@@ -350,7 +350,7 @@ for (const removedPortalFragment of [
 }
 
 for (const fragment of [
-  "submitCustomerBookingRequest(form)",
+  "submitCustomerBookingRequest(form, {",
   "data-customer-booking-form=\"true\"",
   "Our team will review and confirm your booking shortly. Thank you",
   "This is a booking request only, not a confirmed booking yet.",

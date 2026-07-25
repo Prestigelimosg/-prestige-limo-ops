@@ -64,9 +64,10 @@ assert.equal(
     bookingRequestRouteSource.includes("loadAdminBookingByReference") &&
     bookingRequestRouteSource.includes("customer-booking-invitation") &&
     bookingRequestRouteSource.includes("invitation_used") &&
-    bookingRequestRouteSource.includes("groupReferenceOverride"),
+    bookingRequestRouteSource.includes("groupReferenceOverride") &&
+    bookingRequestRouteSource.includes("verifyCustomerBookingPhoneOtpProof"),
   true,
-  "Anonymous /book submissions must require a valid unused invitation while the established route remains the write lane.",
+  "Private invitations must retain priority over the additive public phone-proof boundary while the established route remains the only write lane.",
 );
 
 assert.equal(
@@ -114,7 +115,7 @@ assert.equal(
 assert.equal(
   ledgerSource.includes("Admin-Issued One-Time Customer Booking Invitation") &&
     ledgerSource.includes("existing `Copy + App Link` control") &&
-    ledgerSource.includes("no SMS"),
+    ledgerSource.includes("Invitation creation remains stateless and provider-free"),
   true,
   "The ledger must record the exact established invitation lane and its provider-free boundary.",
 );

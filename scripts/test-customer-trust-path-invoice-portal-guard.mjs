@@ -80,7 +80,7 @@ for (const fragment of [
   'data-customer-booking-field="pickupLocation"',
   'data-customer-booking-field="dropoffLocation"',
   'data-customer-booking-terms-acceptance="true"',
-  'await submitCustomerBookingRequest(form)',
+  'await submitCustomerBookingRequest(form, {',
 ]) {
   assertIncludes(bookPage, fragment, `public booking request source fragment ${fragment}`);
 }

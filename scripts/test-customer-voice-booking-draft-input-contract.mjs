@@ -258,7 +258,7 @@ for (const fragment of [
   'data-customer-voice-booking-transcript="true"',
   "getCustomerBookingSpeechRecognitionConstructor()",
   "Voice dictation is not supported in this browser. Type the trip details manually.",
-  "submitCustomerBookingRequest(form)",
+  "submitCustomerBookingRequest(form, {",
   "This is a booking request only, not a confirmed booking yet.",
   "Our team will review and confirm availability before your booking is confirmed.",
 ]) {

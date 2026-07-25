@@ -111,29 +111,30 @@ for (const fragment of [
   '"emailAddress",',
   "loadCustomerBookingMemoryProfile",
   'data-customer-booking-new-passenger-input="true"',
-  'data-customer-booking-traveler-select="true"',
-  '<option value="">Enter a new passenger name</option>',
-  "{!form.travelerId ? (",
+  'data-customer-booking-traveler-menu-trigger="true"',
+  'data-customer-booking-new-passenger-option="true"',
+  "data-customer-booking-traveler-option={traveler.id}",
+  'type="hidden"',
   "result.bookingReference",
   "result.receiptStatus",
   "This portal link is no longer active.",
 ]) {
   includes(bookingPage, fragment);
 }
-const travelerSelectStart = files[bookingPage].indexOf(
-  'data-customer-booking-traveler-select="true"',
-);
-const travelerSelectEnd = files[bookingPage].indexOf("</select>", travelerSelectStart);
-assert.ok(travelerSelectStart >= 0 && travelerSelectEnd > travelerSelectStart);
-assert.doesNotMatch(
-  files[bookingPage].slice(travelerSelectStart, travelerSelectEnd),
-  /\brequired\b/,
-  "The registered-traveller selector must remain optional so a returning customer can enter a new passenger.",
+assert.equal(
+  files[bookingPage].includes('data-customer-booking-traveler-select="true"'),
+  false,
+  "The Passenger name control must not restore a second stacked registered-traveller field.",
 );
 assert.match(
   files[bookingPage],
   /function updatePassengerName\(value: string\)[\s\S]*?passengerName: value,\s*travelerId: "",/,
   "Typing a new passenger must clear any verified traveller identity.",
+);
+assert.match(
+  files[bookingPage],
+  /data-customer-booking-traveler-option=\{traveler\.id\}[\s\S]*?onClick=\{\(\) => selectRegisteredTraveler\(String\(traveler\.id\)\)\}/,
+  "A registered traveller ID must be set only by an explicit saved-traveller option click.",
 );
 assert.equal(
   files[bookingPage].includes("Your old saved portal access was cleared."),

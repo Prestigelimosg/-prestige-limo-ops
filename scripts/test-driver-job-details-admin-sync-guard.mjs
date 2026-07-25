@@ -189,7 +189,7 @@ for (const fragment of [
 
 assertIncludes(
   driverStatusPersistence,
-  'const driverJobLinkSelect =\n  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context";',
+  'const driverJobLinkSelect =\n  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at";',
   "Driver acknowledgement link identity select",
 );
 

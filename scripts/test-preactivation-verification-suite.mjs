@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 
 const guardChecks = [
   {
+    label: "customer booking phone OTP guard",
+    script: "scripts/test-customer-booking-phone-otp-guard.mjs",
+  },
+  {
     label: "global pre-activation no-live guard",
     script: "scripts/test-global-preactivation-no-live-guard.mjs",
   },

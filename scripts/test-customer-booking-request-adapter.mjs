@@ -191,6 +191,47 @@ try {
   assertNoUnsafeCustomerRequestText(success, "mapped success result");
   assertNoUnsafeCustomerRequestText(fetchCalls[0].body, "submitted request body");
 
+  await submitCustomerBookingRequest(safeInput, {
+    fetcher: async (url, init) => {
+      fetchCalls.push({
+        body: JSON.parse(init.body),
+        init,
+        url,
+      });
+
+      return {
+        json: async () => ({
+          ok: true,
+          request: {
+            booking_reference: "CBOTP-SAFE-001",
+            customer_facing_status: "Request Received",
+            receipt_status: "blocked",
+            return_booking_reference: null,
+            return_trip_requested: false,
+            short_notice_review_required: false,
+          },
+        }),
+        ok: true,
+      };
+    },
+    phoneVerificationProof:
+      "customer_booking_phone_otp_proof_v1.payload.signature",
+  });
+  assert.deepEqual(fetchCalls[1].init.headers, {
+    "Content-Type": "application/json",
+    "x-prestige-customer-booking-phone-proof":
+      "customer_booking_phone_otp_proof_v1.payload.signature",
+    "x-prestige-customer-purpose": "customer-booking-request",
+  });
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      fetchCalls[1].body,
+      "phoneVerificationProof",
+    ),
+    false,
+    "The signed phone proof must stay in a request header and never enter the booking payload.",
+  );
+
   assert.deepEqual(
     mapCustomerBookingRequestSubmitPayload({
       ok: true,
@@ -280,6 +321,9 @@ try {
     "invitation_required",
     "invitation_invalid",
     "invitation_used",
+    "phone_verification_required",
+    "phone_verification_invalid",
+    "phone_verification_used",
   ]) {
     let invitationFailureJsonWasRead = false;
     const invitationFailure = await submitCustomerBookingRequest(safeInput, {

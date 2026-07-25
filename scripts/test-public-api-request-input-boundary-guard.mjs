@@ -293,8 +293,10 @@ for (const fragment of [
   "const body = await readJsonBody(request);",
   "request.headers.get(customerBookingInvitationHeader)",
   "verifyCustomerBookingInvitationToken(invitationToken)",
+  "request.headers.get(customerBookingPhoneProofHeader)",
+  "verifyCustomerBookingPhoneOtpProof(",
   "const parsed = parseCustomerBookingRequestPayloads(body, {",
-  "groupReferenceOverride: invitationGroupReference",
+  "invitationGroupReference || phoneOtpGroupReference",
   "customerSafeError(parsed.error)",
   "customerSafeError(result.error)",
 ]) {

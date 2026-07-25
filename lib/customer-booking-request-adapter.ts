@@ -40,6 +40,9 @@ export type CustomerBookingRequestSubmitResult =
         | "invitation_invalid"
         | "invitation_required"
         | "invitation_used"
+        | "phone_verification_invalid"
+        | "phone_verification_required"
+        | "phone_verification_used"
         | "portal_access_cleared";
     };
 
@@ -224,15 +227,18 @@ export async function submitCustomerBookingRequest(
   {
     fetcher = fetch,
     invitationToken,
+    phoneVerificationProof,
     signal,
   }: {
     fetcher?: CustomerBookingRequestFetch;
     invitationToken?: string;
+    phoneVerificationProof?: string;
     signal?: AbortSignal;
   } = {},
 ): Promise<CustomerBookingRequestSubmitResult> {
   try {
     const safeInvitationToken = invitationToken?.trim() || "";
+    const safePhoneVerificationProof = phoneVerificationProof?.trim() || "";
     const response = await fetcher(customerBookingRequestApiPath, {
       body: JSON.stringify(toCustomerBookingRequestApiBody(input)),
       cache: "no-store",
@@ -241,6 +247,12 @@ export async function submitCustomerBookingRequest(
         "Content-Type": "application/json",
         ...(safeInvitationToken
           ? { "x-prestige-customer-booking-invitation": safeInvitationToken }
+          : {}),
+        ...(!safeInvitationToken && safePhoneVerificationProof
+          ? {
+              "x-prestige-customer-booking-phone-proof":
+                safePhoneVerificationProof,
+            }
           : {}),
         "x-prestige-customer-purpose": "customer-booking-request",
       },
@@ -254,7 +266,10 @@ export async function submitCustomerBookingRequest(
       if (
         resultReason === "invitation_required" ||
         resultReason === "invitation_invalid" ||
-        resultReason === "invitation_used"
+        resultReason === "invitation_used" ||
+        resultReason === "phone_verification_required" ||
+        resultReason === "phone_verification_invalid" ||
+        resultReason === "phone_verification_used"
       ) {
         return { ok: false, reason: resultReason };
       }

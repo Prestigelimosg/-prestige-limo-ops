@@ -21,6 +21,8 @@ const sourceFiles = [
 ];
 
 const validToken = "driver-status-contract-token-a";
+const olderDriverToken = "driver-status-contract-token-older-driver";
+const sameDriverReissueToken = "driver-status-contract-token-same-driver-reissue";
 const expiredToken = "driver-status-contract-token-expired";
 const farFutureToken = "driver-status-contract-token-far-future";
 const revokedToken = "driver-status-contract-token-revoked";
@@ -134,6 +136,12 @@ class MockSupabaseQuery {
 
   eq(column, value) {
     this.filters.push({ column, value });
+
+    return this;
+  }
+
+  in(column, values) {
+    this.filters.push({ column, values });
 
     return this;
   }
@@ -290,7 +298,13 @@ class MockSupabaseClient {
     const updatedRows = [];
 
     this.tables[query.table] = this.tables[query.table].map((row) => {
-      if (!query.filters.every((filter) => row[filter.column] === filter.value)) {
+      if (
+        !query.filters.every((filter) =>
+          "values" in filter
+            ? filter.values.includes(row[filter.column])
+            : row[filter.column] === filter.value,
+        )
+      ) {
         return row;
       }
 
@@ -319,7 +333,12 @@ class MockSupabaseClient {
     const beforeCount = this.tables[query.table].length;
 
     this.tables[query.table] = this.tables[query.table].filter(
-      (row) => !query.filters.every((filter) => row[filter.column] === filter.value),
+      (row) =>
+        !query.filters.every((filter) =>
+          "values" in filter
+            ? filter.values.includes(row[filter.column])
+            : row[filter.column] === filter.value,
+        ),
     );
 
     return {
@@ -342,7 +361,11 @@ class MockSupabaseClient {
     let rows = [...this.tables[query.table]];
 
     for (const filter of query.filters) {
-      rows = rows.filter((row) => row[filter.column] === filter.value);
+      rows = rows.filter((row) =>
+        "values" in filter
+          ? filter.values.includes(row[filter.column])
+          : row[filter.column] === filter.value,
+      );
     }
 
     if (query.orderBy) {
@@ -399,6 +422,7 @@ function createSeededClient({
     driver_job_links: [
       {
         booking_reference: "DRV-JOB-API-001",
+        created_at: "2026-06-07T08:00:00.000Z",
         driver_id: null,
         expires_at: validExpiresAt,
         id: "91c9d972-6fa5-4f3b-b157-bb56a9366c7c",
@@ -428,6 +452,7 @@ function createSeededClient({
       },
       {
         booking_reference: "DRV-JOB-API-EXPIRED",
+        created_at: "2026-06-07T08:00:00.000Z",
         expires_at: expiredExpiresAt,
         id: "7bc159e4-4f96-4963-9a29-36743fa1647f",
         link_status: "active",
@@ -437,6 +462,7 @@ function createSeededClient({
       },
       {
         booking_reference: "DRV-JOB-API-FAR-FUTURE",
+        created_at: "2026-06-07T08:00:00.000Z",
         expires_at: farFutureExpiresAt,
         id: "b63a81ec-005e-4f89-9622-3256b470d4f2",
         link_status: "active",
@@ -446,6 +472,7 @@ function createSeededClient({
       },
       {
         booking_reference: "DRV-JOB-API-REVOKED",
+        created_at: "2026-06-07T08:00:00.000Z",
         expires_at: validExpiresAt,
         id: "5e42b861-2815-490b-9513-32f6b96e8f7b",
         link_status: "revoked",
@@ -736,6 +763,179 @@ try {
   }
 
   {
+    const olderDriverLinkId = "31111111-1111-4111-8111-111111111111";
+    const replacementDriverLinkId = "91c9d972-6fa5-4f3b-b157-bb56a9366c7c";
+    const sameDriverReissueLinkId = "32222222-2222-4222-8222-222222222222";
+    const client = createSeededClient({
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: 202 }],
+      drivers: [
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 0101",
+          driver_name: "Original Driver",
+          id: 101,
+          plate_number: "SLA1010A",
+          vehicle_type: "Mercedes E Class",
+        },
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 0202",
+          driver_name: "Replacement Driver",
+          id: 202,
+          plate_number: "SLA2020B",
+          vehicle_type: "Mercedes V Class",
+        },
+      ],
+      latestStatus: null,
+    });
+    const replacementLink = client.tables.driver_job_links.find(
+      (link) => link.token_hash === hashDriverJobLinkToken(validToken),
+    );
+
+    Object.assign(replacementLink, {
+      created_at: "2026-06-07T10:00:00.000Z",
+      driver_id: 202,
+      id: replacementDriverLinkId,
+    });
+    client.tables.driver_job_links.push(
+      {
+        booking_reference: "DRV-JOB-API-001",
+        created_at: "2026-06-07T09:00:00.000Z",
+        driver_id: 101,
+        expires_at: validExpiresAt,
+        id: olderDriverLinkId,
+        link_status: "active",
+        revoked_at: null,
+        safe_link_context: {
+          driver_acknowledged_at: "2026-06-07T09:05:00.000Z",
+          driver_job_payload: {
+            assigned_driver_contact: "+65 8000 0101",
+            assigned_driver_name: "Original Driver",
+            assigned_driver_plate: "SLA1010A",
+            assigned_driver_vehicle_model: "Mercedes E Class",
+            booking_type: "DEP",
+            dropoff_location: "Changi Airport Terminal 3",
+            passenger_name: "Safe Passenger",
+            pickup_date: "2026-06-09",
+            pickup_location: "Raffles Hotel Singapore",
+            pickup_time: "0900hrs",
+            route: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+            status: "assigned",
+          },
+        },
+        token_hash: hashDriverJobLinkToken(olderDriverToken),
+      },
+      {
+        booking_reference: "DRV-JOB-API-001",
+        created_at: "2026-06-07T09:30:00.000Z",
+        driver_id: 202,
+        expires_at: validExpiresAt,
+        id: sameDriverReissueLinkId,
+        link_status: "active",
+        revoked_at: null,
+        safe_link_context: {
+          driver_acknowledged_at: "2026-06-07T09:35:00.000Z",
+          driver_job_payload: {
+            assigned_driver_contact: "+65 8000 0202",
+            assigned_driver_name: "Replacement Driver",
+            assigned_driver_plate: "SLA2020B",
+            assigned_driver_vehicle_model: "Mercedes V Class",
+            booking_type: "DEP",
+            dropoff_location: "Changi Airport Terminal 3",
+            passenger_name: "Safe Passenger",
+            pickup_date: "2026-06-09",
+            pickup_location: "Raffles Hotel Singapore",
+            pickup_time: "0900hrs",
+            route: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+            status: "assigned",
+          },
+        },
+        token_hash: hashDriverJobLinkToken(sameDriverReissueToken),
+      },
+    );
+
+    const oldLinkBeforeReplacementAcknowledgement =
+      await loadDriverJobPayloadThroughStatusPersistence({
+        client,
+        now,
+        token: olderDriverToken,
+      });
+    assert.equal(
+      oldLinkBeforeReplacementAcknowledgement.ok,
+      true,
+      "Issuing a replacement link alone must not disable the original driver's active link.",
+    );
+
+    const replacementAcknowledgement =
+      await saveDriverJobDetailsThroughStatusPersistence({
+        client,
+        driverContact: "+65 8000 0202",
+        driverName: "Replacement Driver",
+        driverPlateNumber: "SLA2020B",
+        driverVehicleModel: "Mercedes V Class",
+        now,
+        token: validToken,
+      });
+    assert.equal(replacementAcknowledgement.ok, true);
+
+    const oldLinkAfterReplacementAcknowledgement =
+      await loadDriverJobPayloadThroughStatusPersistence({
+        client,
+        now,
+        token: olderDriverToken,
+      });
+    const replacementLinkAfterAcknowledgement =
+      await loadDriverJobPayloadThroughStatusPersistence({
+        client,
+        now,
+        token: validToken,
+      });
+    const sameDriverReissueAfterAcknowledgement =
+      await loadDriverJobPayloadThroughStatusPersistence({
+        client,
+        now,
+        token: sameDriverReissueToken,
+      });
+
+    assert.equal(oldLinkAfterReplacementAcknowledgement.ok, false);
+    assert.equal(oldLinkAfterReplacementAcknowledgement.reason, "expired");
+    assert.equal(replacementLinkAfterAcknowledgement.ok, true);
+    assert.equal(sameDriverReissueAfterAcknowledgement.ok, true);
+    assert.equal(
+      client.tables.driver_job_links.find((link) => link.id === olderDriverLinkId).link_status,
+      "expired",
+      "The newer different-driver acknowledgement must expire the original driver's older link.",
+    );
+    assert.equal(
+      client.tables.driver_job_links.find((link) => link.id === olderDriverLinkId).revoked_at,
+      null,
+      "Automatic supersession is an expiry and must not impersonate the explicit admin revoke.",
+    );
+    assert.equal(
+      client.tables.driver_job_links.find((link) => link.id === replacementDriverLinkId).link_status,
+      "active",
+    );
+    assert.equal(
+      client.tables.driver_job_links.find((link) => link.id === sameDriverReissueLinkId).link_status,
+      "active",
+      "A same-driver reissue must remain usable.",
+    );
+    const supersessionOperations = client.operations.filter(
+      (operation) =>
+        operation.action === "update" &&
+        operation.table === "driver_job_links" &&
+        operation.payload.link_status === "expired",
+    );
+    assert.equal(supersessionOperations.length, 1);
+    assert.deepEqual(supersessionOperations[0].filters, [
+      { column: "id", values: [olderDriverLinkId] },
+      { column: "link_status", value: "active" },
+    ]);
+    assert.equal(client.tables.driver_job_status_events.length, 0);
+    assertNoDriverJobLeaks(replacementAcknowledgement);
+  }
+
+  {
     const client = createSeededClient({
       bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
       drivers: [{
@@ -891,6 +1091,7 @@ try {
       driver_job_links: [
         {
           booking_reference: "DRV-JOB-API-001",
+          created_at: "2026-06-07T10:00:00.000Z",
           expires_at: validExpiresAt,
           id: freshLinkId,
           link_status: "active",

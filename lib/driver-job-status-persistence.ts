@@ -77,6 +77,7 @@ type UnknownRecord = Record<string, unknown>;
 
 type DriverJobLinkPersistenceRow = {
   booking_reference: string;
+  created_at: string;
   driver_id: number | null;
   expires_at: string;
   id: string | null;
@@ -182,7 +183,7 @@ type DriverJobLinkExpiryResult = {
 };
 
 const driverJobLinkSelect =
-  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context";
+  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at";
 const currentSafeBookingScheduleSelect =
   "booking_reference, public_booking_reference, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, admin_internal_status, customer_facing_status, updated_at";
 const currentSafeBookingScheduleSelectWithoutPublicReference =
@@ -518,6 +519,7 @@ function safeHashToken(token: string) {
 
 function toLinkPersistenceRow(row: UnknownRecord): DriverJobLinkPersistenceRow | null {
   const bookingReference = safeIdentifierFromDb(row.booking_reference);
+  const createdAt = safeDateTextFromDb(row.created_at);
   const id = safeIdentifierFromDb(row.id) || null;
   const linkStatus = safeTextFromDb(row.link_status, 40);
   const expiresAt = safeDateTextFromDb(row.expires_at);
@@ -525,6 +527,7 @@ function toLinkPersistenceRow(row: UnknownRecord): DriverJobLinkPersistenceRow |
 
   if (
     !bookingReference ||
+    !createdAt ||
     !expiresAt ||
     !["active", "expired", "revoked"].includes(linkStatus)
   ) {
@@ -533,6 +536,7 @@ function toLinkPersistenceRow(row: UnknownRecord): DriverJobLinkPersistenceRow |
 
   return {
     booking_reference: bookingReference,
+    created_at: createdAt,
     driver_id: positiveIntegerFromDb(row.driver_id),
     expires_at: expiresAt,
     id,
@@ -540,6 +544,69 @@ function toLinkPersistenceRow(row: UnknownRecord): DriverJobLinkPersistenceRow |
     revoked_at: revokedAt,
     safe_link_context: asRecord(row.safe_link_context),
   };
+}
+
+async function expireOlderDifferentDriverLinksAfterAcknowledgement({
+  acknowledgedAt,
+  acknowledgedLink,
+  client,
+}: {
+  acknowledgedAt: string;
+  acknowledgedLink: DriverJobLinkPersistenceRow;
+  client: DriverJobStatusPersistenceClient;
+}) {
+  const acknowledgedLinkCreatedAt = new Date(acknowledgedLink.created_at).getTime();
+
+  if (
+    !acknowledgedLink.id ||
+    !acknowledgedLink.driver_id ||
+    Number.isNaN(acknowledgedLinkCreatedAt)
+  ) {
+    return false;
+  }
+
+  const { data, error } = await client
+    .from("driver_job_links")
+    .select(driverJobLinkSelect)
+    .eq("booking_reference", acknowledgedLink.booking_reference)
+    .eq("link_status", "active");
+
+  if (error) {
+    return false;
+  }
+
+  const supersededLinkIds = asArray(data)
+    .map((row) => toLinkPersistenceRow(asRecord(row)))
+    .filter((link): link is DriverJobLinkPersistenceRow => Boolean(link))
+    .filter((link) => {
+      const linkCreatedAt = new Date(link.created_at).getTime();
+
+      return Boolean(
+        link.id &&
+        link.id !== acknowledgedLink.id &&
+        link.driver_id &&
+        link.driver_id !== acknowledgedLink.driver_id &&
+        !Number.isNaN(linkCreatedAt) &&
+        linkCreatedAt < acknowledgedLinkCreatedAt,
+      );
+    })
+    .map((link) => link.id as string);
+
+  if (supersededLinkIds.length === 0) {
+    return true;
+  }
+
+  const { error: expiryError } = await client
+    .from("driver_job_links")
+    .update({
+      expires_at: acknowledgedAt,
+      link_status: "expired",
+      updated_at: acknowledgedAt,
+    })
+    .in("id", supersededLinkIds)
+    .eq("link_status", "active");
+
+  return !expiryError;
 }
 
 async function resolveAcknowledgedDriverIdentity(
@@ -1237,9 +1304,10 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     driver_plate_number: nextDetails.plate,
     driver_vehicle_model: nextDetails.vehicleModel,
   };
+  const acknowledgedAt = new Date().toISOString();
   const nextSafeContext = {
     ...safeContext,
-    driver_acknowledged_at: new Date().toISOString(),
+    driver_acknowledged_at: acknowledgedAt,
     driver_job_payload: nextDriverJobPayload,
   };
 
@@ -1298,6 +1366,16 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
   }
 
   if (!updatedLink) {
+    return detailsBlockedResult("not_configured");
+  }
+
+  const supersessionSaved = await expireOlderDifferentDriverLinksAfterAcknowledgement({
+    acknowledgedAt,
+    acknowledgedLink: updatedLink,
+    client: input.client,
+  });
+
+  if (!supersessionSaved) {
     return detailsBlockedResult("not_configured");
   }
 

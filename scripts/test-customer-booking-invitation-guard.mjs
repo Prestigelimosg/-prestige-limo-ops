@@ -63,13 +63,16 @@ assert.equal(
   bookingRequestRouteSource.includes("verifyCustomerBookingInvitationToken") &&
     bookingRequestRouteSource.includes("loadAdminBookingByReference") &&
     bookingRequestRouteSource.includes("customer-booking-invitation") &&
-    bookingRequestRouteSource.includes('invitationFailureResponse("invitation_required", 403)') &&
+    bookingRequestRouteSource.includes("if (invitationToken)") &&
     bookingRequestRouteSource.includes("invitation_used") &&
     bookingRequestRouteSource.includes("groupReferenceOverride") &&
-    !bookingRequestRouteSource.includes("PhoneOtp") &&
-    !bookingRequestRouteSource.includes("phone-verification"),
+    bookingRequestRouteSource.includes("verifyCustomerBookingPhoneOtpProof") &&
+    bookingRequestRouteSource.indexOf("if (invitationToken)") <
+      bookingRequestRouteSource.indexOf(
+        "const phoneVerification = verifyCustomerBookingPhoneOtpProof(",
+      ),
   true,
-  "Anonymous /book submissions must require a valid unused invitation while the established route remains the only write lane.",
+  "A supplied private invitation must retain priority over the public OTP fallback while the established route remains the only write lane.",
 );
 
 assert.equal(
@@ -100,13 +103,18 @@ assert.equal(
     bookingRequestAdapterSource.includes('"invitation_used"') &&
     bookingPageSource.includes('searchParams.get("invite")') &&
     bookingPageSource.includes("Ask Prestige Limo for a new booking invitation") &&
-    bookingPageSource.includes('data-customer-booking-invitation-required="true"') &&
-    bookingPageSource.includes("Private booking invitation required") &&
-    bookingPageSource.includes('"Private invitation required"') &&
-    !bookingPageSource.includes("customer-booking-phone") &&
-    !bookingPageSource.includes("Send verification code"),
+    bookingPageSource.includes(
+      'data-customer-booking-private-invitation-no-otp="true"',
+    ) &&
+    bookingPageSource.includes(
+      "Private booking invitation detected. We will check it when you submit; no SMS code is required here.",
+    ) &&
+    bookingPageSource.includes(
+      'data-customer-booking-phone-verification="true"',
+    ) &&
+    bookingPageSource.includes("Send verification code"),
   true,
-  "The existing /book form must carry the private invitation outside the booking payload, visibly block anonymous submission, and expose no retired OTP control.",
+  "The existing /book form must carry the private invitation outside the booking payload, visibly preserve its no-OTP bypass, and keep public OTP in the same form.",
 );
 
 assert.equal(

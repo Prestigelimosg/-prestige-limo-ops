@@ -40,6 +40,10 @@ async function loadRouteHarness() {
   const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
   const customerPortalAccessLinkPath = path.join(tempDir, "lib/customer-portal-access-link.js");
   const customerBookingInvitationPath = path.join(tempDir, "lib/customer-booking-invitation.js");
+  const customerBookingPhoneOtpPath = path.join(
+    tempDir,
+    "lib/customer-booking-phone-otp.js",
+  );
   const codexJobCardAutoPreparationPath = path.join(
     tempDir,
     "lib/codex-job-card-auto-preparation.js",
@@ -194,6 +198,17 @@ async function loadRouteHarness() {
     ].join("\n"),
   );
   await writeFile(
+    customerBookingPhoneOtpPath,
+    [
+      "function verifyCustomerBookingPhoneOtpProof(proof, phone) {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  state.phoneProofCalls.push({ phone, proof });",
+      "  return state.phoneProofResult;",
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
+    ].join("\n"),
+  );
+  await writeFile(
     codexJobCardAutoPreparationPath,
     [
       "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
@@ -244,6 +259,14 @@ function installMock(overrides = {}) {
       },
       ok: true,
     },
+    phoneProofCalls: [],
+    phoneProofResult: {
+      data: {
+        booking_reference: "CBOTP-SAFE-001",
+        challenge_id: "fedcba9876543210fedcba9876543210",
+      },
+      ok: true,
+    },
     lookupCalls: [],
     lookupResult: {
       error: "Booking not found.",
@@ -291,6 +314,13 @@ function validHeadersWithoutInvitation(extra = {}) {
   delete headers["x-prestige-customer-booking-invitation"];
 
   return headers;
+}
+
+function validHeadersWithPhoneProof() {
+  return validHeadersWithoutInvitation({
+    "x-prestige-customer-booking-phone-proof":
+      "customer_booking_phone_otp_proof_v1.test.signature",
+  });
 }
 
 function postRequest(body, headers = validHeaders()) {
@@ -411,25 +441,99 @@ for (const phrase of [
 const harness = await loadRouteHarness();
 
 try {
-  const missingInvitationMock = installMock();
-  const missingInvitationResponse = await harness.route.POST(
+  const missingPhoneProofMock = installMock();
+  const missingPhoneProofResponse = await harness.route.POST(
     postRequest({ passengerName: "Safe Passenger" }, validHeadersWithoutInvitation()),
   );
-  const missingInvitation = await readJson(missingInvitationResponse);
+  const missingPhoneProof = await readJson(missingPhoneProofResponse);
 
-  assert.equal(missingInvitation.status, 403);
+  assert.equal(missingPhoneProof.status, 403);
   assert.equal(
-    missingInvitationResponse.headers.get("x-prestige-customer-booking-result"),
-    "invitation_required",
+    missingPhoneProofResponse.headers.get("x-prestige-customer-booking-result"),
+    "phone_verification_required",
   );
-  assert.equal(missingInvitationMock.invitationCalls.length, 0);
-  assert.equal(missingInvitationMock.lookupCalls.length, 0);
-  assert.equal(missingInvitationMock.parseCalls.length, 0);
-  assert.equal(missingInvitationMock.createCalls.length, 0);
-  assert.equal(missingInvitationMock.adminAppNotificationCalls.length, 0);
-  assert.equal(missingInvitationMock.alertCalls.length, 0);
-  assert.equal(missingInvitationMock.devicePushAlertCalls.length, 0);
-  assertSafeCustomerBody(missingInvitation.body, "missing invitation body");
+  assert.equal(missingPhoneProofMock.invitationCalls.length, 0);
+  assert.equal(missingPhoneProofMock.phoneProofCalls.length, 0);
+  assert.equal(missingPhoneProofMock.lookupCalls.length, 0);
+  assert.equal(missingPhoneProofMock.parseCalls.length, 0);
+  assert.equal(missingPhoneProofMock.createCalls.length, 0);
+  assert.equal(missingPhoneProofMock.adminAppNotificationCalls.length, 0);
+  assert.equal(missingPhoneProofMock.alertCalls.length, 0);
+  assert.equal(missingPhoneProofMock.devicePushAlertCalls.length, 0);
+  assertSafeCustomerBody(missingPhoneProof.body, "missing phone proof body");
+
+  const invalidPhoneProofMock = installMock({
+    phoneProofResult: {
+      error: "challenge_invalid",
+      ok: false,
+      status: 403,
+    },
+  });
+  const invalidPhoneProofResponse = await harness.route.POST(
+    postRequest(
+      { contactNo: "+65 9000 0000", passengerName: "Safe Passenger" },
+      validHeadersWithPhoneProof(),
+    ),
+  );
+  const invalidPhoneProof = await readJson(invalidPhoneProofResponse);
+
+  assert.equal(invalidPhoneProof.status, 403);
+  assert.equal(
+    invalidPhoneProofResponse.headers.get("x-prestige-customer-booking-result"),
+    "phone_verification_invalid",
+  );
+  assert.equal(invalidPhoneProofMock.phoneProofCalls.length, 1);
+  assert.equal(invalidPhoneProofMock.lookupCalls.length, 0);
+  assert.equal(invalidPhoneProofMock.parseCalls.length, 0);
+  assertSafeCustomerBody(invalidPhoneProof.body, "invalid phone proof body");
+
+  const usedPhoneProofMock = installMock({
+    lookupResult: {
+      data: {
+        booking_reference: "CBOTP-SAFE-001",
+      },
+      ok: true,
+    },
+  });
+  const usedPhoneProofResponse = await harness.route.POST(
+    postRequest(
+      { contactNo: "+65 9000 0000", passengerName: "Safe Passenger" },
+      validHeadersWithPhoneProof(),
+    ),
+  );
+  const usedPhoneProof = await readJson(usedPhoneProofResponse);
+
+  assert.equal(usedPhoneProof.status, 409);
+  assert.equal(
+    usedPhoneProofResponse.headers.get("x-prestige-customer-booking-result"),
+    "phone_verification_used",
+  );
+  assert.equal(usedPhoneProofMock.phoneProofCalls.length, 1);
+  assert.equal(usedPhoneProofMock.lookupCalls.length, 1);
+  assert.equal(usedPhoneProofMock.parseCalls.length, 0);
+  assertSafeCustomerBody(usedPhoneProof.body, "used phone proof body");
+
+  const verifiedPhoneProofMock = installMock();
+  const verifiedPhoneProofSuccess = await readJson(
+    await harness.route.POST(
+      postRequest(
+        { contactNo: "+65 9000 0000", passengerName: "Safe Passenger" },
+        validHeadersWithPhoneProof(),
+      ),
+    ),
+  );
+
+  assert.equal(verifiedPhoneProofSuccess.status, 200);
+  assert.deepEqual(verifiedPhoneProofMock.parseOptionsCalls, [
+    { groupReferenceOverride: "CBOTP-SAFE-001" },
+  ]);
+  assert.equal(verifiedPhoneProofMock.phoneProofCalls.length, 1);
+  assert.equal(verifiedPhoneProofMock.invitationCalls.length, 0);
+  assert.equal(verifiedPhoneProofMock.lookupCalls.length, 1);
+  assertSafeCustomerBody(
+    verifiedPhoneProofSuccess.body,
+    "verified phone proof success body",
+  );
 
   const invalidInvitationMock = installMock({
     invitationResult: {

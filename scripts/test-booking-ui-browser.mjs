@@ -20239,6 +20239,62 @@ async function runChromeTest() {
       "parsed booking UI state before CRM save",
     );
 
+    const selectedDspForOptionalScheduledEnd = await evaluate(`(() => {
+      const serviceType = document.querySelector("[data-admin-booking-field='bookingType']");
+
+      if (!(serviceType instanceof HTMLSelectElement)) {
+        return false;
+      }
+
+      serviceType.value = "DSP";
+      serviceType.dispatchEvent(new Event("change", { bubbles: true }));
+      return serviceType.value === "DSP";
+    })()`);
+    assert.equal(
+      selectedDspForOptionalScheduledEnd,
+      true,
+      "Expected the existing CRM save browser path to select DSP",
+    );
+
+    const optionalDspScheduledEndState = await waitForCondition(
+      () => evaluate(`(() => {
+      const serviceType = document.querySelector("[data-admin-booking-field='bookingType']");
+      const dspEndDate = document.querySelector("[data-admin-dispatch-dsp-end-date='true']");
+      const dspEndTime = document.querySelector("[data-admin-dispatch-dsp-end-time='true']");
+
+      if (
+        !(serviceType instanceof HTMLSelectElement) ||
+        !(dspEndDate instanceof HTMLInputElement) ||
+        !(dspEndTime instanceof HTMLInputElement)
+      ) {
+        return false;
+      }
+
+      for (const control of [dspEndDate, dspEndTime]) {
+        control.value = "";
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      return {
+        dspEndDate: dspEndDate.value,
+        dspEndTime: dspEndTime.value,
+        serviceType: serviceType.value,
+      };
+    })()`),
+      10000,
+      "blank optional DSP scheduled-end controls",
+    );
+    assert.deepEqual(
+      optionalDspScheduledEndState,
+      {
+        dspEndDate: "",
+        dspEndTime: "",
+        serviceType: "DSP",
+      },
+      "Expected the existing CRM save browser path to exercise a DSP booking with both optional scheduled-end fields blank",
+    );
+
     await evaluate(`(() => {
       const savedBooking = ${JSON.stringify(crmSavedBookingFixture)};
       const companyRecord = {
@@ -20719,7 +20775,7 @@ async function runChromeTest() {
       crmSaveGoogleCalendarBooking?.booking_reference,
       crmSaveState.bookingInsert?.booking?.booking_reference,
     );
-    assert.equal(crmSaveGoogleCalendarBooking?.booking_type, "MNG");
+    assert.equal(crmSaveGoogleCalendarBooking?.booking_type, "DSP");
     assert.equal(crmSaveGoogleCalendarBooking?.pickup_address, "Changi Airport T3");
     assert.equal(crmSaveGoogleCalendarBooking?.dropoff_address, "Raffles Hotel Singapore");
     assert.equal(
@@ -20739,8 +20795,18 @@ async function runChromeTest() {
     );
     assertNoForbiddenAdminBookingRequestFields(crmSaveState.bookingInsert, "safe Save Booking + CRM request");
     assert.equal(crmSaveState.bookingInsert?.booking?.source_channel, "admin-dashboard");
-    assert.equal(crmSaveState.bookingInsert?.booking?.route_type, "MNG");
-    assert.equal(crmSaveState.bookingInsert?.booking?.service_type, "MNG");
+    assert.equal(crmSaveState.bookingInsert?.booking?.route_type, "DSP");
+    assert.equal(crmSaveState.bookingInsert?.booking?.service_type, "DSP");
+    assert.equal(
+      crmSaveState.bookingInsert?.booking?.dropoff_datetime,
+      null,
+      "Expected Save + CRM to preserve a blank DSP scheduled end as null",
+    );
+    assert.doesNotMatch(
+      crmSaveState.bodyText,
+      /needs DSP end date|needs DSP end time/,
+      "Expected blank optional DSP scheduled-end fields not to block Save + CRM",
+    );
     assert.equal(
       crmSaveState.bookingInsert?.booking?.route_summary,
       "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",

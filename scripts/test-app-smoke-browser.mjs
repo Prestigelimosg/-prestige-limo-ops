@@ -1199,7 +1199,9 @@ async function runChromeTest() {
             : [],
           indexedDbNames: await readIndexedDbNames(),
           localStorageValues: readStorage(localStorage),
-          sessionStorageValues: readStorage(sessionStorage),
+          sessionStorageValues: readStorage(sessionStorage).filter(
+            (value) => !value.startsWith("__next_debug_channel:"),
+          ),
         };
       })()`);
 
@@ -1457,6 +1459,8 @@ async function runChromeTest() {
             updated_at: "2026-06-08T02:00:00.000Z",
           },
         ];
+        window.__adminCustomerDriverAppNotificationCalls = [];
+        window.__adminCustomerDriverAppNotifications = [];
         window.__adminDriverJobStatusCalls = [];
         window.__adminDriverJobStatusRows = {
           "LOADED-OPS-001": [
@@ -1501,6 +1505,46 @@ async function runChromeTest() {
           const [target, options = {}] = args;
           const url = typeof target === "string" ? target : target?.url || "";
           const method = options?.method || target?.method || "GET";
+
+          if (String(url).includes("/api/admin-customer-driver-app-notifications")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            window.__adminCustomerDriverAppNotificationCalls.push({
+              body,
+              method,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              return new Response(
+                JSON.stringify({
+                  notifications: window.__adminCustomerDriverAppNotifications,
+                  ok: true,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            if (method === "POST") {
+              const notification = {
+                ...body,
+                created_at: "2026-06-08T02:05:00.000Z",
+                id: "app-smoke-customer-booking-confirmation",
+                updated_at: "2026-06-08T02:05:00.000Z",
+              };
+              window.__adminCustomerDriverAppNotifications = [
+                notification,
+                ...window.__adminCustomerDriverAppNotifications,
+              ];
+
+              return new Response(
+                JSON.stringify({
+                  notification,
+                  ok: true,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
 
           if (String(url).includes("/api/admin-app-notifications")) {
             const parsedUrl = new URL(String(url), window.location.origin);
@@ -2010,7 +2054,10 @@ async function runChromeTest() {
             );
           }
 
-          if (String(url).includes("/api/admin-bookings")) {
+          if (
+            String(url).includes("/api/admin-bookings") ||
+            String(url).includes("/api/admin-saved-bookings")
+          ) {
             const body = options?.body ? JSON.parse(String(options.body)) : null;
             window.__adminBookingPersistenceCalls.push({ body, method, url: String(url) });
 
@@ -3526,6 +3573,8 @@ async function runChromeTest() {
               ?.textContent.trim() || "";
             const calls = window.__adminBookingPersistenceCalls || [];
             const calendarSyncCalls = window.__adminBookingCalendarSyncCalls || [];
+            const customerNotificationCalls =
+              window.__adminCustomerDriverAppNotificationCalls || [];
             const matchingPatchCalls = calls.filter(
               (call) => call.method === "PATCH" && call.body?.booking?.pickup_location === "Updated Ops Pickup",
             );
@@ -3533,8 +3582,9 @@ async function runChromeTest() {
             const body = patchCall?.body;
 
             if (
-              !feedback.includes("Operational booking updated: LOADED-OPS-001") ||
+              !feedback.includes("Customer booking request accepted: LOADED-OPS-001") ||
               !feedback.includes("Google Calendar auto-synced") ||
+              !feedback.includes("customer app confirmation queued") ||
               !body
             ) {
               return false;
@@ -3562,6 +3612,7 @@ async function runChromeTest() {
               appliedReference,
               body,
               calendarSyncCalls,
+              customerNotificationCalls,
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
               matchingPatchCalls: matchingPatchCalls.length,
@@ -3577,6 +3628,13 @@ async function runChromeTest() {
         1,
         "Expected applied snapshot update to send exactly one edited mocked admin booking PATCH call",
       );
+      assert.equal(
+        updateState.feedback.includes("Customer booking request accepted: LOADED-OPS-001") &&
+          updateState.feedback.includes("Google Calendar auto-synced") &&
+          updateState.feedback.includes("customer app confirmation queued"),
+        true,
+        `Expected successful customer request acceptance feedback, received: ${updateState.feedback}`,
+      );
       assert.equal(updateState.body.target_booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.pickup_location, "Updated Ops Pickup");
@@ -3585,10 +3643,10 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
       assert.equal(updateState.body.booking.pax_count, 2);
       assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
-      assert.equal(updateState.body.booking.customer_facing_status, "Received");
-      assert.equal(updateState.body.booking.admin_internal_status, "Admin Review Required");
-      assert.equal(updateState.body.booking.request_review_status, "pending_review");
-      assert.equal(updateState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
+      assert.equal(updateState.body.booking.admin_internal_status, "Ready for Confirmation");
+      assert.equal(updateState.body.booking.request_review_status, "approved");
+      assert.equal(updateState.body.booking.short_notice_review_status, "reviewed");
       assert.equal(
         updateState.calendarSyncCalls.filter((call) => call.method === "POST").length,
         2,
@@ -3605,6 +3663,18 @@ async function runChromeTest() {
         "Expected update payload service items to remain operational only",
       );
       assert.equal(updateState.body.service_items[0].quantity, 2);
+      const customerConfirmationPostCalls = updateState.customerNotificationCalls.filter(
+        (call) =>
+          call.method === "POST" &&
+          call.body?.booking_reference === "LOADED-OPS-001" &&
+          call.body?.delivery_surface === "customer_app" &&
+          call.body?.workflow_area === "customer_request_review",
+      );
+      assert.equal(
+        customerConfirmationPostCalls.length,
+        1,
+        "Expected one in-memory customer app confirmation for the accepted request",
+      );
       assert.deepEqual(
         updateState.forbiddenKeys,
         [],
@@ -3612,8 +3682,8 @@ async function runChromeTest() {
       );
       assert.equal(
         updateState.feedback.includes("Admin Review Required"),
-        true,
-        "Expected updated review-pending customer request snapshot to retain Admin Review Required",
+        false,
+        "Expected the accepted customer request feedback to leave the pending-review state",
       );
       assert.equal(
         updateState.appliedReference.includes("LOADED-OPS-001"),
@@ -4726,7 +4796,29 @@ async function runChromeTest() {
       };
       const customerBookingBoundaryError =
         "Booking requests can be submitted only from the customer booking form.";
+      const customerBookingPhoneVerificationBoundaryError =
+        "Phone verification is required for this public booking request.";
       const customerBookingSecretLeakPattern = /service_role|sql|stack|secret|key/i;
+      const assertCustomerBookingSafeBoundary = (body, message) => {
+        const error = String(body.error || "");
+        assert.equal(
+          [
+            customerBookingBoundaryError,
+            customerBookingPhoneVerificationBoundaryError,
+          ].includes(error),
+          true,
+          `${message}: expected the customer form or public phone-verification boundary`,
+        );
+        assert.equal(
+          customerBookingSecretLeakPattern.test(JSON.stringify(body)),
+          false,
+          `${message}: expected customer boundary response to hide server internals`,
+        );
+
+        return error === customerBookingPhoneVerificationBoundaryError
+          ? "phone-verification-boundary"
+          : "customer-form-boundary";
+      };
       const assertCustomerBookingBoundaryOrValidation = (
         response,
         body,
@@ -4737,18 +4829,7 @@ async function runChromeTest() {
         },
       ) => {
         if (response.status === 403) {
-          assert.equal(
-            String(body.error || ""),
-            customerBookingBoundaryError,
-            `${message}: expected safe customer form boundary when browser referer is not /book`,
-          );
-          assert.equal(
-            customerBookingSecretLeakPattern.test(JSON.stringify(body)),
-            false,
-            `${message}: expected customer boundary response to hide server internals`,
-          );
-
-          return "customer-form-boundary";
+          return assertCustomerBookingSafeBoundary(body, message);
         }
 
         assert.equal(response.status, 400, message);
@@ -4767,18 +4848,7 @@ async function runChromeTest() {
       };
       const assertCustomerBookingBoundaryOrDisabledConfig = (response, body, message) => {
         if (response.status === 403) {
-          assert.equal(
-            String(body.error || ""),
-            customerBookingBoundaryError,
-            `${message}: expected safe customer form boundary when browser referer is not /book`,
-          );
-          assert.equal(
-            customerBookingSecretLeakPattern.test(JSON.stringify(body)),
-            false,
-            `${message}: expected customer boundary response to hide server internals`,
-          );
-
-          return "customer-form-boundary";
+          return assertCustomerBookingSafeBoundary(body, message);
         }
 
         assert.equal(response.status, 503, message);
@@ -32453,13 +32523,10 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, customerBookingUrl);
-      await waitForSelector(
-        evaluate,
-        "[data-customer-booking-page]",
-        `${viewport.label} customer-facing booking route`,
-      );
-      await evaluate(`(() => {
+      const { identifier: customerBookingFixtureIdentifier } = await client.send(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+          source: `(() => {
         window.__customerBookingIntegrationCalls = [];
         window.__customerBookingRequestCalls = [];
         window.__customerBookingRequestMockMode = "success";
@@ -32522,6 +32589,7 @@ async function runChromeTest() {
           if (url.includes("/api/customer-booking-memory")) {
             return new Response(
               JSON.stringify({
+                booker_profile: null,
                 memories: [
                   {
                     dropoff_location: "Changi Airport Terminal 3",
@@ -32541,6 +32609,7 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
+                travelers: [],
                 version: "customer-booking-memory-read-v1",
               }),
               { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -32570,7 +32639,9 @@ async function runChromeTest() {
           const OriginalWebSocket = window.WebSocket;
           window.__customerBookingOriginalWebSocket = OriginalWebSocket;
           window.WebSocket = function CustomerBookingWebSocket(url, protocols) {
-            window.__customerBookingIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            if (!String(url).includes("/_next/webpack-hmr")) {
+              window.__customerBookingIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            }
             return protocols === undefined
               ? new OriginalWebSocket(url)
               : new OriginalWebSocket(url, protocols);
@@ -32578,7 +32649,22 @@ async function runChromeTest() {
           window.WebSocket.prototype = OriginalWebSocket.prototype;
           Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
         }
-      })()`);
+      })()`,
+        },
+      );
+
+      try {
+        await navigateWithLoadEvent(client, customerBookingUrl);
+        await waitForSelector(
+          evaluate,
+          "[data-customer-booking-page]",
+          `${viewport.label} customer-facing booking route`,
+        );
+      } finally {
+        await client.send("Page.removeScriptToEvaluateOnNewDocument", {
+          identifier: customerBookingFixtureIdentifier,
+        });
+      }
     };
 
     const setCustomerBookingField = async (field, value) => {
@@ -35698,9 +35784,10 @@ async function runChromeTest() {
         "Expected /my-bookings New Booking Request to open the canonical /book form",
       );
       assert.equal(
-        routedBookingRequestState.text.includes("Submit Booking Request"),
+        routedBookingRequestState.text.includes("Verify your mobile for a first public booking") &&
+          routedBookingRequestState.text.includes("Phone verification required"),
         true,
-        "Expected routed /book form to keep the customer-safe submit button",
+        "Expected the mock portal navigation without a real customer session to retain the public OTP boundary",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(
         routedBookingRequestState.text,

@@ -571,7 +571,9 @@ export default function CustomerBookingPage() {
           ? traveler.preferredVehicle
           : current.vehicleType,
     }));
-    setMissingFields((current) => current.filter((item) => item !== "passengerName"));
+    setMissingFields((current) =>
+      traveler ? current.filter((item) => item !== "passengerName") : current,
+    );
     setConfirmationStatus(null);
   }
 
@@ -1079,33 +1081,40 @@ export default function CustomerBookingPage() {
                 Trip Details
               </h2>
               <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
-                <label className="text-xs font-semibold text-slate-800">
-                  Passenger name
+                <div
+                  className="text-xs font-semibold text-slate-800"
+                  data-customer-booking-passenger-control="true"
+                >
+                  <span className="block">Passenger name</span>
                   {registeredTravelers.length > 0 ? (
                     <select
-                      aria-invalid={isMissing("passengerName")}
-                      className={fieldClass(isMissing("passengerName"))}
+                      aria-label="Registered traveller"
+                      className={fieldClass(false)}
                       data-customer-booking-field="travelerId"
                       data-customer-booking-traveler-select="true"
                       name="travelerId"
                       onChange={(event) => selectRegisteredTraveler(event.target.value)}
-                      required
                       value={form.travelerId}
                     >
-                      <option value="">Choose registered traveller</option>
+                      <option value="">Enter a new passenger name</option>
                       {registeredTravelers.map((traveler) => (
                         <option key={traveler.id} value={traveler.id}>
                           {traveler.travelerName}
                         </option>
                       ))}
                     </select>
-                  ) : (
+                  ) : null}
+                  {!form.travelerId ? (
                     <input
+                      aria-label="Passenger name"
                       aria-invalid={isMissing("passengerName")}
                       autoComplete="off"
-                      className={fieldClass(isMissing("passengerName"))}
+                      className={`${fieldClass(isMissing("passengerName"))} ${
+                        registeredTravelers.length > 0 ? "mt-2" : ""
+                      }`}
                       data-customer-booking-field="passengerName"
                       data-customer-booking-memory-passenger-input="true"
+                      data-customer-booking-new-passenger-input="true"
                       list={bookingMemorySuggestions.length > 0 ? bookingMemoryPassengerListId : undefined}
                       name="passengerName"
                       onChange={(event) => updatePassengerName(event.target.value)}
@@ -1116,7 +1125,7 @@ export default function CustomerBookingPage() {
                       type="text"
                       value={form.passengerName}
                     />
-                  )}
+                  ) : null}
                   {bookingMemorySuggestions.length > 0 ? (
                     <datalist
                       data-customer-booking-memory-passenger-list="true"
@@ -1131,7 +1140,7 @@ export default function CustomerBookingPage() {
                       ))}
                     </datalist>
                   ) : null}
-                </label>
+                </div>
 
                 <label className="text-xs font-semibold text-slate-800">
                   Flight number if any

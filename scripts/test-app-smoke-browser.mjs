@@ -32609,7 +32609,15 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
-                travelers: [],
+                travelers: [
+                  {
+                    default_dropoff_address: "Registered Traveller Dropoff",
+                    default_pickup_address: "Registered Traveller Pickup",
+                    id: 901,
+                    preferred_vehicle: "Mercedes S-Class",
+                    traveler_name: "Registered Traveller",
+                  },
+                ],
                 version: "customer-booking-memory-read-v1",
               }),
               { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -33171,6 +33179,26 @@ async function runChromeTest() {
               ...document.querySelectorAll("[data-customer-booking-memory-passenger-option]"),
             ].map((option) => option.value),
           },
+          registeredTraveler: {
+            newPassengerInputVisible: (() => {
+              const input = document.querySelector("[data-customer-booking-new-passenger-input]");
+              const rect = input?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height >= 40);
+            })(),
+            options: [
+              ...document.querySelectorAll("[data-customer-booking-traveler-select] option"),
+            ].map((option) => option.textContent.trim()),
+            required: Boolean(
+              document.querySelector("[data-customer-booking-traveler-select]")?.required,
+            ),
+            value:
+              document.querySelector("[data-customer-booking-traveler-select]")?.value || "",
+            visible: (() => {
+              const select = document.querySelector("[data-customer-booking-traveler-select]");
+              const rect = select?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height >= 40);
+            })(),
+          },
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
           ),
@@ -33456,6 +33484,17 @@ async function runChromeTest() {
         true,
         "Expected /book to show clear team review notice",
       );
+      assert.deepEqual(
+        initialState.registeredTraveler,
+        {
+          newPassengerInputVisible: true,
+          options: ["Enter a new passenger name", "Registered Traveller"],
+          required: false,
+          value: "",
+          visible: true,
+        },
+        "Expected a returning customer to be able to type a new passenger or choose a registered traveller.",
+      );
       assertNoNativeAppOnlyLanguage(initialState.text, "/book desktop");
       for (const expectedField of [
         "Customer / company name",
@@ -33684,6 +33723,41 @@ async function runChromeTest() {
         /[A-Z]{2,}-\d{3,}/.test(invalidState.text),
         false,
         "Expected invalid /book submit not to create an invoice-style number",
+      );
+
+      await setCustomerBookingField("travelerId", "901");
+      const registeredTravelerState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.registeredTraveler.value === "901" &&
+            !candidateState.registeredTraveler.newPassengerInputVisible
+            ? candidateState
+            : false;
+        },
+        10000,
+        "registered traveller selection",
+      );
+      assert.equal(
+        registeredTravelerState.text.includes("Registered Traveller"),
+        true,
+        "Expected the established verified traveller choice to remain available.",
+      );
+      await setCustomerBookingField("travelerId", "");
+      const newPassengerState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.registeredTraveler.value === "" &&
+            candidateState.registeredTraveler.newPassengerInputVisible
+            ? candidateState
+            : false;
+        },
+        10000,
+        "new passenger entry after registered traveller selection",
+      );
+      assert.equal(
+        newPassengerState.fieldState.passengerName.value,
+        "",
+        "Expected choosing new passenger to reveal an empty required passenger-name field.",
       );
 
       await setCustomerBookingField("pickupDate", "2026-06-05");

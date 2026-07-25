@@ -55,8 +55,8 @@ assert.match(
 );
 assert.match(
   appSmoke,
-  /ok: true,\s*travelers: \[\],\s*version: "customer-booking-memory-read-v1"/,
-  "The established customer-memory browser fixture must satisfy the current safe profile response contract.",
+  /ok: true,\s*travelers: \[\s*\{\s*default_dropoff_address: "Registered Traveller Dropoff",\s*default_pickup_address: "Registered Traveller Pickup",\s*id: 901,\s*preferred_vehicle: "Mercedes S-Class",\s*traveler_name: "Registered Traveller",\s*\},\s*\],\s*version: "customer-booking-memory-read-v1"/,
+  "The customer-memory browser fixture must exercise the returning-customer choice between a verified traveller and a new passenger.",
 );
 assert.match(
   appSmoke,

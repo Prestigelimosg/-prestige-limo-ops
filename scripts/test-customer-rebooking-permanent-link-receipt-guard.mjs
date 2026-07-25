@@ -110,13 +110,31 @@ for (const fragment of [
 for (const fragment of [
   '"emailAddress",',
   "loadCustomerBookingMemoryProfile",
+  'data-customer-booking-new-passenger-input="true"',
   'data-customer-booking-traveler-select="true"',
+  '<option value="">Enter a new passenger name</option>',
+  "{!form.travelerId ? (",
   "result.bookingReference",
   "result.receiptStatus",
   "This portal link is no longer active.",
 ]) {
   includes(bookingPage, fragment);
 }
+const travelerSelectStart = files[bookingPage].indexOf(
+  'data-customer-booking-traveler-select="true"',
+);
+const travelerSelectEnd = files[bookingPage].indexOf("</select>", travelerSelectStart);
+assert.ok(travelerSelectStart >= 0 && travelerSelectEnd > travelerSelectStart);
+assert.doesNotMatch(
+  files[bookingPage].slice(travelerSelectStart, travelerSelectEnd),
+  /\brequired\b/,
+  "The registered-traveller selector must remain optional so a returning customer can enter a new passenger.",
+);
+assert.match(
+  files[bookingPage],
+  /function updatePassengerName\(value: string\)[\s\S]*?passengerName: value,\s*travelerId: "",/,
+  "Typing a new passenger must clear any verified traveller identity.",
+);
 assert.equal(
   files[bookingPage].includes("Your old saved portal access was cleared."),
   false,

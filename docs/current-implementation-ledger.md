@@ -1,16 +1,23 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3c09156a Protect public booking with phone OTP
+973b0343 Restore private booking invitation gate
 
 Latest pushed main/staging runtime checkpoint:
-3c09156a Protect public booking with phone OTP
+973b0343 Restore private booking invitation gate
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-8adffa23 Merge PR #97: Protect public booking with phone OTP
+8d9202dc Merge pull request #98 from Prestigelimosg/codex/restore-private-booking-invite
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer Rates Create-Path Guard Selector Alignment (2026-07-25)
+
+- The broad preactivation suite exposed one test-only drift in `scripts/test-customer-rates-runtime-create-path-guard.mjs`: its June assertion required the original exact traveller-create return selector ending at `driver_payout_rules`, while the established July card-option default work correctly extended that same selector with `card_option_default_enabled`.
+- Source and Git blame confirm the traveller create path still returns the required verified record `id`, `company_id`, `traveler_name`, `customer_rates`, and `driver_payout_rules`; the only additive field is the already-approved persisted invoice card default. The runtime query, create/update flow, typed customer-rates boundary, closed-gate legacy fallback, payout separation, Rates UI, and Supabase schema are unchanged.
+- The existing focused create-path guard is aligned to the exact current selector. No application file, route, helper, table, migration, RLS policy, environment value, provider, booking, CRM record, customer rate, driver payout, invoice, payment, payout, PayNow, Calendar, message, GPS, or Production data is changed.
+- Focused verification is `scripts/test-customer-rates-runtime-create-path-guard.mjs`, `scripts/test-customer-rates-runtime-app-wiring.mjs`, `scripts/test-customer-card-option-default-override-guard.mjs`, and the registered preactivation suite.
 
 ### Public Booking Invitation-Only Restoration (2026-07-25)
 

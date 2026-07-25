@@ -901,6 +901,10 @@ export type CustomerBookingRequestParsedPayloads = {
   returnTripRequested: boolean;
 };
 
+export type CustomerBookingRequestParseOptions = {
+  groupReferenceOverride?: string;
+};
+
 function isCustomerReturnTripRequested(value: unknown) {
   if (value === true) {
     return true;
@@ -1024,8 +1028,22 @@ function buildCustomerBookingRequestPayloadForLeg({
 
 export function parseCustomerBookingRequestPayloads(
   value: unknown,
+  options: CustomerBookingRequestParseOptions = {},
 ): AdminBookingResult<CustomerBookingRequestParsedPayloads> {
   const body = asRecord(value);
+  const groupReferenceOverride =
+    options.groupReferenceOverride === undefined
+      ? null
+      : validTargetBookingReference(options.groupReferenceOverride);
+
+  if (options.groupReferenceOverride !== undefined && !groupReferenceOverride) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request reference override rejected.",
+    };
+  }
+
   const forbiddenFields = findForbiddenFieldNames(body);
 
   if (forbiddenFields.length > 0) {
@@ -1089,7 +1107,8 @@ export function parseCustomerBookingRequestPayloads(
 
   const returnTripRequested = isCustomerReturnTripRequested(body.returnTripRequested);
   const flightNumber = textOrNull(body.flightNumber);
-  const groupReference = createCustomerBookingRequestReference();
+  const groupReference =
+    groupReferenceOverride || createCustomerBookingRequestReference();
   const outbound = buildCustomerBookingRequestPayloadForLeg({
     body,
     bookingReference: returnTripRequested ? `${groupReference}-OUT` : groupReference,

@@ -36,7 +36,11 @@ export type CustomerBookingRequestSubmitResult =
     }
   | {
       ok: false;
-      reason?: "portal_access_cleared";
+      reason?:
+        | "invitation_invalid"
+        | "invitation_required"
+        | "invitation_used"
+        | "portal_access_cleared";
     };
 
 type CustomerBookingRequestFetch = typeof fetch;
@@ -219,19 +223,25 @@ export async function submitCustomerBookingRequest(
   input: CustomerBookingRequestSubmitInput,
   {
     fetcher = fetch,
+    invitationToken,
     signal,
   }: {
     fetcher?: CustomerBookingRequestFetch;
+    invitationToken?: string;
     signal?: AbortSignal;
   } = {},
 ): Promise<CustomerBookingRequestSubmitResult> {
   try {
+    const safeInvitationToken = invitationToken?.trim() || "";
     const response = await fetcher(customerBookingRequestApiPath, {
       body: JSON.stringify(toCustomerBookingRequestApiBody(input)),
       cache: "no-store",
       credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
+        ...(safeInvitationToken
+          ? { "x-prestige-customer-booking-invitation": safeInvitationToken }
+          : {}),
         "x-prestige-customer-purpose": "customer-booking-request",
       },
       method: "POST",
@@ -239,6 +249,16 @@ export async function submitCustomerBookingRequest(
     });
 
     if (!response.ok) {
+      const resultReason = response.headers?.get("x-prestige-customer-booking-result");
+
+      if (
+        resultReason === "invitation_required" ||
+        resultReason === "invitation_invalid" ||
+        resultReason === "invitation_used"
+      ) {
+        return { ok: false, reason: resultReason };
+      }
+
       return response.status === 409
         ? { ok: false, reason: "portal_access_cleared" }
         : { ok: false };

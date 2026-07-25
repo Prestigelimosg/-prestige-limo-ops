@@ -548,9 +548,23 @@ export default function CustomerBookingPage() {
     });
 
     try {
-      const result = await submitCustomerBookingRequest(form);
+      const searchParams = new URLSearchParams(window.location.search);
+      const invitationToken = searchParams.get("invite")?.trim() || undefined;
+      const result = await submitCustomerBookingRequest(form, { invitationToken });
 
       if (!result.ok) {
+        if (
+          result.reason === "invitation_required" ||
+          result.reason === "invitation_invalid" ||
+          result.reason === "invitation_used"
+        ) {
+          setFeedback({
+            tone: "error",
+            text: "This booking invitation is missing, expired, or already used. Ask Prestige Limo for a new booking invitation.",
+          });
+          return;
+        }
+
         if (result.reason === "portal_access_cleared") {
           setFeedback({
             tone: "error",

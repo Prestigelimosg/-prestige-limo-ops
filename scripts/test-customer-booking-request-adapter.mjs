@@ -127,6 +127,7 @@ try {
         ok: true,
       };
     },
+    invitationToken: "signed-private-booking-invitation",
   });
 
   assert.equal(customerBookingRequestApiPath, "/api/customer-booking-requests");
@@ -145,6 +146,7 @@ try {
   assert.equal(fetchCalls[0].init.method, "POST");
   assert.deepEqual(fetchCalls[0].init.headers, {
     "Content-Type": "application/json",
+    "x-prestige-customer-booking-invitation": "signed-private-booking-invitation",
     "x-prestige-customer-purpose": "customer-booking-request",
   });
   assert.deepEqual(
@@ -273,6 +275,35 @@ try {
 
   assert.deepEqual(blocked, { ok: false });
   assert.equal(blockedJsonWasRead, false, "Blocked responses should not parse unsafe error bodies.");
+
+  for (const invitationReason of [
+    "invitation_required",
+    "invitation_invalid",
+    "invitation_used",
+  ]) {
+    let invitationFailureJsonWasRead = false;
+    const invitationFailure = await submitCustomerBookingRequest(safeInput, {
+      fetcher: async () => ({
+        headers: {
+          get: (name) =>
+            name === "x-prestige-customer-booking-result" ? invitationReason : null,
+        },
+        json: async () => {
+          invitationFailureJsonWasRead = true;
+          return { error: "must not be parsed", ok: false };
+        },
+        ok: false,
+        status: invitationReason === "invitation_used" ? 409 : 403,
+      }),
+    });
+
+    assert.deepEqual(invitationFailure, { ok: false, reason: invitationReason });
+    assert.equal(
+      invitationFailureJsonWasRead,
+      false,
+      `${invitationReason} response should not parse an unsafe error body.`,
+    );
+  }
 
   let stalePortalJsonWasRead = false;
   const stalePortal = await submitCustomerBookingRequest(safeInput, {

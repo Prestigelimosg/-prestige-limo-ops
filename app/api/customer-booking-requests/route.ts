@@ -1,5 +1,6 @@
 import {
   createAdminBooking,
+  loadAdminBookingByReference,
   parseCustomerBookingRequestPayloads,
   type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
@@ -14,6 +15,7 @@ import {
 } from "../../../lib/customer-saved-bookings-read";
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
+import { verifyCustomerBookingInvitationToken } from "../../../lib/customer-booking-invitation";
 import {
   createCustomerPortalAccessLinkToken,
   safeCustomerPortalPublicBookingReference,
@@ -22,6 +24,8 @@ import {
 export const dynamic = "force-dynamic";
 
 const customerBookingPurposeHeader = "customer-booking-request";
+const customerBookingInvitationHeader = "x-prestige-customer-booking-invitation";
+const customerBookingResultHeader = "x-prestige-customer-booking-result";
 
 function isCustomerBookingRequest(request: Request) {
   const requestUrl = new URL(request.url);
@@ -75,6 +79,32 @@ function safeFailureResponse() {
       error: "Booking request failed safely.",
     },
     { status: 500 },
+  );
+}
+
+function invitationFailureResponse(
+  reason: "invitation_invalid" | "invitation_required" | "invitation_used",
+  status: 403 | 409,
+) {
+  const message =
+    reason === "invitation_used"
+      ? "This booking invitation was already used."
+      : reason === "invitation_required"
+        ? "A valid customer booking invitation is required."
+        : "This booking invitation is invalid or expired.";
+
+  return Response.json(
+    {
+      ok: false,
+      error: message,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        [customerBookingResultHeader]: reason,
+      },
+      status,
+    },
   );
 }
 
@@ -253,18 +283,6 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
-    const parsed = parseCustomerBookingRequestPayloads(body);
-
-    if (!parsed.ok) {
-      return Response.json(
-        {
-          ok: false,
-          error: customerSafeError(parsed.error),
-        },
-        { status: parsed.status },
-      );
-    }
-
     const portalBoundary = resolveCustomerSavedBookingsBoundaryForPurpose(
       request,
       "customer-booking-request",
@@ -280,6 +298,51 @@ export async function POST(request: Request) {
 
     if (!verifiedIdentity?.ok && body.travelerId !== undefined && body.travelerId !== null && body.travelerId !== "") {
       return blockedResponse();
+    }
+
+    let invitationGroupReference: string | undefined;
+
+    if (!verifiedIdentity?.ok) {
+      const invitationToken = request.headers.get(customerBookingInvitationHeader)?.trim() || "";
+
+      if (!invitationToken) {
+        return invitationFailureResponse("invitation_required", 403);
+      }
+
+      const invitation = verifyCustomerBookingInvitationToken(invitationToken);
+
+      if (!invitation.ok) {
+        return invitationFailureResponse("invitation_invalid", 403);
+      }
+
+      const existingInvitationBooking = await loadAdminBookingByReference(
+        customerBookingRequestPersistenceAdapterActor,
+        invitation.data.booking_reference,
+      );
+
+      if (existingInvitationBooking.ok) {
+        return invitationFailureResponse("invitation_used", 409);
+      }
+
+      if (existingInvitationBooking.status !== 404) {
+        return safeFailureResponse();
+      }
+
+      invitationGroupReference = invitation.data.booking_reference;
+    }
+
+    const parsed = parseCustomerBookingRequestPayloads(body, {
+      groupReferenceOverride: invitationGroupReference,
+    });
+
+    if (!parsed.ok) {
+      return Response.json(
+        {
+          ok: false,
+          error: customerSafeError(parsed.error),
+        },
+        { status: parsed.status },
+      );
     }
 
     const savedRequests: AdminBookingPersistenceRecord[] = [];
@@ -310,6 +373,17 @@ export async function POST(request: Request) {
       });
 
       if (!result.ok) {
+        if (invitationGroupReference) {
+          const consumedInvitationBooking = await loadAdminBookingByReference(
+            customerBookingRequestPersistenceAdapterActor,
+            invitationGroupReference,
+          );
+
+          if (consumedInvitationBooking.ok) {
+            return invitationFailureResponse("invitation_used", 409);
+          }
+        }
+
         return Response.json(
           {
             ok: false,

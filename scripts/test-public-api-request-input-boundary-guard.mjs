@@ -291,7 +291,10 @@ for (const fragment of [
   "const customerBookingPurposeHeader = \"customer-booking-request\";",
   "refererUrl.pathname === \"/book\"",
   "const body = await readJsonBody(request);",
-  "const parsed = parseCustomerBookingRequestPayloads(body);",
+  "request.headers.get(customerBookingInvitationHeader)",
+  "verifyCustomerBookingInvitationToken(invitationToken)",
+  "const parsed = parseCustomerBookingRequestPayloads(body, {",
+  "groupReferenceOverride: invitationGroupReference",
   "customerSafeError(parsed.error)",
   "customerSafeError(result.error)",
 ]) {
@@ -300,7 +303,7 @@ for (const fragment of [
 assertBefore(
   customerBookingRequestRoute,
   "if (!isCustomerBookingRequest(request))",
-  "parseCustomerBookingRequestPayloads(body)",
+  "const parsed = parseCustomerBookingRequestPayloads(body, {",
   "customer booking request route",
 );
 

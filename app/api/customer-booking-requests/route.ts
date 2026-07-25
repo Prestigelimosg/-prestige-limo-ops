@@ -16,7 +16,6 @@ import {
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
 import { verifyCustomerBookingInvitationToken } from "../../../lib/customer-booking-invitation";
-import { verifyCustomerBookingPhoneOtpProof } from "../../../lib/customer-booking-phone-otp";
 import {
   createCustomerPortalAccessLinkToken,
   safeCustomerPortalPublicBookingReference,
@@ -26,8 +25,6 @@ export const dynamic = "force-dynamic";
 
 const customerBookingPurposeHeader = "customer-booking-request";
 const customerBookingInvitationHeader = "x-prestige-customer-booking-invitation";
-const customerBookingPhoneProofHeader =
-  "x-prestige-customer-booking-phone-proof";
 const customerBookingResultHeader = "x-prestige-customer-booking-result";
 
 function isCustomerBookingRequest(request: Request) {
@@ -95,35 +92,6 @@ function invitationFailureResponse(
       : reason === "invitation_required"
         ? "A valid customer booking invitation is required."
         : "This booking invitation is invalid or expired.";
-
-  return Response.json(
-    {
-      ok: false,
-      error: message,
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store",
-        [customerBookingResultHeader]: reason,
-      },
-      status,
-    },
-  );
-}
-
-function phoneVerificationFailureResponse(
-  reason:
-    | "phone_verification_invalid"
-    | "phone_verification_required"
-    | "phone_verification_used",
-  status: 403 | 409,
-) {
-  const message =
-    reason === "phone_verification_used"
-      ? "This phone verification was already used."
-      : reason === "phone_verification_required"
-        ? "Phone verification is required for this public booking request."
-        : "Phone verification is invalid or expired.";
 
   return Response.json(
     {
@@ -333,79 +301,38 @@ export async function POST(request: Request) {
     }
 
     let invitationGroupReference: string | undefined;
-    let phoneOtpGroupReference: string | undefined;
 
     if (!verifiedIdentity?.ok) {
       const invitationToken = request.headers.get(customerBookingInvitationHeader)?.trim() || "";
 
-      if (invitationToken) {
-        const invitation = verifyCustomerBookingInvitationToken(invitationToken);
-
-        if (!invitation.ok) {
-          return invitationFailureResponse("invitation_invalid", 403);
-        }
-
-        const existingInvitationBooking = await loadAdminBookingByReference(
-          customerBookingRequestPersistenceAdapterActor,
-          invitation.data.booking_reference,
-        );
-
-        if (existingInvitationBooking.ok) {
-          return invitationFailureResponse("invitation_used", 409);
-        }
-
-        if (existingInvitationBooking.status !== 404) {
-          return safeFailureResponse();
-        }
-
-        invitationGroupReference = invitation.data.booking_reference;
-      } else {
-        const phoneVerificationProof =
-          request.headers.get(customerBookingPhoneProofHeader)?.trim() || "";
-
-        if (!phoneVerificationProof) {
-          return phoneVerificationFailureResponse(
-            "phone_verification_required",
-            403,
-          );
-        }
-
-        const phoneVerification = verifyCustomerBookingPhoneOtpProof(
-          phoneVerificationProof,
-          body.contactNo,
-        );
-
-        if (!phoneVerification.ok) {
-          return phoneVerificationFailureResponse(
-            "phone_verification_invalid",
-            403,
-          );
-        }
-
-        const existingPhoneVerifiedBooking = await loadAdminBookingByReference(
-          customerBookingRequestPersistenceAdapterActor,
-          phoneVerification.data.booking_reference,
-        );
-
-        if (existingPhoneVerifiedBooking.ok) {
-          return phoneVerificationFailureResponse(
-            "phone_verification_used",
-            409,
-          );
-        }
-
-        if (existingPhoneVerifiedBooking.status !== 404) {
-          return safeFailureResponse();
-        }
-
-        phoneOtpGroupReference =
-          phoneVerification.data.booking_reference;
+      if (!invitationToken) {
+        return invitationFailureResponse("invitation_required", 403);
       }
+
+      const invitation = verifyCustomerBookingInvitationToken(invitationToken);
+
+      if (!invitation.ok) {
+        return invitationFailureResponse("invitation_invalid", 403);
+      }
+
+      const existingInvitationBooking = await loadAdminBookingByReference(
+        customerBookingRequestPersistenceAdapterActor,
+        invitation.data.booking_reference,
+      );
+
+      if (existingInvitationBooking.ok) {
+        return invitationFailureResponse("invitation_used", 409);
+      }
+
+      if (existingInvitationBooking.status !== 404) {
+        return safeFailureResponse();
+      }
+
+      invitationGroupReference = invitation.data.booking_reference;
     }
 
     const parsed = parseCustomerBookingRequestPayloads(body, {
-      groupReferenceOverride:
-        invitationGroupReference || phoneOtpGroupReference,
+      groupReferenceOverride: invitationGroupReference,
     });
 
     if (!parsed.ok) {
@@ -446,22 +373,14 @@ export async function POST(request: Request) {
       });
 
       if (!result.ok) {
-        const singleUseGroupReference =
-          invitationGroupReference || phoneOtpGroupReference;
-
-        if (singleUseGroupReference) {
-          const consumedSingleUseBooking = await loadAdminBookingByReference(
+        if (invitationGroupReference) {
+          const consumedInvitationBooking = await loadAdminBookingByReference(
             customerBookingRequestPersistenceAdapterActor,
-            singleUseGroupReference,
+            invitationGroupReference,
           );
 
-          if (consumedSingleUseBooking.ok) {
-            return invitationGroupReference
-              ? invitationFailureResponse("invitation_used", 409)
-              : phoneVerificationFailureResponse(
-                  "phone_verification_used",
-                  409,
-                );
+          if (consumedInvitationBooking.ok) {
+            return invitationFailureResponse("invitation_used", 409);
           }
         }
 

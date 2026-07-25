@@ -406,10 +406,6 @@ const guardChecks = [
     script: "scripts/test-customer-booking-invitation-guard.mjs",
   },
   {
-    label: "public first-booking phone OTP guard",
-    script: "scripts/test-customer-booking-phone-otp-guard.mjs",
-  },
-  {
     label: "public API session cookie/cache boundary guard",
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
   },

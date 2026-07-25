@@ -63,11 +63,13 @@ assert.equal(
   bookingRequestRouteSource.includes("verifyCustomerBookingInvitationToken") &&
     bookingRequestRouteSource.includes("loadAdminBookingByReference") &&
     bookingRequestRouteSource.includes("customer-booking-invitation") &&
+    bookingRequestRouteSource.includes('invitationFailureResponse("invitation_required", 403)') &&
     bookingRequestRouteSource.includes("invitation_used") &&
     bookingRequestRouteSource.includes("groupReferenceOverride") &&
-    bookingRequestRouteSource.includes("verifyCustomerBookingPhoneOtpProof"),
+    !bookingRequestRouteSource.includes("PhoneOtp") &&
+    !bookingRequestRouteSource.includes("phone-verification"),
   true,
-  "Private invitations must retain priority over the additive public phone-proof boundary while the established route remains the only write lane.",
+  "Anonymous /book submissions must require a valid unused invitation while the established route remains the only write lane.",
 );
 
 assert.equal(
@@ -97,9 +99,14 @@ assert.equal(
     bookingRequestAdapterSource.includes('"invitation_invalid"') &&
     bookingRequestAdapterSource.includes('"invitation_used"') &&
     bookingPageSource.includes('searchParams.get("invite")') &&
-    bookingPageSource.includes("Ask Prestige Limo for a new booking invitation"),
+    bookingPageSource.includes("Ask Prestige Limo for a new booking invitation") &&
+    bookingPageSource.includes('data-customer-booking-invitation-required="true"') &&
+    bookingPageSource.includes("Private booking invitation required") &&
+    bookingPageSource.includes('"Private invitation required"') &&
+    !bookingPageSource.includes("customer-booking-phone") &&
+    !bookingPageSource.includes("Send verification code"),
   true,
-  "The existing /book form must carry the private invitation outside the booking payload and show a safe recovery message.",
+  "The existing /book form must carry the private invitation outside the booking payload, visibly block anonymous submission, and expose no retired OTP control.",
 );
 
 assert.equal(

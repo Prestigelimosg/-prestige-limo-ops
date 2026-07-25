@@ -20,11 +20,6 @@ import {
   type CustomerBookingLocalVoiceDraftSupportedField,
   type CustomerBookingSpeechRecognition,
 } from "../../lib/customer-booking-local-voice-draft";
-import {
-  checkCustomerBookingPhoneOtpVerification,
-  startCustomerBookingPhoneOtpVerification,
-  type CustomerBookingPhoneOtpClientReason,
-} from "../../lib/customer-booking-phone-otp-adapter";
 import { submitCustomerBookingRequest } from "../../lib/customer-booking-request-adapter";
 import {
   customerTermsAndConditionsSummary,
@@ -233,14 +228,6 @@ export default function CustomerBookingPage() {
   const [hasBookingInvitation, setHasBookingInvitation] = useState(false);
   const [portalProfileResolved, setPortalProfileResolved] = useState(false);
   const [hasPortalBookingAccess, setHasPortalBookingAccess] = useState(false);
-  const [phoneOtpChallengeId, setPhoneOtpChallengeId] = useState("");
-  const [phoneOtpCode, setPhoneOtpCode] = useState("");
-  const [phoneOtpProof, setPhoneOtpProof] = useState("");
-  const [phoneOtpVerifiedPhone, setPhoneOtpVerifiedPhone] = useState("");
-  const [phoneOtpSending, setPhoneOtpSending] = useState(false);
-  const [phoneOtpChecking, setPhoneOtpChecking] = useState(false);
-  const [phoneOtpCooldown, setPhoneOtpCooldown] = useState(0);
-  const [phoneOtpFeedback, setPhoneOtpFeedback] = useState<Feedback | null>(null);
   const bookingMemoryLoadStarted = useRef(false);
   const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
   const voiceRecognitionErroredRef = useRef(false);
@@ -321,18 +308,6 @@ export default function CustomerBookingPage() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (phoneOtpCooldown <= 0) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setPhoneOtpCooldown((current) => Math.max(0, current - 1));
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, [phoneOtpCooldown]);
-
   function updateForm(updater: (currentForm: BookingRequestForm) => BookingRequestForm) {
     setForm((currentForm) => {
       const nextForm = updater(currentForm);
@@ -342,15 +317,6 @@ export default function CustomerBookingPage() {
   }
 
   function updateField(field: keyof BookingRequestForm, value: string) {
-    if (field === "contactNo" && value !== formRef.current.contactNo) {
-      setPhoneOtpChallengeId("");
-      setPhoneOtpCode("");
-      setPhoneOtpProof("");
-      setPhoneOtpVerifiedPhone("");
-      setPhoneOtpCooldown(0);
-      setPhoneOtpFeedback(null);
-    }
-
     updateForm((current) => ({ ...current, [field]: value }));
     setMissingFields((current) =>
       current.filter(
@@ -364,112 +330,6 @@ export default function CustomerBookingPage() {
       ),
     );
     setConfirmationStatus(null);
-  }
-
-  function phoneOtpFailureText(
-    reason: CustomerBookingPhoneOtpClientReason | "unknown",
-    retryAfterSeconds: number | null,
-  ) {
-    if (reason === "phone_invalid") {
-      return "Enter a valid supported mobile number. Singapore numbers may be entered as +65 or eight digits.";
-    }
-
-    if (reason === "code_invalid") {
-      return "That six-digit code is incorrect. Check the SMS and try again.";
-    }
-
-    if (reason === "challenge_expired" || reason === "challenge_invalid") {
-      return "That verification expired. Request a new code.";
-    }
-
-    if (reason === "rate_limited") {
-      return retryAfterSeconds
-        ? `Too many requests. Try again in about ${retryAfterSeconds} seconds.`
-        : "Too many requests. Please wait before trying again.";
-    }
-
-    return "Phone verification is unavailable right now. Ask Prestige Limo for a private booking invitation.";
-  }
-
-  async function handleSendPhoneOtp() {
-    if (!form.contactNo.trim()) {
-      setPhoneOtpFeedback({
-        tone: "error",
-        text: "Enter your mobile number before requesting a verification code.",
-      });
-      return;
-    }
-
-    setPhoneOtpSending(true);
-    setPhoneOtpProof("");
-    setPhoneOtpVerifiedPhone("");
-    setPhoneOtpFeedback({
-      tone: "info",
-      text: "Requesting one verification code...",
-    });
-
-    try {
-      const result = await startCustomerBookingPhoneOtpVerification(form.contactNo);
-
-      if (!result.ok) {
-        setPhoneOtpFeedback({
-          tone: "error",
-          text: phoneOtpFailureText(result.reason, result.retryAfterSeconds),
-        });
-        return;
-      }
-
-      setPhoneOtpChallengeId(result.challengeId);
-      setPhoneOtpCode("");
-      setPhoneOtpCooldown(result.retryAfterSeconds);
-      setPhoneOtpFeedback({
-        tone: "info",
-        text: "A six-digit code was sent. Enter it below within 10 minutes.",
-      });
-    } finally {
-      setPhoneOtpSending(false);
-    }
-  }
-
-  async function handleCheckPhoneOtp() {
-    if (!phoneOtpChallengeId || !/^\d{6}$/.test(phoneOtpCode.trim())) {
-      setPhoneOtpFeedback({
-        tone: "error",
-        text: "Enter the complete six-digit code from the SMS.",
-      });
-      return;
-    }
-
-    setPhoneOtpChecking(true);
-    setPhoneOtpFeedback({
-      tone: "info",
-      text: "Checking the verification code...",
-    });
-
-    try {
-      const result = await checkCustomerBookingPhoneOtpVerification({
-        challengeId: phoneOtpChallengeId,
-        code: phoneOtpCode.trim(),
-        phone: form.contactNo,
-      });
-
-      if (!result.ok) {
-        setPhoneOtpFeedback({
-          tone: "error",
-          text: phoneOtpFailureText(result.reason, result.retryAfterSeconds),
-        });
-        return;
-      }
-
-      setPhoneOtpProof(result.proof);
-      setPhoneOtpVerifiedPhone(form.contactNo);
-      setPhoneOtpFeedback({
-        tone: "success",
-        text: "Phone verified. You can submit this booking request.",
-      });
-    } finally {
-      setPhoneOtpChecking(false);
-    }
   }
 
   function updatePickupTimeSelect(part: "hour" | "minute", value: string) {
@@ -659,6 +519,23 @@ export default function CustomerBookingPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (
+      !bookingInvitationResolved ||
+      !portalProfileResolved ||
+      (!hasBookingInvitation && !hasPortalBookingAccess)
+    ) {
+      setMissingFields([]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text:
+          !bookingInvitationResolved || !portalProfileResolved
+            ? "Please wait while we check your booking access."
+            : `A private booking invitation or active Customer Portal is required. Contact ${companyName} for your private link.`,
+      });
+      return;
+    }
+
     const dropoffIsOptional = customerBookingDropoffIsOptional(form.serviceType);
     const outboundRequiredFields = dropoffIsOptional
       ? requiredFields.filter((field) => field !== "dropoffLocation")
@@ -709,11 +586,7 @@ export default function CustomerBookingPage() {
     try {
       const searchParams = new URLSearchParams(window.location.search);
       const invitationToken = searchParams.get("invite")?.trim() || undefined;
-      const result = await submitCustomerBookingRequest(form, {
-        invitationToken,
-        phoneVerificationProof:
-          phoneOtpVerifiedPhone === form.contactNo ? phoneOtpProof : undefined,
-      });
+      const result = await submitCustomerBookingRequest(form, { invitationToken });
 
       if (!result.ok) {
         if (
@@ -724,21 +597,6 @@ export default function CustomerBookingPage() {
           setFeedback({
             tone: "error",
             text: "This booking invitation is missing, expired, or already used. Ask Prestige Limo for a new booking invitation.",
-          });
-          return;
-        }
-
-        if (
-          result.reason === "phone_verification_required" ||
-          result.reason === "phone_verification_invalid" ||
-          result.reason === "phone_verification_used"
-        ) {
-          setFeedback({
-            tone: "error",
-            text:
-              result.reason === "phone_verification_used"
-                ? "This phone verification was already used. Request a new code before submitting another booking."
-                : "Verify the contact mobile number below, or ask Prestige Limo for a private booking invitation.",
           });
           return;
         }
@@ -801,13 +659,13 @@ export default function CustomerBookingPage() {
       minute: returnPickupTimeDraft.minute || formParts.minute,
     };
   })();
-  const showPublicPhoneVerification =
+  const bookingSubmissionAccessResolved =
     bookingInvitationResolved &&
-    portalProfileResolved &&
-    !hasBookingInvitation &&
-    !hasPortalBookingAccess;
-  const phoneOtpVerified =
-    Boolean(phoneOtpProof) && phoneOtpVerifiedPhone === form.contactNo;
+    portalProfileResolved;
+  const hasBookingSubmissionAccess =
+    hasBookingInvitation || hasPortalBookingAccess;
+  const showInvitationRequired =
+    bookingSubmissionAccessResolved && !hasBookingSubmissionAccess;
 
   return (
     <main
@@ -951,86 +809,24 @@ export default function CustomerBookingPage() {
                   />
                 </label>
               </div>
-              {showPublicPhoneVerification ? (
+              {showInvitationRequired ? (
                 <div
-                  className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
-                  data-customer-booking-phone-verification="true"
+                  className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-amber-950"
+                  data-customer-booking-invitation-required="true"
                 >
-                  <p className="text-sm font-semibold text-sky-950">
-                    Verify your mobile for a first public booking
+                  <p className="text-sm font-semibold">
+                    Private booking invitation required
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-sky-900">
-                    We send one six-digit SMS code. Prestige Limo customers using a private invitation or Customer Portal do not need this step.
+                  <p className="mt-1 text-xs leading-5">
+                    To protect customers from fake requests, this form accepts a first booking only through a private Prestige Limo invitation. Contact {hotlineContact} and our team will send your private booking link.
                   </p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <button
-                      className="min-h-10 rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-customer-booking-phone-otp-send="true"
-                      disabled={
-                        phoneOtpSending ||
-                        phoneOtpChecking ||
-                        phoneOtpVerified ||
-                        phoneOtpCooldown > 0
-                      }
-                      onClick={handleSendPhoneOtp}
-                      type="button"
-                    >
-                      {phoneOtpSending
-                        ? "Sending code..."
-                        : phoneOtpCooldown > 0
-                          ? `Resend in ${phoneOtpCooldown}s`
-                          : phoneOtpChallengeId
-                            ? "Send new code"
-                            : "Send verification code"}
-                    </button>
-                    {phoneOtpChallengeId && !phoneOtpVerified ? (
-                      <>
-                        <label className="text-xs font-semibold text-slate-800">
-                          Six-digit code
-                          <input
-                            autoComplete="one-time-code"
-                            className={fieldClass()}
-                            data-customer-booking-phone-otp-code="true"
-                            inputMode="numeric"
-                            maxLength={6}
-                            onChange={(event) =>
-                              setPhoneOtpCode(
-                                event.target.value.replace(/\D/g, "").slice(0, 6),
-                              )
-                            }
-                            placeholder="000000"
-                            type="text"
-                            value={phoneOtpCode}
-                          />
-                        </label>
-                        <button
-                          className="min-h-10 rounded-md bg-sky-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-900 disabled:cursor-not-allowed disabled:bg-slate-400"
-                          data-customer-booking-phone-otp-check="true"
-                          disabled={phoneOtpChecking || phoneOtpCode.length !== 6}
-                          onClick={handleCheckPhoneOtp}
-                          type="button"
-                        >
-                          {phoneOtpChecking ? "Checking..." : "Verify code"}
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                  {phoneOtpFeedback ? (
-                    <div
-                      className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${feedbackClass(phoneOtpFeedback.tone)}`}
-                      data-customer-booking-phone-otp-feedback="true"
-                      role="status"
-                    >
-                      {phoneOtpFeedback.text}
-                    </div>
-                  ) : null}
                 </div>
               ) : hasBookingInvitation ? (
                 <div
                   className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900"
                   data-customer-booking-private-invitation-no-otp="true"
                 >
-                  Private booking invitation detected. We will check it when you submit; no SMS code is required here.
+                  Private booking invitation detected. We will check it when you submit.
                 </div>
               ) : null}
             </section>
@@ -1527,10 +1323,23 @@ export default function CustomerBookingPage() {
               <button
                 className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
                 data-customer-booking-submit="true"
-                disabled={submitting || Boolean(confirmationStatus)}
+                disabled={
+                  submitting ||
+                  Boolean(confirmationStatus) ||
+                  !bookingSubmissionAccessResolved ||
+                  !hasBookingSubmissionAccess
+                }
                 type="submit"
               >
-                {confirmationStatus ? "Submitted" : submitting ? "Submitting..." : "Submit Booking Request"}
+                {confirmationStatus
+                  ? "Submitted"
+                  : submitting
+                    ? "Submitting..."
+                    : !bookingSubmissionAccessResolved
+                      ? "Checking booking access..."
+                      : !hasBookingSubmissionAccess
+                        ? "Private invitation required"
+                        : "Submit Booking Request"}
               </button>
               <div
                 className={`rounded-md border px-3 py-3 text-sm leading-6 ${feedbackClass(feedback.tone)}`}

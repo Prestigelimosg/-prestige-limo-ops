@@ -9365,3 +9365,9 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Typing a new passenger does not overwrite, rename, or falsely reuse the registered traveller record and does not silently create another CRM traveller. Admin review and the existing verified CRM maintenance lane remain the only place to establish that identity.
 - OTP, booking persistence, customer/company/booker scope, invoice and billing workflows, payments, payouts, Driver Job, Calendar, GPS, messaging, notifications, provider configuration, environment values, Supabase schema/data, and all other wired lanes remain unchanged.
 - Focused protection: `scripts/test-customer-rebooking-permanent-link-receipt-guard.mjs`, plus the returning-customer branch in `scripts/test-app-smoke-browser.mjs` and its fixture-boundary guard.
+
+### PA Booking Submit Guard Alignment
+
+- Validation of the returning-customer Passenger name repair exposed one unrelated stale source assertion in `scripts/test-customer-booking-request-pa-identity-guard.mjs`. The assertion still required the July 11 single-line submit-button implementation even though the established private-invitation and public OTP work later expanded the same button with booking-access resolution and verified-access locks.
+- The application behavior was not broken: a successful request still renders `Submitted` and remains locked until a safe field edit clears `confirmationStatus`; the current button additionally stays locked while booking access is unresolved or unavailable and shows the established checking/phone-verification labels.
+- Only the focused guard is aligned to the current complete button contract and the existing field-edit unlock. No application component, OTP behavior, booking route, identity boundary, API, persistence helper, database, CRM, customer/driver workflow, invoice/billing workflow, provider configuration, or environment value changed.

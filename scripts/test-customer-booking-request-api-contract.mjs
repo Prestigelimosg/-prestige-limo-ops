@@ -39,6 +39,7 @@ async function loadRouteHarness() {
   const receiptEmailPath = path.join(tempDir, "lib/customer-booking-receipt-email.js");
   const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
   const customerPortalAccessLinkPath = path.join(tempDir, "lib/customer-portal-access-link.js");
+  const customerBookingInvitationPath = path.join(tempDir, "lib/customer-booking-invitation.js");
   const codexJobCardAutoPreparationPath = path.join(
     tempDir,
     "lib/codex-job-card-auto-preparation.js",
@@ -56,17 +57,23 @@ async function loadRouteHarness() {
       "  state.createCalls.push({ actor, audit, data });",
       "  return Array.isArray(state.createResults) && state.createResults.length > 0 ? state.createResults.shift() : state.createResult;",
       "}",
+      "async function loadAdminBookingByReference(actor, bookingReference) {",
+      "  const state = mock();",
+      "  state.lookupCalls.push({ actor, bookingReference });",
+      "  return state.lookupResult;",
+      "}",
       "function parseCustomerBookingRequestPayload(payload) {",
       "  const state = mock();",
       "  state.parseCalls.push(payload);",
       "  return state.parseResult;",
       "}",
-      "function parseCustomerBookingRequestPayloads(payload) {",
+      "function parseCustomerBookingRequestPayloads(payload, options) {",
       "  const state = mock();",
       "  state.parseCalls.push(payload);",
+      "  state.parseOptionsCalls.push(options);",
       "  return state.parsePayloadsResult || state.parseResult;",
       "}",
-      "module.exports = { createAdminBooking, parseCustomerBookingRequestPayload, parseCustomerBookingRequestPayloads };",
+      "module.exports = { createAdminBooking, loadAdminBookingByReference, parseCustomerBookingRequestPayload, parseCustomerBookingRequestPayloads };",
     ].join("\n"),
   );
   await writeFile(
@@ -176,6 +183,17 @@ async function loadRouteHarness() {
     ].join("\n"),
   );
   await writeFile(
+    customerBookingInvitationPath,
+    [
+      "function verifyCustomerBookingInvitationToken(token) {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  state.invitationCalls.push(token);",
+      "  return state.invitationResult;",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
     codexJobCardAutoPreparationPath,
     [
       "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
@@ -218,7 +236,22 @@ function installMock(overrides = {}) {
     devicePushAlertCalls: [],
     devicePushAlertThrows: false,
     identityCalls: [],
+    invitationCalls: [],
+    invitationResult: {
+      data: {
+        booking_reference: "CUST-SAFE-001",
+        invitation_id: "0123456789abcdef0123456789abcdef",
+      },
+      ok: true,
+    },
+    lookupCalls: [],
+    lookupResult: {
+      error: "Booking not found.",
+      ok: false,
+      status: 404,
+    },
     parseCalls: [],
+    parseOptionsCalls: [],
     parseResult: {
       data: {
         groupReference: "CUST-SAFE-001",
@@ -246,9 +279,18 @@ function validHeaders(extra = {}) {
     "Content-Type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-invitation": "valid-customer-booking-invitation",
     "x-prestige-customer-purpose": "customer-booking-request",
     ...extra,
   };
+}
+
+function validHeadersWithoutInvitation() {
+  const headers = validHeaders();
+
+  delete headers["x-prestige-customer-booking-invitation"];
+
+  return headers;
 }
 
 function postRequest(body, headers = validHeaders()) {
@@ -369,6 +411,75 @@ for (const phrase of [
 const harness = await loadRouteHarness();
 
 try {
+  const missingInvitationMock = installMock();
+  const missingInvitationResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Passenger" }, validHeadersWithoutInvitation()),
+  );
+  const missingInvitation = await readJson(missingInvitationResponse);
+
+  assert.equal(missingInvitation.status, 403);
+  assert.equal(
+    missingInvitationResponse.headers.get("x-prestige-customer-booking-result"),
+    "invitation_required",
+  );
+  assert.equal(missingInvitationMock.invitationCalls.length, 0);
+  assert.equal(missingInvitationMock.lookupCalls.length, 0);
+  assert.equal(missingInvitationMock.parseCalls.length, 0);
+  assert.equal(missingInvitationMock.createCalls.length, 0);
+  assert.equal(missingInvitationMock.adminAppNotificationCalls.length, 0);
+  assert.equal(missingInvitationMock.alertCalls.length, 0);
+  assert.equal(missingInvitationMock.devicePushAlertCalls.length, 0);
+  assertSafeCustomerBody(missingInvitation.body, "missing invitation body");
+
+  const invalidInvitationMock = installMock({
+    invitationResult: {
+      error: "invalid invitation",
+      ok: false,
+      status: 403,
+    },
+  });
+  const invalidInvitationResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Passenger" }),
+  );
+  const invalidInvitation = await readJson(invalidInvitationResponse);
+
+  assert.equal(invalidInvitation.status, 403);
+  assert.equal(
+    invalidInvitationResponse.headers.get("x-prestige-customer-booking-result"),
+    "invitation_invalid",
+  );
+  assert.equal(invalidInvitationMock.invitationCalls.length, 1);
+  assert.equal(invalidInvitationMock.lookupCalls.length, 0);
+  assert.equal(invalidInvitationMock.parseCalls.length, 0);
+  assert.equal(invalidInvitationMock.createCalls.length, 0);
+  assertSafeCustomerBody(invalidInvitation.body, "invalid invitation body");
+
+  const usedInvitationMock = installMock({
+    lookupResult: {
+      data: {
+        booking_reference: "CUST-SAFE-001",
+      },
+      ok: true,
+    },
+  });
+  const usedInvitationResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Passenger" }),
+  );
+  const usedInvitation = await readJson(usedInvitationResponse);
+
+  assert.equal(usedInvitation.status, 409);
+  assert.equal(
+    usedInvitationResponse.headers.get("x-prestige-customer-booking-result"),
+    "invitation_used",
+  );
+  assert.equal(usedInvitationMock.lookupCalls.length, 1);
+  assert.equal(usedInvitationMock.parseCalls.length, 0);
+  assert.equal(usedInvitationMock.createCalls.length, 0);
+  assert.equal(usedInvitationMock.adminAppNotificationCalls.length, 0);
+  assert.equal(usedInvitationMock.alertCalls.length, 0);
+  assert.equal(usedInvitationMock.devicePushAlertCalls.length, 0);
+  assertSafeCustomerBody(usedInvitation.body, "used invitation body");
+
   installMock();
   const success = await readJson(
     await harness.route.POST(
@@ -379,6 +490,12 @@ try {
   );
 
   assert.equal(success.status, 200);
+  assert.deepEqual(
+    globalThis.__prestigeCustomerBookingRequestApiMock.parseOptionsCalls,
+    [{ groupReferenceOverride: "CUST-SAFE-001" }],
+    "A verified invitation must supply its deterministic reference only through the server parser option.",
+  );
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.lookupCalls.length, 1);
   assert.deepEqual(success.body, {
     ok: true,
     request: {
@@ -454,7 +571,12 @@ try {
     },
   });
   const verifiedPaSuccess = await readJson(
-    await harness.route.POST(postRequest({ passengerName: "Tampered Passenger", travelerId: "901" })),
+    await harness.route.POST(
+      postRequest(
+        { passengerName: "Tampered Passenger", travelerId: "901" },
+        validHeadersWithoutInvitation(),
+      ),
+    ),
   );
 
   assert.equal(verifiedPaSuccess.status, 200);
@@ -467,6 +589,8 @@ try {
     traveler_id: 901,
   });
   assert.equal(verifiedPaMock.identityCalls[0].travelerId, "901");
+  assert.equal(verifiedPaMock.invitationCalls.length, 0);
+  assert.equal(verifiedPaMock.lookupCalls.length, 0);
   assert.match(
     verifiedPaMock.receiptCalls[0].options.portalUrl,
     /^http:\/\/localhost\/api\/customer-portal-access\/customer-portal-access-link-v1\.test\.signature\?booking=10841&tracking=1$/,
@@ -508,7 +632,12 @@ try {
     },
   });
   const mismatchedEmailSuccess = await readJson(
-    await harness.route.POST(postRequest({ passengerName: "Tampered Passenger", travelerId: "901" })),
+    await harness.route.POST(
+      postRequest(
+        { passengerName: "Tampered Passenger", travelerId: "901" },
+        validHeadersWithoutInvitation(),
+      ),
+    ),
   );
   assert.equal(mismatchedEmailSuccess.status, 200);
   assert.equal(
@@ -621,10 +750,13 @@ try {
   });
   const returnTripSuccess = await readJson(
     await harness.route.POST(
-      postRequest({
-        passengerName: "Safe Passenger",
-        returnTripRequested: "yes",
-      }),
+      postRequest(
+        {
+          passengerName: "Safe Passenger",
+          returnTripRequested: "yes",
+        },
+        validHeadersWithoutInvitation(),
+      ),
     ),
   );
 

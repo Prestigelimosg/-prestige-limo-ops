@@ -402,6 +402,10 @@ const guardChecks = [
     script: "scripts/test-public-api-request-input-boundary-guard.mjs",
   },
   {
+    label: "admin-issued customer booking invitation guard",
+    script: "scripts/test-customer-booking-invitation-guard.mjs",
+  },
+  {
     label: "public API session cookie/cache boundary guard",
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
   },

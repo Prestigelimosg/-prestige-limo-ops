@@ -89,6 +89,7 @@ const adminEmailActivationPreflightApiPath =
 const adminCustomerDriverAppNotificationsApiPath =
   "/api/admin-customer-driver-app-notifications";
 const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
+const adminCustomerBookingInvitationsApiPath = "/api/admin-customer-booking-invitations";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
@@ -118,6 +119,7 @@ const completedHandoffActionQueryParam = "completed_action";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
+const customerBookingInvitationCopyStateKey = "customer-booking-invitation";
 const adminDismissedPendingDriverAckLinksStorageKey =
   "prestige-admin-dismissed-pending-driver-ack-links";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
@@ -22869,22 +22871,82 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return portalUrl;
   }
 
+  async function createCustomerBookingInvitationLink() {
+    const response = await fetch(adminCustomerBookingInvitationsApiPath, {
+      cache: "no-store",
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as {
+      expiresAt?: string;
+      ok?: boolean;
+      url?: string;
+    } | null;
+    const invitationUrl = typeof result?.url === "string" ? result.url.trim() : "";
+
+    if (!response.ok || result?.ok !== true || !invitationUrl) {
+      throw new Error("Customer booking invitation could not be created.");
+    }
+
+    return {
+      expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : "",
+      invitationUrl,
+    };
+  }
+
   async function copyCustomerDriverDetailsWithCustomerAppLink() {
     const bookingReference = customerDriverDetailsPortalBookingReference;
+    const bookingInvitationMode = !bookingReference;
+    const copyStateReference = bookingReference || customerBookingInvitationCopyStateKey;
     const displayBookingReference = dispatchPublicBookingReference || "loaded booking";
     const messageText = getDispatchCopyText("customerCopy");
 
     setCustomerDriverDetailsPortalLinkCopyState({
       external_send: false,
-      loadedReference: bookingReference,
+      loadedReference: copyStateReference,
       noProviderSend: true,
       portalLinkCopied: false,
       portalUrl: "",
       tone: "info",
-      text: `Preparing customer app link for ${displayBookingReference}...`,
+      text: bookingInvitationMode
+        ? "Preparing one-time customer booking invitation..."
+        : `Preparing customer app link for ${displayBookingReference}...`,
     });
 
     try {
+      if (bookingInvitationMode) {
+        const invitation = await createCustomerBookingInvitationLink();
+        const expiryLine = invitation.expiresAt
+          ? `Expires: ${new Date(invitation.expiresAt).toLocaleString()}`
+          : "This link expires after 7 days.";
+        await navigator.clipboard.writeText(
+          [
+            "PRESTIGE LIMO BOOKING INVITATION",
+            "Please complete your booking request using this private one-time link:",
+            invitation.invitationUrl,
+            expiryLine,
+            "The link is used up after one booking request is saved.",
+          ].join("\n"),
+        );
+        setCustomerDriverDetailsPortalLinkCopyState({
+          external_send: false,
+          loadedReference: copyStateReference,
+          noProviderSend: true,
+          portalLinkCopied: true,
+          portalUrl: invitation.invitationUrl,
+          tone: "success",
+          text: "One-time customer booking invitation copied. Paste/send it manually; no SMS or provider message was sent.",
+        });
+        setCopyFeedback({
+          target: "customerCopy",
+          tone: "success",
+          text: "Customer booking invitation copied.",
+        });
+        return;
+      }
+
       if (!clean(messageText)) {
         throw new Error("Customer copy is empty. Load a saved booking first.");
       }
@@ -22895,7 +22957,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       );
       setCustomerDriverDetailsPortalLinkCopyState({
         external_send: false,
-        loadedReference: bookingReference,
+        loadedReference: copyStateReference,
         noProviderSend: true,
         portalLinkCopied: true,
         portalUrl,
@@ -22915,7 +22977,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       setCustomerDriverDetailsPortalLinkCopyState({
         external_send: false,
-        loadedReference: bookingReference,
+        loadedReference: copyStateReference,
         noProviderSend: true,
         portalLinkCopied: false,
         portalUrl: "",
@@ -31461,7 +31523,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerCopyFeedback?.tone === "success" && /copied/i.test(customerCopyFeedback.text);
   const customerDriverDetailsPortalLinkCopyMatchesReference =
     !customerDriverDetailsPortalLinkCopyState?.loadedReference ||
-    customerDriverDetailsPortalLinkCopyState.loadedReference === customerDriverDetailsPortalBookingReference;
+    customerDriverDetailsPortalLinkCopyState.loadedReference ===
+      (customerDriverDetailsPortalBookingReference || customerBookingInvitationCopyStateKey);
   const customerDriverDetailsPortalLinkCopyDisplayState =
     customerDriverDetailsPortalLinkCopyMatchesReference
       ? customerDriverDetailsPortalLinkCopyState
@@ -31477,13 +31540,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ? "Copying link"
       : customerDriverDetailsPortalLinkCopyDisplayState?.portalLinkCopied
         ? "Copied + link"
-        : "Copy + App Link";
+        : customerDriverDetailsPortalBookingReference
+          ? "Copy + App Link"
+          : "Copy Booking Invite";
   const customerDriverDetailsPortalLinkCopyDisabled =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info" ||
-    !customerDriverDetailsPortalLinkCopyReady ||
-    !customerDriverDetailsPortalAccountReference ||
-    !customerDriverDetailsPortalCompanyId ||
-    !customerDriverDetailsPortalBookerId;
+    (Boolean(customerDriverDetailsPortalBookingReference) &&
+      (!customerDriverDetailsPortalLinkCopyReady ||
+        !customerDriverDetailsPortalAccountReference ||
+        !customerDriverDetailsPortalCompanyId ||
+        !customerDriverDetailsPortalBookerId));
   const driverDispatchCopied =
     driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
   const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
@@ -42863,7 +42929,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       disabled={customerDriverDetailsPortalLinkCopyDisabled}
                       onClick={copyCustomerDriverDetailsWithCustomerAppLink}
                       title={
-                        !customerDriverDetailsPortalLinkCopyReady
+                        !customerDriverDetailsPortalBookingReference
+                          ? "Copy a private one-time /book invitation for a genuine new customer. Paste/send it manually; no SMS or provider message is sent."
+                          : !customerDriverDetailsPortalLinkCopyReady
                           ? "Complete the saved trip details first. Driver assignment and live location are not required for the app link."
                           : !customerDriverDetailsPortalAccountReference
                             ? "Save + CRM or load the saved booking before copying a customer app link."

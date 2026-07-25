@@ -686,7 +686,9 @@ function validateRequiredBookingFields(booking: AdminBookingRecordInput): AdminB
 function validateDspScheduledEnd(
   booking: AdminBookingRecordInput,
 ): AdminBookingResult<null> {
-  if (textOrNull(booking.dropoff_datetime) && !validDateTime(booking.dropoff_datetime)) {
+  const scheduledEndDateTime = textOrNull(booking.dropoff_datetime);
+
+  if (scheduledEndDateTime && !validDateTime(scheduledEndDateTime)) {
     return {
       ok: false,
       status: 400,
@@ -699,20 +701,12 @@ function validateDspScheduledEnd(
       textOrNull(booking.source_surface) === "admin_api") &&
     textOrNull(booking.service_type || booking.route_type)?.toUpperCase() === "DSP";
 
-  if (!isAdminDashboardDsp) {
+  if (!isAdminDashboardDsp || !scheduledEndDateTime) {
     return { data: null, ok: true };
   }
 
-  if (!validDateTime(booking.dropoff_datetime)) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Admin DSP booking requires a valid scheduled dropoff_datetime.",
-    };
-  }
-
   const pickupMs = Date.parse(textOrNull(booking.pickup_datetime) || "");
-  const dropoffMs = Date.parse(textOrNull(booking.dropoff_datetime) || "");
+  const dropoffMs = Date.parse(scheduledEndDateTime);
 
   if (!Number.isFinite(pickupMs) || !Number.isFinite(dropoffMs) || dropoffMs <= pickupMs) {
     return {

@@ -8686,7 +8686,11 @@ function adminDispatchSaveCrmMissingPickupFields(bookingValue: BookingForm) {
     missingFields.push(fieldLabels.time);
   }
 
-  if (normalizeBookingType(bookingValue.bookingType) === "DSP") {
+  const hasOptionalDspScheduledEnd =
+    normalizeBookingType(bookingValue.bookingType) === "DSP" &&
+    Boolean(clean(bookingValue.dspEndDate) || clean(bookingValue.dspEndTime));
+
+  if (hasOptionalDspScheduledEnd) {
     if (!clean(bookingValue.dspEndDate)) {
       missingFields.push(fieldLabels.dspEndDate);
     }

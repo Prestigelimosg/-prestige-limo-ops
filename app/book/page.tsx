@@ -227,6 +227,7 @@ export default function CustomerBookingPage() {
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
   const [registeredTravelers, setRegisteredTravelers] = useState<CustomerBookingMemoryTraveler[]>([]);
+  const [registeredTravelerMenuOpen, setRegisteredTravelerMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [bookingInvitationResolved, setBookingInvitationResolved] = useState(false);
@@ -574,6 +575,7 @@ export default function CustomerBookingPage() {
     setMissingFields((current) =>
       traveler ? current.filter((item) => item !== "passengerName") : current,
     );
+    setRegisteredTravelerMenuOpen(false);
     setConfirmationStatus(null);
   }
 
@@ -1086,31 +1088,29 @@ export default function CustomerBookingPage() {
                   data-customer-booking-passenger-control="true"
                 >
                   <span className="block">Passenger name</span>
-                  {registeredTravelers.length > 0 ? (
-                    <select
-                      aria-label="Registered traveller"
-                      className={fieldClass(false)}
-                      data-customer-booking-field="travelerId"
-                      data-customer-booking-traveler-select="true"
-                      name="travelerId"
-                      onChange={(event) => selectRegisteredTraveler(event.target.value)}
-                      value={form.travelerId}
-                    >
-                      <option value="">Enter a new passenger name</option>
-                      {registeredTravelers.map((traveler) => (
-                        <option key={traveler.id} value={traveler.id}>
-                          {traveler.travelerName}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  {!form.travelerId ? (
+                  <div
+                    className="relative"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) {
+                        setRegisteredTravelerMenuOpen(false);
+                      }
+                    }}
+                  >
                     <input
+                      aria-controls={
+                        registeredTravelers.length > 0
+                          ? "customer-booking-registered-traveler-menu"
+                          : undefined
+                      }
+                      aria-expanded={
+                        registeredTravelers.length > 0 ? registeredTravelerMenuOpen : undefined
+                      }
+                      aria-haspopup={registeredTravelers.length > 0 ? "listbox" : undefined}
                       aria-label="Passenger name"
                       aria-invalid={isMissing("passengerName")}
                       autoComplete="off"
                       className={`${fieldClass(isMissing("passengerName"))} ${
-                        registeredTravelers.length > 0 ? "mt-2" : ""
+                        registeredTravelers.length > 0 ? "pr-11" : ""
                       }`}
                       data-customer-booking-field="passengerName"
                       data-customer-booking-memory-passenger-input="true"
@@ -1122,10 +1122,67 @@ export default function CustomerBookingPage() {
                       onPointerDown={ensureBookingMemorySuggestions}
                       placeholder="Passenger name"
                       required
+                      role={registeredTravelers.length > 0 ? "combobox" : undefined}
                       type="text"
                       value={form.passengerName}
                     />
-                  ) : null}
+                    <input
+                      data-customer-booking-field="travelerId"
+                      name="travelerId"
+                      readOnly
+                      type="hidden"
+                      value={form.travelerId}
+                    />
+                    {registeredTravelers.length > 0 ? (
+                      <button
+                        aria-controls="customer-booking-registered-traveler-menu"
+                        aria-expanded={registeredTravelerMenuOpen}
+                        aria-label="Choose registered traveller"
+                        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md bg-white text-base font-normal text-slate-600 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-200"
+                        data-customer-booking-traveler-menu-trigger="true"
+                        onClick={() => {
+                          void ensureBookingMemorySuggestions();
+                          setRegisteredTravelerMenuOpen((current) => !current);
+                        }}
+                        type="button"
+                      >
+                        <span aria-hidden="true">⌄</span>
+                      </button>
+                    ) : null}
+                    {registeredTravelers.length > 0 && registeredTravelerMenuOpen ? (
+                      <div
+                        aria-label="Registered travellers"
+                        className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg"
+                        data-customer-booking-traveler-menu="true"
+                        id="customer-booking-registered-traveler-menu"
+                        role="listbox"
+                      >
+                        <button
+                          aria-selected={!form.travelerId}
+                          className="block min-h-10 w-full rounded px-3 py-2 text-left text-sm font-normal text-slate-800 hover:bg-sky-50 focus:bg-sky-50 focus:outline-none"
+                          data-customer-booking-new-passenger-option="true"
+                          onClick={() => selectRegisteredTraveler("")}
+                          role="option"
+                          type="button"
+                        >
+                          Enter a new passenger name
+                        </button>
+                        {registeredTravelers.map((traveler) => (
+                          <button
+                            aria-selected={form.travelerId === String(traveler.id)}
+                            className="block min-h-10 w-full rounded px-3 py-2 text-left text-sm font-normal text-slate-800 hover:bg-sky-50 focus:bg-sky-50 focus:outline-none"
+                            data-customer-booking-traveler-option={traveler.id}
+                            key={traveler.id}
+                            onClick={() => selectRegisteredTraveler(String(traveler.id))}
+                            role="option"
+                            type="button"
+                          >
+                            {traveler.travelerName}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   {bookingMemorySuggestions.length > 0 ? (
                     <datalist
                       data-customer-booking-memory-passenger-list="true"

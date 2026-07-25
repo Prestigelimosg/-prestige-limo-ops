@@ -32740,6 +32740,36 @@ async function runChromeTest() {
       assert.equal(selected, true, `Expected customer booking memory passenger ${value} to be selectable`);
     };
 
+    const chooseCustomerBookingRegisteredTraveler = async (travelerId) => {
+      const selected = await evaluate(`(async () => {
+        const trigger = document.querySelector("[data-customer-booking-traveler-menu-trigger]");
+
+        if (!trigger) {
+          return false;
+        }
+
+        trigger.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const option = document.querySelector(
+          "[data-customer-booking-traveler-option='" + ${JSON.stringify(travelerId)} + "']",
+        );
+
+        if (!option) {
+          return false;
+        }
+
+        option.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return true;
+      })()`);
+      assert.equal(
+        selected,
+        true,
+        `Expected registered customer traveler ${travelerId} to be explicitly selectable`,
+      );
+    };
+
     const clickCustomerBookingSubmit = async (description) => {
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-customer-booking-submit]");
@@ -33180,24 +33210,44 @@ async function runChromeTest() {
             ].map((option) => option.value),
           },
           registeredTraveler: {
+            alignedWithFlightNumber: (() => {
+              const passenger = document.querySelector("[data-customer-booking-new-passenger-input]");
+              const flight = document.querySelector("[data-customer-booking-field='flightNumber']");
+              const passengerRect = passenger?.getBoundingClientRect();
+              const flightRect = flight?.getBoundingClientRect();
+              return Boolean(
+                passengerRect &&
+                  flightRect &&
+                  Math.abs(passengerRect.top - flightRect.top) <= 1 &&
+                  Math.abs(passengerRect.height - flightRect.height) <= 1,
+              );
+            })(),
+            fieldValue:
+              document.querySelector("[data-customer-booking-new-passenger-input]")?.value || "",
+            menuTriggerVisible: (() => {
+              const trigger = document.querySelector("[data-customer-booking-traveler-menu-trigger]");
+              const rect = trigger?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height >= 40);
+            })(),
             newPassengerInputVisible: (() => {
               const input = document.querySelector("[data-customer-booking-new-passenger-input]");
               const rect = input?.getBoundingClientRect();
               return Boolean(rect && rect.width > 0 && rect.height >= 40);
             })(),
-            options: [
-              ...document.querySelectorAll("[data-customer-booking-traveler-select] option"),
-            ].map((option) => option.textContent.trim()),
             required: Boolean(
-              document.querySelector("[data-customer-booking-traveler-select]")?.required,
+              document.querySelector("[data-customer-booking-new-passenger-input]")?.required,
             ),
             value:
-              document.querySelector("[data-customer-booking-traveler-select]")?.value || "",
-            visible: (() => {
-              const select = document.querySelector("[data-customer-booking-traveler-select]");
-              const rect = select?.getBoundingClientRect();
-              return Boolean(rect && rect.width > 0 && rect.height >= 40);
-            })(),
+              document.querySelector("[data-customer-booking-field='travelerId']")?.value || "",
+            visibleControlCount: [
+              ...document.querySelectorAll(
+                "[data-customer-booking-passenger-control] input:not([type='hidden']), " +
+                  "[data-customer-booking-passenger-control] select",
+              ),
+            ].filter((control) => {
+              const rect = control.getBoundingClientRect();
+              return rect.width > 0 && rect.height >= 40;
+            }).length,
           },
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
@@ -33487,13 +33537,15 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.registeredTraveler,
         {
+          alignedWithFlightNumber: true,
+          fieldValue: "",
+          menuTriggerVisible: true,
           newPassengerInputVisible: true,
-          options: ["Enter a new passenger name", "Registered Traveller"],
-          required: false,
+          required: true,
           value: "",
-          visible: true,
+          visibleControlCount: 1,
         },
-        "Expected a returning customer to be able to type a new passenger or choose a registered traveller.",
+        "Expected one aligned Passenger name field with a registered-traveller menu.",
       );
       assertNoNativeAppOnlyLanguage(initialState.text, "/book desktop");
       for (const expectedField of [
@@ -33725,12 +33777,12 @@ async function runChromeTest() {
         "Expected invalid /book submit not to create an invoice-style number",
       );
 
-      await setCustomerBookingField("travelerId", "901");
+      await chooseCustomerBookingRegisteredTraveler("901");
       const registeredTravelerState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
           return candidateState.registeredTraveler.value === "901" &&
-            !candidateState.registeredTraveler.newPassengerInputVisible
+            candidateState.registeredTraveler.fieldValue === "Registered Traveller"
             ? candidateState
             : false;
         },
@@ -33738,16 +33790,22 @@ async function runChromeTest() {
         "registered traveller selection",
       );
       assert.equal(
-        registeredTravelerState.text.includes("Registered Traveller"),
-        true,
+        registeredTravelerState.registeredTraveler.fieldValue,
+        "Registered Traveller",
         "Expected the established verified traveller choice to remain available.",
       );
-      await setCustomerBookingField("travelerId", "");
+      assert.equal(
+        registeredTravelerState.registeredTraveler.visibleControlCount,
+        1,
+        "Expected a saved traveller selection to stay inside the single Passenger name field.",
+      );
+      await setCustomerBookingField("passengerName", "");
       const newPassengerState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
           return candidateState.registeredTraveler.value === "" &&
-            candidateState.registeredTraveler.newPassengerInputVisible
+            candidateState.registeredTraveler.newPassengerInputVisible &&
+            candidateState.registeredTraveler.fieldValue === ""
             ? candidateState
             : false;
         },
@@ -33757,7 +33815,7 @@ async function runChromeTest() {
       assert.equal(
         newPassengerState.fieldState.passengerName.value,
         "",
-        "Expected choosing new passenger to reveal an empty required passenger-name field.",
+        "Expected manual passenger typing to clear the verified traveler ID in the same field.",
       );
 
       await setCustomerBookingField("pickupDate", "2026-06-05");

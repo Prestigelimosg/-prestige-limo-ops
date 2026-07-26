@@ -4,10 +4,10 @@ Latest verified clean runtime checkpoint:
 4226cac1 fix: allow customer folder DSP timing read
 
 Latest pushed main/staging runtime checkpoint:
-2f09de43 fix: sync driver details and recover DSP JC
+4226cac1 fix: allow customer folder DSP timing read
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-606bd1d7 Merge PR #116: Sync driver details and recover DSP JC
+dc093260 Merge PR #117: Allow customer folder DSP timing read
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -18,7 +18,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The failure was the route boundary, not missing Driver JC, reference keying, customer rate, or the booking-to-JC calculation. The established `/customers/155` caller already supplied the exact admin purpose and same-origin request, but this read-only DSP timing route still allowed only the root admin dashboard referer.
 - The existing route now uses the established narrow boundary options already used by the customer-folder rate setup: exact same-origin `/customers` and `/customers/` descendants may call this read. The root dashboard remains allowed; `/driver-job-demo` remains blocked; cross-origin, missing-referer, wrong-purpose, and invalid server-session requests remain blocked.
 - No endpoint, UI, Supabase query, table, row, policy, schema, migration, environment value, Driver Report, saved booking state, Calendar, driver acknowledgement, GPS, message, rate, price save, invoice, PDF, email, payment, payout, or PayNow behavior is added or changed.
-- This source repair is not yet a runtime acceptance claim. Focused executable protection is `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, `scripts/test-customer-folder-price-review-guard.mjs`, and `scripts/test-customer-invoice-driver-jc-override-guard.mjs`; the locked invoice lifecycle, Driver Reports, personal Driver Calendar, and Operations Calendar guards remain unchanged.
+- Signed-in Production Chrome acceptance on deployed build `dc093260` reloaded the exact `/customers/155` folder and proved booking `10846` now shows the temporary `$390.00 · Codex price · tick to confirm` proposal. Its expanded read-only evidence is `374 booking-to-JC min → 6 billable hr × $65.00/hr`; no checkbox, price review, job details, invoice, email, payment, Calendar, booking, or Driver Report write was performed.
+- Focused executable protection is `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, `scripts/test-customer-folder-price-review-guard.mjs`, and `scripts/test-customer-invoice-driver-jc-override-guard.mjs`; the locked invoice lifecycle, Driver Reports, personal Driver Calendar, and Operations Calendar guards remain unchanged.
 
 ### Verified Driver Details To Operations Calendar Repair (2026-07-26)
 

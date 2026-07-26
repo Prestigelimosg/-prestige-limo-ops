@@ -90,6 +90,30 @@ export type CustomerDspInvoiceReview = CustomerInvoiceRateReview & {
   hourlyRateCents: number;
 };
 
+const customerDspBillingMaxActualMinutes = 60 * 24 * 30;
+
+export function calculateCustomerDspBillingActualMinutes(
+  pickupAt: string | null | undefined,
+  jcEndedAt: string | null | undefined,
+) {
+  const pickupTime = new Date(String(pickupAt ?? "")).getTime();
+  const jcEndTime = new Date(String(jcEndedAt ?? "")).getTime();
+
+  if (
+    !Number.isFinite(pickupTime) ||
+    !Number.isFinite(jcEndTime) ||
+    jcEndTime <= pickupTime
+  ) {
+    return null;
+  }
+
+  const actualMinutes = Math.floor((jcEndTime - pickupTime) / 60_000);
+
+  return actualMinutes >= 1 && actualMinutes <= customerDspBillingMaxActualMinutes
+    ? actualMinutes
+    : null;
+}
+
 function finiteRate(value: unknown, fallback: number) {
   if (value === null || value === undefined || value === "") {
     return fallback;

@@ -26,6 +26,7 @@ import {
 import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
 import { normalizeBookingType } from "../../lib/pricing";
 import {
+  calculateCustomerDspBillingActualMinutes,
   calculateCustomerDspInvoiceReview,
   customerInvoiceCardOptionDefaultEnabled,
   type CustomerInvoiceRateSetupRecord,
@@ -5243,7 +5244,7 @@ export default function MockCustomerDashboardPage() {
                 bookingReference: reference,
                 lineDescription: formatCustomerInvoiceLineDescription({
                   dspEndedAt: dspActualTimeSummary?.dsp_ended_at,
-                  dspStartedAt: dspActualTimeSummary?.dsp_started_at,
+                  dspStartedAt: booking.pickup_at || booking.pickup_datetime,
                   flightNumber: booking.flight_no,
                   passengerName: booking.passenger_name,
                   pickupAt: booking.pickup_at || booking.pickup_datetime,
@@ -5637,20 +5638,20 @@ export default function MockCustomerDashboardPage() {
         }
 
         const summary = await readCustomerInvoiceDriverActualTimeSummary(row.reference);
+        const billingActualMinutes = calculateCustomerDspBillingActualMinutes(
+          row.pickupAt,
+          summary?.dsp_ended_at,
+        );
 
-        if (
-          summary?.actual_time_status !== "complete" ||
-          !Number.isFinite(Number(summary.dsp_total_minutes)) ||
-          Number(summary.dsp_total_minutes) <= 0
-        ) {
+        if (billingActualMinutes === null) {
           throw new Error(
-            `DSP actual timing is incomplete for ${row.reference}. Complete Driver OTS/JC before invoice preparation.`,
+            `DSP billing timing is incomplete for ${row.reference}. Confirm the saved booking pickup time and complete Driver JC before invoice preparation.`,
           );
         }
 
         const calculation = calculateCustomerDspInvoiceReview(
           {
-            actualMinutes: Number(summary.dsp_total_minutes),
+            actualMinutes: billingActualMinutes,
             childSeatCount: row.childSeatCount,
             companyId: row.companyId,
             extraStopCount: row.extraStopCount,
@@ -5675,13 +5676,13 @@ export default function MockCustomerDashboardPage() {
           ...row,
           amount: formatInvoiceAmount(calculation.amountCents),
           billingBreakdown:
-            `${calculation.actualMinutes} actual min → ${calculation.billableHours} billable hr × ` +
+            `${calculation.actualMinutes} booking-to-JC min → ${calculation.billableHours} billable hr × ` +
             `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr${surchargeLabel}. ` +
             `CRM source: ${calculation.customerRateSource}.`,
           invoiceLineDescription:
             `DSP ${row.dateLabel} | ${calculation.billableHours} hr @ ` +
             `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr | ${row.reference}`,
-          statusLabel: "Closeout ready / DSP actual time and CRM rate applied",
+          statusLabel: "Closeout ready / booking time, Driver JC, and CRM rate applied",
         };
       }),
     );

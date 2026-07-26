@@ -7532,6 +7532,7 @@ function computeAdminPickupRiskState({
   approachEvidence,
   bookingRecord,
   currentTimeMs,
+  driverStatusReadStatus,
   driverStatusValue,
   liveLocation,
   monitorEnabled,
@@ -7540,6 +7541,7 @@ function computeAdminPickupRiskState({
   approachEvidence?: AdminPickupApproachEvidenceState | null;
   bookingRecord: BookingRecord;
   currentTimeMs: number;
+  driverStatusReadStatus: AdminDriverJobStatusReadState["status"];
   driverStatusValue?: string | null;
   liveLocation?: AdminActiveJobsMapLocation | null;
   monitorEnabled: boolean;
@@ -7585,6 +7587,20 @@ function computeAdminPickupRiskState({
       pulse: false,
       shortLabel: "At pickup",
       title: "Pickup Risk: At pickup",
+    };
+  }
+
+  if (!normalizedDriverStatus && driverStatusReadStatus !== "loaded") {
+    const readFailed = driverStatusReadStatus === "error";
+
+    return {
+      detail: readFailed
+        ? "Driver Report unavailable. Refresh reports before assessing pickup risk."
+        : "Checking latest Driver Report before assessing pickup risk.",
+      level: "pending",
+      pulse: false,
+      shortLabel: readFailed ? "Report unavailable" : "Checking report",
+      title: readFailed ? "Pickup Risk: Waiting" : "Pickup Risk: Checking",
     };
   }
 
@@ -26890,6 +26906,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       approachEvidence: adminPickupApproachEvidenceByReference[activeJobBookingReference] || null,
       bookingRecord: activeJobBooking,
       currentTimeMs,
+      driverStatusReadStatus: readState?.status || "idle",
       driverStatusValue: readState?.latestStatus?.status_value,
       liveLocation: activeJobsMapLocationsByReference.get(activeJobBookingReference) || null,
       monitorEnabled: adminPickupRiskMonitorEnabled,

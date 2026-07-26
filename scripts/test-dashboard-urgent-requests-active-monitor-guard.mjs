@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const appPagePath = "app/page.tsx";
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -52,6 +53,11 @@ const helperSection = sliceBetween(
   appPage,
   "function bookingRecordPickupDateTimeMs",
   "function sortBookingHistoryNewestFirst",
+);
+const pickupRiskFunctionSource = sliceBetween(
+  appPage,
+  "function computeAdminPickupRiskState",
+  "\nfunction sortBookingHistoryNewestFirst",
 );
 const derivedRequestSection = sliceBetween(
   appPage,
@@ -492,6 +498,10 @@ for (const fragment of [
   "function adminPickupRiskBadgeClass",
   "function adminPickupRiskCardClass",
   "approachEvidence?: AdminPickupApproachEvidenceState | null",
+  'driverStatusReadStatus: AdminDriverJobStatusReadState["status"]',
+  "Checking latest Driver Report before assessing pickup risk.",
+  "Driver Report unavailable. Refresh reports before assessing pickup risk.",
+  'driverStatusReadStatus: readState?.status || "idle"',
   "Pickup approach evidence",
   "Route ETA",
   "Moving away",
@@ -506,6 +516,99 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `pickup risk helper fragment ${fragment}`);
 }
+
+assertSourceOrder(
+  helperSection,
+  [
+    'if (normalizedDriverStatus === "completed" || normalizedDriverStatus === "pob")',
+    'if (normalizedDriverStatus === "ots")',
+    'if (!normalizedDriverStatus && driverStatusReadStatus !== "loaded")',
+    "if (!liveLocation)",
+  ],
+  "pickup risk must clear persisted POB before neutral report loading and assess no-pin risk only after report load",
+);
+
+const pickupRiskFunctionJavaScript = ts.transpileModule(pickupRiskFunctionSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.None,
+    target: ts.ScriptTarget.ES2020,
+  },
+}).outputText;
+const computePickupRiskForGuard = new Function(
+  "clean",
+  "activeJobMinutesUntilPickup",
+  "formatAdminMapDistance",
+  "formatAdminMapDuration",
+  `${pickupRiskFunctionJavaScript}\nreturn computeAdminPickupRiskState;`,
+)(
+  (value) => String(value ?? "").trim(),
+  (bookingRecord) => bookingRecord.minutesUntilPickup,
+  (distanceMeters) => `${distanceMeters ?? 0} m`,
+  (durationSeconds) => `${durationSeconds ?? 0} sec`,
+);
+const pickupRiskGuardBase = {
+  approachEvidence: null,
+  bookingRecord: { minutesUntilPickup: -120 },
+  currentTimeMs: Date.parse("2026-07-26T15:00:00+08:00"),
+  liveLocation: null,
+  monitorEnabled: true,
+  runtimeStatus: "active",
+};
+
+assert.deepEqual(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "loading",
+    driverStatusValue: null,
+  }),
+  {
+    detail: "Checking latest Driver Report before assessing pickup risk.",
+    level: "pending",
+    pulse: false,
+    shortLabel: "Checking report",
+    title: "Pickup Risk: Checking",
+  },
+  "an unread POB during Driver Report loading must not raise a false red pickup risk",
+);
+assert.deepEqual(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "error",
+    driverStatusValue: null,
+  }),
+  {
+    detail: "Driver Report unavailable. Refresh reports before assessing pickup risk.",
+    level: "pending",
+    pulse: false,
+    shortLabel: "Report unavailable",
+    title: "Pickup Risk: Waiting",
+  },
+  "a failed Driver Report read must remain neutral instead of guessing pickup risk",
+);
+assert.equal(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "loading",
+    driverStatusValue: "pob",
+  }).shortLabel,
+  "POB",
+  "persisted POB evidence must clear pickup risk even while a refresh is in flight",
+);
+assert.deepEqual(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "loaded",
+    driverStatusValue: null,
+  }),
+  {
+    detail: "No live pin near pickup time. Call driver or prepare replacement.",
+    level: "critical",
+    pulse: true,
+    shortLabel: "No pin",
+    title: "Pickup Risk: No live pin",
+  },
+  "authoritative loaded no-status evidence must preserve the established critical no-pin alert",
+);
 
 for (const fragment of [
   "bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord)",

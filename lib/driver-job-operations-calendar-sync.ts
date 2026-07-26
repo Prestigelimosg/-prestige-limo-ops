@@ -85,12 +85,34 @@ function singaporeCalendarPickupAt(value: unknown) {
 }
 
 function calendarStatus(booking: UnknownRecord) {
-  return (
+  const status =
     cleanText(booking.admin_internal_status, 80) ||
     cleanText(booking.short_notice_review_status, 80) ||
     cleanText(booking.customer_facing_status, 80) ||
-    "Draft"
-  );
+    "Draft";
+  const normalizedStatus = status
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalizedStatus === "admin review required") {
+    return "Admin Review Required";
+  }
+
+  if (normalizedStatus === "needs review") {
+    return "Needs Review";
+  }
+
+  if (normalizedStatus === "approved internal" || normalizedStatus === "ready for confirmation") {
+    return "Ready for Confirmation";
+  }
+
+  if (normalizedStatus === "declined internal" || normalizedStatus === "declined internally") {
+    return "Declined Internally";
+  }
+
+  return normalizedStatus === "draft" ? "Draft" : status;
 }
 
 function calendarPayload(booking: UnknownRecord, pickupAtOverride: string) {

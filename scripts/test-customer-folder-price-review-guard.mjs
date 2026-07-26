@@ -45,12 +45,34 @@ for (const fragment of [
   "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
   "adminDriverJobDspActualTimeSummariesApiPath",
   "adminRateSetupApiPath",
+  "calculateCustomerDspBillingActualMinutes",
   "calculateCustomerInvoiceRateReview",
+  "summary?.dsp_ended_at",
+  "booking-to-JC min",
   "customerFolderReviewedPricePayload",
   'params.set("selected_booking_references"',
   "customerFolderSelectedPriceReviewsParam",
 ]) {
   includes(folder, fragment, `customer-folder price review ${fragment}`);
+}
+
+const automatedBillingReview = sectionBetween(
+  folder,
+  "async function loadAutomatedBillingReviews",
+  "async function loadSavedBookings",
+);
+
+for (const forbidden of [
+  "summary.dsp_total_minutes",
+  "summary?.actual_time_status",
+  "summary.dsp_started_at",
+  "Complete Driver OTS→JC actual time",
+]) {
+  assert.equal(
+    automatedBillingReview.includes(forbidden),
+    false,
+    `exact-customer folder DSP billing must not use ${forbidden}`,
+  );
 }
 
 for (const fragment of [
@@ -68,6 +90,7 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "export function calculateCustomerDspBillingActualMinutes",
   "export function calculateCustomerInvoiceRateReview",
   "export function customerInvoiceBookingType",
   "export function calculateCustomerDspInvoiceReview",
@@ -130,6 +153,21 @@ for (const phrase of [
   includes(ledgerSection, phrase, `price-review ledger phrase ${phrase}`);
 }
 
+const bookingToJcLedgerSection = sectionBetween(
+  ledger,
+  "### Exact-Customer Folder DSP Booking-Time To JC Repair (2026-07-26)",
+  "\n### ",
+);
+for (const phrase of [
+  "saved booking pickup",
+  "Driver JC end",
+  "Driver OTS remains separate operational evidence",
+  "existing `Customer price` tag",
+  guardScript,
+]) {
+  includes(bookingToJcLedgerSection, phrase, `booking-to-JC folder ledger phrase ${phrase}`);
+}
+
 includes(suite, guardScript, "preactivation price-review guard registration");
 
 const calculationRuntimeDir = await mkdtemp(
@@ -153,7 +191,10 @@ try {
   }
 
   const require = createRequire(import.meta.url);
-  const { calculateCustomerInvoiceRateReview } = require(
+  const {
+    calculateCustomerDspBillingActualMinutes,
+    calculateCustomerInvoiceRateReview,
+  } = require(
     path.join(calculationRuntimeDir, "customer-dsp-invoice-review.js"),
   );
   const exactIdentityInput = {
@@ -243,6 +284,34 @@ try {
   );
   assert.equal(unrelatedTravelerReview?.rateCents, 7200);
   assert.equal(unrelatedTravelerReview?.customerRateSource, "company");
+
+  const bookingToJcMinutes = calculateCustomerDspBillingActualMinutes(
+    "2026-07-26T13:00:00+08:00",
+    "2026-07-26T15:30:59+08:00",
+  );
+  assert.equal(bookingToJcMinutes, 150);
+  const bookingToJcReview = calculateCustomerInvoiceRateReview(
+    {
+      actualMinutes: bookingToJcMinutes,
+      bookingType: "DSP",
+      childSeatCount: 0,
+      companyId: 26,
+      extraStopCount: 0,
+      pickupAt: "2026-07-26T13:00:00+08:00",
+      travelerId: 22,
+      vehicleType: "AVF",
+    },
+    {
+      ...exactDefaultSetup,
+      settings: {
+        ...exactDefaultSetup.settings,
+        customer_rates: { DSP: { AVF: 65 } },
+      },
+    },
+  );
+  assert.equal(bookingToJcReview?.actualMinutes, 150);
+  assert.equal(bookingToJcReview?.billableHours, 3);
+  assert.equal(bookingToJcReview?.amountCents, 19_500);
 } finally {
   await rm(calculationRuntimeDir, { force: true, recursive: true });
 }

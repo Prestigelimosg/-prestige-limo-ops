@@ -850,6 +850,7 @@ try {
     );
     assert.equal(event.start.dateTime, "2026-07-29T23:30:00");
     assert.equal(event.end.dateTime, "2026-07-30T01:00:00");
+    assert.match(event.description, /Status: Ready for Confirmation/);
     assert.match(event.description, /Driver: Simon \/ SNP9124S \/ 97366292/);
     assert.match(event.description, /Vehicle: AVF/);
     assert.equal(event.attendees, undefined);

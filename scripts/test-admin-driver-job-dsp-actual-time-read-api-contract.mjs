@@ -697,6 +697,7 @@ try {
         headers: validAdminHeaders({
           "content-type": "application/json",
           referer: "http://localhost/customers/155?name=Safe+Customer",
+          "x-prestige-admin-session-token": "",
         }),
         method: "POST",
       }),

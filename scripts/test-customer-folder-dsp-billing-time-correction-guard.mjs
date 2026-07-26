@@ -38,6 +38,7 @@ function sectionBetween(source, startFragment, endFragment, label) {
 for (const fragment of [
   'export async function POST(request: Request)',
   "saveAdminDriverJobDspBillingTimeCorrection",
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
 ]) {
   mustInclude(files.route, fragment, "existing DSP actual-time route");
 }

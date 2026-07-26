@@ -85,9 +85,12 @@ self.addEventListener("push", (event) => {
       /^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(payload.target_path)
       ? payload.target_path
       : "";
-  const body = payload.body === "New Driver Job issued. Tap to review."
-    ? "New Driver Job issued. Tap to review."
-    : "New Driver Job app update. Tap to review.";
+  const body =
+    payload.body === "New Driver Job issued. Tap to review."
+      ? "New Driver Job issued. Tap to review."
+      : payload.body === "Pickup is in 1 hour. Open Driver Portal to review."
+        ? "Pickup is in 1 hour. Open Driver Portal to review."
+        : "New Driver Job app update. Tap to review.";
 
   event.waitUntil(
     self.registration.showNotification("Prestige Limo Ops", {

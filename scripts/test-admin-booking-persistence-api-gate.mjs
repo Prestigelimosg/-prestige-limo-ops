@@ -9,6 +9,8 @@ const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const disabledPersistenceError =
   "Admin booking persistence is not enabled on this server.";
+const customerPhoneProof = "gate-customer-phone-proof";
+const customerPhoneBookingReference = "CUST-20300708103000-GATE01";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_GATE_SENTINEL_DO_NOT_LEAK";
 const supabaseUrlSentinel = "https://gate-sentinel.supabase.co";
 const serverSessionToken = "mock-admin-dispatcher-session-token";
@@ -153,6 +155,27 @@ async function writeMockModules(tempDir) {
     ].join("\n"),
   );
   await writeFile(
+    path.join(tempDir, "lib/customer-booking-invitation.js"),
+    [
+      "function verifyCustomerBookingInvitationToken() {",
+      "  return { error: 'Customer booking invitation is invalid.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-phone-otp.js"),
+    [
+      "function verifyCustomerBookingPhoneOtpProof(proof, phone) {",
+      `  if (proof !== ${JSON.stringify(customerPhoneProof)} || phone !== '+65 9000 0202') {`,
+      "    return { error: 'Customer phone verification is invalid.', ok: false, status: 403 };",
+      "  }",
+      `  return { data: { booking_reference: ${JSON.stringify(customerPhoneBookingReference)} }, ok: true };`,
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
     [
       "async function prepareCodexJobCardForAdminReview() {}",
@@ -168,7 +191,10 @@ async function writeMockModules(tempDir) {
       "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
       "  return { error: 'Customer portal authentication is required.', ok: false, status: 401 };",
       "}",
-      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+      "function expiredCustomerSavedBookingsSessionCookieHeaders() {",
+      "  return [];",
+      "}",
+      "module.exports = { expiredCustomerSavedBookingsSessionCookieHeaders, resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
     ].join("\n"),
   );
   await writeFile(
@@ -177,7 +203,11 @@ async function writeMockModules(tempDir) {
       "function createCustomerPortalAccessLinkToken() {",
       "  return { error: 'Customer portal access is unavailable.', ok: false, status: 403 };",
       "}",
-      "module.exports = { createCustomerPortalAccessLinkToken };",
+      "function safeCustomerPortalPublicBookingReference(value) {",
+      "  const cleaned = typeof value === 'string' || typeof value === 'number' ? String(value).trim().toUpperCase() : '';",
+      "  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned) ? cleaned : null;",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken, safeCustomerPortalPublicBookingReference };",
     ].join("\n"),
   );
 }
@@ -612,6 +642,7 @@ function customerHeaders(overrides = {}) {
     "content-type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-phone-proof": customerPhoneProof,
     "x-prestige-customer-purpose": "customer-booking-request",
     ...overrides,
   };
@@ -696,7 +727,7 @@ function assertSafeCustomerBookingRequestOperations(mock) {
 
   const bookingRow = insertedOperation(mock, "bookings").payload;
 
-  assert.match(bookingRow.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
+  assert.equal(bookingRow.booking_reference, customerPhoneBookingReference);
   assert.equal(bookingRow.customer_display_name, "Gate Customer Company");
   assert.equal(bookingRow.contact_phone, "+65 9000 0202");
   assert.equal(bookingRow.contact_email, "gate-customer@example.com");
@@ -1014,7 +1045,7 @@ try {
 
   assert.equal(customerResult.status, 200);
   assert.equal(customerResult.body.ok, true);
-  assert.match(customerResult.body.request.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
+  assert.equal(customerResult.body.request.booking_reference, customerPhoneBookingReference);
   assert.equal(customerResult.body.request.customer_facing_status, "Request Received");
   assert.equal(customerResult.body.request.return_booking_reference, null);
   assert.equal(customerResult.body.request.return_trip_requested, false);
@@ -1028,7 +1059,7 @@ try {
     "return_trip_requested",
     "short_notice_review_required",
   ]);
-  assert.equal(customerMock.createdClients.length, 1);
+  assert.equal(customerMock.createdClients.length, 2);
   assertSafeCustomerBookingRequestOperations(customerMock);
   assertNoLeaks(customerResult, "customer request enabled-write response should stay safe");
 

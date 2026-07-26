@@ -12,6 +12,12 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Booking Persistence Harness OTP Fixture Alignment (2026-07-26)
+
+- The existing `scripts/test-admin-booking-persistence-api-gate.mjs` stopped before its customer-request assertions because its isolated temporary route fixture predated the already-established private invitation and public phone-OTP imports. Inspection also found that the same fixture omitted the current expired-session-cookie and safe public-booking-reference exports used by that route.
+- Only the existing test harness is aligned. It now supplies fail-closed invitation behavior, an exact test-only phone proof bound to the fixture phone and deterministic booking reference, and the two current helper exports. The customer request exercise retains the established `/book` origin/purpose boundary, performs the expected single-use booking-reference lookup, and continues through the same mocked safe persistence assertions without contacting Twilio, Supabase, email, push, or any external provider.
+- No application source, route, UI, API behavior, persistence writer, schema, environment value, Production data, provider send, Driver lane, Calendar lane, messaging lane, pricing, billing, payment, payout, PayNow, invoice workflow, layout, renderer, or PDF is changed. Focused verification is `node scripts/test-admin-booking-persistence-api-gate.mjs`.
+
 ### DSP Scheduled End Optional Save Repair (2026-07-25)
 
 - The owner confirmed that a DSP / Hourly / Disposal booking does not require a scheduled end date or end time when Admin creates or updates the booking. This current contract supersedes only the earlier mandatory scheduled-end save rule; the existing single Dispatch booking lane and nullable `bookings.dropoff_datetime` field remain unchanged.

@@ -296,6 +296,8 @@ type CustomerMonthlyBillingGroup = {
 
 type CustomerInvoiceDriverActualTimeSummary = {
   actual_time_status?: "complete" | "not_started" | "started" | string | null;
+  billing_time_correction_reason?: string | null;
+  billing_time_source?: "admin_correction" | "automatic" | null;
   booking_reference?: string | null;
   dsp_billable_minutes?: number | null;
   dsp_ended_at?: string | null;
@@ -5244,7 +5246,10 @@ export default function MockCustomerDashboardPage() {
                 bookingReference: reference,
                 lineDescription: formatCustomerInvoiceLineDescription({
                   dspEndedAt: dspActualTimeSummary?.dsp_ended_at,
-                  dspStartedAt: booking.pickup_at || booking.pickup_datetime,
+                  dspStartedAt:
+                    dspActualTimeSummary?.billing_time_source === "admin_correction"
+                      ? dspActualTimeSummary?.dsp_started_at
+                      : booking.pickup_at || booking.pickup_datetime,
                   flightNumber: booking.flight_no,
                   passengerName: booking.passenger_name,
                   pickupAt: booking.pickup_at || booking.pickup_datetime,
@@ -5638,8 +5643,12 @@ export default function MockCustomerDashboardPage() {
         }
 
         const summary = await readCustomerInvoiceDriverActualTimeSummary(row.reference);
+        const billingStartAt =
+          summary?.billing_time_source === "admin_correction"
+            ? summary?.dsp_started_at
+            : row.pickupAt;
         const billingActualMinutes = calculateCustomerDspBillingActualMinutes(
-          row.pickupAt,
+          billingStartAt,
           summary?.dsp_ended_at,
         );
 

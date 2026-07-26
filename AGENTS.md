@@ -88,6 +88,14 @@ Live Dispatch GPS cleanup and Driver Reports evidence are separate workflows. Au
 
 A driver `Job Completed` report may remove the temporary GPS marker, but the report card and all timestamp evidence must remain visible and refreshable until the owner uses the existing explicit `Admin confirm completed` action. Preserve `scripts/test-admin-active-job-confirm-completed-guard.mjs`, `scripts/test-driver-completed-history-grouping-guard.mjs`, `scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs`, and the corresponding booking UI browser coverage.
 
+# Admin-Editable DSP Billing Time Correction — do not duplicate
+
+The automatic DSP customer billing interval remains saved booking pickup → persisted Driver JC. Admin may correct both start and end only inside the existing exact-customer `Jobs not billed yet` exact-job Edit box. Do not add this control to Dispatch Driver Reports, a second customer panel, another billing or invoice page, or another route.
+
+Corrections are append-only in the existing server-only DSP actual-time event lane and require a bounded safe reason. The latest valid Admin correction supersedes only the billing interval. Never update or delete the booking pickup, scheduled end, driver status events, earlier DSP timing events, or original Driver Reports evidence. Without a correction, billing continues using booking pickup → Driver JC. With a correction, every established customer billing consumer uses corrected start → corrected end and the same two-hour minimum, 15-minute grace whole-hour rule, verified rate precedence, and surcharges.
+
+Saving the correction may recalculate only the visible in-memory proposal for that exact unbilled job. It must not automatically save a final price, select a job, create/issue/email an invoice or PDF, mark payment, write payout or PayNow, update Calendar, acknowledge/complete a job, or contact any customer or driver. Preserve `scripts/test-customer-folder-dsp-billing-time-correction-guard.mjs`, `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, the customer-folder pricing guards, and the original Driver Reports evidence guards.
+
 # Owner-locked invoice workflow and final layout — do not modify
 
 The entire established customer billing and invoice system is owner-locked. Do not remove, rename, rearrange, redesign, collapse, expand, simplify, duplicate, replace, or otherwise modify its workflow, layout, controls, routes, APIs, persistence, PDF renderer, email/download paths, payment-status handling, invoice numbering, customer/company identity scope, Company Profile inputs, or established consumers unless the owner explicitly requests an invoice-specific change, the exact invoice defect is first reproduced in the approved runtime surface, and the owner approves that bounded repair. An unrelated feature request, including AI or communications work, is never permission to change the invoice system.

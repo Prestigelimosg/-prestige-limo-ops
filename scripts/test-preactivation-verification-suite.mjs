@@ -78,6 +78,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-price-review-guard.mjs",
   },
   {
+    label: "customer folder DSP billing-time correction guard",
+    script: "scripts/test-customer-folder-dsp-billing-time-correction-guard.mjs",
+  },
+  {
     label: "customer card-option default override guard",
     script: "scripts/test-customer-card-option-default-override-guard.mjs",
   },

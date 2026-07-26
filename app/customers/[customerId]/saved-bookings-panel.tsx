@@ -65,7 +65,10 @@ type CustomerFolderBillingReview = {
 type CustomerFolderBillingReviews = Record<string, CustomerFolderBillingReview>;
 
 type CustomerFolderDspActualTimeSummary = {
+  billing_time_correction_reason?: string | null;
+  billing_time_source?: "admin_correction" | "automatic" | null;
   dsp_ended_at?: string | null;
+  dsp_started_at?: string | null;
 };
 
 type CustomerFolderExactRoutePoint = {
@@ -141,6 +144,14 @@ type CustomerFolderInlineEditState = {
   booking: CustomerFolderExactBooking | null;
   form: CustomerFolderInlineEditForm;
   message: string;
+  status: "idle" | "loading" | "loaded" | "saving" | "error";
+};
+
+type CustomerFolderDspBillingTimeCorrectionState = {
+  endInput: string;
+  message: string;
+  reason: string;
+  startInput: string;
   status: "idle" | "loading" | "loaded" | "saving" | "error";
 };
 
@@ -236,6 +247,14 @@ const initialInlineEditState: CustomerFolderInlineEditState = {
   status: "idle",
 };
 
+const initialDspBillingTimeCorrectionState: CustomerFolderDspBillingTimeCorrectionState = {
+  endInput: "",
+  message: "",
+  reason: "",
+  startInput: "",
+  status: "idle",
+};
+
 function inlineEditText(value: unknown, maxLength = 300) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
@@ -282,6 +301,29 @@ function inlineEditFormFromBooking(booking: CustomerFolderExactBooking) {
     routeSummary: inlineEditText(booking.route_summary, 500),
     serviceType: inlineEditText(booking.service_type || booking.route_type, 80),
   } satisfies CustomerFolderInlineEditForm;
+}
+
+function dspBillingTimeCorrectionStateFromSummary(
+  booking: CustomerFolderExactBooking,
+  summary: CustomerFolderDspActualTimeSummary | null,
+): CustomerFolderDspBillingTimeCorrectionState {
+  const hasAdminCorrection = summary?.billing_time_source === "admin_correction";
+
+  return {
+    endInput: inlineEditDateTimeInput(summary?.dsp_ended_at),
+    message: hasAdminCorrection
+      ? "Saved admin correction. Original Driver Reports evidence remains unchanged."
+      : "Automatic default: saved booking pickup → Driver JC. Edit only when the actual billing interval needs correction.",
+    reason: hasAdminCorrection
+      ? inlineEditText(summary?.billing_time_correction_reason, 500)
+      : "",
+    startInput: inlineEditDateTimeInput(
+      hasAdminCorrection
+        ? summary?.dsp_started_at
+        : booking.pickup_at || booking.pickup_datetime,
+    ),
+    status: "loaded",
+  };
 }
 
 function inlineEditRoutePoints(
@@ -620,6 +662,10 @@ export function CustomerFolderSavedBookingsPanel({
   const [editingPriceReference, setEditingPriceReference] = useState("");
   const [inlineEditState, setInlineEditState] =
     useState<CustomerFolderInlineEditState>(initialInlineEditState);
+  const [dspBillingTimeCorrectionState, setDspBillingTimeCorrectionState] =
+    useState<CustomerFolderDspBillingTimeCorrectionState>(
+      initialDspBillingTimeCorrectionState,
+    );
   const [priceDraft, setPriceDraft] = useState("");
   const [expandedSavedBookingReference, setExpandedSavedBookingReference] = useState("");
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
@@ -663,6 +709,8 @@ export function CustomerFolderSavedBookingsPanel({
           const reference = safeDispatchReference(booking);
           const bookingType = customerInvoiceBookingType(booking.service_type);
           let actualMinutes: number | null = null;
+          let dspBillingTimeSource: CustomerFolderDspActualTimeSummary["billing_time_source"] =
+            null;
 
           if (!bookingType) {
             return {
@@ -694,8 +742,13 @@ export function CustomerFolderSavedBookingsPanel({
                 }
               | null;
             const summary = timingResult?.latest_summary;
+            dspBillingTimeSource = summary?.billing_time_source ?? null;
+            const billingStartAt =
+              summary?.billing_time_source === "admin_correction"
+                ? summary?.dsp_started_at
+                : booking.pickup_at;
             actualMinutes = calculateCustomerDspBillingActualMinutes(
-              booking.pickup_at,
+              billingStartAt,
               summary?.dsp_ended_at,
             );
 
@@ -749,7 +802,11 @@ export function CustomerFolderSavedBookingsPanel({
           const sourceLabel = customerFolderRateSourceLabel(calculation.customerRateSource);
           const breakdown =
             bookingType === "DSP" && calculation.actualMinutes !== null && calculation.billableHours !== null
-              ? `${calculation.actualMinutes} booking-to-JC min → ${calculation.billableHours} billable hr × ` +
+              ? `${calculation.actualMinutes} ${
+                  dspBillingTimeSource === "admin_correction"
+                    ? "corrected billing"
+                    : "booking-to-JC"
+                } min → ${calculation.billableHours} billable hr × ` +
                 `${formatInvoiceAmount(calculation.rateCents)}/hr${surchargeLabel}. Source: ${sourceLabel}.`
               : `${formatInvoiceAmount(calculation.baseAmountCents)} fixed trip${surchargeLabel}. ` +
                 `Source: ${sourceLabel}.`;
@@ -1014,6 +1071,11 @@ export function CustomerFolderSavedBookingsPanel({
       message: `Loading job ${publicBookingReferenceDisplay(booking)}...`,
       status: "loading",
     });
+    setDspBillingTimeCorrectionState({
+      ...initialDspBillingTimeCorrectionState,
+      message: "Loading DSP billing time...",
+      status: "loading",
+    });
 
     try {
       const params = new URLSearchParams({ booking_reference: reference });
@@ -1035,16 +1097,59 @@ export function CustomerFolderSavedBookingsPanel({
         throw new Error(result?.error || "Exact job read failed safely.");
       }
 
+      let dspActualTimeSummary: CustomerFolderDspActualTimeSummary | null = null;
+
+      if (customerInvoiceBookingType(exactBooking.service_type) === "DSP") {
+        const timingParams = new URLSearchParams({
+          booking_reference: reference,
+          limit: "1",
+        });
+        const timingResponse = await fetch(
+          `${adminDriverJobDspActualTimeSummariesApiPath}?${timingParams.toString()}`,
+          {
+            headers: {
+              "x-prestige-admin-purpose": "admin-booking-persistence",
+            },
+            method: "GET",
+          },
+        );
+        const timingResult = (await timingResponse.json().catch(() => null)) as
+          | {
+              latest_summary?: CustomerFolderDspActualTimeSummary | null;
+              ok?: boolean;
+            }
+          | null;
+
+        if (!timingResponse.ok || timingResult?.ok !== true) {
+          throw new Error("DSP billing time read failed safely.");
+        }
+
+        dspActualTimeSummary = timingResult.latest_summary ?? null;
+      }
+
       setInlineEditState({
         booking: exactBooking,
         form: inlineEditFormFromBooking(exactBooking),
         message: "Edit the job details and customer price inside this box.",
         status: "loaded",
       });
+      setDspBillingTimeCorrectionState(
+        customerInvoiceBookingType(exactBooking.service_type) === "DSP"
+          ? dspBillingTimeCorrectionStateFromSummary(
+              exactBooking,
+              dspActualTimeSummary,
+            )
+          : initialDspBillingTimeCorrectionState,
+      );
     } catch {
       setInlineEditState({
         ...initialInlineEditState,
         message: "This exact job could not be loaded. Reload the customer folder and try again.",
+        status: "error",
+      });
+      setDspBillingTimeCorrectionState({
+        ...initialDspBillingTimeCorrectionState,
+        message: "DSP billing time could not be loaded safely.",
         status: "error",
       });
     }
@@ -1056,6 +1161,131 @@ export function CustomerFolderSavedBookingsPanel({
       form: { ...current.form, [field]: value },
       message: "Unsaved job-detail changes.",
     }));
+  }
+
+  function updateDspBillingTimeCorrectionField(
+    field: "endInput" | "reason" | "startInput",
+    value: string,
+  ) {
+    setDspBillingTimeCorrectionState((current) => ({
+      ...current,
+      [field]: value,
+      message: "Unsaved DSP billing-time correction.",
+      status: "loaded",
+    }));
+  }
+
+  async function saveDspBillingTimeCorrection(
+    booking: CustomerFolderSavedBookingRecord,
+  ) {
+    const reference = safeDispatchReference(booking);
+    const dspStartedAt = inlineEditApiDateTime(
+      dspBillingTimeCorrectionState.startInput,
+    );
+    const dspEndedAt = inlineEditApiDateTime(
+      dspBillingTimeCorrectionState.endInput,
+    );
+    const correctionReason = inlineEditText(
+      dspBillingTimeCorrectionState.reason,
+      500,
+    );
+    const startTime = new Date(dspStartedAt).getTime();
+    const endTime = new Date(dspEndedAt).getTime();
+
+    if (
+      !reference ||
+      !dspStartedAt ||
+      !dspEndedAt ||
+      correctionReason.length < 3 ||
+      !Number.isFinite(startTime) ||
+      !Number.isFinite(endTime)
+    ) {
+      setDspBillingTimeCorrectionState((current) => ({
+        ...current,
+        message: "Enter a valid DSP billing start, end, and correction reason.",
+        status: "error",
+      }));
+      return;
+    }
+
+    if (endTime <= startTime) {
+      setDspBillingTimeCorrectionState((current) => ({
+        ...current,
+        message: "DSP billing end must be after its start.",
+        status: "error",
+      }));
+      return;
+    }
+
+    setDspBillingTimeCorrectionState((current) => ({
+      ...current,
+      message: `Saving DSP billing times for ${publicBookingReferenceDisplay(booking)}...`,
+      status: "saving",
+    }));
+
+    try {
+      const response = await fetch(adminDriverJobDspActualTimeSummariesApiPath, {
+        body: JSON.stringify({
+          booking_reference: reference,
+          correction_reason: correctionReason,
+          dsp_ended_at: dspEndedAt,
+          dsp_started_at: dspStartedAt,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            corrected_summary?: CustomerFolderDspActualTimeSummary | null;
+            error?: string;
+            ok?: boolean;
+          }
+        | null;
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        result.corrected_summary?.billing_time_source !== "admin_correction"
+      ) {
+        throw new Error(result?.error || "DSP billing time correction failed safely.");
+      }
+
+      setDspBillingTimeCorrectionState({
+        ...dspBillingTimeCorrectionStateFromSummary(
+          inlineEditState.booking || {},
+          result.corrected_summary,
+        ),
+        message:
+          "Saved DSP billing times. Original Driver Reports evidence remains unchanged.",
+      });
+      setBillingReviews((current) => ({
+        ...current,
+        [reference]: {
+          amountCents: null,
+          breakdown: "Recalculating from the saved DSP billing-time correction.",
+          message: "Calculating",
+          status: "calculating",
+        },
+      }));
+      await loadAutomatedBillingReviews([booking]);
+      setReadState((current) => ({
+        ...current,
+        message: `Saved DSP billing times and recalculated the customer proposal for ${publicBookingReferenceDisplay(booking)}.`,
+        tone: "success",
+      }));
+    } catch (error) {
+      setDspBillingTimeCorrectionState((current) => ({
+        ...current,
+        message:
+          error instanceof Error
+            ? error.message
+            : "DSP billing time correction was not saved.",
+        status: "error",
+      }));
+    }
   }
 
   async function saveInlineBookingDetails(booking: CustomerFolderSavedBookingRecord) {
@@ -1184,6 +1414,7 @@ export function CustomerFolderSavedBookingsPanel({
       setEditingPriceReference("");
       setPriceDraft("");
       setInlineEditState(initialInlineEditState);
+      setDspBillingTimeCorrectionState(initialDspBillingTimeCorrectionState);
     } catch {
       setInlineEditState((current) => ({
         ...current,
@@ -1224,6 +1455,7 @@ export function CustomerFolderSavedBookingsPanel({
     setEditingPriceReference("");
     setPriceDraft("");
     setInlineEditState(initialInlineEditState);
+    setDspBillingTimeCorrectionState(initialDspBillingTimeCorrectionState);
   }
 
   return (
@@ -1522,6 +1754,83 @@ export function CustomerFolderSavedBookingsPanel({
                                     />
                                   </label>
                                 </div>
+                                {customerInvoiceBookingType(inlineEditState.form.serviceType) === "DSP" ? (
+                                  <div
+                                    className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
+                                    data-customer-folder-dsp-billing-time-correction="true"
+                                  >
+                                    <p className="text-xs font-bold text-sky-950">
+                                      DSP billing time
+                                    </p>
+                                    <p className="mt-1 text-xs font-semibold leading-5 text-sky-900">
+                                      {dspBillingTimeCorrectionState.message}
+                                    </p>
+                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      <label className="text-xs font-bold text-slate-700">
+                                        DSP billing start (SGT)
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-dsp-billing-start="true"
+                                          disabled={dspBillingTimeCorrectionState.status === "saving"}
+                                          onChange={(event) =>
+                                            updateDspBillingTimeCorrectionField(
+                                              "startInput",
+                                              event.target.value,
+                                            )
+                                          }
+                                          type="datetime-local"
+                                          value={dspBillingTimeCorrectionState.startInput}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        DSP billing end / JC (SGT)
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-dsp-billing-end="true"
+                                          disabled={dspBillingTimeCorrectionState.status === "saving"}
+                                          onChange={(event) =>
+                                            updateDspBillingTimeCorrectionField(
+                                              "endInput",
+                                              event.target.value,
+                                            )
+                                          }
+                                          type="datetime-local"
+                                          value={dspBillingTimeCorrectionState.endInput}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700 sm:col-span-2">
+                                        Correction reason
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-dsp-billing-reason="true"
+                                          disabled={dspBillingTimeCorrectionState.status === "saving"}
+                                          maxLength={500}
+                                          onChange={(event) =>
+                                            updateDspBillingTimeCorrectionField(
+                                              "reason",
+                                              event.target.value,
+                                            )
+                                          }
+                                          placeholder="Actual customer service started early / JC corrected"
+                                          value={dspBillingTimeCorrectionState.reason}
+                                        />
+                                      </label>
+                                    </div>
+                                    <div className="mt-2 flex justify-end">
+                                      <button
+                                        className="h-9 rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+                                        data-customer-folder-dsp-billing-time-save="true"
+                                        disabled={dspBillingTimeCorrectionState.status === "saving"}
+                                        onClick={() => void saveDspBillingTimeCorrection(booking)}
+                                        type="button"
+                                      >
+                                        {dspBillingTimeCorrectionState.status === "saving"
+                                          ? "Saving DSP billing times..."
+                                          : "Save DSP billing times"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
                                 <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
                                   {billingReview?.breakdown || "Enter the approved customer amount."}
                                 </p>
@@ -1532,6 +1841,9 @@ export function CustomerFolderSavedBookingsPanel({
                                     onClick={() => {
                                       setEditingPriceReference("");
                                       setInlineEditState(initialInlineEditState);
+                                      setDspBillingTimeCorrectionState(
+                                        initialDspBillingTimeCorrectionState,
+                                      );
                                       setPriceDraft("");
                                     }}
                                     type="button"

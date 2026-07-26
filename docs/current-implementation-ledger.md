@@ -12,6 +12,15 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin-Editable DSP Billing Time Correction (2026-07-26)
+
+- The owner confirmed that the established automatic DSP customer billing interval remains saved booking pickup → persisted Driver JC, but both billing start and billing end must be editable by Admin when the customer actually starts early/late or the JC time needs correction.
+- The correction lives only inside the existing exact-customer `3 · Pending jobs for payment` → `Jobs not billed yet` → exact job `Edit` box. It adds no Dispatch panel, second billing page, second invoice lane, or duplicate route. Dispatch Driver Reports remains read-only evidence.
+- The existing DSP actual-time admin route now accepts one same-origin, verified admin/dispatcher POST. It verifies the exact saved DSP booking and appends one correction event to the existing server-only `driver_job_dsp_actual_time_events` table. The row records the corrected end, corrected start in bounded safe context, and a required bounded correction reason. It never updates or deletes the booking pickup, scheduled end, driver status events, existing DSP events, or original Driver Reports evidence.
+- The latest valid append-only Admin correction supersedes only the billing interval. Without a correction, customer calculation still uses booking pickup → Driver JC. With a correction, the exact-customer proposal, selected-customer monthly preparation, and invoice line description use corrected start → corrected end, then apply the same two-hour minimum, 15-minute grace whole-hour rule, verified CRM rate precedence, and established surcharges.
+- Saving a correction invalidates only the in-memory reviewed proposal for that exact unbilled job and recalculates it visibly. It does not save a final customer price, select a job, create or issue an invoice, generate/email a PDF, mark payment, write payout/PayNow, update Calendar, acknowledge/complete a job, or contact a customer or driver.
+- Focused protection is `scripts/test-customer-folder-dsp-billing-time-correction-guard.mjs` and the extended executable `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, alongside the existing customer-folder pricing, invoice lifecycle, Driver Reports completion, Pending Driver ACK Queue, and Driver Calendar guards.
+
 ### Customer PDF Notes-Below-Bank Layout Repair (2026-07-26)
 
 - The owner reproduced the issued customer invoice PDF for exact test invoice `JBT-0001` and approved one narrow lower-layout correction: move the existing `Notes` block from above the sign-off to immediately below the complete `Bank Details` block. The resulting stored/customer PDF order is `sign-off → fully visible Bank Details → Notes → Terms & Conditions`.
@@ -3049,7 +3058,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - A completed driver JC timing summary recalculates the customer invoice amount with the locked 15-minute grace hourly rule and the `$65/hr` default rate.
 - The Approved amount remains editable before issue, but changing it away from the calculated amount requires an Adjustment reason before invoice/PDF creation.
 - Adjustment reasons stay in admin review feedback and are not printed into the customer PDF line item.
-- The driver JC invoice read is GET-only through `/api/admin-driver-job-dsp-actual-time-summaries` with `x-prestige-admin-purpose`; it does not write records, send providers, activate payments, or expose driver/customer forbidden data.
+- The invoice-preparation consumer remains GET-only through `/api/admin-driver-job-dsp-actual-time-summaries` with `x-prestige-admin-purpose`; the later owner-approved Admin correction POST is confined to the existing exact-customer unbilled-job editor and does not make invoice preparation itself write records, send providers, activate payments, or expose driver/customer forbidden data.
 - This pass does not send invoices/email/reminders, create Stripe/payment links, write bank/payment/provider records, write Supabase rows, change env, apply migrations, or activate cross-device invoice sync.
 - Guard coverage lives in `scripts/test-customer-invoice-driver-jc-override-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

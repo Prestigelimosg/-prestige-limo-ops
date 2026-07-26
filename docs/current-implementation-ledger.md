@@ -1,16 +1,24 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-2f09de43 fix: sync driver details and recover DSP JC
+4226cac1 fix: allow customer folder DSP timing read
 
 Latest pushed main/staging runtime checkpoint:
-2822fb75 fix: prevent false pickup risk while reports load
+2f09de43 fix: sync driver details and recover DSP JC
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-8d9202dc Merge pull request #98 from Prestigelimosg/codex/restore-private-booking-invite
+606bd1d7 Merge PR #116: Sync driver details and recover DSP JC
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Customer-Folder DSP Timing Read Boundary Repair (2026-07-26)
+
+- Exact signed-in Production acceptance on deployed build `606bd1d7` reproduced the remaining failure without a write: booking `10846` still showed `Review required`, and Chrome network evidence proved the existing `GET /api/admin-driver-job-dsp-actual-time-summaries` request for internal reference `ADM-20260725150239` returned HTTP 403 before its persisted JC query.
+- The failure was the route boundary, not missing Driver JC, reference keying, customer rate, or the booking-to-JC calculation. The established `/customers/155` caller already supplied the exact admin purpose and same-origin request, but this read-only DSP timing route still allowed only the root admin dashboard referer.
+- The existing route now uses the established narrow boundary options already used by the customer-folder rate setup: exact same-origin `/customers` and `/customers/` descendants may call this read. The root dashboard remains allowed; `/driver-job-demo` remains blocked; cross-origin, missing-referer, wrong-purpose, and invalid server-session requests remain blocked.
+- No endpoint, UI, Supabase query, table, row, policy, schema, migration, environment value, Driver Report, saved booking state, Calendar, driver acknowledgement, GPS, message, rate, price save, invoice, PDF, email, payment, payout, or PayNow behavior is added or changed.
+- This source repair is not yet a runtime acceptance claim. Focused executable protection is `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, `scripts/test-customer-folder-price-review-guard.mjs`, and `scripts/test-customer-invoice-driver-jc-override-guard.mjs`; the locked invoice lifecycle, Driver Reports, personal Driver Calendar, and Operations Calendar guards remain unchanged.
 
 ### Verified Driver Details To Operations Calendar Repair (2026-07-26)
 

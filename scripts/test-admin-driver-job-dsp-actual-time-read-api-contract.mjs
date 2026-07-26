@@ -393,6 +393,27 @@ try {
   });
   assertNoLeaks(blockedResult.body, "blocked read response");
 
+  const customerFolderMock = installMockClient(seed);
+  const customerFolderReadResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-driver-job-dsp-actual-time-summaries?booking_reference=SAFE-DSP-001&limit=1",
+        {
+          headers: validAdminHeaders({
+            referer: "http://localhost/customers/155?name=Safe+Customer",
+          }),
+          method: "GET",
+        },
+      ),
+    ),
+  );
+
+  assert.equal(customerFolderReadResult.status, 200);
+  assert.equal(customerFolderReadResult.body.ok, true);
+  assert.equal(customerFolderReadResult.body.booking_reference, "SAFE-DSP-001");
+  assert.equal(customerFolderMock.client.selectHistory.length, 1);
+  assertNoLeaks(customerFolderReadResult.body, "customer-folder DSP actual-time read response");
+
   const mock = installMockClient(seed);
   const readResult = await readRouteResponse(
     await route.GET(

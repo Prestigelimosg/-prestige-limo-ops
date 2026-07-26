@@ -6,12 +6,22 @@ import path from "node:path";
 import ts from "typescript";
 
 const guardScript = "scripts/test-customer-folder-price-review-guard.mjs";
-const [folder, customers, sharedCalculation, savedBookingsRead, rateSetupRoute, ledger, suite] = await Promise.all([
+const [
+  folder,
+  customers,
+  sharedCalculation,
+  savedBookingsRead,
+  rateSetupRoute,
+  dspActualTimeRoute,
+  ledger,
+  suite,
+] = await Promise.all([
   readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
   readFile("app/customers/page.tsx", "utf8"),
   readFile("lib/customer-dsp-invoice-review.ts", "utf8"),
   readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
   readFile("app/api/admin-rate-setup/route.ts", "utf8"),
+  readFile("app/api/admin-driver-job-dsp-actual-time-summaries/route.ts", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
   readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
 ]);
@@ -135,6 +145,7 @@ for (const fragment of [
   'additionalSameOriginRefererPathnames: ["/customers"]',
 ]) {
   includes(rateSetupRoute, fragment, `customer-folder rate setup boundary ${fragment}`);
+  includes(dspActualTimeRoute, fragment, `customer-folder DSP actual-time boundary ${fragment}`);
 }
 
 const ledgerSection = sectionBetween(
@@ -187,6 +198,27 @@ for (const phrase of [
     persistedJcFallbackLedgerSection,
     phrase,
     `persisted Driver JC fallback ledger phrase ${phrase}`,
+  );
+}
+
+const customerFolderTimingBoundaryLedgerSection = sectionBetween(
+  ledger,
+  "### Customer-Folder DSP Timing Read Boundary Repair (2026-07-26)",
+  "\n### ",
+);
+for (const phrase of [
+  "HTTP 403",
+  "`/customers/155`",
+  "same-origin",
+  "read-only DSP timing route",
+  "`/driver-job-demo` remains blocked",
+  "scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs",
+  guardScript,
+]) {
+  includes(
+    customerFolderTimingBoundaryLedgerSection,
+    phrase,
+    `customer-folder DSP timing boundary ledger phrase ${phrase}`,
   );
 }
 

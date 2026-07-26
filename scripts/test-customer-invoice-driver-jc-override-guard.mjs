@@ -203,7 +203,9 @@ assertExcludes(
 for (const fragment of [
   "export async function GET(request: Request)",
   "loadAdminDriverJobDspActualTimeSummaries",
-  "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose)",
+  "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {",
+  'additionalSameOriginRefererPathPrefixes: ["/customers/"]',
+  'additionalSameOriginRefererPathnames: ["/customers"]',
 ]) {
   assertIncludes(driverActualTimeRoute, fragment, `driver actual time route fragment ${fragment}`);
 }

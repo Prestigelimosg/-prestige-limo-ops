@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-2822fb75 fix: prevent false pickup risk while reports load
+2f09de43 fix: sync driver details and recover DSP JC
 
 Latest pushed main/staging runtime checkpoint:
 2822fb75 fix: prevent false pickup risk while reports load

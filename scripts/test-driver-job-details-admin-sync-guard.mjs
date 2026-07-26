@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
+const agentsPath = "AGENTS.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-driver-job-details-admin-sync-guard.mjs";
 const persistenceContractScript = "scripts/test-driver-job-status-persistence-api-contract.mjs";
@@ -46,6 +47,7 @@ function sliceBetween(source, startMarker, endMarker) {
 }
 
 const [
+  agents,
   ledger,
   preactivationSuite,
   appPage,
@@ -57,6 +59,7 @@ const [
   driverStatusPersistence,
   adminBookingAdapter,
 ] = await Promise.all([
+  readFile(agentsPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   readFile(appPagePath, "utf8"),
@@ -68,6 +71,30 @@ const [
   readFile(driverStatusPersistencePath, "utf8"),
   readFile(adminBookingAdapterPath, "utf8"),
 ]);
+
+const operationsCalendarAgentLockSection = sectionBetween(
+  agents,
+  "# Owner-locked automatic Driver ACK to Operations Calendar sync — do not break",
+  "\n# ",
+);
+for (const phrase of [
+  "`Save & Acknowledge Job` must automatically",
+  "same deterministic Operations Calendar event",
+  "must not normally click `Update + Cal` merely to add or refresh driver name, contact, plate, or vehicle",
+  "booking amendments, explicit recovery, or events created before this automatic handoff existed",
+  "must never create a duplicate event",
+  "`sendUpdates=none`",
+  "personal Driver Calendar",
+  "scripts/test-admin-booking-google-calendar-sync-api-contract.mjs",
+  guardScript,
+  persistenceContractScript,
+]) {
+  assertIncludes(
+    operationsCalendarAgentLockSection,
+    phrase,
+    `Automatic Driver ACK Operations Calendar owner lock ${phrase}`,
+  );
+}
 
 const ledgerSection = sectionBetween(ledger, "### Driver Save And Acknowledge Details Admin Sync");
 const calendarIdentityLedgerSection = sectionBetween(
@@ -127,6 +154,7 @@ for (const phrase of [
   "same-event update behavior",
   "Calendar provider failure never rolls back or blocks the saved driver acknowledgement",
   "personal Driver Calendar",
+  "owner-locked in `AGENTS.md`",
   "scripts/test-admin-booking-google-calendar-sync-api-contract.mjs",
   guardScript,
   persistenceContractScript,

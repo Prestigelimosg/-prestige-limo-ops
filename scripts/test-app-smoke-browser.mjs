@@ -685,18 +685,58 @@ const customerPortalInvoicesApiPattern = /\/api\/customer-invoices(?:[/?#]|$)/i;
 const customerPortalTripUpdatesApiPattern = /\/api\/customer-app-notifications(?:[/?#]|$)/i;
 const combineAllowedRuntimePatterns = (...patterns) =>
   new RegExp(patterns.map((pattern) => pattern.source).join("|"), "i");
-const customerBookingPageRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerBookingMemoryApiPattern,
+const withAllowedRuntimeCalls = (pattern, ...allowedCalls) => ({
+  test(value) {
+    return pattern.test(value) || allowedCalls.some((allowedCall) => allowedCall(value));
+  },
+});
+const exactCustomerPortalRscPrefetchCall = (call) => {
+  const requestMatch = /^GET (\S+)$/.exec(call);
+
+  if (!requestMatch) {
+    return false;
+  }
+
+  try {
+    const requestUrl = new URL(requestMatch[1]);
+    const portalUrl = new URL(customerPortalUrl);
+    const searchEntries = [...requestUrl.searchParams.entries()];
+
+    return (
+      requestUrl.origin === portalUrl.origin &&
+      requestUrl.pathname === portalUrl.pathname &&
+      requestUrl.username === "" &&
+      requestUrl.password === "" &&
+      requestUrl.hash === "" &&
+      searchEntries.length === 1 &&
+      searchEntries[0][0] === "_rsc" &&
+      /^[A-Za-z0-9_-]+$/.test(searchEntries[0][1])
+    );
+  } catch {
+    return false;
+  }
+};
+const customerBookingPageRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerBookingMemoryApiPattern,
+  ),
+  exactCustomerPortalRscPrefetchCall,
 );
-const customerBookingMemoryRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerBookingMemoryApiPattern,
+const customerBookingMemoryRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerBookingMemoryApiPattern,
+  ),
+  exactCustomerPortalRscPrefetchCall,
 );
-const customerBookingRequestRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerBookingMemoryApiPattern,
-  customerBookingRequestApiPattern,
+const customerBookingRequestRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerBookingMemoryApiPattern,
+    customerBookingRequestApiPattern,
+  ),
+  exactCustomerPortalRscPrefetchCall,
 );
 const customerPortalRuntimeAllowedPattern = combineAllowedRuntimePatterns(
   publicCompanyProfileApiPattern,
@@ -801,6 +841,32 @@ function assertNoPublicRouteRuntimeCalls(integrationCalls, resourceCalls, contex
   );
 }
 
+function assertCustomerPortalRscPrefetchBoundary() {
+  const allowedCall = `GET ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`;
+  const forbiddenCalls = [
+    `POST ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`,
+    `BEACON ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`,
+    "GET https://example.com/my-bookings?_rsc=q9AXDFxzgqR_RnIk",
+    `GET ${customerPortalUrl}`,
+    `GET ${customerPortalUrl}?_rsc=`,
+    `GET ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk&extra=1`,
+    `GET ${customerPortalUrl}?extra=1&_rsc=q9AXDFxzgqR_RnIk`,
+    `GET ${customerPortalUrl}?_rsc=one&_rsc=two`,
+    `GET ${new URL("/api/customer-saved-bookings", appUrl)}?_rsc=q9AXDFxzgqR_RnIk`,
+  ];
+
+  assert.equal(
+    exactCustomerPortalRscPrefetchCall(allowedCall),
+    true,
+    "Expected the exact same-origin read-only Customer Portal RSC prefetch to be allowed",
+  );
+  assert.deepEqual(
+    forbiddenCalls.filter(exactCustomerPortalRscPrefetchCall),
+    [],
+    "Expected non-GET, external, empty, duplicate, extra-query, and API calls to remain blocked",
+  );
+}
+
 function assertNoBrowserPersistenceLeaks(state, context) {
   assert.deepEqual(state.localStorageValues, [], `${context}: expected no localStorage persistence`);
   assert.deepEqual(state.sessionStorageValues, [], `${context}: expected no sessionStorage persistence`);
@@ -871,6 +937,8 @@ async function terminateChromeProcess(chrome) {
 async function runChromeTest() {
   const reporter = createBrowserTestReporter("app-smoke-browser");
   const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
+
+  assertCustomerPortalRscPrefetchBoundary();
 
   if (!Number.isInteger(chromeDebugPort) || chromeDebugPort <= 0) {
     throw new Error(`Invalid Chrome debug port: ${chromeDebugPort}`);
@@ -35906,7 +35974,11 @@ async function runChromeTest() {
             };
           })()`);
 
-          return candidateState.pathname === "/book" && candidateState.visible && candidateState.submitVisible
+          return candidateState.pathname === "/book" &&
+            candidateState.visible &&
+            candidateState.submitVisible &&
+            candidateState.text.includes("Verify your mobile for a first public booking") &&
+            candidateState.text.includes("Phone verification required")
             ? candidateState
             : false;
         },

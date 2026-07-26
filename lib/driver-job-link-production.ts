@@ -146,12 +146,18 @@ export async function applyProductionDriverJobDetailsUpdate({
     const { syncAcknowledgedDriverDetailsToOperationsCalendar } = await import(
       "./driver-job-operations-calendar-sync.ts"
     );
-    await syncAcknowledgedDriverDetailsToOperationsCalendar({
-      bookingReference: detailsResult.booking_reference,
-      client: clientResult.client,
-    });
+    const operationsCalendarSynced =
+      await syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: detailsResult.booking_reference,
+        client: clientResult.client,
+      });
+
+    if (!operationsCalendarSynced) {
+      console.warn("Driver acknowledgement Operations Calendar sync failed safely.");
+    }
   } catch {
     // A saved acknowledgement must not fail because Operations Calendar is unavailable.
+    console.warn("Driver acknowledgement Operations Calendar sync failed safely.");
   }
 
   try {

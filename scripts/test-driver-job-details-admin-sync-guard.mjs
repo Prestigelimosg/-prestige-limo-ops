@@ -216,6 +216,9 @@ for (const fragment of [
   "syncAcknowledgedDriverDetailsToOperationsCalendar",
   "bookingReference: detailsResult.booking_reference",
   "client: clientResult.client",
+  "const operationsCalendarSynced",
+  "if (!operationsCalendarSynced)",
+  'console.warn("Driver acknowledgement Operations Calendar sync failed safely.")',
   "A saved acknowledgement must not fail because Operations Calendar is unavailable.",
 ]) {
   assertIncludes(
@@ -240,6 +243,10 @@ for (const fragment of [
   "driver_contact: cleanText(booking.driver_contact, 120)",
   "driver_plate_number: cleanText(booking.driver_plate_number, 80)",
   "vehicle: cleanText(booking.vehicle_type_or_category, 120)",
+  "const payload = {",
+  "if (result.status !== 502)",
+  "const retryResult = await syncer(payload)",
+  "return retryResult.ok",
 ]) {
   assertIncludes(
     driverJobOperationsCalendarSync,

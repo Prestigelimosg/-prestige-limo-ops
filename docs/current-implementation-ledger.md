@@ -21,6 +21,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The customer invoice line description uses the same saved booking pickup and Driver JC end so its displayed DSP interval agrees with the amount calculation. No invoice layout, control, route, persistence writer, PDF renderer, payment, payout, PayNow, provider send, schema, migration, environment value, or other wired lane is changed.
 - Focused regression protection extends `scripts/test-admin-dispatch-dsp-scheduled-end-invoice-wiring-guard.mjs`; the established invoice layout and lifecycle guards remain unchanged.
 
+### Exact-Customer Folder DSP Booking-Time To JC Repair (2026-07-26)
+
+- Signed-in Production Chrome reproduced the remaining exact-customer folder defect on test DSP booking `10846`: the established `3 · Pending jobs for payment` `Customer price` tag showed `Review required`, the inline amount stayed blank, and its message still required Driver OTS→JC even after the selected-customer monthly preparation path had been repaired.
+- The existing exact-customer folder DSP proposal branch now calculates elapsed minutes from the saved booking pickup to the Driver JC end, then passes those minutes through the same shared DSP minimum/grace calculator and verified traveler/company/Prestige customer-rate precedence. Driver OTS remains separate operational evidence and is not an input or prerequisite for this customer amount.
+- Missing or invalid saved booking pickup, missing or invalid Driver JC end, JC at or before pickup, an interval beyond the existing 30-day plausibility boundary, or unavailable rate evidence continues failing visibly to `Review required`. No amount is guessed or saved.
+- Only the calculation behind the existing `Customer price` tag is repaired. The same inline editor, `Save price review`, selection, exact-booking handoff, invoice review, Preview, Draft, Issue/PDF, Email, and payment-status controls remain in their established locations and retain their existing gates. No invoice or email is created automatically.
+- Driver Reports, OTS/JC persistence, Admin completion, Driver Calendar, links, acknowledgement, GPS, messaging, invoice layout/PDF renderer, customer portal, payments, payouts, PayNow, schema, migrations, environment values, provider configuration, and all other wired lanes remain unchanged.
+- Focused protection extends `scripts/test-customer-folder-price-review-guard.mjs`, alongside the locked multi-job invoice handoff, stored-PDF/portal, and billing lifecycle guards.
+
 ### Admin Booking Persistence Harness OTP Fixture Alignment (2026-07-26)
 
 - The existing `scripts/test-admin-booking-persistence-api-gate.mjs` stopped before its customer-request assertions because its isolated temporary route fixture predated the already-established private invitation and public phone-OTP imports. Inspection also found that the same fixture omitted the current expired-session-cookie and safe public-booking-reference exports used by that route.

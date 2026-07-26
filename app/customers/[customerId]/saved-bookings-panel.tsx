@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 
 import {
+  calculateCustomerDspBillingActualMinutes,
   calculateCustomerInvoiceRateReview,
   customerInvoiceBookingType,
   type CustomerInvoiceRateSetupRecord,
@@ -64,8 +65,7 @@ type CustomerFolderBillingReview = {
 type CustomerFolderBillingReviews = Record<string, CustomerFolderBillingReview>;
 
 type CustomerFolderDspActualTimeSummary = {
-  actual_time_status?: "complete" | "not_started" | "started" | string | null;
-  dsp_total_minutes?: number | null;
+  dsp_ended_at?: string | null;
 };
 
 type CustomerFolderExactRoutePoint = {
@@ -363,7 +363,7 @@ function customerFolderBillingReviewForBooking(
     amountCents: null,
     breakdown:
       bookingType === "DSP"
-        ? "Checking Driver OTS→JC actual time and the verified Prestige customer rate."
+        ? "Checking saved booking pickup→Driver JC end and the verified Prestige customer rate."
         : "Calculating a temporary proposal from the existing Prestige customer rate setup.",
     message: "Calculating",
     status: "calculating",
@@ -694,26 +694,27 @@ export function CustomerFolderSavedBookingsPanel({
                 }
               | null;
             const summary = timingResult?.latest_summary;
+            actualMinutes = calculateCustomerDspBillingActualMinutes(
+              booking.pickup_at,
+              summary?.dsp_ended_at,
+            );
 
             if (
               !timingResponse.ok ||
               timingResult?.ok !== true ||
-              summary?.actual_time_status !== "complete" ||
-              !Number.isFinite(Number(summary.dsp_total_minutes)) ||
-              Number(summary.dsp_total_minutes) <= 0
+              actualMinutes === null
             ) {
               return {
                 reference,
                 review: {
                   amountCents: null,
-                  breakdown: "Complete Driver OTS→JC actual time, then reload this customer folder.",
+                  breakdown:
+                    "Confirm the saved booking pickup and complete Driver JC, then reload this customer folder.",
                   message: "Review required",
                   status: "required",
                 } satisfies CustomerFolderBillingReview,
               };
             }
-
-            actualMinutes = Number(summary.dsp_total_minutes);
           }
 
           const calculation = calculateCustomerInvoiceRateReview(
@@ -748,7 +749,7 @@ export function CustomerFolderSavedBookingsPanel({
           const sourceLabel = customerFolderRateSourceLabel(calculation.customerRateSource);
           const breakdown =
             bookingType === "DSP" && calculation.actualMinutes !== null && calculation.billableHours !== null
-              ? `${calculation.actualMinutes} actual min → ${calculation.billableHours} billable hr × ` +
+              ? `${calculation.actualMinutes} booking-to-JC min → ${calculation.billableHours} billable hr × ` +
                 `${formatInvoiceAmount(calculation.rateCents)}/hr${surchargeLabel}. Source: ${sourceLabel}.`
               : `${formatInvoiceAmount(calculation.baseAmountCents)} fixed trip${surchargeLabel}. ` +
                 `Source: ${sourceLabel}.`;

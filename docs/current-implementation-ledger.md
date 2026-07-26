@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Amended Stored-Invoice Email Idempotency Repair (2026-07-27)
+
+- After the existing exact-customer DSP correction updated issued invoice `JBT-0001` from its earlier stored PDF to the owner-confirmed SGD520 / `12:00-20:14` PDF, one approved Production Email attempt reproduced HTTP 502 on the established `/api/admin-customer-invoice-email` route. Chrome console showed that exact route failure, the JBT row remained `Email` rather than `Emailed`, and Resend contained no new event. Its earlier JBT delivery remained the only provider record.
+- The defect was the established invoice idempotency key, not recipient selection, PDF regeneration, invoice linkage, or a second email lane. The key used invoice number plus sorted recipients only, so the amended PDF changed the provider payload while retaining the key from the earlier send. Resend's documented contract rejects a key reused within its retention window with a different payload as `409 invalid_idempotent_request`; the route safely mapped that provider rejection to 502.
+- The same one-request route now serializes its existing Resend body once, derives a bounded SHA-256 payload version from that exact serialized body, and adds that version only to the normal-invoice idempotency key. An identical invoice/recipient/payload retry retains the same key and duplicate protection. An explicitly amended stored PDF changes the payload version and can use the established Email action without conflicting with the prior document.
+- Reminder and payment-thank-you idempotency keys remain unchanged. No second sender, provider call, retry, queue, background job, button, route, PDF renderer, invoice writer, record, number, recipient rule, allowlist, payment action, payout, PayNow, customer/driver surface, schema, migration, environment value, or provider configuration is added or changed. The payload hash is server-only and is never returned or displayed.
+- Focused regression protection is `scripts/test-customer-invoice-amended-email-idempotency-guard.mjs`, registered beside the existing multi-recipient, stored-PDF/portal, billing lifecycle, exact-customer, and privacy guards.
+
 ### Exact-Customer Issued-Invoice Eligibility Repair (2026-07-27)
 
 - Signed-in Production Chrome reproduced the exact split state on booking `10846`: `2 · Total invoices` showed issued pending invoice `JBT-0001` at SGD520 with its single line referencing `10846`, while `3 · Pending jobs for payment` still rendered the same booking inside `Jobs not billed yet` with selection, Edit, Delete, price-review, and Invoice preparation controls.

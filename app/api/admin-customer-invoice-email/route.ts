@@ -294,10 +294,23 @@ export async function POST(request: Request) {
             kind: messageKind,
             paymentMethod: invoiceResult.data.paymentMethod,
           });
+    const providerBody = buildProviderBody({
+      contentBase64: Buffer.from(pdfResult.data.bytes).toString("base64"),
+      documentLabel: documentEmailLabel(pdfResult.data.documentType),
+      filename: pdfResult.data.filename,
+      from: from as string,
+      html: actionMessage?.html,
+      invoiceNumber: pdfResult.data.invoiceNumber,
+      recipients,
+      replyTo,
+      subject: actionMessage?.subject,
+      text: actionMessage?.text,
+    });
     const recipientHash = createHash("sha256")
       .update([...recipients].sort().join(","))
       .digest("hex")
       .slice(0, 24);
+    const payloadHash = createHash("sha256").update(providerBody).digest("hex").slice(0, 24);
     const idempotencyAction =
       messageKind === "reminder"
         ? `reminder-${invoiceResult.data.reminderSendCount + 1}`
@@ -306,23 +319,12 @@ export async function POST(request: Request) {
           : "invoice";
     const idempotencyKey =
       messageKind === "invoice"
-        ? `customer-invoice-${pdfResult.data.invoiceNumber}-${recipientHash}`
+        ? `customer-invoice-${pdfResult.data.invoiceNumber}-${recipientHash}-${payloadHash}`
         : `customer-invoice-${idempotencyAction}-${pdfResult.data.invoiceNumber}-${recipientHash}`;
 
     try {
       const response = await fetch(resendEmailApiUrl, {
-        body: buildProviderBody({
-          contentBase64: Buffer.from(pdfResult.data.bytes).toString("base64"),
-          documentLabel: documentEmailLabel(pdfResult.data.documentType),
-          filename: pdfResult.data.filename,
-          from: from as string,
-          html: actionMessage?.html,
-          invoiceNumber: pdfResult.data.invoiceNumber,
-          recipients,
-          replyTo,
-          subject: actionMessage?.subject,
-          text: actionMessage?.text,
-        }),
+        body: providerBody,
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",

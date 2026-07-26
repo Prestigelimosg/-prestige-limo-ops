@@ -30,6 +30,7 @@ const sourceFiles = [
   "lib/admin-booking-calendar-policy.ts",
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-booking-google-calendar-sync.ts",
+  "lib/driver-job-operations-calendar-sync.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-booking-calendar-google-sync/route.ts",
 ];
@@ -191,6 +192,9 @@ async function loadHarness() {
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    driverDetailsCalendarSync: require(
+      path.join(tempDir, "lib/driver-job-operations-calendar-sync.js"),
+    ),
     googleSync: require(path.join(tempDir, "lib/admin-booking-google-calendar-sync.js")),
     route: require(path.join(tempDir, "app/api/admin-booking-calendar-google-sync/route.js")),
   };
@@ -331,7 +335,7 @@ function parseJsonBody(call) {
 const harness = await loadHarness();
 
 try {
-  const { googleSync, route } = harness;
+  const { driverDetailsCalendarSync, googleSync, route } = harness;
 
   assert.equal(
     googleSync.adminBookingGoogleCalendarSyncVersion,
@@ -534,6 +538,151 @@ try {
     assert.equal(firstEvent.extendedProperties.private.prestigeBookingReference, "PL-2026-0615-001");
     assert.equal(firstEvent.extendedProperties.private.prestigeSource, "prestige_limo_ops");
     assertNoLeaks(firstEvent, "Google Calendar event request must not include forbidden booking fields");
+  }
+
+  {
+    setEnv(validEnv());
+    const calls = installFetchMock({ eventStatuses: [409, 200] });
+    const result = await googleSync.syncVerifiedDriverDetailsToAdminBookingCalendar({
+      bookings: [
+        safeBooking({
+          booking_reference: "ADM-DRIVER-DETAILS-CALENDAR-001",
+          booking_type: "DSP",
+          driver_contact: "97366292",
+          driver_name: "Simon",
+          driver_plate_number: "SNP9124S",
+          traveler_name: "Mr. Jenn Bin Tan",
+          vehicle: "AVF",
+        }),
+      ],
+      date_label: "ADM-DRIVER-DETAILS-CALENDAR-001",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.sync.events_synced, 1);
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 2);
+    assert.equal(providerCalls[0].method, "POST");
+    assert.equal(providerCalls[1].method, "PUT");
+    assert.equal(providerCalls[1].searchParams.sendUpdates, "none");
+    const event = parseJsonBody(providerCalls[1]);
+    assert.equal(
+      event.summary,
+      "SNP9124S > Mr. Jenn Bin Tan - DSP - Prestige",
+    );
+    assert.match(event.description, /Driver: Simon \/ SNP9124S \/ 97366292/);
+    assert.match(event.description, /Vehicle: AVF/);
+    assert.equal(event.attendees, undefined);
+    assertNoLeaks(
+      event,
+      "verified Driver Job detail Calendar upsert must retain the admin Calendar privacy boundary",
+    );
+  }
+
+  {
+    setEnv(validEnv());
+    const filters = [];
+    let selectedColumns = "";
+    let syncPayload = null;
+    const bookingRow = {
+      admin_internal_status: "Admin Review Required",
+      booking_reference: "ADM-20260725150239",
+      bookers: {
+        booker_name: "Mr. Jenn Bin Tan",
+      },
+      companies: null,
+      company_id: null,
+      contact_display_name: "Mr. Jenn Bin Tan",
+      customer_facing_status: "Confirmed",
+      driver_contact: "97366292",
+      driver_name: "Simon",
+      driver_plate_number: "SNP9124S",
+      dropoff_location: "Drop-off To Confirm",
+      flight_no: null,
+      passenger_name: "Mr. Jenn Bin Tan",
+      pax_count: 1,
+      pickup_at: "2026-07-26T13:00:00+08:00",
+      pickup_location: "Wallich Street",
+      route_summary: "Wallich Street > Drop-off To Confirm",
+      route_type: "DSP",
+      service_type: "DSP",
+      short_notice_review_status: null,
+      vehicle_type_or_category: "AVF",
+    };
+    const query = {
+      eq(column, value) {
+        filters.push({ column, value });
+        return this;
+      },
+      async maybeSingle() {
+        return { data: bookingRow, error: null };
+      },
+      select(columns) {
+        selectedColumns = columns;
+        return this;
+      },
+    };
+    const client = {
+      from(table) {
+        assert.equal(table, "bookings");
+        return query;
+      },
+    };
+
+    const synced =
+      await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: "ADM-20260725150239",
+        client,
+        async syncer(payload) {
+          syncPayload = payload;
+          return {
+            data: {
+              sync: {
+                events_synced: 1,
+              },
+            },
+            ok: true,
+          };
+        },
+      });
+
+    assert.equal(synced, true);
+    assert.deepEqual(filters, [
+      {
+        column: "booking_reference",
+        value: "ADM-20260725150239",
+      },
+    ]);
+    assert.match(selectedColumns, /driver_name, driver_contact, driver_plate_number/);
+    assert.doesNotMatch(selectedColumns, unsafeLeakPattern);
+    assert.deepEqual(syncPayload, {
+      bookings: [
+        {
+          booking_reference: "ADM-20260725150239",
+          booking_type: "DSP",
+          booker_name: "Mr. Jenn Bin Tan",
+          company_name: "",
+          driver_contact: "97366292",
+          driver_name: "Simon",
+          driver_plate_number: "SNP9124S",
+          dropoff_address: "Drop-off To Confirm",
+          flight_no: "",
+          id: "ADM-20260725150239",
+          pax: 1,
+          pickup_address: "Wallich Street",
+          pickup_at: "2026-07-26T13:00:00+08:00",
+          route: "Wallich Street > Drop-off To Confirm",
+          status: "Admin Review Required",
+          traveler_name: "Mr. Jenn Bin Tan",
+          vehicle: "AVF",
+        },
+      ],
+      date_label: "ADM-20260725150239",
+    });
+    assertNoLeaks(
+      syncPayload,
+      "token-verified Driver Job detail Calendar handoff must use the existing safe event payload",
+    );
   }
 
   {

@@ -143,6 +143,18 @@ export async function applyProductionDriverJobDetailsUpdate({
   });
 
   try {
+    const { syncAcknowledgedDriverDetailsToOperationsCalendar } = await import(
+      "./driver-job-operations-calendar-sync.ts"
+    );
+    await syncAcknowledgedDriverDetailsToOperationsCalendar({
+      bookingReference: detailsResult.booking_reference,
+      client: clientResult.client,
+    });
+  } catch {
+    // A saved acknowledgement must not fail because Operations Calendar is unavailable.
+  }
+
+  try {
     const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
     await sendAdminDevicePushAlert("driver_acknowledged");
   } catch {

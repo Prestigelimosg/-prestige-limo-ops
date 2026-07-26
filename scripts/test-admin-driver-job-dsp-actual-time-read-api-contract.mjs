@@ -186,6 +186,7 @@ class MockSupabaseClient {
     this.selectHistory = [];
     this.tables = {
       driver_job_dsp_actual_time_summaries: [],
+      driver_job_status_events: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -309,6 +310,7 @@ const seed = {
       total_minutes: null,
     },
   ],
+  driver_job_status_events: [],
 };
 
 let harness;
@@ -452,6 +454,61 @@ try {
   assert.equal(startedResult.body.latest_summary.dsp_billable_minutes, null);
   assert.equal(startedResult.body.summary.has_complete_actual_time, false);
   assertNoLeaks(startedResult.body, "started DSP actual-time read response");
+
+  const canonicalJcMock = installMockClient({
+    driver_job_dsp_actual_time_summaries: [],
+    driver_job_status_events: [
+      {
+        booking_reference: "ADM-20260725150239",
+        occurred_at: "2026-07-26T11:14:00.000Z",
+        status_value: "completed",
+      },
+    ],
+  });
+  const canonicalJcResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-driver-job-dsp-actual-time-summaries?booking_reference=ADM-20260725150239",
+        {
+          headers: validAdminHeaders(),
+          method: "GET",
+        },
+      ),
+    ),
+  );
+
+  assert.equal(canonicalJcResult.status, 200);
+  assert.equal(canonicalJcResult.body.ok, true);
+  assert.equal(
+    canonicalJcResult.body.latest_summary.dsp_ended_at,
+    "2026-07-26T11:14:00.000Z",
+  );
+  assert.equal(canonicalJcResult.body.latest_summary.dsp_started_at, null);
+  assert.equal(canonicalJcResult.body.latest_summary.dsp_total_minutes, null);
+  assert.equal(canonicalJcResult.body.latest_summary.actual_time_status, "not_started");
+  assert.deepEqual(canonicalJcMock.client.selectHistory[1], {
+    filters: [
+      {
+        column: "booking_reference",
+        value: "ADM-20260725150239",
+      },
+      {
+        column: "status_value",
+        value: "completed",
+      },
+    ],
+    limit: 1,
+    orderBy: {
+      column: "occurred_at",
+      options: {
+        ascending: false,
+        nullsFirst: false,
+      },
+    },
+    selectedColumns: "booking_reference, status_value, occurred_at",
+    table: "driver_job_status_events",
+  });
+  assertNoLeaks(canonicalJcResult.body, "canonical Driver JC fallback response");
 
   const failureMock = installMockClient(seed, {
     failures: {

@@ -51,6 +51,8 @@ const maxBookingReferenceLength = 120;
 const maxDspMinutes = 60 * 24 * 30;
 const dspActualTimeSummarySelect =
   "booking_reference, dsp_started_at, dsp_ended_at, total_minutes, actual_time_status";
+const driverJcStatusEventSelect =
+  "booking_reference, status_value, occurred_at";
 const disabledDspActualTimeReadError =
   "Admin driver job DSP actual time read is not enabled on this server.";
 const safeDspActualTimeConfigError =
@@ -372,6 +374,73 @@ function summarizeDspActualTime(summaries: AdminDriverJobDspActualTimeSummary[])
   };
 }
 
+async function loadPersistedDriverJcEnd(
+  client: SupabaseClient,
+  bookingReference: string,
+) {
+  const { data, error } = await client
+    .from("driver_job_status_events")
+    .select(driverJcStatusEventSelect)
+    .eq("booking_reference", bookingReference)
+    .eq("status_value", "completed")
+    .order("occurred_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+
+  if (error) {
+    return null;
+  }
+
+  const row = asRecord(asArray(data)[0]);
+  const exactReference = validBookingReference(row.booking_reference);
+  const status = textOrNull(row.status_value);
+
+  if (exactReference !== bookingReference || status !== "completed") {
+    return null;
+  }
+
+  return safeDateTextFromDb(row.occurred_at);
+}
+
+async function addPersistedDriverJcEndFallback(
+  client: SupabaseClient,
+  bookingReference: string,
+  summaries: AdminDriverJobDspActualTimeSummary[],
+) {
+  if (summaries[0]?.dsp_ended_at) {
+    return summaries;
+  }
+
+  const persistedDriverJcEnd = await loadPersistedDriverJcEnd(
+    client,
+    bookingReference,
+  );
+
+  if (!persistedDriverJcEnd) {
+    return summaries;
+  }
+
+  if (summaries.length > 0) {
+    return [
+      {
+        ...summaries[0],
+        dsp_ended_at: persistedDriverJcEnd,
+      },
+      ...summaries.slice(1),
+    ];
+  }
+
+  return [
+    {
+      actual_time_status: "not_started" as const,
+      booking_reference: bookingReference,
+      dsp_billable_minutes: null,
+      dsp_ended_at: persistedDriverJcEnd,
+      dsp_started_at: null,
+      dsp_total_minutes: null,
+    },
+  ];
+}
+
 export async function loadAdminDriverJobDspActualTimeSummaries(
   input: URLSearchParams | UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
@@ -399,10 +468,15 @@ export async function loadAdminDriverJobDspActualTimeSummaries(
     return safeAdapterFailure(safeDspActualTimeReadError, 500, error);
   }
 
-  const summaries = asArray(data)
+  const storedSummaries = asArray(data)
     .map(asRecord)
     .map(toAdminDriverJobDspActualTimeSummary)
     .filter((summary): summary is AdminDriverJobDspActualTimeSummary => Boolean(summary));
+  const summaries = await addPersistedDriverJcEndFallback(
+    clientResult.data,
+    parsed.data.booking_reference,
+    storedSummaries,
+  );
 
   return {
     data: {

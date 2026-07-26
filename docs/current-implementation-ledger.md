@@ -12,6 +12,15 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Linked Pending Jobs And Unpaid Invoice Amendment Refresh (2026-07-27)
+
+- The owner reproduced the exact-customer split-brain defect on booking `10846`: `3 · Pending jobs for payment` saved the owner-approved DSP correction `12:00-20:14` and reviewed `$520`, while the single matching unpaid issued invoice `JBT-0001` in `2 · Total invoices` remained the earlier `13:00-19:14` / `$390` stored snapshot and PDF.
+- The two established sections are now linked through the existing `Save price review` and existing `/api/admin-customer-invoices` PATCH lane. After explicit Admin review, the server verifies the exact saved booking/customer identity, finds one single matching unpaid issued invoice by its internal or public booking reference, replaces only that exact line, recalculates the invoice total, regenerates the stored PDF, and returns the same invoice number to the existing Total invoices panel.
+- The update uses the same shared customer invoice line-description formatter and the latest exact DSP billing correction, retains the invoice number, issue date, due date, status, recipient, customer/traveller scope, payment wording, and every unrelated line item. A prior card-payment note on the amended line is preserved. The changed document is reset to `not_sent` until the established Email action sends the regenerated PDF.
+- Paid invoices, quotations, credit notes, drafts, multiple matching invoices, ambiguous/missing line matches, cross-customer rows, stale concurrent amounts, invalid booking ownership, and unsafe input all fail closed without a write. With no existing matching unpaid invoice, the reviewed job remains available for the normal invoice-creation handoff and no invoice is created automatically.
+- No second invoice, new route, control, workbench, panel, numbering scheme, payment action, email sender, PDF layout, customer portal lane, schema, migration, or provider path is added. The existing Total invoices panel refreshes immediately from the returned stored record; customer portal and later Email/PDF downloads read the same regenerated record.
+- Focused protection is `scripts/test-customer-folder-amended-unpaid-invoice-link-guard.mjs`, registered in the preactivation suite, alongside the locked multi-job handoff, stored invoice/PDF/portal, billing document lifecycle, DSP correction, and privacy guards.
+
 ### Admin-Editable DSP Billing Time Correction (2026-07-26)
 
 - The owner confirmed that the established automatic DSP customer billing interval remains saved booking pickup → persisted Driver JC, but both billing start and billing end must be editable by Admin when the customer actually starts early/late or the JC time needs correction.

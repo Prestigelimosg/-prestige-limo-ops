@@ -9,6 +9,7 @@ import {
   customerInvoiceBookingType,
   type CustomerInvoiceRateSetupRecord,
 } from "../../../lib/customer-dsp-invoice-review";
+import { formatCustomerInvoiceLineDescription } from "../../../lib/customer-invoice-line-description";
 import {
   formatInvoiceAmount,
   parseInvoiceAmountToCents,
@@ -16,6 +17,7 @@ import {
 import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-display";
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
+const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
@@ -24,6 +26,8 @@ const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
 const customerFolderSelectedPriceReviewsParam = "selected_booking_price_reviews";
 const customerFolderInvoiceSelectionLimit = 4;
+const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpaid_invoice";
+const customerInvoiceUpdatedEventName = "prestige:customer-invoice-updated";
 
 type CustomerFolderSavedBookingRecord = {
   admin_status?: string | null;
@@ -1437,11 +1441,131 @@ export function CustomerFolderSavedBookingsPanel({
     void openInlineBookingEditor(booking);
   }
 
-  function savePriceReview(booking: CustomerFolderSavedBookingRecord) {
+  async function refreshLinkedUnpaidInvoice(
+    booking: CustomerFolderSavedBookingRecord,
+    amountCents: number,
+  ) {
+    const exactBooking = inlineEditState.booking;
+    const bookingReference = safeDispatchReference(booking);
+    const exactBookingReference = safeBookingReferenceValue(
+      exactBooking?.booking_reference,
+    );
+
+    if (
+      !exactBooking ||
+      !bookingReference ||
+      exactBookingReference !== bookingReference
+    ) {
+      throw new Error(
+        "Reload this exact job before linking its reviewed price to Total invoices.",
+      );
+    }
+
+    const serviceType = inlineEditText(
+      exactBooking.service_type || exactBooking.route_type,
+      80,
+    );
+    const dspBooking = customerInvoiceBookingType(serviceType) === "DSP";
+    const route =
+      inlineEditText(exactBooking.route_summary, 500) ||
+      [exactBooking.pickup_location, exactBooking.dropoff_location]
+        .map((value) => inlineEditText(value))
+        .filter(Boolean)
+        .join(" > ");
+    const lineDescription = formatCustomerInvoiceLineDescription({
+      dspEndedAt: dspBooking
+        ? inlineEditApiDateTime(dspBillingTimeCorrectionState.endInput)
+        : null,
+      dspStartedAt: dspBooking
+        ? inlineEditApiDateTime(dspBillingTimeCorrectionState.startInput)
+        : null,
+      flightNumber: exactBooking.flight_no,
+      passengerName: exactBooking.passenger_name,
+      pickupAt: exactBooking.pickup_at || exactBooking.pickup_datetime,
+      pickupLocation: exactBooking.pickup_location,
+      publicReference:
+        safePublicBookingReference(exactBooking.public_booking_reference) ||
+        safePublicBookingReference(booking.public_booking_reference),
+      route,
+      serviceType,
+      vehicleType: exactBooking.vehicle_type_or_category,
+    });
+    const response = await fetch(adminCustomerInvoicesApiPath, {
+      body: JSON.stringify({
+        action: customerInvoiceAmendedBookingRefreshAction,
+        amountCents,
+        bookingReference,
+        customerId,
+        lineItem: {
+          amountLabel: formatInvoiceAmount(amountCents),
+          bookingReference,
+          description: lineDescription,
+          quantity: 1,
+        },
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "PATCH",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | {
+          error?: string;
+          invoice?: Record<string, unknown> | null;
+          linked?: boolean;
+          ok?: boolean;
+        }
+      | null;
+
+    if (!response.ok || result?.ok !== true) {
+      throw new Error(
+        result?.error ||
+          "The reviewed job price was not linked to Total invoices.",
+      );
+    }
+
+    if (result.linked && result.invoice) {
+      window.dispatchEvent(
+        new CustomEvent(customerInvoiceUpdatedEventName, {
+          detail: {
+            invoice: result.invoice,
+          },
+        }),
+      );
+      return inlineEditText(result.invoice.invoiceNumber, 80);
+    }
+
+    return "";
+  }
+
+  async function savePriceReview(booking: CustomerFolderSavedBookingRecord) {
     const reference = safeDispatchReference(booking);
     const amountCents = parseInvoiceAmountToCents(priceDraft);
 
     if (!reference || !amountCents) {
+      return;
+    }
+
+    setReadState((current) => ({
+      ...current,
+      message: `Linking the reviewed price for ${publicBookingReferenceDisplay(booking)}...`,
+      tone: "info",
+    }));
+
+    let linkedInvoiceNumber = "";
+
+    try {
+      linkedInvoiceNumber = await refreshLinkedUnpaidInvoice(booking, amountCents);
+    } catch (error) {
+      setReadState((current) => ({
+        ...current,
+        message:
+          error instanceof Error
+            ? error.message
+            : "The reviewed job price was not saved.",
+        tone: "error",
+      }));
       return;
     }
 
@@ -1457,7 +1581,9 @@ export function CustomerFolderSavedBookingsPanel({
     }));
     setReadState((current) => ({
       ...current,
-      message: `Saved customer price for ${publicBookingReferenceDisplay(booking)}.`,
+      message: linkedInvoiceNumber
+        ? `Saved customer price and refreshed ${linkedInvoiceNumber} in Total invoices.`
+        : `Saved customer price for ${publicBookingReferenceDisplay(booking)}. No existing unpaid invoice required a refresh.`,
       tone: "success",
     }));
     setExpandedSavedBookingReference("");
@@ -1863,7 +1989,7 @@ export function CustomerFolderSavedBookingsPanel({
                                     className="h-9 rounded-md border border-emerald-700 bg-emerald-700 px-3 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
                                     data-customer-folder-price-review-save={booking.booking_reference || ""}
                                     disabled={!parseInvoiceAmountToCents(priceDraft)}
-                                    onClick={() => savePriceReview(booking)}
+                                    onClick={() => void savePriceReview(booking)}
                                     type="button"
                                   >
                                     Save price review

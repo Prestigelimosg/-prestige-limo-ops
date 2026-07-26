@@ -11,8 +11,10 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   checkCustomerBookingRequestPersistenceConfigReadiness,
 } from "./admin-booking-supabase-adapter";
+import { loadAdminDriverJobDspActualTimeSummaries } from "./admin-driver-job-dsp-actual-time-read";
 import { loadPublicCompanyProfile } from "./company-profile-persistence";
 import { defaultCompanyProfile } from "./company-profile-shared";
+import { formatCustomerInvoiceLineDescription } from "./customer-invoice-line-description";
 import {
   createCustomerInvoicePdfBytes,
   formatInvoiceAmount,
@@ -29,6 +31,7 @@ import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-book
 
 export const customerInvoiceRecordVersion = "customer-invoice-record-v1";
 export const customerInvoiceRecordTableName = "customer_invoice_records";
+export const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpaid_invoice";
 export const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
 
 export type CustomerInvoiceEmailDeliveryStatus = "blocked" | "failed" | "not_sent" | "sent";
@@ -77,6 +80,14 @@ export type CustomerInvoiceTestArtifactArchiveInput = {
   bookingReference?: unknown;
   confirmationText?: unknown;
   invoiceNumber?: unknown;
+};
+
+export type CustomerInvoiceAmendedBookingRefreshInput = {
+  action?: unknown;
+  amountCents?: unknown;
+  bookingReference?: unknown;
+  customerId?: unknown;
+  lineItem?: unknown;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -382,6 +393,16 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] | null {
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
 
   return lineItems.length === value.length ? lineItems : null;
+}
+
+function customerInvoiceLineItemAmountCents(value: unknown) {
+  const cleaned = safeText(value, 40);
+  const amount = cleaned ? Number(cleaned.replace(/[^0-9.]/g, "")) : Number.NaN;
+  const cents = Math.round(amount * 100);
+
+  return Number.isFinite(amount) && amount > 0 && Number.isSafeInteger(cents)
+    ? cents
+    : null;
 }
 
 function safeActor(actor: AdminBookingPersistenceAdapterActor) {
@@ -1320,6 +1341,306 @@ export async function updateAdminCustomerInvoiceStatus(
         version: customerInvoiceRecordVersion,
       }
     : safeFailure(safeMissingError, 404);
+}
+
+export async function refreshAdminCustomerAmendedUnpaidInvoice(
+  input: CustomerInvoiceAmendedBookingRefreshInput,
+  actor: AdminBookingPersistenceAdapterActor,
+  client?: CustomerInvoiceClient,
+): Promise<
+  CustomerInvoiceResult<{
+    invoice: CustomerInvoiceStoredRecord | null;
+    linked: boolean;
+  }>
+> {
+  if (!safeActor(actor)) {
+    return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
+  }
+
+  const action = safeText(input.action, 80);
+  const amountCents = safeAmountCents(input.amountCents);
+  const bookingReference = safeText(input.bookingReference, 160);
+  const customerId = safeText(input.customerId, 160);
+  const [lineItem] = safeLineItems([input.lineItem]) || [];
+
+  if (
+    action !== customerInvoiceAmendedBookingRefreshAction ||
+    !amountCents ||
+    !bookingReference ||
+    !customerId ||
+    !lineItem ||
+    lineItem.bookingReference !== bookingReference ||
+    customerInvoiceLineItemAmountCents(lineItem.amountLabel) !== amountCents
+  ) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const invoiceClient = client ?? createServerClient();
+  const { data: bookingData, error: bookingError } = await invoiceClient
+    .from("bookings")
+    .select(
+      "booking_reference, customer_id, public_booking_reference, service_type, route_type, route_summary, pickup_at, pickup_datetime, pickup_location, dropoff_location, flight_no, passenger_name, vehicle_type_or_category",
+    )
+    .eq("booking_reference", bookingReference)
+    .eq("customer_id", customerId)
+    .maybeSingle();
+  const verifiedBooking = asRecord(bookingData);
+  const verifiedBookingReference = safeText(verifiedBooking.booking_reference, 160);
+  const verifiedCustomerId = safeText(verifiedBooking.customer_id, 160);
+  const verifiedPublicReference = safeText(verifiedBooking.public_booking_reference, 160);
+  const verifiedServiceType =
+    safeText(verifiedBooking.service_type, 80) ||
+    safeText(verifiedBooking.route_type, 80);
+
+  if (
+    bookingError ||
+    verifiedBookingReference !== bookingReference ||
+    verifiedCustomerId !== customerId ||
+    !verifiedServiceType
+  ) {
+    return safeFailure(safeValidationError, 403);
+  }
+
+  const isDspBooking = ["DSP", "HOURLY"].includes(verifiedServiceType.toUpperCase());
+  let dspStartedAt: string | null = null;
+  let dspEndedAt: string | null = null;
+
+  if (isDspBooking) {
+    const timingResult = await loadAdminDriverJobDspActualTimeSummaries(
+      {
+        booking_reference: bookingReference,
+        limit: 1,
+      },
+      actor,
+    );
+    const latestSummary = timingResult.ok
+      ? timingResult.data.latest_summary
+      : null;
+
+    if (
+      !latestSummary ||
+      latestSummary.actual_time_status !== "complete" ||
+      !latestSummary.dsp_ended_at
+    ) {
+      return safeFailure(
+        "The saved DSP billing interval is not ready. No invoice was changed.",
+        409,
+      );
+    }
+
+    dspStartedAt =
+      latestSummary.billing_time_source === "admin_correction"
+        ? latestSummary.dsp_started_at
+        : safeText(verifiedBooking.pickup_at, 160) ||
+          safeText(verifiedBooking.pickup_datetime, 160);
+    dspEndedAt = latestSummary.dsp_ended_at;
+
+    if (!dspStartedAt) {
+      return safeFailure(
+        "The saved DSP billing start is not ready. No invoice was changed.",
+        409,
+      );
+    }
+  }
+
+  const verifiedLineDescription = formatCustomerInvoiceLineDescription({
+    dropoffLocation: safeText(verifiedBooking.dropoff_location, 500),
+    dspEndedAt,
+    dspStartedAt,
+    flightNumber: safeText(verifiedBooking.flight_no, 160),
+    passengerName: safeText(verifiedBooking.passenger_name, 300),
+    pickupAt:
+      safeText(verifiedBooking.pickup_at, 160) ||
+      safeText(verifiedBooking.pickup_datetime, 160),
+    pickupLocation: safeText(verifiedBooking.pickup_location, 500),
+    publicReference: verifiedPublicReference,
+    route: safeText(verifiedBooking.route_summary, 500),
+    serviceType: verifiedServiceType,
+    vehicleType: safeText(verifiedBooking.vehicle_type_or_category, 160),
+  });
+
+  const matchingInvoiceBookingReferences = new Set(
+    [verifiedBookingReference, verifiedPublicReference].filter(
+      (reference): reference is string => Boolean(reference),
+    ),
+  );
+  const { data: invoiceRows, error: invoiceReadError } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .select(customerInvoiceSelect)
+    .eq("customer_id", customerId)
+    .eq("status", "Unpaid")
+    .eq("document_type", "invoice")
+    .eq("document_state", "issued");
+
+  if (invoiceReadError) {
+    return safeFailure(safeReadError, 503);
+  }
+
+  const matchingInvoices = asArray(invoiceRows)
+    .map((row) => toStoredRecord(asRecord(row)))
+    .filter((invoice): invoice is CustomerInvoiceStoredRecord => {
+      if (!invoice) {
+        return false;
+      }
+
+      return (
+        matchingInvoiceBookingReferences.has(invoice.reference) ||
+        invoice.lineItems.some((item) =>
+          item.bookingReference
+            ? matchingInvoiceBookingReferences.has(item.bookingReference)
+            : false,
+        )
+      );
+    });
+
+  if (matchingInvoices.length === 0) {
+    return {
+      data: {
+        invoice: null,
+        linked: false,
+      },
+      ok: true,
+      version: customerInvoiceRecordVersion,
+    };
+  }
+
+  if (matchingInvoices.length !== 1) {
+    return safeFailure(
+      "More than one unpaid invoice contains this amended booking. No invoice was changed.",
+      409,
+    );
+  }
+
+  const [matchingInvoice] = matchingInvoices;
+  const matchingLineItemIndexes = matchingInvoice.lineItems.reduce<number[]>(
+    (indexes, existingLineItem, index) => {
+      if (
+        existingLineItem.bookingReference &&
+        matchingInvoiceBookingReferences.has(existingLineItem.bookingReference)
+      ) {
+        indexes.push(index);
+      }
+
+      return indexes;
+    },
+    [],
+  );
+
+  if (
+    matchingLineItemIndexes.length === 0 &&
+    matchingInvoice.lineItems.length === 1 &&
+    matchingInvoiceBookingReferences.has(matchingInvoice.reference)
+  ) {
+    matchingLineItemIndexes.push(0);
+  }
+
+  if (matchingLineItemIndexes.length !== 1) {
+    return safeFailure(
+      "The unpaid invoice does not contain one exact amended-booking line. No invoice was changed.",
+      409,
+    );
+  }
+
+  const matchingLineItemIndex = matchingLineItemIndexes[0];
+  const matchingExistingLineItem = matchingInvoice.lineItems[matchingLineItemIndex];
+  const preservedCardPaymentNote = matchingExistingLineItem.description
+    .split("\n")
+    .find((line) => line.startsWith("Card payment available on request."));
+  const refreshedLineDescription = safeLineItemDescription(
+    preservedCardPaymentNote
+      ? `${verifiedLineDescription}\n${preservedCardPaymentNote}`
+      : verifiedLineDescription,
+  );
+
+  if (!refreshedLineDescription) {
+    return safeFailure(safeValidationError, 409);
+  }
+
+  const updatedLineItems = matchingInvoice.lineItems.map((existingLineItem, index) =>
+    index === matchingLineItemIndex
+      ? {
+          ...lineItem,
+          bookingReference,
+          description: refreshedLineDescription,
+          quantity: existingLineItem.quantity || lineItem.quantity || 1,
+        }
+      : existingLineItem,
+  );
+  const updatedAmountCents = updatedLineItems.reduce<number | null>(
+    (total, item) => {
+      const itemAmountCents = customerInvoiceLineItemAmountCents(item.amountLabel);
+
+      return total === null || itemAmountCents === null ? null : total + itemAmountCents;
+    },
+    0,
+  );
+
+  if (!updatedAmountCents) {
+    return safeFailure(safeValidationError, 409);
+  }
+
+  const updatedRecord: CustomerInvoiceStoredRecord = {
+    ...matchingInvoice,
+    amountCents: updatedAmountCents,
+    amountLabel: formatInvoiceAmount(updatedAmountCents),
+    lineItems: updatedLineItems,
+  };
+  const { logoImage, profile } = await loadServerLogoImage();
+  const pdfBytes = createCustomerInvoicePdfBytes(updatedRecord, profile, logoImage);
+  const { data: updatedData, error: updateError } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .update({
+      actor_label: actor.actor_label,
+      actor_role: actor.actor_role,
+      amount_cents: updatedRecord.amountCents,
+      amount_label: updatedRecord.amountLabel,
+      email_delivery_status: "not_sent",
+      email_message_id: null,
+      email_sent_at: null,
+      line_items: updatedLineItems,
+      pdf_base64: base64FromBytes(pdfBytes),
+      pdf_content_type: "application/pdf",
+      pdf_filename: `${matchingInvoice.invoiceNumber}.pdf`,
+      pdf_sha256: sha256Hex(pdfBytes),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("invoice_number", matchingInvoice.invoiceNumber)
+    .eq("customer_id", customerId)
+    .eq("status", "Unpaid")
+    .eq("document_type", "invoice")
+    .eq("document_state", "issued")
+    .eq("amount_cents", matchingInvoice.amountCents)
+    .select(customerInvoiceSelect)
+    .maybeSingle();
+
+  if (updateError) {
+    return safeFailure(safeWriteError, 500);
+  }
+
+  const refreshedInvoice = toStoredRecord(asRecord(updatedData));
+
+  return refreshedInvoice &&
+    refreshedInvoice.invoiceNumber === matchingInvoice.invoiceNumber &&
+    refreshedInvoice.status === "Unpaid" &&
+    refreshedInvoice.amountCents === updatedAmountCents
+    ? {
+        data: {
+          invoice: refreshedInvoice,
+          linked: true,
+        },
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(
+        "The unpaid invoice changed before its amended booking could be refreshed. No stale result was accepted.",
+        409,
+      );
 }
 
 export async function recordCustomerInvoiceActionEmailDelivery(

@@ -35,6 +35,7 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
     additionalSameOriginRefererPathPrefixes: ["/customers/"],
     additionalSameOriginRefererPathnames: ["/customers"],
+    allowServerSessionRoleMethodsWithoutRequestToken: ["POST"],
   });
 
   return boundary.ok

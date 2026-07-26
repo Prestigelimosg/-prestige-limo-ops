@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-2f09de43 fix: sync driver details and recover DSP JC
+4226cac1 fix: allow customer folder DSP timing read
 
 Latest pushed main/staging runtime checkpoint:
 2f09de43 fix: sync driver details and recover DSP JC

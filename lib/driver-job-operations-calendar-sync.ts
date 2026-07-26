@@ -112,10 +112,21 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   }
 
   const booking = calendarPayload(asRecord(data));
-  const result = await syncer({
+  const payload = {
     bookings: [booking],
     date_label: exactBookingReference,
-  });
+  };
+  const result = await syncer(payload);
 
-  return result.ok;
+  if (result.ok) {
+    return true;
+  }
+
+  if (result.status !== 502) {
+    return false;
+  }
+
+  const retryResult = await syncer(payload);
+
+  return retryResult.ok;
 }

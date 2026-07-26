@@ -687,6 +687,89 @@ try {
 
   {
     setEnv(validEnv());
+    let syncAttempts = 0;
+    const bookingRow = {
+      admin_internal_status: "approved_internal",
+      booking_reference: "CUST-20260725115928-WORYU7",
+      bookers: {
+        booker_name: "William Test",
+      },
+      companies: {
+        company_name: "CODEX CUSTOMER REBOOKING TEST",
+      },
+      company_id: 1,
+      contact_display_name: "William Test",
+      customer_facing_status: "Ready for Confirmation",
+      driver_contact: "97366292",
+      driver_name: "Simon",
+      driver_plate_number: "SNP9124S",
+      dropoff_location: "CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      flight_no: null,
+      passenger_name: "Otis JULY",
+      pax_count: 1,
+      pickup_at: "2026-07-30T01:00:00+08:00",
+      pickup_location: "Orchard Hotel Singapore",
+      route_summary:
+        "Orchard Hotel Singapore > CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      route_type: "TRF",
+      service_type: "TRF",
+      short_notice_review_status: null,
+      vehicle_type_or_category: "AVF",
+    };
+    const query = {
+      eq() {
+        return this;
+      },
+      async maybeSingle() {
+        return { data: bookingRow, error: null };
+      },
+      select() {
+        return this;
+      },
+    };
+    const client = {
+      from(table) {
+        assert.equal(table, "bookings");
+        return query;
+      },
+    };
+
+    const synced =
+      await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: "CUST-20260725115928-WORYU7",
+        client,
+        async syncer() {
+          syncAttempts += 1;
+
+          if (syncAttempts === 1) {
+            return {
+              error: "Google Calendar provider request failed safely.",
+              ok: false,
+              status: 502,
+            };
+          }
+
+          return {
+            data: {
+              sync: {
+                events_synced: 1,
+              },
+            },
+            ok: true,
+          };
+        },
+      });
+
+    assert.equal(
+      synced,
+      true,
+      "one transient provider failure must retry the same deterministic Operations Calendar upsert",
+    );
+    assert.equal(syncAttempts, 2, "the automatic acknowledgement handoff must retry only once");
+  }
+
+  {
+    setEnv(validEnv());
     const statusBookings = [
       safeBooking({ booking_reference: "PL-CAL-STATUS-CURRENT" }),
       safeBooking({

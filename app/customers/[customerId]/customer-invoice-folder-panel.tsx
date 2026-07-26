@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildCustomerInvoiceActionEmail,
   formatCustomerInvoiceActionSentAt,
@@ -8,6 +8,7 @@ import {
 import type { MockCustomer, MockCustomerBooking, MockCustomerInvoice } from "../_data/mock-customers";
 
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
+const customerInvoiceUpdatedEventName = "prestige:customer-invoice-updated";
 
 type CustomerInvoiceFolderPanelProps = {
   customer: MockCustomer;
@@ -328,7 +329,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     );
   }
 
-  function applyStoredInvoice(invoice: StoredInvoiceRecord) {
+  const applyStoredInvoice = useCallback((invoice: StoredInvoiceRecord) => {
     const displayed = displayStoredInvoice(invoice);
 
     if (!displayed) {
@@ -346,9 +347,45 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             ...currentMethods,
             [displayed.invoiceNumber]: displayed.paymentMethod,
           }
-        : currentMethods,
+          : currentMethods,
     );
-  }
+  }, []);
+
+  useEffect(() => {
+    function handleCustomerInvoiceUpdated(event: Event) {
+      const updatedInvoice =
+        event instanceof CustomEvent &&
+        event.detail &&
+        typeof event.detail === "object"
+          ? (event.detail.invoice as StoredInvoiceRecord | undefined)
+          : undefined;
+      const invoiceCustomerId = normalizeCustomerMatch(
+        String(updatedInvoice?.customerId ?? ""),
+      );
+      const customerIdKey = normalizeCustomerMatch(customer.id);
+
+      if (!updatedInvoice || invoiceCustomerId !== customerIdKey) {
+        return;
+      }
+
+      applyStoredInvoice(updatedInvoice);
+      setSelectedInvoiceNumber(String(updatedInvoice.invoiceNumber ?? ""));
+      setStoredInvoiceMessage(
+        `${String(updatedInvoice.invoiceNumber ?? "Invoice")} refreshed from the reviewed amended job.`,
+      );
+    }
+
+    window.addEventListener(
+      customerInvoiceUpdatedEventName,
+      handleCustomerInvoiceUpdated,
+    );
+
+    return () =>
+      window.removeEventListener(
+        customerInvoiceUpdatedEventName,
+        handleCustomerInvoiceUpdated,
+      );
+  }, [applyStoredInvoice, customer.id]);
 
   async function persistInvoiceStatus(invoiceNumber: string, status: "Paid" | "Unpaid", paymentMethod?: PaymentMethod) {
     try {

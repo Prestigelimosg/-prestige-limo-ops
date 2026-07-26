@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer PDF Notes-Below-Bank Layout Repair (2026-07-26)
+
+- The owner reproduced the issued customer invoice PDF for exact test invoice `JBT-0001` and approved one narrow lower-layout correction: move the existing `Notes` block from above the sign-off to immediately below the complete `Bank Details` block. The resulting stored/customer PDF order is `sign-off → fully visible Bank Details → Notes → Terms & Conditions`.
+- Only the shared stored/customer PDF renderer is changed in place. The sign-off remains visible, Bank Details remains fully printed and non-interactive, Notes retains the same four approved lines, and Terms & Conditions remains the final section. The existing admin selected-job invoice review keeps its approved closed Bank Details disclosure and its closed Notes/Terms bottom row.
+- Invoice identity, numbering, customer/company scope, Company Profile content, logo, line items, quantities, rates, totals, recipient controls, issue/download/email paths, saved PDF lifecycle, customer portal, Paid/Unpaid handling, pricing, payment, payout, PayNow, booking, Driver, Calendar, messaging, GPS, persistence, schema, environment, and provider behavior are unchanged.
+- Focused protection updates `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs`, `scripts/test-customer-billing-document-lifecycle-guard.mjs`, and the startup workflow lock. The new expectations failed against the old `Notes → sign-off → Bank Details → Terms` renderer before the bounded repair and pass afterward.
+- A representative one-page `JBT-0001` / booking `10846` / SGD390 PDF was generated locally from the shared renderer and rendered to PNG with Poppler. Visual inspection confirmed sign-off, Bank Details, Notes, and Terms in the approved order with no overlap, clipping, overflow, or illegible text. This local artifact did not create, modify, issue, email, pay, or otherwise mutate any Production invoice or provider state.
+
 ### Customer-Folder DSP Timing Read Boundary Repair (2026-07-26)
 
 - Exact signed-in Production acceptance on deployed build `606bd1d7` reproduced the remaining failure without a write: booking `10846` still showed `Review required`, and Chrome network evidence proved the existing `GET /api/admin-driver-job-dsp-actual-time-summaries` request for internal reference `ADM-20260725150239` returned HTTP 403 before its persisted JC query.

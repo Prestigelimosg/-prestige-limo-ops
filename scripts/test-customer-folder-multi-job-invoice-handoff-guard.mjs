@@ -343,10 +343,10 @@ for (const fragment of [
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
-  'const notesY = 320;',
-  'const signoffY = 245;',
-  'const paymentY = 182;',
-  'const termsY = 55;',
+  'const signoffY = 260;',
+  'const paymentY = 203;',
+  'const notesY = 118;',
+  'const termsY = 45;',
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",
   "companyProfile.invoice_signoff_name",
@@ -381,14 +381,14 @@ for (const hardcodedFragment of [
 }
 
 assert.equal(
-  localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
-    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') &&
-    localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
+  localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
       localInvoices.indexOf("pdfTextAt(paymentHeading") &&
     localInvoices.indexOf("pdfTextAt(paymentHeading") <
+      localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') &&
+    localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
       localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
   true,
-  "shared PDF must preserve the owner-approved Notes, sign-off, bank, then Terms order",
+  "shared PDF must preserve the owner-approved sign-off, bank, Notes, then Terms order",
 );
 
 for (const fragment of [

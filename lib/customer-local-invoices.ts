@@ -677,10 +677,10 @@ export function createCustomerInvoicePdfBytes(
   });
 
   const totalsY = Math.max(360, rowY - 8);
-  const notesY = 320;
-  const signoffY = 245;
-  const paymentY = 182;
-  const termsY = 55;
+  const signoffY = 260;
+  const paymentY = 203;
+  const notesY = 118;
+  const termsY = 45;
   const streamLines = [
     ...logoStreamLines,
     pdfRightTextAt(documentTitle, 562, 725, 30),
@@ -705,8 +705,6 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt(balanceLabel, 495, totalsY - 70, 9),
     pdfRightTextAt(balanceDueValue, 562, totalsY - 70, 9),
     pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
-    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
-    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
     pdfTextAt("Thank you for your business", 50, signoffY, 8),
     pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
     pdfTextAt(companyProfile.invoice_signoff_name, 50, signoffY - 32, 8),
@@ -715,6 +713,8 @@ export function createCustomerInvoicePdfBytes(
     ...paymentDetailLines.map((line, index) =>
       pdfTextAt(line, 50, paymentY - 15 - index * 8, 7),
     ),
+    pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
+    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
     pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
     ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
   ];

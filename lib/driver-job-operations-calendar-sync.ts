@@ -84,6 +84,15 @@ function singaporeCalendarPickupAt(value: unknown) {
     : pickupAt;
 }
 
+function calendarBuilderPickupAt(value: unknown) {
+  const pickupAt = cleanText(value, 80);
+  const localDateTime = pickupAt.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/,
+  );
+
+  return localDateTime ? `${localDateTime[1]} ${localDateTime[2]}` : pickupAt;
+}
+
 function calendarStatus(booking: UnknownRecord) {
   const status =
     cleanText(booking.admin_internal_status, 80) ||
@@ -143,9 +152,10 @@ function calendarPayload(booking: UnknownRecord, pickupAtOverride: string) {
     id: bookingReference,
     pax: positiveInteger(booking.pax_count) || 1,
     pickup_address: pickupLocation,
-    pickup_at:
+    pickup_at: calendarBuilderPickupAt(
       cleanText(pickupAtOverride, 80) ||
-      singaporeCalendarPickupAt(booking.pickup_at),
+        singaporeCalendarPickupAt(booking.pickup_at),
+    ),
     route,
     status: calendarStatus(booking),
     traveler_name: cleanText(booking.passenger_name, 160),

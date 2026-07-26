@@ -80,6 +80,30 @@ async function storedDriverJobUrl(jobKey: string) {
   }
 }
 
+async function readDriverPortalAlertState(): Promise<DriverPortalAlertState> {
+  if (
+    !("Notification" in window) ||
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window)
+  ) {
+    return "unavailable";
+  }
+  if (Notification.permission === "denied") {
+    return "blocked";
+  }
+  if (Notification.permission !== "granted") {
+    return "available";
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration("/driver-job/");
+    const subscription = await registration?.pushManager.getSubscription();
+    return subscription ? "enabled" : "available";
+  } catch {
+    return "available";
+  }
+}
+
 export default function DriverPortalPage() {
   const [readState, setReadState] = useState<DriverPortalReadState>({ kind: "loading" });
   const [alertReadiness, setAlertReadiness] = useState<DriverPortalAlertReadiness>({
@@ -124,15 +148,7 @@ export default function DriverPortalPage() {
         publicKey,
         ready: result.device_alerts?.ready === true && Boolean(publicKey),
       });
-      if (
-        !("Notification" in window) ||
-        !("serviceWorker" in navigator) ||
-        !("PushManager" in window)
-      ) {
-        setAlertState("unavailable");
-      } else if (Notification.permission === "denied") {
-        setAlertState("blocked");
-      }
+      setAlertState(await readDriverPortalAlertState());
       setReadState({ kind: "ready", jobs: Array.isArray(result.jobs) ? result.jobs : [] });
     } catch {
       setReadState({ kind: "blocked", reason: "unavailable" });
@@ -264,7 +280,7 @@ export default function DriverPortalPage() {
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm" data-driver-portal-alert-setup={alertState}>
               <h2 className="text-base font-bold text-sky-950">Job alerts</h2>
               <p className="mt-1 text-sm font-medium leading-6 text-sky-900">
-                Enable once on this iPhone to receive newly issued jobs and Driver Job updates.
+                Enable once on this device to receive newly issued jobs and Driver Job updates.
               </p>
               <button
                 className="mt-3 h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
@@ -281,11 +297,13 @@ export default function DriverPortalPage() {
               </button>
               {alertState === "blocked" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
-                  Alerts are blocked. Open iPhone Settings, choose Driver Portal, then allow Notifications.
+                  Alerts are blocked. Open this device&apos;s notification settings, allow notifications
+                  for Driver Portal, then try again.
                 </p>
               ) : alertState === "unavailable" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
-                  Job alerts are unavailable. On iPhone, open this installed Driver Portal from the Home Screen and try again.
+                  Job alerts are unavailable. Open this installed Driver Portal from your device&apos;s
+                  Home Screen and try again.
                 </p>
               ) : alertState === "enabled" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-emerald-800">

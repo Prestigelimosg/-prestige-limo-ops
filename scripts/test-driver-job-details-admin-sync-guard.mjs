@@ -243,6 +243,8 @@ for (const fragment of [
   "driver_contact: cleanText(booking.driver_contact, 120)",
   "driver_plate_number: cleanText(booking.driver_plate_number, 80)",
   "vehicle: cleanText(booking.vehicle_type_or_category, 120)",
+  "singaporeCalendarPickupAt(booking.pickup_at)",
+  'timeZone: "Asia/Singapore"',
   "const payload = {",
   "if (result.status !== 502)",
   "const providerTrace: string[] = []",

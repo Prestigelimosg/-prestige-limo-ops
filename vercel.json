@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/driver-one-hour-pickup-reminders",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/codex-monthly-invoice-drafts",
       "schedule": "0 0 1 * *"
     }

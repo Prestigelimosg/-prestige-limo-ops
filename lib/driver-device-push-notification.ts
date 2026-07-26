@@ -104,7 +104,8 @@ type DriverDevicePushAlertInput = {
 type DriverDevicePushPayload = {
   body:
     | "New Driver Job app update. Tap to review."
-    | "New Driver Job issued. Tap to review.";
+    | "New Driver Job issued. Tap to review."
+    | "Pickup is in 1 hour. Open Driver Portal to review.";
   job_key: string;
   tag: string;
   target_path?: string;
@@ -503,6 +504,17 @@ function newJobPayload(linkId: string, token: string): DriverDevicePushPayload |
   };
 }
 
+function pickupReminderPayload(linkId: string): DriverDevicePushPayload {
+  const jobKey = opaqueDriverJobLinkKey(linkId);
+  return {
+    body: "Pickup is in 1 hour. Open Driver Portal to review.",
+    job_key: jobKey,
+    tag: `prestige-driver-update-${jobKey.slice(0, 24)}`,
+    title: "Prestige Limo Ops",
+    version: driverDevicePushNotificationVersion,
+  };
+}
+
 async function sendWebPush(
   config: DriverDevicePushProviderConfig,
   subscription: PushSubscription,
@@ -697,4 +709,51 @@ export async function sendDriverDevicePushAlertForAppUpdate(
 
   const payload = safePayload(linkId);
   return sendPayloadToDriverSubscriptions(client, driverId, payload, config, options);
+}
+
+export async function sendDriverDevicePushAlertForPickupReminder(
+  client: DriverDevicePushClient,
+  input: DriverDevicePushAlertInput & {
+    driver_id: unknown;
+    notification_id?: string | null;
+  },
+  options: DriverDevicePushAlertOptions = {},
+): Promise<DriverDevicePushAlertResult> {
+  if (input.delivery_surface !== "driver_app") {
+    return alertResult("invalid_driver_link");
+  }
+
+  const env = options.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  const config = resolveProviderConfig(env);
+  if (!config) {
+    return alertResult(enabled ? "provider_not_configured" : "push_gate_closed", {
+      enabled,
+    });
+  }
+
+  const link = await resolveAlertDriverLink(client, input);
+  const linkId = safeUuid(link?.id);
+  const driverId = safePositiveInteger(input.driver_id);
+  const linkDriverId = safePositiveInteger(link?.driver_id);
+  const bookingReference = safeText(input.booking_reference, 120);
+  const linkBookingReference = safeText(link?.booking_reference, 120);
+  if (
+    !link ||
+    !linkId ||
+    !driverId ||
+    linkDriverId !== driverId ||
+    !bookingReference ||
+    linkBookingReference !== bookingReference
+  ) {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+
+  return sendPayloadToDriverSubscriptions(
+    client,
+    driverId,
+    pickupReminderPayload(linkId),
+    config,
+    options,
+  );
 }

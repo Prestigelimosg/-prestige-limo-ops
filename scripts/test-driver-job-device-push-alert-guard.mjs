@@ -92,8 +92,10 @@ assertIncludes(
     "driver_portal",
     "registerDriverDevicePushSubscriptionForPortalSession",
     "sendDriverDevicePushAlertForNewJobLink",
+    "sendDriverDevicePushAlertForPickupReminder",
     "New Driver Job issued. Tap to review.",
     "New Driver Job app update. Tap to review.",
+    "Pickup is in 1 hour. Open Driver Portal to review.",
   ],
   "driver device push helper",
 );
@@ -501,6 +503,62 @@ try {
   );
   assert.equal(mismatchedIssuedJobAlert.ok, false);
   assert.equal(mismatchedIssuedJobAlert.reason, "invalid_driver_link");
+
+  let pickupReminderPayload = null;
+  const pickupReminderAlert = await helper.sendDriverDevicePushAlertForPickupReminder(
+    issuedJobClient,
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_id: 8,
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      notification_id: "22222222-2222-4222-8222-222222222222",
+    },
+    {
+      env: configuredEnv,
+      pushSender: async (_subscription, payload) => {
+        pickupReminderPayload = payload;
+      },
+    },
+  );
+  assert.equal(pickupReminderAlert.ok, true);
+  assert.equal(pickupReminderAlert.reason, "send_succeeded");
+  assert.equal(
+    pickupReminderPayload.body,
+    "Pickup is in 1 hour. Open Driver Portal to review.",
+  );
+  assert.equal(pickupReminderPayload.title, "Prestige Limo Ops");
+  assert.match(pickupReminderPayload.job_key, /^[0-9a-f]{64}$/);
+  assertExcludes(
+    JSON.stringify(pickupReminderPayload),
+    [
+      "PRIVATE-BOOKING-REFERENCE",
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      "passenger",
+      "customer",
+      "contact",
+      "price",
+      "payout",
+      "invoice",
+      "billing",
+      "payment",
+      "paynow",
+    ],
+    "one-hour pickup push visible-data privacy",
+  );
+  const mismatchedPickupDriver = await helper.sendDriverDevicePushAlertForPickupReminder(
+    issuedJobClient,
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_id: 9,
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+    },
+    { env: configuredEnv, pushSender: async () => undefined },
+  );
+  assert.equal(mismatchedPickupDriver.ok, false);
+  assert.equal(mismatchedPickupDriver.reason, "invalid_driver_link");
 } finally {
   await rm(tempDir, { force: true, recursive: true });
 }

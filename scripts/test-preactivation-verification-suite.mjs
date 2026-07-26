@@ -378,6 +378,10 @@ const guardChecks = [
     script: "scripts/test-driver-job-device-push-alert-guard.mjs",
   },
   {
+    label: "Driver one-hour pickup app push reminder guard",
+    script: "scripts/test-driver-one-hour-pickup-push-reminder-guard.mjs",
+  },
+  {
     label: "Driver Portal encrypted session and exact-driver jobs guard",
     script: "scripts/test-driver-portal-session-jobs-guard.mjs",
   },

@@ -3,7 +3,8 @@ import { runDriverOneHourPickupReminders } from "../../../../lib/driver-one-hour
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const cronSecret = process.env.CRON_SECRET?.trim();
+  const cronSecret =
+    process.env.PRESTIGE_DRIVER_PICKUP_REMINDER_CRON_SECRET?.trim();
   const authorization = request.headers.get("authorization");
 
   if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {

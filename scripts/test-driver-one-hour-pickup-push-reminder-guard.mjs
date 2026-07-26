@@ -9,6 +9,8 @@ const pushPath = "lib/driver-device-push-notification.ts";
 const routePath = "app/api/cron/driver-one-hour-pickup-reminders/route.ts";
 const workerPath = "public/prestige-driver-push-sw.js";
 const vercelPath = "vercel.json";
+const migrationPath =
+  "supabase/migrations/20260726043818_driver_one_hour_pickup_reminder_cron.sql";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 
@@ -40,9 +42,26 @@ function transpileTypescript(source, filename) {
   }).outputText;
 }
 
-const [helperSource, pushSource, routeSource, workerSource, vercelSource, ledgerSource, suiteSource] =
-  await Promise.all(
-    [helperPath, pushPath, routePath, workerPath, vercelPath, ledgerPath, suitePath].map(
+const [
+  helperSource,
+  pushSource,
+  routeSource,
+  workerSource,
+  vercelSource,
+  migrationSource,
+  ledgerSource,
+  suiteSource,
+] = await Promise.all(
+    [
+      helperPath,
+      pushPath,
+      routePath,
+      workerPath,
+      vercelPath,
+      migrationPath,
+      ledgerPath,
+      suitePath,
+    ].map(
       (relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8"),
     ),
   );
@@ -102,6 +121,7 @@ assertIncludes(
   routeSource,
   [
     'import { runDriverOneHourPickupReminders }',
+    "PRESTIGE_DRIVER_PICKUP_REMINDER_CRON_SECRET",
     'request.headers.get("authorization")',
     "`Bearer ${cronSecret}`",
     "runDriverOneHourPickupReminders()",
@@ -118,10 +138,42 @@ const vercelConfig = JSON.parse(vercelSource);
 const reminderCron = vercelConfig.crons.find(
   (entry) => entry.path === "/api/cron/driver-one-hour-pickup-reminders",
 );
-assert.deepEqual(reminderCron, {
-  path: "/api/cron/driver-one-hour-pickup-reminders",
-  schedule: "* * * * *",
-});
+assert.equal(
+  reminderCron,
+  undefined,
+  "Hobby-incompatible per-minute Vercel Cron must not be restored",
+);
+assertIncludes(
+  migrationSource,
+  [
+    "create extension if not exists pg_cron;",
+    "create extension if not exists pg_net with schema extensions;",
+    "cron.schedule(",
+    "'driver-one-hour-pickup-reminders'",
+    "'* * * * *'",
+    "net.http_get(",
+    "vault.decrypted_secrets",
+    "prestige_driver_pickup_reminder_endpoint",
+    "prestige_driver_pickup_reminder_cron_secret",
+    "https://app.prestigelimo.sg/api/cron/driver-one-hour-pickup-reminders",
+    "'Authorization'",
+    "'Bearer ' || reminder_config.bearer_secret",
+  ],
+  "Vault-authenticated Supabase Cron trigger",
+);
+assertExcludes(
+  migrationSource,
+  [
+    "customer_price",
+    "driver_payout",
+    "paynow",
+    "invoice",
+    "billing",
+    "service_role_key",
+    "vapid_private",
+  ],
+  "Supabase Cron privacy and secret isolation",
+);
 assertIncludes(
   suiteSource,
   ["scripts/test-driver-one-hour-pickup-push-reminder-guard.mjs"],

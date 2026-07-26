@@ -236,6 +236,11 @@ async function runChromeTest() {
           originalError.apply(console, args);
         };
         window.__driverDeviceAlertTest = {
+          clearPortalSubscription: () => {
+            window.name = "";
+            driverPushSubscriptionState = null;
+          },
+          getRegistrations: [],
           permissionRequests: 0,
           registrations: [],
           rememberedLinks: [],
@@ -248,19 +253,31 @@ async function runChromeTest() {
             keys: { auth: "browser-auth", p256dh: "browser-p256dh" },
           }),
         };
+        let driverPushSubscriptionState = window.name === "prestige-driver-push-subscribed"
+          ? driverPushSubscription
+          : null;
         const driverPushRegistration = {
           active: {
             postMessage: (message) => window.__driverDeviceAlertTest.rememberedLinks.push(message),
           },
           pushManager: {
-            getSubscription: async () => null,
-            subscribe: async () => driverPushSubscription,
+            getSubscription: async () => driverPushSubscriptionState,
+            subscribe: async () => {
+              driverPushSubscriptionState = driverPushSubscription;
+              window.name = "prestige-driver-push-subscribed";
+              return driverPushSubscription;
+            },
           },
         };
         Object.defineProperty(window, "Notification", {
           configurable: true,
           value: {
-            permission: "default",
+            get permission() {
+              return location.pathname === "/driver-portal" &&
+                window.name === "prestige-driver-push-subscribed"
+                ? "granted"
+                : "default";
+            },
             requestPermission: async () => {
               window.__driverDeviceAlertTest.permissionRequests += 1;
               return "granted";
@@ -274,6 +291,10 @@ async function runChromeTest() {
         Object.defineProperty(navigator, "serviceWorker", {
           configurable: true,
           value: {
+            getRegistration: async (url) => {
+              window.__driverDeviceAlertTest.getRegistrations.push(url);
+              return driverPushRegistration;
+            },
             ready: Promise.resolve(driverPushRegistration),
             register: async (url, options) => {
               window.__driverDeviceAlertTest.registrations.push({ options, url });
@@ -1581,6 +1602,7 @@ async function runChromeTest() {
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
 
+    await evaluate("window.__driverDeviceAlertTest.clearPortalSubscription()");
     await navigateAndWaitForBodyText(
       client,
       evaluate,
@@ -1662,6 +1684,47 @@ async function runChromeTest() {
       "Installed alert setup must reuse the existing driver-scoped service worker.",
     );
     assert.equal(portalAlertState.text.includes("This device is ready for Driver Job alerts."), true);
+    assert.equal(portalAlertState.text.includes("Enable once on this device"), true);
+    assert.equal(portalAlertState.text.includes("iPhone"), false);
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal", appUrl).toString(),
+      "Upcoming & active jobs",
+      "Driver Portal restored alert state",
+    );
+    const restoredPortalAlertState = await waitForCondition(
+      () => evaluate(`(() => {
+        const setup = document.querySelector("[data-driver-portal-alert-setup]");
+        const button = document.querySelector('[data-driver-portal-enable-alerts="true"]');
+        return setup?.getAttribute("data-driver-portal-alert-setup") === "enabled"
+          ? {
+              buttonDisabled: button?.disabled === true,
+              buttonText: button?.textContent.trim() || "",
+              fetchCalls: window.__driverJobFetchCalls || [],
+              getRegistrations: window.__driverDeviceAlertTest?.getRegistrations || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
+              text: setup.textContent.trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal existing subscription state restoration",
+    );
+    assert.equal(restoredPortalAlertState.buttonDisabled, true);
+    assert.equal(restoredPortalAlertState.buttonText, "Job Alerts Enabled");
+    assert.deepEqual(restoredPortalAlertState.getRegistrations, ["/driver-job/"]);
+    assert.equal(restoredPortalAlertState.permissionRequests, 0);
+    assert.deepEqual(restoredPortalAlertState.portalSubscriptionBodies, []);
+    assert.equal(
+      restoredPortalAlertState.fetchCalls.includes("POST /api/driver-portal/jobs"),
+      false,
+      "Restoring an existing browser subscription must remain read-only.",
+    );
+    assert.equal(restoredPortalAlertState.text.includes("Enable once on this device"), true);
+    assert.equal(restoredPortalAlertState.text.includes("iPhone"), false);
 
     const missingShortcutClicked = await evaluate(`(() => {
       const button = document.querySelector('[data-driver-portal-open-job="${"b".repeat(64)}"]');

@@ -166,7 +166,10 @@ assertIncludes(
   portalPageSource,
   [
     "Enable Job Alerts",
+    "Job Alerts Enabled",
+    "Enable once on this device",
     "Notification.requestPermission()",
+    'navigator.serviceWorker.getRegistration("/driver-job/")',
     "navigator.serviceWorker.register(",
     '"/prestige-driver-push-sw.js"',
     'scope: "/driver-job/"',
@@ -176,6 +179,11 @@ assertIncludes(
     'data-driver-portal-enable-alerts="true"',
   ],
   "installed Driver Portal alert setup",
+);
+assertExcludes(
+  portalPageSource,
+  ["on this iPhone", "Open iPhone Settings", "On iPhone"],
+  "installed Driver Portal platform-neutral alert guidance",
 );
 assertIncludes(
   portalRouteSource,

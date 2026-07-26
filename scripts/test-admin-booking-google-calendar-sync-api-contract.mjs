@@ -740,6 +740,7 @@ try {
       await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
         bookingReference: "CUST-20260725115928-WORYU7",
         client,
+        pickupAt: "2026-07-30T01:00",
         async syncer(payload, options) {
           normalizedPickupAt = payload.bookings[0]?.pickup_at || "";
           safeFetcherObserved = typeof options?.fetcher === "function";

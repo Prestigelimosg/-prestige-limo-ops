@@ -93,7 +93,7 @@ function calendarStatus(booking: UnknownRecord) {
   );
 }
 
-function calendarPayload(booking: UnknownRecord) {
+function calendarPayload(booking: UnknownRecord, pickupAtOverride: string) {
   const bookingReference = cleanText(booking.booking_reference, 120);
   const pickupLocation = cleanText(booking.pickup_location);
   const dropoffLocation = cleanText(booking.dropoff_location);
@@ -121,7 +121,9 @@ function calendarPayload(booking: UnknownRecord) {
     id: bookingReference,
     pax: positiveInteger(booking.pax_count) || 1,
     pickup_address: pickupLocation,
-    pickup_at: singaporeCalendarPickupAt(booking.pickup_at),
+    pickup_at:
+      cleanText(pickupAtOverride, 80) ||
+      singaporeCalendarPickupAt(booking.pickup_at),
     route,
     status: calendarStatus(booking),
     traveler_name: cleanText(booking.passenger_name, 160),
@@ -132,10 +134,12 @@ function calendarPayload(booking: UnknownRecord) {
 export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
   bookingReference,
   client,
+  pickupAt,
   syncer = syncVerifiedDriverDetailsToAdminBookingCalendar,
 }: {
   bookingReference: string;
   client: DriverJobOperationsCalendarClient;
+  pickupAt?: string;
   syncer?: typeof syncVerifiedDriverDetailsToAdminBookingCalendar;
 }) {
   const exactBookingReference = cleanText(bookingReference, 120);
@@ -157,7 +161,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
     return false;
   }
 
-  const booking = calendarPayload(asRecord(data));
+  const booking = calendarPayload(asRecord(data), cleanText(pickupAt, 80));
   const payload = {
     bookings: [booking],
     date_label: exactBookingReference,

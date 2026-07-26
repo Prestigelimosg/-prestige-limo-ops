@@ -150,6 +150,7 @@ export async function applyProductionDriverJobDetailsUpdate({
       await syncAcknowledgedDriverDetailsToOperationsCalendar({
         bookingReference: detailsResult.booking_reference,
         client: clientResult.client,
+        pickupAt: detailsResult.payload.pickupDateTime,
       });
 
     if (!operationsCalendarSynced) {

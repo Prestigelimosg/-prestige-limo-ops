@@ -61,6 +61,7 @@ export type DriverJobProductionStatusUpdateResult =
 
 export type DriverJobProductionDetailsUpdateResult =
   | {
+      booking_reference: string;
       ok: true;
       payload: SafeDriverJobPayload;
       reason: "updated";
@@ -1382,6 +1383,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
   const currentSafeSchedule = await loadCurrentSafeBookingSchedule(input.client, updatedLink);
 
   return {
+    booking_reference: resolvedLink.link.booking_reference,
     ok: true,
     payload: payloadForLink(
       updatedLink,

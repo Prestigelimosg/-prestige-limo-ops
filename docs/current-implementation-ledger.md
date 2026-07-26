@@ -1,16 +1,34 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-973b0343 Restore private booking invitation gate
+2822fb75 fix: prevent false pickup risk while reports load
 
 Latest pushed main/staging runtime checkpoint:
-973b0343 Restore private booking invitation gate
+2822fb75 fix: prevent false pickup risk while reports load
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 8d9202dc Merge pull request #98 from Prestigelimosg/codex/restore-private-booking-invite
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+### Verified Driver Details To Operations Calendar Repair (2026-07-26)
+
+- Signed-in Production Chrome reproduced the exact existing-lane defect on booking `10846` / `ADM-20260725150239`: the saved booking and Dispatch preview contained driver Simon, contact `97366292`, plate `SNP9124S`, and vehicle `AVF`, while the already-created deterministic `Prestige Ops Calendar` event still had no Driver line and no plate in its title.
+- The existing token-verified `Save & Acknowledge Job` persistence path now performs one server-only, best-effort handoff after the exact booking and link have successfully saved those safe driver details. It re-reads only Calendar-safe fields from that exact internal booking reference and calls the existing service-account Operations Calendar upsert. The deterministic booking-reference event ID, `sendUpdates=none`, no-attendee boundary, popup reminders, existing event location/description layout, and same-event update behavior remain unchanged.
+- Calendar provider failure never rolls back or blocks the saved driver acknowledgement. No provider status, token, credential, internal booking reference, or provider response is exposed to the driver. The public Driver Job route does not gain a second Calendar endpoint or admin permission.
+- This repair changes only the separate admin Operations Calendar consumer. The personal Driver Calendar action, OAuth connection, encrypted credential, driver-plus-booking event identity, `Add / Update Calendar` control, reporting shortcut, and amendment behavior remain unchanged.
+- No booking form, Driver Job Link, acknowledgement UI, Driver Report, completion action, customer/driver message, push reminder, GPS, invoice workflow/layout/PDF, pricing rule, payment, payout, PayNow, schema, migration, environment value, or external guest/customer notification is added or changed.
+- Focused protection extends `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`, `scripts/test-driver-job-details-admin-sync-guard.mjs`, and `scripts/test-driver-job-status-persistence-api-contract.mjs`.
+
+### DSP Persisted JC Billing-Evidence Fallback Repair (2026-07-26)
+
+- The same signed-in Production inspection proved booking `10846` had a real persisted Driver `Job Completed`/JC timestamp at `19:14 SGT`, while the exact customer folder still showed `Review required` because the separate best-effort `driver_job_dsp_actual_time_summaries` read returned no usable JC end.
+- The established read-only DSP timing endpoint now keeps the existing summary as its first source and, only when that summary lacks an end, reads the latest exact-booking `completed` timestamp from canonical `driver_job_status_events`. It projects that persisted timestamp as the JC end consumed by the already-repaired booking-pickup-to-JC customer calculation. It never infers JC from OTS, POB, current time, scheduled end, booking status text, admin completion, names, rates, or invoice amounts.
+- The fallback does not invent an OTS/start marker or OTS-to-JC duration, does not alter the existing auxiliary timing rows, and does not change Driver Reports or the saved booking completion state. Existing consumers that still require a complete OTS-to-JC summary retain that gate.
+- For the inspected evidence, saved pickup `13:00 SGT` to persisted JC `19:14 SGT` is `374` minutes; the established 15-minute grace rule yields `6` billable hours, and the saved/default AVF DSP customer rate of SGD65/hour yields a temporary customer proposal of SGD390 before any separately persisted surcharge. This source calculation is not an invoice, price save, issue, email, payment, or runtime acceptance claim.
+- The existing customer-folder tag/editor, `Save price review`, selection, invoice handoff, Preview, Draft, Issue/PDF, Email, payment status, invoice layout, and renderer remain unchanged. No price, booking, invoice, payment, payout, PayNow, status, Calendar event, provider, schema, migration, or environment value is written by the read fallback.
+- Focused protection extends `scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs`, `scripts/test-customer-folder-price-review-guard.mjs`, and the existing DSP booking-time-to-JC and locked invoice lifecycle guards.
 
 ### DSP Customer Billing Booking-Time To JC Repair (2026-07-26)
 
@@ -2844,7 +2862,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer Copy and Driver Dispatch can reflect driver-entered details without pressing Refresh or reloading the page.
 - The Dispatch `Today's Jobs` sector shows assigned jobs inside the monitor window, so saved OTW/OTS/POB/Completed driver reports can appear without expanding a separate monitor.
 - This is not a customer send; admin still reviews Customer Copy before any customer-facing send.
-- The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.
+- The three-second admin display sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, or shims. The separately recorded token-verified Operations Calendar handoff reuses the existing deterministic admin event writer only after acknowledgement persistence succeeds.
 - Customer/driver-visible forbidden data remains blocked from this path: driver payout, PayNow payout, customer price, billing, invoice, payment, internal admin notes, parser/debug, secrets, raw provider payloads, and mock QA/dev archive data.
 - Guard coverage lives in `scripts/test-driver-job-details-admin-sync-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

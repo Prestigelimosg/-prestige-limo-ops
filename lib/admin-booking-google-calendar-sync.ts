@@ -648,6 +648,28 @@ export async function syncAdminBookingCalendarAgendaToGoogle(
     return actorFailure;
   }
 
+  return syncValidatedAdminBookingCalendarAgendaToGoogle(input, options);
+}
+
+export async function syncVerifiedDriverDetailsToAdminBookingCalendar(
+  input: unknown,
+  options: {
+    env?: EnvInput;
+    fetcher?: Fetcher;
+    now?: Date;
+  } = {},
+): Promise<AdminBookingGoogleCalendarSyncResult> {
+  return syncValidatedAdminBookingCalendarAgendaToGoogle(input, options);
+}
+
+async function syncValidatedAdminBookingCalendarAgendaToGoogle(
+  input: unknown,
+  options: {
+    env?: EnvInput;
+    fetcher?: Fetcher;
+    now?: Date;
+  },
+): Promise<AdminBookingGoogleCalendarSyncResult> {
   const agendaResult = buildAdminBookingCalendarAgenda(input, {
     now: options.now,
   });

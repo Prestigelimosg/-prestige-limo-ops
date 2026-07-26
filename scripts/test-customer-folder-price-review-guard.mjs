@@ -168,6 +168,28 @@ for (const phrase of [
   includes(bookingToJcLedgerSection, phrase, `booking-to-JC folder ledger phrase ${phrase}`);
 }
 
+const persistedJcFallbackLedgerSection = sectionBetween(
+  ledger,
+  "### DSP Persisted JC Billing-Evidence Fallback Repair (2026-07-26)",
+  "\n### ",
+);
+for (const phrase of [
+  "booking `10846`",
+  "canonical `driver_job_status_events`",
+  "never infers JC from OTS, POB, current time, scheduled end",
+  "`374` minutes",
+  "`6` billable hours",
+  "SGD390",
+  "scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs",
+  guardScript,
+]) {
+  includes(
+    persistedJcFallbackLedgerSection,
+    phrase,
+    `persisted Driver JC fallback ledger phrase ${phrase}`,
+  );
+}
+
 includes(suite, guardScript, "preactivation price-review guard registration");
 
 const calculationRuntimeDir = await mkdtemp(

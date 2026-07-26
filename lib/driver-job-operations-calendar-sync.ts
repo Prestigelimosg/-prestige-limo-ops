@@ -38,6 +38,16 @@ function positiveInteger(value: unknown) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function safeProviderMethod(value: unknown) {
+  const method = cleanText(value, 20).toUpperCase();
+
+  return ["GET", "POST", "PUT"].includes(method) ? method : "OTHER";
+}
+
+function safeProviderTrace(trace: string[]) {
+  return trace.length > 0 ? trace.join(",") : "none";
+}
+
 function calendarStatus(booking: UnknownRecord) {
   return (
     cleanText(booking.admin_internal_status, 80) ||
@@ -116,17 +126,38 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
     bookings: [booking],
     date_label: exactBookingReference,
   };
-  const result = await syncer(payload);
+  const providerTrace: string[] = [];
+  const observedFetcher: typeof fetch = async (input, init) => {
+    const response = await fetch(input, init);
+
+    providerTrace.push(`${safeProviderMethod(init?.method)}:${response.status}`);
+
+    return response;
+  };
+  const result = await syncer(payload, {
+    fetcher: observedFetcher,
+  });
 
   if (result.ok) {
     return true;
   }
 
   if (result.status !== 502) {
+    console.warn(
+      `Driver acknowledgement Operations Calendar result failed safely: sync=${result.status}; provider_http=${safeProviderTrace(providerTrace)}.`,
+    );
     return false;
   }
 
-  const retryResult = await syncer(payload);
+  const retryResult = await syncer(payload, {
+    fetcher: observedFetcher,
+  });
+
+  if (!retryResult.ok) {
+    console.warn(
+      `Driver acknowledgement Operations Calendar result failed safely: sync=${retryResult.status}; provider_http=${safeProviderTrace(providerTrace)}.`,
+    );
+  }
 
   return retryResult.ok;
 }

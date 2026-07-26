@@ -687,6 +687,7 @@ try {
 
   {
     setEnv(validEnv());
+    let safeFetcherObserved = false;
     let syncAttempts = 0;
     const bookingRow = {
       admin_internal_status: "approved_internal",
@@ -738,7 +739,8 @@ try {
       await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
         bookingReference: "CUST-20260725115928-WORYU7",
         client,
-        async syncer() {
+        async syncer(_payload, options) {
+          safeFetcherObserved = typeof options?.fetcher === "function";
           syncAttempts += 1;
 
           if (syncAttempts === 1) {
@@ -766,6 +768,11 @@ try {
       "one transient provider failure must retry the same deterministic Operations Calendar upsert",
     );
     assert.equal(syncAttempts, 2, "the automatic acknowledgement handoff must retry only once");
+    assert.equal(
+      safeFetcherObserved,
+      true,
+      "the automatic acknowledgement handoff must provide its internal-only provider status observer",
+    );
   }
 
   {

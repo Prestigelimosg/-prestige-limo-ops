@@ -245,7 +245,12 @@ for (const fragment of [
   "vehicle: cleanText(booking.vehicle_type_or_category, 120)",
   "const payload = {",
   "if (result.status !== 502)",
-  "const retryResult = await syncer(payload)",
+  "const providerTrace: string[] = []",
+  "fetcher: observedFetcher",
+  "safeProviderMethod(init?.method)",
+  "safeProviderTrace(providerTrace)",
+  "Driver acknowledgement Operations Calendar result failed safely:",
+  "const retryResult = await syncer(payload, {",
   "return retryResult.ok",
 ]) {
   assertIncludes(

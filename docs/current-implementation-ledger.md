@@ -30,6 +30,12 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Driver Reports, OTS/JC persistence, Admin completion, Driver Calendar, links, acknowledgement, GPS, messaging, invoice layout/PDF renderer, customer portal, payments, payouts, PayNow, schema, migrations, environment values, provider configuration, and all other wired lanes remain unchanged.
 - Focused protection extends `scripts/test-customer-folder-price-review-guard.mjs`, alongside the locked multi-job invoice handoff, stored-PDF/portal, and billing lifecycle guards.
 
+### Node 24 Pricing Test Harness Module Resolution Repair (2026-07-26)
+
+- `npm run test:pricing` reproduced a test-harness failure under Node 24 before any pricing assertion ran: direct strip-types execution loaded `lib/pricing.ts`, but Node ESM did not resolve its existing extensionless `./hourly-billing` import. The Node specifier-resolution compatibility flag produced the same failure, while the established Next.js Production build already resolves that application import.
+- Only `scripts/test-child-seat-pricing.mjs` is repaired. The existing test now reads the current `lib/pricing.ts` and `lib/hourly-billing.ts` sources, transpiles them into one isolated temporary CommonJS directory using the repository's installed TypeScript compiler, executes the unchanged pricing assertions against those compiled current sources, and removes the temporary directory in `finally`.
+- No application import, pricing rule, customer rate, DSP minimum/grace calculation, surcharge, driver payout, invoice workflow, invoice layout/renderer/PDF, booking, route, API, persistence, schema, environment value, provider send, Calendar, Driver lane, messaging lane, payment, payout, PayNow, or Production data is changed. Focused verification is `npm run test:pricing` alongside the existing hourly/DSP pricing guards.
+
 ### Admin Booking Persistence Harness OTP Fixture Alignment (2026-07-26)
 
 - The existing `scripts/test-admin-booking-persistence-api-gate.mjs` stopped before its customer-request assertions because its isolated temporary route fixture predated the already-established private invitation and public phone-OTP imports. Inspection also found that the same fixture omitted the current expired-session-cookie and safe public-booking-reference exports used by that route.

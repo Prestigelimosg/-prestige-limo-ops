@@ -1,10 +1,42 @@
 import assert from "node:assert/strict";
-import {
-  calculateProfit,
-  initialRateSettings,
-  isMidnightPickup,
-  resolvePricing,
-} from "../lib/pricing.ts";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import ts from "typescript";
+
+function transpileTypescript(source, filename) {
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: filename,
+  }).outputText;
+}
+
+const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-pricing-test-"));
+
+try {
+  for (const relativePath of ["lib/hourly-billing.ts", "lib/pricing.ts"]) {
+    const sourcePath = path.join(process.cwd(), relativePath);
+    const outputPath = path.join(tempDir, relativePath.replace(/\.ts$/, ".js"));
+
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(
+      outputPath,
+      transpileTypescript(await readFile(sourcePath, "utf8"), sourcePath),
+    );
+  }
+
+  const require = createRequire(import.meta.url);
+  const {
+    calculateProfit,
+    initialRateSettings,
+    isMidnightPickup,
+    resolvePricing,
+  } = require(path.join(tempDir, "lib/pricing.js"));
 
 assert.equal(isMidnightPickup("2259hrs"), false);
 assert.equal(isMidnightPickup("10:59pm"), false);
@@ -274,3 +306,6 @@ assert.deepEqual(
 );
 
 console.log("Pricing tests passed.");
+} finally {
+  await rm(tempDir, { force: true, recursive: true });
+}

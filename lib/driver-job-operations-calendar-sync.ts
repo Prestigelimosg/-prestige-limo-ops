@@ -48,6 +48,42 @@ function safeProviderTrace(trace: string[]) {
   return trace.length > 0 ? trace.join(",") : "none";
 }
 
+function singaporeCalendarPickupAt(value: unknown) {
+  const pickupAt = cleanText(value, 80);
+
+  if (!pickupAt || !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(pickupAt)) {
+    return pickupAt;
+  }
+
+  const parsed = new Date(pickupAt);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return pickupAt;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(parsed);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value || "";
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  const rawHour = part("hour");
+  const hour = rawHour === "24" ? "00" : rawHour;
+  const minute = part("minute");
+
+  return year && month && day && hour && minute
+    ? `${year}-${month}-${day}T${hour}:${minute}`
+    : pickupAt;
+}
+
 function calendarStatus(booking: UnknownRecord) {
   return (
     cleanText(booking.admin_internal_status, 80) ||
@@ -85,7 +121,7 @@ function calendarPayload(booking: UnknownRecord) {
     id: bookingReference,
     pax: positiveInteger(booking.pax_count) || 1,
     pickup_address: pickupLocation,
-    pickup_at: cleanText(booking.pickup_at, 80),
+    pickup_at: singaporeCalendarPickupAt(booking.pickup_at),
     route,
     status: calendarStatus(booking),
     traveler_name: cleanText(booking.passenger_name, 160),

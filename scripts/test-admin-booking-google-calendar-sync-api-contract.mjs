@@ -670,7 +670,7 @@ try {
           id: "ADM-20260725150239",
           pax: 1,
           pickup_address: "Wallich Street",
-          pickup_at: "2026-07-26T13:00:00+08:00",
+          pickup_at: "2026-07-26T13:00",
           route: "Wallich Street > Drop-off To Confirm",
           status: "Admin Review Required",
           traveler_name: "Mr. Jenn Bin Tan",
@@ -687,6 +687,7 @@ try {
 
   {
     setEnv(validEnv());
+    let normalizedPickupAt = "";
     let safeFetcherObserved = false;
     let syncAttempts = 0;
     const bookingRow = {
@@ -708,7 +709,7 @@ try {
       flight_no: null,
       passenger_name: "Otis JULY",
       pax_count: 1,
-      pickup_at: "2026-07-30T01:00:00+08:00",
+      pickup_at: "2026-07-29T17:00:00+00:00",
       pickup_location: "Orchard Hotel Singapore",
       route_summary:
         "Orchard Hotel Singapore > CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
@@ -739,7 +740,8 @@ try {
       await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
         bookingReference: "CUST-20260725115928-WORYU7",
         client,
-        async syncer(_payload, options) {
+        async syncer(payload, options) {
+          normalizedPickupAt = payload.bookings[0]?.pickup_at || "";
           safeFetcherObserved = typeof options?.fetcher === "function";
           syncAttempts += 1;
 
@@ -772,6 +774,11 @@ try {
       safeFetcherObserved,
       true,
       "the automatic acknowledgement handoff must provide its internal-only provider status observer",
+    );
+    assert.equal(
+      normalizedPickupAt,
+      "2026-07-30T01:00",
+      "the persisted UTC pickup must be normalized to the established Singapore-local Calendar input",
     );
   }
 

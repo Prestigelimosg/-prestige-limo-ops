@@ -12,6 +12,15 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Exact-Customer Issued-Invoice Eligibility Repair (2026-07-27)
+
+- Signed-in Production Chrome reproduced the exact split state on booking `10846`: `2 · Total invoices` showed issued pending invoice `JBT-0001` at SGD520 with its single line referencing `10846`, while `3 · Pending jobs for payment` still rendered the same booking inside `Jobs not billed yet` with selection, Edit, Delete, price-review, and Invoice preparation controls.
+- The existing exact-customer saved-jobs read now reconciles its result with the existing guarded `/api/admin-customer-invoices` GET before rendering invoice-eligible jobs. It accepts only the exact customer ID, `invoice` document type, and `issued` document state, and matches only an exact internal or public booking reference carried by the stored invoice reference or line-item `bookingReference`. It never infers coverage from customer name, passenger, description text, amount, status wording, invoice number, pickup, service, or route.
+- A saved booking already covered by an issued invoice is excluded from the existing `Jobs not billed yet` eligibility set, so it cannot be selected or handed to the existing new-invoice controls a second time. Paid and unpaid issued invoices both count as billed; quotations, credit notes, and drafts do not. The existing authoritative server issue guard still rejects any matching issued-invoice reference with `409`, so this repair adds UI alignment without replacing or weakening the write boundary.
+- If invoice coverage cannot be read and verified, the exact-customer unbilled lane fails closed with a visible explanation and no invoice-eligible rows. It does not silently claim that jobs are unbilled, guess coverage, or write any booking, price, invoice, PDF, email, payment, payout, PayNow, Calendar, Driver Report, acknowledgement, message, GPS, provider, schema, migration, or environment state.
+- No section, route, helper, panel, button, table, invoice workbench, renderer, numbering scheme, persistence writer, email sender, payment action, or customer/driver surface is added or rearranged. The approved `1 → 2 → 3 → 4 → All booking history` exact-customer workflow, amended unpaid-invoice refresh, PDF layout, customer portal, and all other wired lanes remain unchanged.
+- Focused regression protection is `scripts/test-customer-folder-issued-invoice-eligibility-guard.mjs`, registered in the preactivation verification suite alongside the existing exact-customer, invoice lifecycle, PDF/portal, DSP, and privacy guards.
+
 ### Linked Pending Jobs And Unpaid Invoice Amendment Refresh (2026-07-27)
 
 - The owner reproduced the exact-customer split-brain defect on booking `10846`: `3 · Pending jobs for payment` saved the owner-approved DSP correction `12:00-20:14` and reviewed `$520`, while the single matching unpaid issued invoice `JBT-0001` in `2 · Total invoices` remained the earlier `13:00-19:14` / `$390` stored snapshot and PDF.

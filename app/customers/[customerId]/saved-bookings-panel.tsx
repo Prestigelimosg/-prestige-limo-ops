@@ -52,6 +52,18 @@ type CustomerFolderSavedBookingRecord = {
   vehicle_type_or_category?: string | null;
 };
 
+type CustomerFolderIssuedInvoiceLineItem = {
+  bookingReference?: string;
+};
+
+type CustomerFolderIssuedInvoiceRecord = {
+  customerId?: string;
+  documentState?: string;
+  documentType?: string;
+  lineItems?: CustomerFolderIssuedInvoiceLineItem[];
+  reference?: string;
+};
+
 type CustomerFolderTravelerInvoiceGroup = {
   bookings: CustomerFolderSavedBookingRecord[];
   bookerId: number;
@@ -160,6 +172,7 @@ type CustomerFolderDspBillingTimeCorrectionState = {
 };
 
 type CustomerFolderSavedBookingsState = {
+  issuedInvoiceBookingReferences: string[];
   message: string;
   savedBookings: CustomerFolderSavedBookingRecord[];
   status: "idle" | "loading" | "loaded" | "error";
@@ -611,6 +624,56 @@ function isClearlyBilledOrClosedJob(booking: CustomerFolderSavedBookingRecord) {
   );
 }
 
+function normalizedExactInvoiceReference(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function issuedInvoiceBookingReferences(
+  invoices: CustomerFolderIssuedInvoiceRecord[],
+  customerId: string,
+) {
+  const exactCustomerId = normalizedExactInvoiceReference(customerId);
+  const references = new Set<string>();
+
+  invoices.forEach((invoice) => {
+    if (
+      (invoice.documentType || "invoice") !== "invoice" ||
+      (invoice.documentState || "issued") !== "issued" ||
+      normalizedExactInvoiceReference(invoice.customerId) !== exactCustomerId
+    ) {
+      return;
+    }
+
+    const invoiceReference = normalizedExactInvoiceReference(invoice.reference);
+
+    if (invoiceReference) {
+      references.add(invoiceReference);
+    }
+
+    invoice.lineItems?.forEach((lineItem) => {
+      const lineItemReference = normalizedExactInvoiceReference(
+        lineItem.bookingReference,
+      );
+
+      if (lineItemReference) {
+        references.add(lineItemReference);
+      }
+    });
+  });
+
+  return references;
+}
+
+function bookingHasIssuedInvoice(
+  booking: CustomerFolderSavedBookingRecord,
+  issuedInvoiceReferences: Set<string>,
+) {
+  return [booking.booking_reference, booking.public_booking_reference].some(
+    (reference) =>
+      issuedInvoiceReferences.has(normalizedExactInvoiceReference(reference)),
+  );
+}
+
 function initialMessage(customerName: string) {
   return `Load saved jobs not clearly billed or closed for ${customerName}.`;
 }
@@ -633,6 +696,10 @@ function customerFolderReturnContext() {
 
 function savedBookingReadFailureMessage(rawError: unknown) {
   const message = rawError instanceof Error ? rawError.message.toLowerCase() : String(rawError ?? "").toLowerCase();
+
+  if (/invoice coverage/.test(message)) {
+    return "Customer invoice coverage could not be verified. Jobs not billed yet is blocked so an existing issued invoice cannot be duplicated. Reload this customer folder and try again.";
+  }
 
   if (/not enabled|configuration|config|client_init/.test(message)) {
     return "Saved booking references are not enabled or configured on this server.";
@@ -674,6 +741,7 @@ export function CustomerFolderSavedBookingsPanel({
   const [expandedSavedBookingReference, setExpandedSavedBookingReference] = useState("");
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
+    issuedInvoiceBookingReferences: [],
     message: initialMessage(customerName),
     savedBookings: [],
     status: "idle",
@@ -868,6 +936,7 @@ export function CustomerFolderSavedBookingsPanel({
   }) {
     const focusBookingReference = safeBookingReferenceValue(options?.focusBookingReference);
     setReadState({
+      issuedInvoiceBookingReferences: [],
       message: `Loading saved jobs for ${customerName}...`,
       savedBookings: [],
       status: "loading",
@@ -884,24 +953,48 @@ export function CustomerFolderSavedBookingsPanel({
       if (focusBookingReference) {
         params.set("booking_reference", focusBookingReference);
       }
-      const response = await fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "GET",
-      });
+      const [response, invoiceResponse] = await Promise.all([
+        fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "GET",
+        }),
+        fetch(adminCustomerInvoicesApiPath, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "GET",
+        }),
+      ]);
       const result = await response.json().catch(() => null);
+      const invoiceResult = await invoiceResponse.json().catch(() => null);
 
       if (!response.ok || !result?.ok) {
         throw new Error(result?.error || "Saved booking read could not be completed.");
       }
 
+      if (
+        !invoiceResponse.ok ||
+        !invoiceResult?.ok ||
+        !Array.isArray(invoiceResult.invoices)
+      ) {
+        throw new Error("Customer invoice coverage could not be verified.");
+      }
+
       const savedBookings = Array.isArray(result.saved_bookings)
         ? (result.saved_bookings as CustomerFolderSavedBookingRecord[])
         : [];
+      const issuedInvoiceReferenceSet = issuedInvoiceBookingReferences(
+        invoiceResult.invoices as CustomerFolderIssuedInvoiceRecord[],
+        customerId,
+      );
       const returnedCount = Number(result.summary?.returned_count ?? savedBookings.length);
       const visibleSavedBookings = savedBookings.filter(
-        (booking) => !isClearlyBilledOrClosedJob(booking),
+        (booking) =>
+          !isClearlyBilledOrClosedJob(booking) &&
+          !bookingHasIssuedInvoice(booking, issuedInvoiceReferenceSet),
       );
       setBillingReviews(customerFolderInitialBillingReviews(visibleSavedBookings));
       void loadAutomatedBillingReviews(visibleSavedBookings);
@@ -932,10 +1025,13 @@ export function CustomerFolderSavedBookingsPanel({
         : "";
 
       setReadState({
+        issuedInvoiceBookingReferences: [...issuedInvoiceReferenceSet],
         message:
           returnMessage ||
-          (returnedCount > 0
-            ? `Loaded ${countLabel(returnedCount, "saved job")} for ${customerName}.`
+          (visibleSavedBookings.length > 0
+            ? `Loaded ${countLabel(visibleSavedBookings.length, "unbilled saved job")} for ${customerName}.`
+            : returnedCount > 0
+              ? "No saved job remains in Jobs not billed yet after billed or closed checks."
             : `No saved jobs returned for ${customerName}.`),
         savedBookings,
         status: "loaded",
@@ -944,6 +1040,7 @@ export function CustomerFolderSavedBookingsPanel({
       });
     } catch (error) {
       setReadState({
+        issuedInvoiceBookingReferences: [],
         message: savedBookingReadFailureMessage(error),
         savedBookings: [],
         status: "error",
@@ -971,8 +1068,13 @@ export function CustomerFolderSavedBookingsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const issuedInvoiceReferenceSet = new Set(
+    readState.issuedInvoiceBookingReferences,
+  );
   const unbilledSavedBookings = readState.savedBookings.filter(
-    (booking) => !isClearlyBilledOrClosedJob(booking),
+    (booking) =>
+      !isClearlyBilledOrClosedJob(booking) &&
+      !bookingHasIssuedInvoice(booking, issuedInvoiceReferenceSet),
   );
   const selectedUnbilledBookings = unbilledSavedBookings.filter((booking) => {
     const reference = safeDispatchReference(booking);

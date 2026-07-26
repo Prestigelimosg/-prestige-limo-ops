@@ -86,6 +86,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-amended-unpaid-invoice-link-guard.mjs",
   },
   {
+    label: "customer folder issued-invoice eligibility guard",
+    script: "scripts/test-customer-folder-issued-invoice-eligibility-guard.mjs",
+  },
+  {
     label: "customer card-option default override guard",
     script: "scripts/test-customer-card-option-default-override-guard.mjs",
   },

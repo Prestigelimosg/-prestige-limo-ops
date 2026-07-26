@@ -249,6 +249,8 @@ for (const fragment of [
   "fetcher: observedFetcher",
   "safeProviderMethod(init?.method)",
   "safeProviderTrace(providerTrace)",
+  "calendar_error=${JSON.stringify(result.error)}",
+  "calendar_error=${JSON.stringify(retryResult.error)}",
   "Driver acknowledgement Operations Calendar result failed safely:",
   "const retryResult = await syncer(payload, {",
   "return retryResult.ok",

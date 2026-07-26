@@ -144,7 +144,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
 
   if (result.status !== 502) {
     console.warn(
-      `Driver acknowledgement Operations Calendar result failed safely: sync=${result.status}; provider_http=${safeProviderTrace(providerTrace)}.`,
+      `Driver acknowledgement Operations Calendar result failed safely: sync=${result.status}; calendar_error=${JSON.stringify(result.error)}; provider_http=${safeProviderTrace(providerTrace)}.`,
     );
     return false;
   }
@@ -155,7 +155,7 @@ export async function syncAcknowledgedDriverDetailsToOperationsCalendar({
 
   if (!retryResult.ok) {
     console.warn(
-      `Driver acknowledgement Operations Calendar result failed safely: sync=${retryResult.status}; provider_http=${safeProviderTrace(providerTrace)}.`,
+      `Driver acknowledgement Operations Calendar result failed safely: sync=${retryResult.status}; calendar_error=${JSON.stringify(retryResult.error)}; provider_http=${safeProviderTrace(providerTrace)}.`,
     );
   }
 

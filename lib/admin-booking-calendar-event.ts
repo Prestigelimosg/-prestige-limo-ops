@@ -684,7 +684,7 @@ function parseDateParts(value: string) {
     return null;
   }
 
-  const isoMatch = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})(?=$|[T\s])/);
+  const isoMatch = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
 
   if (isoMatch) {
     return {

@@ -670,7 +670,7 @@ try {
           id: "ADM-20260725150239",
           pax: 1,
           pickup_address: "Wallich Street",
-          pickup_at: "2026-07-26T13:00",
+          pickup_at: "2026-07-26 13:00",
           route: "Wallich Street > Drop-off To Confirm",
           status: "Admin Review Required",
           traveler_name: "Mr. Jenn Bin Tan",
@@ -778,8 +778,8 @@ try {
     );
     assert.equal(
       normalizedPickupAt,
-      "2026-07-30T01:00",
-      "the persisted UTC pickup must be normalized to the established Singapore-local Calendar input",
+      "2026-07-30 01:00",
+      "the persisted UTC pickup must use the established Singapore-local Calendar builder input",
     );
   }
 
@@ -1025,11 +1025,21 @@ try {
       pickupTime: "0000hrs",
       reference: "PL-MIDNIGHT-0000",
     },
+    {
+      actualPickupText: "30 July 2026, 01:00hrs",
+      date: "2026-07-30",
+      expectedEnd: "2026-07-30T01:00:00",
+      expectedStart: "2026-07-29T23:30:00",
+      midnight: true,
+      pickupAt: "2026-07-29T17:00:00+00:00",
+      pickupTime: "0100hrs",
+      reference: "PL-MIDNIGHT-UTC-FALLBACK",
+    },
   ]) {
     setEnv(validEnv());
     const sourceBooking = safeBooking({
       booking_reference: calendarCase.reference,
-      date: calendarCase.pickupAt.slice(0, 10),
+      date: calendarCase.date || calendarCase.pickupAt.slice(0, 10),
       pickup_at: calendarCase.pickupAt,
       pickup_datetime: calendarCase.pickupAt,
       pickup_time: calendarCase.pickupTime,

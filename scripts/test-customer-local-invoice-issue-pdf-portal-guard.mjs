@@ -113,10 +113,10 @@ for (const fragment of [
   "Payment Made",
   "Sub Total",
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
-  "const notesY = 320;",
-  "const signoffY = 245;",
-  "const paymentY = 182;",
-  "const termsY = 55;",
+  "const signoffY = 260;",
+  "const paymentY = 203;",
+  "const notesY = 118;",
+  "const termsY = 45;",
   'pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g")',
   "Terms & Conditions:",
   "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
@@ -133,13 +133,13 @@ for (const fragment of [
 }
 
 assert.ok(
-  localPdfHelper.indexOf('pdfTextAt("Notes", 50, notesY') <
-    localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') &&
-    localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') <
+  localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') <
       localPdfHelper.indexOf("pdfTextAt(paymentHeading") &&
     localPdfHelper.indexOf("pdfTextAt(paymentHeading") <
+      localPdfHelper.indexOf('pdfTextAt("Notes", 50, notesY') &&
+    localPdfHelper.indexOf('pdfTextAt("Notes", 50, notesY') <
       localPdfHelper.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
-  "Stored invoice PDF must preserve the owner-approved Notes, sign-off, bank, then Terms layout.",
+  "Stored invoice PDF must preserve the owner-approved sign-off, bank, Notes, then Terms layout.",
 );
 
 for (const fragment of [

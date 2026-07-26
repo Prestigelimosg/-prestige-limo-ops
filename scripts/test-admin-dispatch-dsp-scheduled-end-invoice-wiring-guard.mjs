@@ -132,7 +132,9 @@ for (const fragment of [
   "complete Driver JC",
   "actualMinutes: billingActualMinutes",
   "booking-to-JC min",
-  "dspStartedAt: booking.pickup_at || booking.pickup_datetime",
+  'dspActualTimeSummary?.billing_time_source === "admin_correction"',
+  "dspActualTimeSummary?.dsp_started_at",
+  ": booking.pickup_at || booking.pickup_datetime",
   "dspEndedAt: dspActualTimeSummary?.dsp_ended_at",
 ]) {
   mustInclude(files.customers, fragment, "existing selected-customer invoice preparation lane");

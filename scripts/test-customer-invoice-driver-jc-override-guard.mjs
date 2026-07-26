@@ -202,14 +202,16 @@ assertExcludes(
 
 for (const fragment of [
   "export async function GET(request: Request)",
+  "export async function POST(request: Request)",
   "loadAdminDriverJobDspActualTimeSummaries",
+  "saveAdminDriverJobDspBillingTimeCorrection",
   "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {",
   'additionalSameOriginRefererPathPrefixes: ["/customers/"]',
   'additionalSameOriginRefererPathnames: ["/customers"]',
 ]) {
   assertIncludes(driverActualTimeRoute, fragment, `driver actual time route fragment ${fragment}`);
 }
-assertExcludes(driverActualTimeRoute, /export async function (?:POST|PATCH|PUT|DELETE)/, "driver actual time route");
+assertExcludes(driverActualTimeRoute, /export async function (?:PATCH|PUT|DELETE)/, "driver actual time route");
 
 for (const forbiddenPattern of [
   /driver payout|PayNow payout|payout comparisons|customer price/i,
@@ -224,7 +226,7 @@ for (const phrase of [
   "A completed driver JC timing summary recalculates the customer invoice amount with the locked 15-minute grace hourly rule and the `$65/hr` default rate.",
   "The Approved amount remains editable before issue, but changing it away from the calculated amount requires an Adjustment reason before invoice/PDF creation.",
   "Adjustment reasons stay in admin review feedback and are not printed into the customer PDF line item.",
-  "The driver JC invoice read is GET-only through `/api/admin-driver-job-dsp-actual-time-summaries` with `x-prestige-admin-purpose`; it does not write records, send providers, activate payments, or expose driver/customer forbidden data.",
+  "The invoice-preparation consumer remains GET-only through `/api/admin-driver-job-dsp-actual-time-summaries` with `x-prestige-admin-purpose`; the later owner-approved Admin correction POST is confined to the existing exact-customer unbilled-job editor and does not make invoice preparation itself write records, send providers, activate payments, or expose driver/customer forbidden data.",
   "Guard coverage lives in `scripts/test-customer-invoice-driver-jc-override-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase ${phrase}`);

@@ -13,9 +13,10 @@ import {
 import { calculateDspBillableMinutes } from "./hourly-billing";
 
 export const adminDriverJobDspActualTimeReadVersion =
-  "stage-admin-driver-job-dsp-actual-time-read-api-v1";
+  "stage-admin-driver-job-dsp-actual-time-read-api-v2";
 
 export type AdminDriverJobDspActualTimeStatus = "complete" | "started" | "not_started";
+export type AdminDriverJobDspBillingTimeSource = "admin_correction" | "automatic";
 
 export type AdminDriverJobDspActualTimeReadParams = {
   booking_reference: string;
@@ -24,11 +25,26 @@ export type AdminDriverJobDspActualTimeReadParams = {
 
 export type AdminDriverJobDspActualTimeSummary = {
   actual_time_status: AdminDriverJobDspActualTimeStatus;
+  billing_time_correction_reason: string | null;
+  billing_time_source: AdminDriverJobDspBillingTimeSource;
   booking_reference: string;
   dsp_billable_minutes: number | null;
   dsp_ended_at: string | null;
   dsp_started_at: string | null;
   dsp_total_minutes: number | null;
+};
+
+export type AdminDriverJobDspBillingTimeCorrectionParams = {
+  booking_reference: string;
+  correction_reason: string;
+  dsp_ended_at: string;
+  dsp_started_at: string;
+};
+
+export type AdminDriverJobDspBillingTimeCorrectionResult = {
+  booking_reference: string;
+  corrected_summary: AdminDriverJobDspActualTimeSummary;
+  version: typeof adminDriverJobDspActualTimeReadVersion;
 };
 
 export type AdminDriverJobDspActualTimeReadResult = {
@@ -49,8 +65,14 @@ const defaultDspActualTimeLimit = 3;
 const maxDspActualTimeLimit = 5;
 const maxBookingReferenceLength = 120;
 const maxDspMinutes = 60 * 24 * 30;
+const maxCorrectionReasonLength = 500;
 const dspActualTimeSummarySelect =
   "booking_reference, dsp_started_at, dsp_ended_at, total_minutes, actual_time_status";
+const dspBillingTimeCorrectionSelect =
+  "booking_reference, event_type, occurred_at, safe_event_note, safe_event_context, source_surface, actor_role, created_at";
+const dspBillingTimeCorrectionInsertSelect =
+  "booking_reference, event_type, occurred_at, safe_event_note, safe_event_context, source_surface, actor_role, created_at";
+const dspBillingTimeCorrectionBookingSelect = "booking_reference, service_type";
 const driverJcStatusEventSelect =
   "booking_reference, status_value, occurred_at";
 const disabledDspActualTimeReadError =
@@ -62,6 +84,8 @@ const safeDspActualTimeActorError =
 const safeDspActualTimeServerSessionActorError =
   "Admin driver job DSP actual time read requires a verified admin or dispatcher server session.";
 const safeDspActualTimeReadError = "Admin driver job DSP actual time read failed safely.";
+const safeDspBillingTimeCorrectionWriteError =
+  "Admin DSP billing time correction was not saved.";
 const allowedActualTimeStatuses = new Set<AdminDriverJobDspActualTimeStatus>([
   "complete",
   "started",
@@ -127,6 +151,30 @@ function safeDateTextFromDb(value: unknown) {
   return cleaned;
 }
 
+function safeCorrectionReason(value: unknown) {
+  const cleaned = textOrNull(value)?.replace(/\s+/g, " ").trim() || "";
+
+  return cleaned.length >= 3 && cleaned.length <= maxCorrectionReasonLength
+    ? cleaned
+    : null;
+}
+
+function timezoneBearingIsoDate(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  if (
+    !cleaned ||
+    cleaned.length > 80 ||
+    !/(?:Z|[+-]\d{2}:\d{2})$/i.test(cleaned)
+  ) {
+    return null;
+  }
+
+  const parsed = new Date(cleaned);
+
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
 function readParamsValue(params: URLSearchParams | UnknownRecord, key: string) {
   return params instanceof URLSearchParams ? params.get(key) : params[key];
 }
@@ -158,6 +206,69 @@ export function parseAdminDriverJobDspActualTimeReadParams(
     data: {
       booking_reference: bookingReference,
       limit,
+    },
+    ok: true,
+  };
+}
+
+export function parseAdminDriverJobDspBillingTimeCorrectionParams(
+  input: UnknownRecord,
+): AdminBookingResult<AdminDriverJobDspBillingTimeCorrectionParams> {
+  const bookingReference = validBookingReference(input.booking_reference);
+  const correctionReason = safeCorrectionReason(input.correction_reason);
+  const dspStartedAt = timezoneBearingIsoDate(input.dsp_started_at);
+  const dspEndedAt = timezoneBearingIsoDate(input.dsp_ended_at);
+
+  if (!bookingReference) {
+    return {
+      error: "Missing or malformed DSP billing time booking_reference.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (!correctionReason) {
+    return {
+      error: `Correction reason is required and must be 3-${maxCorrectionReasonLength} characters.`,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (!dspStartedAt || !dspEndedAt) {
+    return {
+      error: "DSP billing start and end must be valid timezone-bearing timestamps.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const totalMinutes = Math.floor(
+    (new Date(dspEndedAt).getTime() - new Date(dspStartedAt).getTime()) / 60_000,
+  );
+
+  if (totalMinutes <= 0) {
+    return {
+      error: "DSP billing end must be after its start.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (totalMinutes > maxDspMinutes) {
+    return {
+      error: "DSP billing interval exceeds the 30-day safety boundary.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return {
+    data: {
+      booking_reference: bookingReference,
+      correction_reason: correctionReason,
+      dsp_ended_at: dspEndedAt,
+      dsp_started_at: dspStartedAt,
     },
     ok: true,
   };
@@ -350,11 +461,60 @@ function toAdminDriverJobDspActualTimeSummary(
 
   return {
     actual_time_status: actualTimeStatus,
+    billing_time_correction_reason: null,
+    billing_time_source: "automatic",
     booking_reference: bookingReference,
     dsp_billable_minutes:
       actualTimeStatus === "complete" ? calculateDspBillableMinutes(totalMinutes) : null,
     dsp_ended_at: safeDateTextFromDb(row.dsp_ended_at),
     dsp_started_at: safeDateTextFromDb(row.dsp_started_at),
+    dsp_total_minutes: totalMinutes,
+  };
+}
+
+function toAdminDspBillingTimeCorrectionSummary(
+  row: UnknownRecord,
+  bookingReference: string,
+): AdminDriverJobDspActualTimeSummary | null {
+  const exactReference = validBookingReference(row.booking_reference);
+  const eventType = textOrNull(row.event_type);
+  const sourceSurface = textOrNull(row.source_surface);
+  const actorRole = textOrNull(row.actor_role);
+  const context = asRecord(row.safe_event_context);
+  const policy = textOrNull(context.actual_time_policy);
+  const dspStartedAt = timezoneBearingIsoDate(context.billing_started_at);
+  const dspEndedAt = timezoneBearingIsoDate(row.occurred_at);
+  const correctionReason = safeCorrectionReason(row.safe_event_note);
+
+  if (
+    exactReference !== bookingReference ||
+    eventType !== "dsp_end" ||
+    sourceSurface !== "admin_api" ||
+    !["admin", "dispatcher"].includes(actorRole || "") ||
+    policy !== "admin_billing_time_correction" ||
+    !dspStartedAt ||
+    !dspEndedAt ||
+    !correctionReason
+  ) {
+    return null;
+  }
+
+  const totalMinutes = Math.floor(
+    (new Date(dspEndedAt).getTime() - new Date(dspStartedAt).getTime()) / 60_000,
+  );
+
+  if (totalMinutes <= 0 || totalMinutes > maxDspMinutes) {
+    return null;
+  }
+
+  return {
+    actual_time_status: "complete",
+    billing_time_correction_reason: correctionReason,
+    billing_time_source: "admin_correction",
+    booking_reference: bookingReference,
+    dsp_billable_minutes: calculateDspBillableMinutes(totalMinutes),
+    dsp_ended_at: dspEndedAt,
+    dsp_started_at: dspStartedAt,
     dsp_total_minutes: totalMinutes,
   };
 }
@@ -432,6 +592,8 @@ async function addPersistedDriverJcEndFallback(
   return [
     {
       actual_time_status: "not_started" as const,
+      billing_time_correction_reason: null,
+      billing_time_source: "automatic" as const,
       booking_reference: bookingReference,
       dsp_billable_minutes: null,
       dsp_ended_at: persistedDriverJcEnd,
@@ -439,6 +601,38 @@ async function addPersistedDriverJcEndFallback(
       dsp_total_minutes: null,
     },
   ];
+}
+
+async function loadLatestDspBillingTimeCorrection(
+  client: SupabaseClient,
+  bookingReference: string,
+) {
+  const { data, error } = await client
+    .from("driver_job_dsp_actual_time_events")
+    .select(dspBillingTimeCorrectionSelect)
+    .eq("booking_reference", bookingReference)
+    .eq("event_type", "dsp_end")
+    .eq("source_surface", "admin_api")
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(20);
+
+  if (error) {
+    return {
+      error,
+      summary: null,
+    };
+  }
+
+  return {
+    error: null,
+    summary:
+      asArray(data)
+        .map(asRecord)
+        .map((row) => toAdminDspBillingTimeCorrectionSummary(row, bookingReference))
+        .find(
+          (summary): summary is AdminDriverJobDspActualTimeSummary => Boolean(summary),
+        ) || null,
+  };
 }
 
 export async function loadAdminDriverJobDspActualTimeSummaries(
@@ -457,6 +651,19 @@ export async function loadAdminDriverJobDspActualTimeSummaries(
     return clientResult;
   }
 
+  const correctionResult = await loadLatestDspBillingTimeCorrection(
+    clientResult.data,
+    parsed.data.booking_reference,
+  );
+
+  if (correctionResult.error) {
+    return safeAdapterFailure(
+      safeDspActualTimeReadError,
+      500,
+      correctionResult.error,
+    );
+  }
+
   const { data, error } = await clientResult.data
     .from("driver_job_dsp_actual_time_summaries")
     .select(dspActualTimeSummarySelect)
@@ -472,11 +679,23 @@ export async function loadAdminDriverJobDspActualTimeSummaries(
     .map(asRecord)
     .map(toAdminDriverJobDspActualTimeSummary)
     .filter((summary): summary is AdminDriverJobDspActualTimeSummary => Boolean(summary));
-  const summaries = await addPersistedDriverJcEndFallback(
-    clientResult.data,
-    parsed.data.booking_reference,
-    storedSummaries,
-  );
+  const originalSummaries = correctionResult.summary
+    ? storedSummaries.filter(
+        (summary) =>
+          !(
+            summary.actual_time_status === "not_started" &&
+            !summary.dsp_started_at &&
+            summary.dsp_ended_at === correctionResult.summary?.dsp_ended_at
+          ),
+      )
+    : storedSummaries;
+  const summaries = correctionResult.summary
+    ? [correctionResult.summary, ...originalSummaries].slice(0, parsed.data.limit)
+    : await addPersistedDriverJcEndFallback(
+        clientResult.data,
+        parsed.data.booking_reference,
+        originalSummaries,
+      );
 
   return {
     data: {
@@ -484,6 +703,126 @@ export async function loadAdminDriverJobDspActualTimeSummaries(
       latest_summary: summaries[0] || null,
       summaries,
       summary: summarizeDspActualTime(summaries),
+      version: adminDriverJobDspActualTimeReadVersion,
+    },
+    ok: true,
+  };
+}
+
+function normalizedDspBookingType(value: unknown) {
+  return (textOrNull(value) || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function isDspBillingTimeCorrectionEligibleBooking(value: unknown) {
+  const normalized = normalizedDspBookingType(value);
+
+  return (
+    normalized === "dsp" ||
+    normalized === "hourly" ||
+    normalized === "disposal" ||
+    normalized.includes("hourly") ||
+    normalized.includes("disposal")
+  );
+}
+
+export async function saveAdminDriverJobDspBillingTimeCorrection(
+  input: UnknownRecord,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<AdminDriverJobDspBillingTimeCorrectionResult>> {
+  const parsed = parseAdminDriverJobDspBillingTimeCorrectionParams(input);
+
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  const clientResult = getServerOnlyAdminDriverJobDspActualTimeSupabaseClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const { data: bookingData, error: bookingError } = await clientResult.data
+    .from("bookings")
+    .select(dspBillingTimeCorrectionBookingSelect)
+    .eq("booking_reference", parsed.data.booking_reference)
+    .limit(2);
+
+  if (bookingError) {
+    return safeAdapterFailure(
+      safeDspBillingTimeCorrectionWriteError,
+      500,
+      bookingError,
+    );
+  }
+
+  const bookingRows = asArray(bookingData).map(asRecord);
+  const exactBooking = bookingRows.find(
+    (row) => validBookingReference(row.booking_reference) === parsed.data.booking_reference,
+  );
+
+  if (!exactBooking || bookingRows.length !== 1) {
+    return {
+      error: "Exact saved DSP booking was not found.",
+      ok: false,
+      status: 404,
+    };
+  }
+
+  if (!isDspBillingTimeCorrectionEligibleBooking(exactBooking.service_type)) {
+    return {
+      error: "DSP billing time correction is available only for a saved DSP job.",
+      ok: false,
+      status: 409,
+    };
+  }
+
+  const { data: insertedData, error: insertError } = await clientResult.data
+    .from("driver_job_dsp_actual_time_events")
+    .insert({
+      actor_label: actor.actor_label,
+      actor_role: actor.actor_role,
+      booking_reference: parsed.data.booking_reference,
+      driver_job_link_id: null,
+      event_type: "dsp_end",
+      occurred_at: parsed.data.dsp_ended_at,
+      safe_event_context: {
+        actual_time_policy: "admin_billing_time_correction",
+        billing_started_at: parsed.data.dsp_started_at,
+      },
+      safe_event_note: parsed.data.correction_reason,
+      source_surface: "admin_api",
+    })
+    .select(dspBillingTimeCorrectionInsertSelect)
+    .single();
+
+  if (insertError) {
+    return safeAdapterFailure(
+      safeDspBillingTimeCorrectionWriteError,
+      500,
+      insertError,
+    );
+  }
+
+  const correctedSummary = toAdminDspBillingTimeCorrectionSummary(
+    asRecord(insertedData),
+    parsed.data.booking_reference,
+  );
+
+  if (!correctedSummary) {
+    return {
+      error: safeDspBillingTimeCorrectionWriteError,
+      ok: false,
+      status: 500,
+    };
+  }
+
+  return {
+    data: {
+      booking_reference: parsed.data.booking_reference,
+      corrected_summary: correctedSummary,
       version: adminDriverJobDspActualTimeReadVersion,
     },
     ok: true,

@@ -12,6 +12,15 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### DSP Customer Billing Booking-Time To JC Repair (2026-07-26)
+
+- The owner confirmed the customer DSP billing interval starts at the saved canonical booking pickup (`pickup_at`, with the established normalized `pickup_datetime` source) and ends at the completed Driver JC end timestamp. This supersedes only the earlier customer invoice-duration start rule that used Driver OTS.
+- The existing selected-customer monthly invoice preparation lane now calculates elapsed DSP minutes from that saved canonical booking pickup to the Driver JC end, then applies the established two-hour minimum, 15-minute grace whole-hour rule, verified traveler/company CRM rate precedence, and existing customer surcharges.
+- Driver OTS remains separate operational evidence in Driver Reports and in the established actual-time summary. It is neither changed nor deleted and no Driver Report, JC persistence, completion, Calendar, link, acknowledgement, or live-location behavior is modified.
+- The calculation fails closed when the saved booking pickup is invalid or missing, Driver JC is incomplete or invalid, JC is not later than pickup, or the interval exceeds the existing 30-day plausibility boundary. Optional scheduled DSP end remains planning data and is never used for the billed duration.
+- The customer invoice line description uses the same saved booking pickup and Driver JC end so its displayed DSP interval agrees with the amount calculation. No invoice layout, control, route, persistence writer, PDF renderer, payment, payout, PayNow, provider send, schema, migration, environment value, or other wired lane is changed.
+- Focused regression protection extends `scripts/test-admin-dispatch-dsp-scheduled-end-invoice-wiring-guard.mjs`; the established invoice layout and lifecycle guards remain unchanged.
+
 ### Admin Booking Persistence Harness OTP Fixture Alignment (2026-07-26)
 
 - The existing `scripts/test-admin-booking-persistence-api-gate.mjs` stopped before its customer-request assertions because its isolated temporary route fixture predated the already-established private invitation and public phone-OTP imports. Inspection also found that the same fixture omitted the current expired-session-cookie and safe public-booking-reference exports used by that route.

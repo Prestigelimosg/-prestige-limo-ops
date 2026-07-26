@@ -105,8 +105,13 @@ mustInclude(
 );
 mustInclude(
   files.customerFolder,
-  "await loadAutomatedBillingReviews([booking])",
+  "const recalculatedReviews = await loadAutomatedBillingReviews([booking])",
   "same-lane price recalculation after correction",
+);
+mustInclude(
+  files.customerFolder,
+  "setPriceDraft((recalculatedReview.review.amountCents / 100).toFixed(2))",
+  "same-editor recalculated customer price refresh",
 );
 mustExclude(
   files.dashboard,

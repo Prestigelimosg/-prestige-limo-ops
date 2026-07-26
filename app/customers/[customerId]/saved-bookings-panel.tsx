@@ -686,7 +686,7 @@ export function CustomerFolderSavedBookingsPanel({
     );
 
     if (proposalBookings.length === 0) {
-      return;
+      return [];
     }
 
     try {
@@ -834,6 +834,7 @@ export function CustomerFolderSavedBookingsPanel({
 
         return next;
       });
+      return calculatedReviews;
     } catch {
       setBillingReviews((current) => {
         const next = { ...current };
@@ -853,6 +854,7 @@ export function CustomerFolderSavedBookingsPanel({
 
         return next;
       });
+      return [];
     }
   }
 
@@ -1270,7 +1272,14 @@ export function CustomerFolderSavedBookingsPanel({
           status: "calculating",
         },
       }));
-      await loadAutomatedBillingReviews([booking]);
+      const recalculatedReviews = await loadAutomatedBillingReviews([booking]);
+      const recalculatedReview = recalculatedReviews.find(
+        (candidate) => candidate.reference === reference,
+      );
+
+      if (recalculatedReview?.review.amountCents) {
+        setPriceDraft((recalculatedReview.review.amountCents / 100).toFixed(2));
+      }
       setReadState((current) => ({
         ...current,
         message: `Saved DSP billing times and recalculated the customer proposal for ${publicBookingReferenceDisplay(booking)}.`,

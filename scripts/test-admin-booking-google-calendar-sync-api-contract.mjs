@@ -785,6 +785,78 @@ try {
 
   {
     setEnv(validEnv());
+    const bookingRow = {
+      admin_internal_status: "approved_internal",
+      booking_reference: "CUST-20260725115928-WORYU7",
+      bookers: {
+        booker_name: "William Test",
+      },
+      companies: {
+        company_name: "CODEX CUSTOMER REBOOKING TEST",
+      },
+      company_id: 26,
+      contact_display_name: "William Test",
+      customer_facing_status: "confirmed",
+      driver_contact: "97366292",
+      driver_name: "Simon",
+      driver_plate_number: "SNP9124S",
+      dropoff_location: "CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      flight_no: null,
+      passenger_name: "Otis JULY",
+      pax_count: null,
+      pickup_at: "2026-07-29T17:00:00+00:00",
+      pickup_location: "Orchard Hotel Singapore",
+      route_summary:
+        "Orchard Hotel Singapore > CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      route_type: null,
+      service_type: "TRF",
+      short_notice_review_status: "reviewed",
+      vehicle_type_or_category: "AVF",
+    };
+    const query = {
+      eq() {
+        return this;
+      },
+      async maybeSingle() {
+        return { data: bookingRow, error: null };
+      },
+      select() {
+        return this;
+      },
+    };
+    const calls = installFetchMock({ eventStatuses: [200] });
+    const synced =
+      await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: "CUST-20260725115928-WORYU7",
+        client: {
+          from() {
+            return query;
+          },
+        },
+        pickupAt: "2026-07-30T01:00",
+      });
+
+    assert.equal(
+      synced,
+      true,
+      "the exact Production-shaped acknowledgement must pass the real Calendar builder and writer",
+    );
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 1);
+    const event = parseJsonBody(providerCalls[0]);
+    assert.equal(
+      event.summary,
+      "MIDNIGHT JOB - SNP9124S > Otis JULY - TRF - Prestige",
+    );
+    assert.equal(event.start.dateTime, "2026-07-29T23:30:00");
+    assert.equal(event.end.dateTime, "2026-07-30T01:00:00");
+    assert.match(event.description, /Driver: Simon \/ SNP9124S \/ 97366292/);
+    assert.match(event.description, /Vehicle: AVF/);
+    assert.equal(event.attendees, undefined);
+  }
+
+  {
+    setEnv(validEnv());
     const statusBookings = [
       safeBooking({ booking_reference: "PL-CAL-STATUS-CURRENT" }),
       safeBooking({

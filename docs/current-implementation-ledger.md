@@ -7,7 +7,7 @@ Latest pushed main/staging runtime checkpoint:
 4226cac1 fix: allow customer folder DSP timing read
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-dc093260 Merge PR #117: Allow customer folder DSP timing read
+a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -28,6 +28,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Calendar provider failure never rolls back or blocks the saved driver acknowledgement. No provider status, token, credential, internal booking reference, or provider response is exposed to the driver. The public Driver Job route does not gain a second Calendar endpoint or admin permission.
 - This repair changes only the separate admin Operations Calendar consumer. The personal Driver Calendar action, OAuth connection, encrypted credential, driver-plus-booking event identity, `Add / Update Calendar` control, reporting shortcut, and amendment behavior remain unchanged.
 - No booking form, Driver Job Link, acknowledgement UI, Driver Report, completion action, customer/driver message, push reminder, GPS, invoice workflow/layout/PDF, pricing rule, payment, payout, PayNow, schema, migration, environment value, or external guest/customer notification is added or changed.
+- On deployed Production build `a5832c4e`, the owner approved one exact existing `Update + Cal` action for booking `10846`. The app returned `Operational booking updated: ADM-20260725150239. Admin Review Required. Google Calendar auto-synced; reminders included; no guest email sent.` The loaded safe booking values remained Simon, `97366292`, `SNP9124S`, and `AVF`.
+- Signed-in Google Calendar verification found exactly one `Prestige Ops Calendar` event on Sunday, 26 July 2026 from 13:00–14:30 SGT. The same event now has title `SNP9124S > Mr. Jenn Bin Tan - DSP - Prestige`, location `Wallich Street`, and description lines `Vehicle: AVF` and `Driver: Simon / SNP9124S / 97366292`. No duplicate event, attendee, guest email, customer/driver message, invoice, payment, payout, PayNow, personal Driver Calendar write, Driver Report write, completion action, or other booking was created or changed.
 - Focused protection extends `scripts/test-admin-booking-google-calendar-sync-api-contract.mjs`, `scripts/test-driver-job-details-admin-sync-guard.mjs`, and `scripts/test-driver-job-status-persistence-api-contract.mjs`.
 
 ### DSP Persisted JC Billing-Evidence Fallback Repair (2026-07-26)

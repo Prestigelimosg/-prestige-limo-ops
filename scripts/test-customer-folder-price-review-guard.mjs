@@ -7,6 +7,7 @@ import ts from "typescript";
 
 const guardScript = "scripts/test-customer-folder-price-review-guard.mjs";
 const [
+  agents,
   folder,
   customers,
   sharedCalculation,
@@ -16,6 +17,7 @@ const [
   ledger,
   suite,
 ] = await Promise.all([
+  readFile("AGENTS.md", "utf8"),
   readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
   readFile("app/customers/page.tsx", "utf8"),
   readFile("lib/customer-dsp-invoice-review.ts", "utf8"),
@@ -37,6 +39,35 @@ function sectionBetween(source, startFragment, endFragment) {
   assert.notEqual(end, -1, `Missing section end: ${endFragment}`);
 
   return source.slice(start, end);
+}
+
+const dspCalculationAgentLockSection = sectionBetween(
+  agents,
+  "# Owner-locked DSP customer billing calculation — do not break",
+  "\n# ",
+);
+for (const phrase of [
+  "saved canonical booking pickup",
+  "real persisted Driver `Job Completed`/JC timestamp",
+  "must never use Driver OTS, POB, scheduled DSP end, current time, booking status, or admin completion",
+  "two-hour minimum",
+  "15-minute grace",
+  "verified traveler/company/Prestige rate precedence",
+  "booking `10846`",
+  "`374` minutes",
+  "`6` billable hours",
+  "SGD390",
+  "must remain a temporary review proposal",
+  "must never automatically save a customer price, select a job, create or issue an invoice, send an email, or record a payment",
+  guardScript,
+  "scripts/test-admin-dispatch-dsp-scheduled-end-invoice-wiring-guard.mjs",
+  "scripts/test-admin-driver-job-dsp-actual-time-read-api-contract.mjs",
+]) {
+  includes(
+    dspCalculationAgentLockSection,
+    phrase,
+    `DSP customer billing owner lock ${phrase}`,
+  );
 }
 
 for (const fragment of [
@@ -174,6 +205,7 @@ for (const phrase of [
   "Driver JC end",
   "Driver OTS remains separate operational evidence",
   "existing `Customer price` tag",
+  "owner-locked in `AGENTS.md`",
   guardScript,
 ]) {
   includes(bookingToJcLedgerSection, phrase, `booking-to-JC folder ledger phrase ${phrase}`);

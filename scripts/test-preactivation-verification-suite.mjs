@@ -98,6 +98,10 @@ const guardChecks = [
     script: "scripts/test-customer-invoice-multi-recipient-email-guard.mjs",
   },
   {
+    label: "customer invoice amended-email idempotency guard",
+    script: "scripts/test-customer-invoice-amended-email-idempotency-guard.mjs",
+  },
+  {
     label: "customer invoice reminder and payment action guard",
     script: "scripts/test-customer-invoice-reminder-payment-actions-guard.mjs",
   },

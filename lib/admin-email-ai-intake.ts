@@ -37,6 +37,8 @@ const mailboxStateTable = "admin_email_ai_mailbox_state";
 const maximumEmailSourceBytes = 256_000;
 const maximumAiInputCharacters = 12_000;
 const maximumMessagesPerRun = 20;
+const tokenUsagePageSize = 1_000;
+const tokenUsageMaximumPages = 100;
 
 const emailAnalysisInstructions = `You are the private email intake reviewer for Prestige Limo Ops admin.
 
@@ -90,6 +92,14 @@ export type AdminEmailAiIntakeRecord = {
   summary: string;
 };
 
+export type AdminEmailAiTokenUsage = {
+  available: boolean;
+  input_tokens: number;
+  month_key: string;
+  output_tokens: number;
+  total_tokens: number;
+};
+
 type AdminEmailAiPersistenceRecord = {
   booking_parse_result?: unknown;
   canonical_booking_text?: unknown;
@@ -108,11 +118,17 @@ type AdminEmailAiPersistenceRecord = {
   summary?: unknown;
 };
 
+type AdminEmailAiTokenPersistenceRecord = {
+  openai_input_tokens?: unknown;
+  openai_output_tokens?: unknown;
+};
+
 export type AdminEmailAiIntakeLoadResult =
   | {
       data: {
         enabled: boolean;
         records: AdminEmailAiIntakeRecord[];
+        token_usage: AdminEmailAiTokenUsage;
         version: typeof adminEmailAiIntakeVersion;
       };
       ok: true;
@@ -173,6 +189,41 @@ function cleanPositiveInteger(value: unknown) {
   const parsed = Number(value);
 
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function addSafeTokenCount(current: number, value: unknown) {
+  return Math.min(
+    Number.MAX_SAFE_INTEGER,
+    current + cleanPositiveInteger(value),
+  );
+}
+
+function currentSingaporeMonthWindow(now = new Date()) {
+  const singaporeOffsetMs = 8 * 60 * 60 * 1_000;
+  const singaporeClock = new Date(now.getTime() + singaporeOffsetMs);
+  const year = singaporeClock.getUTCFullYear();
+  const monthIndex = singaporeClock.getUTCMonth();
+  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+
+  return {
+    end: new Date(
+      Date.UTC(year, monthIndex + 1, 1) - singaporeOffsetMs,
+    ).toISOString(),
+    monthKey,
+    start: new Date(
+      Date.UTC(year, monthIndex, 1) - singaporeOffsetMs,
+    ).toISOString(),
+  };
+}
+
+function unavailableTokenUsage(monthKey: string): AdminEmailAiTokenUsage {
+  return {
+    available: false,
+    input_tokens: 0,
+    month_key: monthKey,
+    output_tokens: 0,
+    total_tokens: 0,
+  };
 }
 
 function cleanConfidence(value: unknown) {
@@ -360,11 +411,14 @@ function sanitizePersistenceRecord(
 export async function loadAdminEmailAiIntake(
   client?: SupabaseClient,
 ): Promise<AdminEmailAiIntakeLoadResult> {
+  const usageWindow = currentSingaporeMonthWindow();
+
   if (process.env[adminEmailAiEnabledEnvName] !== "true") {
     return {
       data: {
         enabled: false,
         records: [],
+        token_usage: unavailableTokenUsage(usageWindow.monthKey),
         version: adminEmailAiIntakeVersion,
       },
       ok: true,
@@ -411,11 +465,56 @@ export async function loadAdminEmailAiIntake(
             adminEmailAiClassificationAppearsInApp(record.classification),
         )
     : [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let tokenUsageAvailable = true;
+
+  for (let pageIndex = 0; pageIndex < tokenUsageMaximumPages; pageIndex += 1) {
+    const pageStart = pageIndex * tokenUsagePageSize;
+    const tokenResult = await database
+      .from(intakeTable)
+      .select("openai_input_tokens, openai_output_tokens")
+      .gte("created_at", usageWindow.start)
+      .lt("created_at", usageWindow.end)
+      .order("created_at", { ascending: true })
+      .range(pageStart, pageStart + tokenUsagePageSize - 1);
+
+    if (tokenResult.error) {
+      tokenUsageAvailable = false;
+      break;
+    }
+
+    const tokenRows = Array.isArray(tokenResult.data)
+      ? tokenResult.data as AdminEmailAiTokenPersistenceRecord[]
+      : [];
+
+    tokenRows.forEach((row) => {
+      inputTokens = addSafeTokenCount(inputTokens, row.openai_input_tokens);
+      outputTokens = addSafeTokenCount(outputTokens, row.openai_output_tokens);
+    });
+
+    if (tokenRows.length < tokenUsagePageSize) {
+      break;
+    }
+
+    if (pageIndex === tokenUsageMaximumPages - 1) {
+      tokenUsageAvailable = false;
+    }
+  }
 
   return {
     data: {
       enabled: true,
       records,
+      token_usage: tokenUsageAvailable
+        ? {
+            available: true,
+            input_tokens: inputTokens,
+            month_key: usageWindow.monthKey,
+            output_tokens: outputTokens,
+            total_tokens: addSafeTokenCount(inputTokens, outputTokens),
+          }
+        : unavailableTokenUsage(usageWindow.monthKey),
       version: adminEmailAiIntakeVersion,
     },
     ok: true,

@@ -43,6 +43,7 @@ export async function GET(request: Request) {
     external_send: false,
     ok: true,
     records: result.data.records,
+    token_usage: result.data.token_usage,
     version: result.data.version,
     write_action: false,
   });

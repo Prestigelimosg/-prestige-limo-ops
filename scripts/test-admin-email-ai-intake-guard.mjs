@@ -156,5 +156,9 @@ assert.match(ledgerSource, /booking@prestigelimo\.sg/);
 assert.match(ledgerSource, /info@prestigelimo\.sg/);
 assert.match(ledgerSource, /before OpenAI/);
 assert.match(ledgerSource, /No external reply is sent/);
+assert.match(ledgerSource, /classified the message as `enquiry` with 99% confidence/);
+assert.match(ledgerSource, /702 OpenAI input tokens plus 274 output tokens/);
+assert.match(ledgerSource, /the token totals remained unchanged/);
+assert.match(ledgerSource, /No external reply, booking\/CRM\/Calendar\/message\/invoice\/payment/);
 
 console.log("Private semantic email AI intake guard passed.");

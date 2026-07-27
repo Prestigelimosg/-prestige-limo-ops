@@ -1541,11 +1541,20 @@ type AdminEmailAiIntakeRecord = {
   summary?: string | null;
 };
 
+type AdminEmailAiTokenUsage = {
+  available: boolean;
+  input_tokens: number;
+  month_key: string;
+  output_tokens: number;
+  total_tokens: number;
+};
+
 type AdminEmailAiIntakeReadState = {
   enabled: boolean;
   message: Message | null;
   records: AdminEmailAiIntakeRecord[];
   status: "idle" | "loading" | "loaded" | "error" | "unavailable";
+  tokenUsage: AdminEmailAiTokenUsage | null;
 };
 
 type AdminAppNotificationAction = {
@@ -10721,6 +10730,14 @@ async function loadAdminEmailAiIntakeRead() {
           adminEmailAiClassificationAppearsInApp(record.classification),
         )
       : [],
+    tokenUsage:
+      result.token_usage &&
+      typeof result.token_usage === "object" &&
+      typeof result.token_usage.available === "boolean" &&
+      typeof result.token_usage.month_key === "string" &&
+      typeof result.token_usage.total_tokens === "number"
+        ? (result.token_usage as AdminEmailAiTokenUsage)
+        : null,
   };
 }
 
@@ -13574,7 +13591,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       message: null,
       records: [],
       status: "idle",
+      tokenUsage: null,
     });
+  const adminEmailAiInitialLoadAttemptedRef = useRef(false);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
     target: AdminAlertLocatorTarget;
@@ -14202,12 +14221,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   useEffect(() => {
     let cancelled = false;
 
-    if (activeTab !== "dashboard") {
+    if (
+      activeTab !== "dashboard" &&
+      adminEmailAiInitialLoadAttemptedRef.current
+    ) {
       return () => {
         cancelled = true;
       };
     }
 
+    adminEmailAiInitialLoadAttemptedRef.current = true;
     setAdminEmailAiIntakeReadState((current) => ({
       ...current,
       message: null,
@@ -14227,6 +14250,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           message: null,
           records: result.records,
           status: "loaded",
+          tokenUsage: result.tokenUsage,
         });
       } catch {
         if (cancelled) {
@@ -14241,6 +14265,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           },
           records: [],
           status: "unavailable",
+          tokenUsage: null,
         });
       }
     })();
@@ -31965,6 +31990,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : dashboardSystemNotices.some((notice) => notice.tone === "info")
       ? "info"
       : "success";
+  const adminEmailAiTokenUsage = adminEmailAiIntakeReadState.tokenUsage;
+  const adminEmailAiTokenUsageLabel =
+    adminEmailAiIntakeReadState.status === "loading" ||
+    adminEmailAiIntakeReadState.status === "idle"
+      ? "..."
+      : adminEmailAiTokenUsage?.available
+        ? new Intl.NumberFormat("en-SG", {
+            maximumFractionDigits: 1,
+            notation: "compact",
+          }).format(adminEmailAiTokenUsage.total_tokens)
+        : "—";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
@@ -31986,11 +32022,34 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               Build {deployedBuildCommitShort}
             </p>
           </div>
-          <div className="flex flex-col gap-1.5 sm:min-w-72">
-            <div className="grid grid-cols-3 gap-1.5 text-center">
+          <div className="flex flex-col gap-1.5 sm:min-w-80">
+            <div className="grid grid-cols-4 gap-1.5 text-center">
               <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
                 <p className="text-[11px] text-slate-500">Saved</p>
                 <p className="text-base font-semibold">{operationalBookings.length}</p>
+              </div>
+              <div
+                className="rounded-md border border-stone-200 bg-white px-2 py-1.5"
+                data-admin-email-ai-monthly-token-usage="true"
+                data-admin-email-ai-monthly-token-usage-available={
+                  adminEmailAiTokenUsage?.available ? "true" : "false"
+                }
+                data-admin-email-ai-monthly-token-usage-month={
+                  adminEmailAiTokenUsage?.month_key || ""
+                }
+                data-admin-email-ai-monthly-token-usage-total={
+                  adminEmailAiTokenUsage?.available
+                    ? String(adminEmailAiTokenUsage.total_tokens)
+                    : ""
+                }
+                title="Current Singapore-month Email AI usage. OpenAI API has no fixed token balance."
+              >
+                <p className="text-[11px] text-slate-500">Email AI</p>
+                <p className="text-sm font-semibold">
+                  {adminEmailAiTokenUsage?.available
+                    ? `${adminEmailAiTokenUsageLabel} used`
+                    : adminEmailAiTokenUsageLabel}
+                </p>
               </div>
               <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
                 <p className="text-[11px] text-slate-500">Status</p>

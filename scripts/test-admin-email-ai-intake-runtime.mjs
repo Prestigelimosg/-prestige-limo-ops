@@ -63,6 +63,8 @@ class FakeQuery {
     this.filters = [];
     this.inFilters = [];
     this.orExpression = "";
+    this.rangeEnd = null;
+    this.rangeStart = null;
   }
 
   select() {
@@ -97,6 +99,16 @@ class FakeQuery {
     return this;
   }
 
+  gte(field, value) {
+    this.filters.push([field, value, "gte"]);
+    return this;
+  }
+
+  lt(field, value) {
+    this.filters.push([field, value, "lt"]);
+    return this;
+  }
+
   or(expression) {
     this.operation = "dedupe";
     this.orExpression = expression;
@@ -108,6 +120,12 @@ class FakeQuery {
   }
 
   limit() {
+    return this;
+  }
+
+  range(start, end) {
+    this.rangeStart = start;
+    this.rangeEnd = end;
     return this;
   }
 
@@ -183,7 +201,12 @@ class FakeQuery {
 
     const selectedRows = intakeRows.filter((row) => {
       const exactFiltersPass = this.filters.every(
-        ([field, value]) => row[field] === value,
+        ([field, value, operator]) =>
+          operator === "gte"
+            ? row[field] >= value
+            : operator === "lt"
+              ? row[field] < value
+              : row[field] === value,
       );
       const inFiltersPass = this.inFilters.every(
         ([field, values]) => values.includes(row[field]),
@@ -191,8 +214,12 @@ class FakeQuery {
 
       return exactFiltersPass && inFiltersPass;
     });
+    const rangedRows =
+      this.rangeStart === null || this.rangeEnd === null
+        ? selectedRows
+        : selectedRows.slice(this.rangeStart, this.rangeEnd + 1);
     return {
-      data: single ? selectedRows[0] || null : selectedRows,
+      data: single ? rangedRows[0] || null : rangedRows,
       error: null,
     };
   }
@@ -424,6 +451,7 @@ try {
   assert.equal(disabledRead.ok, true);
   assert.equal(disabledRead.data.enabled, false);
   assert.deepEqual(disabledRead.data.records, []);
+  assert.equal(disabledRead.data.token_usage.available, false);
   assert.equal(
     supabaseCreateClientCalls,
     0,
@@ -541,6 +569,13 @@ try {
   assert.equal(loaded.ok, true);
   assert.equal(loaded.data.records.length, 1);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
+  assert.deepEqual(loaded.data.token_usage, {
+    available: true,
+    input_tokens: 200,
+    month_key: loaded.data.token_usage.month_key,
+    output_tokens: 160,
+    total_tokens: 360,
+  });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
   assert.equal(route.POST, undefined);
@@ -570,6 +605,7 @@ try {
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
   assert.equal(allowedReadBody.records.length, 1);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 360);
 
   const cronRoute = createRequire(import.meta.url)(targetPaths.cronRoute);
   delete process.env.PRESTIGE_EMAIL_AI_CRON_SECRET;

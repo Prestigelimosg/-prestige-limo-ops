@@ -290,7 +290,18 @@ const codexCalendarConflictExistingBookingFixture = {
   driver_contact: codexPreparedCustomerRequestFixture.driver_contact,
   driver_plate_number: codexPreparedCustomerRequestFixture.driver_plate_number,
 };
-const dashboardOverduePickupAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+const dashboardOverdueNowMs = Date.now();
+const singaporeOffsetMs = 8 * 60 * 60 * 1000;
+const dashboardOverdueSingaporeMidnightMs =
+  Math.floor((dashboardOverdueNowMs + singaporeOffsetMs) / (24 * 60 * 60 * 1000)) *
+    (24 * 60 * 60 * 1000) -
+  singaporeOffsetMs;
+const dashboardOverduePickupAt = new Date(
+  Math.max(
+    dashboardOverdueSingaporeMidnightMs,
+    dashboardOverdueNowMs - 15 * 60 * 1000,
+  ),
+).toISOString();
 const dashboardOverdueCompletedFixture = {
   ...loadedSavedBookingFixture,
   id: "ui-dashboard-overdue-completed",
@@ -6441,6 +6452,13 @@ async function runChromeTest() {
       window.__prestigeAdminAppNotificationRequests = [];
       window.__prestigeAdminEmailAiIntakeRequests = [];
       window.__prestigeAdminEmailAiIntake = [];
+      window.__prestigeAdminEmailAiTokenUsage = {
+        available: true,
+        input_tokens: 702,
+        month_key: "2026-07",
+        output_tokens: 274,
+        total_tokens: 976,
+      };
       window.__prestigeCustomerDriverAppNotificationRequests = [];
       window.__prestigeCustomerDriverAppNotifications = [];
       window.__prestigeAdminAutomationRuntimeEnabled = false;
@@ -6887,6 +6905,7 @@ async function runChromeTest() {
                 external_send: false,
                 ok: true,
                 records: window.__prestigeAdminEmailAiIntake || [],
+                token_usage: window.__prestigeAdminEmailAiTokenUsage,
                 version: "browser-private-email-ai-intake-mock",
                 write_action: false,
               }),
@@ -8292,6 +8311,29 @@ async function runChromeTest() {
 
     reporter.step("checking dashboard booking actions");
     await clickTab("Dashboard", "Operations Dashboard");
+    const compactEmailAiTokenUsageState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const tile = document.querySelector("[data-admin-email-ai-monthly-token-usage='true']");
+
+          return tile?.getAttribute("data-admin-email-ai-monthly-token-usage-total") === "976"
+            ? {
+                available: tile.getAttribute("data-admin-email-ai-monthly-token-usage-available"),
+                month: tile.getAttribute("data-admin-email-ai-monthly-token-usage-month"),
+                lines: [...tile.querySelectorAll("p")].map((line) => line.textContent.trim()),
+                title: tile.getAttribute("title"),
+              }
+            : false;
+        })()`),
+      10000,
+      "compact monthly Email AI token usage",
+    );
+    assert.deepEqual(compactEmailAiTokenUsageState, {
+      available: "true",
+      lines: ["Email AI", "976 used"],
+      month: "2026-07",
+      title: "Current Singapore-month Email AI usage. OpenAI API has no fixed token balance.",
+    });
     const dashboardCommandCentreState = await waitForCondition(
       () =>
         evaluate(`(() => {

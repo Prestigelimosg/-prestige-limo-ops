@@ -134,6 +134,11 @@ assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(runtimeSource, /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/);
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
+assert.match(runtimeSource, /currentSingaporeMonthWindow/);
+assert.match(runtimeSource, /tokenUsageMaximumPages/);
+assert.match(runtimeSource, /\.gte\("created_at", usageWindow\.start\)/);
+assert.match(runtimeSource, /\.lt\("created_at", usageWindow\.end\)/);
+assert.match(runtimeSource, /\.range\(pageStart, pageStart \+ tokenUsagePageSize - 1\)/);
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
 assert.doesNotMatch(runtimeSource, /google-calendar|calendar/i);
@@ -145,6 +150,7 @@ assert.match(cronRouteSource, /PRESTIGE_EMAIL_AI_CRON_SECRET/);
 assert.match(cronRouteSource, /authorization/);
 assert.match(adminRouteSource, /resolveAdminDispatcherBoundary/);
 assert.match(adminRouteSource, /export async function GET/);
+assert.match(adminRouteSource, /token_usage:\s*result\.data\.token_usage/);
 assert.doesNotMatch(adminRouteSource, /export async function POST/);
 
 assert.match(migrationSource, /mailbox_address = 'booking@prestigelimo\.sg'/);
@@ -161,6 +167,9 @@ assert.match(timeoutMigrationSource, /private-email-ai-intake/);
 assert.doesNotMatch(timeoutMigrationSource, /create policy/i);
 
 assert.match(pageSource, /data-dashboard-email-ai-intake-row/);
+assert.match(pageSource, /data-admin-email-ai-monthly-token-usage="true"/);
+assert.match(pageSource, /Current Singapore-month Email AI usage\. OpenAI API has no fixed token balance\./);
+assert.match(pageSource, /grid-cols-4/);
 assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
 assert.doesNotMatch(pageSource, /Review enquiry/);
@@ -171,6 +180,8 @@ assert.match(browserTestSource, /browser-email-ai-confirmed/);
 assert.match(browserTestSource, /browser-email-ai-enquiry/);
 assert.match(browserTestSource, /Expected enquiry email to remain outside the app review feed/);
 assert.match(browserTestSource, /Expected private email AI dashboard lane to remain read-only/);
+assert.match(browserTestSource, /compact monthly Email AI token usage/);
+assert.match(browserTestSource, /dashboardOverdueSingaporeMidnightMs/);
 
 assert.match(ledgerSource, /### Private Semantic Email AI Intake/);
 assert.match(ledgerSource, /booking@prestigelimo\.sg/);

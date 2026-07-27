@@ -767,6 +767,41 @@ async function parseAllowedSource(source: Buffer) {
   });
 }
 
+async function downloadAllowedSource(
+  imap: ImapFlow,
+  uid: number,
+) {
+  const downloaded = await imap.download(
+    String(uid),
+    undefined,
+    {
+      chunkSize: 64_000,
+      maxBytes: maximumEmailSourceBytes,
+      uid: true,
+    },
+  );
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  for await (const chunk of downloaded.content) {
+    const buffer = Buffer.isBuffer(chunk)
+      ? chunk
+      : Buffer.from(chunk);
+
+    totalBytes += buffer.length;
+
+    if (totalBytes > maximumEmailSourceBytes) {
+      throw new Error("email_source_too_large");
+    }
+
+    chunks.push(buffer);
+  }
+
+  return totalBytes > 0
+    ? Buffer.concat(chunks, totalBytes)
+    : null;
+}
+
 export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
   const configuration = runtimeConfiguration();
 
@@ -860,20 +895,10 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
         continue;
       }
 
-      const sourceResult = await imap.fetchOne(
-        String(message.uid),
-        {
-          source: {
-            maxLength: maximumEmailSourceBytes,
-          },
-          uid: true,
-        },
-        { uid: true },
+      const source = await downloadAllowedSource(
+        imap,
+        message.uid,
       );
-      const source =
-        sourceResult && sourceResult.source
-          ? sourceResult.source
-          : null;
 
       if (!source) {
         throw new Error("email_source_read_failed");

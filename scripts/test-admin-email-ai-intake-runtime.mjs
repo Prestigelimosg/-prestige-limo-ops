@@ -199,7 +199,8 @@ const fakeMailbox = {
   messages: [],
   uidNext: 101,
 };
-let fetchOneCalls = 0;
+let downloadCalls = 0;
+let downloadOptions = [];
 let providerRequestBodies = [];
 let supabaseCreateClientCalls = 0;
 
@@ -225,13 +226,28 @@ class FakeImapFlow {
     }
   }
 
-  async fetchOne(uid) {
-    fetchOneCalls += 1;
+  async download(uid, part, options) {
+    downloadCalls += 1;
+    downloadOptions.push({ options, part });
     const message = fakeMailbox.messages.find(
       (item) => item.uid === Number(uid),
     );
 
-    return message ? { source: message.source, uid: message.uid } : false;
+    return {
+      content: {
+        async *[Symbol.asyncIterator]() {
+          if (message) {
+            const midpoint = Math.ceil(message.source.length / 2);
+            yield message.source.subarray(0, midpoint);
+            yield message.source.subarray(midpoint);
+          }
+        },
+      },
+      meta: {
+        contentType: "message/rfc822",
+        expectedSize: message?.source.length || 0,
+      },
+    };
   }
 
   async logout() {
@@ -379,7 +395,17 @@ try {
   assert.equal(parsed.parsed, 1);
   assert.equal(parsed.skipped, 0);
   assert.equal(providerRequestBodies.length, 1);
-  assert.equal(fetchOneCalls, 1);
+  assert.equal(downloadCalls, 1);
+  assert.deepEqual(downloadOptions, [
+    {
+      options: {
+        chunkSize: 64_000,
+        maxBytes: 256_000,
+        uid: true,
+      },
+      part: undefined,
+    },
+  ]);
   assert.equal(providerRequestBodies[0].store, false);
   assert.deepEqual(providerRequestBodies[0].tools, []);
   assert.equal(providerRequestBodies[0].parallel_tool_calls, false);
@@ -418,7 +444,7 @@ try {
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
   assert.equal(providerRequestBodies.length, 1);
-  assert.equal(fetchOneCalls, 1, "blocked sender body must not be fetched");
+  assert.equal(downloadCalls, 1, "blocked sender body must not be fetched");
   assert.equal(intakeRows.length, 1);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);

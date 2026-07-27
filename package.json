@@ -28,6 +28,7 @@
     "test:ai-parser-schema": "node --experimental-strip-types scripts/test-ai-parser-schema.mjs",
     "test:ai-parse-api-route": "node scripts/test-ai-parse-api-route.mjs",
     "test:admin-ai-assistant": "node scripts/test-admin-ai-assistant-guard.mjs",
+    "test:admin-email-ai-intake": "node --experimental-strip-types scripts/test-admin-email-ai-intake-guard.mjs && node scripts/test-admin-email-ai-intake-runtime.mjs",
     "test:browser": "node scripts/test-booking-browser.mjs",
     "test:app-smoke-browser": "node scripts/test-app-smoke-browser.mjs",
     "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",
@@ -38,6 +39,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
     "@types/web-push": "^3.6.4",
+    "imapflow": "1.5.0",
+    "mailparser": "3.9.14",
     "next": "16.2.11",
     "openai": "^6.48.0",
     "react": "19.2.4",
@@ -46,6 +49,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "3.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

@@ -74,6 +74,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminCompanyProfileApiPath = "/api/admin-company-profile";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminEmailAiIntakeApiPath = "/api/admin-email-ai-intake";
 const adminAutomationRuntimeApiPath = "/api/admin-automation-runtime";
 const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
@@ -1515,6 +1516,39 @@ type AdminAppNotificationReadState = {
   message: Message | null;
   notifications: AdminAppNotificationRecord[];
   pagination: AdminAppNotificationPagination | null;
+  status: "idle" | "loading" | "loaded" | "error" | "unavailable";
+};
+
+type AdminEmailAiClassification =
+  | "confirmed_booking"
+  | "enquiry"
+  | "amendment"
+  | "cancellation"
+  | "unrelated"
+  | "uncertain";
+
+type AdminEmailAiIntakeRecord = {
+  booking_parse_result?: unknown;
+  canonical_booking_text?: string | null;
+  classification?: AdminEmailAiClassification | string | null;
+  confidence?: number | null;
+  created_at?: string | null;
+  id?: string | null;
+  mailbox_address?: string | null;
+  normalized_text?: string | null;
+  processing_status?: string | null;
+  received_at?: string | null;
+  review_reasons?: string[] | null;
+  sender_address?: string | null;
+  subject?: string | null;
+  suggested_reply?: string | null;
+  summary?: string | null;
+};
+
+type AdminEmailAiIntakeReadState = {
+  enabled: boolean;
+  message: Message | null;
+  records: AdminEmailAiIntakeRecord[];
   status: "idle" | "loading" | "loaded" | "error" | "unavailable";
 };
 
@@ -10663,6 +10697,35 @@ async function loadAdminAppNotificationsRead() {
   };
 }
 
+async function loadAdminEmailAiIntakeRead() {
+  const response = await fetch(adminEmailAiIntakeApiPath, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": "admin-email-ai-intake",
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result?.external_send !== false ||
+    result?.write_action !== false
+  ) {
+    throw new Error(
+      result?.error || "Private email AI intake read failed.",
+    );
+  }
+
+  return {
+    enabled: result.enabled === true,
+    records: Array.isArray(result.records)
+      ? (result.records as AdminEmailAiIntakeRecord[])
+      : [],
+  };
+}
+
 async function updateAdminAppNotificationStatus(
   notificationId: string,
   notificationStatus: AdminAppNotificationUpdateStatus,
@@ -13507,6 +13570,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pagination: null,
       status: "idle",
     });
+  const [adminEmailAiIntakeReadState, setAdminEmailAiIntakeReadState] =
+    useState<AdminEmailAiIntakeReadState>({
+      enabled: false,
+      message: null,
+      records: [],
+      status: "idle",
+    });
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
     target: AdminAlertLocatorTarget;
@@ -14122,6 +14192,57 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           notifications: [],
           pagination: null,
           status: terminalFailure ? "unavailable" : "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminAppNotificationReadRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (activeTab !== "dashboard") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAdminEmailAiIntakeReadState((current) => ({
+      ...current,
+      message: null,
+      status: "loading",
+    }));
+
+    void (async () => {
+      try {
+        const result = await loadAdminEmailAiIntakeRead();
+
+        if (cancelled) {
+          return;
+        }
+
+        setAdminEmailAiIntakeReadState({
+          enabled: result.enabled,
+          message: null,
+          records: result.records,
+          status: "loaded",
+        });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminEmailAiIntakeReadState({
+          enabled: false,
+          message: {
+            tone: "error",
+            text: "Private email AI review could not be loaded. No external reply was sent.",
+          },
+          records: [],
+          status: "unavailable",
         });
       }
     })();
@@ -17445,6 +17566,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     adminAppNotificationIsNewBookingRequest,
   );
   const newBookingRequestNotificationCount = newBookingRequestNotifications.length;
+  const adminEmailAiIntakeRecords =
+    adminEmailAiIntakeReadState.records.filter(
+      (record) =>
+        clean(record.mailbox_address).toLowerCase() ===
+          "booking@prestigelimo.sg" &&
+        clean(record.sender_address).toLowerCase() ===
+          "info@prestigelimo.sg",
+    );
+  const adminEmailAiIntakeCount = adminEmailAiIntakeRecords.length;
   const dashboardNewBookingRequestAttentionCount = Math.max(
     customerBookingRequestCount,
     newBookingRequestNotificationCount,
@@ -17490,7 +17620,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const dashboardBookingRequestRowCount =
     newBookingRequestNotificationCount +
     standaloneUrgentBookingRequestDisplayItems.length +
-    customerBookingChangeRequestCount;
+    customerBookingChangeRequestCount +
+    adminEmailAiIntakeCount;
   const filteredRecentBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(
     filteredRecentBookings,
     { useTypedOperationalOrder: true },
@@ -18695,6 +18826,68 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     } finally {
       setAiAssistLoading(false);
     }
+  }
+
+  function openAdminEmailAiIntakeReview(
+    record: AdminEmailAiIntakeRecord,
+  ) {
+    const classification = clean(record.classification).toLowerCase();
+    const subject = clean(record.subject) || "No subject";
+    const normalizedText = clean(record.normalized_text);
+    const canonicalBookingText = clean(record.canonical_booking_text);
+    const bookingLike =
+      classification === "confirmed_booking" ||
+      classification === "amendment" ||
+      classification === "cancellation";
+
+    clearParseArtifacts();
+    clearLoadedBookingSelectionContext();
+    setBooking(() => createInitialBooking());
+    setActiveTab("dispatch");
+
+    if (bookingLike) {
+      setAiAssistMode("parser");
+      setBookingMessage(canonicalBookingText || normalizedText);
+      setAiDraft(sanitizeAiParseResult(record.booking_parse_result));
+      setAiConversationMessages([]);
+      setAiAssistResponseNote(
+        "Private email AI review draft. Nothing was saved or sent. Use the existing Create Job Card action only after review.",
+      );
+      setAiAssistMessage({
+        tone: "info",
+        text: `Email · booking@prestigelimo.sg · ${subject}`,
+      });
+    } else {
+      const suggestedReply = clean(record.suggested_reply);
+
+      setAiAssistMode("conversation");
+      setBookingMessage(normalizedText);
+      setAiDraft(null);
+      setAiConversationMessages([
+        {
+          role: "admin",
+          text: `Email review · ${subject}\n\n${normalizedText}`,
+        },
+        {
+          role: "assistant",
+          text: suggestedReply
+            ? `Suggested reply draft — not sent:\n${suggestedReply}`
+            : `Internal summary — no reply sent:\n${clean(record.summary) || "Manual review required."}`,
+        },
+      ]);
+      setAiAssistResponseNote(
+        "Existing Ask AI review only. No external reply was sent.",
+      );
+      setAiAssistMessage(null);
+    }
+
+    window.setTimeout(() => {
+      bookingMessageRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      bookingMessageRef.current?.focus();
+    }, 0);
   }
 
   async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
@@ -31781,6 +31974,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     !dashboardSystemNoticeIsRoutineSuccess(adminAppNotificationReadState.message)
   ) {
     dashboardSystemNoticeCandidates.push(adminAppNotificationReadState.message);
+  }
+  if (adminEmailAiIntakeReadState.message?.text) {
+    dashboardSystemNoticeCandidates.push(adminEmailAiIntakeReadState.message);
   }
 
   const dashboardSystemNotices = Array.from(
@@ -45146,14 +45342,97 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   >
                     {customerBookingChangeRequestCount} change/cancel
                   </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
+                      adminEmailAiIntakeCount > 0
+                        ? "bg-indigo-100 text-indigo-900 ring-indigo-200"
+                        : "bg-white text-slate-600 ring-stone-200"
+                    }`}
+                    data-dashboard-email-ai-intake-count={String(adminEmailAiIntakeCount)}
+                  >
+                    {adminEmailAiIntakeCount} email
+                  </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-600 sm:text-sm">
                     New, urgent, Driver TBC, amendment, and cancellation work in one place. Each row states its job type.
+                    Private email AI reviews stay in this same workbench and state their source.
                   </p>
                 </div>
               </div>
             {dashboardBookingRequestRowCount > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
+                {adminEmailAiIntakeRecords.map((record) => {
+                  const intakeId = clean(record.id);
+                  const classification = clean(record.classification).toLowerCase();
+                  const bookingLike =
+                    classification === "confirmed_booking" ||
+                    classification === "amendment" ||
+                    classification === "cancellation";
+                  const classificationLabel =
+                    classification === "confirmed_booking"
+                      ? "Confirmed booking"
+                      : classification === "enquiry"
+                        ? "Enquiry"
+                        : classification === "amendment"
+                          ? "Amendment"
+                          : classification === "cancellation"
+                            ? "Cancellation"
+                            : classification === "unrelated"
+                              ? "Unrelated"
+                              : "Needs review";
+                  const confidence = Math.round(
+                    Math.min(1, Math.max(0, Number(record.confidence) || 0)) * 100,
+                  );
+                  const reviewButtonLabel = bookingLike
+                    ? "Review in Dispatch"
+                    : classification === "enquiry"
+                      ? "Review enquiry"
+                      : "Review email";
+
+                  return (
+                    <article
+                      className="rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm shadow-sm"
+                      data-dashboard-email-ai-intake-row={intakeId || "email-review"}
+                      key={`email-ai-intake-${intakeId || clean(record.created_at)}`}
+                    >
+                      <div className="grid gap-2 md:grid-cols-[minmax(12rem,0.9fr)_minmax(12rem,1fr)_auto] md:items-center">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-900 ring-1 ring-indigo-200">
+                              Email · booking@prestigelimo.sg
+                            </span>
+                            <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                              {classificationLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate font-semibold text-slate-950">
+                            {clean(record.subject) || "No subject"}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            From info@prestigelimo.sg · {confidence}% confidence
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-slate-800">
+                            {clean(record.summary) || "Manual review required."}
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-slate-500">
+                            AI review only · no reply sent · no booking saved
+                          </p>
+                        </div>
+                        <div className="flex md:justify-end">
+                          <button
+                            className="h-8 rounded-md border border-indigo-300 bg-indigo-800 px-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                            onClick={() => openAdminEmailAiIntakeReview(record)}
+                            type="button"
+                          >
+                            {reviewButtonLabel}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
                 {newBookingRequestNotifications.map((notification, index) => {
                   const notificationId = clean(notification.id);
                   const bookingReference = adminAppNotificationBookingReference(notification);

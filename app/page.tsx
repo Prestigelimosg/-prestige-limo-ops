@@ -10,6 +10,10 @@ import {
   sanitizeAiParseResult,
   type AiParseResult,
 } from "../lib/ai-parser-schema";
+import {
+  adminEmailAiClassificationAppearsInApp,
+  type AdminEmailAiClassification,
+} from "../lib/admin-email-ai-intake-contract";
 import { mockCustomers } from "./customers/_data/mock-customers";
 import {
   calculateProfit,
@@ -1518,14 +1522,6 @@ type AdminAppNotificationReadState = {
   pagination: AdminAppNotificationPagination | null;
   status: "idle" | "loading" | "loaded" | "error" | "unavailable";
 };
-
-type AdminEmailAiClassification =
-  | "confirmed_booking"
-  | "enquiry"
-  | "amendment"
-  | "cancellation"
-  | "unrelated"
-  | "uncertain";
 
 type AdminEmailAiIntakeRecord = {
   booking_parse_result?: unknown;
@@ -10721,7 +10717,9 @@ async function loadAdminEmailAiIntakeRead() {
   return {
     enabled: result.enabled === true,
     records: Array.isArray(result.records)
-      ? (result.records as AdminEmailAiIntakeRecord[])
+      ? (result.records as AdminEmailAiIntakeRecord[]).filter((record) =>
+          adminEmailAiClassificationAppearsInApp(record.classification),
+        )
       : [],
   };
 }
@@ -18832,54 +18830,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     record: AdminEmailAiIntakeRecord,
   ) {
     const classification = clean(record.classification).toLowerCase();
+
+    if (!adminEmailAiClassificationAppearsInApp(classification)) {
+      return;
+    }
+
     const subject = clean(record.subject) || "No subject";
     const normalizedText = clean(record.normalized_text);
     const canonicalBookingText = clean(record.canonical_booking_text);
-    const bookingLike =
-      classification === "confirmed_booking" ||
-      classification === "amendment" ||
-      classification === "cancellation";
 
     clearParseArtifacts();
     clearLoadedBookingSelectionContext();
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
-
-    if (bookingLike) {
-      setAiAssistMode("parser");
-      setBookingMessage(canonicalBookingText || normalizedText);
-      setAiDraft(sanitizeAiParseResult(record.booking_parse_result));
-      setAiConversationMessages([]);
-      setAiAssistResponseNote(
-        "Private email AI review draft. Nothing was saved or sent. Use the existing Create Job Card action only after review.",
-      );
-      setAiAssistMessage({
-        tone: "info",
-        text: `Email · booking@prestigelimo.sg · ${subject}`,
-      });
-    } else {
-      const suggestedReply = clean(record.suggested_reply);
-
-      setAiAssistMode("conversation");
-      setBookingMessage(normalizedText);
-      setAiDraft(null);
-      setAiConversationMessages([
-        {
-          role: "admin",
-          text: `Email review · ${subject}\n\n${normalizedText}`,
-        },
-        {
-          role: "assistant",
-          text: suggestedReply
-            ? `Suggested reply draft — not sent:\n${suggestedReply}`
-            : `Internal summary — no reply sent:\n${clean(record.summary) || "Manual review required."}`,
-        },
-      ]);
-      setAiAssistResponseNote(
-        "Existing Ask AI review only. No external reply was sent.",
-      );
-      setAiAssistMessage(null);
-    }
+    setAiAssistMode("parser");
+    setBookingMessage(canonicalBookingText || normalizedText);
+    setAiDraft(sanitizeAiParseResult(record.booking_parse_result));
+    setAiConversationMessages([]);
+    setAiAssistResponseNote(
+      "Private email AI review draft. Nothing was saved or sent. Use the existing Create Job Card action only after review.",
+    );
+    setAiAssistMessage({
+      tone: "info",
+      text: `Email · booking@prestigelimo.sg · ${subject}`,
+    });
 
     window.setTimeout(() => {
       bookingMessageRef.current?.scrollIntoView({
@@ -45355,7 +45329,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   </div>
                   <p className="mt-1 text-xs text-slate-600 sm:text-sm">
                     New, urgent, Driver TBC, amendment, and cancellation work in one place. Each row states its job type.
-                    Private email AI reviews stay in this same workbench and state their source.
+                    Only confirmed booking, amendment, and cancellation email reviews appear here.
                   </p>
                 </div>
               </div>
@@ -45364,30 +45338,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 {adminEmailAiIntakeRecords.map((record) => {
                   const intakeId = clean(record.id);
                   const classification = clean(record.classification).toLowerCase();
-                  const bookingLike =
-                    classification === "confirmed_booking" ||
-                    classification === "amendment" ||
-                    classification === "cancellation";
                   const classificationLabel =
                     classification === "confirmed_booking"
                       ? "Confirmed booking"
-                      : classification === "enquiry"
-                        ? "Enquiry"
-                        : classification === "amendment"
+                      : classification === "amendment"
                           ? "Amendment"
                           : classification === "cancellation"
                             ? "Cancellation"
-                            : classification === "unrelated"
-                              ? "Unrelated"
-                              : "Needs review";
+                            : "Needs review";
                   const confidence = Math.round(
                     Math.min(1, Math.max(0, Number(record.confidence) || 0)) * 100,
                   );
-                  const reviewButtonLabel = bookingLike
-                    ? "Review in Dispatch"
-                    : classification === "enquiry"
-                      ? "Review enquiry"
-                      : "Review email";
 
                   return (
                     <article
@@ -45426,7 +45387,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             onClick={() => openAdminEmailAiIntakeReview(record)}
                             type="button"
                           >
-                            {reviewButtonLabel}
+                            Review in Dispatch
                           </button>
                         </div>
                       </div>

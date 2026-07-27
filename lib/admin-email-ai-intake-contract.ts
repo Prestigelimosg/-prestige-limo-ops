@@ -14,6 +14,22 @@ export const adminEmailAiClassifications = [
 export type AdminEmailAiClassification =
   (typeof adminEmailAiClassifications)[number];
 
+export const adminEmailAiAppReviewClassifications = [
+  "confirmed_booking",
+  "amendment",
+  "cancellation",
+] as const satisfies readonly AdminEmailAiClassification[];
+
+export function adminEmailAiClassificationAppearsInApp(value: unknown) {
+  const classification =
+    typeof value === "string" ? value.trim().toLowerCase() : "";
+
+  return adminEmailAiAppReviewClassifications.some(
+    (allowedClassification) =>
+      allowedClassification === classification,
+  );
+}
+
 export type AdminEmailAiEnvelopeInput = {
   deliveredTo: string[];
   from: string[];

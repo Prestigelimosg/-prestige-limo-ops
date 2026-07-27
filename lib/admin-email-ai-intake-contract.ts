@@ -1,0 +1,98 @@
+export const adminEmailAiMailboxAddress = "booking@prestigelimo.sg";
+export const adminEmailAiAllowedSenderAddress = "info@prestigelimo.sg";
+export const adminEmailAiInboxFolder = "INBOX";
+
+export const adminEmailAiClassifications = [
+  "confirmed_booking",
+  "enquiry",
+  "amendment",
+  "cancellation",
+  "unrelated",
+  "uncertain",
+] as const;
+
+export type AdminEmailAiClassification =
+  (typeof adminEmailAiClassifications)[number];
+
+export type AdminEmailAiEnvelopeInput = {
+  deliveredTo: string[];
+  from: string[];
+  mailboxAddress: string;
+  returnPath: string;
+  to: string[];
+};
+
+export type AdminEmailAiEnvelopeDecision =
+  | {
+      allowed: true;
+      reason: "exact_allowed_pair";
+    }
+  | {
+      allowed: false;
+      reason:
+        | "mailbox_not_allowed"
+        | "sender_not_allowed"
+        | "return_path_not_allowed"
+        | "recipient_not_allowed";
+    };
+
+export function normalizeAdminEmailAiAddress(value: unknown) {
+  const text =
+    typeof value === "string" || typeof value === "number"
+      ? String(value).trim().toLowerCase()
+      : "";
+  const angleAddress = text.match(/<([^<>@\s]+@[^<>@\s]+)>/)?.[1];
+  const bareAddress = text.match(
+    /(?:^|[\s,;])([^<>\s,;@]+@[^<>\s,;@]+)(?:$|[\s,;])/,
+  )?.[1];
+
+  return (angleAddress || bareAddress || text)
+    .replace(/^mailto:/, "")
+    .replace(/[<>"']/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizedAddressList(values: string[]) {
+  return values
+    .map((value) => normalizeAdminEmailAiAddress(value))
+    .filter(Boolean);
+}
+
+export function decideAdminEmailAiEnvelope(
+  input: AdminEmailAiEnvelopeInput,
+): AdminEmailAiEnvelopeDecision {
+  if (
+    normalizeAdminEmailAiAddress(input.mailboxAddress) !==
+    adminEmailAiMailboxAddress
+  ) {
+    return { allowed: false, reason: "mailbox_not_allowed" };
+  }
+
+  const from = normalizedAddressList(input.from);
+
+  if (
+    from.length !== 1 ||
+    from[0] !== adminEmailAiAllowedSenderAddress
+  ) {
+    return { allowed: false, reason: "sender_not_allowed" };
+  }
+
+  if (
+    normalizeAdminEmailAiAddress(input.returnPath) !==
+    adminEmailAiAllowedSenderAddress
+  ) {
+    return { allowed: false, reason: "return_path_not_allowed" };
+  }
+
+  const recipients = [
+    ...normalizedAddressList(input.deliveredTo),
+    ...normalizedAddressList(input.to),
+  ];
+
+  if (!recipients.includes(adminEmailAiMailboxAddress)) {
+    return { allowed: false, reason: "recipient_not_allowed" };
+  }
+
+  return { allowed: true, reason: "exact_allowed_pair" };
+}

@@ -184,5 +184,8 @@ assert.match(ledgerSource, /No external reply, booking\/CRM\/Calendar\/message\/
 assert.match(ledgerSource, /only confirmed bookings, amendments, and cancellations may enter the existing app review feed/);
 assert.match(ledgerSource, /Enquiries are ignored by the app and answered manually by Admin from the mailbox/);
 assert.match(ledgerSource, /No mailbox draft, email send, new UI lane, route, table, migration, or operational write was added/);
+assert.match(ledgerSource, /Production build `143f3bd1`/);
+assert.match(ledgerSource, /the Email AI badge showed `0 email`/);
+assert.match(ledgerSource, /Chrome reported zero console errors/);
 
 console.log("Private semantic email AI intake guard passed.");

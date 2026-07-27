@@ -61,7 +61,8 @@ class FakeQuery {
     this.operation = "select";
     this.payload = null;
     this.filters = [];
-    this.statuses = null;
+    this.inFilters = [];
+    this.orExpression = "";
   }
 
   select() {
@@ -91,13 +92,14 @@ class FakeQuery {
     return this;
   }
 
-  in(_field, values) {
-    this.statuses = values;
+  in(field, values) {
+    this.inFilters.push([field, values]);
     return this;
   }
 
-  or() {
+  or(expression) {
     this.operation = "dedupe";
+    this.orExpression = expression;
     return this;
   }
 
@@ -136,8 +138,24 @@ class FakeQuery {
     }
 
     if (this.operation === "dedupe") {
+      const messageIdHash = this.orExpression.match(
+        /message_id_hash\.eq\.([0-9a-f]{64})/,
+      )?.[1];
+      const uidValidity = this.orExpression.match(
+        /uid_validity\.eq\.([0-9]+)/,
+      )?.[1];
+      const imapUid = this.orExpression.match(
+        /imap_uid\.eq\.([0-9]+)/,
+      )?.[1];
+      const matchingRows = intakeRows.filter(
+        (row) =>
+          row.message_id_hash === messageIdHash ||
+          (String(row.uid_validity) === uidValidity &&
+            String(row.imap_uid) === imapUid),
+      );
+
       return {
-        data: intakeRows.length > 0 ? [{ id: intakeRows[0].id }] : [],
+        data: matchingRows.map((row) => ({ id: row.id })),
         error: null,
       };
     }
@@ -163,9 +181,16 @@ class FakeQuery {
       return { data: null, error: null };
     }
 
-    const selectedRows = intakeRows.filter(
-      (row) => !this.statuses || this.statuses.includes(row.processing_status),
-    );
+    const selectedRows = intakeRows.filter((row) => {
+      const exactFiltersPass = this.filters.every(
+        ([field, value]) => row[field] === value,
+      );
+      const inFiltersPass = this.inFilters.every(
+        ([field, values]) => values.includes(row[field]),
+      );
+
+      return exactFiltersPass && inFiltersPass;
+    });
     return {
       data: single ? selectedRows[0] || null : selectedRows,
       error: null,
@@ -192,6 +217,21 @@ const syntheticAllowedSource = Buffer.from(
     'Content-Type: text/html; charset="UTF-8"',
     "",
     "<html><body><h1>Confirmed booking</h1><p>Passenger: Test Guest</p><p>Pickup: Changi Airport</p><p>Drop-off: Marina Bay</p></body></html>",
+  ].join("\r\n"),
+);
+const syntheticEnquirySource = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-enquiry-1@example.test>",
+    "Date: Mon, 27 Jul 2026 13:31:00 +0800",
+    "Subject: Synthetic availability enquiry",
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "Are you available tomorrow at 12pm from Changi Airport to MBS for two passengers?",
   ].join("\r\n"),
 );
 
@@ -274,40 +314,56 @@ class FakeOpenAI {
   responses = {
     create: async (body) => {
       providerRequestBodies.push(body);
-      const analysis = {
-        bookingResult: {
-          bookings: [
-            {
-              bookerContact: "",
-              bookerEmail: "",
-              bookerName: "",
-              bookingType: "MNG",
-              companyAccount: "",
-              confidence: 0.98,
-              customerPriceOverride: "",
-              dropoff: "Marina Bay",
-              extraStopLocation: "",
-              extraStops: "",
-              flightNumber: "",
-              needsReviewReasons: ["Flight number missing"],
-              notes: "",
-              passengerName: "Test Guest",
-              pax: "1",
-              pickup: "Changi Airport",
-              pickupDate: "2026-07-28",
-              pickupTime: "12:00",
-              vehicle: "AVF",
+      const isEnquiry = body.input.includes(
+        "Synthetic availability enquiry",
+      );
+      const analysis = isEnquiry
+        ? {
+            bookingResult: {
+              bookings: [],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
             },
-          ],
-          multipleBookingsDetected: false,
-          rawWarnings: [],
-        },
-        classification: "confirmed_booking",
-        confidence: 0.98,
-        reviewReasons: ["Flight number missing"],
-        suggestedReply: "Thank you. We have received the booking for review.",
-        summary: "Confirmed airport booking requires flight-number review.",
-      };
+            classification: "enquiry",
+            confidence: 0.99,
+            reviewReasons: [],
+            suggestedReply: "",
+            summary: "Customer asks for availability and a quote.",
+          }
+        : {
+            bookingResult: {
+              bookings: [
+                {
+                  bookerContact: "",
+                  bookerEmail: "",
+                  bookerName: "",
+                  bookingType: "MNG",
+                  companyAccount: "",
+                  confidence: 0.98,
+                  customerPriceOverride: "",
+                  dropoff: "Marina Bay",
+                  extraStopLocation: "",
+                  extraStops: "",
+                  flightNumber: "",
+                  needsReviewReasons: ["Flight number missing"],
+                  notes: "",
+                  passengerName: "Test Guest",
+                  pax: "1",
+                  pickup: "Changi Airport",
+                  pickupDate: "2026-07-28",
+                  pickupTime: "12:00",
+                  vehicle: "AVF",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.98,
+            reviewReasons: ["Flight number missing"],
+            suggestedReply: "",
+            summary: "Confirmed airport booking requires flight-number review.",
+          };
 
       return {
         model: "gpt-5.6-luna",
@@ -426,6 +482,7 @@ try {
   assert.equal(intakeRows[0].sender_address, "info@prestigelimo.sg");
   assert.equal(intakeRows[0].processing_status, "queued");
   assert.equal(intakeRows[0].classification, "confirmed_booking");
+  assert.equal(intakeRows[0].suggested_reply, "");
   assert.match(intakeRows[0].canonical_booking_text, /Passenger: Test Guest/);
 
   const duplicatePoll = await runtime.runAdminEmailAiIntake();
@@ -433,13 +490,35 @@ try {
   assert.equal(duplicatePoll.inspected, 0);
   assert.equal(providerRequestBodies.length, 1);
 
+  fakeMailbox.uidNext = 103;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticEnquirySource.length,
+    source: syntheticEnquirySource,
+    uid: 102,
+  });
+
+  const ignoredEnquiry = await runtime.runAdminEmailAiIntake();
+  assert.equal(ignoredEnquiry.ok, true);
+  assert.equal(ignoredEnquiry.parsed, 1);
+  assert.equal(ignoredEnquiry.skipped, 0);
+  assert.equal(providerRequestBodies.length, 2);
+  assert.equal(downloadCalls, 2);
+  assert.equal(intakeRows.length, 2);
+  assert.equal(intakeRows[1].classification, "enquiry");
+  assert.equal(intakeRows[1].processing_status, "dismissed");
+  assert.equal(intakeRows[1].suggested_reply, "");
+
   const blockedSource = Buffer.from(
     syntheticAllowedSource
       .toString()
       .replaceAll("info@prestigelimo.sg", "other@example.test")
       .replace("synthetic-booking-1", "synthetic-booking-2"),
   );
-  fakeMailbox.uidNext = 103;
+  fakeMailbox.uidNext = 104;
   fakeMailbox.messages.push({
     envelope: {
       from: [{ address: "other@example.test" }],
@@ -447,16 +526,16 @@ try {
     },
     size: blockedSource.length,
     source: blockedSource,
-    uid: 102,
+    uid: 103,
   });
 
   const skipped = await runtime.runAdminEmailAiIntake();
   assert.equal(skipped.ok, true);
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
-  assert.equal(providerRequestBodies.length, 1);
-  assert.equal(downloadCalls, 1, "blocked sender body must not be fetched");
-  assert.equal(intakeRows.length, 1);
+  assert.equal(providerRequestBodies.length, 2);
+  assert.equal(downloadCalls, 2, "blocked sender body must not be fetched");
+  assert.equal(intakeRows.length, 2);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
@@ -529,7 +608,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 1);
+  assert.equal(providerRequestBodies.length, 2);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

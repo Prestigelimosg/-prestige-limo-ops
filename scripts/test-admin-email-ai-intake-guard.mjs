@@ -50,6 +50,19 @@ const timeoutMigrationSource = fs.readFileSync(timeoutMigrationPath, "utf8");
 
 assert.equal(contract.adminEmailAiMailboxAddress, "booking@prestigelimo.sg");
 assert.equal(contract.adminEmailAiAllowedSenderAddress, "info@prestigelimo.sg");
+assert.deepEqual(contract.adminEmailAiAppReviewClassifications, [
+  "confirmed_booking",
+  "amendment",
+  "cancellation",
+]);
+for (const classification of contract.adminEmailAiClassifications) {
+  assert.equal(
+    contract.adminEmailAiClassificationAppearsInApp(classification),
+    ["confirmed_booking", "amendment", "cancellation"].includes(
+      classification,
+    ),
+  );
+}
 
 assert.deepEqual(
   contract.decideAdminEmailAiEnvelope({
@@ -115,11 +128,18 @@ assert.match(runtimeSource, /amendment/);
 assert.match(runtimeSource, /cancellation/);
 assert.match(runtimeSource, /unrelated/);
 assert.match(runtimeSource, /uncertain/);
+assert.match(runtimeSource, /Always return suggestedReply as an empty string/);
+assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
+assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
+assert.match(runtimeSource, /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/);
+assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
 assert.doesNotMatch(runtimeSource, /google-calendar|calendar/i);
 assert.doesNotMatch(runtimeSource, /invoice|payment|payout|paynow/i);
 assert.doesNotMatch(runtimeSource, /external_send:\s*true/);
+assert.doesNotMatch(runtimeSource, /imap\.append|nodemailer|smtp/i);
 
 assert.match(cronRouteSource, /PRESTIGE_EMAIL_AI_CRON_SECRET/);
 assert.match(cronRouteSource, /authorization/);
@@ -143,12 +163,13 @@ assert.doesNotMatch(timeoutMigrationSource, /create policy/i);
 assert.match(pageSource, /data-dashboard-email-ai-intake-row/);
 assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
-assert.match(pageSource, /Review enquiry/);
+assert.doesNotMatch(pageSource, /Review enquiry/);
+assert.match(pageSource, /adminEmailAiClassificationAppearsInApp/);
 assert.doesNotMatch(pageSource, /data-dashboard-email-ai-intake-(?:approve|save|calendar|send)/);
 
 assert.match(browserTestSource, /browser-email-ai-confirmed/);
 assert.match(browserTestSource, /browser-email-ai-enquiry/);
-assert.match(browserTestSource, /Opening the saved enquiry draft must not charge OpenAI again/);
+assert.match(browserTestSource, /Expected enquiry email to remain outside the app review feed/);
 assert.match(browserTestSource, /Expected private email AI dashboard lane to remain read-only/);
 
 assert.match(ledgerSource, /### Private Semantic Email AI Intake/);
@@ -160,5 +181,8 @@ assert.match(ledgerSource, /classified the message as `enquiry` with 99% confide
 assert.match(ledgerSource, /702 OpenAI input tokens plus 274 output tokens/);
 assert.match(ledgerSource, /the token totals remained unchanged/);
 assert.match(ledgerSource, /No external reply, booking\/CRM\/Calendar\/message\/invoice\/payment/);
+assert.match(ledgerSource, /only confirmed bookings, amendments, and cancellations may enter the existing app review feed/);
+assert.match(ledgerSource, /Enquiries are ignored by the app and answered manually by Admin from the mailbox/);
+assert.match(ledgerSource, /No mailbox draft, email send, new UI lane, route, table, migration, or operational write was added/);
 
 console.log("Private semantic email AI intake guard passed.");

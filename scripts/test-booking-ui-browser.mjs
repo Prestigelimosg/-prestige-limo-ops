@@ -8404,7 +8404,7 @@ async function runChromeTest() {
           const rows = [...document.querySelectorAll("[data-dashboard-email-ai-intake-row]")];
           const count = document.querySelector("[data-dashboard-email-ai-intake-count]");
 
-          return rows.length === 2 && count?.textContent.trim() === "2 email"
+          return rows.length === 1 && count?.textContent.trim() === "1 email"
             ? {
                 countAttribute: count.getAttribute("data-dashboard-email-ai-intake-count"),
                 requestMethods: (window.__prestigeAdminEmailAiIntakeRequests || []).map(
@@ -8417,7 +8417,7 @@ async function runChromeTest() {
       10000,
       "private email AI rows inside existing Booking Requests",
     );
-    assert.equal(emailAiDashboardState.countAttribute, "2");
+    assert.equal(emailAiDashboardState.countAttribute, "1");
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),
       true,
@@ -8435,7 +8435,7 @@ async function runChromeTest() {
       emailAiDashboardState.rowTexts.join(" "),
       /Confirmed booking/,
     );
-    assert.match(emailAiDashboardState.rowTexts.join(" "), /Enquiry/);
+    assert.doesNotMatch(emailAiDashboardState.rowTexts.join(" "), /Enquiry/);
     assert.match(
       emailAiDashboardState.rowTexts.join(" "),
       /AI review only · no reply sent · no booking saved/,
@@ -8502,101 +8502,23 @@ async function runChromeTest() {
     );
 
     await clickTab("Dashboard", "Operations Dashboard");
-    const openedEmailEnquiryReview = await evaluate(`(() => {
-      const row = document.querySelector(
+    const ignoredEmailEnquiryState = await evaluate(`(() => ({
+      enquiryRow: Boolean(document.querySelector(
         '[data-dashboard-email-ai-intake-row="browser-email-ai-enquiry"]',
-      );
-      const button = [...(row?.querySelectorAll("button") || [])].find(
-        (candidate) => candidate.textContent.trim() === "Review enquiry",
-      );
-
-      if (!button || button.disabled) {
-        return false;
-      }
-
-      button.click();
-      return true;
-    })()`);
-    assert.equal(
-      openedEmailEnquiryReview,
-      true,
-      "Expected enquiry email review to reuse Ask AI",
-    );
-
-    const emailEnquiryAskAiState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const conversationMode = document.querySelector(
-            '[data-ai-assist-mode="conversation"][aria-pressed="true"]',
-          );
-          const conversation = document.querySelector(
-            "[data-admin-ai-conversation='true']",
-          );
-          const textarea = document.querySelector(
-            '[data-dispatch-workflow-step="booking-input-parser"] textarea',
-          );
-          const createJobCardButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "Create Job Card",
-          );
-
-          return conversationMode && conversation && textarea?.value
-            ? {
-                aiPostCalls: (window.__prestigeFetchCalls || []).filter(
-                  (call) => call === "POST /api/admin-ai-assistant",
-                ),
-                conversationText: conversation.textContent.replace(/\\s+/g, " ").trim(),
-                createJobCardDisabled: createJobCardButton?.disabled,
-                textareaValue: textarea.value,
-              }
-            : false;
-        })()`),
-      10000,
-      "email enquiry in existing Ask AI",
-    );
-    assert.equal(emailEnquiryAskAiState.createJobCardDisabled, true);
-    assert.match(
-      emailEnquiryAskAiState.conversationText,
-      /Suggested reply draft — not sent/,
-    );
-    assert.match(
-      emailEnquiryAskAiState.conversationText,
-      /checking availability and will confirm shortly/,
-    );
-    assert.match(
-      emailEnquiryAskAiState.textareaValue,
-      /synthetic airport pickup tomorrow/,
-    );
+      )),
+      reviewEnquiryButton: [...document.querySelectorAll("button")].some(
+        (button) => button.textContent.trim() === "Review enquiry",
+      ),
+    }))()`);
     assert.deepEqual(
-      emailEnquiryAskAiState.aiPostCalls,
-      [],
-      "Opening the saved enquiry draft must not charge OpenAI again",
+      ignoredEmailEnquiryState,
+      {
+        enquiryRow: false,
+        reviewEnquiryButton: false,
+      },
+      "Expected enquiry email to remain outside the app review feed",
     );
 
-    const restoredBookingParserMode = await evaluate(`(() => {
-      const parserModeButton = document.querySelector(
-        '[data-ai-assist-mode="parser"]',
-      );
-
-      if (!parserModeButton || parserModeButton.disabled) {
-        return false;
-      }
-
-      parserModeButton.click();
-      return true;
-    })()`);
-    assert.equal(
-      restoredBookingParserMode,
-      true,
-      "Expected browser fixture to restore Booking Parser mode",
-    );
-    await waitForCondition(
-      () =>
-        evaluate(`document.querySelector('[data-ai-assist-mode="parser"]')?.getAttribute("aria-pressed") === "true"`),
-      10000,
-      "Booking Parser mode restored after enquiry fixture",
-    );
-
-    await clickTab("Dashboard", "Operations Dashboard");
     await evaluate(`(() => {
       window.__prestigeAdminEmailAiIntake = [];
       const refreshButton = [...document.querySelectorAll("button")].find(

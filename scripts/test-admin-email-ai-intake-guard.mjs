@@ -14,8 +14,14 @@ const ledgerPath = path.join(root, "docs/current-implementation-ledger.md");
 const migrationName = fs
   .readdirSync(path.join(root, "supabase/migrations"))
   .find((name) => name.endsWith("_admin_email_ai_intake.sql"));
+const timeoutMigrationName = fs
+  .readdirSync(path.join(root, "supabase/migrations"))
+  .find((name) => name.endsWith("_admin_email_ai_intake_timeout_repair.sql"));
 const migrationPath = migrationName
   ? path.join(root, "supabase/migrations", migrationName)
+  : "";
+const timeoutMigrationPath = timeoutMigrationName
+  ? path.join(root, "supabase/migrations", timeoutMigrationName)
   : "";
 
 for (const requiredPath of [
@@ -27,6 +33,7 @@ for (const requiredPath of [
   browserTestPath,
   ledgerPath,
   migrationPath,
+  timeoutMigrationPath,
 ]) {
   assert.equal(fs.existsSync(requiredPath), true, `Missing required file: ${requiredPath}`);
 }
@@ -39,6 +46,7 @@ const pageSource = fs.readFileSync(pagePath, "utf8");
 const browserTestSource = fs.readFileSync(browserTestPath, "utf8");
 const ledgerSource = fs.readFileSync(ledgerPath, "utf8");
 const migrationSource = fs.readFileSync(migrationPath, "utf8");
+const timeoutMigrationSource = fs.readFileSync(timeoutMigrationPath, "utf8");
 
 assert.equal(contract.adminEmailAiMailboxAddress, "booking@prestigelimo.sg");
 assert.equal(contract.adminEmailAiAllowedSenderAddress, "info@prestigelimo.sg");
@@ -88,6 +96,10 @@ assert.match(runtimeSource, /PRESTIGE_EMAIL_AI_IMAP_PASSWORD/);
 assert.match(runtimeSource, /message_id_hash/);
 assert.match(runtimeSource, /last_seen_uid/);
 assert.match(runtimeSource, /simpleParser/);
+assert.match(runtimeSource, /imap\.download/);
+assert.match(runtimeSource, /chunkSize:\s*64_000/);
+assert.match(runtimeSource, /maxBytes:\s*maximumEmailSourceBytes/);
+assert.doesNotMatch(runtimeSource, /imap\.fetchOne/);
 assert.match(runtimeSource, /decideAdminEmailAiEnvelope/);
 assert.match(runtimeSource, /classification/);
 assert.match(runtimeSource, /confirmed_booking/);
@@ -116,6 +128,10 @@ assert.match(migrationSource, /grant select, insert, update, delete[\s\S]*to ser
 assert.match(migrationSource, /prestige_email_ai_intake_endpoint/);
 assert.match(migrationSource, /prestige_email_ai_intake_cron_secret/);
 assert.doesNotMatch(migrationSource, /create policy/i);
+assert.match(timeoutMigrationSource, /cron\.alter_job/);
+assert.match(timeoutMigrationSource, /timeout_milliseconds := 120000/);
+assert.match(timeoutMigrationSource, /private-email-ai-intake/);
+assert.doesNotMatch(timeoutMigrationSource, /create policy/i);
 
 assert.match(pageSource, /data-dashboard-email-ai-intake-row/);
 assert.match(pageSource, /Email · booking@prestigelimo\.sg/);

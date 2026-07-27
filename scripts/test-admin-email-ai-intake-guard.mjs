@@ -100,6 +100,13 @@ assert.match(runtimeSource, /imap\.download/);
 assert.match(runtimeSource, /chunkSize:\s*64_000/);
 assert.match(runtimeSource, /maxBytes:\s*maximumEmailSourceBytes/);
 assert.doesNotMatch(runtimeSource, /imap\.fetchOne/);
+assert.match(runtimeSource, /const pendingMessages/);
+assert.match(runtimeSource, /for \(const message of pendingMessages\)/);
+assert.ok(
+  runtimeSource.indexOf("for await (const message of imap.fetch") <
+    runtimeSource.indexOf("for (const message of pendingMessages)"),
+  "The IMAP envelope iterator must finish before any per-message command runs.",
+);
 assert.match(runtimeSource, /decideAdminEmailAiEnvelope/);
 assert.match(runtimeSource, /classification/);
 assert.match(runtimeSource, /confirmed_booking/);

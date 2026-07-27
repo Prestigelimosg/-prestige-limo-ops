@@ -205,6 +205,7 @@ let providerRequestBodies = [];
 let supabaseCreateClientCalls = 0;
 
 class FakeImapFlow {
+  fetchActive = false;
   usable = true;
 
   async connect() {}
@@ -219,14 +220,24 @@ class FakeImapFlow {
   async *fetch(range) {
     const startUid = Number(String(range).split(":")[0]);
 
-    for (const message of fakeMailbox.messages) {
-      if (message.uid >= startUid) {
-        yield message;
+    this.fetchActive = true;
+
+    try {
+      for (const message of fakeMailbox.messages) {
+        if (message.uid >= startUid) {
+          yield message;
+        }
       }
+    } finally {
+      this.fetchActive = false;
     }
   }
 
   async download(uid, part, options) {
+    if (this.fetchActive) {
+      throw new Error("nested_imap_command_deadlock");
+    }
+
     downloadCalls += 1;
     downloadOptions.push({ options, part });
     const message = fakeMailbox.messages.find(

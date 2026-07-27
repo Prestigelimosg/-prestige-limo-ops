@@ -866,6 +866,11 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
     }
 
     const startUid = lastSeenUid + 1;
+    const pendingMessages: Array<{
+      envelope?: MessageEnvelopeObject;
+      size?: number;
+      uid: number;
+    }> = [];
 
     for await (const message of imap.fetch(
       `${startUid}:*`,
@@ -876,13 +881,22 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
       },
       { uid: true },
     )) {
-      if (
-        message.uid < startUid ||
-        inspected >= maximumMessagesPerRun
-      ) {
+      if (message.uid < startUid) {
         continue;
       }
 
+      if (pendingMessages.length >= maximumMessagesPerRun) {
+        break;
+      }
+
+      pendingMessages.push({
+        envelope: message.envelope,
+        size: message.size,
+        uid: message.uid,
+      });
+    }
+
+    for (const message of pendingMessages) {
       inspected += 1;
 
       if (

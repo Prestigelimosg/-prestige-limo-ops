@@ -8445,10 +8445,19 @@ async function runChromeTest() {
         evaluate(`(() => {
           const rows = [...document.querySelectorAll("[data-dashboard-email-ai-intake-row]")];
           const count = document.querySelector("[data-dashboard-email-ai-intake-count]");
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const dashboardBadge = dashboardTab?.querySelector(
+            '[data-bookings-new-request-badge="true"]',
+          );
 
           return rows.length === 1 && count?.textContent.trim() === "1 email"
             ? {
                 countAttribute: count.getAttribute("data-dashboard-email-ai-intake-count"),
+                dashboardBadgeText: dashboardBadge?.textContent.trim() || "",
+                dashboardNewRequestCount:
+                  dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "",
+                dashboardTotalAlertCount:
+                  dashboardTab?.getAttribute("data-dashboard-tab-total-alerts") || "",
                 requestMethods: (window.__prestigeAdminEmailAiIntakeRequests || []).map(
                   (request) => request.method,
                 ),
@@ -8460,6 +8469,9 @@ async function runChromeTest() {
       "private email AI rows inside existing Booking Requests",
     );
     assert.equal(emailAiDashboardState.countAttribute, "1");
+    assert.equal(emailAiDashboardState.dashboardBadgeText, "1 new");
+    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "1");
+    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "1");
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),
       true,

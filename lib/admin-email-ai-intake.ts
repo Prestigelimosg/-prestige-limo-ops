@@ -867,6 +867,43 @@ async function updateProcessedIntake(
   return true;
 }
 
+function adminEmailAiDevicePushEvent(
+  classification: AdminEmailAiClassification,
+) {
+  if (classification === "confirmed_booking") {
+    return "email_confirmed_booking";
+  }
+
+  if (classification === "amendment") {
+    return "email_booking_amendment";
+  }
+
+  if (classification === "cancellation") {
+    return "email_booking_cancellation";
+  }
+
+  return null;
+}
+
+async function sendAdminEmailAiDevicePushAlert(
+  classification: AdminEmailAiClassification,
+) {
+  const eventType = adminEmailAiDevicePushEvent(classification);
+
+  if (!eventType) {
+    return;
+  }
+
+  try {
+    const { sendAdminDevicePushAlert } = await import(
+      "./admin-device-push-notification"
+    );
+    await sendAdminDevicePushAlert(eventType);
+  } catch {
+    // The persisted Email AI review remains authoritative when push is unavailable.
+  }
+}
+
 async function parseAllowedSource(source: Buffer) {
   return simpleParser(source, {
     maxHtmlLengthToParse: maximumEmailSourceBytes,
@@ -1092,6 +1129,12 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
 
       if (completed) {
         parsed += 1;
+
+        if (providerResult.ok) {
+          await sendAdminEmailAiDevicePushAlert(
+            providerResult.analysis.classification,
+          );
+        }
       }
 
       lastSeenUid = message.uid;

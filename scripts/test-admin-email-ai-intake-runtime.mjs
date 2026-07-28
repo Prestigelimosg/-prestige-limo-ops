@@ -270,6 +270,7 @@ let downloadCalls = 0;
 let downloadOptions = [];
 let providerRequestBodies = [];
 let supabaseCreateClientCalls = 0;
+const adminDevicePushEvents = [];
 
 class FakeImapFlow {
   fetchActive = false;
@@ -428,6 +429,17 @@ try {
     if (request === "openai") {
       return { __esModule: true, default: FakeOpenAI };
     }
+    if (request === "./admin-device-push-notification") {
+      return {
+        sendAdminDevicePushAlert: async (eventType) => {
+          adminDevicePushEvents.push(eventType);
+          return {
+            ok: true,
+            reason: "send_succeeded",
+          };
+        },
+      };
+    }
     return originalLoad.call(this, request, parent, isMain);
   };
 
@@ -512,11 +524,13 @@ try {
   assert.equal(intakeRows[0].classification, "confirmed_booking");
   assert.equal(intakeRows[0].suggested_reply, "");
   assert.match(intakeRows[0].canonical_booking_text, /Passenger: Test Guest/);
+  assert.deepEqual(adminDevicePushEvents, ["email_confirmed_booking"]);
 
   const duplicatePoll = await runtime.runAdminEmailAiIntake();
   assert.equal(duplicatePoll.ok, true);
   assert.equal(duplicatePoll.inspected, 0);
   assert.equal(providerRequestBodies.length, 1);
+  assert.deepEqual(adminDevicePushEvents, ["email_confirmed_booking"]);
 
   fakeMailbox.uidNext = 103;
   fakeMailbox.messages.push({
@@ -539,6 +553,11 @@ try {
   assert.equal(intakeRows[1].classification, "enquiry");
   assert.equal(intakeRows[1].processing_status, "dismissed");
   assert.equal(intakeRows[1].suggested_reply, "");
+  assert.deepEqual(
+    adminDevicePushEvents,
+    ["email_confirmed_booking"],
+    "enquiries must remain silent on admin device push",
+  );
 
   const blockedSource = Buffer.from(
     syntheticAllowedSource

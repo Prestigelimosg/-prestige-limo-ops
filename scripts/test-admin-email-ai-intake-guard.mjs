@@ -131,6 +131,10 @@ assert.match(runtimeSource, /uncertain/);
 assert.match(runtimeSource, /Always return suggestedReply as an empty string/);
 assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
 assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(runtimeSource, /email_confirmed_booking/);
+assert.match(runtimeSource, /email_booking_amendment/);
+assert.match(runtimeSource, /email_booking_cancellation/);
+assert.match(runtimeSource, /sendAdminDevicePushAlert/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(runtimeSource, /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/);
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
@@ -174,6 +178,10 @@ assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
 assert.doesNotMatch(pageSource, /Review enquiry/);
 assert.match(pageSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(
+  pageSource,
+  /dashboardNewBookingRequestAttentionCount \+ adminEmailAiIntakeCount/,
+);
 assert.doesNotMatch(pageSource, /data-dashboard-email-ai-intake-(?:approve|save|calendar|send)/);
 
 assert.match(browserTestSource, /browser-email-ai-confirmed/);
@@ -198,5 +206,13 @@ assert.match(ledgerSource, /No mailbox draft, email send, new UI lane, route, ta
 assert.match(ledgerSource, /Production build `143f3bd1`/);
 assert.match(ledgerSource, /the Email AI badge showed `0 email`/);
 assert.match(ledgerSource, /Chrome reported zero console errors/);
+assert.match(
+  ledgerSource,
+  /actionable Email AI records now reuse the existing Admin device-push sender/,
+);
+assert.match(
+  ledgerSource,
+  /Email AI count now contributes to the existing Dashboard alert badge/,
+);
 
 console.log("Private semantic email AI intake guard passed.");

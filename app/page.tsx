@@ -17602,6 +17602,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerBookingRequestCount,
     newBookingRequestNotificationCount,
   );
+  const bookingsTabNewBookingRequestCount =
+    dashboardNewBookingRequestAttentionCount + adminEmailAiIntakeCount;
   const customerBookingChangeRequestNotifications = adminAppNotificationReadState.notifications.filter((notification) =>
     Boolean(adminAppNotificationChangeRequestContext(notification)),
   );
@@ -17613,16 +17615,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const bookingsTabUrgentUnderOneHourCount = dashboardUrgentBookingRequestBookings.length;
   const bookingsTabAttentionCount =
-    dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
+    bookingsTabNewBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
   const bookingsTabAlertBadgeLabel = adminBookingsTabAlertBadgeLabel({
     changeRequestCount: customerBookingChangeRequestCount,
-    newBookingRequestCount: dashboardNewBookingRequestAttentionCount,
+    newBookingRequestCount: bookingsTabNewBookingRequestCount,
     totalCount: bookingsTabAttentionCount,
     urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
   });
   const bookingsTabAlertTypeCount = [
     customerBookingChangeRequestCount,
-    dashboardNewBookingRequestAttentionCount,
+    bookingsTabNewBookingRequestCount,
     bookingsTabUrgentUnderOneHourCount,
   ].filter((count) => count > 0).length;
   const dashboardUrgentBookingRequestDisplayItems =
@@ -32095,7 +32097,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
-                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}
+	                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}
                 data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
 	                data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}

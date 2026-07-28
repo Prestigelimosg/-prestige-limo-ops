@@ -375,9 +375,10 @@ class FakeOpenAI {
             bookingResult: {
               bookings: [
                 {
-                  bookerContact: "",
-                  bookerEmail: "",
-                  bookerName: "",
+                  bookerContact: "+65 98156017",
+                  bookerEmail: "hyunsoostar@hotmail.com",
+                  bookerName:
+                    "Mr Kim, Hyun Soo, +65 98156017. Client details list 1 passenger",
                   bookingType: "MNG",
                   companyAccount: "",
                   confidence: 0.98,
@@ -468,6 +469,36 @@ try {
   });
 
   const runtime = createRequire(import.meta.url)(targetPaths.runtime);
+  const adminSchema = createRequire(import.meta.url)(targetPaths.schema);
+  const safeNameAnalysis = adminSchema.sanitizeAdminEmailAiAnalysis({
+    bookingResult: {
+      bookings: [
+        {
+          bookerName: "Ms Passenger Lee",
+          confidence: 0.9,
+          needsReviewReasons: [],
+        },
+        {
+          bookerName: "John Contact",
+          confidence: 0.9,
+          needsReviewReasons: [],
+        },
+      ],
+      multipleBookingsDetected: true,
+      rawWarnings: [],
+    },
+    classification: "confirmed_booking",
+    confidence: 0.9,
+    reviewReasons: [],
+    suggestedReply: "",
+    summary: "Safe-name preservation test.",
+  });
+  assert.deepEqual(
+    safeNameAnalysis.bookingResult.bookings.map(
+      (booking) => booking.bookerName,
+    ),
+    ["Ms Passenger Lee", "John Contact"],
+  );
 
   process.env.PRESTIGE_EMAIL_AI_ENABLED = "false";
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -536,6 +567,18 @@ try {
   assert.equal(intakeRows[0].processing_status, "queued");
   assert.equal(intakeRows[0].classification, "confirmed_booking");
   assert.equal(intakeRows[0].suggested_reply, "");
+  assert.equal(
+    intakeRows[0].booking_parse_result.bookings[0].bookerName,
+    "Mr Kim, Hyun Soo",
+  );
+  assert.match(
+    intakeRows[0].canonical_booking_text,
+    /^Booker: Mr Kim, Hyun Soo$/m,
+  );
+  assert.doesNotMatch(
+    intakeRows[0].canonical_booking_text,
+    /Client details list|\+65 98156017.*Client details/i,
+  );
   assert.match(intakeRows[0].canonical_booking_text, /Passenger: Test Guest/);
   assert.deepEqual(adminDevicePushEvents, ["email_confirmed_booking"]);
 
@@ -597,10 +640,27 @@ try {
   assert.equal(downloadCalls, 2, "blocked sender body must not be fetched");
   assert.equal(intakeRows.length, 2);
 
+  intakeRows[0].booking_parse_result.bookings[0].bookerName =
+    "Mr Kim, Hyun Soo, +65 98156017. Client details list 1 passenger";
+  intakeRows[0].canonical_booking_text =
+    "Booker: Mr Kim, Hyun Soo, +65 98156017. Client details list 1 passenger\nPassenger: Test Guest";
+
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
   assert.equal(loaded.data.records.length, 1);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
+  assert.equal(
+    loaded.data.records[0].booking_parse_result.bookings[0].bookerName,
+    "Mr Kim, Hyun Soo",
+  );
+  assert.match(
+    loaded.data.records[0].canonical_booking_text,
+    /^Booker: Mr Kim, Hyun Soo$/m,
+  );
+  assert.doesNotMatch(
+    loaded.data.records[0].canonical_booking_text,
+    /Client details list|\+65 98156017.*Client details/i,
+  );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
     input_tokens: 200,

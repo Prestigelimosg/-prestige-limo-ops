@@ -71,6 +71,71 @@ function cleanMultilineText(value: unknown, maximumLength: number) {
     : "";
 }
 
+function sanitizeAdminEmailAiBookerName(
+  value: string,
+  needsReviewReasons: string[],
+) {
+  const cleanedValue = cleanText(value, 240);
+
+  if (!cleanedValue) {
+    return "";
+  }
+
+  const contaminationPatterns = [
+    /\s*(?:[,;|]\s*)?(?=\+?\d[\d\s().-]{6,})/,
+    /\s*(?:[,;|]\s*)?(?=[^\s@]+@[^\s@]+\.[^\s@]+)/i,
+    /\s*(?:[.,;|:-]\s*)?(?=\b(?:client\s+details?(?:\s+list)?|passenger\s+(?:details?|list)|booking\s+(?:details?|reference)|(?:pax|phone|mobile|whatsapp|contact|email|pickup|drop-?off)\s*:))/i,
+  ];
+  const contaminationStarts = contaminationPatterns
+    .map((pattern) => cleanedValue.search(pattern))
+    .filter((index) => index >= 0);
+  const contaminationStart =
+    contaminationStarts.length > 0
+      ? Math.min(...contaminationStarts)
+      : -1;
+  const candidate = cleanText(
+    contaminationStart >= 0
+      ? cleanedValue.slice(0, contaminationStart)
+      : cleanedValue,
+    160,
+  ).replace(/[\s,;|:-]+$/g, "");
+  const sanitized =
+    /@|\d{6,}/.test(candidate) || candidate.length > 120
+      ? ""
+      : candidate;
+
+  if (sanitized !== cleanedValue) {
+    const reason =
+      "Removed contact or list text from Email AI booker name";
+
+    if (!needsReviewReasons.includes(reason)) {
+      needsReviewReasons.push(reason);
+    }
+  }
+
+  return sanitized;
+}
+
+function sanitizeAdminEmailAiBookingResult(value: unknown): AiParseResult {
+  const bookingResult = sanitizeAiParseResult(value);
+
+  return {
+    ...bookingResult,
+    bookings: bookingResult.bookings.map((booking) => {
+      const needsReviewReasons = [...booking.needsReviewReasons];
+
+      return {
+        ...booking,
+        bookerName: sanitizeAdminEmailAiBookerName(
+          booking.bookerName,
+          needsReviewReasons,
+        ),
+        needsReviewReasons,
+      };
+    }),
+  };
+}
+
 export function sanitizeAdminEmailAiAnalysis(
   value: unknown,
 ): AdminEmailAiAnalysis {
@@ -95,7 +160,7 @@ export function sanitizeAdminEmailAiAnalysis(
     : [];
 
   return {
-    bookingResult: sanitizeAiParseResult(record.bookingResult),
+    bookingResult: sanitizeAdminEmailAiBookingResult(record.bookingResult),
     classification,
     confidence,
     reviewReasons,

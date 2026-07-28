@@ -139,6 +139,21 @@ export type AdminEmailAiIntakeLoadResult =
       status: 500 | 503;
     };
 
+export type AdminEmailAiIntakeReviewResult =
+  | {
+      data: {
+        intake_id: string;
+        processing_status: "reviewed";
+        version: typeof adminEmailAiIntakeVersion;
+      };
+      ok: true;
+    }
+  | {
+      error: string;
+      ok: false;
+      status: 400 | 404 | 409 | 500 | 503;
+    };
+
 export type AdminEmailAiRunResult =
   | {
       initialized: boolean;
@@ -405,6 +420,138 @@ function sanitizePersistenceRecord(
     subject: cleanText(value.subject, 240),
     suggested_reply: analysis.suggestedReply,
     summary: analysis.summary,
+  };
+}
+
+export async function markAdminEmailAiIntakeReviewed(
+  intakeId: string,
+  client?: SupabaseClient,
+): Promise<AdminEmailAiIntakeReviewResult> {
+  const cleanedIntakeId = cleanText(intakeId, 120);
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      cleanedIntakeId,
+    )
+  ) {
+    return {
+      error: "Email AI intake review request is invalid.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  if (!serverPersistenceReady()) {
+    return {
+      error: "Private email AI intake configuration is not ready.",
+      ok: false,
+      status: 503,
+    };
+  }
+
+  const database = client || createServerClient();
+  const existingResult = await database
+    .from(intakeTable)
+    .select("id, classification, processing_status")
+    .eq("id", cleanedIntakeId)
+    .maybeSingle();
+
+  if (existingResult.error) {
+    return {
+      error: "Email AI intake review could not be verified safely.",
+      ok: false,
+      status: 500,
+    };
+  }
+
+  const existingRecord = existingResult.data as {
+    classification?: unknown;
+    id?: unknown;
+    processing_status?: unknown;
+  } | null;
+  const classification = classificationValue(existingRecord?.classification);
+  const processingStatus = intakeStatusValue(
+    existingRecord?.processing_status,
+  );
+
+  if (!existingRecord || cleanText(existingRecord.id, 120) !== cleanedIntakeId) {
+    return {
+      error: "Email AI intake review was not found.",
+      ok: false,
+      status: 404,
+    };
+  }
+
+  if (!adminEmailAiClassificationAppearsInApp(classification)) {
+    return {
+      error: "Email AI intake is not eligible for app review.",
+      ok: false,
+      status: 409,
+    };
+  }
+
+  if (processingStatus === "reviewed") {
+    return {
+      data: {
+        intake_id: cleanedIntakeId,
+        processing_status: "reviewed",
+        version: adminEmailAiIntakeVersion,
+      },
+      ok: true,
+    };
+  }
+
+  if (processingStatus !== "queued") {
+    return {
+      error: "Email AI intake is no longer queued for review.",
+      ok: false,
+      status: 409,
+    };
+  }
+
+  const updateResult = await database
+    .from(intakeTable)
+    .update({
+      processing_status: "reviewed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", cleanedIntakeId)
+    .eq("processing_status", "queued")
+    .in("classification", [...adminEmailAiAppReviewClassifications])
+    .select("id, processing_status")
+    .maybeSingle();
+
+  if (updateResult.error) {
+    return {
+      error: "Email AI intake review could not be saved safely.",
+      ok: false,
+      status: 500,
+    };
+  }
+
+  const updatedRecord = updateResult.data as {
+    id?: unknown;
+    processing_status?: unknown;
+  } | null;
+
+  if (
+    cleanText(updatedRecord?.id, 120) !== cleanedIntakeId ||
+    intakeStatusValue(updatedRecord?.processing_status) !== "reviewed"
+  ) {
+    return {
+      error: "Email AI intake review changed before it could be saved.",
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return {
+    data: {
+      intake_id: cleanedIntakeId,
+      processing_status: "reviewed",
+      version: adminEmailAiIntakeVersion,
+    },
+    ok: true,
   };
 }
 
@@ -867,6 +1014,43 @@ async function updateProcessedIntake(
   return true;
 }
 
+function adminEmailAiDevicePushEvent(
+  classification: AdminEmailAiClassification,
+) {
+  if (classification === "confirmed_booking") {
+    return "email_confirmed_booking";
+  }
+
+  if (classification === "amendment") {
+    return "email_booking_amendment";
+  }
+
+  if (classification === "cancellation") {
+    return "email_booking_cancellation";
+  }
+
+  return null;
+}
+
+async function sendAdminEmailAiDevicePushAlert(
+  classification: AdminEmailAiClassification,
+) {
+  const eventType = adminEmailAiDevicePushEvent(classification);
+
+  if (!eventType) {
+    return;
+  }
+
+  try {
+    const { sendAdminDevicePushAlert } = await import(
+      "./admin-device-push-notification"
+    );
+    await sendAdminDevicePushAlert(eventType);
+  } catch {
+    // The persisted Email AI review remains authoritative when push is unavailable.
+  }
+}
+
 async function parseAllowedSource(source: Buffer) {
   return simpleParser(source, {
     maxHtmlLengthToParse: maximumEmailSourceBytes,
@@ -1092,6 +1276,12 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
 
       if (completed) {
         parsed += 1;
+
+        if (providerResult.ok) {
+          await sendAdminEmailAiDevicePushAlert(
+            providerResult.analysis.classification,
+          );
+        }
       }
 
       lastSeenUid = message.uid;

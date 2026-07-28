@@ -152,7 +152,10 @@ export type AdminDevicePushEventType =
   | "driver_ots_photo"
   | "driver_otw"
   | "driver_pob"
-  | "driver_to_customer_reply";
+  | "driver_to_customer_reply"
+  | "email_booking_amendment"
+  | "email_booking_cancellation"
+  | "email_confirmed_booking";
 
 export type AdminDevicePushSender = (
   subscription: PushSubscription,
@@ -541,6 +544,18 @@ const adminDevicePushEventCopy: Record<
   driver_to_customer_reply: {
     body: "Driver sent a customer app reply. Open Dashboard to review.",
     title: "Driver app reply",
+  },
+  email_booking_amendment: {
+    body: "Booking amendment received by email. Open Dashboard to review.",
+    title: "Email booking amendment",
+  },
+  email_booking_cancellation: {
+    body: "Booking cancellation received by email. Open Dashboard to review.",
+    title: "Email booking cancellation",
+  },
+  email_confirmed_booking: {
+    body: "Confirmed booking received by email. Open Dashboard to review.",
+    title: "Confirmed booking email",
   },
   new_booking_request: {
     body: "New booking request received. Open Dashboard to review.",

@@ -112,6 +112,9 @@ assertIncludes(
     "sendAdminDevicePushAlert",
     "customer_booking_amendment",
     "customer_booking_cancellation",
+    "email_confirmed_booking",
+    "email_booking_amendment",
+    "email_booking_cancellation",
     "driver_acknowledged",
     "driver_otw",
     "driver_ots",
@@ -415,6 +418,18 @@ try {
     customer_booking_cancellation: [
       "Customer cancellation request",
       "Customer cancellation request received. Open Dashboard to review.",
+    ],
+    email_booking_amendment: [
+      "Email booking amendment",
+      "Booking amendment received by email. Open Dashboard to review.",
+    ],
+    email_booking_cancellation: [
+      "Email booking cancellation",
+      "Booking cancellation received by email. Open Dashboard to review.",
+    ],
+    email_confirmed_booking: [
+      "Confirmed booking email",
+      "Confirmed booking received by email. Open Dashboard to review.",
     ],
     customer_driver_details_acknowledged: [
       "Driver details acknowledged",

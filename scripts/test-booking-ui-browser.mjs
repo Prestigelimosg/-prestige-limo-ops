@@ -240,7 +240,7 @@ const dashboardEmailAiConfirmedBookingFixture = {
   classification: "confirmed_booking",
   confidence: 0.98,
   created_at: "2026-07-27T13:30:00.000Z",
-  id: "browser-email-ai-confirmed",
+  id: "00000000-0000-4000-8000-000000000101",
   mailbox_address: "booking@prestigelimo.sg",
   normalized_text: "Synthetic confirmed booking for test only.",
   processing_status: "queued",
@@ -261,7 +261,7 @@ const dashboardEmailAiEnquiryFixture = {
   classification: "enquiry",
   confidence: 0.96,
   created_at: "2026-07-27T13:31:00.000Z",
-  id: "browser-email-ai-enquiry",
+  id: "00000000-0000-4000-8000-000000000102",
   mailbox_address: "booking@prestigelimo.sg",
   normalized_text:
     "Can you provide availability for a synthetic airport pickup tomorrow?",
@@ -6904,7 +6904,9 @@ async function runChromeTest() {
                 enabled: true,
                 external_send: false,
                 ok: true,
-                records: window.__prestigeAdminEmailAiIntake || [],
+                records: (window.__prestigeAdminEmailAiIntake || []).filter(
+                  (record) => record.processing_status === "queued",
+                ),
                 token_usage: window.__prestigeAdminEmailAiTokenUsage,
                 version: "browser-private-email-ai-intake-mock",
                 write_action: false,
@@ -6914,6 +6916,41 @@ async function runChromeTest() {
                 headers: { "content-type": "application/json" },
               },
             );
+          }
+
+          if (method === "PATCH") {
+            let body = null;
+
+            try {
+              body = JSON.parse(bodyText);
+            } catch {}
+
+            const intakeId = String(body?.intake_id || "");
+            const intake = (window.__prestigeAdminEmailAiIntake || []).find(
+              (record) => String(record.id) === intakeId,
+            );
+
+            if (
+              intake &&
+              intake.processing_status === "queued" &&
+              body?.processing_status === "reviewed"
+            ) {
+              intake.processing_status = "reviewed";
+              return new Response(
+                JSON.stringify({
+                  external_send: false,
+                  intake_id: intakeId,
+                  ok: true,
+                  processing_status: "reviewed",
+                  version: "browser-private-email-ai-intake-mock",
+                  write_action: true,
+                }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              );
+            }
           }
 
           return new Response(
@@ -8445,10 +8482,19 @@ async function runChromeTest() {
         evaluate(`(() => {
           const rows = [...document.querySelectorAll("[data-dashboard-email-ai-intake-row]")];
           const count = document.querySelector("[data-dashboard-email-ai-intake-count]");
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const dashboardBadge = dashboardTab?.querySelector(
+            '[data-bookings-new-request-badge="true"]',
+          );
 
           return rows.length === 1 && count?.textContent.trim() === "1 email"
             ? {
                 countAttribute: count.getAttribute("data-dashboard-email-ai-intake-count"),
+                dashboardBadgeText: dashboardBadge?.textContent.trim() || "",
+                dashboardNewRequestCount:
+                  dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "",
+                dashboardTotalAlertCount:
+                  dashboardTab?.getAttribute("data-dashboard-tab-total-alerts") || "",
                 requestMethods: (window.__prestigeAdminEmailAiIntakeRequests || []).map(
                   (request) => request.method,
                 ),
@@ -8460,6 +8506,9 @@ async function runChromeTest() {
       "private email AI rows inside existing Booking Requests",
     );
     assert.equal(emailAiDashboardState.countAttribute, "1");
+    assert.equal(emailAiDashboardState.dashboardBadgeText, "1 new");
+    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "1");
+    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "1");
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),
       true,
@@ -8485,7 +8534,7 @@ async function runChromeTest() {
 
     const openedEmailBookingReview = await evaluate(`(() => {
       const row = document.querySelector(
-        '[data-dashboard-email-ai-intake-row="browser-email-ai-confirmed"]',
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
       );
       const button = [...(row?.querySelectorAll("button") || [])].find(
         (candidate) => candidate.textContent.trim() === "Review in Dispatch",
@@ -8546,7 +8595,7 @@ async function runChromeTest() {
     await clickTab("Dashboard", "Operations Dashboard");
     const ignoredEmailEnquiryState = await evaluate(`(() => ({
       enquiryRow: Boolean(document.querySelector(
-        '[data-dashboard-email-ai-intake-row="browser-email-ai-enquiry"]',
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000102"]',
       )),
       reviewEnquiryButton: [...document.querySelectorAll("button")].some(
         (button) => button.textContent.trim() === "Review enquiry",
@@ -20487,6 +20536,100 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedClearBeforeCrmSave, true, "Expected Clear button before CRM save test");
 
+    await evaluate(`(() => {
+      window.__prestigeAdminEmailAiIntake = [
+        ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture)},
+      ];
+      const previousFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+
+        if (
+          method === "GET" &&
+          String(target).includes("/api/admin-email-ai-intake")
+        ) {
+          return new Response(
+            JSON.stringify({
+              enabled: true,
+              external_send: false,
+              ok: true,
+              records: (window.__prestigeAdminEmailAiIntake || []).filter(
+                (record) => record.processing_status === "queued",
+              ),
+              token_usage: window.__prestigeAdminEmailAiTokenUsage,
+              version: "browser-private-email-ai-before-crm-save-mock",
+              write_action: false,
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+
+        return previousFetch(...args);
+      };
+    })()`);
+    await clickTab("Dashboard", "Operations Dashboard");
+    await evaluate(`(() => {
+      const refreshButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Refresh Dashboard",
+      );
+      refreshButton?.click();
+    })()`);
+    const emailAiBeforeCrmSaveState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const row = document.querySelector(
+            '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+          );
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const emailCount = Number(
+            document.querySelector("[data-dashboard-email-ai-intake-count]")
+              ?.getAttribute("data-dashboard-email-ai-intake-count") || "-1",
+          );
+          const newRequestCount = Number(
+            dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "-1",
+          );
+
+          return row && emailCount === 1 && newRequestCount >= 1
+            ? { emailCount, newRequestCount }
+            : false;
+        })()`),
+      10000,
+      "Email AI row and badge before successful Save + CRM",
+    );
+
+    const openedEmailAiReviewBeforeCrmSave = await evaluate(`(() => {
+      const row = document.querySelector(
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+      );
+      const reviewButton = [...(row?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Review in Dispatch",
+      );
+
+      if (!reviewButton || reviewButton.disabled) {
+        return false;
+      }
+
+      reviewButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      openedEmailAiReviewBeforeCrmSave,
+      true,
+      "Expected the exact Email AI request to open before the successful CRM save scenario",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`Boolean(document.querySelector(
+          '[data-app-tab="dispatch"][aria-selected="true"]',
+        ))`),
+      10000,
+      "Email AI review returned to Dispatch before successful CRM save",
+    );
+
     const focusedCrmSaveTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
       if (!textarea) {
@@ -20644,6 +20787,7 @@ async function runChromeTest() {
       window.__prestigeCrmSaveGoogleCalendarSyncRequests = [];
       window.__prestigeCrmSaveCalendarDownloads = [];
       window.__prestigeCrmSaveCalendarBlobTypes = [];
+      window.__prestigeCrmSaveEmailAiRequests = [];
       window.URL.createObjectURL = (blob) => {
         window.__prestigeCrmSaveCalendarBlobTypes.push(blob?.type || "");
         return "blob:prestige-crm-save-calendar-test";
@@ -20683,6 +20827,48 @@ async function runChromeTest() {
           } catch {
             window.__prestigeSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-email-ai-intake")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmSaveEmailAiRequests.push({
+            body: parsedBody,
+            headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
+            method,
+            url,
+          });
+
+          const intakeId = String(parsedBody?.intake_id || "");
+          const intake = (window.__prestigeAdminEmailAiIntake || []).find(
+            (record) => String(record.id) === intakeId,
+          );
+
+          if (
+            method === "PATCH" &&
+            intake &&
+            intake.processing_status === "queued" &&
+            parsedBody?.processing_status === "reviewed"
+          ) {
+            intake.processing_status = "reviewed";
+            return jsonResponse({
+              external_send: false,
+              intake_id: intakeId,
+              ok: true,
+              processing_status: "reviewed",
+              version: "browser-private-email-ai-intake-review-mock",
+              write_action: true,
+            });
+          }
+
+          return jsonResponse(
+            { error: "Email AI intake review mock rejected the request.", ok: false },
+            409,
+          );
         }
 
         if (url.includes("/api/admin-booking-calendar-google-sync")) {
@@ -20984,6 +21170,7 @@ async function runChromeTest() {
                 calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
                 calendarRequests: window.__prestigeCrmSaveCalendarRequests || [],
                 calendarSyncStatusRequests: window.__prestigeCrmSaveCalendarSyncStatusRequests || [],
+                emailAiRequests: window.__prestigeCrmSaveEmailAiRequests || [],
                 googleCalendarSyncRequests,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 requestBodies: window.__prestigeSaveRequestBodies || [],
@@ -21053,6 +21240,24 @@ async function runChromeTest() {
       "Expected Save Booking + CRM not to download a calendar file",
     );
     assert.deepEqual(crmSaveState.calendarBlobTypes, []);
+    assert.deepEqual(
+      crmSaveState.emailAiRequests.map((request) => ({
+        body: request.body,
+        method: request.method,
+        purpose: request.headers?.["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          body: {
+            intake_id: "00000000-0000-4000-8000-000000000101",
+            processing_status: "reviewed",
+          },
+          method: "PATCH",
+          purpose: "admin-email-ai-intake",
+        },
+      ],
+      "Expected successful Save + CRM to close the exact Email AI intake",
+    );
     assert.equal(
       crmSaveState.googleCalendarSyncRequests.length,
       1,
@@ -21156,6 +21361,45 @@ async function runChromeTest() {
         operationsCalendarPanelCount: 0,
       },
       "Expected duplicate manual Calendar / ICS controls to be removed after Save + CRM; Google auto-sync is the only calendar write lane",
+    );
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    const emailAiAfterCrmSaveState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const dashboardBadge = dashboardTab?.querySelector(
+            '[data-bookings-new-request-badge="true"]',
+          );
+          const emailCount = Number(
+            document.querySelector("[data-dashboard-email-ai-intake-count]")
+              ?.getAttribute("data-dashboard-email-ai-intake-count") || "-1",
+          );
+          const newRequestCount = Number(
+            dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "-1",
+          );
+          const rowCount = document.querySelectorAll(
+            '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+          ).length;
+
+          return emailCount === 0 && rowCount === 0
+            ? {
+                badgeText: dashboardBadge?.textContent.trim() || "",
+                emailCount,
+                newRequestCount,
+                rowCount,
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI row and badge after successful Save + CRM",
+    );
+    assert.equal(emailAiAfterCrmSaveState.emailCount, 0);
+    assert.equal(emailAiAfterCrmSaveState.rowCount, 0);
+    assert.equal(
+      emailAiAfterCrmSaveState.newRequestCount,
+      emailAiBeforeCrmSaveState.newRequestCount - 1,
+      "Expected Email AI badge to update after successful Save + CRM",
     );
 
     await clickTab("Bookings", "Find saved jobs");

@@ -10741,6 +10741,34 @@ async function loadAdminEmailAiIntakeRead() {
   };
 }
 
+async function markAdminEmailAiIntakeReviewed(intakeId: string) {
+  const response = await fetch(adminEmailAiIntakeApiPath, {
+    body: JSON.stringify({
+      intake_id: intakeId,
+      processing_status: "reviewed",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": "admin-email-ai-intake",
+    },
+    method: "PATCH",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result?.external_send !== false ||
+    result?.write_action !== true ||
+    clean(result?.intake_id) !== intakeId ||
+    result?.processing_status !== "reviewed"
+  ) {
+    throw new Error(
+      result?.error || "Email AI intake review update failed.",
+    );
+  }
+}
+
 async function updateAdminAppNotificationStatus(
   notificationId: string,
   notificationStatus: AdminAppNotificationUpdateStatus,
@@ -13593,6 +13621,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       status: "idle",
       tokenUsage: null,
     });
+  const [activeAdminEmailAiIntakeId, setActiveAdminEmailAiIntakeId] =
+    useState("");
   const adminEmailAiInitialLoadAttemptedRef = useRef(false);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
@@ -17602,6 +17632,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerBookingRequestCount,
     newBookingRequestNotificationCount,
   );
+  const bookingsTabNewBookingRequestCount =
+    dashboardNewBookingRequestAttentionCount + adminEmailAiIntakeCount;
   const customerBookingChangeRequestNotifications = adminAppNotificationReadState.notifications.filter((notification) =>
     Boolean(adminAppNotificationChangeRequestContext(notification)),
   );
@@ -17613,16 +17645,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const bookingsTabUrgentUnderOneHourCount = dashboardUrgentBookingRequestBookings.length;
   const bookingsTabAttentionCount =
-    dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
+    bookingsTabNewBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
   const bookingsTabAlertBadgeLabel = adminBookingsTabAlertBadgeLabel({
     changeRequestCount: customerBookingChangeRequestCount,
-    newBookingRequestCount: dashboardNewBookingRequestAttentionCount,
+    newBookingRequestCount: bookingsTabNewBookingRequestCount,
     totalCount: bookingsTabAttentionCount,
     urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
   });
   const bookingsTabAlertTypeCount = [
     customerBookingChangeRequestCount,
-    dashboardNewBookingRequestAttentionCount,
+    bookingsTabNewBookingRequestCount,
     bookingsTabUrgentUnderOneHourCount,
   ].filter((count) => count > 0).length;
   const dashboardUrgentBookingRequestDisplayItems =
@@ -18069,7 +18101,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  function clearLoadedBookingSelectionContext() {
+  function clearLoadedBookingSelectionContext(
+    options: { preserveAdminEmailAiReview?: boolean } = {},
+  ) {
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
     driverJobLinkHandoffFocusAppliedRef.current = "";
@@ -18078,6 +18112,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setDriverJobLinkHandoffReference("");
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
+
+    if (!options.preserveAdminEmailAiReview) {
+      setActiveAdminEmailAiIntakeId("");
+    }
   }
 
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
@@ -18610,7 +18648,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function applyParsedBookingMessage(messageText: string) {
     clearParseArtifacts();
-    clearLoadedBookingSelectionContext();
+    clearLoadedBookingSelectionContext({
+      preserveAdminEmailAiReview: true,
+    });
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
@@ -18866,6 +18906,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     clearParseArtifacts();
     clearLoadedBookingSelectionContext();
+    setActiveAdminEmailAiIntakeId(clean(record.id));
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
     setAiAssistMode("parser");
@@ -20109,6 +20150,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  async function completeActiveAdminEmailAiReviewAfterSave() {
+    const intakeId = clean(activeAdminEmailAiIntakeId);
+
+    if (!intakeId) {
+      return true;
+    }
+
+    try {
+      await markAdminEmailAiIntakeReviewed(intakeId);
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        message: null,
+        records: current.records.filter(
+          (record) => clean(record.id) !== intakeId,
+        ),
+      }));
+      setActiveAdminEmailAiIntakeId("");
+      return true;
+    } catch {
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text:
+            "Booking saved, but its Email AI request could not be closed safely. Refresh Dashboard and retry the review.",
+        },
+      }));
+      return false;
+    }
+  }
+
   async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {
     setAdminBookingPersistenceMessage(null);
 
@@ -20164,6 +20236,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const lastSuccessfulBookingSave = lastSuccessfulBookingSaveRef.current;
 
     if (lastSuccessfulBookingSave?.key === bookingSaveGuardKey) {
+      await completeActiveAdminEmailAiReviewAfterSave();
       const saveMessage = {
         tone: "info",
         text: `Operational booking already saved: ${lastSuccessfulBookingSave.bookingId}. Change details before saving again.`,
@@ -20285,6 +20358,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         key: getBookingSaveGuardKey(primarySavedBookingReference),
         record: primarySavedBooking,
       };
+      await completeActiveAdminEmailAiReviewAfterSave();
 
       const calendarSyncResults = [];
 
@@ -32095,7 +32169,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
-                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}
+	                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}
                 data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
 	                data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}

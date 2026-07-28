@@ -258,7 +258,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}',
+  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}',
   "Dashboard tab customer booking request count marker",
 );
 assertIncludes(
@@ -305,7 +305,12 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
+  "dashboardNewBookingRequestAttentionCount + adminEmailAiIntakeCount;",
+  "Dashboard action badge includes actionable Email AI requests",
+);
+assertIncludes(
+  appPage,
+  "bookingsTabNewBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
   "Dashboard action badge combined attention count",
 );
 assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Dashboard action badge meaningful alert label helper");

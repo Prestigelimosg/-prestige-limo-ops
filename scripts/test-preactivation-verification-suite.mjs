@@ -94,6 +94,10 @@ const guardChecks = [
     script: "scripts/test-customer-folder-issued-invoice-edit-guard.mjs",
   },
   {
+    label: "customer folder issued-invoice DSP calculation guard",
+    script: "scripts/test-customer-folder-issued-invoice-dsp-calculation-guard.mjs",
+  },
+  {
     label: "customer card-option default override guard",
     script: "scripts/test-customer-card-option-default-override-guard.mjs",
   },

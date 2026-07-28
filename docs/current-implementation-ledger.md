@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Unified Invoice Item Description Format Repair (2026-07-28)
+
+- The owner confirmed that every invoice job type uses one continuous uppercase, pipe-separated item description with compact 24-hour time: MNG `ARRIVAL | DATE, TIME | FLIGHT | DROP-OFF | VEHICLE | PASSENGER | REF`; DEP `DEPARTURE | DATE, TIME | FLIGHT | PICKUP | VEHICLE | PASSENGER | REF`; TRF `CITY TRANSFER | DATE, TIME | PICKUP > DROP-OFF | VEHICLE | PASSENGER | REF`; and DSP `HOURLY | DATE, START - END | VEHICLE | PASSENGER | REF`. Blank fields remain `NIL`.
+- The shared established invoice line-description formatter applies that same format to MNG, DEP, TRF, and DSP descriptions flowing through the existing pending-job selection and selected-jobs review consumers. A single time displays as `1200`; a DSP interval displays as `1200 - 2114`. `1200 TO 2114` remains accepted Admin input and saves as the canonical dash form. Vehicle code `AVF` and the exact legacy display `ALPHARD / VELLFIRE` render as `ALPHARD`.
+- The existing Section 2 issued-invoice DSP save path now canonicalizes the complete description only for a booking-reference-linked DSP line. The exact legacy `JBT-0001` description therefore becomes `HOURLY | 26 JUL 2026, 1200 - 2114 | ALPHARD | MR. JENN BIN TAN | REF 10846` when Admin explicitly saves that same invoice again; its verified nine-hour SGD585 calculation remains unchanged. Source work does not itself modify the Production record.
+- No section, table, field, button, route, API, persistence boundary, PDF renderer, email/reminder/payment action, invoice identity/status/date, booking record, DSP timing evidence, Driver Report, Calendar, message, payout, PayNow, GPS, provider, environment, schema, or migration is changed. Focused fail-then-pass coverage is in `scripts/test-customer-invoice-line-description-format.mjs` and `scripts/test-customer-folder-issued-invoice-dsp-calculation-guard.mjs`.
+
 ### Issued-Invoice DSP Dispute Calculation Repair (2026-07-28)
 
 - Signed-in owner-Mac Production Chrome reproduced one exact Section 2 dispute-edit defect on issued/sent pending invoice `JBT-0001`, linked to DSP booking `10846` / internal reference `ADM-20260725150239`. Admin changed the stored item description from the prior `1200-2014` interval to an end time of `2114`, but the independent Amount input remained SGD520. Saving regenerated the same PDF and stored the changed description while the invoice total and balance stayed SGD520.

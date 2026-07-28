@@ -11,7 +11,7 @@ import {
   type CustomerInvoiceRateSetupRecord,
 } from "../../../lib/customer-dsp-invoice-review";
 import {
-  normalizeCustomerInvoiceDspLineTimeRange,
+  normalizeCustomerInvoiceDspLineDescription,
   parseCustomerInvoiceDspLineTimeRange,
 } from "../../../lib/customer-invoice-line-description";
 import type { MockCustomer, MockCustomerBooking, MockCustomerInvoice } from "../_data/mock-customers";
@@ -794,9 +794,9 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   async function saveInvoiceEdit(invoice: DisplayInvoice) {
     const lineItems = invoiceEditItems.map((item) => {
       const amountCents = centsFromAmountLabel(item.amount);
-      const description = normalizeCustomerInvoiceDspLineTimeRange(
-        item.description,
-      );
+      const description = isIssuedInvoiceDspLine(item)
+        ? normalizeCustomerInvoiceDspLineDescription(item.description)
+        : item.description.trim();
 
       return {
         amountCents,

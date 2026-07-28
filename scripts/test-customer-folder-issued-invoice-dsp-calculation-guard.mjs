@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import {
-  normalizeCustomerInvoiceDspLineTimeRange,
+  normalizeCustomerInvoiceDspLineDescription,
   parseCustomerInvoiceDspLineTimeRange,
 } from "../lib/customer-invoice-line-description.ts";
 import { calculateDspBillableMinutes } from "../lib/hourly-billing.ts";
@@ -52,11 +52,19 @@ assert.deepEqual(
 );
 
 assert.equal(
-  normalizeCustomerInvoiceDspLineTimeRange(
+  normalizeCustomerInvoiceDspLineDescription(
     "HOURLY / DISPOSAL | 26 JUL 2026, 12:00-2114| ALPHARD / VELLFIRE | MR. JENN BIN TAN | REF 10846",
   ),
-  "HOURLY / DISPOSAL | 26 JUL 2026, 1200 - 2114 | ALPHARD / VELLFIRE | MR. JENN BIN TAN | REF 10846",
-  "A disputed DSP invoice line must save the canonical compact time range.",
+  "HOURLY | 26 JUL 2026, 1200 - 2114 | ALPHARD | MR. JENN BIN TAN | REF 10846",
+  "A disputed DSP invoice line must save the full owner-approved canonical description.",
+);
+
+assert.equal(
+  normalizeCustomerInvoiceDspLineDescription(
+    "DSP | 26 JUL 2026, 1200 TO 2114 | AVF | MR. JENN BIN TAN | REF 10846",
+  ),
+  "HOURLY | 26 JUL 2026, 1200 - 2114 | ALPHARD | MR. JENN BIN TAN | REF 10846",
+  "Every future booking-linked DSP invoice edit must save the same canonical layout.",
 );
 
 const jbtActualMinutes = 9 * 60 + 14;
@@ -98,7 +106,8 @@ for (const fragment of [
   "calculateCustomerInvoiceRateReview",
   "type CustomerInvoiceRateSetupRecord",
   "parseCustomerInvoiceDspLineTimeRange",
-  "normalizeCustomerInvoiceDspLineTimeRange",
+  "normalizeCustomerInvoiceDspLineDescription",
+  "const description = isIssuedInvoiceDspLine(item)",
   'const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";',
   'const adminRateSetupApiPath = "/api/admin-rate-setup";',
   "function calculateIssuedInvoiceDspLine",
@@ -124,8 +133,11 @@ assert.ok(
 );
 
 for (const fragment of [
+  "Unified Invoice Item Description Format Repair",
   "Issued-Invoice DSP Dispute Calculation Repair",
   "Section 2",
+  "HOURLY | DATE, START - END | VEHICLE | PASSENGER | REF",
+  "MNG, DEP, TRF, and DSP",
   "same invoice",
   "start and end",
   "invoice layout",

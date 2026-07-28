@@ -84,7 +84,7 @@ export function parseCustomerInvoiceDspLineTimeRange(
     : null;
 }
 
-export function normalizeCustomerInvoiceDspLineTimeRange(
+export function normalizeCustomerInvoiceDspLineDescription(
   description: string | null | undefined,
 ) {
   const normalizedDescription = String(description ?? "").trim();
@@ -96,11 +96,25 @@ export function normalizeCustomerInvoiceDspLineTimeRange(
 
   const compactStartTime = timeRange.startTime.replace(":", "");
   const compactEndTime = timeRange.endTime.replace(":", "");
+  const fields = normalizedDescription
+    .replace(
+      /,\s*\d{1,2}:?\d{2}\s*(?:\/|-|\bTO\b)\s*\d{1,2}:?\d{2}\s*(?=\||$)/i,
+      `, ${compactStartTime} - ${compactEndTime} `,
+    )
+    .split("|")
+    .map((field) => field.trim());
 
-  return normalizedDescription.replace(
-    /,\s*\d{1,2}:?\d{2}\s*(?:\/|-|\bTO\b)\s*\d{1,2}:?\d{2}\s*(?=\||$)/i,
-    `, ${compactStartTime} - ${compactEndTime} `,
-  );
+  if (fields.length !== 5) {
+    return normalizedDescription;
+  }
+
+  fields[0] = "HOURLY";
+
+  if (/^(?:AVF|ALPHARD\s*\/\s*VELLFIRE)$/i.test(fields[2])) {
+    fields[2] = "ALPHARD";
+  }
+
+  return fields.join(" | ");
 }
 
 function invoiceDescriptionText(value: unknown) {
@@ -152,6 +166,10 @@ function invoiceDescriptionTime(value: unknown) {
   }).format(parsed);
 }
 
+function compactInvoiceDescriptionTime(value: string) {
+  return value === nilLabel ? value : value.replace(":", "");
+}
+
 function invoiceDescriptionService(value: unknown) {
   const serviceType = invoiceDescriptionText(value);
 
@@ -189,33 +207,45 @@ export function formatCustomerInvoiceLineDescription(input: CustomerInvoiceLineD
   if (normalizedService === "DSP" || normalizedService === "HOURLY") {
     return [
       service,
-      `${invoiceDescriptionDateTime(input.dspStartedAt)} / ${invoiceDescriptionTime(input.dspEndedAt)}`,
+      `${compactInvoiceDescriptionTime(
+        invoiceDescriptionDateTime(input.dspStartedAt),
+      )} - ${compactInvoiceDescriptionTime(
+        invoiceDescriptionTime(input.dspEndedAt),
+      )}`,
       vehicle,
       passenger,
       `REF ${reference}`,
     ].join(" | ");
   }
 
-  const firstLine =
+  const serviceFields =
     normalizedService === "MNG"
       ? [
           service,
-          invoiceDescriptionDateTime(input.pickupAt),
+          compactInvoiceDescriptionTime(
+            invoiceDescriptionDateTime(input.pickupAt),
+          ),
           invoiceDescriptionText(input.flightNumber),
           invoiceDescriptionText(input.dropoffLocation),
-        ].join(" | ")
+        ]
       : normalizedService === "DEP"
         ? [
             service,
-            invoiceDescriptionDateTime(input.pickupAt),
+            compactInvoiceDescriptionTime(
+              invoiceDescriptionDateTime(input.pickupAt),
+            ),
             invoiceDescriptionText(input.flightNumber),
             invoiceDescriptionText(input.pickupLocation),
-          ].join(" | ")
+          ]
         : [
             service,
-            invoiceDescriptionDateTime(input.pickupAt),
+            compactInvoiceDescriptionTime(
+              invoiceDescriptionDateTime(input.pickupAt),
+            ),
             `${invoiceDescriptionText(input.pickupLocation)} > ${invoiceDescriptionText(input.dropoffLocation)}`,
-          ].join(" | ");
+          ];
 
-  return `${firstLine}\n${[vehicle, passenger, `REF ${reference}`].join(" | ")}`;
+  return [...serviceFields, vehicle, passenger, `REF ${reference}`].join(
+    " | ",
+  );
 }

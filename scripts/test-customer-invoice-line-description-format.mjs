@@ -14,14 +14,14 @@ const common = {
 
 assert.equal(
   formatCustomerInvoiceLineDescription({ ...common, flightNumber: "SQ12", serviceType: "MNG" }),
-  "AIRPORT ARRIVAL | SQ12 | 18 JUL 2026, 06:10 | 327 RIVER VALLEY ROAD > CHANGI AIRPORT T3\n" +
-    "ALPHARD / VELLFIRE | DEEP JULY | REF 10826",
+  "ARRIVAL | 18 JUL 2026, 06:10 | SQ12 | CHANGI AIRPORT T3\n" +
+    "ALPHARD | DEEP JULY | REF 10826",
 );
 
 assert.equal(
   formatCustomerInvoiceLineDescription({ ...common, flightNumber: "SQ12", serviceType: "DEP" }),
-  "AIRPORT DEPARTURE | SQ12 | 18 JUL 2026, 06:10 | 327 RIVER VALLEY ROAD > CHANGI AIRPORT T3\n" +
-    "ALPHARD / VELLFIRE | DEEP JULY | REF 10826",
+  "DEPARTURE | 18 JUL 2026, 06:10 | SQ12 | 327 RIVER VALLEY ROAD\n" +
+    "ALPHARD | DEEP JULY | REF 10826",
 );
 
 assert.equal(
@@ -33,7 +33,7 @@ assert.equal(
 assert.equal(
   formatCustomerInvoiceLineDescription({ ...common, serviceType: "TRF", vehicleType: "E / AVF" }),
   "CITY TRANSFER | 18 JUL 2026, 06:10 | 327 RIVER VALLEY ROAD > CHANGI AIRPORT T3\n" +
-    "MERCEDES E-CLASS / ALPHARD / VELLFIRE | DEEP JULY | REF 10826",
+    "MERCEDES E-CLASS / ALPHARD | DEEP JULY | REF 10826",
 );
 
 assert.equal(
@@ -43,12 +43,12 @@ assert.equal(
     dspStartedAt: "2026-07-17T22:10:00.000Z",
     serviceType: "DSP",
   }),
-  "HOURLY / DISPOSAL | 18 JUL 2026, 06:10-09:25 | ALPHARD / VELLFIRE | DEEP JULY | REF 10826",
+  "HOURLY | 18 JUL 2026, 06:10 / 09:25 | ALPHARD | DEEP JULY | REF 10826",
 );
 
 assert.equal(
   formatCustomerInvoiceLineDescription({ serviceType: "MNG" }),
-  "AIRPORT ARRIVAL | NIL | NIL | NIL > NIL\nNIL | NIL | REF NIL",
+  "ARRIVAL | NIL | NIL | NIL\nNIL | NIL | REF NIL",
 );
 
 assert.equal(
@@ -58,13 +58,13 @@ assert.equal(
     route: "327 River Valley Road",
     serviceType: "DEP",
   }),
-  "AIRPORT DEPARTURE | NIL | 18 JUL 2026, 06:10 | 327 RIVER VALLEY ROAD > NIL\n" +
-    "ALPHARD / VELLFIRE | DEEP JULY | REF 10826",
+  "DEPARTURE | 18 JUL 2026, 06:10 | NIL | 327 RIVER VALLEY ROAD\n" +
+    "ALPHARD | DEEP JULY | REF 10826",
 );
 
 assert.equal(
   formatCustomerInvoiceLineDescription({ serviceType: "DSP" }),
-  "HOURLY / DISPOSAL | NIL-NIL | NIL | NIL | REF NIL",
+  "HOURLY | NIL / NIL | NIL | NIL | REF NIL",
 );
 
 console.log("Customer invoice line-description format tests passed");

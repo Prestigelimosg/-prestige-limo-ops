@@ -878,6 +878,44 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             </span>
           </div>
 
+          <div
+            className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white"
+            data-customer-invoice-folder-selected-item-table={selectedInvoice.invoiceNumber}
+          >
+            <table className="w-full min-w-[680px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
+                  <th className="px-4 py-3">No.</th>
+                  <th className="px-4 py-3">Item description</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(selectedInvoice.lineItems.length > 0
+                  ? selectedInvoice.lineItems
+                  : [
+                      {
+                        amountLabel: selectedInvoice.amount,
+                        description: itemDescription(customer, selectedBooking, {
+                          invoiceNumber: selectedInvoice.invoiceNumber,
+                        }),
+                      },
+                    ]
+                ).map((item, itemIndex) => (
+                  <tr key={`${selectedInvoice.invoiceNumber}-${itemIndex}`}>
+                    <td className="px-4 py-4 font-bold text-slate-600">{itemIndex + 1}</td>
+                    <td className="px-4 py-4 font-semibold leading-6 text-slate-900">
+                      {item.description || "Invoice item description pending"}
+                    </td>
+                    <td className="px-4 py-4 text-right font-bold text-slate-950">
+                      {item.amountLabel || selectedInvoice.amount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
           {invoiceEditNumber === selectedInvoice.invoiceNumber ? (
             <div
               className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3"
@@ -980,42 +1018,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                 </p>
               ) : null}
             </div>
-          ) : (
-            <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
-              <table className="w-full min-w-[680px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
-                  <th className="px-4 py-3">No.</th>
-                  <th className="px-4 py-3">Item description</th>
-                  <th className="px-4 py-3 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(selectedInvoice.lineItems.length > 0
-                  ? selectedInvoice.lineItems
-                  : [
-                      {
-                        amountLabel: selectedInvoice.amount,
-                        description: itemDescription(customer, selectedBooking, {
-                          invoiceNumber: selectedInvoice.invoiceNumber,
-                        }),
-                      },
-                    ]
-                ).map((item, itemIndex) => (
-                  <tr key={`${selectedInvoice.invoiceNumber}-${itemIndex}`}>
-                    <td className="px-4 py-4 font-bold text-slate-600">{itemIndex + 1}</td>
-                    <td className="px-4 py-4 font-semibold leading-6 text-slate-900">
-                      {item.description || "Invoice item description pending"}
-                    </td>
-                    <td className="px-4 py-4 text-right font-bold text-slate-950">
-                      {item.amountLabel || selectedInvoice.amount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              </table>
-            </div>
-          )}
+          ) : null}
           <div
             className="mt-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-[minmax(14rem,1fr)_minmax(14rem,1fr)]"
             data-customer-invoice-folder-selected-actions={selectedInvoice.invoiceNumber}

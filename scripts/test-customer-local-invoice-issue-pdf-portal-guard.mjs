@@ -104,6 +104,7 @@ for (const fragment of [
   "const billToNameLines = wrapText(invoice.customerName, 62).slice(0, 2);",
   "billToNameLines.map((line, index) => pdfTextAt(line, 50, billToY - 17 - index * 12, 9))",
   "const billToExtraLineOffset = (billToNameLines.length - 1) * 12;",
+  "const totalsY = Math.min(360, rowY - 8);",
   "const documentTitle =",
   '"INVOICE"',
   '"QUOTATION"',
@@ -131,6 +132,12 @@ for (const fragment of [
 ]) {
   assertIncludes(localPdfHelper, fragment, `PDF helper fragment ${fragment}`);
 }
+
+assertExcludes(
+  localPdfHelper,
+  "const totalsY = Math.max(360, rowY - 8);",
+  "four-line invoice totals must not be forced upward into item rows",
+);
 
 assert.ok(
   localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') <

@@ -66,10 +66,10 @@ function invoiceDescriptionTime(value: unknown) {
 function invoiceDescriptionService(value: unknown) {
   const serviceType = invoiceDescriptionText(value);
 
-  if (serviceType === "MNG") return "AIRPORT ARRIVAL";
-  if (serviceType === "DEP") return "AIRPORT DEPARTURE";
+  if (serviceType === "MNG") return "ARRIVAL";
+  if (serviceType === "DEP") return "DEPARTURE";
   if (serviceType === "TRF") return "CITY TRANSFER";
-  if (serviceType === "DSP" || serviceType === "HOURLY") return "HOURLY / DISPOSAL";
+  if (serviceType === "DSP" || serviceType === "HOURLY") return "HOURLY";
 
   return serviceType;
 }
@@ -77,10 +77,10 @@ function invoiceDescriptionService(value: unknown) {
 function invoiceDescriptionVehicle(value: unknown) {
   const vehicleType = invoiceDescriptionText(value);
   const fullVehicleLabels: Record<string, string> = {
-    AVF: "ALPHARD / VELLFIRE",
+    AVF: "ALPHARD",
     COMBI: "HI-ROOF MINIBUS",
     E: "MERCEDES E-CLASS",
-    "E / AVF": "MERCEDES E-CLASS / ALPHARD / VELLFIRE",
+    "E / AVF": "MERCEDES E-CLASS / ALPHARD",
     "E-CLASS": "MERCEDES E-CLASS",
     S: "MERCEDES S-CLASS",
     "S-CLASS": "MERCEDES S-CLASS",
@@ -88,16 +88,6 @@ function invoiceDescriptionVehicle(value: unknown) {
   };
 
   return fullVehicleLabels[vehicleType] || vehicleType;
-}
-
-function invoiceDescriptionRoute(input: CustomerInvoiceLineDescriptionInput) {
-  const savedRoute = String(input.route ?? "").replace(/\s+/g, " ").trim();
-  const pickupLocation = String(input.pickupLocation ?? "").trim();
-  const dropoffLocation = String(input.dropoffLocation ?? "").trim();
-
-  return savedRoute && pickupLocation && dropoffLocation
-    ? savedRoute.toUpperCase()
-    : `${invoiceDescriptionText(input.pickupLocation)} > ${invoiceDescriptionText(input.dropoffLocation)}`;
 }
 
 export function formatCustomerInvoiceLineDescription(input: CustomerInvoiceLineDescriptionInput) {
@@ -110,7 +100,7 @@ export function formatCustomerInvoiceLineDescription(input: CustomerInvoiceLineD
   if (normalizedService === "DSP" || normalizedService === "HOURLY") {
     return [
       service,
-      `${invoiceDescriptionDateTime(input.dspStartedAt)}-${invoiceDescriptionTime(input.dspEndedAt)}`,
+      `${invoiceDescriptionDateTime(input.dspStartedAt)} / ${invoiceDescriptionTime(input.dspEndedAt)}`,
       vehicle,
       passenger,
       `REF ${reference}`,
@@ -118,14 +108,25 @@ export function formatCustomerInvoiceLineDescription(input: CustomerInvoiceLineD
   }
 
   const firstLine =
-    normalizedService === "MNG" || normalizedService === "DEP"
+    normalizedService === "MNG"
       ? [
           service,
-          invoiceDescriptionText(input.flightNumber),
           invoiceDescriptionDateTime(input.pickupAt),
-          invoiceDescriptionRoute(input),
+          invoiceDescriptionText(input.flightNumber),
+          invoiceDescriptionText(input.dropoffLocation),
         ].join(" | ")
-      : [service, invoiceDescriptionDateTime(input.pickupAt), invoiceDescriptionRoute(input)].join(" | ");
+      : normalizedService === "DEP"
+        ? [
+            service,
+            invoiceDescriptionDateTime(input.pickupAt),
+            invoiceDescriptionText(input.flightNumber),
+            invoiceDescriptionText(input.pickupLocation),
+          ].join(" | ")
+        : [
+            service,
+            invoiceDescriptionDateTime(input.pickupAt),
+            `${invoiceDescriptionText(input.pickupLocation)} > ${invoiceDescriptionText(input.dropoffLocation)}`,
+          ].join(" | ");
 
   return `${firstLine}\n${[vehicle, passenger, `REF ${reference}`].join(" | ")}`;
 }

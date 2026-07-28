@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Issued Invoice In-Place Edit Repair (2026-07-28)
+
+- Signed-in owner-Mac Chrome reproduced the exact customer-folder workflow gap on pending issued invoice `DEEP-0001`: `2 · Total invoices` showed the two stored lines and exposed only `View`, `Send reminder`, payment method, and `Mark paid`. The page had no browser error, but no established control could correct a disputed line description, wrong job line, or price after issue.
+- Every stored issued invoice row now has one compact `Edit` control inside the existing `2 · Total invoices` lane. It opens an inline editor for the selected invoice's existing job/item descriptions and amounts, permits adding or removing lines within the established four-line limit, and saves back to that same stored record. No second invoice page, workbench, route, renderer, numbering scheme, table, or customer/driver surface is added.
+- Save requires an explicit confirmation naming the same invoice and reviewed total. The existing guarded `/api/admin-customer-invoices` PATCH route verifies the exact invoice number, exact customer, issued invoice document type/state, current payment status, and expected prior amount before one compare-and-update write. Stale, missing, cross-customer, draft, quotation, credit-note, malformed, empty, or over-limit edits fail closed.
+- A successful edit keeps the same invoice number, issue date, due date, customer scope, reference, route, service, and Paid/Unpaid payment status. It recalculates the total, regenerates the stored PDF through the established shared renderer, and resets only the normal invoice email-delivery state because the document payload changed. It does not send email or reminder, mark Paid/Unpaid, change payment method/evidence, create a charge, touch payout/PayNow, or mutate booking, CRM, Calendar, Driver, messaging, GPS, completion, or customer-portal access lanes.
+- Focused regression protection is `scripts/test-customer-folder-issued-invoice-edit-guard.mjs`, registered beside the existing issued-invoice eligibility, amended-unpaid refresh, multi-job handoff, stored PDF/portal, billing lifecycle, email-idempotency, and privacy guards.
+
 ### Private Semantic Email AI Intake (2026-07-27)
 
 - A live Email AI `Review in Dispatch` → `Create Job Card` check reproduced one exact parser defect before Save + CRM: the queued record's canonical Notes contained `Trip organizer: Mr. Kim, Hyun Soo, +65 98156017. Client details list...`, and the existing deterministic `Trip organizer` extractor copied the phone number and all later Notes text into the Booker field.

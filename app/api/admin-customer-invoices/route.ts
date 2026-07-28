@@ -3,7 +3,9 @@ import {
   archiveAdminCustomerTestInvoiceArtifact,
   createCustomerInvoiceRecord,
   customerInvoiceAmendedBookingRefreshAction,
+  customerInvoiceIssuedEditAction,
   customerInvoiceTestArtifactArchiveAction,
+  editAdminCustomerIssuedInvoice,
   loadAdminCustomerInvoiceRecords,
   refreshAdminCustomerAmendedUnpaidInvoice,
   updateAdminCustomerInvoiceStatus,
@@ -116,6 +118,20 @@ export async function PATCH(request: Request) {
         linked: refreshed.data.linked,
         ok: true,
         version: refreshed.version,
+      });
+    }
+
+    if (body?.action === customerInvoiceIssuedEditAction) {
+      const edited = await editAdminCustomerIssuedInvoice(body, boundary.actor);
+
+      if (!edited.ok) {
+        return safeErrorResponse(edited);
+      }
+
+      return Response.json({
+        invoice: edited.data,
+        ok: true,
+        version: edited.version,
       });
     }
 

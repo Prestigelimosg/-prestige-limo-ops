@@ -17,7 +17,15 @@ type CustomerInvoiceFolderPanelProps = {
 type PaymentMethod = "Card" | "Cash" | "Bank transfer";
 type InvoiceLineItem = {
   amountLabel?: string;
+  bookingReference?: string;
   description?: string;
+  quantity?: number;
+};
+type InvoiceEditLineItem = {
+  amount: string;
+  bookingReference?: string;
+  description: string;
+  quantity: number;
 };
 type DisplayInvoice = {
   amount: string;
@@ -61,6 +69,8 @@ type StoredInvoiceRecord = {
 };
 
 type InvoiceActionMode = "payment" | "reminder" | null;
+const customerInvoiceIssuedEditAction = "edit_issued_invoice";
+const customerInvoiceMaximumLineItems = 4;
 
 function statusClass(status: string) {
   if (isPaidStatus(status)) {
@@ -107,6 +117,34 @@ function centsFromAmountLabel(value: string) {
   const amount = Number(value.replace(/[^0-9.]/g, ""));
 
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) : 0;
+}
+
+function amountInputFromLabel(value: string | undefined) {
+  const amountCents = centsFromAmountLabel(value || "");
+
+  return amountCents > 0 ? (amountCents / 100).toFixed(2) : "";
+}
+
+function editLineItemsFromInvoice(
+  invoice: DisplayInvoice,
+  fallbackDescription: string,
+): InvoiceEditLineItem[] {
+  const sourceItems =
+    invoice.lineItems.length > 0
+      ? invoice.lineItems
+      : [
+          {
+            amountLabel: invoice.amount,
+            description: fallbackDescription,
+          },
+        ];
+
+  return sourceItems.map((item) => ({
+    amount: amountInputFromLabel(item.amountLabel || invoice.amount),
+    bookingReference: item.bookingReference,
+    description: safeDisplay(item.description, "Invoice item"),
+    quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+  }));
 }
 
 function displayStoredInvoice(invoice: StoredInvoiceRecord): DisplayInvoice | null {
@@ -174,6 +212,10 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
   const [invoiceActionMode, setInvoiceActionMode] = useState<InvoiceActionMode>(null);
   const [invoiceActionPending, setInvoiceActionPending] = useState(false);
+  const [invoiceEditItems, setInvoiceEditItems] = useState<InvoiceEditLineItem[]>([]);
+  const [invoiceEditMessage, setInvoiceEditMessage] = useState("");
+  const [invoiceEditNumber, setInvoiceEditNumber] = useState("");
+  const [invoiceEditPending, setInvoiceEditPending] = useState(false);
   const [reminderRecipientEmail, setReminderRecipientEmail] = useState("");
   const [sendPaymentThankYou, setSendPaymentThankYou] = useState(true);
   const mockInvoices = useMemo<DisplayInvoice[]>(
@@ -303,6 +345,78 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     setSelectedInvoiceNumber(invoiceNumber);
     setInvoiceActionMessage("");
     setInvoiceActionMode(null);
+    setInvoiceEditMessage("");
+    setInvoiceEditNumber("");
+    setInvoiceEditItems([]);
+  }
+
+  function beginInvoiceEdit(invoice: DisplayInvoice) {
+    setSelectedInvoiceNumber(invoice.invoiceNumber);
+    setInvoiceActionMessage("");
+    setInvoiceActionMode(null);
+    setInvoiceEditMessage("");
+    setInvoiceEditItems(
+      editLineItemsFromInvoice(
+        invoice,
+        itemDescription(customer, selectedBooking, {
+          invoiceNumber: invoice.invoiceNumber,
+        }),
+      ),
+    );
+    setInvoiceEditNumber(invoice.invoiceNumber);
+  }
+
+  function cancelInvoiceEdit() {
+    setInvoiceEditMessage("");
+    setInvoiceEditItems([]);
+    setInvoiceEditNumber("");
+  }
+
+  function updateInvoiceEditItem(
+    itemIndex: number,
+    field: "amount" | "description",
+    value: string,
+  ) {
+    setInvoiceEditItems((currentItems) =>
+      currentItems.map((item, index) =>
+        index === itemIndex
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
+      ),
+    );
+    setInvoiceEditMessage("");
+  }
+
+  function addInvoiceEditItem() {
+    if (invoiceEditItems.length >= customerInvoiceMaximumLineItems) {
+      setInvoiceEditMessage(`Invoices support up to ${customerInvoiceMaximumLineItems} line items.`);
+      return;
+    }
+
+    setInvoiceEditItems((currentItems) => [
+      ...currentItems,
+      {
+        amount: "",
+        description: "",
+        quantity: 1,
+      },
+    ]);
+    setInvoiceEditMessage("");
+  }
+
+  function removeInvoiceEditItem(itemIndex: number) {
+    if (invoiceEditItems.length <= 1) {
+      setInvoiceEditMessage("An issued invoice must keep at least one line item.");
+      return;
+    }
+
+    setInvoiceEditItems((currentItems) =>
+      currentItems.filter((_, index) => index !== itemIndex),
+    );
+    setInvoiceEditMessage("");
   }
 
   function updatePaymentMethod(invoiceNumber: string, paymentMethod: PaymentMethod) {
@@ -406,6 +520,77 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
       return response.ok && result?.ok && result?.invoice ? (result.invoice as StoredInvoiceRecord) : null;
     } catch {
       return null;
+    }
+  }
+
+  async function saveInvoiceEdit(invoice: DisplayInvoice) {
+    const lineItems = invoiceEditItems.map((item) => {
+      const amountCents = centsFromAmountLabel(item.amount);
+
+      return {
+        amountCents,
+        amountLabel: amountCents > 0 ? `$${(amountCents / 100).toFixed(2)}` : "",
+        bookingReference: item.bookingReference,
+        description: item.description.trim(),
+        quantity: item.quantity,
+      };
+    });
+    const invalidLine = lineItems.find(
+      (item) => !item.description || item.description.length > 500 || !item.amountCents,
+    );
+
+    if (lineItems.length === 0 || lineItems.length > customerInvoiceMaximumLineItems || invalidLine) {
+      setInvoiceEditMessage("Every line needs a description and an amount greater than $0.");
+      return;
+    }
+
+    const nextAmountCents = lineItems.reduce((total, item) => total + item.amountCents, 0);
+    const confirmed = window.confirm(
+      `Update issued invoice ${invoice.invoiceNumber} to $${(nextAmountCents / 100).toFixed(2)}? ` +
+        "This keeps the same invoice number, dates, and payment status, regenerates its PDF, and sends no email.",
+    );
+
+    if (!confirmed) {
+      setInvoiceEditMessage(`${invoice.invoiceNumber} edit cancelled. Nothing was changed.`);
+      return;
+    }
+
+    setInvoiceEditPending(true);
+    setInvoiceEditMessage("");
+
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify({
+          action: customerInvoiceIssuedEditAction,
+          customerId: customer.id,
+          expectedAmountCents: invoice.amountCents,
+          invoiceNumber: invoice.invoiceNumber,
+          lineItems: lineItems.map(({ amountCents: _amountCents, ...lineItem }) => lineItem),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !result.invoice) {
+        throw new Error(result?.error || "Issued invoice edit failed safely.");
+      }
+
+      applyStoredInvoice(result.invoice as StoredInvoiceRecord);
+      setInvoiceEditItems([]);
+      setInvoiceEditNumber("");
+      setInvoiceActionMessage(
+        `${invoice.invoiceNumber} updated. The same invoice number and payment status were kept; its PDF was regenerated and no email was sent.`,
+      );
+    } catch (error) {
+      setInvoiceEditMessage(
+        error instanceof Error ? error.message : "Issued invoice edit failed safely.",
+      );
+    } finally {
+      setInvoiceEditPending(false);
     }
   }
 
@@ -653,14 +838,24 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      className="ml-auto block rounded-md border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-800 hover:bg-slate-100"
-                      data-customer-invoice-folder-open={invoice.invoiceNumber}
-                      onClick={() => openInvoice(invoice.invoiceNumber)}
-                      type="button"
-                    >
-                      View
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-800 hover:bg-slate-100"
+                        data-customer-invoice-folder-open={invoice.invoiceNumber}
+                        onClick={() => openInvoice(invoice.invoiceNumber)}
+                        type="button"
+                      >
+                        View
+                      </button>
+                      <button
+                        className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 font-bold text-amber-900 hover:bg-amber-100"
+                        data-customer-invoice-folder-edit={invoice.invoiceNumber}
+                        onClick={() => beginInvoiceEdit(invoice)}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -683,8 +878,111 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             </span>
           </div>
 
-          <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
-            <table className="w-full min-w-[680px] border-collapse text-left text-sm">
+          {invoiceEditNumber === selectedInvoice.invoiceNumber ? (
+            <div
+              className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3"
+              data-customer-invoice-folder-editor={selectedInvoice.invoiceNumber}
+            >
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-bold text-slate-950">Edit issued invoice</p>
+                  <p className="text-xs font-semibold text-slate-600">
+                    Update the existing lines. The invoice number, dates, customer, and payment status stay unchanged.
+                  </p>
+                </div>
+                <p className="text-xs font-bold text-amber-900">
+                  No email is sent when saved.
+                </p>
+              </div>
+              <div className="mt-3 space-y-2">
+                {invoiceEditItems.map((item, itemIndex) => (
+                  <div
+                    className="grid gap-2 rounded-md border border-amber-200 bg-white p-2 sm:grid-cols-[minmax(0,1fr)_9rem_auto]"
+                    data-customer-invoice-folder-edit-line={itemIndex + 1}
+                    key={`${selectedInvoice.invoiceNumber}-edit-${itemIndex}`}
+                  >
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Job / item {itemIndex + 1}
+                      <textarea
+                        className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 px-2 py-1.5 text-sm font-semibold text-slate-950"
+                        data-customer-invoice-folder-edit-description={itemIndex + 1}
+                        maxLength={500}
+                        onChange={(event) =>
+                          updateInvoiceEditItem(itemIndex, "description", event.target.value)
+                        }
+                        value={item.description}
+                      />
+                    </label>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                      Amount (SGD)
+                      <input
+                        className="mt-1 h-9 w-full rounded-md border border-slate-300 px-2 text-sm font-bold text-slate-950"
+                        data-customer-invoice-folder-edit-amount={itemIndex + 1}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateInvoiceEditItem(itemIndex, "amount", event.target.value)
+                        }
+                        placeholder="0.00"
+                        value={item.amount}
+                      />
+                    </label>
+                    <button
+                      className="h-9 self-end rounded-md border border-rose-300 bg-rose-50 px-3 text-xs font-bold text-rose-800 hover:bg-rose-100"
+                      data-customer-invoice-folder-edit-remove={itemIndex + 1}
+                      disabled={invoiceEditPending || invoiceEditItems.length <= 1}
+                      onClick={() => removeInvoiceEditItem(itemIndex)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <button
+                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                  data-customer-invoice-folder-edit-add={selectedInvoice.invoiceNumber}
+                  disabled={
+                    invoiceEditPending ||
+                    invoiceEditItems.length >= customerInvoiceMaximumLineItems
+                  }
+                  onClick={addInvoiceEditItem}
+                  type="button"
+                >
+                  Add item
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800"
+                    disabled={invoiceEditPending}
+                    onClick={cancelInvoiceEdit}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="h-9 rounded-md border border-amber-500 bg-amber-100 px-3 text-sm font-bold text-amber-950 disabled:opacity-50"
+                    data-customer-invoice-folder-edit-save={selectedInvoice.invoiceNumber}
+                    disabled={invoiceEditPending}
+                    onClick={() => void saveInvoiceEdit(selectedInvoice)}
+                    type="button"
+                  >
+                    {invoiceEditPending ? "Saving…" : "Save invoice"}
+                  </button>
+                </div>
+              </div>
+              {invoiceEditMessage ? (
+                <p
+                  className="mt-2 rounded-md border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-slate-800"
+                  data-customer-invoice-folder-edit-message="true"
+                >
+                  {invoiceEditMessage}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
+              <table className="w-full min-w-[680px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
                   <th className="px-4 py-3">No.</th>
@@ -715,8 +1013,9 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          )}
           <div
             className="mt-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm md:grid-cols-[minmax(14rem,1fr)_minmax(14rem,1fr)]"
             data-customer-invoice-folder-selected-actions={selectedInvoice.invoiceNumber}

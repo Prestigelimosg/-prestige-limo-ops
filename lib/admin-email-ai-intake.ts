@@ -8,13 +8,15 @@ import { simpleParser, type HeaderValue, type ParsedMail } from "mailparser";
 import OpenAI from "openai";
 
 import {
-  adminEmailAiAllowedSenderAddress,
   adminEmailAiAppReviewClassifications,
   adminEmailAiClassificationAppearsInApp,
   adminEmailAiInboxFolder,
   adminEmailAiMailboxAddress,
+  adminEmailAiRecipientIsAllowedForSender,
+  adminEmailAiSenderAddressIsAllowed,
   decideAdminEmailAiEnvelope,
   normalizeAdminEmailAiAddress,
+  type AdminEmailAiAllowedSenderAddress,
   type AdminEmailAiClassification,
 } from "./admin-email-ai-intake-contract";
 import {
@@ -86,7 +88,7 @@ export type AdminEmailAiIntakeRecord = {
   processing_status: AdminEmailAiIntakeStatus;
   received_at: string | null;
   review_reasons: string[];
-  sender_address: typeof adminEmailAiAllowedSenderAddress;
+  sender_address: AdminEmailAiAllowedSenderAddress;
   subject: string;
   suggested_reply: string;
   summary: string;
@@ -384,7 +386,7 @@ function sanitizePersistenceRecord(
   if (
     !id ||
     mailboxAddress !== adminEmailAiMailboxAddress ||
-    senderAddress !== adminEmailAiAllowedSenderAddress
+    !adminEmailAiSenderAddressIsAllowed(senderAddress)
   ) {
     return null;
   }
@@ -416,7 +418,7 @@ function sanitizePersistenceRecord(
     processing_status: intakeStatusValue(value.processing_status),
     received_at: cleanText(value.received_at, 80) || null,
     review_reasons: cleanReviewReasons(value.review_reasons),
-    sender_address: adminEmailAiAllowedSenderAddress,
+    sender_address: senderAddress,
     subject: cleanText(value.subject, 240),
     suggested_reply: analysis.suggestedReply,
     summary: analysis.summary,
@@ -692,8 +694,8 @@ function envelopePassesHeaderGate(envelope: MessageEnvelopeObject | undefined) {
 
   return (
     from.length === 1 &&
-    from[0] === adminEmailAiAllowedSenderAddress &&
-    recipients.includes(adminEmailAiMailboxAddress)
+    adminEmailAiSenderAddressIsAllowed(from[0]) &&
+    adminEmailAiRecipientIsAllowedForSender(from[0], recipients)
   );
 }
 
@@ -915,6 +917,7 @@ async function insertProcessingIntake(
     body: string;
     messageIdHash: string;
     receivedAt: string | null;
+    senderAddress: AdminEmailAiAllowedSenderAddress;
     subject: string;
     uid: number;
     uidValidity: string;
@@ -939,7 +942,7 @@ async function insertProcessingIntake(
       received_at: input.receivedAt,
       recipient_address: adminEmailAiMailboxAddress,
       review_reasons: [],
-      sender_address: adminEmailAiAllowedSenderAddress,
+      sender_address: input.senderAddress,
       subject: input.subject,
       suggested_reply: "",
       summary: "Email AI review is processing.",
@@ -1220,6 +1223,15 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
         continue;
       }
 
+      const senderAddress = parsedMailAddresses(parsedMail.from)[0];
+
+      if (!adminEmailAiSenderAddressIsAllowed(senderAddress)) {
+        skipped += 1;
+        lastSeenUid = message.uid;
+        await saveMailboxState(database, uidValidity, lastSeenUid);
+        continue;
+      }
+
       const body = parsedMailText(parsedMail);
 
       if (!body) {
@@ -1252,6 +1264,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
           !Number.isNaN(parsedMail.date.getTime())
             ? parsedMail.date.toISOString()
             : null,
+        senderAddress,
         subject: cleanText(parsedMail.subject, 240),
         uid: message.uid,
         uidValidity,

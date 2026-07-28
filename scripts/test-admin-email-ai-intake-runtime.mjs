@@ -274,6 +274,21 @@ const syntheticEnquirySource = Buffer.from(
     "Are you available tomorrow at 12pm from Changi Airport to MBS for two passengers?",
   ].join("\r\n"),
 );
+const syntheticGroundBookerSource = Buffer.from(
+  [
+    "Return-Path: <transzend@groundbooker.com>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: GroundBooker <transzend@groundbooker.com>",
+    "To: info@prestigelimo.sg",
+    "Message-ID: <synthetic-groundbooker-booking-1@example.test>",
+    "Date: Mon, 27 Jul 2026 13:32:00 +0800",
+    "Subject: Synthetic GroundBooker confirmed booking",
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "Confirmed booking. Passenger: Test Guest. Pickup: Changi Airport. Drop-off: Marina Bay.",
+  ].join("\r\n"),
+);
 
 const fakeMailbox = {
   messages: [],
@@ -572,13 +587,42 @@ try {
     "enquiries must remain silent on admin device push",
   );
 
+  fakeMailbox.uidNext = 104;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "transzend@groundbooker.com" }],
+      to: [{ address: "info@prestigelimo.sg" }],
+    },
+    size: syntheticGroundBookerSource.length,
+    source: syntheticGroundBookerSource,
+    uid: 103,
+  });
+
+  const groundBookerParsed = await runtime.runAdminEmailAiIntake();
+  assert.equal(groundBookerParsed.ok, true);
+  assert.equal(groundBookerParsed.parsed, 1);
+  assert.equal(groundBookerParsed.skipped, 0);
+  assert.equal(providerRequestBodies.length, 3);
+  assert.equal(downloadCalls, 3);
+  assert.equal(intakeRows.length, 3);
+  assert.equal(
+    intakeRows[2].sender_address,
+    "transzend@groundbooker.com",
+  );
+  assert.equal(intakeRows[2].classification, "confirmed_booking");
+  assert.equal(intakeRows[2].processing_status, "queued");
+  assert.deepEqual(adminDevicePushEvents, [
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+  ]);
+
   const blockedSource = Buffer.from(
     syntheticAllowedSource
       .toString()
       .replaceAll("info@prestigelimo.sg", "other@example.test")
       .replace("synthetic-booking-1", "synthetic-booking-2"),
   );
-  fakeMailbox.uidNext = 104;
+  fakeMailbox.uidNext = 105;
   fakeMailbox.messages.push({
     envelope: {
       from: [{ address: "other@example.test" }],
@@ -586,27 +630,31 @@ try {
     },
     size: blockedSource.length,
     source: blockedSource,
-    uid: 103,
+    uid: 104,
   });
 
   const skipped = await runtime.runAdminEmailAiIntake();
   assert.equal(skipped.ok, true);
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
-  assert.equal(providerRequestBodies.length, 2);
-  assert.equal(downloadCalls, 2, "blocked sender body must not be fetched");
-  assert.equal(intakeRows.length, 2);
+  assert.equal(providerRequestBodies.length, 3);
+  assert.equal(downloadCalls, 3, "blocked sender body must not be fetched");
+  assert.equal(intakeRows.length, 3);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 1);
+  assert.equal(loaded.data.records.length, 2);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
+  assert.equal(
+    loaded.data.records[1].sender_address,
+    "transzend@groundbooker.com",
+  );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 200,
+    input_tokens: 300,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 160,
-    total_tokens: 360,
+    output_tokens: 240,
+    total_tokens: 540,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -637,8 +685,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 1);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 360);
+  assert.equal(allowedReadBody.records.length, 2);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 540);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -731,7 +779,13 @@ try {
     }),
   );
   assert.equal(afterReviewRead.status, 200);
-  assert.deepEqual((await afterReviewRead.json()).records, []);
+  const afterReviewRecords = (await afterReviewRead.json()).records;
+  assert.equal(afterReviewRecords.length, 1);
+  assert.equal(
+    afterReviewRecords[0].sender_address,
+    "transzend@groundbooker.com",
+  );
+  assert.equal(afterReviewRecords[0].processing_status, "queued");
 
   const cronRoute = createRequire(import.meta.url)(targetPaths.cronRoute);
   delete process.env.PRESTIGE_EMAIL_AI_CRON_SECRET;
@@ -770,7 +824,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 2);
+  assert.equal(providerRequestBodies.length, 3);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

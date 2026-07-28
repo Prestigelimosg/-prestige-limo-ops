@@ -246,7 +246,7 @@ const dashboardEmailAiConfirmedBookingFixture = {
   processing_status: "queued",
   received_at: "2026-07-27T13:29:00.000Z",
   review_reasons: ["Flight number missing"],
-  sender_address: "info@prestigelimo.sg",
+  sender_address: "transzend@groundbooker.com",
   subject: "Synthetic confirmed booking",
   suggested_reply: "Thank you. We have received the booking for review.",
   summary: "Confirmed airport booking requires flight-number review.",
@@ -8520,7 +8520,7 @@ async function runChromeTest() {
     );
     assert.match(
       emailAiDashboardState.rowTexts.join(" "),
-      /From info@prestigelimo\.sg/,
+      /From transzend@groundbooker\.com/,
     );
     assert.match(
       emailAiDashboardState.rowTexts.join(" "),

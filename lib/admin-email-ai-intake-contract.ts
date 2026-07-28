@@ -1,5 +1,15 @@
 export const adminEmailAiMailboxAddress = "booking@prestigelimo.sg";
-export const adminEmailAiAllowedSenderAddress = "info@prestigelimo.sg";
+export const adminEmailAiPrestigeSenderAddress = "info@prestigelimo.sg";
+export const adminEmailAiGroundBookerSenderAddress =
+  "transzend@groundbooker.com";
+export const adminEmailAiGroundBookerRecipientAddress =
+  "info@prestigelimo.sg";
+export const adminEmailAiAllowedSenderAddresses = [
+  adminEmailAiPrestigeSenderAddress,
+  adminEmailAiGroundBookerSenderAddress,
+] as const;
+export type AdminEmailAiAllowedSenderAddress =
+  (typeof adminEmailAiAllowedSenderAddresses)[number];
 export const adminEmailAiInboxFolder = "INBOX";
 
 export const adminEmailAiClassifications = [
@@ -75,6 +85,29 @@ function normalizedAddressList(values: string[]) {
     .filter(Boolean);
 }
 
+export function adminEmailAiSenderAddressIsAllowed(
+  value: unknown,
+): value is AdminEmailAiAllowedSenderAddress {
+  const normalized = normalizeAdminEmailAiAddress(value);
+
+  return adminEmailAiAllowedSenderAddresses.some(
+    (allowedAddress) => allowedAddress === normalized,
+  );
+}
+
+export function adminEmailAiRecipientIsAllowedForSender(
+  senderAddress: AdminEmailAiAllowedSenderAddress,
+  recipients: string[],
+) {
+  const normalizedRecipients = normalizedAddressList(recipients);
+  const requiredRecipient =
+    senderAddress === adminEmailAiGroundBookerSenderAddress
+      ? adminEmailAiGroundBookerRecipientAddress
+      : adminEmailAiMailboxAddress;
+
+  return normalizedRecipients.includes(requiredRecipient);
+}
+
 export function decideAdminEmailAiEnvelope(
   input: AdminEmailAiEnvelopeInput,
 ): AdminEmailAiEnvelopeDecision {
@@ -89,14 +122,14 @@ export function decideAdminEmailAiEnvelope(
 
   if (
     from.length !== 1 ||
-    from[0] !== adminEmailAiAllowedSenderAddress
+    !adminEmailAiSenderAddressIsAllowed(from[0])
   ) {
     return { allowed: false, reason: "sender_not_allowed" };
   }
 
   if (
     normalizeAdminEmailAiAddress(input.returnPath) !==
-    adminEmailAiAllowedSenderAddress
+    from[0]
   ) {
     return { allowed: false, reason: "return_path_not_allowed" };
   }
@@ -106,7 +139,7 @@ export function decideAdminEmailAiEnvelope(
     ...normalizedAddressList(input.to),
   ];
 
-  if (!recipients.includes(adminEmailAiMailboxAddress)) {
+  if (!adminEmailAiRecipientIsAllowedForSender(from[0], recipients)) {
     return { allowed: false, reason: "recipient_not_allowed" };
   }
 

@@ -17,11 +17,19 @@ const migrationName = fs
 const timeoutMigrationName = fs
   .readdirSync(path.join(root, "supabase/migrations"))
   .find((name) => name.endsWith("_admin_email_ai_intake_timeout_repair.sql"));
+const groundBookerMigrationName = fs
+  .readdirSync(path.join(root, "supabase/migrations"))
+  .find((name) =>
+    name.endsWith("_admin_email_ai_groundbooker_sender.sql"),
+  );
 const migrationPath = migrationName
   ? path.join(root, "supabase/migrations", migrationName)
   : "";
 const timeoutMigrationPath = timeoutMigrationName
   ? path.join(root, "supabase/migrations", timeoutMigrationName)
+  : "";
+const groundBookerMigrationPath = groundBookerMigrationName
+  ? path.join(root, "supabase/migrations", groundBookerMigrationName)
   : "";
 
 for (const requiredPath of [
@@ -34,6 +42,7 @@ for (const requiredPath of [
   ledgerPath,
   migrationPath,
   timeoutMigrationPath,
+  groundBookerMigrationPath,
 ]) {
   assert.equal(fs.existsSync(requiredPath), true, `Missing required file: ${requiredPath}`);
 }
@@ -47,9 +56,16 @@ const browserTestSource = fs.readFileSync(browserTestPath, "utf8");
 const ledgerSource = fs.readFileSync(ledgerPath, "utf8");
 const migrationSource = fs.readFileSync(migrationPath, "utf8");
 const timeoutMigrationSource = fs.readFileSync(timeoutMigrationPath, "utf8");
+const groundBookerMigrationSource = fs.readFileSync(
+  groundBookerMigrationPath,
+  "utf8",
+);
 
 assert.equal(contract.adminEmailAiMailboxAddress, "booking@prestigelimo.sg");
-assert.equal(contract.adminEmailAiAllowedSenderAddress, "info@prestigelimo.sg");
+assert.deepEqual(contract.adminEmailAiAllowedSenderAddresses, [
+  "info@prestigelimo.sg",
+  "transzend@groundbooker.com",
+]);
 assert.deepEqual(contract.adminEmailAiAppReviewClassifications, [
   "confirmed_booking",
   "amendment",
@@ -75,6 +91,17 @@ assert.deepEqual(
   { allowed: true, reason: "exact_allowed_pair" },
 );
 
+assert.deepEqual(
+  contract.decideAdminEmailAiEnvelope({
+    deliveredTo: ["booking@prestigelimo.sg"],
+    from: ["transzend@groundbooker.com"],
+    mailboxAddress: "booking@prestigelimo.sg",
+    returnPath: "transzend@groundbooker.com",
+    to: ["info@prestigelimo.sg"],
+  }),
+  { allowed: true, reason: "exact_allowed_pair" },
+);
+
 for (const blockedInput of [
   {
     deliveredTo: ["booking@prestigelimo.sg"],
@@ -96,6 +123,20 @@ for (const blockedInput of [
     mailboxAddress: "booking@prestigelimo.sg",
     returnPath: "bounce@example.com",
     to: ["booking@prestigelimo.sg"],
+  },
+  {
+    deliveredTo: ["booking@prestigelimo.sg"],
+    from: ["transzend@groundbooker.com"],
+    mailboxAddress: "booking@prestigelimo.sg",
+    returnPath: "transzend@groundbooker.com",
+    to: ["booking@prestigelimo.sg"],
+  },
+  {
+    deliveredTo: ["booking@prestigelimo.sg"],
+    from: ["transzend@groundbooker.com"],
+    mailboxAddress: "booking@prestigelimo.sg",
+    returnPath: "info@prestigelimo.sg",
+    to: ["info@prestigelimo.sg"],
   },
 ]) {
   assert.equal(contract.decideAdminEmailAiEnvelope(blockedInput).allowed, false);
@@ -184,6 +225,19 @@ assert.match(timeoutMigrationSource, /cron\.alter_job/);
 assert.match(timeoutMigrationSource, /timeout_milliseconds := 120000/);
 assert.match(timeoutMigrationSource, /private-email-ai-intake/);
 assert.doesNotMatch(timeoutMigrationSource, /create policy/i);
+assert.match(
+  groundBookerMigrationSource,
+  /sender_address in \(\s*'info@prestigelimo\.sg',\s*'transzend@groundbooker\.com'\s*\)/,
+);
+assert.match(
+  groundBookerMigrationSource,
+  /drop constraint if exists admin_email_ai_intake_exact_sender_check/,
+);
+assert.match(
+  groundBookerMigrationSource,
+  /add constraint admin_email_ai_intake_exact_sender_check/,
+);
+assert.doesNotMatch(groundBookerMigrationSource, /create policy/i);
 
 assert.match(pageSource, /data-dashboard-email-ai-intake-row/);
 assert.match(pageSource, /data-admin-email-ai-monthly-token-usage="true"/);
@@ -193,6 +247,8 @@ assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
 assert.doesNotMatch(pageSource, /Review enquiry/);
 assert.match(pageSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(pageSource, /adminEmailAiSenderAddressIsAllowed/);
+assert.match(pageSource, /From \{clean\(record\.sender_address\)\}/);
 assert.match(pageSource, /activeAdminEmailAiIntakeId/);
 assert.match(pageSource, /preserveAdminEmailAiReview/);
 assert.match(pageSource, /markAdminEmailAiIntakeReviewed/);
@@ -221,6 +277,7 @@ assert.match(browserTestSource, /compact monthly Email AI token usage/);
 assert.match(browserTestSource, /dashboardOverdueSingaporeMidnightMs/);
 assert.match(browserTestSource, /successful Save \+ CRM to close the exact Email AI intake/);
 assert.match(browserTestSource, /Email AI badge to update after successful Save \+ CRM/);
+assert.match(browserTestSource, /From transzend@groundbooker\\\.com/);
 
 assert.match(ledgerSource, /### Private Semantic Email AI Intake/);
 assert.match(ledgerSource, /booking@prestigelimo\.sg/);
@@ -252,6 +309,15 @@ assert.match(
 assert.match(
   ledgerSource,
   /row disappears and the existing badge count decreases immediately/,
+);
+assert.match(
+  ledgerSource,
+  /GroundBooker Exact-Sender Email AI Intake/,
+);
+assert.match(ledgerSource, /transzend@groundbooker\.com/);
+assert.match(
+  ledgerSource,
+  /original recipient `info@prestigelimo\.sg`/,
 );
 
 console.log("Private semantic email AI intake guard passed.");

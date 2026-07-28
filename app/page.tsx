@@ -12,6 +12,7 @@ import {
 } from "../lib/ai-parser-schema";
 import {
   adminEmailAiClassificationAppearsInApp,
+  adminEmailAiSenderAddressIsAllowed,
   type AdminEmailAiClassification,
 } from "../lib/admin-email-ai-intake-contract";
 import { mockCustomers } from "./customers/_data/mock-customers";
@@ -17624,8 +17625,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       (record) =>
         clean(record.mailbox_address).toLowerCase() ===
           "booking@prestigelimo.sg" &&
-        clean(record.sender_address).toLowerCase() ===
-          "info@prestigelimo.sg",
+        adminEmailAiSenderAddressIsAllowed(record.sender_address),
     );
   const adminEmailAiIntakeCount = adminEmailAiIntakeRecords.length;
   const dashboardNewBookingRequestAttentionCount = Math.max(
@@ -45503,7 +45503,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             {clean(record.subject) || "No subject"}
                           </p>
                           <p className="truncate text-xs text-slate-500">
-                            From info@prestigelimo.sg · {confidence}% confidence
+                            From {clean(record.sender_address)} · {confidence}% confidence
                           </p>
                         </div>
                         <div className="min-w-0">

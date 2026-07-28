@@ -34,6 +34,7 @@ function mustExclude(source, fragment, label) {
 for (const fragment of [
   'const customerInvoiceIssuedEditAction = "edit_issued_invoice";',
   "data-customer-invoice-folder-edit=",
+  "data-customer-invoice-folder-selected-item-table=",
   "data-customer-invoice-folder-editor=",
   "data-customer-invoice-folder-edit-description=",
   "data-customer-invoice-folder-edit-amount=",
@@ -49,6 +50,18 @@ for (const fragment of [
 ]) {
   mustInclude(invoiceFolder, fragment, "existing Total invoices issued editor");
 }
+
+assert.ok(
+  invoiceFolder.indexOf("data-customer-invoice-folder-selected-item-table=") <
+    invoiceFolder.indexOf("data-customer-invoice-folder-editor="),
+  "The approved selected-invoice item table must remain visible before the issued-invoice editor.",
+);
+
+mustExclude(
+  invoiceFolder,
+  'invoiceEditNumber === selectedInvoice.invoiceNumber ? (\n            <div className="mt-3 overflow-x-auto',
+  "issued invoice editing must not replace the approved selected-invoice item table",
+);
 
 for (const fragment of [
   'export const customerInvoiceIssuedEditAction = "edit_issued_invoice";',

@@ -36,8 +36,8 @@ const [customerFolderPage, ledger, preactivationSuite] = await Promise.all([
 
 const jobHistorySection = sectionBetween(
   customerFolderPage,
-  'data-customer-booking-history="true"',
-  "\n          </section>",
+  '<details className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">',
+  "\n          </details>",
 );
 const ledgerSection = sectionBetween(
   ledger,
@@ -52,6 +52,8 @@ assertIncludes(
 );
 
 for (const fragment of [
+  "<details className=\"rounded-md border border-slate-200 bg-white p-3 shadow-sm\" data-customer-booking-history=\"true\">",
+  "<summary className=\"cursor-pointer text-base font-bold text-slate-950\">All booking history</summary>",
   "All booking history",
   "<table className=\"w-full min-w-[760px] border-collapse text-left text-sm\">",
   "customer.bookingHistory.map",
@@ -62,6 +64,7 @@ for (const fragment of [
 }
 
 for (const forbiddenPattern of [
+  /<details[^>]*\sopen(?:=|[\s>])/,
   /<article/,
   /sm:grid-cols-3/,
   /<div className="rounded-md border border-slate-200 bg-slate-50 p-3">/,
@@ -78,6 +81,7 @@ for (const forbiddenPattern of [
 
 for (const phrase of [
   "Customer folder `All booking history` uses one compact table instead of summary cards and large job cards.",
+  "The existing `All booking history` compact table is now closed by default behind its single in-place disclosure heading; opening it reveals the same rows, fields, and order without a duplicate history lane.",
   "The compact history sector now renders only when the established folder data contains at least one history row. Dynamic customer folders with no history rows no longer show an empty heading and table shell; populated folders retain the same table and fields.",
   "The duplicate Upcoming/Completed job blocks remain removed from the customer folder; job and payment status stay in the compact rows.",
   "This is customer-folder UI-only polish on existing mock/customer data; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, invoice/PDF/payment/provider sending, payout automation, GPS/live location, calendar sync, parser changes, or shims.",

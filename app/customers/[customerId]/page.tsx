@@ -114,8 +114,8 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
         <CustomerFolderSavedBookingsPanel customerId={customer.id} customerName={customer.companyName} />
 
         {customer.bookingHistory.length > 0 ? (
-          <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">
-            <h2 className="text-base font-bold text-slate-950">All booking history</h2>
+          <details className="rounded-md border border-slate-200 bg-white p-3 shadow-sm" data-customer-booking-history="true">
+            <summary className="cursor-pointer text-base font-bold text-slate-950">All booking history</summary>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[760px] border-collapse text-left text-sm">
                 <thead>
@@ -145,7 +145,7 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
                 </tbody>
               </table>
             </div>
-          </section>
+          </details>
         ) : null}
 
       </div>

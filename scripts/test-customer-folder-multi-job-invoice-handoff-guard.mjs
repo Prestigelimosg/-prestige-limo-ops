@@ -141,15 +141,17 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  'return "AIRPORT ARRIVAL";',
-  'return "AIRPORT DEPARTURE";',
+  'return "ARRIVAL";',
+  'return "DEPARTURE";',
   'return "CITY TRANSFER";',
-  'return "HOURLY / DISPOSAL";',
-  'AVF: "ALPHARD / VELLFIRE"',
-  '"E / AVF": "MERCEDES E-CLASS / ALPHARD / VELLFIRE"',
+  'return "HOURLY";',
+  'AVF: "ALPHARD"',
+  '"E / AVF": "MERCEDES E-CLASS / ALPHARD"',
   'VVV: "MERCEDES VIANO / V-CLASS"',
   'return `${firstLine}\\n${[vehicle, passenger, `REF ${reference}`].join(" | ")}`;',
-  '`${invoiceDescriptionDateTime(input.dspStartedAt)}-${invoiceDescriptionTime(input.dspEndedAt)}`',
+  '`${invoiceDescriptionDateTime(input.dspStartedAt)} / ${invoiceDescriptionTime(input.dspEndedAt)}`',
+  "invoiceDescriptionText(input.dropoffLocation)",
+  "invoiceDescriptionText(input.pickupLocation)",
   'const nilLabel = "NIL";',
 ]) {
   includes(lineDescriptionFormatter, fragment, `invoice line-description format ${fragment}`);

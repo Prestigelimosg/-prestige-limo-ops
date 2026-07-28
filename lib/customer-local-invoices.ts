@@ -676,7 +676,7 @@ export function createCustomerInvoicePdfBytes(
     lineItemCommands.push(pdfLinePath(50, rowY + 11, 562, rowY + 11));
   });
 
-  const totalsY = Math.max(360, rowY - 8);
+  const totalsY = Math.min(360, rowY - 8);
   const signoffY = 260;
   const paymentY = 203;
   const notesY = 118;

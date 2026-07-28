@@ -32,6 +32,7 @@ import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-book
 export const customerInvoiceRecordVersion = "customer-invoice-record-v1";
 export const customerInvoiceRecordTableName = "customer_invoice_records";
 export const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpaid_invoice";
+export const customerInvoiceIssuedEditAction = "edit_issued_invoice";
 export const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
 
 export type CustomerInvoiceEmailDeliveryStatus = "blocked" | "failed" | "not_sent" | "sent";
@@ -88,6 +89,14 @@ export type CustomerInvoiceAmendedBookingRefreshInput = {
   bookingReference?: unknown;
   customerId?: unknown;
   lineItem?: unknown;
+};
+
+export type CustomerInvoiceIssuedEditInput = {
+  action?: unknown;
+  customerId?: unknown;
+  expectedAmountCents?: unknown;
+  invoiceNumber?: unknown;
+  lineItems?: unknown;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -1341,6 +1350,134 @@ export async function updateAdminCustomerInvoiceStatus(
         version: customerInvoiceRecordVersion,
       }
     : safeFailure(safeMissingError, 404);
+}
+
+export async function editAdminCustomerIssuedInvoice(
+  input: CustomerInvoiceIssuedEditInput,
+  actor: AdminBookingPersistenceAdapterActor,
+  client?: CustomerInvoiceClient,
+): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
+  if (!safeActor(actor)) {
+    return safeFailure(safePersistenceConfigError, 403);
+  }
+
+  const readiness = checkAdminBookingPersistenceStagingConfigReadiness();
+
+  if (!readiness.ok) {
+    return safeFailure(safePersistenceConfigError, 503);
+  }
+
+  const action = safeText(input.action, 80);
+  const customerId = safeText(input.customerId, 160);
+  const expectedAmountCents = safeAmountCents(input.expectedAmountCents);
+  const invoiceNumber = safeInvoiceNumber(input.invoiceNumber);
+  const lineItems = safeLineItems(input.lineItems);
+  const updatedAmountCents = lineItems?.reduce<number | null>(
+    (total, item) => {
+      const itemAmountCents = customerInvoiceLineItemAmountCents(item.amountLabel);
+
+      return total === null || itemAmountCents === null ? null : total + itemAmountCents;
+    },
+    0,
+  );
+
+  if (
+    action !== customerInvoiceIssuedEditAction ||
+    !customerId ||
+    !expectedAmountCents ||
+    !invoiceNumber ||
+    !lineItems ||
+    lineItems.length === 0 ||
+    !updatedAmountCents
+  ) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const invoiceClient = client ?? createServerClient();
+  const { data: existingData, error: existingError } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .select(customerInvoiceSelect)
+    .eq("invoice_number", invoiceNumber)
+    .eq("customer_id", customerId)
+    .eq("document_type", "invoice")
+    .eq("document_state", "issued")
+    .maybeSingle();
+
+  if (existingError) {
+    return safeFailure(safeReadError, 503);
+  }
+
+  const existingInvoice = toStoredRecord(asRecord(existingData));
+
+  if (
+    !existingInvoice ||
+    existingInvoice.invoiceNumber !== invoiceNumber ||
+    existingInvoice.customerId !== customerId
+  ) {
+    return safeFailure(safeMissingError, 404);
+  }
+
+  if (existingInvoice.amountCents !== expectedAmountCents) {
+    return safeFailure(
+      "The issued invoice changed before this edit was saved. Reload it and review the latest values.",
+      409,
+    );
+  }
+
+  const updatedRecord: CustomerInvoiceStoredRecord = {
+    ...existingInvoice,
+    amountCents: updatedAmountCents,
+    amountLabel: formatInvoiceAmount(updatedAmountCents),
+    lineItems,
+  };
+  const { logoImage, profile } = await loadServerLogoImage();
+  const pdfBytes = createCustomerInvoicePdfBytes(updatedRecord, profile, logoImage);
+  const { data: updatedData, error: updateError } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .update({
+      actor_label: actor.actor_label,
+      actor_role: actor.actor_role,
+      amount_cents: updatedRecord.amountCents,
+      amount_label: updatedRecord.amountLabel,
+      email_delivery_status: "not_sent",
+      email_message_id: null,
+      email_sent_at: null,
+      line_items: lineItems,
+      pdf_base64: base64FromBytes(pdfBytes),
+      pdf_content_type: "application/pdf",
+      pdf_filename: `${existingInvoice.invoiceNumber}.pdf`,
+      pdf_sha256: sha256Hex(pdfBytes),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("invoice_number", invoiceNumber)
+    .eq("customer_id", customerId)
+    .eq("document_type", "invoice")
+    .eq("document_state", "issued")
+    .eq("status", existingInvoice.status)
+    .eq("amount_cents", expectedAmountCents)
+    .select(customerInvoiceSelect)
+    .maybeSingle();
+
+  if (updateError) {
+    return safeFailure(safeWriteError, 500);
+  }
+
+  const updatedInvoice = toStoredRecord(asRecord(updatedData));
+
+  return updatedInvoice &&
+    updatedInvoice.invoiceNumber === invoiceNumber &&
+    updatedInvoice.customerId === customerId &&
+    updatedInvoice.status === existingInvoice.status &&
+    updatedInvoice.amountCents === updatedAmountCents
+    ? {
+        data: updatedInvoice,
+        ok: true,
+        version: customerInvoiceRecordVersion,
+      }
+    : safeFailure(
+        "The issued invoice changed while this edit was saving. No stale result was accepted.",
+        409,
+      );
 }
 
 export async function refreshAdminCustomerAmendedUnpaidInvoice(

@@ -14,6 +14,95 @@ export type CustomerInvoiceLineDescriptionInput = {
 
 const nilLabel = "NIL";
 
+export type CustomerInvoiceDspLineTimeRange = {
+  actualMinutes: number;
+  endTime: string;
+  startTime: string;
+};
+
+function normalizedInvoiceDescriptionClock(value: string) {
+  const match = value.trim().match(/^(\d{1,2}):?(\d{2})$/);
+
+  if (!match) {
+    return "";
+  }
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return "";
+  }
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function invoiceDescriptionClockMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+
+  return hour * 60 + minute;
+}
+
+export function parseCustomerInvoiceDspLineTimeRange(
+  description: string | null | undefined,
+): CustomerInvoiceDspLineTimeRange | null {
+  const normalizedDescription = String(description ?? "").trim();
+
+  if (!/^(?:DSP|HOURLY)(?:\s*\/\s*DISPOSAL)?\s*\|/i.test(normalizedDescription)) {
+    return null;
+  }
+
+  const timeRangeMatch = normalizedDescription.match(
+    /,\s*(\d{1,2}:?\d{2})\s*(?:\/|-|\bTO\b)\s*(\d{1,2}:?\d{2})\s*(?:\||$)/i,
+  );
+
+  if (!timeRangeMatch) {
+    return null;
+  }
+
+  const startTime = normalizedInvoiceDescriptionClock(timeRangeMatch[1]);
+  const endTime = normalizedInvoiceDescriptionClock(timeRangeMatch[2]);
+  const sameDayMinutes =
+    invoiceDescriptionClockMinutes(endTime) -
+    invoiceDescriptionClockMinutes(startTime);
+  const actualMinutes =
+    sameDayMinutes > 0 ? sameDayMinutes : sameDayMinutes + 24 * 60;
+
+  return startTime && endTime && actualMinutes
+    ? {
+        actualMinutes,
+        endTime,
+        startTime,
+      }
+    : null;
+}
+
+export function normalizeCustomerInvoiceDspLineTimeRange(
+  description: string | null | undefined,
+) {
+  const normalizedDescription = String(description ?? "").trim();
+  const timeRange = parseCustomerInvoiceDspLineTimeRange(normalizedDescription);
+
+  if (!timeRange) {
+    return normalizedDescription;
+  }
+
+  const compactStartTime = timeRange.startTime.replace(":", "");
+  const compactEndTime = timeRange.endTime.replace(":", "");
+
+  return normalizedDescription.replace(
+    /,\s*\d{1,2}:?\d{2}\s*(?:\/|-|\bTO\b)\s*\d{1,2}:?\d{2}\s*(?=\||$)/i,
+    `, ${compactStartTime} - ${compactEndTime} `,
+  );
+}
+
 function invoiceDescriptionText(value: unknown) {
   const cleaned = String(value ?? "").replace(/\s+/g, " ").trim();
 

@@ -5,9 +5,20 @@ import {
   buildCustomerInvoiceActionEmail,
   formatCustomerInvoiceActionSentAt,
 } from "../../../lib/customer-invoice-action-email";
+import {
+  calculateCustomerInvoiceRateReview,
+  type CustomerInvoiceRateReview,
+  type CustomerInvoiceRateSetupRecord,
+} from "../../../lib/customer-dsp-invoice-review";
+import {
+  normalizeCustomerInvoiceDspLineTimeRange,
+  parseCustomerInvoiceDspLineTimeRange,
+} from "../../../lib/customer-invoice-line-description";
 import type { MockCustomer, MockCustomerBooking, MockCustomerInvoice } from "../_data/mock-customers";
 
+const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
+const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerInvoiceUpdatedEventName = "prestige:customer-invoice-updated";
 
 type CustomerInvoiceFolderPanelProps = {
@@ -26,6 +37,21 @@ type InvoiceEditLineItem = {
   bookingReference?: string;
   description: string;
   quantity: number;
+};
+type IssuedInvoiceDspSavedBooking = {
+  booking_reference?: string | null;
+  child_seat_count?: number | null;
+  company_id?: number | null;
+  customer_id?: number | string | null;
+  extra_stop_count?: number | null;
+  pickup_at?: string | null;
+  service_type?: string | null;
+  traveler_id?: number | null;
+  vehicle_type_or_category?: string | null;
+};
+type IssuedInvoiceDspPricingContext = {
+  booking: IssuedInvoiceDspSavedBooking;
+  rateSetup: CustomerInvoiceRateSetupRecord;
 };
 type DisplayInvoice = {
   amount: string;
@@ -147,6 +173,63 @@ function editLineItemsFromInvoice(
   }));
 }
 
+function calculateIssuedInvoiceDspLine(
+  item: InvoiceEditLineItem,
+  context: IssuedInvoiceDspPricingContext | undefined,
+): CustomerInvoiceRateReview | null {
+  const timeRange = parseCustomerInvoiceDspLineTimeRange(item.description);
+  const bookingService = String(context?.booking.service_type ?? "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    !timeRange ||
+    !context ||
+    !["DSP", "HOURLY"].includes(bookingService)
+  ) {
+    return null;
+  }
+
+  return calculateCustomerInvoiceRateReview(
+    {
+      actualMinutes: timeRange.actualMinutes,
+      bookingType: "DSP",
+      childSeatCount: context.booking.child_seat_count,
+      companyId: context.booking.company_id,
+      extraStopCount: context.booking.extra_stop_count,
+      pickupAt: context.booking.pickup_at,
+      travelerId: context.booking.traveler_id,
+      vehicleType: context.booking.vehicle_type_or_category,
+    },
+    context.rateSetup,
+  );
+}
+
+function isIssuedInvoiceDspLine(item: InvoiceEditLineItem) {
+  return (
+    Boolean(item.bookingReference) &&
+    /^(?:DSP|HOURLY)(?:\s*\/\s*DISPOSAL)?\s*\|/i.test(
+      item.description.trim(),
+    )
+  );
+}
+
+function issuedInvoiceDspCalculationMessage(
+  billingReview: CustomerInvoiceRateReview,
+) {
+  const surchargeText =
+    billingReview.surchargeAmountCents > 0
+      ? ` plus $${(billingReview.surchargeAmountCents / 100).toFixed(2)} surcharges`
+      : "";
+
+  return (
+    "DSP amount recalculated from the edited start and end time. " +
+    `${billingReview.billableHours} billable hr × ` +
+    `$${(billingReview.rateCents / 100).toFixed(2)}/hr${surchargeText} = ` +
+    `$${(billingReview.amountCents / 100).toFixed(2)}.`
+  );
+}
+
 function displayStoredInvoice(invoice: StoredInvoiceRecord): DisplayInvoice | null {
   const invoiceNumber = safeDisplay(invoice.invoiceNumber, "");
 
@@ -216,6 +299,11 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const [invoiceEditMessage, setInvoiceEditMessage] = useState("");
   const [invoiceEditNumber, setInvoiceEditNumber] = useState("");
   const [invoiceEditPending, setInvoiceEditPending] = useState(false);
+  const [invoiceEditDspPricing, setInvoiceEditDspPricing] = useState<
+    Record<string, IssuedInvoiceDspPricingContext>
+  >({});
+  const [invoiceEditDspPricingPending, setInvoiceEditDspPricingPending] =
+    useState(false);
   const [reminderRecipientEmail, setReminderRecipientEmail] = useState("");
   const [sendPaymentThankYou, setSendPaymentThankYou] = useState(true);
   const mockInvoices = useMemo<DisplayInvoice[]>(
@@ -284,6 +372,13 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           paymentMethod: selectedPaymentMethod,
         })
       : null;
+  const invoiceEditDspCalculationBlocked = invoiceEditItems.some(
+    (item) =>
+      isIssuedInvoiceDspLine(item) &&
+      (!parseCustomerInvoiceDspLineTimeRange(item.description) ||
+        !item.bookingReference ||
+        !invoiceEditDspPricing[item.bookingReference]),
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -348,28 +443,172 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     setInvoiceEditMessage("");
     setInvoiceEditNumber("");
     setInvoiceEditItems([]);
+    setInvoiceEditDspPricing({});
+    setInvoiceEditDspPricingPending(false);
+  }
+
+  async function loadIssuedInvoiceDspPricing(
+    editItems: InvoiceEditLineItem[],
+  ) {
+    const dspBookingReferences = [
+      ...new Set(
+        editItems
+          .filter((item) =>
+            Boolean(
+              item.bookingReference &&
+                parseCustomerInvoiceDspLineTimeRange(item.description),
+            ),
+          )
+          .map((item) => String(item.bookingReference)),
+      ),
+    ];
+
+    if (dspBookingReferences.length === 0) {
+      setInvoiceEditDspPricing({});
+      setInvoiceEditDspPricingPending(false);
+      return;
+    }
+
+    setInvoiceEditDspPricingPending(true);
+    setInvoiceEditMessage("Loading the verified DSP customer rate...");
+
+    try {
+      const rateResponsePromise = fetch(adminRateSetupApiPath, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const bookingResponsePromises = dspBookingReferences.map(
+        (bookingReference) => {
+          const params = new URLSearchParams({
+            booking_reference: bookingReference,
+            customer_account: customer.companyName,
+            customer_id: customer.id,
+            limit: "1",
+          });
+
+          return fetch(
+            `${adminCustomerSavedBookingsApiPath}?${params.toString()}`,
+            {
+              headers: {
+                "x-prestige-admin-purpose": "admin-booking-persistence",
+              },
+              method: "GET",
+            },
+          );
+        },
+      );
+      const [rateResponse, ...bookingResponses] = await Promise.all([
+        rateResponsePromise,
+        ...bookingResponsePromises,
+      ]);
+      const rateSetup = (await rateResponse.json().catch(() => null)) as
+        | (CustomerInvoiceRateSetupRecord & { ok?: boolean })
+        | null;
+
+      if (!rateResponse.ok || rateSetup?.ok !== true) {
+        throw new Error("Verified customer rate setup is unavailable.");
+      }
+
+      const contexts: Record<string, IssuedInvoiceDspPricingContext> = {};
+
+      for (let index = 0; index < dspBookingReferences.length; index += 1) {
+        const response = bookingResponses[index];
+        const result = (await response.json().catch(() => null)) as
+          | {
+              ok?: boolean;
+              saved_bookings?: IssuedInvoiceDspSavedBooking[];
+            }
+          | null;
+        const bookingReference = dspBookingReferences[index];
+        const booking = result?.saved_bookings?.find(
+          (candidate) =>
+            String(candidate.booking_reference ?? "").trim() ===
+              bookingReference &&
+            String(candidate.customer_id ?? "").trim() ===
+              String(customer.id).trim(),
+        );
+
+        if (!response.ok || result?.ok !== true || !booking) {
+          throw new Error(
+            `The exact saved job for ${bookingReference} is unavailable.`,
+          );
+        }
+
+        contexts[bookingReference] = {
+          booking,
+          rateSetup,
+        };
+      }
+
+      setInvoiceEditDspPricing(contexts);
+      setInvoiceEditItems((currentItems) => {
+        let latestReview: CustomerInvoiceRateReview | null = null;
+        const nextItems = currentItems.map((item) => {
+          const billingReview = item.bookingReference
+            ? calculateIssuedInvoiceDspLine(
+                item,
+                contexts[item.bookingReference],
+              )
+            : null;
+
+          if (!billingReview) {
+            return item;
+          }
+
+          latestReview = billingReview;
+
+          return {
+            ...item,
+            amount: (billingReview.amountCents / 100).toFixed(2),
+          };
+        });
+
+        if (latestReview) {
+          setInvoiceEditMessage(
+            issuedInvoiceDspCalculationMessage(latestReview),
+          );
+        }
+
+        return nextItems;
+      });
+    } catch (error) {
+      setInvoiceEditDspPricing({});
+      setInvoiceEditMessage(
+        error instanceof Error
+          ? `${error.message} The DSP invoice was not changed.`
+          : "The verified DSP calculation is unavailable. The invoice was not changed.",
+      );
+    } finally {
+      setInvoiceEditDspPricingPending(false);
+    }
   }
 
   function beginInvoiceEdit(invoice: DisplayInvoice) {
+    const editItems = editLineItemsFromInvoice(
+      invoice,
+      itemDescription(customer, selectedBooking, {
+        invoiceNumber: invoice.invoiceNumber,
+      }),
+    );
+
     setSelectedInvoiceNumber(invoice.invoiceNumber);
     setInvoiceActionMessage("");
     setInvoiceActionMode(null);
     setInvoiceEditMessage("");
-    setInvoiceEditItems(
-      editLineItemsFromInvoice(
-        invoice,
-        itemDescription(customer, selectedBooking, {
-          invoiceNumber: invoice.invoiceNumber,
-        }),
-      ),
-    );
+    setInvoiceEditItems(editItems);
     setInvoiceEditNumber(invoice.invoiceNumber);
+    setInvoiceEditDspPricing({});
+    void loadIssuedInvoiceDspPricing(editItems);
   }
 
   function cancelInvoiceEdit() {
     setInvoiceEditMessage("");
     setInvoiceEditItems([]);
     setInvoiceEditNumber("");
+    setInvoiceEditDspPricing({});
+    setInvoiceEditDspPricingPending(false);
   }
 
   function updateInvoiceEditItem(
@@ -377,17 +616,46 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     field: "amount" | "description",
     value: string,
   ) {
+    const currentItem = invoiceEditItems[itemIndex];
+    const updatedItem = currentItem
+      ? {
+          ...currentItem,
+          [field]: value,
+        }
+      : null;
+    const billingReview =
+      field === "description" &&
+      updatedItem?.bookingReference
+        ? calculateIssuedInvoiceDspLine(
+            updatedItem,
+            invoiceEditDspPricing[updatedItem.bookingReference],
+          )
+        : null;
+
     setInvoiceEditItems((currentItems) =>
       currentItems.map((item, index) =>
         index === itemIndex
           ? {
               ...item,
               [field]: value,
+              ...(billingReview
+                ? {
+                    amount: (billingReview.amountCents / 100).toFixed(2),
+                  }
+                : {}),
             }
           : item,
       ),
     );
-    setInvoiceEditMessage("");
+    setInvoiceEditMessage(
+      billingReview
+        ? issuedInvoiceDspCalculationMessage(billingReview)
+        : field === "description" &&
+            updatedItem &&
+            isIssuedInvoiceDspLine(updatedItem)
+          ? "Enter the DSP time as 1200 - 2114 or 1200 TO 2114. The invoice was not changed."
+          : "",
+    );
   }
 
   function addInvoiceEditItem() {
@@ -526,12 +794,15 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   async function saveInvoiceEdit(invoice: DisplayInvoice) {
     const lineItems = invoiceEditItems.map((item) => {
       const amountCents = centsFromAmountLabel(item.amount);
+      const description = normalizeCustomerInvoiceDspLineTimeRange(
+        item.description,
+      );
 
       return {
         amountCents,
         amountLabel: amountCents > 0 ? `$${(amountCents / 100).toFixed(2)}` : "",
         bookingReference: item.bookingReference,
-        description: item.description.trim(),
+        description,
         quantity: item.quantity,
       };
     });
@@ -955,6 +1226,15 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                       Amount (SGD)
                       <input
                         className="mt-1 h-9 w-full rounded-md border border-slate-300 px-2 text-sm font-bold text-slate-950"
+                        data-customer-invoice-folder-edit-dsp-calculation={
+                          item.bookingReference &&
+                          calculateIssuedInvoiceDspLine(
+                            item,
+                            invoiceEditDspPricing[item.bookingReference],
+                          )
+                            ? "calculated"
+                            : "manual"
+                        }
                         data-customer-invoice-folder-edit-amount={itemIndex + 1}
                         inputMode="decimal"
                         onChange={(event) =>
@@ -1001,7 +1281,11 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   <button
                     className="h-9 rounded-md border border-amber-500 bg-amber-100 px-3 text-sm font-bold text-amber-950 disabled:opacity-50"
                     data-customer-invoice-folder-edit-save={selectedInvoice.invoiceNumber}
-                    disabled={invoiceEditPending}
+                    disabled={
+                      invoiceEditPending ||
+                      invoiceEditDspPricingPending ||
+                      invoiceEditDspCalculationBlocked
+                    }
                     onClick={() => void saveInvoiceEdit(selectedInvoice)}
                     type="button"
                   >

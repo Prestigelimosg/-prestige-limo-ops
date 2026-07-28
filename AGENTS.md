@@ -124,6 +124,14 @@ The existing invoice Email action must retain one Resend request and determinist
 
 Before any approved invoice repair, read `docs/current-implementation-ledger.md` section `Owner-Approved Final Invoice Layout Restoration` and run `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs`, `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs`, and `scripts/test-customer-billing-document-lifecycle-guard.mjs`. If no invoice defect is reproduced and specifically approved, make no invoice application change.
 
+# Owner-locked Issued-Invoice DSP Dispute Calculation Repair
+
+Section 2 `Total invoices` is the established dispute-correction lane for an invoice that already exists or was already sent. Keep its existing selected-invoice table and in-place Edit control exactly where they are. For one exact booking-linked DSP line, changing the line's start and end time must recalculate the draft line amount through the established verified customer-rate precedence, DSP two-hour minimum, 15-minute grace rule, and existing customer surcharges before the same invoice is saved. The canonical disputed time range is `1200 - 2114`; `1200 TO 2114` is accepted as equivalent Admin input. Preserve the owner-locked item field order and uppercase layout.
+
+This repair does not move an already invoiced job back into Section 3 or make it eligible for a duplicate invoice. Section 3 remains the established unbilled-job selection, exact-job Edit, DSP timing-correction, customer-price review, and invoice-preparation lane. Section 2 recalculation may read only the exact linked saved booking and existing verified rate setup; it must not update the saved booking, append a DSP correction event, alter Driver Reports evidence, or treat edited invoice text as a Driver JC record.
+
+Saving keeps the same invoice number, issue/due dates, customer, payment status, line count, approved invoice/PDF layout, and existing customer-portal consumers. It regenerates the same stored PDF and resets only the normal invoice email-delivery state because the document changed. It must not automatically send or resend email, send a reminder, mark Paid/Unpaid, change payment method, create another invoice, charge a card, or touch payment, payout, PayNow, booking, Driver, Calendar, messaging, GPS, provider, schema, migration, or environment lanes. Preserve `scripts/test-customer-folder-issued-invoice-dsp-calculation-guard.mjs` and the existing issued-invoice edit, line-description, PDF/portal, lifecycle, email-idempotency, reminder/payment, DSP, and privacy guards.
+
 # Pre-operation test-data permission
 
 Until the owner explicitly declares that real operations have started, existing booking, driver, and customer records may be reused as test data because the owner will fully clean those records before live operations. Prefer reusing an existing test record over creating a duplicate, and keep every test scoped to the exact workflow under review.

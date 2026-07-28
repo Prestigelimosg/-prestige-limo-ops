@@ -143,6 +143,13 @@ assert.match(runtimeSource, /tokenUsageMaximumPages/);
 assert.match(runtimeSource, /\.gte\("created_at", usageWindow\.start\)/);
 assert.match(runtimeSource, /\.lt\("created_at", usageWindow\.end\)/);
 assert.match(runtimeSource, /\.range\(pageStart, pageStart \+ tokenUsagePageSize - 1\)/);
+assert.match(runtimeSource, /markAdminEmailAiIntakeReviewed/);
+assert.match(runtimeSource, /processing_status:\s*"reviewed"/);
+assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
+assert.match(
+  runtimeSource,
+  /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/,
+);
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
 assert.doesNotMatch(runtimeSource, /google-calendar|calendar/i);
@@ -154,6 +161,14 @@ assert.match(cronRouteSource, /PRESTIGE_EMAIL_AI_CRON_SECRET/);
 assert.match(cronRouteSource, /authorization/);
 assert.match(adminRouteSource, /resolveAdminDispatcherBoundary/);
 assert.match(adminRouteSource, /export async function GET/);
+assert.match(adminRouteSource, /export async function PATCH/);
+assert.match(
+  adminRouteSource,
+  /allowServerSessionRoleMethodsWithoutRequestToken:\s*\["PATCH"\]/,
+);
+assert.match(adminRouteSource, /intake_id/);
+assert.match(adminRouteSource, /processing_status/);
+assert.match(adminRouteSource, /markAdminEmailAiIntakeReviewed/);
 assert.match(adminRouteSource, /token_usage:\s*result\.data\.token_usage/);
 assert.doesNotMatch(adminRouteSource, /export async function POST/);
 
@@ -178,18 +193,34 @@ assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
 assert.doesNotMatch(pageSource, /Review enquiry/);
 assert.match(pageSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(pageSource, /activeAdminEmailAiIntakeId/);
+assert.match(pageSource, /preserveAdminEmailAiReview/);
+assert.match(pageSource, /markAdminEmailAiIntakeReviewed/);
+assert.match(pageSource, /completeActiveAdminEmailAiReviewAfterSave/);
+assert.match(
+  pageSource,
+  /records:\s*current\.records\.filter\(\s*\(record\)\s*=>\s*clean\(record\.id\)\s*!==\s*intakeId/,
+);
 assert.match(
   pageSource,
   /dashboardNewBookingRequestAttentionCount \+ adminEmailAiIntakeCount/,
 );
 assert.doesNotMatch(pageSource, /data-dashboard-email-ai-intake-(?:approve|save|calendar|send)/);
 
-assert.match(browserTestSource, /browser-email-ai-confirmed/);
-assert.match(browserTestSource, /browser-email-ai-enquiry/);
+assert.match(
+  browserTestSource,
+  /00000000-0000-4000-8000-000000000101/,
+);
+assert.match(
+  browserTestSource,
+  /00000000-0000-4000-8000-000000000102/,
+);
 assert.match(browserTestSource, /Expected enquiry email to remain outside the app review feed/);
 assert.match(browserTestSource, /Expected private email AI dashboard lane to remain read-only/);
 assert.match(browserTestSource, /compact monthly Email AI token usage/);
 assert.match(browserTestSource, /dashboardOverdueSingaporeMidnightMs/);
+assert.match(browserTestSource, /successful Save \+ CRM to close the exact Email AI intake/);
+assert.match(browserTestSource, /Email AI badge to update after successful Save \+ CRM/);
 
 assert.match(ledgerSource, /### Private Semantic Email AI Intake/);
 assert.match(ledgerSource, /booking@prestigelimo\.sg/);
@@ -213,6 +244,14 @@ assert.match(
 assert.match(
   ledgerSource,
   /Email AI count now contributes to the existing Dashboard alert badge/,
+);
+assert.match(
+  ledgerSource,
+  /`Save \+ CRM` path, one same-route guarded PATCH marks only the exact originating Email AI intake as `reviewed`/,
+);
+assert.match(
+  ledgerSource,
+  /row disappears and the existing badge count decreases immediately/,
 );
 
 console.log("Private semantic email AI intake guard passed.");

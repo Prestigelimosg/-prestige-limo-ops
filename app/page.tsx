@@ -10741,6 +10741,34 @@ async function loadAdminEmailAiIntakeRead() {
   };
 }
 
+async function markAdminEmailAiIntakeReviewed(intakeId: string) {
+  const response = await fetch(adminEmailAiIntakeApiPath, {
+    body: JSON.stringify({
+      intake_id: intakeId,
+      processing_status: "reviewed",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": "admin-email-ai-intake",
+    },
+    method: "PATCH",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result?.external_send !== false ||
+    result?.write_action !== true ||
+    clean(result?.intake_id) !== intakeId ||
+    result?.processing_status !== "reviewed"
+  ) {
+    throw new Error(
+      result?.error || "Email AI intake review update failed.",
+    );
+  }
+}
+
 async function updateAdminAppNotificationStatus(
   notificationId: string,
   notificationStatus: AdminAppNotificationUpdateStatus,
@@ -13593,6 +13621,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       status: "idle",
       tokenUsage: null,
     });
+  const [activeAdminEmailAiIntakeId, setActiveAdminEmailAiIntakeId] =
+    useState("");
   const adminEmailAiInitialLoadAttemptedRef = useRef(false);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
@@ -18071,7 +18101,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  function clearLoadedBookingSelectionContext() {
+  function clearLoadedBookingSelectionContext(
+    options: { preserveAdminEmailAiReview?: boolean } = {},
+  ) {
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
     driverJobLinkHandoffFocusAppliedRef.current = "";
@@ -18080,6 +18112,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setDriverJobLinkHandoffReference("");
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
+
+    if (!options.preserveAdminEmailAiReview) {
+      setActiveAdminEmailAiIntakeId("");
+    }
   }
 
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
@@ -18612,7 +18648,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function applyParsedBookingMessage(messageText: string) {
     clearParseArtifacts();
-    clearLoadedBookingSelectionContext();
+    clearLoadedBookingSelectionContext({
+      preserveAdminEmailAiReview: true,
+    });
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
@@ -18868,6 +18906,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
     clearParseArtifacts();
     clearLoadedBookingSelectionContext();
+    setActiveAdminEmailAiIntakeId(clean(record.id));
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
     setAiAssistMode("parser");
@@ -20111,6 +20150,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  async function completeActiveAdminEmailAiReviewAfterSave() {
+    const intakeId = clean(activeAdminEmailAiIntakeId);
+
+    if (!intakeId) {
+      return true;
+    }
+
+    try {
+      await markAdminEmailAiIntakeReviewed(intakeId);
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        message: null,
+        records: current.records.filter(
+          (record) => clean(record.id) !== intakeId,
+        ),
+      }));
+      setActiveAdminEmailAiIntakeId("");
+      return true;
+    } catch {
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text:
+            "Booking saved, but its Email AI request could not be closed safely. Refresh Dashboard and retry the review.",
+        },
+      }));
+      return false;
+    }
+  }
+
   async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {
     setAdminBookingPersistenceMessage(null);
 
@@ -20166,6 +20236,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const lastSuccessfulBookingSave = lastSuccessfulBookingSaveRef.current;
 
     if (lastSuccessfulBookingSave?.key === bookingSaveGuardKey) {
+      await completeActiveAdminEmailAiReviewAfterSave();
       const saveMessage = {
         tone: "info",
         text: `Operational booking already saved: ${lastSuccessfulBookingSave.bookingId}. Change details before saving again.`,
@@ -20287,6 +20358,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         key: getBookingSaveGuardKey(primarySavedBookingReference),
         record: primarySavedBooking,
       };
+      await completeActiveAdminEmailAiReviewAfterSave();
 
       const calendarSyncResults = [];
 

@@ -182,21 +182,34 @@ class FakeQuery {
       const row = {
         ...this.payload,
         created_at: "2026-07-27T13:30:00.000Z",
-        id: `intake-${intakeRows.length + 1}`,
+        id: `00000000-0000-4000-8000-${String(
+          intakeRows.length + 1,
+        ).padStart(12, "0")}`,
       };
       intakeRows.push(row);
       return { data: single ? { id: row.id } : [row], error: null };
     }
 
     if (this.operation === "update") {
-      const id = this.filters.find(([field]) => field === "id")?.[1];
-      const row = intakeRows.find((item) => item.id === id);
+      const row = intakeRows.find((item) => {
+        const exactFiltersPass = this.filters.every(
+          ([field, value]) => item[field] === value,
+        );
+        const inFiltersPass = this.inFilters.every(
+          ([field, values]) => values.includes(item[field]),
+        );
+
+        return exactFiltersPass && inFiltersPass;
+      });
 
       if (row) {
         Object.assign(row, this.payload);
       }
 
-      return { data: null, error: null };
+      return {
+        data: single ? row || null : row ? [row] : [],
+        error: null,
+      };
     }
 
     const selectedRows = intakeRows.filter((row) => {
@@ -598,6 +611,7 @@ try {
 
   const route = createRequire(import.meta.url)(targetPaths.route);
   assert.equal(route.POST, undefined);
+  assert.equal(typeof route.PATCH, "function");
   const blockedRead = await route.GET(
     new Request("http://localhost/api/admin-email-ai-intake", {
       headers: {
@@ -625,6 +639,99 @@ try {
   assert.equal(allowedReadBody.write_action, false);
   assert.equal(allowedReadBody.records.length, 1);
   assert.equal(allowedReadBody.token_usage.total_tokens, 360);
+
+  const actionableIntakeId = allowedReadBody.records[0].id;
+  const blockedReview = await route.PATCH(
+    new Request("http://localhost/api/admin-email-ai-intake", {
+      body: JSON.stringify({
+        intake_id: actionableIntakeId,
+        processing_status: "reviewed",
+      }),
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost",
+        referer: "http://localhost/",
+        "x-prestige-admin-purpose": "wrong-purpose",
+      },
+      method: "PATCH",
+    }),
+  );
+  assert.equal(blockedReview.status, 403);
+  assert.equal(intakeRows[0].processing_status, "queued");
+
+  const invalidReview = await route.PATCH(
+    new Request("http://localhost/api/admin-email-ai-intake", {
+      body: JSON.stringify({
+        intake_id: actionableIntakeId,
+        processing_status: "dismissed",
+      }),
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost",
+        referer: "http://localhost/",
+        "x-prestige-admin-purpose": "admin-email-ai-intake",
+      },
+      method: "PATCH",
+    }),
+  );
+  assert.equal(invalidReview.status, 400);
+  assert.equal(intakeRows[0].processing_status, "queued");
+
+  const allowedReview = await route.PATCH(
+    new Request("http://localhost/api/admin-email-ai-intake", {
+      body: JSON.stringify({
+        intake_id: actionableIntakeId,
+        processing_status: "reviewed",
+      }),
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost",
+        referer: "http://localhost/",
+        "x-prestige-admin-purpose": "admin-email-ai-intake",
+      },
+      method: "PATCH",
+    }),
+  );
+  const allowedReviewBody = await allowedReview.json();
+  assert.equal(allowedReview.status, 200);
+  assert.deepEqual(allowedReviewBody, {
+    external_send: false,
+    intake_id: actionableIntakeId,
+    ok: true,
+    processing_status: "reviewed",
+    version: "private-semantic-email-ai-intake-v1",
+    write_action: true,
+  });
+  assert.equal(intakeRows[0].processing_status, "reviewed");
+
+  const repeatedReview = await route.PATCH(
+    new Request("http://localhost/api/admin-email-ai-intake", {
+      body: JSON.stringify({
+        intake_id: actionableIntakeId,
+        processing_status: "reviewed",
+      }),
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost",
+        referer: "http://localhost/",
+        "x-prestige-admin-purpose": "admin-email-ai-intake",
+      },
+      method: "PATCH",
+    }),
+  );
+  assert.equal(repeatedReview.status, 200);
+
+  const afterReviewRead = await route.GET(
+    new Request("http://localhost/api/admin-email-ai-intake", {
+      headers: {
+        origin: "http://localhost",
+        referer: "http://localhost/",
+        "x-prestige-admin-purpose": "admin-email-ai-intake",
+      },
+    }),
+  );
+  assert.equal(afterReviewRead.status, 200);
+  assert.deepEqual((await afterReviewRead.json()).records, []);
 
   const cronRoute = createRequire(import.meta.url)(targetPaths.cronRoute);
   delete process.env.PRESTIGE_EMAIL_AI_CRON_SECRET;

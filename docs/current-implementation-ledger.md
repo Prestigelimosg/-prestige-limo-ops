@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Public WordPress Soft 404 Repair (2026-07-28)
+
+- Google Search Console reported six exact public-site Soft 404 examples on `prestigelimo.sg`. Live reproduction proved that five retired URLs returned WordPress HTTP 302 redirects to the published `/page-not-found/` placeholder and that the placeholder itself returned HTTP 200 with `index, follow`; the Prestige Limo Ops app and GroundBooker Email AI route were not involved.
+- The A2-hosted WordPress site uses the active Autoride theme. Its existing `404.php` reads `page_404_page_id` from the serialized `ar_option` theme option and redirects every missing request to that page whenever the value is nonzero. The live value was exact page ID `10478`, the published `Page Not Found` page. No matching Redirection-plugin rule, theme/plugin code string, or other sitemap entry caused this behavior.
+- The bounded live repair changed only the WordPress theme option `page_404_page_id` from `10478` to `0` and changed exact page ID `10478` from `publish` to `draft`. No theme/plugin file, other page/post, menu, homepage, app route, email route, booking, invoice, Calendar, payment, DNS, mailbox, or provider lane changed.
+- Post-write readback proved `page_404_page_id=0` and page ID `10478` status `draft`. All six Search Console examples plus one deterministic nonexistent control URL now return direct HTTP 404 with no redirect and `noindex, follow`; the public homepage remains HTTP 200 with `index, follow`; and none of the six retired URLs remains in `page-sitemap.xml`. Focused live regression protection is `node scripts/test-public-wordpress-soft-404-guard.mjs`. After exact owner action-time approval, Google Search Console `Validate fix` was submitted for this six-URL Soft 404 issue and returned `Validation Started` with start date `7/28/26`; Google's asynchronous recrawl remains pending.
+
 ### GroundBooker Exact-Sender Email AI Intake (2026-07-28)
 
 - The owner approved one additive private sender boundary for GroundBooker booking mail: exact `From` and `Return-Path` `transzend@groundbooker.com`, with original recipient `info@prestigelimo.sg`. The established Email AI still opens only the private `booking@prestigelimo.sg` IMAP mailbox; it does not read or scan the `info@prestigelimo.sg` inbox.

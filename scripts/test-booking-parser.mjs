@@ -4334,6 +4334,29 @@ assert.equal(plainBookerNoCompany.company, '');
 assert.equal(plainBookerNoCompany.booker, 'Nicole');
 assert.equal(plainBookerNoCompany.name, 'Mr Tan');
 
+const emailAiTripOrganizerNotesMessage = `Booking type: DEP
+Booker: Pui Yu Chan
+Booker email: hyunsoostar@hotmail.com
+Contact: +6596389322
+Passenger: Pui Yu Chan
+Pax: 4
+Vehicle: Toyota Alphard 2.5
+Pickup date: 2026-08-05
+Pickup time: 05:50
+Flight: SQ600
+Pickup: 26 Newton Rd, Singapore 307957
+Notes: Completed booking. Trip organizer: Mr. Kim, Hyun Soo, +65 98156017. Client details list 1 passenger; vehicle booking lists 4. Order total S$110.00, including S$15.00 midnight surcharge.`;
+const emailAiTripOrganizerNotes = parseBookingMessage(
+  emailAiTripOrganizerNotesMessage,
+  {
+    referenceDate: new Date('2026-07-28T12:00:00+08:00'),
+  },
+);
+assert.equal(emailAiTripOrganizerNotes.booker, 'Mr Kim, Hyun Soo');
+assert.equal(emailAiTripOrganizerNotes.bookerContact, '+65 98156017');
+assert.equal(emailAiTripOrganizerNotes.name, 'Pui Yu Chan');
+assert.equal(emailAiTripOrganizerNotes.pax, '4');
+
 const looseStayAddressTransferMessage = `Roland
 Pickup 0630 and he stay 82 Grange Road
 22 Bedok North Drive

@@ -2397,9 +2397,13 @@ function detectStandaloneHonorificNameLine(text: string) {
 
 function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
-  const booker = cleanDetectedName(match?.[1] ?? "");
+  const rawBooker = clean(match?.[1] ?? "");
   const contactText = match?.[2] || match?.[0] || "";
   const contact = firstMatch(contactText, [new RegExp(String.raw`(${phoneNumberPatternSource})`)]);
+  const contactIndex = contact ? rawBooker.indexOf(contact) : -1;
+  const booker = cleanDetectedName(
+    contactIndex >= 0 ? rawBooker.slice(0, contactIndex) : rawBooker,
+  );
 
   return {
     booker,

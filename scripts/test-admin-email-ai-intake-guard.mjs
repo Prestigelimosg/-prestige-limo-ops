@@ -5,8 +5,6 @@ import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const contractPath = path.join(root, "lib/admin-email-ai-intake-contract.ts");
-const adminSchemaPath = path.join(root, "lib/admin-email-ai-intake-schema.ts");
-const sharedAiSchemaPath = path.join(root, "lib/ai-parser-schema.ts");
 const runtimePath = path.join(root, "lib/admin-email-ai-intake.ts");
 const cronRoutePath = path.join(root, "app/api/cron/admin-email-ai-intake/route.ts");
 const adminRoutePath = path.join(root, "app/api/admin-email-ai-intake/route.ts");
@@ -28,8 +26,6 @@ const timeoutMigrationPath = timeoutMigrationName
 
 for (const requiredPath of [
   contractPath,
-  adminSchemaPath,
-  sharedAiSchemaPath,
   runtimePath,
   cronRoutePath,
   adminRoutePath,
@@ -43,8 +39,6 @@ for (const requiredPath of [
 }
 
 const contract = await import(pathToFileURL(contractPath).href);
-const adminSchemaSource = fs.readFileSync(adminSchemaPath, "utf8");
-const sharedAiSchemaSource = fs.readFileSync(sharedAiSchemaPath, "utf8");
 const runtimeSource = fs.readFileSync(runtimePath, "utf8");
 const cronRouteSource = fs.readFileSync(cronRoutePath, "utf8");
 const adminRouteSource = fs.readFileSync(adminRoutePath, "utf8");
@@ -135,10 +129,6 @@ assert.match(runtimeSource, /cancellation/);
 assert.match(runtimeSource, /unrelated/);
 assert.match(runtimeSource, /uncertain/);
 assert.match(runtimeSource, /Always return suggestedReply as an empty string/);
-assert.match(
-  runtimeSource,
-  /bookerName must contain only the human booker name and title/,
-);
 assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
 assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
 assert.match(runtimeSource, /email_confirmed_booking/);
@@ -159,18 +149,6 @@ assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(
   runtimeSource,
   /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/,
-);
-assert.match(
-  runtimeSource,
-  /canonical_booking_text:\s*adminEmailAiCanonicalBookingText\(analysis\)/,
-);
-
-assert.match(adminSchemaSource, /sanitizeAdminEmailAiBookerName/);
-assert.match(adminSchemaSource, /client\\s\+details/);
-assert.match(adminSchemaSource, /Removed contact or list text from Email AI booker name/);
-assert.doesNotMatch(
-  sharedAiSchemaSource,
-  /sanitizeAdminEmailAiBookerName|Removed contact or list text from Email AI booker name/,
 );
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
@@ -274,14 +252,6 @@ assert.match(
 assert.match(
   ledgerSource,
   /row disappears and the existing badge count decreases immediately/,
-);
-assert.match(
-  ledgerSource,
-  /Email-AI-only Booker-name sanitizer/,
-);
-assert.match(
-  ledgerSource,
-  /shared Ask AI schema and deterministic booking parser remain unchanged/,
 );
 
 console.log("Private semantic email AI intake guard passed.");

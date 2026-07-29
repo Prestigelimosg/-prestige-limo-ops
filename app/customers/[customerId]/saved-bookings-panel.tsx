@@ -19,8 +19,11 @@ import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-disp
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminBookingsApiPath = "/api/admin-bookings";
+const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
+  "/api/admin-company-traveler-crm-runtime-write-action";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
+const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
@@ -300,6 +303,10 @@ const initialDspBillingTimeCorrectionState: CustomerFolderDspBillingTimeCorrecti
 
 function inlineEditText(value: unknown, maxLength = 300) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function inlineEditComparableText(value: unknown, maxLength = 300) {
+  return inlineEditText(value, maxLength).toLocaleLowerCase("en-SG");
 }
 
 function inlineEditIdentityId(value: unknown) {
@@ -799,8 +806,10 @@ export function CustomerFolderSavedBookingsPanel({
     tone: "info",
   });
 
-  async function loadCustomerFolderRateSetup() {
-    if (customerFolderRateSetupRef.current) {
+  async function loadCustomerFolderRateSetup(
+    options: { force?: boolean } = {},
+  ) {
+    if (!options.force && customerFolderRateSetupRef.current) {
       return customerFolderRateSetupRef.current;
     }
 
@@ -1440,13 +1449,158 @@ export function CustomerFolderSavedBookingsPanel({
       companyId &&
       bookerId &&
       travelerId &&
-      (customerFolderRateSetup?.travelers || []).some(
+      (customerFolderRateSetupRef.current?.travelers ||
+        customerFolderRateSetup?.travelers ||
+        []).some(
         (traveler) =>
           inlineEditIdentityId(traveler.id) === travelerId &&
           inlineEditIdentityId(traveler.company_id) === companyId &&
           inlineEditIdentityId(traveler.booker_id) === bookerId,
       ),
     );
+  }
+
+  async function ensureSectionFourVerifiedIdentity(
+    form: CustomerFolderInlineEditForm,
+  ) {
+    const companyId = inlineEditIdentityId(form.companyId);
+    const bookerId = inlineEditIdentityId(form.bookerId);
+    const travelerName = inlineEditText(form.passengerName, 160);
+    const bookerName = inlineEditText(form.bookerName, 160);
+    const bookerContact = inlineEditText(form.bookerContact, 120);
+    const bookerEmail = inlineEditEmail(form.bookerEmail);
+
+    if (!companyId || !bookerId || !travelerName || !bookerName) {
+      throw new Error(
+        "Select the exact verified company and booker, then enter the traveller name.",
+      );
+    }
+
+    const freshRateSetup = await loadCustomerFolderRateSetup({ force: true });
+    const companyExists = (freshRateSetup.companies || []).some(
+      (company) => inlineEditIdentityId(company.id) === companyId,
+    );
+
+    if (!companyExists) {
+      throw new Error("Select one existing verified company before saving.");
+    }
+
+    const bookerBelongsToCompany = (freshRateSetup.travelers || []).some(
+      (traveler) =>
+        inlineEditIdentityId(traveler.company_id) === companyId &&
+        inlineEditIdentityId(traveler.booker_id) === bookerId,
+    );
+
+    if (!bookerBelongsToCompany) {
+      throw new Error("Select one existing verified booker for this company.");
+    }
+    const matchingTraveler = (freshRateSetup.travelers || []).find(
+      (traveler) =>
+        inlineEditIdentityId(traveler.company_id) === companyId &&
+        inlineEditComparableText(traveler.traveler_name, 160) ===
+          inlineEditComparableText(travelerName, 160),
+    );
+    const linkedBookerId = inlineEditIdentityId(matchingTraveler?.booker_id);
+
+    if (linkedBookerId && linkedBookerId !== bookerId) {
+      throw new Error(
+        "That traveller is already linked to another verified booker. Select the exact traveller instead.",
+      );
+    }
+
+    let travelerId = inlineEditIdentityId(matchingTraveler?.id);
+
+    if (!travelerId) {
+      const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
+        body: JSON.stringify({
+          action_type: "traveler_create",
+          booker_contact: bookerContact || null,
+          booker_email: bookerEmail,
+          booker_name: bookerName,
+          company_id: companyId,
+          traveler_name: travelerName,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            ok?: boolean;
+            record?: {
+              company_id?: number | null;
+              id?: number | null;
+            } | null;
+          }
+        | null;
+
+      travelerId = inlineEditIdentityId(result?.record?.id);
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        !travelerId ||
+        inlineEditIdentityId(result.record?.company_id) !== companyId
+      ) {
+        throw new Error(
+          result?.error ||
+            "Verified traveller could not be created. No invoice was created or emailed.",
+        );
+      }
+    }
+
+    const travelerLinkParams = new URLSearchParams({
+      id: `eq.${travelerId}`,
+      select:
+        "id,company_id,booker_id,traveler_name,booker_name,booker_contact,booker_email",
+      single: "single",
+    });
+    const travelerLinkResponse = await fetch(
+      `${adminLegacyTravelersApiPath}?${travelerLinkParams.toString()}`,
+      {
+        body: JSON.stringify({
+          booker_contact: bookerContact || null,
+          booker_email: bookerEmail,
+          booker_id: bookerId,
+          booker_name: bookerName,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      },
+    );
+    const linkedTraveler = (await travelerLinkResponse.json().catch(() => null)) as
+      | {
+          booker_id?: number | null;
+          company_id?: number | null;
+          id?: number | null;
+        }
+      | null;
+
+    if (
+      !travelerLinkResponse.ok ||
+      inlineEditIdentityId(linkedTraveler?.id) !== travelerId ||
+      inlineEditIdentityId(linkedTraveler?.company_id) !== companyId ||
+      inlineEditIdentityId(linkedTraveler?.booker_id) !== bookerId
+    ) {
+      throw new Error(
+        "Verified traveller could not be linked to the exact booker. No invoice was created or emailed.",
+      );
+    }
+
+    await loadCustomerFolderRateSetup({ force: true });
+
+    return {
+      ...form,
+      bookerId: String(bookerId),
+      companyId: String(companyId),
+      travelerId: String(travelerId),
+    } satisfies CustomerFolderInlineEditForm;
   }
 
   function updateDspBillingTimeCorrectionField(
@@ -1590,7 +1744,7 @@ export function CustomerFolderSavedBookingsPanel({
   ) {
     const exactBooking = inlineEditState.booking;
     const reference = safeDispatchReference(booking);
-    const form = inlineEditState.form;
+    let form = inlineEditState.form;
     const pickupDateTime = inlineEditApiDateTime(form.pickupDateTime);
     const requiredValues = [
       form.customerName,
@@ -1623,11 +1777,33 @@ export function CustomerFolderSavedBookingsPanel({
     if (options.requireVerifiedIdentity && !sectionFourVerifiedIdentityIsValid(form)) {
       setInlineEditState((current) => ({
         ...current,
-        message:
-          "Select one exact verified company, PA / booker, and traveller before saving the Section 4 correction.",
-        status: "error",
+        message: "Creating or linking the missing verified traveller...",
+        status: "saving",
       }));
-      return;
+
+      try {
+        form = await ensureSectionFourVerifiedIdentity(form);
+      } catch (error) {
+        setInlineEditState((current) => ({
+          ...current,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Verified traveller could not be saved. No invoice was created or emailed.",
+          status: "error",
+        }));
+        return;
+      }
+
+      if (!sectionFourVerifiedIdentityIsValid(form)) {
+        setInlineEditState((current) => ({
+          ...current,
+          message:
+            "Verified identity could not be confirmed after saving. No invoice was created or emailed.",
+          status: "error",
+        }));
+        return;
+      }
     }
 
     setInlineEditState((current) => ({

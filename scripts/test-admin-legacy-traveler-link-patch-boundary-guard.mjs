@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const route = await readFile("app/api/admin-legacy-data/rest/v1/[table]/route.ts", "utf8");
 
 assert.ok(route.includes('allowServerSessionRoleMethodsWithoutRequestToken: ["PATCH"]'));
+assert.ok(route.includes('additionalSameOriginRefererPathPrefixes: ["/customers/"]'));
 assert.ok(route.includes("resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose"));
 assert.ok(route.includes("if (boundary.context.mode === \"local-dev-admin-surface\" && isProductionRuntime())"));
 assert.ok(route.includes("allowedColumnsByTable"));

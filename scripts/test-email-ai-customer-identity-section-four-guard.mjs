@@ -35,6 +35,8 @@ assert.ok(
 );
 
 for (const fragment of [
+  'const adminCompanyTravelerCrmRuntimeWriteActionApiPath =',
+  'const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers"',
   'data-customer-folder-section-four-edit="true"',
   'data-customer-folder-section-four-identity-editor="true"',
   'data-customer-folder-section-four-company-identity="true"',
@@ -50,6 +52,18 @@ for (const fragment of [
   assert.ok(
     savedBookingsPanel.includes(fragment),
     `Section 4 customer identity correction is missing ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "ensureSectionFourVerifiedIdentity",
+  'action_type: "traveler_create"',
+  "booker_id: bookerId",
+  "await loadCustomerFolderRateSetup({ force: true })",
+]) {
+  assert.ok(
+    savedBookingsPanel.includes(fragment),
+    `Section 4 missing-identity repair is missing ${fragment}`,
   );
 }
 
@@ -70,6 +84,14 @@ for (const fragment of [
 assert.ok(
   savedBookingsPanel.includes("method: \"PATCH\""),
   "Section 4 corrections must reuse the established exact-booking PATCH",
+);
+assert.ok(
+  savedBookingsPanel.indexOf(
+    "await ensureSectionFourVerifiedIdentity",
+    savedBookingsPanel.indexOf("async function saveInlineBookingDetails"),
+  ) <
+    savedBookingsPanel.indexOf("const payload = {", savedBookingsPanel.indexOf("async function saveInlineBookingDetails")),
+  "Section 4 must establish the verified identity before the exact booking PATCH payload is built",
 );
 assert.ok(
   !savedBookingsPanel.includes("/api/admin-email-ai-customer"),

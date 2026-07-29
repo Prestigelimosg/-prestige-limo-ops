@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, type MouseEvent, useEffect, useRef, useState } from "react";
 
 import {
   calculateCustomerDspBillingActualMinutes,
@@ -1460,6 +1460,92 @@ export function CustomerFolderSavedBookingsPanel({
     );
   }
 
+  function sectionFourProceedCause(form: CustomerFolderInlineEditForm) {
+    const companyId = inlineEditIdentityId(form.companyId);
+    const bookerId = inlineEditIdentityId(form.bookerId);
+    const travelerId = inlineEditIdentityId(form.travelerId);
+
+    if (!companyId) {
+      return "No verified company is selected for this booking.";
+    }
+
+    if (!bookerId) {
+      return "No verified PA / booker is selected beneath the verified company.";
+    }
+
+    if (!travelerId) {
+      return "A verified traveller is missing. The existing guarded correction will try to create and link only that traveller beneath the selected company and PA / booker.";
+    }
+
+    if (!sectionFourVerifiedIdentityIsValid(form)) {
+      return "The selected company, PA / booker, and traveller chain must be re-read and verified before this booking can continue to invoice review.";
+    }
+
+    return "You reviewed corrections to this booking's customer identity or job details.";
+  }
+
+  function sectionFourProceedConfirmation(
+    booking: CustomerFolderSavedBookingRecord,
+    form: CustomerFolderInlineEditForm,
+  ) {
+    return [
+      `Proceed for booking ${publicBookingReferenceDisplay(booking)}?`,
+      "",
+      `Cause: ${sectionFourProceedCause(form)}`,
+      "",
+      "This saves only the reviewed customer identity and job fields for this booking.",
+      "If one traveller is missing, the existing guarded correction may create and link only that traveller beneath the selected company and PA / booker.",
+      "The customer price returns to Review required.",
+      "No invoice, PDF, email, reminder, payment, driver, Calendar, messaging, payout, PayNow, or other booking action will run.",
+      "",
+      "Email AI and Ask AI cannot approve this action. Continue only if you pressed this visible Admin button yourself.",
+    ].join("\n");
+  }
+
+  async function proceedWithSectionFourBookingCorrection(
+    event: MouseEvent<HTMLButtonElement>,
+    booking: CustomerFolderSavedBookingRecord,
+  ) {
+    const reference = safeDispatchReference(booking);
+    const editingReference = safeBookingReferenceValue(
+      inlineEditText(inlineEditState.booking?.booking_reference, 120),
+    );
+
+    if (!event.isTrusted) {
+      setInlineEditState((current) => ({
+        ...current,
+        message:
+          "Use the visible Proceed for this booking button. Email AI and Ask AI cannot approve this action. No job was changed.",
+        status: "error",
+      }));
+      return;
+    }
+
+    if (!reference || reference !== editingReference) {
+      setInlineEditState((current) => ({
+        ...current,
+        message:
+          "The exact booking changed before confirmation. Reopen Edit job and review it again. No job was changed.",
+        status: "error",
+      }));
+      return;
+    }
+
+    if (!window.confirm(sectionFourProceedConfirmation(booking, inlineEditState.form))) {
+      setInlineEditState((current) => ({
+        ...current,
+        message: `Proceed cancelled for ${publicBookingReferenceDisplay(booking)}. No job was changed.`,
+        status: "loaded",
+      }));
+      return;
+    }
+
+    await saveInlineBookingDetails(booking, {
+      keepEditorOpen: true,
+      requireVerifiedIdentity: true,
+    });
+  }
+
   async function ensureSectionFourVerifiedIdentity(
     form: CustomerFolderInlineEditForm,
   ) {
@@ -2851,22 +2937,31 @@ export function CustomerFolderSavedBookingsPanel({
                                     <p className="mt-2 text-xs font-bold text-slate-700">
                                       {inlineEditState.message}
                                     </p>
+                                    <p
+                                      className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-xs font-semibold text-sky-950"
+                                      data-customer-folder-section-four-exact-booking-proceed="true"
+                                    >
+                                      Proceed applies only to this exact booking. The confirmation
+                                      explains the cause, affected fields, and untouched actions
+                                      before the existing guarded save runs. Email AI and Ask AI do
+                                      not call this control.
+                                    </p>
                                     <div className="mt-3 flex flex-wrap justify-end gap-2">
                                       <button
                                         className="h-9 rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
                                         data-customer-folder-section-four-save="true"
                                         disabled={inlineEditState.status === "saving"}
-                                        onClick={() =>
-                                          void saveInlineBookingDetails(booking, {
-                                            keepEditorOpen: true,
-                                            requireVerifiedIdentity: true,
-                                          })
+                                        onClick={(event) =>
+                                          void proceedWithSectionFourBookingCorrection(
+                                            event,
+                                            booking,
+                                          )
                                         }
                                         type="button"
                                       >
                                         {inlineEditState.status === "saving"
                                           ? "Saving..."
-                                          : "Save corrected job"}
+                                          : "Proceed for this booking"}
                                       </button>
                                       <button
                                         className="h-9 rounded-md border border-emerald-700 bg-emerald-700 px-3 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"

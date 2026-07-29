@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Build-Only Dependency Audit Repair (2026-07-29)
+
+- The current registry audit reproduced four transitive development/build-tool findings: one low-severity `@babel/core` file-read advisory and high-severity `brace-expansion`, `js-yaml`, and PostCSS advisories. `npm audit --omit=dev` returned zero findings, so no Production runtime dependency was implicated.
+- The existing permitted dependency ranges now resolve patched build-only releases: `@babel/core` 7.29.7, `js-yaml` 4.3.0, Tailwind's PostCSS 8.5.25, and TypeScript ESLint's `brace-expansion` 5.0.8. Their lockfile refresh also updates build-time browser-support metadata such as Browserslist, `caniuse-lite`, and `baseline-browser-mapping`; no direct Production dependency version changes. Next.js, React, ESLint, `eslint-config-next`, all direct Production dependencies, and the existing reviewed Next.js PostCSS/Sharp overrides remain at their established versions.
+- ESLint's established `minimatch` 3 dependency still requests the unpatched `brace-expansion` 1.x export shape, while the patched 5.0.8 release exposes a named CommonJS `expand` function. One small local build-only compatibility package exposes that exact patched function through the old callable contract and is restricted to `minimatch@3.1.5`; modern `minimatch@10.2.5` resolves the patched package directly. No forced ESLint/Next major downgrade or upgrade was accepted.
+- The repair changes no application component, route, API, database, environment value, provider, deployment, customer or driver data, Calendar, messaging, GPS, payment, payout, PayNow, billing, PDF, or owner-locked invoice workflow. Focused protection remains in `scripts/test-release-hardening-security-guard.mjs`.
+- The first full lint run found one new adapter-only error because the repository forbids an unannotated CommonJS `require()`. The adapter now carries the narrow line-level exception required for its `.cjs` compatibility contract; no global lint rule or application file changed. Final verification passed the callable minimatch probe, full and Production-only npm audits with zero findings, the focused release-hardening security guard, `npx tsc --noEmit --pretty false`, lint with zero errors and the existing 162 warnings, and the Next.js 16.2.11 Production build.
+
 ### Exact-Booking Human Proceed Confirmation (2026-07-29)
 
 - The owner approved one deliberate human confirmation on the existing Section 4 exact-job correction control. The existing `Save corrected job` button is not duplicated; it is relabelled `Proceed for this booking` and remains inside `4 · Selected jobs invoice review`.

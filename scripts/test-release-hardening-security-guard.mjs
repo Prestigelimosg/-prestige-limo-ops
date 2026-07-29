@@ -6,6 +6,16 @@ const migrationPath =
 const migration = await readFile(migrationPath, "utf8");
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const packageLock = JSON.parse(await readFile("package-lock.json", "utf8"));
+const braceExpansionCompat = await readFile(
+  "vendor/brace-expansion-minimatch3-compat/index.cjs",
+  "utf8",
+);
+const braceExpansionCompatPackage = JSON.parse(
+  await readFile(
+    "vendor/brace-expansion-minimatch3-compat/package.json",
+    "utf8",
+  ),
+);
 const navigationGuard = await readFile(
   "scripts/test-public-client-navigation-boundary-guard.mjs",
   "utf8",
@@ -83,6 +93,63 @@ assert.equal(
   packageLock.packages["node_modules/sharp"].version,
   "0.35.3",
   "The lockfile must resolve patched Sharp for Next.js.",
+);
+assert.equal(
+  packageJson.devDependencies["brace-expansion"],
+  "file:vendor/brace-expansion-minimatch3-compat",
+  "The reviewed build-only brace-expansion compatibility package must remain local.",
+);
+assert.equal(
+  packageJson.overrides["minimatch@3.1.5"]["brace-expansion"],
+  "$brace-expansion",
+  "Legacy minimatch must use the reviewed patched compatibility package.",
+);
+assert.equal(
+  packageJson.overrides["minimatch@10.2.5"]["brace-expansion"],
+  "5.0.8",
+  "Modern minimatch must retain the patched brace-expansion release.",
+);
+assert.equal(
+  packageLock.packages["node_modules/@babel/core"].version,
+  "7.29.7",
+  "The lockfile must retain the patched build-only Babel release.",
+);
+assert.equal(
+  packageLock.packages["node_modules/js-yaml"].version,
+  "4.3.0",
+  "The lockfile must retain the patched build-only js-yaml release.",
+);
+assert.equal(
+  packageLock.packages["node_modules/postcss"].version,
+  "8.5.25",
+  "The lockfile must retain the patched Tailwind PostCSS release.",
+);
+assert.equal(
+  packageLock.packages["node_modules/brace-expansion-safe"].version,
+  "5.0.8",
+  "The compatibility package must wrap the exact patched brace-expansion release.",
+);
+assert.deepEqual(
+  braceExpansionCompatPackage.dependencies,
+  { "brace-expansion-safe": "npm:brace-expansion@5.0.8" },
+  "The compatibility package must depend only on the exact patched upstream release.",
+);
+assert.equal(
+  packageLock.packages[
+    "node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion"
+  ].version,
+  "5.0.8",
+  "The TypeScript ESLint dependency must retain patched brace-expansion.",
+);
+assertIncludes(
+  braceExpansionCompat,
+  'const { expand } = require("brace-expansion-safe");',
+  "legacy minimatch callable brace-expansion compatibility",
+);
+assertIncludes(
+  braceExpansionCompat,
+  "module.exports = expand;",
+  "legacy minimatch CommonJS callable export",
 );
 
 assertIncludes(

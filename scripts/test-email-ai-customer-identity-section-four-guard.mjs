@@ -48,10 +48,32 @@ for (const fragment of [
   'data-customer-folder-section-four-booker-email="true"',
   'data-customer-folder-section-four-passenger-name="true"',
   'data-customer-folder-section-four-save="true"',
+  'data-customer-folder-section-four-exact-booking-proceed="true"',
 ]) {
   assert.ok(
     savedBookingsPanel.includes(fragment),
     `Section 4 customer identity correction is missing ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "sectionFourProceedCause",
+  "sectionFourProceedConfirmation",
+  "proceedWithSectionFourBookingCorrection",
+  "event.isTrusted",
+  "window.confirm",
+  "Proceed for this booking",
+  "Cause:",
+  "saves only the reviewed customer identity and job fields for this booking",
+  "The customer price returns to Review required.",
+  "Email AI and Ask AI cannot approve this action.",
+  "inlineEditText(inlineEditState.booking?.booking_reference, 120)",
+  "Proceed cancelled for",
+  "No job was changed.",
+]) {
+  assert.ok(
+    savedBookingsPanel.includes(fragment),
+    `Section 4 exact-booking owner proceed confirmation is missing ${fragment}`,
   );
 }
 
@@ -96,6 +118,10 @@ assert.ok(
 assert.ok(
   !savedBookingsPanel.includes("/api/admin-email-ai-customer"),
   "The repair must not add a second Email AI customer route",
+);
+assert.ok(
+  !savedBookingsPanel.includes("/api/admin-section-four-proceed"),
+  "The exact-booking proceed confirmation must reuse the established booking and CRM routes",
 );
 assert.ok(
   !savedBookingsPanel.includes("Missing verified traveller identity. Invoice preparation is skipped."),

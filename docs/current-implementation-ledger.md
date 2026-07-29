@@ -12,6 +12,15 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Exact-Booking Human Proceed Confirmation (2026-07-29)
+
+- The owner approved one deliberate human confirmation on the existing Section 4 exact-job correction control. The existing `Save corrected job` button is not duplicated; it is relabelled `Proceed for this booking` and remains inside `4 · Selected jobs invoice review`.
+- Before the existing guarded save runs, the confirmation names the exact public booking reference, explains the current verified-identity or reviewed-correction cause, states that only the reviewed customer identity and job fields for that booking will be saved, and states that the customer price returns to `Review required`.
+- The visible control rejects an untrusted DOM event, rechecks that the editor still targets the same exact booking reference, and leaves the booking unchanged when Admin cancels. Email AI and Ask AI have no caller or approval path into this control. The owner declined a passkey requirement, so this is deliberate visible-button confirmation rather than hardware-backed human verification.
+- The existing verified company-booker-traveller readback, optional one-missing-traveller creation/link repair, exact-booking PATCH, CRM write kill switch, same-origin Admin/Dispatcher server boundary, and post-save price review remain unchanged. Missing company/booker selection, mismatched ownership, failed readback, disabled writes, unsafe calls, and malformed input still fail safely with an exact cause.
+- Proceed never creates, issues, regenerates, or emails an invoice; downloads a PDF; sends a reminder; changes payment status; contacts a customer or driver; or changes another booking, Driver Reports, Calendar, messaging, payout, PayNow, GPS, provider, environment, schema, or migration lane. Duplicate-invoice and issued-invoice eligibility protections remain non-bypassable.
+- Focused fail-then-pass protection remains in `scripts/test-email-ai-customer-identity-section-four-guard.mjs`. Visible local Chrome acceptance used an intercepted browser-only booking `10845` fixture, showed the exact cause and untouched actions in the native confirmation, and dismissed it before any save was accepted. This source checkpoint is local-branch only until separately pushed, merged, deployed, and accepted on the approved runtime surface.
+
 ### Email AI Customer Identity Review And Section 4 Correction (2026-07-29)
 
 - Signed-in Production Chrome reproduced the remaining exact blocker on customer `150`, booking `10845`: Section 3 correctly proposed SGD70 for TRF passenger `Otis JULY`, while Section 4 had the exact verified company `CODEX CUSTOMER REBOOKING TEST` and booker `William Test` but no matching verified Otis traveller. The only offered traveller was `William Test Traveller`, so invoice preparation correctly failed closed rather than assigning the wrong identity. No invoice was created or emailed during reproduction.

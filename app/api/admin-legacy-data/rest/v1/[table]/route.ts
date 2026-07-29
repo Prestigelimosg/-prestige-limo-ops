@@ -154,6 +154,7 @@ function isProductionRuntime() {
 
 function requireAdminBoundary(request: Request) {
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathPrefixes: ["/customers/"],
     allowServerSessionRoleMethodsWithoutRequestToken: ["PATCH"],
   });
 

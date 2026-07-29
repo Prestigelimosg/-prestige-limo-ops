@@ -58,9 +58,13 @@ After `git fetch origin --prune`:
 
   `codex/fix-email-ai-customer-identity`
 
-- Local HEAD:
+- Local checkpoint before publishing this handoff:
 
   `3f2c922e docs: record traveler invoice acceptance`
+
+- Initial handoff publication commit:
+
+  `40cf8631 docs: add Email AI OTIS invoice handoff`
 
 - Fetched `origin/main`:
 
@@ -77,6 +81,8 @@ After `git fetch origin --prune`:
 - Before this handoff was published, no fetched remote branch contained those three commits.
 - The owner then explicitly approved pushing the existing branch with those three approved commits and this documentation handoff.
 - Remote branch `origin/codex/fix-email-ai-customer-identity` now preserves that bounded history.
+- The initial handoff push succeeded and configured the local branch to track that exact remote branch.
+- This post-push wording refresh is documentation only and is the final branch-tip update; use `git log --oneline -5` for its exact commit hash.
 - The commits are still not merged into `origin/main` or `origin/staging`.
 - Application commit `6407b39c`, which includes parent commit `fc473f1e`, was nevertheless directly deployed to Production and accepted there.
 - Production deployment:

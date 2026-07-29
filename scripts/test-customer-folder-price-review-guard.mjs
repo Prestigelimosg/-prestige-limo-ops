@@ -78,7 +78,7 @@ for (const fragment of [
   "Customer price",
   "Save price review",
   '"Review required"',
-  '"Codex price · tick to confirm"',
+  '"Review required · tick to confirm"',
   "Ticking a job confirms its displayed customer price for this invoice.",
   'review?.status === "reviewed"',
   "loadAutomatedBillingReviews",
@@ -99,6 +99,12 @@ for (const fragment of [
 ]) {
   includes(folder, fragment, `customer-folder price review ${fragment}`);
 }
+
+assert.equal(
+  folder.includes('"Codex price · tick to confirm"'),
+  false,
+  "unconfirmed calculated proposals must use the same Review required wording before and after reload",
+);
 
 const automatedBillingReview = sectionBetween(
   folder,

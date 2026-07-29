@@ -964,7 +964,7 @@ export function CustomerFolderSavedBookingsPanel({
             review: {
               amountCents: calculation.amountCents,
               breakdown: `${breakdown} Temporary Codex proposal; tick the job to confirm this price for invoice handoff, or edit it first.`,
-              message: "Codex price · tick to confirm",
+              message: "Review required · tick to confirm",
               status: "proposed",
             } satisfies CustomerFolderBillingReview,
           };

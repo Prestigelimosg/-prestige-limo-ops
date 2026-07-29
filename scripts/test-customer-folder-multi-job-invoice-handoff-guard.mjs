@@ -30,7 +30,7 @@ for (const fragment of [
   "data-customer-folder-selected-invoice-job",
   "Review invoice &amp; email",
   "Ticking a job confirms its displayed customer price for this invoice.",
-  "Codex price · tick to confirm",
+  "Review required · tick to confirm",
   "Load {group.passengerName} invoice",
   "selected_booking_references",
   "selectedUnbilledBookings.map((booking)",

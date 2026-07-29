@@ -8989,9 +8989,10 @@ function adminDispatchLinkedReturnParserSource(
   bookingValue: BookingForm,
   groupReference: string,
   legLabel: "OUTBOUND" | "RETURN",
+  baseParserSourceReference?: string | null,
 ) {
   return [
-    parsedSourceReference(bookingValue),
+    clean(baseParserSourceReference) || parsedSourceReference(bookingValue),
     `Linked return group ${groupReference}`,
     legLabel,
   ]
@@ -9002,7 +9003,10 @@ function adminDispatchLinkedReturnParserSource(
 function buildAdminDispatchReturnTripPersistencePayloads(
   bookingValue: BookingForm,
   currentTimeMs: number,
-  options: { customerDisplayNameOverride?: string | null } = {},
+  options: {
+    customerDisplayNameOverride?: string | null;
+    parserSourceReferenceOverride?: string | null;
+  } = {},
 ): AdminDispatchReturnTripPersistencePayload[] {
   const returnTripRequested = adminDispatchReturnTripRequested(bookingValue);
   const groupReference = createAdminBookingReference();
@@ -9014,8 +9018,13 @@ function buildAdminDispatchReturnTripPersistencePayloads(
     {
       ...options,
       parserSourceReferenceOverride: returnTripRequested
-        ? adminDispatchLinkedReturnParserSource(bookingValue, groupReference, "OUTBOUND")
-        : undefined,
+        ? adminDispatchLinkedReturnParserSource(
+            bookingValue,
+            groupReference,
+            "OUTBOUND",
+            options.parserSourceReferenceOverride,
+          )
+        : options.parserSourceReferenceOverride,
     },
   );
 
@@ -9050,6 +9059,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
             returnBookingValue,
             groupReference,
             "RETURN",
+            options.parserSourceReferenceOverride,
           ),
         },
       ),
@@ -18717,6 +18727,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
+    if (activeAdminEmailAiIntakeId) {
+      const crmLoadResult = await loadRates("Email AI customer check loaded.", {
+        preserveAction: true,
+      });
+
+      setMessage({
+        tone: crmLoadResult.ok ? "success" : "error",
+        text: crmLoadResult.ok
+          ? `Parsed ${detectedFields} fields. Email AI customer check loaded; confirm whether this is a repeated or new customer before Save + CRM.`
+          : `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
+      });
+      return;
+    }
+
     const nameMemory = await lookupNameMemory(parsedBooking.name || "");
 
     if (nameMemory) {
@@ -20270,6 +20294,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         currentTimeMs,
         {
           customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+          parserSourceReferenceOverride: activeAdminEmailAiIntakeId
+            ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
+            : undefined,
         },
       );
       const savedBookings: Array<{
@@ -24544,6 +24571,77 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       </div>
     );
   };
+  const adminEmailAiPassengerName = clean(booking.name);
+  const adminEmailAiCompanyName = saveCrmExplicitCompanyAccount(booking);
+  const adminEmailAiBookerName = clean(booking.booker);
+  const adminEmailAiPassengerMatches = activeAdminEmailAiIntakeId
+    ? rateTravelers.filter((traveler) =>
+        Boolean(
+          adminDispatchVerifiedIdentityId(traveler.id) &&
+          adminDispatchVerifiedIdentityId(traveler.company_id) &&
+          adminDispatchVerifiedIdentityId(traveler.booker_id) &&
+          adminEmailAiPassengerName &&
+          billingIdentityMatches(traveler.traveler_name, adminEmailAiPassengerName),
+        ),
+      )
+    : [];
+  const adminEmailAiRepeatedCustomerCandidates = adminEmailAiPassengerMatches.filter(
+    (traveler) => {
+      const company = rateCompanies.find(
+        (candidate) => candidate.id === traveler.company_id,
+      );
+      const companyMatches =
+        Boolean(adminEmailAiCompanyName) &&
+        Boolean(company) &&
+        billingCompanyIdentityMatches(company?.company_name, adminEmailAiCompanyName);
+      const bookerMatches =
+        Boolean(adminEmailAiBookerName) &&
+        billingIdentityMatches(traveler.booker_name, adminEmailAiBookerName);
+
+      return companyMatches || bookerMatches;
+    },
+  );
+  const adminEmailAiRepeatedCustomerCandidate =
+    adminEmailAiRepeatedCustomerCandidates.length === 1
+      ? adminEmailAiRepeatedCustomerCandidates[0]
+      : null;
+  const adminEmailAiCustomerStatus = !activeAdminEmailAiIntakeId
+    ? null
+    : !ratesLoaded
+      ? savingRates
+        ? "checking"
+        : "unavailable"
+      : adminEmailAiRepeatedCustomerCandidate
+        ? "repeated"
+        : adminEmailAiPassengerMatches.length === 0
+          ? "new"
+          : "ambiguous";
+
+  function applyAdminEmailAiRepeatedCustomerCandidate() {
+    if (!adminEmailAiRepeatedCustomerCandidate) {
+      return;
+    }
+
+    const company = rateCompanies.find(
+      (candidate) => candidate.id === adminEmailAiRepeatedCustomerCandidate.company_id,
+    );
+
+    setBooking((current) => ({
+      ...current,
+      booker: clean(adminEmailAiRepeatedCustomerCandidate.booker_name) || current.booker,
+      bookerId: String(adminEmailAiRepeatedCustomerCandidate.booker_id),
+      company: clean(company?.company_name) || current.company,
+      companyId: String(adminEmailAiRepeatedCustomerCandidate.company_id),
+      name: clean(adminEmailAiRepeatedCustomerCandidate.traveler_name) || current.name,
+      travelerId: String(adminEmailAiRepeatedCustomerCandidate.id),
+    }));
+    setMessage({
+      tone: "success",
+      text:
+        "Repeated customer selected from the verified CRM chain. Review the company, PA / booker, traveller, and booking details before Save + CRM.",
+    });
+  }
+
   const adminDispatchVerifiedBookerOptions = Array.from(
     new Map(
       rateTravelers
@@ -39099,6 +39197,69 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     {adminDispatchVerifiedTravelerOptions.map((traveler) => <option key={traveler.id} value={traveler.id}>{clean(traveler.traveler_name) || `Traveler ${traveler.id}`}</option>)}
                   </select>
                 </label>
+                {adminEmailAiCustomerStatus ? (
+                  <div
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold md:col-span-3 ${
+                      adminEmailAiCustomerStatus === "repeated"
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                        : adminEmailAiCustomerStatus === "new"
+                          ? "border-sky-300 bg-sky-50 text-sky-950"
+                          : "border-amber-300 bg-amber-50 text-amber-950"
+                    }`}
+                    data-admin-email-ai-customer-status="true"
+                    data-admin-email-ai-customer-status-value={adminEmailAiCustomerStatus}
+                  >
+                    {adminEmailAiCustomerStatus === "checking" ? (
+                      <p>Checking Email AI customer against the verified CRM list.</p>
+                    ) : adminEmailAiCustomerStatus === "unavailable" ? (
+                      <>
+                        <p>Customer check unavailable</p>
+                        <p className="font-medium">
+                          The verified CRM list did not load. No new or repeated customer is
+                          assumed; reload the CRM identities before Save + CRM.
+                        </p>
+                      </>
+                    ) : adminEmailAiCustomerStatus === "repeated" &&
+                      adminEmailAiRepeatedCustomerCandidate ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p>Repeated customer</p>
+                          <p className="font-medium">
+                            {clean(adminEmailAiRepeatedCustomerCandidate.traveler_name)} ·{" "}
+                            {clean(adminEmailAiRepeatedCustomerCandidate.booker_name)}. Confirm the
+                            exact verified CRM chain before saving.
+                          </p>
+                        </div>
+                        <button
+                          className="h-8 shrink-0 rounded-md border border-emerald-700 bg-white px-3 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+                          data-admin-email-ai-use-repeated-customer="true"
+                          onClick={applyAdminEmailAiRepeatedCustomerCandidate}
+                          type="button"
+                        >
+                          Use repeated customer
+                        </button>
+                      </div>
+                    ) : adminEmailAiCustomerStatus === "new" ? (
+                      <>
+                        <p>New customer</p>
+                        <p className="font-medium">
+                          No verified CRM traveller matches this Email AI passenger. Review the
+                          customer information before Save + CRM; invoicing remains blocked until
+                          an exact verified PA / booker and traveller are selected.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>Ambiguous customer</p>
+                        <p className="font-medium">
+                          A passenger-name match exists, but the verified company or PA / booker
+                          evidence does not identify one exact CRM chain. Select the exact company,
+                          PA / booker, and traveller manually.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 {!ratesLoaded ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.")} type="button">Load CRM identities</button> : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">

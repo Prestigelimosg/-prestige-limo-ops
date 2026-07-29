@@ -71,6 +71,20 @@ type CustomerFolderTravelerInvoiceGroup = {
   travelerId: number;
 };
 
+type CustomerFolderRateSetup = Omit<CustomerInvoiceRateSetupRecord, "companies" | "travelers"> & {
+  companies?: Array<{
+    company_name?: string | null;
+    id?: number | null;
+  }>;
+  travelers?: Array<{
+    booker_id?: number | null;
+    booker_name?: string | null;
+    company_id?: number | null;
+    id?: number | null;
+    traveler_name?: string | null;
+  }>;
+};
+
 type CustomerFolderBillingReview = {
   amountCents: number | null;
   breakdown: string;
@@ -147,6 +161,11 @@ type CustomerFolderExactBooking = {
 };
 
 type CustomerFolderInlineEditForm = {
+  bookerContact: string;
+  bookerEmail: string;
+  bookerId: string;
+  bookerName: string;
+  companyId: string;
   customerName: string;
   dropoffLocation: string;
   passengerName: string;
@@ -154,6 +173,7 @@ type CustomerFolderInlineEditForm = {
   pickupLocation: string;
   routeSummary: string;
   serviceType: string;
+  travelerId: string;
 };
 
 type CustomerFolderInlineEditState = {
@@ -248,6 +268,11 @@ function publicBookingReferenceDisplay(booking: CustomerFolderSavedBookingRecord
 }
 
 const emptyInlineEditForm: CustomerFolderInlineEditForm = {
+  bookerContact: "",
+  bookerEmail: "",
+  bookerId: "",
+  bookerName: "",
+  companyId: "",
   customerName: "",
   dropoffLocation: "",
   passengerName: "",
@@ -255,6 +280,7 @@ const emptyInlineEditForm: CustomerFolderInlineEditForm = {
   pickupLocation: "",
   routeSummary: "",
   serviceType: "",
+  travelerId: "",
 };
 
 const initialInlineEditState: CustomerFolderInlineEditState = {
@@ -274,6 +300,18 @@ const initialDspBillingTimeCorrectionState: CustomerFolderDspBillingTimeCorrecti
 
 function inlineEditText(value: unknown, maxLength = 300) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function inlineEditIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function inlineEditEmail(value: unknown) {
+  const email = inlineEditText(value, 240).toLowerCase();
+
+  return !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email || null : null;
 }
 
 function inlineEditDateTimeInput(value: unknown) {
@@ -310,6 +348,11 @@ function inlineEditApiDateTime(value: string) {
 
 function inlineEditFormFromBooking(booking: CustomerFolderExactBooking) {
   return {
+    bookerContact: inlineEditText(booking.contact_phone, 120),
+    bookerEmail: inlineEditText(booking.contact_email, 240),
+    bookerId: inlineEditIdentityId(booking.booker_id)?.toString() || "",
+    bookerName: inlineEditText(booking.contact_display_name, 160),
+    companyId: inlineEditIdentityId(booking.company_id)?.toString() || "",
     customerName: inlineEditText(booking.customer_display_name, 160),
     dropoffLocation: inlineEditText(booking.dropoff_location),
     passengerName: inlineEditText(booking.passenger_name, 160),
@@ -317,6 +360,7 @@ function inlineEditFormFromBooking(booking: CustomerFolderExactBooking) {
     pickupLocation: inlineEditText(booking.pickup_location),
     routeSummary: inlineEditText(booking.route_summary, 500),
     serviceType: inlineEditText(booking.service_type || booking.route_type, 80),
+    travelerId: inlineEditIdentityId(booking.traveler_id)?.toString() || "",
   } satisfies CustomerFolderInlineEditForm;
 }
 
@@ -733,6 +777,12 @@ export function CustomerFolderSavedBookingsPanel({
   const [editingPriceReference, setEditingPriceReference] = useState("");
   const [inlineEditState, setInlineEditState] =
     useState<CustomerFolderInlineEditState>(initialInlineEditState);
+  const customerFolderRateSetupRef = useRef<CustomerFolderRateSetup | null>(null);
+  const [customerFolderRateSetup, setCustomerFolderRateSetup] =
+    useState<CustomerFolderRateSetup | null>(null);
+  const [customerFolderRateSetupMessage, setCustomerFolderRateSetupMessage] =
+    useState("");
+  const [sectionFourEditingReference, setSectionFourEditingReference] = useState("");
   const [dspBillingTimeCorrectionState, setDspBillingTimeCorrectionState] =
     useState<CustomerFolderDspBillingTimeCorrectionState>(
       initialDspBillingTimeCorrectionState,
@@ -749,6 +799,35 @@ export function CustomerFolderSavedBookingsPanel({
     tone: "info",
   });
 
+  async function loadCustomerFolderRateSetup() {
+    if (customerFolderRateSetupRef.current) {
+      return customerFolderRateSetupRef.current;
+    }
+
+    setCustomerFolderRateSetupMessage("Loading verified CRM identities...");
+    const rateResponse = await fetch(adminRateSetupApiPath, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const rateSetup = (await rateResponse.json().catch(() => null)) as
+      | (CustomerFolderRateSetup & { error?: string; ok?: boolean })
+      | null;
+
+    if (!rateResponse.ok || rateSetup?.ok !== true) {
+      setCustomerFolderRateSetupMessage(
+        "Verified CRM identities could not be loaded. No customer identity is assumed.",
+      );
+      throw new Error("CRM rate setup unavailable");
+    }
+
+    customerFolderRateSetupRef.current = rateSetup;
+    setCustomerFolderRateSetup(rateSetup);
+    setCustomerFolderRateSetupMessage("Verified CRM identities loaded.");
+    return rateSetup;
+  }
+
   async function loadAutomatedBillingReviews(bookings: CustomerFolderSavedBookingRecord[]) {
     const proposalBookings = bookings.filter(
       (booking) =>
@@ -762,19 +841,7 @@ export function CustomerFolderSavedBookingsPanel({
     }
 
     try {
-      const rateResponse = await fetch(adminRateSetupApiPath, {
-        headers: {
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "GET",
-      });
-      const rateSetup = (await rateResponse.json().catch(() => null)) as
-        | (CustomerInvoiceRateSetupRecord & { error?: string; ok?: boolean })
-        | null;
-
-      if (!rateResponse.ok || rateSetup?.ok !== true) {
-        throw new Error("CRM rate setup unavailable");
-      }
+      const rateSetup = await loadCustomerFolderRateSetup();
 
       const calculatedReviews = await Promise.all(
         proposalBookings.map(async (booking) => {
@@ -1103,6 +1170,40 @@ export function CustomerFolderSavedBookingsPanel({
   const selectedPublicReferencesReady = selectedUnbilledBookings.every((booking) =>
     Boolean(safePublicBookingReference(booking.public_booking_reference)),
   );
+  const sectionFourCrmCompanies = (customerFolderRateSetup?.companies || [])
+    .filter((company) => inlineEditIdentityId(company.id))
+    .map((company) => ({
+      id: String(company.id),
+      name: displayText(company.company_name, `Company ${company.id}`),
+    }));
+  const sectionFourCompanyId = inlineEditIdentityId(inlineEditState.form.companyId);
+  const sectionFourBookerId = inlineEditIdentityId(inlineEditState.form.bookerId);
+  const sectionFourCrmBookers = Array.from(
+    new Map(
+      (customerFolderRateSetup?.travelers || [])
+        .filter(
+          (traveler) =>
+            sectionFourCompanyId &&
+            inlineEditIdentityId(traveler.company_id) === sectionFourCompanyId &&
+            inlineEditIdentityId(traveler.booker_id),
+        )
+        .map((traveler) => [
+          String(traveler.booker_id),
+          {
+            id: String(traveler.booker_id),
+            name: displayText(traveler.booker_name, `Booker ${traveler.booker_id}`),
+          },
+        ]),
+    ).values(),
+  );
+  const sectionFourCrmTravelers = (customerFolderRateSetup?.travelers || []).filter(
+    (traveler) =>
+      sectionFourCompanyId &&
+      sectionFourBookerId &&
+      inlineEditIdentityId(traveler.company_id) === sectionFourCompanyId &&
+      inlineEditIdentityId(traveler.booker_id) === sectionFourBookerId &&
+      inlineEditIdentityId(traveler.id),
+  );
 
   function toggleSelectedBooking(booking: CustomerFolderSavedBookingRecord, selected: boolean) {
     const reference = safeDispatchReference(booking);
@@ -1152,14 +1253,27 @@ export function CustomerFolderSavedBookingsPanel({
     );
   }
 
-  async function openInlineBookingEditor(booking: CustomerFolderSavedBookingRecord) {
+  async function openInlineBookingEditor(
+    booking: CustomerFolderSavedBookingRecord,
+    options: { surface?: "invoice-review" | "unbilled-jobs" } = {},
+  ) {
     const reference = safeDispatchReference(booking);
 
     if (!reference) {
       return;
     }
 
-    setExpandedSavedBookingReference(reference);
+    if (options.surface === "invoice-review") {
+      setSectionFourEditingReference(reference);
+      try {
+        await loadCustomerFolderRateSetup();
+      } catch {
+        // The visible Section 4 identity editor remains fail closed.
+      }
+    } else {
+      setExpandedSavedBookingReference(reference);
+      setSectionFourEditingReference("");
+    }
     setEditingPriceReference(reference);
     setPriceDraft(
       billingReviews[reference]?.amountCents
@@ -1269,6 +1383,70 @@ export function CustomerFolderSavedBookingsPanel({
       form: { ...current.form, [field]: value },
       message: "Unsaved job-detail changes.",
     }));
+  }
+
+  function updateSectionFourCompanyIdentity(value: string) {
+    setInlineEditState((current) => ({
+      ...current,
+      form: {
+        ...current.form,
+        bookerId: "",
+        companyId: value,
+        travelerId: "",
+      },
+      message: "Unsaved verified customer identity changes.",
+    }));
+  }
+
+  function updateSectionFourBookerIdentity(value: string) {
+    const selectedBooker = sectionFourCrmBookers.find((booker) => booker.id === value);
+
+    setInlineEditState((current) => ({
+      ...current,
+      form: {
+        ...current.form,
+        bookerId: value,
+        bookerName: selectedBooker?.name || current.form.bookerName,
+        travelerId: "",
+      },
+      message: "Unsaved verified customer identity changes.",
+    }));
+  }
+
+  function updateSectionFourTravelerIdentity(value: string) {
+    const selectedTraveler = sectionFourCrmTravelers.find(
+      (traveler) => String(traveler.id) === value,
+    );
+
+    setInlineEditState((current) => ({
+      ...current,
+      form: {
+        ...current.form,
+        passengerName:
+          inlineEditText(selectedTraveler?.traveler_name, 160) ||
+          current.form.passengerName,
+        travelerId: value,
+      },
+      message: "Unsaved verified customer identity changes.",
+    }));
+  }
+
+  function sectionFourVerifiedIdentityIsValid(form: CustomerFolderInlineEditForm) {
+    const companyId = inlineEditIdentityId(form.companyId);
+    const bookerId = inlineEditIdentityId(form.bookerId);
+    const travelerId = inlineEditIdentityId(form.travelerId);
+
+    return Boolean(
+      companyId &&
+      bookerId &&
+      travelerId &&
+      (customerFolderRateSetup?.travelers || []).some(
+        (traveler) =>
+          inlineEditIdentityId(traveler.id) === travelerId &&
+          inlineEditIdentityId(traveler.company_id) === companyId &&
+          inlineEditIdentityId(traveler.booker_id) === bookerId,
+      ),
+    );
   }
 
   function updateDspBillingTimeCorrectionField(
@@ -1403,7 +1581,13 @@ export function CustomerFolderSavedBookingsPanel({
     }
   }
 
-  async function saveInlineBookingDetails(booking: CustomerFolderSavedBookingRecord) {
+  async function saveInlineBookingDetails(
+    booking: CustomerFolderSavedBookingRecord,
+    options: {
+      keepEditorOpen?: boolean;
+      requireVerifiedIdentity?: boolean;
+    } = {},
+  ) {
     const exactBooking = inlineEditState.booking;
     const reference = safeDispatchReference(booking);
     const form = inlineEditState.form;
@@ -1427,6 +1611,25 @@ export function CustomerFolderSavedBookingsPanel({
       return;
     }
 
+    if (inlineEditText(form.bookerEmail) && !inlineEditEmail(form.bookerEmail)) {
+      setInlineEditState((current) => ({
+        ...current,
+        message: "Enter a valid booker email or leave it blank.",
+        status: "error",
+      }));
+      return;
+    }
+
+    if (options.requireVerifiedIdentity && !sectionFourVerifiedIdentityIsValid(form)) {
+      setInlineEditState((current) => ({
+        ...current,
+        message:
+          "Select one exact verified company, PA / booker, and traveller before saving the Section 4 correction.",
+        status: "error",
+      }));
+      return;
+    }
+
     setInlineEditState((current) => ({
       ...current,
       message: `Saving job ${publicBookingReferenceDisplay(booking)}...`,
@@ -1436,14 +1639,14 @@ export function CustomerFolderSavedBookingsPanel({
     const payload = {
       booking: {
         admin_internal_status: exactBooking.admin_internal_status ?? "Draft",
-        booker_id: exactBooking.booker_id ?? null,
+        booker_id: inlineEditIdentityId(form.bookerId),
         booking_reference: reference,
         cancellation_review_status: exactBooking.cancellation_review_status ?? null,
         change_review_status: exactBooking.change_review_status ?? null,
-        company_id: exactBooking.company_id ?? null,
-        contact_display_name: exactBooking.contact_display_name ?? null,
-        contact_email: exactBooking.contact_email ?? null,
-        contact_phone: exactBooking.contact_phone ?? null,
+        company_id: inlineEditIdentityId(form.companyId),
+        contact_display_name: inlineEditText(form.bookerName, 160) || null,
+        contact_email: inlineEditEmail(form.bookerEmail),
+        contact_phone: inlineEditText(form.bookerContact, 120) || null,
         customer_display_name: inlineEditText(form.customerName, 160),
         customer_facing_status: exactBooking.customer_facing_status ?? "Received",
         customer_id: exactBooking.customer_id ?? null,
@@ -1467,7 +1670,7 @@ export function CustomerFolderSavedBookingsPanel({
         short_notice_review_status: exactBooking.short_notice_review_status ?? null,
         source_channel: exactBooking.source_channel || exactBooking.source_surface || "admin-dashboard",
         source_surface: exactBooking.source_surface || exactBooking.source_channel || "admin-dashboard",
-        traveler_id: exactBooking.traveler_id ?? null,
+        traveler_id: inlineEditIdentityId(form.travelerId),
         vehicle_type_or_category: exactBooking.vehicle_type_or_category ?? null,
       },
       route_points: inlineEditRoutePoints(exactBooking, form),
@@ -1511,6 +1714,8 @@ export function CustomerFolderSavedBookingsPanel({
           safeDispatchReference(savedBooking) === reference
             ? {
                 ...savedBooking,
+                booker_id: updatedBooking.booker_id,
+                company_id: updatedBooking.company_id,
                 customer_account: updatedBooking.customer_display_name,
                 dropoff_location: updatedBooking.dropoff_location,
                 passenger_name: updatedBooking.passenger_name,
@@ -1520,12 +1725,28 @@ export function CustomerFolderSavedBookingsPanel({
                   updatedBooking.public_booking_reference || savedBooking.public_booking_reference,
                 route_summary: updatedBooking.route_summary,
                 service_type: updatedBooking.service_type || updatedBooking.route_type,
+                traveler_id: updatedBooking.traveler_id,
               }
             : savedBooking,
         ),
         tone: "success",
       }));
+      if (options.keepEditorOpen) {
+        setBillingReviews((current) => ({
+          ...current,
+          [reference]: {
+            amountCents: current[reference]?.amountCents ?? null,
+            breakdown:
+              "Customer identity or job information changed. Review and confirm the displayed customer price again before invoice handoff.",
+            message: "Review corrected job price",
+            status: "proposed",
+          },
+        }));
+        return;
+      }
+
       setExpandedSavedBookingReference("");
+      setSectionFourEditingReference("");
       setEditingPriceReference("");
       setPriceDraft("");
       setInlineEditState(initialInlineEditState);
@@ -2193,6 +2414,7 @@ export function CustomerFolderSavedBookingsPanel({
                       <th className="border-b border-slate-200 px-3 py-2">Pickup</th>
                       <th className="border-b border-slate-200 px-3 py-2">Service</th>
                       <th className="border-b border-slate-200 px-3 py-2 text-right">Confirmed price</th>
+                      <th className="border-b border-slate-200 px-3 py-2 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2201,24 +2423,299 @@ export function CustomerFolderSavedBookingsPanel({
                       const review = reference ? billingReviews[reference] : null;
 
                       return (
-                      <tr
-                        className="border-b border-slate-100 last:border-b-0"
-                        data-customer-folder-selected-invoice-job={booking.booking_reference || ""}
-                        key={`invoice-layout-${booking.booking_reference}`}
-                      >
-                        <td className="px-3 py-2 font-bold text-slate-950">
-                          {publicBookingReferenceDisplay(booking)}
-                        </td>
-                        <td className="px-3 py-2 text-slate-700">
-                          {formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")}
-                        </td>
-                        <td className="px-3 py-2 text-slate-700">{displayText(booking.service_type)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-950">
-                          {review?.status === "reviewed" && review.amountCents
-                            ? formatInvoiceAmount(review.amountCents)
-                            : "Review required"}
-                        </td>
-                      </tr>
+                      <Fragment key={`invoice-layout-${booking.booking_reference}`}>
+                        <tr
+                          className="border-b border-slate-100 last:border-b-0"
+                          data-customer-folder-selected-invoice-job={booking.booking_reference || ""}
+                        >
+                          <td className="px-3 py-2 font-bold text-slate-950">
+                            {publicBookingReferenceDisplay(booking)}
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">
+                            {formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")}
+                          </td>
+                          <td className="px-3 py-2 text-slate-700">{displayText(booking.service_type)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-slate-950">
+                            {review?.status === "reviewed" && review.amountCents
+                              ? formatInvoiceAmount(review.amountCents)
+                              : "Review required"}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-800 hover:bg-slate-100"
+                              data-customer-folder-section-four-edit="true"
+                              onClick={() =>
+                                void openInlineBookingEditor(booking, {
+                                  surface: "invoice-review",
+                                })
+                              }
+                              type="button"
+                            >
+                              Edit job
+                            </button>
+                          </td>
+                        </tr>
+                        {sectionFourEditingReference === reference ? (
+                          <tr className="border-b border-slate-200 bg-slate-50">
+                            <td className="px-3 py-3" colSpan={5}>
+                              <div
+                                className="rounded-md border border-sky-300 bg-white p-3"
+                                data-customer-folder-section-four-identity-editor="true"
+                              >
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                  <div>
+                                    <p className="text-xs font-bold uppercase tracking-wide text-sky-900">
+                                      Correct saved customer identity and job information
+                                    </p>
+                                    <p className="text-xs font-semibold leading-5 text-slate-600">
+                                      Reuses the exact saved-booking Edit/PATCH lane. Invoice preparation
+                                      stays blocked until one verified company, PA / booker, traveller,
+                                      and reviewed price are confirmed.
+                                    </p>
+                                  </div>
+                                  <button
+                                    className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                                    onClick={() => {
+                                      setSectionFourEditingReference("");
+                                      setEditingPriceReference("");
+                                      setInlineEditState(initialInlineEditState);
+                                      setPriceDraft("");
+                                    }}
+                                    type="button"
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                                {inlineEditState.status === "loading" ? (
+                                  <p className="mt-3 text-xs font-bold text-sky-800">
+                                    {inlineEditState.message}
+                                  </p>
+                                ) : inlineEditState.booking ? (
+                                  <>
+                                    <p className="mt-2 text-xs font-semibold text-slate-600">
+                                      {customerFolderRateSetupMessage}
+                                    </p>
+                                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Verified company
+                                        <select
+                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-section-four-company-identity="true"
+                                          onChange={(event) =>
+                                            updateSectionFourCompanyIdentity(event.target.value)
+                                          }
+                                          value={inlineEditState.form.companyId}
+                                        >
+                                          <option value="">Select exact company</option>
+                                          {sectionFourCrmCompanies.map((company) => (
+                                            <option key={company.id} value={company.id}>
+                                              {company.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Verified PA / booker
+                                        <select
+                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950 disabled:bg-slate-100"
+                                          data-customer-folder-section-four-booker-identity="true"
+                                          disabled={!sectionFourCompanyId}
+                                          onChange={(event) =>
+                                            updateSectionFourBookerIdentity(event.target.value)
+                                          }
+                                          value={inlineEditState.form.bookerId}
+                                        >
+                                          <option value="">Select exact PA / booker</option>
+                                          {sectionFourCrmBookers.map((booker) => (
+                                            <option key={booker.id} value={booker.id}>
+                                              {booker.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Verified traveller
+                                        <select
+                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950 disabled:bg-slate-100"
+                                          data-customer-folder-section-four-traveler-identity="true"
+                                          disabled={!sectionFourBookerId}
+                                          onChange={(event) =>
+                                            updateSectionFourTravelerIdentity(event.target.value)
+                                          }
+                                          value={inlineEditState.form.travelerId}
+                                        >
+                                          <option value="">Select exact traveller</option>
+                                          {sectionFourCrmTravelers.map((traveler) => (
+                                            <option key={traveler.id} value={String(traveler.id)}>
+                                              {displayText(
+                                                traveler.traveler_name,
+                                                `Traveller ${traveler.id}`,
+                                              )}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Customer / company
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-section-four-customer-name="true"
+                                          onChange={(event) =>
+                                            updateInlineEditField("customerName", event.target.value)
+                                          }
+                                          value={inlineEditState.form.customerName}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Booker name
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-section-four-booker-name="true"
+                                          onChange={(event) =>
+                                            updateInlineEditField("bookerName", event.target.value)
+                                          }
+                                          value={inlineEditState.form.bookerName}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Passenger
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-section-four-passenger-name="true"
+                                          onChange={(event) =>
+                                            updateInlineEditField("passengerName", event.target.value)
+                                          }
+                                          value={inlineEditState.form.passengerName}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Booker contact
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-section-four-booker-contact="true"
+                                          onChange={(event) =>
+                                            updateInlineEditField("bookerContact", event.target.value)
+                                          }
+                                          value={inlineEditState.form.bookerContact}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Booker email
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          data-customer-folder-section-four-booker-email="true"
+                                          onChange={(event) =>
+                                            updateInlineEditField("bookerEmail", event.target.value)
+                                          }
+                                          type="email"
+                                          value={inlineEditState.form.bookerEmail}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Pickup date &amp; time (SGT)
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          onChange={(event) =>
+                                            updateInlineEditField("pickupDateTime", event.target.value)
+                                          }
+                                          type="datetime-local"
+                                          value={inlineEditState.form.pickupDateTime}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Pickup
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          onChange={(event) =>
+                                            updateInlineEditField("pickupLocation", event.target.value)
+                                          }
+                                          value={inlineEditState.form.pickupLocation}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Drop-off
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          onChange={(event) =>
+                                            updateInlineEditField("dropoffLocation", event.target.value)
+                                          }
+                                          value={inlineEditState.form.dropoffLocation}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Service
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          onChange={(event) =>
+                                            updateInlineEditField("serviceType", event.target.value)
+                                          }
+                                          value={inlineEditState.form.serviceType}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700 sm:col-span-2">
+                                        Route
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 font-semibold text-slate-950"
+                                          onChange={(event) =>
+                                            updateInlineEditField("routeSummary", event.target.value)
+                                          }
+                                          value={inlineEditState.form.routeSummary}
+                                        />
+                                      </label>
+                                      <label className="text-xs font-bold text-slate-700">
+                                        Confirmed price (SGD)
+                                        <input
+                                          className="mt-1 h-9 w-full rounded-md border border-amber-300 bg-white px-2 font-bold text-slate-950"
+                                          inputMode="decimal"
+                                          onChange={(event) => setPriceDraft(event.target.value)}
+                                          value={priceDraft}
+                                        />
+                                      </label>
+                                    </div>
+                                    <p className="mt-2 text-xs font-bold text-slate-700">
+                                      {inlineEditState.message}
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                                      <button
+                                        className="h-9 rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+                                        data-customer-folder-section-four-save="true"
+                                        disabled={inlineEditState.status === "saving"}
+                                        onClick={() =>
+                                          void saveInlineBookingDetails(booking, {
+                                            keepEditorOpen: true,
+                                            requireVerifiedIdentity: true,
+                                          })
+                                        }
+                                        type="button"
+                                      >
+                                        {inlineEditState.status === "saving"
+                                          ? "Saving..."
+                                          : "Save corrected job"}
+                                      </button>
+                                      <button
+                                        className="h-9 rounded-md border border-emerald-700 bg-emerald-700 px-3 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+                                        disabled={
+                                          !parseInvoiceAmountToCents(priceDraft) ||
+                                          inlineEditState.message.startsWith("Unsaved") ||
+                                          inlineEditState.status === "saving"
+                                        }
+                                        onClick={() => void savePriceReview(booking)}
+                                        type="button"
+                                      >
+                                        Confirm corrected price
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <p className="mt-3 text-xs font-bold text-rose-800">
+                                    {inlineEditState.message}
+                                  </p>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                       );
                     })}
                   </tbody>

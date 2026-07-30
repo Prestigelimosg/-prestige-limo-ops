@@ -10826,7 +10826,10 @@ async function runChromeTest() {
     );
     assert.match(driverJobLinkCopyState.previewText, /Driver Job Link/);
     assert.match(driverJobLinkCopyState.previewText, /Saved link status: active/);
+    assert.match(driverJobLinkCopyState.previewText, /Expires: 11 Jun 2026, 0800hrs SGT/);
     assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
+    assert.match(driverJobLinkCopyState.copiedText, /Expires: 11 Jun 2026, 0800hrs SGT/);
+    assert.doesNotMatch(driverJobLinkCopyState.copiedText, /2026-06-11T00:00:00.000Z/);
     assert.match(
       driverJobLinkCopyState.copiedText,
       /Greeting boss, thank you for taking the job\. Please keep the car interior clean and fresh\./,

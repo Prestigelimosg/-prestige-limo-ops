@@ -3061,6 +3061,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Arrival copies now attach the flight detail to the pickup location line.
 - Customer Copy, Driver Dispatch, and Driver Job Link copy reuse the same formatter so the airport-side location is consistent.
 - The Driver Job Link `Copy Link` button now shades green and changes to `Copied` after a successful copy.
+- The Driver Job Link preview and copied message format the stored UTC expiry through the existing Singapore-time formatter, including `2026-08-03T06:48:28.795+00:00` as `Expires: 03 Aug 2026, 1448hrs SGT`, instead of exposing raw ISO text.
+- Stored `expires_at`, TTL, token creation, active/revoked state, acknowledgement, pickup display, Driver and Operations Calendar behavior, and every other Driver Job Link consumer remain unchanged.
 - This is copy/UI-only; it does not change parser behavior, booking saves, driver job link API payloads, DB writes, env values, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, or deploy behavior.
 - Guard coverage lives in `scripts/test-dispatch-flight-location-copy-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

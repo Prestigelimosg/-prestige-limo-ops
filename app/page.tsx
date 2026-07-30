@@ -17158,7 +17158,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const linkSummary = activeAdminDriverJobLink
       ? [
           `Saved link status: ${activeAdminDriverJobLink.link_status}`,
-          activeAdminDriverJobLink.expires_at ? `Expires: ${activeAdminDriverJobLink.expires_at}` : "",
+          activeAdminDriverJobLink.expires_at
+            ? `Expires: ${formatBookingTimestampSgt(activeAdminDriverJobLink.expires_at)}`
+            : "",
         ]
       : ["Saved link status: No active driver job link loaded."];
     const sections = [

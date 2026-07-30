@@ -192,7 +192,8 @@ assertIncludes(
     'ots: "driver_ots",',
     'pob: "driver_pob",',
     'completed: "driver_completed",',
-    "sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status])",
+    "sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status], {",
+    "vehiclePlate: result.payload.assignedDriver.plate,",
   ],
   "existing driver acknowledgement and status success paths",
 );
@@ -512,6 +513,64 @@ try {
       `${eventType} admin push payload`,
     );
   }
+
+  const plateStatusEvents = {
+    driver_completed: "Job Completed",
+    driver_ots: "OTS",
+    driver_otw: "OTW",
+    driver_pob: "POB",
+  };
+
+  for (const [eventType, statusLabel] of Object.entries(plateStatusEvents)) {
+    let platePayload = null;
+    const plateAlert = await helper.sendAdminDevicePushAlert(eventType, {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/plate-status-subscription",
+          keys: {
+            auth: "fake-auth-plate-status",
+            p256dh: "fake-p256dh-plate-status",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        platePayload = payload;
+      },
+      vehiclePlate: " snp 9124s ",
+    });
+
+    assert.equal(plateAlert.ok, true, `${eventType} plate push must send.`);
+    assert.equal(platePayload.title, `SNP 9124S reported ${statusLabel}`);
+    assert.equal(
+      platePayload.body,
+      `SNP 9124S reported ${statusLabel}. Open Dashboard to review.`,
+    );
+  }
+
+  let unsafePlatePayload = null;
+  const unsafePlateAlert = await helper.sendAdminDevicePushAlert("driver_otw", {
+    env: configuredEnv,
+    subscriptionLoader: async () => [
+      {
+        endpoint: "https://push.example.test/unsafe-plate-subscription",
+        keys: {
+          auth: "fake-auth-unsafe-plate",
+          p256dh: "fake-p256dh-unsafe-plate",
+        },
+      },
+    ],
+    pushSender: async (_subscription, payload) => {
+      unsafePlatePayload = payload;
+    },
+    vehiclePlate: "9999\nPassenger: Private",
+  });
+  assert.equal(unsafePlateAlert.ok, true);
+  assert.equal(unsafePlatePayload.title, "Driver reported OTW");
+  assert.equal(
+    unsafePlatePayload.body,
+    "Driver reported OTW. Open Dashboard to review.",
+  );
 
   const invalidOperationalAlert = await helper.sendAdminDevicePushAlert("monthly_billing", {
     env: configuredEnv,

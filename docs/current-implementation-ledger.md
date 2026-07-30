@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver OTW Admin Device Push Event Repair (2026-07-30)
+
+- The owner-approved signed-in Production rehearsal used only the acknowledged private Driver Job link for booking `10851`. One `OTW` click persisted `driver_otw` at `18:07 SGT`; the existing Dashboard refreshed to `Latest report: I'm on the way`, retained the same history while the booking stayed active, and the authenticated Customer App displayed exactly one safe `Driver on the way` update. OTS, POB, Job Completed, Calendar, invoice, payment, payout, PayNow, GPS, external messaging, schema, and environment lanes were not used.
+- Mac Notification Centre retained no Admin OTW alert. A read-only Production health query showed both active Admin push subscriptions still had their prior `17:50 SGT` success timestamps and no new failure timestamp, proving the OTW attempt stopped before provider delivery.
+- Source inspection isolated the exact defect inside the established post-status Admin push handoff: the canonical saved status is already `driver_otw`, but the handoff prefixed every saved status with `driver_`, producing the invalid fail-closed event `driver_driver_otw`. OTS, POB, and Completed already produced their valid existing event names.
+- The established handoff is repaired in place with one explicit canonical mapping: `driver_otw -> driver_otw`, `ots -> driver_ots`, `pob -> driver_pob`, and `completed -> driver_completed`. Status persistence, customer in-app fan-out, best-effort failure isolation, fixed safe payloads, subscription loading, provider sender, Dashboard, Driver Reports, private Driver Job controls, and every other existing consumer remain unchanged.
+- Focused fail-then-pass protection is the updated `scripts/test-admin-device-push-notification-guard.mjs`, which now requires the canonical mapping and rejects restoration of the duplicate-prefix interpolation. This checkpoint is local and committed only until separately approved deployment and live OTW acceptance.
+
 ### Booking 10851 Customer In-App Exact-Two Production Activation (2026-07-30)
 
 - Signed-in Production Chrome reproduced the existing compact Customer Copy `Send In-App` failure for booking `10851` before any write. The UI returned `Customer app notifications require secure customer account auth before saved notifications can be read.`, and a read-only database check confirmed zero rows for event key `ADM-20260729110409:customer-in-app:driver-details-ready`.

@@ -49,6 +49,13 @@ export type ProductionDriverJobStatusUpdateInput = {
   token: string;
 };
 
+const adminDevicePushEventForDriverStatus = {
+  driver_otw: "driver_otw",
+  ots: "driver_ots",
+  pob: "driver_pob",
+  completed: "driver_completed",
+} as const;
+
 let driverJobProductionClientForTests: DriverJobStatusPersistenceClient | null = null;
 
 export function setDriverJobProductionSupabaseClientForTests(
@@ -208,7 +215,7 @@ export async function applyProductionDriverJobStatusUpdate({
   if (result.ok) {
     try {
       const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
-      await sendAdminDevicePushAlert(`driver_${result.status}`);
+      await sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status]);
     } catch {
       // A saved driver status must not fail because Admin device push is unavailable.
     }

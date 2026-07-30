@@ -187,9 +187,19 @@ assertIncludes(
   driverJobProductionSource,
   [
     'sendAdminDevicePushAlert("driver_acknowledged")',
-    "sendAdminDevicePushAlert(`driver_${result.status}`)",
+    "const adminDevicePushEventForDriverStatus = {",
+    'driver_otw: "driver_otw",',
+    'ots: "driver_ots",',
+    'pob: "driver_pob",',
+    'completed: "driver_completed",',
+    "sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status])",
   ],
   "existing driver acknowledgement and status success paths",
+);
+assertExcludes(
+  driverJobProductionSource,
+  ["sendAdminDevicePushAlert(`driver_${result.status}`)"],
+  "driver OTW admin push event must not gain a duplicate driver prefix",
 );
 
 assertIncludes(

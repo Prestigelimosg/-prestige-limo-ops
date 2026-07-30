@@ -65,6 +65,35 @@ const activationSection = sectionBetween(
   "### Controlled Customer Portal + Customer In-App Runtime Activation Contract Guard Lock",
 );
 
+const booking10851ActivationSection = sectionBetween(
+  ledger,
+  "### Booking 10851 Customer In-App Exact-Two Production Activation (2026-07-30)",
+);
+
+for (const phrase of [
+  "Signed-in Production Chrome reproduced the existing compact Customer Copy `Send In-App` failure for booking `10851` before any write.",
+  "a read-only database check confirmed zero rows for event key `ADM-20260729110409:customer-in-app:driver-details-ready`.",
+  "booking `10851` belongs to active customer account `150`, while the prior one-customer Production activation covered account `128`.",
+  "`PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE` changed to `small-allowlist`",
+  "`PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST` preserved account `128` while adding account `150`.",
+  "The same application build `cac1922a` was redeployed without an application-code change; Vercel deployment `3oJ4jdpGzvHH7b3a1tHNrozUs9Lu` reached `Ready` on `app.prestigelimo.sg`.",
+  "One and only one post-deployment click on the existing booking-`10851` `Send In-App` action produced one queued `customer_app` row",
+  "no provider send.",
+  "No WhatsApp, Telegram, Email, SMS, or other external/manual message was sent during this acceptance.",
+  "The customer surface showed only the safe booking and driver handoff fields",
+  "Customer acknowledgement and customer quick replies were deliberately not clicked.",
+  "only the configuration entry is preserved and no account-`128` runtime send is claimed.",
+  "Account `150` is the only runtime path proven in this acceptance.",
+  "This configuration-only activation changes no invoice workflow or layout, Customer Portal environment/session mapping, Driver Job Link, Driver ACK, Operations Calendar, personal Driver Calendar, booking, pricing/rates, payout, PayNow, payment, PDF, Email/WhatsApp/SMS/Telegram provider send, schema, migration, notification template, or automatic messaging behavior.",
+  "Manual customer delivery remains a separate owner action.",
+]) {
+  assertIncludes(
+    booking10851ActivationSection,
+    phrase,
+    `booking 10851 controlled Customer In-App activation phrase: ${phrase}`,
+  );
+}
+
 for (const phrase of [
   "This is a docs/test-only guard for a future separately approved controlled customer-facing runtime activation lane.",
   "This lock does not activate customer portal runtime, customer auth/session/cookie creation, customer in-app production read/write, notification row writes, env changes, DB reads/writes, provider sends, Google Maps/OneMap/FlightAware calls, deploy, production activation, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, pricing/rates/customer_rates changes, `driver_payout_rules` changes, payout/payment/PDF/billing/invoice activation, OTS/photo/storage activation, calendar activation, UI sector/card expansion, or shims.",

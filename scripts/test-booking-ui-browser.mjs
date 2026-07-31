@@ -7815,6 +7815,82 @@ async function runChromeTest() {
     );
 
     await setInputValue(
+      "[data-bookings-date-input='true']",
+      "2026-05-28",
+      "Bookings earlier pickup date",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const link = document.querySelector("[data-bookings-completed-history-date-link='true']");
+          return link?.textContent.trim() === "Completed / History" &&
+            link.getAttribute("href") === "#completed-history";
+        })()`),
+      10000,
+      "Bookings earlier-date inline Completed / History link",
+    );
+    const clickedBookingsCompletedHistoryDateLink = await evaluate(`(() => {
+      const link = document.querySelector("[data-bookings-completed-history-date-link='true']");
+
+      if (!link) {
+        return false;
+      }
+
+      link.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedBookingsCompletedHistoryDateLink,
+      true,
+      "Expected the Bookings earlier-date Completed / History inline link to be clickable",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedTab = document.querySelector("[data-app-tab='completed']");
+          const completedSection = document.querySelector("#completed-history");
+          const monthFilter = document.querySelector("[data-completed-month-filter='true']");
+          const search = document.querySelector("[data-completed-search-input='true']");
+          const matchingCards = [...document.querySelectorAll("[data-completed-operational-card]")]
+            .filter((card) => card.innerText.includes("LOADED SAVED TRAVELER"));
+
+          return completedTab?.getAttribute("aria-selected") === "true" &&
+            Boolean(completedSection) &&
+            monthFilter?.value === "2026-05" &&
+            search?.value === "2026-05-28" &&
+            matchingCards.length === 1;
+        })()`),
+      10000,
+      "Completed / History exact-date handoff",
+    );
+    await setInputValue(
+      "[data-completed-search-input='true']",
+      "",
+      "Completed / History exact-date handoff search cleanup",
+    );
+    await setInputValue(
+      "[data-completed-month-filter='true']",
+      "all",
+      "Completed / History exact-date handoff month cleanup",
+    );
+    await clickTab("Bookings", "Find saved jobs");
+    const clickedUpcomingAfterCompletedHistoryDateLink = await evaluate(`(() => {
+      const button = document.querySelector("[data-bookings-upcoming='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedUpcomingAfterCompletedHistoryDateLink,
+      true,
+      "Expected Bookings Upcoming view to remain available after the Completed / History date handoff",
+    );
+
+    await setInputValue(
       "[data-bookings-search-input='true']",
       bookingsCancelActionFixture.booking_reference,
       "Bookings exact cancellation fixture search",

@@ -122,6 +122,17 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `completed/current local search fragment ${fragment}`);
 }
+for (const fragment of [
+  "const completedExactDateSearchKey = /^\\d{4}-\\d{2}-\\d{2}$/.test(clean(completedSearchTerm))",
+  "getBookingDateKey(bookingRecord) === completedExactDateSearchKey",
+  "function openCompletedHistoryForBookingsDate()",
+  "setCompletedMonthFilter(exactDate.slice(0, 7));",
+  "setCompletedSearchTerm(exactDate);",
+  'selectAppTab("completed");',
+  "void loadBookings(`Completed / History refreshed for ${formatDateWithWeekday(exactDate)}.`);",
+]) {
+  assertIncludes(appPage, fragment, `exact-date Completed / History handoff fragment ${fragment}`);
+}
 
 for (const fragment of [
   "const todayKey = toDateKey(new Date());",
@@ -208,12 +219,23 @@ for (const fragment of [
   "No matching jobs found for {bookingsDateScopeLabel}.",
   'data-current-upcoming-bookings-list="true"',
   'data-current-upcoming-bookings-empty="true"',
-  "No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in Completed / History.",
+  "No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in",
+  'data-bookings-completed-history-date-link="true"',
+  'href="#completed-history"',
+  "event.preventDefault();",
+  "openCompletedHistoryForBookingsDate();",
+  "{!bookingsShowUpcoming && bookingsSelectedDate < todayKey ? (",
+  '"Completed / History"',
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
   'className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1"',
 ]) {
   assertIncludes(currentUpcomingPanel, fragment, `current/upcoming panel fragment ${fragment}`);
 }
+assertExcludes(
+  currentUpcomingPanel,
+  'button data-bookings-completed-history-date-link="true"',
+  "exact-date Completed / History handoff must remain an inline link, not a new button",
+);
 assertExcludes(
   currentUpcomingPanel,
   "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
@@ -269,6 +291,20 @@ for (const fragment of [
   'Replacement: {completedOperationalReadiness.exceptionReplacement}',
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed/history panel fragment ${fragment}`);
+}
+
+assertIncludes(
+  completedTabSection,
+  'id="completed-history"',
+  "completed/history tab must expose the inline link target",
+);
+
+for (const fragment of [
+  "The existing Current / Upcoming empty-state text now makes only `Completed / History` an inline link",
+  "refreshes the established booking read once",
+  "No button, panel, route, status mutation, completion action, billing/invoice change",
+]) {
+  assertIncludes(ledgerSection, fragment, `exact-date Completed / History ledger fragment ${fragment}`);
 }
 
 for (const retiredDriverJcFallback of ["isDriverCompletedHistoryJob", '"driver-completed"']) {

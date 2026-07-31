@@ -17439,12 +17439,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       operationalBookings,
     ],
   );
+  const completedExactDateSearchKey = /^\d{4}-\d{2}-\d{2}$/.test(clean(completedSearchTerm))
+    ? clean(completedSearchTerm)
+    : "";
   const filteredCompletedBookings = useMemo(
     () =>
       completedBookings.filter((bookingRecord) =>
-        bookingMatchesLocalSearch(bookingRecord, completedSearchTerm),
+        completedExactDateSearchKey
+          ? getBookingDateKey(bookingRecord) === completedExactDateSearchKey
+          : bookingMatchesLocalSearch(bookingRecord, completedSearchTerm),
       ),
-    [completedBookings, completedSearchTerm],
+    [completedBookings, completedExactDateSearchKey, completedSearchTerm],
   );
   const completedHistoryMonthOptions = useMemo(() => {
     const monthCounts = new Map<string, number>();
@@ -21025,6 +21030,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     if (nextTab === "company" && !companyProfileLoaded && companyProfileAction === "idle") {
       void loadCompanyProfileSettings();
     }
+  }
+
+  function openCompletedHistoryForBookingsDate() {
+    const exactDate = clean(bookingsSelectedDate);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(exactDate)) {
+      return;
+    }
+
+    setCompletedMonthFilter(exactDate.slice(0, 7));
+    setCompletedSearchTerm(exactDate);
+    selectAppTab("completed");
+    void loadBookings(`Completed / History refreshed for ${formatDateWithWeekday(exactDate)}.`);
   }
 
   async function loadDispatchHandoffBookingFromUrl(targetBookingReference: string) {
@@ -25241,7 +25259,23 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           className="mt-3 rounded-md border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-slate-500"
           data-current-upcoming-bookings-empty="true"
         >
-          No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in Completed / History.
+          No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in{" "}
+          {!bookingsShowUpcoming && bookingsSelectedDate < todayKey ? (
+            <a
+              className="font-semibold text-slate-900 underline decoration-slate-400 underline-offset-2 hover:decoration-slate-900"
+              data-bookings-completed-history-date-link="true"
+              href="#completed-history"
+              onClick={(event) => {
+                event.preventDefault();
+                openCompletedHistoryForBookingsDate();
+              }}
+            >
+              Completed / History
+            </a>
+          ) : (
+            "Completed / History"
+          )}
+          .
         </div>
       )}
     </div>
@@ -44222,7 +44256,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ) : null}
 
         {activeTab === "completed" ? (
-        <section className="rounded-md border border-stone-200 bg-white p-3">
+        <section
+          className="rounded-md border border-stone-200 bg-white p-3"
+          id="completed-history"
+        >
           <div className="mb-3">
             <h2 className="text-lg font-semibold">Completed / History</h2>
             <p className="text-xs text-slate-500">

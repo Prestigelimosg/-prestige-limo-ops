@@ -2861,6 +2861,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.
 - Expanded Current / Upcoming and Completed / History rows use compact detail strips instead of large mini-cards.
 - Earlier non-completed rows do not show `Undo completed` or `Delete` because they are history rows, not completed-status rows.
+- The existing Current / Upcoming empty-state text now makes only `Completed / History` an inline link when Admin has selected an earlier pickup date. It refreshes the established booking read once, opens the existing Completed tab, selects that pickup month, and applies the exact pickup date through the existing Completed search state. No button, panel, route, status mutation, completion action, billing/invoice change, save, Calendar action, Driver Job action, notification, schema, or second data lane is added.
 - This is UI-only grouping/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-bookings-earlier-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 

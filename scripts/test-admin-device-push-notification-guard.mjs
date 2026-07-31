@@ -186,7 +186,8 @@ assertIncludes(
 assertIncludes(
   driverJobProductionSource,
   [
-    'sendAdminDevicePushAlert("driver_acknowledged")',
+    'sendAdminDevicePushAlert("driver_acknowledged", {',
+    "vehiclePlate: detailsResult.payload.assignedDriver.plate,",
     "const adminDevicePushEventForDriverStatus = {",
     'driver_otw: "driver_otw",',
     'ots: "driver_ots",',
@@ -548,6 +549,38 @@ try {
     );
   }
 
+  let acknowledgedPlatePayload = null;
+  const acknowledgedPlateAlert = await helper.sendAdminDevicePushAlert(
+    "driver_acknowledged",
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/plate-acknowledgement-subscription",
+          keys: {
+            auth: "fake-auth-plate-acknowledgement",
+            p256dh: "fake-p256dh-plate-acknowledgement",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        acknowledgedPlatePayload = payload;
+      },
+      vehiclePlate: " snp 9124s ",
+    },
+  );
+  assert.equal(acknowledgedPlateAlert.ok, true);
+  assert.equal(acknowledgedPlatePayload.title, "SNP 9124S acknowledged job");
+  assert.equal(
+    acknowledgedPlatePayload.body,
+    "SNP 9124S saved details and acknowledged a job. Open Dashboard to review.",
+  );
+  assert.equal(
+    acknowledgedPlatePayload.tag,
+    "prestige-admin-driver-acknowledged",
+  );
+  assert.equal(acknowledgedPlatePayload.url, "/");
+
   let unsafePlatePayload = null;
   const unsafePlateAlert = await helper.sendAdminDevicePushAlert("driver_otw", {
     env: configuredEnv,
@@ -570,6 +603,33 @@ try {
   assert.equal(
     unsafePlatePayload.body,
     "Driver reported OTW. Open Dashboard to review.",
+  );
+
+  let unsafeAcknowledgedPlatePayload = null;
+  const unsafeAcknowledgedPlateAlert = await helper.sendAdminDevicePushAlert(
+    "driver_acknowledged",
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/unsafe-acknowledgement-subscription",
+          keys: {
+            auth: "fake-auth-unsafe-acknowledgement",
+            p256dh: "fake-p256dh-unsafe-acknowledgement",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        unsafeAcknowledgedPlatePayload = payload;
+      },
+      vehiclePlate: "9999\nPassenger: Private",
+    },
+  );
+  assert.equal(unsafeAcknowledgedPlateAlert.ok, true);
+  assert.equal(unsafeAcknowledgedPlatePayload.title, "Driver acknowledged job");
+  assert.equal(
+    unsafeAcknowledgedPlatePayload.body,
+    "Driver saved details and acknowledged a job. Open Dashboard to review.",
   );
 
   const invalidOperationalAlert = await helper.sendAdminDevicePushAlert("monthly_billing", {

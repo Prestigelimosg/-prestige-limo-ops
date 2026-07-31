@@ -170,7 +170,9 @@ export async function applyProductionDriverJobDetailsUpdate({
 
   try {
     const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
-    await sendAdminDevicePushAlert("driver_acknowledged");
+    await sendAdminDevicePushAlert("driver_acknowledged", {
+      vehiclePlate: detailsResult.payload.assignedDriver.plate,
+    });
   } catch {
     // A saved acknowledgement must not fail because Admin device push is unavailable.
   }

@@ -596,13 +596,21 @@ function safeAlertPayload(
   vehiclePlate?: unknown,
 ): AdminDevicePushPayload {
   const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
-  const plate = statusLabel ? safeVehiclePlate(vehiclePlate) : null;
+  const plate =
+    statusLabel || eventType === "driver_acknowledged"
+      ? safeVehiclePlate(vehiclePlate)
+      : null;
   const copy =
     plate && statusLabel
       ? {
           body: `${plate} reported ${statusLabel}. Open Dashboard to review.`,
           title: `${plate} reported ${statusLabel}`,
         }
+      : plate && eventType === "driver_acknowledged"
+        ? {
+            body: `${plate} saved details and acknowledged a job. Open Dashboard to review.`,
+            title: `${plate} acknowledged job`,
+          }
       : adminDevicePushEventCopy[eventType];
 
   return {

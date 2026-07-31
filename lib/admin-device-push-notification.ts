@@ -166,6 +166,7 @@ type AdminDevicePushAlertOptions = {
   env?: EnvInput;
   subscriptionLoader?: () => Promise<PushSubscription[]>;
   pushSender?: AdminDevicePushSender;
+  vehiclePlate?: unknown;
 };
 
 function cleanEnvValue(env: EnvInput, key: string): string | null {
@@ -563,13 +564,57 @@ const adminDevicePushEventCopy: Record<
   },
 };
 
+const adminDevicePushVehicleStatusLabels: Partial<
+  Record<AdminDevicePushEventType, string>
+> = {
+  driver_completed: "Job Completed",
+  driver_ots: "OTS",
+  driver_otw: "OTW",
+  driver_pob: "POB",
+};
+
 function validAdminDevicePushEventType(value: unknown): value is AdminDevicePushEventType {
   return typeof value === "string" && value in adminDevicePushEventCopy;
 }
 
-function safeAlertPayload(eventType: AdminDevicePushEventType): AdminDevicePushPayload {
+function safeVehiclePlate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const plate = value.trim().replace(/\s+/g, " ").toUpperCase();
+
+  if (!plate || plate.length > 20 || !/^[A-Z0-9 -]+$/.test(plate)) {
+    return null;
+  }
+
+  return plate;
+}
+
+function safeAlertPayload(
+  eventType: AdminDevicePushEventType,
+  vehiclePlate?: unknown,
+): AdminDevicePushPayload {
+  const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
+  const plate =
+    statusLabel || eventType === "driver_acknowledged"
+      ? safeVehiclePlate(vehiclePlate)
+      : null;
+  const copy =
+    plate && statusLabel
+      ? {
+          body: `${plate} reported ${statusLabel}. Open Dashboard to review.`,
+          title: `${plate} reported ${statusLabel}`,
+        }
+      : plate && eventType === "driver_acknowledged"
+        ? {
+            body: `${plate} saved details and acknowledged a job. Open Dashboard to review.`,
+            title: `${plate} acknowledged job`,
+          }
+      : adminDevicePushEventCopy[eventType];
+
   return {
-    ...adminDevicePushEventCopy[eventType],
+    ...copy,
     url: "/",
     tag:
       eventType === "new_booking_request"
@@ -762,7 +807,7 @@ export async function sendAdminDevicePushAlert(
     );
   }
 
-  const payload = safeAlertPayload(eventType);
+  const payload = safeAlertPayload(eventType, options.vehiclePlate);
   if (payloadHasForbiddenFragments(payload)) {
     return blockedAlertResult("provider_failure", true);
   }

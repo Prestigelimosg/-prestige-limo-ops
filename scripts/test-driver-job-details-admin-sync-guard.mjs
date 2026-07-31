@@ -158,6 +158,14 @@ for (const phrase of [
   "scripts/test-admin-booking-google-calendar-sync-api-contract.mjs",
   guardScript,
   persistenceContractScript,
+  "booking `10851` / `ADM-20260729110409`",
+  "`10851 · Reissued · Link issued 17:33`",
+  "`Driver details saved and job acknowledged. Device alerts are enabled on this device.`",
+  "`0 pending` and `No driver acknowledgements pending.`",
+  "`9999 > William Test Traveller - TRF - Prestige`",
+  "`Status: Draft`, `Vehicle: AVF`, `Driver: Me / 9999 / 9999999`",
+  "Initial Calendar reference search returned only the separate `Will Soh` personal Driver Calendar event and therefore triggered a stop-and-inspect rather than a failure claim.",
+  "No Admin `Update + Cal`, personal `Add / Update Calendar`, driver message, OTW, OTS, POB, Job Completed, live location, issue alert, invoice, payment, payout, PayNow, schema, environment, application-code repair, or external message was used.",
 ]) {
   assertIncludes(
     operationsCalendarLedgerSection,

@@ -49,6 +49,10 @@ for (const requiredPath of [
 
 const contract = await import(pathToFileURL(contractPath).href);
 const runtimeSource = fs.readFileSync(runtimePath, "utf8");
+const runtimeSourceWithoutEmailInstructions = runtimeSource.replace(
+  /const emailAnalysisInstructions = `[\s\S]*?`;/,
+  'const emailAnalysisInstructions = "";',
+);
 const cronRouteSource = fs.readFileSync(cronRoutePath, "utf8");
 const adminRouteSource = fs.readFileSync(adminRoutePath, "utf8");
 const pageSource = fs.readFileSync(pagePath, "utf8");
@@ -170,6 +174,14 @@ assert.match(runtimeSource, /cancellation/);
 assert.match(runtimeSource, /unrelated/);
 assert.match(runtimeSource, /uncertain/);
 assert.match(runtimeSource, /Always return suggestedReply as an empty string/);
+assert.match(
+  runtimeSource,
+  /Content under a PAYMENT heading is payment metadata only\./,
+);
+assert.match(
+  runtimeSource,
+  /Never copy Stripe or another payment method\/provider into booking pickup, drop-off, extraStopLocation, extraStops, route, or notes\./,
+);
 assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
 assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
 assert.match(runtimeSource, /email_confirmed_booking/);
@@ -194,7 +206,10 @@ assert.match(
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
 assert.doesNotMatch(runtimeSource, /google-calendar|calendar/i);
-assert.doesNotMatch(runtimeSource, /invoice|payment|payout|paynow/i);
+assert.doesNotMatch(
+  runtimeSourceWithoutEmailInstructions,
+  /invoice|payment|payout|paynow/i,
+);
 assert.doesNotMatch(runtimeSource, /external_send:\s*true/);
 assert.doesNotMatch(runtimeSource, /imap\.append|nodemailer|smtp/i);
 
@@ -318,6 +333,14 @@ assert.match(ledgerSource, /transzend@groundbooker\.com/);
 assert.match(
   ledgerSource,
   /original recipient `info@prestigelimo\.sg`/,
+);
+assert.match(
+  ledgerSource,
+  /Email AI Payment Section Location Exclusion/,
+);
+assert.match(
+  ledgerSource,
+  /`PAYMENT` values such as `Stripe` are payment metadata only/,
 );
 
 console.log("Private semantic email AI intake guard passed.");

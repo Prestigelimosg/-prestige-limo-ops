@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Email AI Payment Section Location Exclusion (2026-07-31)
+
+- Live booking `10849` reproduced one exact Email AI extraction defect: the saved booking carried `Stripe` as an extra stop and therefore into the operational route, while the owner-provided source-layout evidence showed that this template places `Stripe` beneath its separate `PAYMENT` heading. The established Driver Job Link safety validator then rejected the route before creating a link. No Driver Job Link, acknowledgement, Driver status, notification, Calendar action, customer/driver message, invoice, payment, payout, PayNow, GPS, schema, environment, or unrelated record changed during reproduction.
+- The existing private Email AI instruction now explicitly preserves labelled email sections: `PAYMENT` values such as `Stripe` are payment metadata only and must never populate booking pickup, drop-off, extra stop, route, or notes. Location fields remain empty unless the source explicitly places their values beneath a route, route-locations, pickup-location, drop-off-location, or itinerary section.
+- This is one instruction-only repair inside the established private Email AI intake. It adds no parser field, post-processor, mailbox/header change, OpenAI call, route, table, schema, migration, booking writer, Job Card writer, UI, notification, provider send, or second AI lane. All existing human review, `Create Job Card`, `Save + CRM`, privacy, deduplication, token, and no-send boundaries remain unchanged.
+- Focused fail-then-pass protection is the updated `scripts/test-admin-email-ai-intake-guard.mjs`, alongside the unchanged Email AI runtime guard. This checkpoint is local and committed only until separately approved push, deployment, and one new-email Production acceptance; existing saved bookings are not rewritten automatically.
+
 ### Driver ACK Plate Lock-Screen Copy (2026-07-31)
 
 - The owner approved one narrow in-place Admin device-push copy repair after the live Mac notification test proved the existing Driver status alerts identify the job by plate while the earlier `Save & Acknowledge Job` alert remains generic. The acknowledged-job success result already contains the same token-bound, server-saved safe plate used by the established Driver Job page and later status alerts.

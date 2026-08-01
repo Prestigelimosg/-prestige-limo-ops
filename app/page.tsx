@@ -14303,11 +14303,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       };
     }
 
-    setAdminMonthlyBillingDashboardClassificationState({
-      billingMonth,
-      groups: [],
-      message: "Loading completed-job billing classifications...",
-      status: "loading",
+    setAdminMonthlyBillingDashboardClassificationState((current) => {
+      if (current.billingMonth === billingMonth && current.status === "loaded") {
+        return current;
+      }
+
+      return {
+        billingMonth,
+        groups: [],
+        message: "Loading completed-job billing classifications...",
+        status: "loading",
+      };
     });
 
     void (async () => {

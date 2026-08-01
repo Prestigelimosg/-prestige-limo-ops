@@ -65,7 +65,7 @@ function applyLocalAdminBoundary() {
 function applyReadyEmailConfiguration() {
   process.env.PRESTIGE_EMAIL_PROVIDER = "resend";
   process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM =
-    "Prestige Limo Dispatch <info@prestigelimo.sg>";
+    "Prestige Limo SG <info@prestigelimo.sg>";
   process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO = "info@prestigelimo.sg";
   process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST =
     "info@prestigelimo.sg";

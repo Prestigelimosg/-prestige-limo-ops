@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Prestige Limo SG Driver Details Email Sender Name (2026-08-01)
+
+- The owner selected the customer-facing Driver Details Email From display name `Prestige Limo SG`, replacing the prior operational wording `Prestige Limo Dispatch`. The established sender address remains `info@prestigelimo.sg`, so the complete current sender contract is `Prestige Limo SG <info@prestigelimo.sg>`.
+- Only the existing server-only Driver Details Email helper sender constant changes. The same `PRESTIGE_DRIVER_DETAILS_EMAIL_FROM` environment name, exact sender-match fail-closed check, Resend API lane, Reply-To `info@prestigelimo.sg`, saved-booking recipient verification, explicit Admin Email click, send gate, payload/privacy allowlist, deterministic idempotency, sanitized response, and no-retry/no-batch boundaries remain unchanged.
+- Historical ledger evidence that records messages actually received as `Prestige Limo Dispatch <info@prestigelimo.sg>` remains unchanged and must not be rewritten. Separate internal new-booking and booking-change-request Admin alert helpers remain untouched; this customer-facing naming change applies only to the established Customer Copy Driver Details Email action.
+- No UI, Customer Copy card/control/content, route URL/method, email address, Reply-To, subject, message body, customer/driver data, Supabase table/schema/policy, invoice workflow/layout, Calendar, messaging, payment, payout, PayNow, provider credential, or other wired lane is added or changed. The Production environment assignment is not changed by this local source pass, the Email gate remains closed, and no email or provider request is sent.
+- Focused fail-then-pass protection is the updated `scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs` and `scripts/test-admin-email-activation-preflight-setup-api-contract.mjs`. Deployment must not proceed until the exact Production `PRESTIGE_DRIVER_DETAILS_EMAIL_FROM` assignment is separately approved to change to the same complete sender contract for the new deployment; a mismatch must continue blocking configuration readiness and sending safely.
+
 ### Exact Saved-Booking Driver Details Email Recipient Authorization (2026-08-01)
 
 - Read-only diagnosis confirmed that the established Customer Copy card displays and submits `booking.bookerEmail`, populated from the saved booking's `contact_email` with the verified nested booker's email as its fallback. The send route previously accepted that browser-supplied recipient after only the static staging-recipient allowlist check; it did not independently re-read the exact saved booking before a possible Resend request.

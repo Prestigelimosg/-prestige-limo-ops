@@ -122,7 +122,7 @@ export type AdminCustomerDriverDetailsEmailConfigReadiness = {
 
 const resendEmailApiUrl = "https://api.resend.com/emails";
 const selectedProvider = "resend";
-const selectedSender = "Prestige Limo Dispatch <info@prestigelimo.sg>";
+const selectedSender = "Prestige Limo SG <info@prestigelimo.sg>";
 const selectedReplyTo = "info@prestigelimo.sg";
 const allowedActorRoles = new Set(["admin", "dispatcher"]);
 const placeholderConfigPattern =

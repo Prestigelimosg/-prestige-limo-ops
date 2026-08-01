@@ -17,7 +17,7 @@ const routePathFragment = "/api/admin-customer-driver-details-email-send-action"
 const guardScript = "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs";
 const gateEnvName = "PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED";
 const providerName = "resend";
-const selectedFrom = "Prestige Limo Dispatch <info@prestigelimo.sg>";
+const selectedFrom = "Prestige Limo SG <info@prestigelimo.sg>";
 const selectedReplyTo = "info@prestigelimo.sg";
 
 const originalEnv = {
@@ -441,6 +441,11 @@ assertIncludes(
   ledger,
   "Exact Saved-Booking Driver Details Email Recipient Authorization",
   "Ledger exact saved-booking recipient authorization",
+);
+assertIncludes(
+  ledger,
+  "Prestige Limo SG Driver Details Email Sender Name",
+  "Ledger customer-facing Driver Details Email sender name",
 );
 for (const evidenceFragment of [
   "dpl_Aa5QVgCmTdgbvU9rmh6PjdFMz6JJ",

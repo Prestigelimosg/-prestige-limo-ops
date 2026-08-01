@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Desktop Browser Favicon Prestige Logo Repair (2026-08-01)
+
+- Read-only source and rendered-asset inspection reproduced the exact desktop branding defect: `app/favicon.ico` still displayed the white Vercel triangle, while the existing approved 192px, 512px, and Apple touch icons already displayed the owner's black-and-gold Prestige artwork.
+- Only `app/favicon.ico` is replaced with a deterministic four-size Windows icon derived from the existing approved `public/icons/prestige-ops-icon-512.png`. Its embedded 16px, 32px, 48px, and 256px PNG images retain the same black-and-gold Prestige artwork; no new or AI-generated logo is introduced.
+- The existing `scripts/test-web-app-install-manifest-guard.mjs` now locks the favicon resource header, image count, approved dimensions, embedded PNG boundaries/signatures, and exact asset hash in the same established install-icon lane.
+- Verification passed the focused install-manifest guard, TypeScript, lint with zero errors and the existing warnings only, and the Next.js 16.2.11 Production build. Local Mac Chrome loaded the app-generated hashed `/favicon.ico` link and visibly rendered the approved gold Prestige artwork instead of the Vercel triangle.
+- Mobile/PWA icons, Apple touch icon, manifests, app metadata, invoice logo/layout, Company Profile, booking, customers, drivers, Calendar, messaging, billing, payment, payout, PayNow, routes, APIs, persistence, schema, environment, providers, and Production data remain unchanged. This checkpoint is local and committed only until any separate push, PR, merge, deployment, and browser acceptance are explicitly approved.
+
 ### Email AI Payment Section Location Exclusion (2026-07-31)
 
 - Live booking `10849` reproduced one exact Email AI extraction defect: the saved booking carried `Stripe` as an extra stop and therefore into the operational route, while the owner-provided source-layout evidence showed that this template places `Stripe` beneath its separate `PAYMENT` heading. The established Driver Job Link safety validator then rejected the route before creating a link. No Driver Job Link, acknowledgement, Driver status, notification, Calendar action, customer/driver message, invoice, payment, payout, PayNow, GPS, schema, environment, or unrelated record changed during reproduction.

@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Copy Email Recipient Visibility (2026-08-01)
+
+- The owner requested one narrow admin-only visibility repair inside the established Dispatch Customer Copy card: show the exact email recipient directly above the existing Email, WhatsApp, SMS, Telegram, and Send In-App controls so Admin can verify the address before any Email action.
+- The new display-only line reuses the exact existing `adminCustomerDriverDetailsEmailReviewCustomerEmail` value sourced from `booking.bookerEmail`, which is already passed unchanged as the gated Driver Details Email `recipient_email`. A blank value displays `Email recipient: Not set`; long addresses wrap inside the existing responsive card.
+- No email field, edit/save action, button, card, route, API, helper, provider, gate, send behavior, customer/driver message, booking/customer data, invoice workflow/layout, Calendar, payment, payout, PayNow, schema, environment, or Production configuration is added or changed. The existing compact Customer Copy lane and all privacy/no-live boundaries remain unchanged.
+- Focused protection is the updated `scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs`, which requires exactly one recipient display inside the existing Customer Copy lane and locks it to the same send-recipient value with the truthful blank fallback. This checkpoint is local and committed only until any separate push, PR, merge, deployment, and Production acceptance are explicitly approved.
+
 ### Desktop Browser Favicon Prestige Logo Repair (2026-08-01)
 
 - Read-only source and rendered-asset inspection reproduced the exact desktop branding defect: `app/favicon.ico` still displayed the white Vercel triangle, while the existing approved 192px, 512px, and Apple touch icons already displayed the owner's black-and-gold Prestige artwork.

@@ -43654,6 +43654,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     >
                       WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.
                     </p>
+                    <p
+                      className="mt-1 min-w-0 break-all text-[10px] leading-4 text-emerald-900"
+                      data-admin-customer-driver-details-email-recipient="true"
+                    >
+                      <span className="font-semibold">Email recipient:</span>{" "}
+                      {adminCustomerDriverDetailsEmailReviewCustomerEmail || "Not set"}
+                    </p>
                     <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
                         aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}

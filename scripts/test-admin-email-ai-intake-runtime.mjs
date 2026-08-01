@@ -41,6 +41,23 @@ const originalEnv = Object.fromEntries(
 );
 const originalLoad = Module._load;
 
+function currentSingaporeMonthFixtureTimestamp(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      month: "2-digit",
+      timeZone: "Asia/Singapore",
+      year: "numeric",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value]),
+  );
+
+  return `${parts.year}-${parts.month}-15T04:00:00.000Z`;
+}
+
+const currentSingaporeMonthCreatedAt =
+  currentSingaporeMonthFixtureTimestamp();
+
 function transpile(source, filename) {
   return ts.transpileModule(source, {
     compilerOptions: {
@@ -181,7 +198,7 @@ class FakeQuery {
     if (this.operation === "insert") {
       const row = {
         ...this.payload,
-        created_at: "2026-07-27T13:30:00.000Z",
+        created_at: currentSingaporeMonthCreatedAt,
         id: `00000000-0000-4000-8000-${String(
           intakeRows.length + 1,
         ).padStart(12, "0")}`,

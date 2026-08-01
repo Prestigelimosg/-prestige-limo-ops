@@ -510,13 +510,29 @@ class MockSupabaseClient {
   }
 
   projectRow(row, selectedColumns) {
-    if (!row || selectedColumns !== "id") {
-      return row ? clone(row) : row;
+    if (!row) {
+      return row;
     }
 
-    return {
-      id: row.id,
-    };
+    if (selectedColumns === "id") {
+      return {
+        id: row.id,
+      };
+    }
+
+    const projectedRow = clone(row);
+
+    if (
+      typeof selectedColumns === "string" &&
+      !selectedColumns
+        .split(",")
+        .map((field) => field.trim())
+        .includes("pax_count")
+    ) {
+      delete projectedRow.pax_count;
+    }
+
+    return projectedRow;
   }
 }
 

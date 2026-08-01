@@ -183,6 +183,9 @@ class MockSupabaseClient {
       bookings: [],
       completed_booking_closeouts: [],
       customer_invoice_records: [],
+      driver_job_dsp_actual_time_events: [],
+      driver_job_dsp_actual_time_summaries: [],
+      driver_job_status_events: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -469,7 +472,7 @@ try {
 
   assert.equal(
     grouping.adminMonthlyBillingGroupingReadVersion,
-    "stage-4a-443-admin-monthly-billing-classification-read-v3",
+    "stage-4a-444-admin-monthly-billing-dsp-time-validation-v4",
   );
 
   assert.deepEqual(grouping.parseAdminMonthlyBillingGroupingReadParams({}), {
@@ -688,6 +691,219 @@ try {
   assert.equal(defaultReadResult.body.summary.covered_count, 1);
   assert.equal(defaultReadMock.client.operations.length, 0);
   assertNoLeaks(defaultReadResult, "default monthly billing grouping response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const dspTimingSeed = {
+    bookings: [
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-INVALID-JC",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-25T08:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-MISSING-JC",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-26T08:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-27T15:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-COVERED",
+        public_booking_reference: "10999",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-28T08:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-NON-DSP-READY",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-29T08:00:00.000Z",
+        service_type: "TRF",
+      },
+    ],
+    completed_booking_closeouts: [
+      "MONTHLY-DSP-INVALID-JC",
+      "MONTHLY-DSP-MISSING-JC",
+      "MONTHLY-DSP-CORRECTED",
+      "MONTHLY-DSP-COVERED",
+      "MONTHLY-NON-DSP-READY",
+    ].map((booking_reference) => ({
+      billing_prep_readiness: "ready",
+      booking_reference,
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: booking_reference === "MONTHLY-NON-DSP-READY"
+        ? "not_applicable"
+        : "ready",
+      extra_charges_readiness: "none",
+      updated_at: "2026-07-30T12:00:00.000Z",
+    })),
+    customer_invoice_records: [
+      {
+        customer_id: "customer-dsp-timing",
+        document_state: "issued",
+        document_type: "invoice",
+        line_items: [{ bookingReference: "10999" }],
+        reference: "DSP-COVERED-INVOICE",
+      },
+    ],
+    driver_job_dsp_actual_time_events: [
+      {
+        actor_role: "admin",
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        created_at: "2026-07-27T12:30:00.000Z",
+        event_type: "dsp_end",
+        occurred_at: "2026-07-27T12:00:00.000Z",
+        safe_event_context: {
+          actual_time_policy: "admin_billing_time_correction",
+          billing_started_at: "2026-07-27T08:00:00.000Z",
+        },
+        safe_event_note: "Verified actual customer service interval",
+        source_surface: "admin_api",
+      },
+    ],
+    driver_job_dsp_actual_time_summaries: [
+      {
+        actual_time_status: "complete",
+        booking_reference: "MONTHLY-DSP-INVALID-JC",
+        dsp_ended_at: "2026-07-22T10:30:00.000Z",
+      },
+      {
+        actual_time_status: "complete",
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        dsp_ended_at: "2026-07-22T10:30:00.000Z",
+      },
+      {
+        actual_time_status: "complete",
+        booking_reference: "MONTHLY-DSP-COVERED",
+        dsp_ended_at: "2026-07-22T10:30:00.000Z",
+      },
+    ],
+    driver_job_status_events: [
+      {
+        booking_reference: "MONTHLY-DSP-INVALID-JC",
+        occurred_at: "2026-07-22T10:30:00.000Z",
+        status_value: "completed",
+      },
+      {
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        occurred_at: "2026-07-22T10:30:00.000Z",
+        status_value: "completed",
+      },
+      {
+        booking_reference: "MONTHLY-DSP-COVERED",
+        occurred_at: "2026-07-22T10:30:00.000Z",
+        status_value: "completed",
+      },
+    ],
+  };
+  const dspTimingMock = installMockClient(dspTimingSeed);
+  const dspTimingResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-07", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(dspTimingResult.status, 200);
+  assert.equal(dspTimingResult.body.groups.length, 1);
+  assert.deepEqual(
+    dspTimingResult.body.groups[0].jobs.map((job) => [
+      job.booking_reference,
+      job.safe_billing_status,
+      job.safe_reason,
+    ]),
+    [
+      [
+        "MONTHLY-DSP-COVERED",
+        "covered",
+        "An issued customer bill already covers this booking.",
+      ],
+      [
+        "MONTHLY-DSP-CORRECTED",
+        "ready",
+        "Ready and not covered by an issued customer bill.",
+      ],
+      [
+        "MONTHLY-DSP-INVALID-JC",
+        "blocked",
+        "DSP billing time needs review.",
+      ],
+      [
+        "MONTHLY-DSP-MISSING-JC",
+        "blocked",
+        "DSP billing time needs review.",
+      ],
+      [
+        "MONTHLY-NON-DSP-READY",
+        "ready",
+        "Ready and not covered by an issued customer bill.",
+      ],
+    ],
+  );
+  assert.deepEqual(establishedSummaryCounts(dspTimingResult.body.summary), {
+    blocked_count: 2,
+    group_count: 1,
+    ready_count: 2,
+    total_count: 4,
+  });
+  assert.equal(dspTimingMock.client.operations.length, 0);
+  assert.deepEqual(
+    dspTimingMock.client.selectHistory.slice(-3).map(({ table }) => table),
+    [
+      "driver_job_dsp_actual_time_events",
+      "driver_job_dsp_actual_time_summaries",
+      "driver_job_status_events",
+    ],
+  );
+  assertNoLeaks(dspTimingResult, "DSP timing monthly billing grouping response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const dspTimingFailureMock = installMockClient(dspTimingSeed, {
+    failures: {
+      "select:driver_job_dsp_actual_time_summaries": {
+        code: "42501",
+        message: `SQL stack with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const dspTimingFailureResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-07", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(dspTimingFailureResult.status, 500);
+  assert.deepEqual(dspTimingFailureResult.body, {
+    error: "Admin monthly billing grouping read failed safely.",
+    ok: false,
+  });
+  assert.equal(dspTimingFailureMock.client.operations.length, 0);
+  assertNoLeaks(
+    dspTimingFailureResult,
+    "failed DSP timing monthly billing grouping response should stay safe",
+  );
 
   setEnv(enabledEnv());
 

@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Company Profile Missing-Config Safe Fallback Repair (2026-08-01)
+
+- Read-only local reproduction proved `GET /api/company-profile` returned HTTP 500 with `supabaseUrl is required` when protected server-only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` were intentionally absent, even though the established read contract says customer surfaces fall back to safe Company Profile defaults when persistence is not ready. The Supabase project remained reachable, and the deployed Production endpoint returned HTTP 200 with the persisted profile; this was a no-config construction-order defect, not a Production database outage.
+- The established Company Profile persistence functions now accept an optional injected client and create the existing server-only Supabase client only after the existing actor/config readiness gates pass. Public and admin reads therefore retain the persisted service-role path when configured and return the existing sanitized safe-default profile without touching Supabase when configuration is absent. Admin saves retain the existing verified actor boundary, staging readiness requirements, safe 503 response, payload sanitization, table, and write behavior.
+- No route, API shape, UI, Company Profile field/value, Supabase credential, data, table, RLS policy, schema, migration, customer/driver surface, invoice workflow/layout, booking, Calendar, messaging, payment, payout, PayNow, environment, provider, or Production configuration is added or changed.
+- Focused protection remains in the updated `scripts/test-company-profile-settings-guard.mjs`, which forbids eager server-client defaults and requires the established read/save readiness checks to precede client construction. Local route verification must prove the no-config public GET returns HTTP 200 with `persistence_status: default`; configured Production verification remains read-only and must continue returning the persisted profile.
+
 ### Customer Copy Email Recipient Visibility (2026-08-01)
 
 - The owner requested one narrow admin-only visibility repair inside the established Dispatch Customer Copy card: show the exact email recipient directly above the existing Email, WhatsApp, SMS, Telegram, and Send In-App controls so Admin can verify the address before any Email action.

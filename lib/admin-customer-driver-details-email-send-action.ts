@@ -105,6 +105,18 @@ export type AdminCustomerDriverDetailsEmailSendOptions = {
   timeoutMs?: number;
 };
 
+export type AdminCustomerDriverDetailsEmailConfigReadiness = {
+  configurationReady: boolean;
+  driverDetailsEmailSendGateOpen: boolean;
+  providerConfigured: boolean;
+  providerCredentialConfigured: boolean;
+  providerSelected: boolean;
+  recipientAllowlistConfigured: boolean;
+  replyToMatched: boolean;
+  selectedProvider: "resend" | null;
+  senderMatched: boolean;
+};
+
 const resendEmailApiUrl = "https://api.resend.com/emails";
 const selectedProvider = "resend";
 const selectedSender = "Prestige Limo Dispatch <info@prestigelimo.sg>";
@@ -517,13 +529,9 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
     });
   }
 
-  const provider = cleanConfigValue(process.env.PRESTIGE_EMAIL_PROVIDER)?.toLowerCase() || null;
-  const from = cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM);
-  const replyTo = cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO);
-  const allowlist = parseAllowlist(
-    cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST),
-  );
   const apiKey = cleanConfigValue(process.env.RESEND_API_KEY);
+  const { allowlist, from, provider, replyTo } =
+    readAdminCustomerDriverDetailsEmailProviderConfig(apiKey);
 
   if (
     provider !== selectedProvider ||
@@ -593,4 +601,48 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
       status: "failed",
     });
   }
+}
+
+function readAdminCustomerDriverDetailsEmailProviderConfig(
+  apiKey = cleanConfigValue(process.env.RESEND_API_KEY),
+) {
+  return {
+    provider: cleanConfigValue(process.env.PRESTIGE_EMAIL_PROVIDER)?.toLowerCase() || null,
+    from: cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM),
+    replyTo: cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO),
+    allowlist: parseAllowlist(
+      cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST),
+    ),
+    apiKey,
+  };
+}
+
+export function adminCustomerDriverDetailsEmailConfigReadiness(): AdminCustomerDriverDetailsEmailConfigReadiness {
+  const { allowlist, apiKey, from, provider, replyTo } =
+    readAdminCustomerDriverDetailsEmailProviderConfig();
+  const providerSelected = provider === selectedProvider;
+  const senderMatched = from === selectedSender && validConfigValue(from);
+  const replyToMatched =
+    replyTo?.toLowerCase() === selectedReplyTo && validConfigValue(replyTo);
+  const recipientAllowlistConfigured = allowlist.length > 0;
+  const providerCredentialConfigured = validProviderToken(apiKey);
+  const providerConfigured = Boolean(
+    providerSelected &&
+      senderMatched &&
+      replyToMatched &&
+      recipientAllowlistConfigured &&
+      providerCredentialConfigured,
+  );
+
+  return {
+    configurationReady: providerConfigured,
+    driverDetailsEmailSendGateOpen: adminCustomerDriverDetailsEmailSendGateOpen(),
+    providerConfigured,
+    providerCredentialConfigured,
+    providerSelected,
+    recipientAllowlistConfigured,
+    replyToMatched,
+    selectedProvider: providerSelected ? selectedProvider : null,
+    senderMatched,
+  };
 }

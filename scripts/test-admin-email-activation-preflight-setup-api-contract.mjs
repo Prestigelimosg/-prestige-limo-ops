@@ -30,6 +30,13 @@ const originalEnv = {
   PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN,
   PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED:
     process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED,
+  PRESTIGE_EMAIL_PROVIDER: process.env.PRESTIGE_EMAIL_PROVIDER,
+  PRESTIGE_DRIVER_DETAILS_EMAIL_FROM: process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM,
+  PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO:
+    process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO,
+  PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST:
+    process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
 };
 
 function restoreEnv() {
@@ -48,6 +55,21 @@ function applyLocalAdminBoundary() {
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE;
   delete process.env.PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN;
   delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED;
+  delete process.env.PRESTIGE_EMAIL_PROVIDER;
+  delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM;
+  delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO;
+  delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST;
+  delete process.env.RESEND_API_KEY;
+}
+
+function applyReadyEmailConfiguration() {
+  process.env.PRESTIGE_EMAIL_PROVIDER = "resend";
+  process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM =
+    "Prestige Limo Dispatch <info@prestigelimo.sg>";
+  process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO = "info@prestigelimo.sg";
+  process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST =
+    "info@prestigelimo.sg";
+  process.env.RESEND_API_KEY = "test-resend-configured-value";
 }
 
 function adminHeaders() {
@@ -127,6 +149,11 @@ for (const fragment of [
   "selectedProvider",
   "live_sending",
   "driverDetailsEmailSendGateOpen",
+  "senderMatched",
+  "replyToMatched",
+  "recipientAllowlistConfigured",
+  "providerCredentialConfigured",
+  "configurationReady",
 ]) {
   assert.ok(routeSource.includes(fragment), `Missing email activation preflight route fragment: ${fragment}`);
 }
@@ -222,7 +249,7 @@ try {
   assert.equal(setupOnlyDashboard.providerConfigured, false);
   assert.equal(setupOnlyDashboard.providerSelected, false);
   assert.equal(setupOnlyDashboard.sendingEnabled, false);
-  assert.equal(setupOnlyDashboard.status, "setup_only");
+  assert.equal(setupOnlyDashboard.status, "blocked");
   applyLocalAdminBoundary();
 
   const defaultResponse = await harness.route.GET(new Request(apiUrl(), { headers: adminHeaders() }));
@@ -240,13 +267,18 @@ try {
   assert.equal(preflight.providerConfigured, false);
   assert.equal(preflight.providerSelected, false);
   assert.equal(preflight.selectedProvider, null);
+  assert.equal(preflight.senderMatched, false);
+  assert.equal(preflight.replyToMatched, false);
+  assert.equal(preflight.recipientAllowlistConfigured, false);
+  assert.equal(preflight.providerCredentialConfigured, false);
+  assert.equal(preflight.configurationReady, false);
   assert.equal(preflight.sendingEnabled, false);
-  assert.equal(preflight.status, "setup_only");
+  assert.equal(preflight.status, "blocked");
   assert.equal(preflight.version, "admin-email-activation-preflight-setup-api-v1");
   assert.deepEqual(preflight.componentStatuses, {
     disabledSend: "blocked",
     emailPolicy: "allowed_for_future_setup",
-    providerReadiness: "setup_only",
+    providerReadiness: "blocked",
     providerSelection: "not_selected",
   });
   assert.equal(preflight.disabled_send_status, "blocked");
@@ -254,30 +286,58 @@ try {
   assert.equal(preflight.readiness.providerConfigured, false);
   assert.equal(preflight.readiness.liveSendingEnabled, false);
   assert.equal(preflight.readiness.external_send, false);
-  assert.deepEqual(preflight.readiness.missing_requirements, ["provider", "env", "approval"]);
+  assert.deepEqual(preflight.readiness.missing_requirements, activationBlockers);
   assert.equal(preflight.selection.providerSelected, false);
   assert.equal(preflight.selection.providerConfigured, false);
   assert.equal(preflight.selection.liveSendingEnabled, false);
   assert.equal(preflight.selection.external_send, false);
-  assert.deepEqual(preflight.selection.missing_requirements, ["provider", "env", "approval"]);
+  assert.deepEqual(preflight.selection.missing_requirements, activationBlockers);
 
-  const selectedResponse = await harness.route.GET(
+  const requestedProviderResponse = await harness.route.GET(
     new Request(apiUrl({ selected_provider: "resend" }), { headers: adminHeaders() }),
   );
-  const selected = await selectedResponse.json();
+  const requestedProvider = await requestedProviderResponse.json();
 
-  assert.equal(selectedResponse.status, 200);
-  assert.equal(selected.ok, true);
-  assert.equal(selected.activationReady, false);
-  assert.deepEqual(selected.blockers, activationBlockers);
-  assert.equal(selected.selectedProvider, "resend");
-  assert.equal(selected.providerSelected, true);
-  assert.equal(selected.providerConfigured, false);
-  assert.equal(selected.liveSendingEnabled, false);
-  assert.equal(selected.external_send, false);
-  assert.equal(selected.sendingEnabled, false);
-  assert.deepEqual(selected.selection.missing_requirements, ["env", "approval"]);
-  assert.equal(selected.componentStatuses.providerSelection, "disabled");
+  assert.equal(requestedProviderResponse.status, 200);
+  assert.equal(requestedProvider.ok, true);
+  assert.equal(requestedProvider.activationReady, false);
+  assert.deepEqual(requestedProvider.blockers, activationBlockers);
+  assert.equal(
+    requestedProvider.selectedProvider,
+    null,
+    "A query parameter must not claim that the server selected a provider.",
+  );
+  assert.equal(requestedProvider.providerSelected, false);
+  assert.equal(requestedProvider.providerConfigured, false);
+  assert.equal(requestedProvider.liveSendingEnabled, false);
+  assert.equal(requestedProvider.external_send, false);
+  assert.equal(requestedProvider.sendingEnabled, false);
+
+  applyReadyEmailConfiguration();
+  const configuredGateClosedResponse = await harness.route.GET(
+    new Request(apiUrl(), { headers: adminHeaders() }),
+  );
+  const configuredGateClosed = await configuredGateClosedResponse.json();
+
+  assert.equal(configuredGateClosedResponse.status, 200);
+  assert.equal(configuredGateClosed.ok, true);
+  assert.equal(configuredGateClosed.providerSelected, true);
+  assert.equal(configuredGateClosed.selectedProvider, "resend");
+  assert.equal(configuredGateClosed.senderMatched, true);
+  assert.equal(configuredGateClosed.replyToMatched, true);
+  assert.equal(configuredGateClosed.recipientAllowlistConfigured, true);
+  assert.equal(configuredGateClosed.providerCredentialConfigured, true);
+  assert.equal(configuredGateClosed.providerConfigured, true);
+  assert.equal(configuredGateClosed.configurationReady, true);
+  assert.equal(configuredGateClosed.driverDetailsEmailSendGateOpen, false);
+  assert.equal(configuredGateClosed.activationReady, false);
+  assert.equal(configuredGateClosed.sendingEnabled, false);
+  assert.equal(configuredGateClosed.liveSendingEnabled, false);
+  assert.equal(configuredGateClosed.external_send, false);
+  assert.equal(configuredGateClosed.status, "ready_for_gate");
+  assert.equal(configuredGateClosed.activationStatus, "ready_for_gate");
+  assert.deepEqual(configuredGateClosed.blockers, ["approval", "live_sending"]);
+  assert.deepEqual(configuredGateClosed.missing_requirements, ["approval", "live_sending"]);
 
   process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED = "true";
   const gateOpenResponse = await harness.route.GET(
@@ -288,22 +348,32 @@ try {
   assert.equal(gateOpenResponse.status, 200);
   assert.equal(gateOpen.ok, true);
   assert.equal(gateOpen.driverDetailsEmailSendGateOpen, true);
+  assert.equal(gateOpen.providerConfigured, true);
+  assert.equal(gateOpen.configurationReady, true);
+  assert.equal(gateOpen.activationReady, true);
   assert.equal(gateOpen.external_send, false);
-  assert.equal(gateOpen.sendingEnabled, false);
+  assert.equal(gateOpen.sendingEnabled, true);
+  assert.equal(gateOpen.liveSendingEnabled, true);
+  assert.equal(gateOpen.status, "ready");
+  assert.equal(gateOpen.activationStatus, "ready");
+  assert.deepEqual(gateOpen.blockers, []);
+  assert.deepEqual(gateOpen.missing_requirements, []);
   delete process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED;
 
-  const camelCaseResponse = await harness.route.GET(
-    new Request(apiUrl({ selectedProvider: "aws-ses" }), { headers: adminHeaders() }),
+  process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM = "Wrong Sender <wrong@example.com>";
+  const mismatchedSenderResponse = await harness.route.GET(
+    new Request(apiUrl(), { headers: adminHeaders() }),
   );
-  const camelCase = await camelCaseResponse.json();
+  const mismatchedSender = await mismatchedSenderResponse.json();
 
-  assert.equal(camelCaseResponse.status, 200);
-  assert.equal(camelCase.selectedProvider, "aws_ses");
-  assert.equal(camelCase.providerSelected, true);
-  assert.equal(camelCase.providerConfigured, false);
-  assert.equal(camelCase.liveSendingEnabled, false);
-  assert.equal(camelCase.external_send, false);
-  assert.deepEqual(camelCase.blockers, activationBlockers);
+  assert.equal(mismatchedSenderResponse.status, 200);
+  assert.equal(mismatchedSender.providerSelected, true);
+  assert.equal(mismatchedSender.senderMatched, false);
+  assert.equal(mismatchedSender.replyToMatched, true);
+  assert.equal(mismatchedSender.providerConfigured, false);
+  assert.equal(mismatchedSender.configurationReady, false);
+  assert.equal(mismatchedSender.activationReady, false);
+  assert.deepEqual(mismatchedSender.blockers, ["env", "approval", "live_sending"]);
 
   const invalidResponse = await harness.route.GET(
     new Request(apiUrl({ selected_provider: "smtp-secret-provider" }), { headers: adminHeaders() }),
@@ -312,13 +382,12 @@ try {
 
   assert.equal(invalidResponse.status, 200);
   assert.equal(invalid.activationReady, false);
-  assert.equal(invalid.selectedProvider, null);
-  assert.equal(invalid.providerSelected, false);
+  assert.equal(invalid.selectedProvider, "resend");
+  assert.equal(invalid.providerSelected, true);
   assert.equal(invalid.providerConfigured, false);
   assert.equal(invalid.liveSendingEnabled, false);
   assert.equal(invalid.external_send, false);
-  assert.deepEqual(invalid.blockers, activationBlockers);
-  assert.deepEqual(invalid.selection.missing_requirements, ["provider", "env", "approval"]);
+  assert.deepEqual(invalid.blockers, ["env", "approval", "live_sending"]);
   assert.equal(
     safeOutputLeakPattern.test(JSON.stringify(invalid)),
     false,

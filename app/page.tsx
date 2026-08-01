@@ -26219,9 +26219,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         }
 
         const blockers =
-          Array.isArray(result.blockers) && result.blockers.length > 0
+          Array.isArray(result.blockers)
             ? result.blockers
-            : Array.isArray(result.missing_requirements) && result.missing_requirements.length > 0
+            : Array.isArray(result.missing_requirements)
               ? result.missing_requirements
               : adminEmailActivationPreflightFallbackState().blockers;
 
@@ -26874,11 +26874,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     adminEmailActivationPreflightDisplayState.blockers.filter((blocker) =>
       ["provider", "env", "approval"].includes(blocker),
     );
-  const adminEmailActivationPreflightBlockedText = `${
+  const adminEmailActivationPreflightBlockedText =
     adminEmailActivationPreflightBlockedRequirements.length > 0
-      ? adminEmailActivationPreflightBlockedRequirements.join("/")
-      : "provider/env/approval"
-  } blocked`;
+      ? `${adminEmailActivationPreflightBlockedRequirements.join("/")} blocked`
+      : "no blockers";
   const adminEmailActivationPreflightStatusDetail =
     adminEmailActivationPreflightDisplayState.status === "loading"
       ? "Preflight checking"

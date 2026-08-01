@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Details Email Ready-State Diagnostic Repair (2026-08-01)
+
+- Signed-in Production diagnosis reproduced one display-only inconsistency after the established Driver Details Email gate became ready: the visible Customer Copy status correctly said `Email gate ready`, and the ready/gate/live-sending booleans were true, but the hidden diagnostic attributes and title still listed `provider,env,approval,live_sending` and `provider/env/approval blocked`.
+- The established preflight API was already correct and its focused guard proved a fully configured gate-open response returns `blockers: []`, `missing_requirements: []`, `activationReady: true`, and `liveSendingEnabled: true`. The client incorrectly treated those valid empty arrays as absent and substituted its fail-closed fallback blocker list; its title formatter separately substituted `provider/env/approval blocked` when no provider/env/approval blockers existed.
+- The existing client preflight read now preserves any returned blocker array, including the valid empty ready-state array. The existing hidden status title now renders `no blockers` when that filtered list is empty. The visible Customer Copy layout, status location, controls, Email button, explicit Admin review/click, send route, sender, recipient verification, environment gate, provider, and all other behavior remain unchanged.
+- The existing booking UI browser fixture now returns one internally consistent mocked ready preflight and verifies the established attributes contain an empty blocker list and the unchanged `Email gate ready` label carries a truthful `no blockers` title. No real customer, provider request, Email, booking, Supabase write, invoice, Calendar, messaging, payment, payout, PayNow, environment, or Production deployment is used by this regression.
+
 ### Prestige Limo SG Driver Details Email Sender Name (2026-08-01)
 
 - The owner selected the customer-facing Driver Details Email From display name `Prestige Limo SG`, replacing the prior operational wording `Prestige Limo Dispatch`. The established sender address remains `info@prestigelimo.sg`, so the complete current sender contract is `Prestige Limo SG <info@prestigelimo.sg>`.

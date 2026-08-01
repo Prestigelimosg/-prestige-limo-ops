@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Load Bookings Persisted Pax Typed-Read Repair (2026-08-01)
+
+- After the prior Pax reload repair reached Production at build `73dd98f0`, read-only live verification proved booking `10855` still displayed `AVF · Pax 1` in the Bookings tab while the authoritative Supabase row retained `pax_count = 5`. No booking, Calendar, customer, driver, invoice, payment, or provider write was used for this diagnosis.
+- The Bookings primary display uses the separate established typed-read route. Its legacy projection already included `pax_count` but fell through against the current schema; both successful current-schema projections omitted `pax_count`, so the existing mapper received no Pax and correctly applied its safe fallback `1`.
+- Only `pax_count` is added to the two existing current-schema saved-booking read projections. The established route, fallback order, DTO, mapper, UI, Supabase table, persistence writer, and every Calendar path remain unchanged.
+- The existing gated typed-read API guard now requires both current-schema projections to retain `pax_count`; it failed on the previous source and passes with this repair. No UI/layout, Calendar code/action/identity, parser, return-trip logic, booking writer, driver/customer/CRM lane, invoice workflow/layout, pricing, payment, payout, PayNow, messaging, schema, migration, environment, provider configuration, or Production record is added or changed.
+- This local code checkpoint does not itself refresh the existing Operations Calendar event. After a separately approved push, PR, merge, deployment, and live read-only verification, booking `10855` would still require a separately approved use of the existing `Update + Cal` action to refresh the same event from persisted Pax `5`; that Production action is not authorized by this repair.
+
 ### Admin Booking Pax Reload And Operations Calendar Refresh Repair (2026-08-01)
 
 - After the Pax persistence mapper repair reached Production, the owner approved one exact correction of booking `10855` / `ADM-20260801140903-RET` through the established `Update + Cal` lane. Supabase stored `pax_count = 5`, and the Dispatch form and Job Card displayed Pax `5`, but the saved Bookings list still displayed Pax `1` and the same deterministic Operations Calendar event retained `Pax: 1` while reporting `Cal saved`.

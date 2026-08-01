@@ -2567,26 +2567,6 @@ type ParsedDebugBooking = BookingForm & {
   multipleBookingsDetected?: boolean;
 };
 
-type CustomerMatchConfidence = "High" | "Medium" | "Needs review";
-type CustomerMatchSuggestedAction =
-  | "Create new customer folder"
-  | "Leave unlinked"
-  | "Link to existing customer"
-  | "Update existing customer contact";
-
-type MockCustomerMatchSuggestion = {
-  confidence: CustomerMatchConfidence;
-  customerId: string | null;
-  customerName: string;
-  isExistingCustomer: boolean;
-  matchReason: string;
-  suggestedAction: CustomerMatchSuggestedAction;
-};
-
-type CustomerMatchFeedback = Message & {
-  action: "create" | "leave" | "link";
-};
-
 type RateOverrideDraft = {
   companyName: string;
   bossName: string;
@@ -4895,13 +4875,6 @@ function getPublicEmailLocalPart(value: string | null | undefined) {
   return localPart && isPublicEmailDomain(domain) ? localPart : "";
 }
 
-function getEmailDomain(value: string) {
-  const email = normaliseEmail(value);
-  const domain = normaliseEmailDomain(email.split("@")[1]);
-
-  return isIgnoredAccountEmailDomain(domain) ? "" : domain;
-}
-
 function normalizeCompanyAccount(value: string | null | undefined, email: string | null | undefined = "") {
   const companyName = clean(value);
   const publicEmailLocalPart = getPublicEmailLocalPart(email);
@@ -5251,18 +5224,6 @@ function buildServiceChangePriceReview(
   };
 }
 
-const mockCustomerDomainMatches = new Map([
-  ["marriott.com", "ritz-carlton"],
-  ["ritzcarlton.com", "ritz-carlton"],
-  ["ritzcarlton.com.sg", "ritz-carlton"],
-  ["ubs.com", "ubs"],
-  ["ubs.com.sg", "ubs"],
-]);
-
-function findMockCustomerById(customerId: string | null | undefined) {
-  return mockCustomers.find((customer) => customer.id === customerId) ?? null;
-}
-
 function findMockCustomerByText(value: string | null | undefined, onlyIndividual = false) {
   const query = normalizeCompactSearch(value);
 
@@ -5304,113 +5265,6 @@ function deriveAdminMonthlyInvoicePrefix(customerAccount: string | null | undefi
   }
 
   return "INV";
-}
-
-function findMockCustomerByEmailDomain(domain: string | null | undefined) {
-  const emailDomain = normaliseEmailDomain(domain);
-  const mappedCustomer = findMockCustomerById(mockCustomerDomainMatches.get(emailDomain));
-
-  if (mappedCustomer) {
-    return mappedCustomer;
-  }
-
-  return findMockCustomerByText(emailDomain.replace(/\.[a-z]{2,}$/i, ""));
-}
-
-function getMockCustomerMatchSuggestion(bookingValue: BookingForm): MockCustomerMatchSuggestion {
-  const safeCompany = normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
-  const email = normaliseEmail(bookingValue.bookerEmail);
-  const rawEmailDomain = normaliseEmailDomain(email.split("@")[1]);
-  const organizationEmailDomain = getEmailDomain(email);
-  const hasPublicEmail = Boolean(rawEmailDomain && isPublicEmailDomain(rawEmailDomain));
-  const personName = clean(bookingValue.name) || clean(bookingValue.booker);
-  const contactValue = clean(bookingValue.bookerEmail) || clean(bookingValue.bookerContact);
-  const companyMatch = findMockCustomerByText(safeCompany);
-
-  if (organizationEmailDomain) {
-    const domainMatch = findMockCustomerByEmailDomain(organizationEmailDomain);
-
-    if (domainMatch) {
-      return {
-        confidence: "High",
-        customerId: domainMatch.id,
-        customerName: domainMatch.companyName,
-        isExistingCustomer: true,
-        matchReason: `Organization email domain ${organizationEmailDomain} matches an existing mock customer folder.`,
-        suggestedAction: "Link to existing customer",
-      };
-    }
-  }
-
-  if (companyMatch) {
-    return {
-      confidence: "High",
-      customerId: companyMatch.id,
-      customerName: companyMatch.companyName,
-      isExistingCustomer: true,
-      matchReason: `Company/account "${safeCompany}" matches an existing mock customer folder.`,
-      suggestedAction: "Link to existing customer",
-    };
-  }
-
-  if (organizationEmailDomain) {
-    return {
-      confidence: "Medium",
-      customerId: null,
-      customerName: "New customer suggested",
-      isExistingCustomer: false,
-      matchReason: `Organization email domain ${organizationEmailDomain} does not match a current mock customer.`,
-      suggestedAction: "Create new customer folder",
-    };
-  }
-
-  if (hasPublicEmail) {
-    const individualMatch =
-      findMockCustomerByText(personName, true) ||
-      findMockCustomerByText(contactValue, true);
-
-    if (individualMatch) {
-      return {
-        confidence: "Medium",
-        customerId: individualMatch.id,
-        customerName: individualMatch.companyName,
-        isExistingCustomer: true,
-        matchReason: `Public/personal email domain ${rawEmailDomain} is not used to create a company account; matched by individual name/email only.`,
-        suggestedAction: "Update existing customer contact",
-      };
-    }
-
-    return {
-      confidence: "Needs review",
-      customerId: null,
-      customerName: "New customer suggested",
-      isExistingCustomer: false,
-      matchReason: `Public/personal email domain ${rawEmailDomain} is not used to create or suggest a company account.`,
-      suggestedAction: "Create new customer folder",
-    };
-  }
-
-  const individualNameMatch = findMockCustomerByText(personName, true);
-
-  if (individualNameMatch) {
-    return {
-      confidence: "Medium",
-      customerId: individualNameMatch.id,
-      customerName: individualNameMatch.companyName,
-      isExistingCustomer: true,
-      matchReason: "Passenger/booker name matches an existing individual mock customer folder.",
-      suggestedAction: "Update existing customer contact",
-    };
-  }
-
-  return {
-    confidence: "Needs review",
-    customerId: null,
-    customerName: "New customer suggested",
-    isExistingCustomer: false,
-    matchReason: "No existing mock customer matched the parsed company, domain, name, email, or contact.",
-    suggestedAction: "Create new customer folder",
-  };
 }
 
 function isValidEmail(value: string) {
@@ -13556,7 +13410,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState("");
   const [adminCustomerRequestStatusFilter, setAdminCustomerRequestStatusFilter] =
     useState<AdminCustomerRequestStatusFilter>(adminCustomerRequestAllStatusFilter);
-  const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
   const [saveCrmBillingIdentityConfirmation, setSaveCrmBillingIdentityConfirmation] =
     useState<SaveCrmBillingIdentityConfirmation | null>(null);
   const [saveCrmBillingIdentityMessage, setSaveCrmBillingIdentityMessage] =
@@ -16927,14 +16780,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : "$0.00";
   const manualExtraChargesNotePreview = clean(booking.manualExtraChargesNote) || "Blank";
   const hasNeedsReviewWarnings = needsReviewWarnings.length > 0;
-  const customerMatchSuggestion = useMemo(
-    () =>
-      parsedDebugBooking && !parsedDebugBooking.multipleBookingsDetected
-        ? getMockCustomerMatchSuggestion(booking)
-        : null,
-    [booking, parsedDebugBooking],
-  );
-
   const displayedCompanyOverrideRecords = useMemo(
     () =>
       rateCompanies.filter(
@@ -17886,7 +17731,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [filteredCompletedBookingDisplayItems, todayKey]);
 
   function update(field: keyof BookingForm, value: string) {
-    setCustomerMatchFeedback(null);
     if (field === "pickup") {
       setAdminMapPickupLocation(null);
       setAdminMapRouteEstimate(null);
@@ -18187,7 +18031,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   function clearReviewAndSaveState() {
     setBookingSaveMessage(null);
-    setCustomerMatchFeedback(null);
     setSaveCrmBillingIdentityMessage(null);
     setServiceChangePriceReviewMessage(null);
   }
@@ -18277,39 +18120,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setShowParserDebug(false);
     setMultiBookingNotice(null);
     setBookingSaveMessage(null);
-    setCustomerMatchFeedback(null);
-  }
-
-  function setMockCustomerMatchAction(action: CustomerMatchFeedback["action"]) {
-    if (!customerMatchSuggestion) {
-      return;
-    }
-
-    if (action === "link") {
-      setCustomerMatchFeedback({
-        action,
-        tone: customerMatchSuggestion.isExistingCustomer ? "success" : "error",
-        text: customerMatchSuggestion.isExistingCustomer
-          ? `Mock link selected for ${customerMatchSuggestion.customerName}. No customer record was written.`
-          : "No existing mock customer folder is available to link. No customer record was written.",
-      });
-      return;
-    }
-
-    if (action === "create") {
-      setCustomerMatchFeedback({
-        action,
-        tone: "success",
-        text: `Mock create selected for ${customerMatchSuggestion.customerName}. No customer folder was created.`,
-      });
-      return;
-    }
-
-    setCustomerMatchFeedback({
-      action,
-      tone: "info",
-      text: "Mock booking left unlinked. No customer record was changed.",
-    });
   }
 
   function updateDefaultCustomerRate(
@@ -39599,102 +39409,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </p>
                           </div>
             </details>
-
-            {customerMatchSuggestion ? (
-              <section
-                className="order-[100] rounded-md border border-emerald-200 bg-emerald-50 p-3"
-                data-customer-match-suggestion="true"
-                data-dispatch-workflow-step="admin-lower-customer-match"
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-emerald-950">Customer Match Suggestion</h3>
-                    <p className="mt-1 text-sm text-emerald-900">
-                      Mock/local only. Dispatcher must confirm; no customer record, CRM record, payment record, or
-                      Supabase row is created.
-                    </p>
-                  </div>
-                  <span
-                    className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-950"
-                    data-customer-match-confidence="true"
-                  >
-                    {customerMatchSuggestion.confidence}
-                  </span>
-                </div>
-
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                  <div className="rounded-md border border-emerald-200 bg-white p-3">
-                    <dt className="font-semibold text-emerald-950">Suggested customer/folder</dt>
-                    <dd className="mt-1 text-slate-900" data-customer-match-name="true">
-                      {customerMatchSuggestion.customerId ? (
-                        <Link
-                          className="font-bold text-emerald-900 underline underline-offset-4"
-                          href={`/customers/${customerMatchSuggestion.customerId}`}
-                        >
-                          {customerMatchSuggestion.customerName}
-                        </Link>
-                      ) : (
-                        customerMatchSuggestion.customerName
-                      )}
-                    </dd>
-                  </div>
-                  <div className="rounded-md border border-emerald-200 bg-white p-3">
-                    <dt className="font-semibold text-emerald-950">Suggested action</dt>
-                    <dd className="mt-1 text-slate-900" data-customer-match-action="true">
-                      {customerMatchSuggestion.suggestedAction}
-                    </dd>
-                  </div>
-                  <div className="rounded-md border border-emerald-200 bg-white p-3 sm:col-span-2">
-                    <dt className="font-semibold text-emerald-950">Match reason</dt>
-                    <dd className="mt-1 text-slate-900" data-customer-match-reason="true">
-                      {customerMatchSuggestion.matchReason}
-                    </dd>
-                  </div>
-                </dl>
-
-                <p className="mt-3 text-xs leading-5 text-emerald-950">
-                  Mock action choices: Link to existing customer, Create new customer folder, Update existing customer
-                  contact, or Leave unlinked. This does not auto-create or overwrite any account.
-                </p>
-
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <button
-                    className="h-10 rounded-md bg-emerald-900 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
-                    data-customer-match-action-button="link"
-                    onClick={() => setMockCustomerMatchAction("link")}
-                    type="button"
-                  >
-                    Link Mock Customer
-                  </button>
-                  <button
-                    className="h-10 rounded-md border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-100"
-                    data-customer-match-action-button="create"
-                    onClick={() => setMockCustomerMatchAction("create")}
-                    type="button"
-                  >
-                    Create Mock Customer
-                  </button>
-                  <button
-                    className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                    data-customer-match-action-button="leave"
-                    onClick={() => setMockCustomerMatchAction("leave")}
-                    type="button"
-                  >
-                    Leave Unlinked
-                  </button>
-                </div>
-
-                {customerMatchFeedback ? (
-                  <p
-                    aria-live="polite"
-                    className={`mt-3 rounded-md border px-3 py-2 text-sm font-medium ${statusClass(customerMatchFeedback.tone)}`}
-                    data-customer-match-feedback={customerMatchFeedback.action}
-                  >
-                    {customerMatchFeedback.text}
-                  </p>
-                ) : null}
-              </section>
-            ) : null}
 
             <div className="order-[32]" data-dispatch-workflow-step="admin-lower-pricing">
               {pricingPanel}

@@ -37,39 +37,6 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
-const ubsCustomerMatchSample = `Booking type: MNG
-Vehicle: AVF
-Date: 27/05/2026
-Time: 15:45
-Flight: SQ333
-Pickup: Changi Airport Terminal 3
-Drop-off: UBS office Singapore
-Booker: Yasuko Kunisawa
-Booker Email: yasuko.kunisawa@ubs.com
-Name: UBS Match Traveler
-Pax: 1`;
-const publicEmailCustomerMatchSample = `Booking type: MNG
-Vehicle: AVF
-Date: 27/05/2026
-Time: 16:15
-Flight: SQ335
-Pickup: Changi Airport Terminal 3
-Drop-off: Private residence
-Booker: Public Email Booker
-Booker Email: public.email.booker@gmail.com
-Name: Public Email Traveler
-Pax: 1`;
-const unknownOrgCustomerMatchSample = `Booking type: DEP
-Vehicle: AVF
-Date: 28/05/2026
-Time: 09:00
-Flight: SQ999
-Pickup: Newco office
-Drop-off: Changi Airport Terminal 2
-Booker: Newco Booker
-Booker Email: ops@newco-corporate.sg
-Name: Newco Traveler
-Pax: 1`;
 const crmSavedBookingFixture = {
   id: "ui-crm-save-fixture",
   company_id: 601,
@@ -4034,121 +4001,6 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedClearAfterNeedsReview, true, "Expected Clear button after Needs Review test");
 
-    const clearDispatchDraft = async (description) => {
-      const clickedClear = await evaluate(`(() => {
-        const clearButton = [...document.querySelectorAll("button")].find(
-          (button) => button.textContent.trim() === "Clear",
-        );
-
-        if (!clearButton || clearButton.disabled) {
-          return false;
-        }
-
-        clearButton.click();
-        return true;
-      })()`);
-      assert.equal(clickedClear, true, `Expected Clear button for ${description}`);
-
-      await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const textarea = [...document.querySelectorAll("label")].find(
-              (candidate) => candidate.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Paste Booking Message",
-            )?.querySelector("textarea");
-
-            return Boolean(textarea) &&
-              textarea.value === "" &&
-              !document.querySelector("[data-customer-match-suggestion]");
-          })()`),
-        10000,
-        `${description} clear state`,
-      );
-    };
-
-    const parseCustomerMatchSample = async (sample, description) => {
-      await setBookingMessageValue(sample, `${description} booking message`);
-
-      const clickedCustomerMatchParse = await evaluate(`(() => {
-        const parseButton = [...document.querySelectorAll("button")].find(
-          (button) => button.textContent.trim() === "Create Job Card",
-        );
-
-        if (!parseButton || parseButton.disabled) {
-          return false;
-        }
-
-        parseButton.click();
-        return true;
-      })()`);
-      assert.equal(clickedCustomerMatchParse, true, `Expected Create Job Card button for ${description}`);
-
-      return waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const section = document.querySelector("[data-customer-match-suggestion]");
-
-            if (!section) {
-              return false;
-            }
-
-            return {
-              action: section.querySelector("[data-customer-match-action]")?.textContent.trim() || "",
-              buttons: [...section.querySelectorAll("button")].map((button) => button.textContent.trim()),
-              confidence: section.querySelector("[data-customer-match-confidence]")?.textContent.trim() || "",
-              customer: section.querySelector("[data-customer-match-name]")?.textContent.trim() || "",
-              reason: section.querySelector("[data-customer-match-reason]")?.textContent.trim() || "",
-              text: section.innerText,
-            };
-          })()`),
-        10000,
-        `${description} customer match suggestion`,
-      );
-    };
-
-    const clickCustomerMatchAction = async (action, expectedText) => {
-      const clickedAction = await evaluate(`(() => {
-        const button = document.querySelector("[data-customer-match-action-button='${action}']");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(clickedAction, true, `Expected ${action} customer match action button to be clickable`);
-
-      const feedbackState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const section = document.querySelector("[data-customer-match-suggestion]");
-            const button = document.querySelector("[data-customer-match-action-button='${action}']");
-            const feedback = document.querySelector("[data-customer-match-feedback='${action}']");
-
-            if (!section || !button || !feedback) {
-              return false;
-            }
-
-            const buttonRect = button.getBoundingClientRect();
-            const feedbackRect = feedback.getBoundingClientRect();
-
-            return {
-              distanceFromButton: Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)),
-              inSection: section.contains(feedback),
-              text: feedback.textContent.trim(),
-            };
-          })()`),
-        10000,
-        `${action} customer match feedback`,
-      );
-      assert.match(feedbackState.text, expectedText);
-      assert.equal(feedbackState.inSection, true, `Expected ${action} feedback inside customer match suggestion`);
-      assert.ok(
-        feedbackState.distanceFromButton <= 140,
-        `Expected ${action} feedback near button, got ${feedbackState.distanceFromButton}px`,
-      );
-    };
-
     const waitForTravelerIdentityLookup = async (travelerName, description) => {
       const expectedParam = `traveler_name=${encodeURIComponent(travelerName).replace(/%20/g, "+")}`.toLowerCase();
       await waitForCondition(
@@ -4167,9 +4019,6 @@ async function runChromeTest() {
     };
 
     const expectedBackgroundTravelerLookupNames = [
-      "UBS Match Traveler",
-      "Public Email Traveler",
-      "Newco Traveler",
       "BROWSER UI TEST TRAVELER",
     ];
     const isExpectedBackgroundTravelerLookup = (url) => {
@@ -4216,74 +4065,6 @@ async function runChromeTest() {
       };
     })()`);
 
-    const ubsMatchState = await parseCustomerMatchSample(
-      ubsCustomerMatchSample,
-      "UBS organization domain",
-    );
-    await waitForTravelerIdentityLookup("UBS Match Traveler", "UBS organization domain");
-    assert.equal(ubsMatchState.customer, "UBS", "Expected ubs.com email to suggest UBS");
-    assert.equal(ubsMatchState.confidence, "High", "Expected ubs.com match to be high confidence");
-    assert.equal(
-      ubsMatchState.action,
-      "Link to existing customer",
-      "Expected ubs.com match to suggest linking existing customer",
-    );
-    assert.match(
-      ubsMatchState.reason,
-      /Organization email domain ubs\.com matches an existing mock customer folder\./,
-    );
-    assert.deepEqual(
-      ["Link Mock Customer", "Create Mock Customer", "Leave Unlinked"].filter(
-        (label) => !ubsMatchState.buttons.includes(label),
-      ),
-      [],
-      "Expected mock customer action buttons",
-    );
-    await clickCustomerMatchAction("link", /Mock link selected for UBS\. No customer record was written\./);
-    await clearDispatchDraft("UBS organization domain customer match");
-
-    const publicEmailMatchState = await parseCustomerMatchSample(
-      publicEmailCustomerMatchSample,
-      "public email customer",
-    );
-    await waitForTravelerIdentityLookup("Public Email Traveler", "public email customer");
-    assert.equal(
-      publicEmailMatchState.customer,
-      "New customer suggested",
-      "Expected public email to avoid company-account suggestion",
-    );
-    assert.equal(
-      publicEmailMatchState.action,
-      "Create new customer folder",
-      "Expected public email to require dispatcher-reviewed customer creation",
-    );
-    assert.match(
-      publicEmailMatchState.reason,
-      /Public\/personal email domain gmail\.com is not used to create or suggest a company account\./,
-    );
-    assert.doesNotMatch(publicEmailMatchState.reason, /UBS|Ritz Carlton/);
-    await clickCustomerMatchAction("leave", /Mock booking left unlinked\. No customer record was changed\./);
-    await clearDispatchDraft("public email customer match");
-
-    const unknownOrgMatchState = await parseCustomerMatchSample(
-      unknownOrgCustomerMatchSample,
-      "unknown organization domain",
-    );
-    await waitForTravelerIdentityLookup("Newco Traveler", "unknown organization domain");
-    assert.equal(
-      unknownOrgMatchState.customer,
-      "New customer suggested",
-      "Expected unknown organization domain to suggest a new customer",
-    );
-    assert.equal(unknownOrgMatchState.confidence, "Medium");
-    assert.equal(unknownOrgMatchState.action, "Create new customer folder");
-    assert.match(
-      unknownOrgMatchState.reason,
-      /Organization email domain newco-corporate\.sg does not match a current mock customer\./,
-    );
-    await clickCustomerMatchAction("create", /Mock create selected for New customer suggested\. No customer folder was created\./);
-    await clearDispatchDraft("unknown organization domain customer match");
-
     await setBookingMessageValue(bookingSample, "primary booking message");
 
     const clickedParse = await evaluate(`(() => {
@@ -4299,6 +4080,47 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(clickedParse, true, "Expected Create Job Card button to be clickable");
+
+    const removedMockCustomerMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const labels = [...document.querySelectorAll("label")];
+          const passengerInput = labels.find(
+            (label) => label.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Passenger name",
+          )?.querySelector("input");
+
+          if (passengerInput?.value !== "BROWSER UI TEST TRAVELER") {
+            return false;
+          }
+
+          const mockLabels = new Set([
+            "Link Mock Customer",
+            "Create Mock Customer",
+            "Leave Unlinked",
+          ]);
+
+          return {
+            bookerSelectorCount: document.querySelectorAll("[data-admin-dispatch-booker-identity-select='true']").length,
+            companySelectorCount: document.querySelectorAll("[data-admin-dispatch-company-identity-select='true']").length,
+            mockButtonLabels: [...document.querySelectorAll("button")]
+              .map((button) => button.textContent.trim())
+              .filter((label) => mockLabels.has(label)),
+            mockPanelCount: document.querySelectorAll("[data-customer-match-suggestion='true']").length,
+            saveCrmButtonCount: [...document.querySelectorAll("button")].filter(
+              (button) => button.textContent.trim() === "Save + CRM",
+            ).length,
+            travelerSelectorCount: document.querySelectorAll("[data-admin-dispatch-traveler-identity-select='true']").length,
+          };
+        })()`),
+      10000,
+      "parsed booking without retired mock customer suggestion",
+    );
+    assert.equal(removedMockCustomerMatchState.mockPanelCount, 0);
+    assert.deepEqual(removedMockCustomerMatchState.mockButtonLabels, []);
+    assert.equal(removedMockCustomerMatchState.companySelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.bookerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.travelerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.saveCrmButtonCount, 1);
 
     await evaluate(`(() => {
       document

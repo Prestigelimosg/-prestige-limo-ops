@@ -12,6 +12,14 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Retired Dispatch Mock Customer Match Suggestion (2026-08-01)
+
+- The owner identified the legacy `Customer Match Suggestion` card as obsolete and confusing after the established verified company, PA/booker, and traveller selectors became the real Dispatch identity workflow. Git history confirms the mock-only demonstration was introduced on 23 May 2026 and explicitly created no customer, CRM, payment, or Supabase record.
+- Only that legacy card, its `Link Mock Customer`, `Create Mock Customer`, and `Leave Unlinked` controls, its local feedback state, and its match-only local helpers/domain fixtures are removed from the existing Dispatch parsing result. Shared local fixtures and helpers still consumed by established billing or test behavior remain unchanged.
+- The existing booking UI browser guard now requires the mock card and its three controls to be absent after parsing while requiring exactly one established verified company selector, PA/booker selector, traveller selector, and `Save + CRM` action to remain present.
+- Verification passed all 44 real-world parser fixtures and 55 confidence examples, lint with zero errors and the existing 162 warnings, the Next.js 16.2.11 Webpack Production build with TypeScript, and the complete visible local Mac Chrome booking UI suite in 27.7 seconds with zero console errors, zero test errors, and zero blocked Supabase requests or mutations.
+- No parser behavior, booking or CRM writer, customer folder, customer identity persistence, route/API, Supabase data/schema/policy, invoice workflow/layout, Driver Reports, Driver Job Link, Calendar, messaging, notification, billing, payment, payout, PayNow, provider, environment, or Production data is added or changed. This checkpoint remains local and committed only until any separate push, PR, merge, deployment, or Production acceptance is explicitly approved.
+
 ### Explicit SIN Arrival And Departure Parser Sections (2026-08-01)
 
 - The owner supplied one genuine two-leg airport-transfer request with explicit `SIN Arrival Transfer from Changi to Ferry` and `SIN Departure Transfer from Ferry to Changi` headings. Read-only Production reproduction through the established Dispatch `Create Job Card` action incorrectly produced 15 selectable fragments, treated the trailing screenshot filename date as booking context, missed `Lead Pax`, and did not preserve the departure pickup time `13:10pm`. No booking was saved and no Production data, Calendar event, customer/driver message, invoice, payment, payout, or provider action occurred.

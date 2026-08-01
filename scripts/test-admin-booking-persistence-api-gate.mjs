@@ -543,6 +543,7 @@ function adminPayload(overrides = {}) {
       customer_facing_status: "pending_review",
       dropoff_location: "Gate Safe Dropoff",
       driver_id: 8,
+      pax_count: 2,
       passenger_name: "Gate Passenger",
       passenger_phone: "+65 9000 0102",
       pickup_at: "2026-06-08T10:30:00+08:00",
@@ -656,6 +657,14 @@ function postJson(url, body, headers) {
   });
 }
 
+function patchJson(url, body, headers) {
+  return new Request(url, {
+    body: JSON.stringify(body),
+    headers,
+    method: "PATCH",
+  });
+}
+
 async function readResponse(response) {
   return {
     body: await response.json(),
@@ -702,6 +711,7 @@ function assertSafeCreateOperations(mock, expectedActorRole) {
   assert.equal(insertedOperation(mock, "bookings").payload.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
   assert.equal(insertedOperation(mock, "bookings").payload.service_type, "MNG");
   assert.equal(insertedOperation(mock, "bookings").payload.driver_id, 8);
+  assert.equal(insertedOperation(mock, "bookings").payload.pax_count, 2);
   assert.equal(insertedOperation(mock, "bookings").payload.admin_internal_status, "admin_review_required");
   assert.equal(insertedOperation(mock, "audit_logs").payload.actor_role, expectedActorRole);
   assert.equal(insertedOperation(mock, "audit_logs").payload.action_type, "booking_created");
@@ -978,6 +988,7 @@ try {
     assert.equal(result.body.booking.pickup_at, "2026-06-08T10:30:00+08:00");
     assert.equal(result.body.booking.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
     assert.equal(result.body.booking.admin_internal_status, "Admin Review Required");
+    assert.equal(result.body.booking.pax_count, 2);
     assert.equal(mock.createdClients.length, 1);
     assert.equal(mock.createdClients[0].url, supabaseUrlSentinel);
     assert.equal(mock.createdClients[0].serviceRoleKey, serviceRoleSentinel);
@@ -988,6 +999,27 @@ try {
     });
     assertSafeCreateOperations(mock, role);
     assertNoLeaks(result, `${role} response should expose only safe DTO fields`);
+
+    const updateResult = await readResponse(
+      await adminRoute.PATCH(
+        patchJson(
+          "http://localhost/api/admin-bookings",
+          {
+            ...adminPayload({ booking: { pax_count: 5 } }),
+            target_booking_reference: "GATE-ADM-001",
+          },
+          sessionHeaders(),
+        ),
+      ),
+    );
+    const bookingUpdate = mock.client.operations.find(
+      (operation) => operation.action === "update" && operation.table === "bookings",
+    );
+
+    assert.equal(updateResult.status, 200, `${role} Pax update should use the existing booking PATCH lane`);
+    assert.equal(updateResult.body.booking.pax_count, 5);
+    assert.equal(bookingUpdate?.payload.pax_count, 5);
+    assertNoLeaks(updateResult.body.booking, `${role} Pax update booking should expose only safe DTO fields`);
   }
 
   for (const actor of [

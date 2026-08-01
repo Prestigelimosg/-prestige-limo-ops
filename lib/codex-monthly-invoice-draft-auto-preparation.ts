@@ -12,7 +12,7 @@ import {
 import { loadAdminMonthlyInvoiceDraftTripCandidates } from "./admin-monthly-invoice-draft-trip-candidates";
 
 export const codexMonthlyInvoiceDraftAutoPreparationVersion =
-  "codex-monthly-invoice-draft-auto-preparation:v1";
+  "codex-monthly-invoice-draft-auto-preparation:v2";
 
 export type CodexMonthlyInvoiceDraftAutoPreparationResult = {
   automation_enabled: boolean;
@@ -106,6 +106,14 @@ export function isFirstSingaporeCalendarDay(now: Date) {
 
 function draftKey(customerAccount: string, billingMonth: string) {
   return `${customerAccount.trim()}::${billingMonth}`;
+}
+
+function sortedReferences(values: Array<string | null | undefined>) {
+  return values.map((value) => String(value || "").trim()).filter(Boolean).sort();
+}
+
+function sameReferences(first: string[], second: string[]) {
+  return first.length === second.length && first.every((value, index) => value === second[index]);
 }
 
 export async function runCodexMonthlyInvoiceDraftAutoPreparation({
@@ -212,18 +220,18 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
     });
   }
 
-  const existingDraftKeys = new Set(
-    existingDraftResult.data.invoice_drafts.map((draft) =>
+  const existingDraftsByKey = new Map(
+    existingDraftResult.data.invoice_drafts.map((draft) => [
       draftKey(draft.customer_account, draft.billing_month),
-    ),
+      draft,
+    ]),
   );
   let failedCount = 0;
   let preparedCount = 0;
   let skippedExistingCount = 0;
 
   for (const group of groupResult.data.groups) {
-    if (existingDraftKeys.has(draftKey(group.customer_account, group.billing_month))) {
-      skippedExistingCount += 1;
+    if (group.ready_count < 1) {
       continue;
     }
 
@@ -241,16 +249,36 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
     if (
       !candidateResult.ok ||
       candidateResult.data.pagination.has_next_page ||
-      candidateResult.data.summary.total_count !== group.total_count ||
-      candidateResult.data.trip_candidates.length !== group.total_count
+      candidateResult.data.summary.blocked_count !== 0 ||
+      candidateResult.data.summary.ready_count !== group.ready_count ||
+      candidateResult.data.summary.total_count !== group.ready_count ||
+      candidateResult.data.trip_candidates.length !== group.ready_count ||
+      candidateResult.data.trip_candidates.some(
+        (candidate) => candidate.trip_readiness_status !== "ready",
+      )
     ) {
       failedCount += 1;
       continue;
     }
 
+    const existingDraft = existingDraftsByKey.get(
+      draftKey(group.customer_account, group.billing_month),
+    );
+    const readyReferences = sortedReferences(
+      candidateResult.data.trip_candidates.map((candidate) => candidate.booking_reference),
+    );
+    const existingReferences = sortedReferences(
+      existingDraft?.linked_trips.map((trip) => trip.booking_reference) || [],
+    );
+
+    if (existingDraft && sameReferences(readyReferences, existingReferences)) {
+      skippedExistingCount += 1;
+      continue;
+    }
+
     const draftInput: AdminMonthlyInvoiceDraftInput = {
       billing_month: group.billing_month,
-      blocked_count: group.blocked_count,
+      blocked_count: 0,
       customer_account: group.customer_account,
       customer_id: group.customer_id,
       draft_status: "pending_admin_review",
@@ -262,27 +290,24 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
         safe_trip_context: candidate.safe_trip_context,
         trip_readiness_status: candidate.trip_readiness_status,
       })),
-      ready_count: group.ready_count,
-      readiness_status: group.safe_readiness_status,
+      ready_count: readyReferences.length,
+      readiness_status: "ready",
       safe_draft_note: "Prepared automatically from the saved monthly group for admin review.",
       safe_draft_context: {
-        draft_summary: `${group.total_count} saved completed trip${group.total_count === 1 ? "" : "s"} grouped for monthly draft prep.`,
-        next_action:
-          group.blocked_count > 0
-            ? "Review blocked saved trips before manager approval."
-            : "Review saved group counts before manager approval.",
+        draft_summary: `${readyReferences.length} ready unbilled completed trip${readyReferences.length === 1 ? "" : "s"} grouped for monthly draft prep.`,
+        next_action: "Review ready unbilled saved trips before manager approval.",
         review_status: "Prepared automatically and waiting for admin review.",
       },
       source_grouping_summary: {
         billing_month: group.billing_month,
-        blocked_count: group.blocked_count,
+        blocked_count: 0,
         customer_account: group.customer_account,
-        readiness_status: group.safe_readiness_status,
-        ready_count: group.ready_count,
+        readiness_status: "ready",
+        ready_count: readyReferences.length,
         source: "admin_monthly_billing_grouping_read",
-        total_count: group.total_count,
+        total_count: readyReferences.length,
       },
-      total_count: group.total_count,
+      total_count: readyReferences.length,
     };
     const savedDraft = await createAdminMonthlyInvoiceDraftFromGroup(draftInput, actor);
 
@@ -297,12 +322,16 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
   let notificationStatus: CodexMonthlyInvoiceDraftAutoPreparationResult["notification_status"] =
     "not_created";
 
-  if (preparedCount > 0) {
+  if (groupResult.data.summary.classified_count > 0) {
     const notification = await createMonthlyInvoiceDraftAutomationSummaryAppEvent(
       {
         billingMonth,
+        blockedCount: groupResult.data.summary.blocked_count,
+        classifiedCount: groupResult.data.summary.classified_count,
+        coveredCount: groupResult.data.summary.covered_count,
         failedCount,
         preparedCount,
+        readyCount: groupResult.data.summary.ready_count,
         skippedExistingCount,
       },
       actor,

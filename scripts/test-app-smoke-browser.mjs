@@ -690,7 +690,7 @@ const withAllowedRuntimeCalls = (pattern, ...allowedCalls) => ({
     return pattern.test(value) || allowedCalls.some((allowedCall) => allowedCall(value));
   },
 });
-const exactCustomerPortalRscPrefetchCall = (call) => {
+const exactSameOriginRscPrefetchCall = (call, targetUrl) => {
   const requestMatch = /^GET (\S+)$/.exec(call);
 
   if (!requestMatch) {
@@ -699,12 +699,12 @@ const exactCustomerPortalRscPrefetchCall = (call) => {
 
   try {
     const requestUrl = new URL(requestMatch[1]);
-    const portalUrl = new URL(customerPortalUrl);
+    const expectedUrl = new URL(targetUrl);
     const searchEntries = [...requestUrl.searchParams.entries()];
 
     return (
-      requestUrl.origin === portalUrl.origin &&
-      requestUrl.pathname === portalUrl.pathname &&
+      requestUrl.origin === expectedUrl.origin &&
+      requestUrl.pathname === expectedUrl.pathname &&
       requestUrl.username === "" &&
       requestUrl.password === "" &&
       requestUrl.hash === "" &&
@@ -716,6 +716,10 @@ const exactCustomerPortalRscPrefetchCall = (call) => {
     return false;
   }
 };
+const exactCustomerPortalRscPrefetchCall = (call) =>
+  exactSameOriginRscPrefetchCall(call, customerPortalUrl);
+const exactCustomerBookingRscPrefetchCall = (call) =>
+  exactSameOriginRscPrefetchCall(call, customerBookingUrl);
 const customerBookingPageRuntimeAllowedPattern = withAllowedRuntimeCalls(
   combineAllowedRuntimePatterns(
     publicCompanyProfileApiPattern,
@@ -738,13 +742,16 @@ const customerBookingRequestRuntimeAllowedPattern = withAllowedRuntimeCalls(
   ),
   exactCustomerPortalRscPrefetchCall,
 );
-const customerPortalRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerPortalSavedBookingsApiPattern,
-  customerPortalChangeRequestApiPattern,
-  customerPortalDevicePushApiPattern,
-  customerPortalInvoicesApiPattern,
-  customerPortalTripUpdatesApiPattern,
+const customerPortalRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerPortalSavedBookingsApiPattern,
+    customerPortalChangeRequestApiPattern,
+    customerPortalDevicePushApiPattern,
+    customerPortalInvoicesApiPattern,
+    customerPortalTripUpdatesApiPattern,
+  ),
+  exactCustomerBookingRscPrefetchCall,
 );
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
@@ -841,8 +848,9 @@ function assertNoPublicRouteRuntimeCalls(integrationCalls, resourceCalls, contex
   );
 }
 
-function assertCustomerPortalRscPrefetchBoundary() {
-  const allowedCall = `GET ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`;
+function assertCustomerNavigationRscPrefetchBoundary() {
+  const allowedPortalCall = `GET ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`;
+  const allowedBookingCall = `GET ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH`;
   const forbiddenCalls = [
     `POST ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`,
     `BEACON ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`,
@@ -853,17 +861,34 @@ function assertCustomerPortalRscPrefetchBoundary() {
     `GET ${customerPortalUrl}?extra=1&_rsc=q9AXDFxzgqR_RnIk`,
     `GET ${customerPortalUrl}?_rsc=one&_rsc=two`,
     `GET ${new URL("/api/customer-saved-bookings", appUrl)}?_rsc=q9AXDFxzgqR_RnIk`,
+    `POST ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH`,
+    `BEACON ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH`,
+    "GET https://example.com/book?_rsc=JuHZozMZvHGet0MH",
+    `GET ${customerBookingUrl}`,
+    `GET ${customerBookingUrl}?_rsc=`,
+    `GET ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH&extra=1`,
+    `GET ${customerBookingUrl}?extra=1&_rsc=JuHZozMZvHGet0MH`,
+    `GET ${customerBookingUrl}?_rsc=one&_rsc=two`,
+    `GET ${new URL("/api/customer-booking-requests", appUrl)}?_rsc=JuHZozMZvHGet0MH`,
   ];
 
   assert.equal(
-    exactCustomerPortalRscPrefetchCall(allowedCall),
+    exactCustomerPortalRscPrefetchCall(allowedPortalCall),
     true,
     "Expected the exact same-origin read-only Customer Portal RSC prefetch to be allowed",
   );
+  assert.equal(
+    exactCustomerBookingRscPrefetchCall(allowedBookingCall),
+    true,
+    "Expected the exact same-origin read-only Booking Request RSC prefetch to be allowed",
+  );
   assert.deepEqual(
-    forbiddenCalls.filter(exactCustomerPortalRscPrefetchCall),
+    forbiddenCalls.filter(
+      (call) =>
+        exactCustomerPortalRscPrefetchCall(call) || exactCustomerBookingRscPrefetchCall(call),
+    ),
     [],
-    "Expected non-GET, external, empty, duplicate, extra-query, and API calls to remain blocked",
+    "Expected non-GET, external, empty, duplicate, extra-query, and API customer navigation calls to remain blocked",
   );
 }
 
@@ -938,7 +963,7 @@ async function runChromeTest() {
   const reporter = createBrowserTestReporter("app-smoke-browser");
   const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
 
-  assertCustomerPortalRscPrefetchBoundary();
+  assertCustomerNavigationRscPrefetchBoundary();
 
   if (!Number.isInteger(chromeDebugPort) || chromeDebugPort <= 0) {
     throw new Error(`Invalid Chrome debug port: ${chromeDebugPort}`);

@@ -15878,6 +15878,7 @@ async function runChromeTest() {
         },
       ];
       window.__prestigeMonthlyInvoiceDraftRequests = [];
+      window.__prestigeMonthlyInvoiceDraftTripCandidateRequests = [];
       window.__prestigeMonthlyInvoiceDrafts = [
         {
           billing_month: "2026-05",
@@ -16616,6 +16617,69 @@ async function runChromeTest() {
           }
         }
 
+        if (String(target).includes("/api/admin-monthly-invoice-draft-trip-candidates")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMonthlyInvoiceDraftTripCandidateRequests.push({
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const tripCandidates = [
+              {
+                billing_month: "2026-05",
+                billing_prep_readiness: "ready",
+                booking_reference: "ui-cleanup-load-fixture",
+                closeout_id: "aaaaaaaa-1111-4111-8111-111111111111",
+                closeout_status: "closed",
+                customer_account: "LOADED SAVED COMPANY",
+                customer_id: "801",
+                safe_trip_context: {
+                  readiness_reason: "Ready closeout is eligible for this exact draft.",
+                  source: "completed_booking_closeout",
+                },
+                trip_readiness_status: "ready",
+              },
+              {
+                billing_month: "2026-05",
+                billing_prep_readiness: "ready",
+                booking_reference: "ui-second-ready-load-fixture",
+                closeout_id: "bbbbbbbb-2222-4222-8222-222222222222",
+                closeout_status: "closed",
+                customer_account: "LOADED SAVED COMPANY",
+                customer_id: "801",
+                safe_trip_context: {
+                  readiness_reason: "Ready closeout is eligible for this exact draft.",
+                  source: "completed_booking_closeout",
+                },
+                trip_readiness_status: "ready",
+              },
+            ];
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                pagination: {
+                  has_next_page: false,
+                  has_previous_page: false,
+                  page: 1,
+                  page_count: 1,
+                  page_size: 250,
+                  total_candidate_count: 2,
+                },
+                summary: { blocked_count: 0, ready_count: 2, total_count: 2 },
+                trip_candidates: tripCandidates,
+                version: "focused-browser-monthly-ready-trip-candidate-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
         if (String(target).includes("/api/admin-monthly-invoice-drafts")) {
           const url = new URL(String(target), window.location.origin);
           let parsedBody = null;
@@ -16711,18 +16775,46 @@ async function runChromeTest() {
           }
 
           if (method === "POST") {
+            const existingDraftIndex = (window.__prestigeMonthlyInvoiceDrafts || []).findIndex(
+              (draft) =>
+                draft.customer_account === parsedBody?.customer_account &&
+                draft.billing_month === parsedBody?.billing_month,
+            );
+            const existingDraft =
+              existingDraftIndex >= 0 ? window.__prestigeMonthlyInvoiceDrafts[existingDraftIndex] : {};
+            const invoiceDraftId = existingDraft.id || "focused-browser-monthly-invoice-draft-created";
+            const linkedTrips = (parsedBody?.linked_trips || []).map((trip, index) => {
+              const existingLink = (existingDraft.linked_trips || []).find(
+                (link) => link.booking_reference === trip.booking_reference,
+              );
+
+              return {
+                ...trip,
+                draft_id: invoiceDraftId,
+                id:
+                  existingLink?.id ||
+                  (index === 0
+                    ? "77777777-7777-4777-8777-777777777777"
+                    : "88888888-8888-4888-8888-888888888888"),
+              };
+            });
             const invoiceDraft = {
+              ...existingDraft,
               ...parsedBody,
               actor_label: "Focused browser monthly invoice draft mock",
               actor_role: "admin",
               created_at: "2026-06-07T00:00:00.000Z",
-              id: "focused-browser-monthly-invoice-draft-created",
-              linked_trips: parsedBody?.linked_trips || [],
+              id: invoiceDraftId,
+              linked_trips: linkedTrips,
               source_surface: "admin_api",
               updated_at: "2026-06-07T00:00:00.000Z",
             };
 
-            window.__prestigeMonthlyInvoiceDrafts.push(invoiceDraft);
+            if (existingDraftIndex >= 0) {
+              window.__prestigeMonthlyInvoiceDrafts[existingDraftIndex] = invoiceDraft;
+            } else {
+              window.__prestigeMonthlyInvoiceDrafts.push(invoiceDraft);
+            }
 
             return new Response(
               JSON.stringify({
@@ -18626,7 +18718,7 @@ async function runChromeTest() {
           };
         })()`);
 
-        return candidateState?.requests?.some((request) => request.method === "PATCH") &&
+        return candidateState?.requests?.some((request) => request.method === "POST") &&
           candidateState.feedback.includes("Refreshed monthly invoice draft preparation for LOADED SAVED COMPANY")
           ? candidateState
           : false;
@@ -18634,52 +18726,60 @@ async function runChromeTest() {
       10000,
       "monthly invoice draft prep refresh",
     );
-    const monthlyInvoiceDraftPatchRequest = monthlyInvoiceDraftSaveState.requests.find(
-      (request) => request.method === "PATCH",
+    const monthlyInvoiceDraftPostRequest = monthlyInvoiceDraftSaveState.requests.find(
+      (request) => request.method === "POST",
     );
     assert.deepEqual(
       {
         body: {
-          billing_month: monthlyInvoiceDraftPatchRequest.body.billing_month,
-          blocked_count: monthlyInvoiceDraftPatchRequest.body.blocked_count,
-          customer_account: monthlyInvoiceDraftPatchRequest.body.customer_account,
-          draft_id: monthlyInvoiceDraftPatchRequest.body.draft_id,
-          draft_status: monthlyInvoiceDraftPatchRequest.body.draft_status,
-          ready_count: monthlyInvoiceDraftPatchRequest.body.ready_count,
-          readiness_status: monthlyInvoiceDraftPatchRequest.body.readiness_status,
-          total_count: monthlyInvoiceDraftPatchRequest.body.total_count,
+          billing_month: monthlyInvoiceDraftPostRequest.body.billing_month,
+          blocked_count: monthlyInvoiceDraftPostRequest.body.blocked_count,
+          customer_account: monthlyInvoiceDraftPostRequest.body.customer_account,
+          customer_id: monthlyInvoiceDraftPostRequest.body.customer_id,
+          draft_status: monthlyInvoiceDraftPostRequest.body.draft_status,
+          linked_trip_references: monthlyInvoiceDraftPostRequest.body.linked_trips.map(
+            (trip) => trip.booking_reference,
+          ),
+          ready_count: monthlyInvoiceDraftPostRequest.body.ready_count,
+          readiness_status: monthlyInvoiceDraftPostRequest.body.readiness_status,
+          total_count: monthlyInvoiceDraftPostRequest.body.total_count,
         },
-        hasSessionTokenHeader: Boolean(monthlyInvoiceDraftPatchRequest.headers["x-prestige-admin-session-token"]),
-        method: monthlyInvoiceDraftPatchRequest.method,
-        purpose: monthlyInvoiceDraftPatchRequest.headers["x-prestige-admin-purpose"] || "",
-        search: monthlyInvoiceDraftPatchRequest.search,
+        hasSessionTokenHeader: Boolean(monthlyInvoiceDraftPostRequest.headers["x-prestige-admin-session-token"]),
+        method: monthlyInvoiceDraftPostRequest.method,
+        purpose: monthlyInvoiceDraftPostRequest.headers["x-prestige-admin-purpose"] || "",
+        search: monthlyInvoiceDraftPostRequest.search,
       },
       {
         body: {
           billing_month: "2026-05",
-          blocked_count: 1,
+          blocked_count: 0,
           customer_account: "LOADED SAVED COMPANY",
-          draft_id: "11111111-1111-4111-8111-111111111111",
+          customer_id: null,
           draft_status: "pending_admin_review",
+          linked_trip_references: [
+            "ui-cleanup-load-fixture",
+            "ui-second-ready-load-fixture",
+          ],
           ready_count: 2,
-          readiness_status: "mixed",
-          total_count: 3,
+          readiness_status: "ready",
+          total_count: 2,
         },
         hasSessionTokenHeader: false,
-        method: "PATCH",
+        method: "POST",
         purpose: "admin-booking-persistence",
         search: "",
       },
-      "Expected monthly invoice draft prep refresh to PATCH safe grouped counts through the guarded API path",
+      "Expected monthly invoice draft prep refresh to POST the exact ready-only trip set through the guarded API path",
     );
     assert.deepEqual(
-      Object.keys(monthlyInvoiceDraftPatchRequest.body).sort(),
+      Object.keys(monthlyInvoiceDraftPostRequest.body).sort(),
       [
         "billing_month",
         "blocked_count",
         "customer_account",
-        "draft_id",
+        "customer_id",
         "draft_status",
+        "linked_trips",
         "readiness_status",
         "ready_count",
         "safe_draft_context",
@@ -18687,7 +18787,7 @@ async function runChromeTest() {
         "source_grouping_summary",
         "total_count",
       ],
-      "Expected monthly invoice draft prep refresh to avoid invoice/payment/PDF/payout fields",
+      "Expected monthly invoice draft prep refresh to replace only safe ready trip links and avoid invoice/payment/PDF/payout fields",
     );
     const clickedMonthlyInvoiceDraftItemReviewSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-invoice-draft-item-review-save-action='true']");
@@ -19212,14 +19312,14 @@ async function runChromeTest() {
       {
         body: {
           billing_month: "2026-05",
-          blocked_count: 1,
+          blocked_count: 0,
           customer_account: "LOADED SAVED COMPANY",
           draft_id: "11111111-1111-4111-8111-111111111111",
           draft_status_snapshot: "pending_admin_review",
           issue_review_status: "issue_review_pending",
           ready_count: 2,
-          readiness_status: "mixed",
-          total_count: 3,
+          readiness_status: "ready",
+          total_count: 2,
         },
         hasSessionTokenHeader: false,
         method: "PATCH",

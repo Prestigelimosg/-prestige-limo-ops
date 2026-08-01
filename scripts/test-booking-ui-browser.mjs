@@ -1338,6 +1338,25 @@ EA to Mark Colodny, Co-Head of US Private Equity
 	Warburg Pincus`;
 const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer on 20/05/26, 645 pick for SQ108. And the return transfer on 22/05/26, 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
 const customerRoundTripAirportTransferSample = "Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o";
+const explicitSinArrivalDepartureSample = `Dear William
+
+I have a request for an airport transfer please, as below
+
+**SIN Arrival Transfer from Changi to Ferry**
+**August 01**
+SQ 317 at 07:30am
+Lead Pax:  Mr David Kelly
+Five (5) Pax : 2 adults + 3 children (ages 4, 7 and 10)
+Transfer in Alphard to Harbour Front Ferry -   ’Sindo’ Ferry
+
+**SIN Departure Transfer from Ferry to Changi**
+**August 05**
+Alphard Pick up from Harbour Front Ferry **at 13:10pm** ’Sindo’ Ferry
+Flight SQ 928 at 16:55pm
+Lead Pax:  Mr David Kelly
+Five (5) Pax : 2 adults + 3 children (ages 4, 7 and 10)
+
+Screenshot 2026-06-23 at 11.16.35.png`;
 const airportDepartureToAirportForFlightSample = "Please arrange Alphard on 20/05/26, 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.";
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
@@ -21745,6 +21764,113 @@ async function runChromeTest() {
     assert.equal(selectedPreviewState.fields.name, "Mr Deep");
     assert.doesNotMatch(selectedPreviewState.fieldText, /Mr Stanley|Ms Chloe|SQ221|Capella/);
     assert.doesNotMatch(selectedPreviewState.visibleText, /extractedBookingsPreview\.length|Please review warnings before saving\./);
+
+    const parseExplicitSinTransferPreview = async (
+      previewIndex,
+      expectedFlight,
+      expectedBookingType,
+      expectedDate,
+      expectedTime,
+      expectedPickup,
+      expectedDropoff,
+    ) => {
+      await setBookingMessageValue(explicitSinArrivalDepartureSample, "explicit SIN arrival/departure message");
+
+      const clickedParse = await evaluate(`(() => {
+        const parseButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Create Job Card",
+        );
+
+        if (!parseButton || parseButton.disabled) {
+          return false;
+        }
+
+        parseButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedParse, true, "Expected Create Job Card for explicit SIN transfer message");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const bodyText = document.body.innerText;
+            const previewButtons = [...document.querySelectorAll("button")].filter(
+              (button) => button.textContent.trim() === "Use this booking",
+            );
+
+            return bodyText.includes("Multiple bookings detected. Please select one extracted booking.") &&
+              bodyText.includes("extractedBookingsPreview.length: 2") &&
+              bodyText.includes("SQ317") &&
+              bodyText.includes("SQ928") &&
+              previewButtons.length === 2;
+          })()`),
+        10000,
+        "explicit SIN two-booking preview choices",
+      );
+
+      const clickedPreview = await evaluate(`(() => {
+        const previewButtons = [...document.querySelectorAll("button")].filter(
+          (button) => button.textContent.trim() === "Use this booking",
+        );
+        const previewButton = previewButtons[${previewIndex}];
+
+        if (!previewButton || previewButton.disabled) {
+          return false;
+        }
+
+        previewButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedPreview, true, `Expected explicit SIN preview ${previewIndex + 1} to be selectable`);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
+
+          if (
+            candidateState?.fields?.flight === expectedFlight &&
+            candidateState?.fields?.bookingType === expectedBookingType &&
+            candidateState?.fields?.pickupDate === expectedDate &&
+            candidateState?.fields?.pickupTime === expectedTime &&
+            candidateState?.fields?.pickup === expectedPickup &&
+            candidateState?.fields?.dropoff === expectedDropoff &&
+            candidateState?.fields?.name === "Mr David Kelly" &&
+            candidateState?.fields?.pax === "5" &&
+            candidateState?.fields?.vehicle === "AVF"
+          ) {
+            return candidateState;
+          }
+
+          return false;
+        },
+        10000,
+        `selected explicit SIN preview ${previewIndex + 1} UI state`,
+      );
+    };
+
+    const selectedExplicitSinArrivalState = await parseExplicitSinTransferPreview(
+      0,
+      "SQ317",
+      "MNG",
+      "2026-08-01",
+      "0730hrs",
+      "Changi Airport",
+      "Harbour Front Ferry - Sindo Ferry",
+    );
+    assert.equal(selectedExplicitSinArrivalState.fields.childSeatCount, "");
+    assert.doesNotMatch(selectedExplicitSinArrivalState.fieldText, /2026-06-23|Screenshot/);
+
+    const selectedExplicitSinDepartureState = await parseExplicitSinTransferPreview(
+      1,
+      "SQ928",
+      "DEP",
+      "2026-08-05",
+      "1310hrs",
+      "Harbour Front Ferry - Sindo Ferry",
+      "Changi Airport",
+    );
+    assert.equal(selectedExplicitSinDepartureState.fields.childSeatCount, "");
+    assert.doesNotMatch(selectedExplicitSinDepartureState.fieldText, /2026-06-23|Screenshot|1655hrs/);
 
     const parseWarburgPreview = async (previewIndex, expectedFlight) => {
       const focusedTextarea = await evaluate(`(() => {

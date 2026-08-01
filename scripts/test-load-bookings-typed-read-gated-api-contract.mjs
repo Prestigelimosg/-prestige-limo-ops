@@ -346,6 +346,7 @@ const [
   routeSource,
   gatedHelperSource,
   recordMapperSource,
+  savedBookingReadSource,
   appPage,
   aiParseRoute,
   adminBookingsRoute,
@@ -355,6 +356,7 @@ const [
   readFile(routePath, "utf8"),
   readFile(gatedHelperPath, "utf8"),
   readFile(recordMapperPath, "utf8"),
+  readFile(savedBookingReadPath, "utf8"),
   readFile(appPagePath, "utf8"),
   readFile(aiParseRoutePath, "utf8"),
   readFile(adminBookingsRoutePath, "utf8"),
@@ -474,6 +476,26 @@ assertIncludes(adminSavedBookingsRoute, "export async function GET", "Admin save
 assertIncludes(adminSavedBookingsRoute, "loadAdminSavedBookingList", "Admin saved bookings list remains");
 assertIncludes(adminSavedBookingsRoute, "loadAdminSavedBookingById", "Admin saved bookings detail remains");
 assertIncludes(recordMapperSource, "safe_card", "Operational mapper remains safe-card based");
+const currentReadSelectBlock = sliceBetween(
+  savedBookingReadSource,
+  "const adminSavedBookingCurrentReadSelect =",
+  "const adminSavedBookingCurrentMinimalReadSelect =",
+);
+const currentMinimalReadSelectBlock = sliceBetween(
+  savedBookingReadSource,
+  "const adminSavedBookingCurrentMinimalReadSelect =",
+  "const adminSavedBookingFoundationScalarReadSelect =",
+);
+assertIncludes(
+  currentReadSelectBlock,
+  "pax_count",
+  "Current-schema typed Load Bookings select",
+);
+assertIncludes(
+  currentMinimalReadSelectBlock,
+  "pax_count",
+  "Current-schema minimal typed Load Bookings select",
+);
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite typed gated route guard registration");
 
 const harness = await loadHarness();

@@ -7655,6 +7655,65 @@ async function runChromeTest() {
       "Expected the retired manual Load Bookings button to stay absent",
     );
 
+    const clickedBookingsTodayForCompletedHistoryLink = await evaluate(`(() => {
+      const button = document.querySelector("[data-bookings-today='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedBookingsTodayForCompletedHistoryLink,
+      true,
+      "Expected Bookings Today view to be selectable before the Completed / History handoff check",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const link = document.querySelector("[data-bookings-completed-history-date-link='true']");
+          const dateInput = document.querySelector("[data-bookings-date-input='true']");
+          return Boolean(dateInput?.value) &&
+            link?.textContent.trim() === "Completed / History" &&
+            link.getAttribute("href") === "#completed-history";
+        })()`),
+      10000,
+      "Bookings today inline Completed / History link",
+    );
+    const clickedUpcomingWithTodaySelected = await evaluate(`(() => {
+      const button = document.querySelector("[data-bookings-upcoming='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedUpcomingWithTodaySelected,
+      true,
+      "Expected Bookings Upcoming view with today selected to remain available",
+    );
+    await setInputValue(
+      "[data-bookings-search-input='true']",
+      "NO UPCOMING TODAY COMPLETED HISTORY MATCH",
+      "Bookings upcoming-today empty-state search",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`document.querySelector("[data-bookings-completed-history-date-link='true']")?.textContent.trim() === "Completed / History"`),
+      10000,
+      "Bookings upcoming-today inline Completed / History link",
+    );
+    await setInputValue(
+      "[data-bookings-search-input='true']",
+      "",
+      "Bookings upcoming-today empty-state search cleanup",
+    );
+
     await setInputValue(
       "[data-bookings-date-input='true']",
       "2026-05-28",

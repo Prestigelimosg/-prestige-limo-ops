@@ -224,7 +224,7 @@ for (const fragment of [
   'href="#completed-history"',
   "event.preventDefault();",
   "openCompletedHistoryForBookingsDate();",
-  "{!bookingsShowUpcoming && bookingsSelectedDate < todayKey ? (",
+  "{bookingsSelectedDate <= todayKey ? (",
   '"Completed / History"',
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
   'className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1"',
@@ -235,6 +235,11 @@ assertExcludes(
   currentUpcomingPanel,
   'button data-bookings-completed-history-date-link="true"',
   "exact-date Completed / History handoff must remain an inline link, not a new button",
+);
+assertExcludes(
+  currentUpcomingPanel,
+  "!bookingsShowUpcoming && bookingsSelectedDate < todayKey",
+  "today and the default Upcoming view must not suppress the existing Completed / History handoff",
 );
 assertExcludes(
   currentUpcomingPanel,
@@ -300,7 +305,8 @@ assertIncludes(
 );
 
 for (const fragment of [
-  "The existing Current / Upcoming empty-state text now makes only `Completed / History` an inline link",
+  "The existing Current / Upcoming empty-state text makes only `Completed / History` an inline link when the selected pickup date is today or earlier",
+  "including the default Upcoming view while today remains selected",
   "refreshes the established booking read once",
   "No button, panel, route, status mutation, completion action, billing/invoice change",
 ]) {

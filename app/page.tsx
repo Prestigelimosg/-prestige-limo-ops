@@ -25170,7 +25170,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           data-current-upcoming-bookings-empty="true"
         >
           No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in{" "}
-          {!bookingsShowUpcoming && bookingsSelectedDate < todayKey ? (
+          {bookingsSelectedDate <= todayKey ? (
             <a
               className="font-semibold text-slate-900 underline decoration-slate-400 underline-offset-2 hover:decoration-slate-900"
               data-bookings-completed-history-date-link="true"

@@ -181,6 +181,38 @@ assertIncludes(
   "checkCustomerBookingRequestPersistenceConfigReadiness",
   "Public company profile read must use the customer-safe DB readiness path.",
 );
+assertNotIncludes(
+  persistence,
+  "client: CompanyProfileClient = createServerClient()",
+  "Company profile persistence must not create the server client before its actor/config readiness checks.",
+);
+const publicProfileLoadBlock = persistence.slice(
+  persistence.indexOf("export async function loadPublicCompanyProfile"),
+  persistence.indexOf("export async function loadAdminCompanyProfile"),
+);
+assertIncludes(
+  publicProfileLoadBlock,
+  "checkCustomerBookingRequestPersistenceConfigReadiness()",
+  "Public company profile read must keep its server configuration readiness check in the established function.",
+);
+assert(
+  publicProfileLoadBlock.indexOf("checkCustomerBookingRequestPersistenceConfigReadiness()") <
+    publicProfileLoadBlock.indexOf("const profileClient = client ?? createServerClient();"),
+  "Public company profile read must verify server configuration before creating its Supabase client.",
+);
+const adminProfileSaveBlock = persistence.slice(
+  persistence.indexOf("export async function saveAdminCompanyProfile"),
+);
+assertIncludes(
+  adminProfileSaveBlock,
+  "checkAdminBookingPersistenceStagingConfigReadiness()",
+  "Admin company profile save must keep its actor/config readiness check in the established function.",
+);
+assert(
+  adminProfileSaveBlock.indexOf("checkAdminBookingPersistenceStagingConfigReadiness()") <
+    adminProfileSaveBlock.indexOf("const profileClient = client ?? createServerClient();"),
+  "Admin company profile save must verify actor/config readiness before creating its Supabase client.",
+);
 assertIncludes(
   persistence,
   "sanitizePublicCompanyProfile",

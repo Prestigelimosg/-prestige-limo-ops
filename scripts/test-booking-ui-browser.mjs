@@ -16054,21 +16054,27 @@ async function runChromeTest() {
 
         if (String(target).includes("/api/admin-email-activation-preflight-setup")) {
           window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          const emailGateOpen =
+            window.__prestigeCustomerDriverDetailsEmailSendGateOpen === true;
 
           return new Response(
             JSON.stringify({
-              activationReady: false,
-              blockers: ["provider", "env", "approval", "live_sending"],
-              driverDetailsEmailSendGateOpen:
-                window.__prestigeCustomerDriverDetailsEmailSendGateOpen === true,
+              activationReady: emailGateOpen,
+              blockers: emailGateOpen
+                ? []
+                : ["provider", "env", "approval", "live_sending"],
+              driverDetailsEmailSendGateOpen: emailGateOpen,
               external_send: false,
-              liveSendingEnabled: false,
+              liveSendingEnabled: emailGateOpen,
+              missing_requirements: emailGateOpen
+                ? []
+                : ["provider", "env", "approval", "live_sending"],
               ok: true,
-              providerConfigured: false,
-              providerSelected: false,
-              selectedProvider: null,
-              sendingEnabled: false,
-              status: "setup_only",
+              providerConfigured: emailGateOpen,
+              providerSelected: emailGateOpen,
+              selectedProvider: emailGateOpen ? "resend" : null,
+              sendingEnabled: emailGateOpen,
+              status: emailGateOpen ? "ready" : "setup_only",
             }),
             { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
           );
@@ -17965,6 +17971,28 @@ async function runChromeTest() {
       "mock gate-open Driver Details Email button",
     );
     assert.equal(gateOpenEmailButton, true);
+    const gateOpenPreflightState = await evaluate(`(() => {
+      const item = document.querySelector("[data-admin-customer-driver-details-email-review-item='true']");
+      const status = item?.querySelector("[data-admin-email-activation-preflight-status='true']");
+
+      return {
+        activationReady:
+          item?.getAttribute("data-admin-email-activation-preflight-activation-ready") || "",
+        blockers: item?.getAttribute("data-admin-email-activation-preflight-blockers") || "",
+        liveSendingEnabled:
+          item?.getAttribute("data-admin-email-activation-preflight-live-sending-enabled") || "",
+        statusText: status?.textContent.replace(/\\s+/g, " ").trim() || "",
+        statusTitle: status?.getAttribute("title") || "",
+      };
+    })()`);
+    assert.deepEqual(gateOpenPreflightState, {
+      activationReady: "true",
+      blockers: "",
+      liveSendingEnabled: "true",
+      statusText: "Email gate ready",
+      statusTitle:
+        "Preflight: activationReady true, driverDetailsEmailSendGateOpen true, liveSendingEnabled true, external_send false, no blockers | Driver Details Email send gate is open; explicit admin review is still required.",
+    });
     const clickedGateOpenEmail = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
 

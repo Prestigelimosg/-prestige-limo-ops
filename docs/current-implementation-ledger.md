@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Booking Pax Persistence Mapper Repair (2026-08-01)
+
+- The owner-approved Production correction of booking `10855` used the established Dispatch `Update + Cal` lane to change only service `MNG` to `DEP`, vehicle `VVV` to `AVF`, and Pax to `5`, while preserving its date, time, flight, route, draft status, customer, references, and unassigned-driver state. Service and vehicle persisted and the same Operations Calendar event updated in place, but the saved booking retained null Pax and therefore displayed the existing fallback `1`.
+- Read-only diagnosis proved the admin UI payload and safe parser already carry `pax_count`, while the current-schema `bookingToDbRow` mapper omitted only that field. The established API persistence guard reproduced the defect as an accepted Pax value returning null after persistence.
+- The current-schema mapper now writes only `pax_count` through the existing bounded integer sanitizer. The existing create and PATCH route, Supabase table, booking identity, reload DTO, Calendar consumer, and all other persistence fields remain unchanged. The focused API guard requires both create and update to persist and reload their exact Pax values.
+- No parser, return-trip logic, UI/control/layout, Calendar code or identity, driver workflow, customer or CRM lane, service/vehicle mapping, pricing, invoice workflow/layout, payment, payout, PayNow, messaging, provider, environment, schema, migration, or other Production record is added or changed. Booking `10855` still requires one separately approved post-deployment retry through the same existing lane to persist Pax `5` and refresh the same Calendar event without a duplicate.
+
 ### Today Completed History Inline Handoff Repair (2026-08-01)
 
 - Signed-in Production diagnosis reproduced a same-day navigation gap after the only saved 1 August job moved into Completed / History: the Bookings active list correctly showed zero rows, and Completed / History correctly retained the exact completed job, but the empty-state handoff rendered `Completed / History` as plain text in both the default `Upcoming` state and explicit `Today` state.

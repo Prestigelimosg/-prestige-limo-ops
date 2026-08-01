@@ -44,6 +44,11 @@ const intervalEffect = sectionBetween(
   'if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {',
   "  useEffect(() => {\n    let cancelled = false;",
 );
+const monthlyBillingClassificationEffect = sectionBetween(
+  dashboardSource,
+  "const billingMonth = adminAppNotificationReadState.notifications",
+  "  }, [activeTab, adminAppNotificationReadState.notifications]);",
+);
 
 for (const fragment of [
   'if (current.status === "loaded") {',
@@ -59,6 +64,25 @@ assertBefore(
   'if (current.status === "loaded") {',
   "Loading saved admin app notifications through the guarded API...",
   "loaded notification feed stays visually stable before background refresh",
+);
+
+for (const fragment of [
+  'if (current.billingMonth === billingMonth && current.status === "loaded") {',
+  "return current;",
+  "Loading completed-job billing classifications...",
+]) {
+  assertIncludes(
+    monthlyBillingClassificationEffect,
+    fragment,
+    `monthly billing classification no-blink fragment ${fragment}`,
+  );
+}
+
+assertBefore(
+  monthlyBillingClassificationEffect,
+  'if (current.billingMonth === billingMonth && current.status === "loaded") {',
+  "Loading completed-job billing classifications...",
+  "loaded monthly billing classifications stay visible during background refresh",
 );
 
 for (const fragment of [

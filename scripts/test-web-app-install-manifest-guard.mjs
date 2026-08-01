@@ -107,6 +107,50 @@ for (const { height, path: iconPath, sha256, width } of expectedIconAssets) {
   assert.equal(createHash("sha256").update(icon).digest("hex"), sha256, `${iconPath} approved logo`);
 }
 
+const faviconPath = "app/favicon.ico";
+const favicon = await readFile(faviconPath);
+const faviconStat = await stat(faviconPath);
+const expectedFaviconSizes = [16, 32, 48, 256];
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+assert.ok(faviconStat.size > 1000, `${faviconPath} should be a real multi-size icon asset`);
+assert.equal(favicon.readUInt16LE(0), 0, `${faviconPath} reserved header`);
+assert.equal(favicon.readUInt16LE(2), 1, `${faviconPath} icon resource type`);
+assert.equal(
+  favicon.readUInt16LE(4),
+  expectedFaviconSizes.length,
+  `${faviconPath} image count`,
+);
+
+const faviconSizes = expectedFaviconSizes.map((_, index) => {
+  const entryOffset = 6 + index * 16;
+  const width = favicon.readUInt8(entryOffset) || 256;
+  const height = favicon.readUInt8(entryOffset + 1) || 256;
+  const imageLength = favicon.readUInt32LE(entryOffset + 8);
+  const imageOffset = favicon.readUInt32LE(entryOffset + 12);
+
+  assert.equal(height, width, `${faviconPath} image ${index + 1} should be square`);
+  assert.ok(imageLength > 0, `${faviconPath} image ${index + 1} should not be empty`);
+  assert.ok(
+    imageOffset + imageLength <= favicon.length,
+    `${faviconPath} image ${index + 1} should stay inside the icon file`,
+  );
+  assert.deepEqual(
+    favicon.subarray(imageOffset, imageOffset + pngSignature.length),
+    pngSignature,
+    `${faviconPath} image ${index + 1} PNG signature`,
+  );
+
+  return width;
+});
+
+assert.deepEqual(faviconSizes, expectedFaviconSizes, `${faviconPath} approved desktop sizes`);
+assert.equal(
+  createHash("sha256").update(favicon).digest("hex"),
+  "589c9e0bc114bb031701d47c2080527e377b7ac0328b2a1bb9f278874f85020e",
+  `${faviconPath} approved Prestige desktop logo`,
+);
+
 const blockedInstallSideEffects = [
   /api\.telegram\.org/i,
   /sendUpdates"\s*,\s*"all/i,

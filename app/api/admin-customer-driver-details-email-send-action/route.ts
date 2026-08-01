@@ -1,10 +1,14 @@
 import {
   adminCustomerDriverDetailsEmailClosedGateResult,
+  adminCustomerDriverDetailsEmailRecipientIdentity,
+  adminCustomerDriverDetailsEmailRecipientVerificationResult,
+  adminCustomerDriverDetailsEmailSavedRecipientEmail,
   adminCustomerDriverDetailsEmailSendActionEnvGateName,
   adminCustomerDriverDetailsEmailSendGateOpen,
   executeAdminCustomerDriverDetailsEmailSendAction,
 } from "../../../lib/admin-customer-driver-details-email-send-action";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { loadAdminSavedBookingById } from "../../../lib/admin-saved-booking-read";
 import {
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
@@ -93,7 +97,11 @@ function responseStatus(reason: string, status: string) {
     return 200;
   }
 
-  if (reason === "recipient_not_allowlisted" || reason === "admin_session_required") {
+  if (
+    reason === "recipient_not_allowlisted" ||
+    reason === "recipient_not_saved_for_booking" ||
+    reason === "admin_session_required"
+  ) {
     return 403;
   }
 
@@ -142,9 +150,46 @@ export async function POST(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await executeAdminCustomerDriverDetailsEmailSendAction(
-      await readJsonBody(request),
+    const input = await readJsonBody(request);
+    const recipientIdentity = adminCustomerDriverDetailsEmailRecipientIdentity(input);
+
+    if (!recipientIdentity) {
+      const result = await executeAdminCustomerDriverDetailsEmailSendAction(input, actor);
+
+      return Response.json(result, { status: responseStatus(result.reason, result.status) });
+    }
+
+    const savedBookingResult = await loadAdminSavedBookingById(
+      { booking_reference: recipientIdentity.bookingReference },
       actor,
+    );
+
+    if (!savedBookingResult.ok) {
+      const result = adminCustomerDriverDetailsEmailRecipientVerificationResult(
+        "recipient_verification_unavailable",
+      );
+
+      return Response.json(result, { status: responseStatus(result.reason, result.status) });
+    }
+
+    const savedBooking = savedBookingResult.data.booking;
+    const verifiedRecipientEmail = adminCustomerDriverDetailsEmailSavedRecipientEmail(
+      savedBooking?.contact_email,
+      savedBooking?.bookers?.email,
+    );
+
+    if (!verifiedRecipientEmail || verifiedRecipientEmail !== recipientIdentity.recipientEmail) {
+      const result = adminCustomerDriverDetailsEmailRecipientVerificationResult(
+        "recipient_not_saved_for_booking",
+      );
+
+      return Response.json(result, { status: responseStatus(result.reason, result.status) });
+    }
+
+    const result = await executeAdminCustomerDriverDetailsEmailSendAction(
+      input,
+      actor,
+      { verifiedRecipientEmail },
     );
 
     return Response.json(result, { status: responseStatus(result.reason, result.status) });

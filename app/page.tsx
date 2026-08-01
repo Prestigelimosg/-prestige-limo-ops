@@ -1654,11 +1654,24 @@ type AdminMonthlyBillingGroupingReadinessFilter =
   | "all"
   | AdminMonthlyBillingGroupingReadinessStatus;
 
+type AdminMonthlyBillingJobClassification = {
+  billing_month?: string | null;
+  booking_reference?: string | null;
+  customer_account?: string | null;
+  customer_id?: string | null;
+  display_booking_reference?: string | null;
+  safe_billing_status?: "ready" | "covered" | "blocked" | null;
+  safe_reason?: string | null;
+};
+
 type AdminMonthlyBillingGroup = {
   billing_month?: string | null;
   blocked_count?: number | null;
+  classified_count?: number | null;
+  covered_count?: number | null;
   customer_account?: string | null;
   customer_id?: string | null;
+  jobs?: AdminMonthlyBillingJobClassification[] | null;
   ready_count?: number | null;
   safe_readiness_status?: AdminMonthlyBillingGroupingReadinessStatus | null;
   total_count?: number | null;
@@ -1675,6 +1688,8 @@ type AdminMonthlyBillingGroupingPagination = {
 
 type AdminMonthlyBillingGroupingSummary = {
   blocked_count?: number | null;
+  classified_count?: number | null;
+  covered_count?: number | null;
   group_count?: number | null;
   ready_count?: number | null;
   total_count?: number | null;
@@ -1686,6 +1701,13 @@ type AdminMonthlyBillingGroupingReadState = {
   pagination: AdminMonthlyBillingGroupingPagination | null;
   status: "idle" | "loading" | "loaded" | "error";
   summary: AdminMonthlyBillingGroupingSummary | null;
+};
+
+type AdminMonthlyBillingDashboardClassificationState = {
+  billingMonth: string;
+  groups: AdminMonthlyBillingGroup[];
+  message: string;
+  status: "idle" | "loading" | "loaded" | "error";
 };
 
 type AdminCompletedBookingBillingReadinessAuditRequirement =
@@ -10175,6 +10197,18 @@ function adminAppNotificationSafeContext(notification: AdminAppNotificationRecor
       : {};
 }
 
+function adminAppNotificationMonthlyBillingMonth(notification: AdminAppNotificationRecord) {
+  if (clean(notification.workflow_area) !== "monthly_billing_draft_prep") {
+    return "";
+  }
+
+  const billingMonth = adminAppNotificationContextValue(
+    adminAppNotificationSafeContext(notification).billing_month,
+  );
+
+  return /^\d{4}-\d{2}$/.test(billingMonth) ? billingMonth : "";
+}
+
 function adminAppNotificationBookingReference(notification: AdminAppNotificationRecord) {
   const context = adminAppNotificationSafeContext(notification);
 
@@ -11706,21 +11740,35 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
 }) {
   const customerAccount = clean(group.customer_account);
   const billingMonth = clean(group.billing_month);
-  const readyCount = adminMonthlyBillingGroupingCount(group.ready_count);
-  const blockedCount = adminMonthlyBillingGroupingCount(group.blocked_count);
-  const totalCount = adminMonthlyBillingGroupingCount(group.total_count);
-  const readinessStatus = group.safe_readiness_status || "blocked";
+  const expectedReadyCount = adminMonthlyBillingGroupingCount(group.ready_count);
 
-  if (!customerAccount || !billingMonth || totalCount < 1) {
+  if (!customerAccount || !billingMonth || expectedReadyCount < 1) {
     throw new Error("Monthly invoice draft preparation requires a saved customer/month group.");
   }
 
+  const linkedTrips = (await loadAdminMonthlyInvoiceDraftTripCandidatesRead(group)).map(
+    (candidate) => ({
+      billing_prep_readiness: clean(candidate.billing_prep_readiness) || null,
+      booking_reference: clean(candidate.booking_reference),
+      closeout_id: clean(candidate.closeout_id) || null,
+      closeout_status: clean(candidate.closeout_status) || null,
+      safe_trip_context: candidate.safe_trip_context || {},
+      trip_readiness_status: "ready" as const,
+    }),
+  ).filter((candidate) => Boolean(candidate.booking_reference));
+
+  if (linkedTrips.length !== expectedReadyCount) {
+    throw new Error("Monthly invoice draft preparation requires every ready unbilled trip.");
+  }
+
+  const readyCount = linkedTrips.length;
+  const blockedCount = 0;
+  const totalCount = readyCount;
+  const readinessStatus: AdminMonthlyBillingGroupingReadinessStatus = "ready";
+
   const safeDraftContext = {
-    draft_summary: `${totalCount} saved completed trip${totalCount === 1 ? "" : "s"} grouped for monthly draft prep.`,
-    next_action:
-      blockedCount > 0
-        ? "Review blocked saved trips before manager approval."
-        : "Review saved group counts before manager approval.",
+    draft_summary: `${totalCount} ready unbilled completed trip${totalCount === 1 ? "" : "s"} grouped for monthly draft prep.`,
+    next_action: "Review ready unbilled saved trips before manager approval.",
     review_status: existingDraft
       ? "Saved draft prep refreshed from grouped data."
       : "Saved draft prep created from grouped data.",
@@ -11745,47 +11793,17 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
     },
     total_count: totalCount,
   };
-  const linkedTrips = existingDraft?.id
-    ? []
-    : (await loadAdminMonthlyInvoiceDraftTripCandidatesRead(group)).map((candidate) => ({
-        billing_prep_readiness: clean(candidate.billing_prep_readiness) || null,
-        booking_reference: clean(candidate.booking_reference),
-        closeout_id: clean(candidate.closeout_id) || null,
-        closeout_status: clean(candidate.closeout_status) || null,
-        safe_trip_context: candidate.safe_trip_context || {},
-        trip_readiness_status:
-          candidate.trip_readiness_status === "blocked" ? "blocked" : "ready",
-      })).filter((candidate) => Boolean(candidate.booking_reference));
-
-  if (!existingDraft?.id && linkedTrips.length === 0) {
-    throw new Error("Monthly invoice draft preparation requires saved trip references.");
-  }
-
-  const request =
-    existingDraft?.id
-      ? {
-          body: {
-            ...sharedPayload,
-            draft_id: existingDraft.id,
-          },
-          method: "PATCH",
-        }
-      : {
-          body: {
-            ...sharedPayload,
-            customer_id: clean(group.customer_id) || null,
-            linked_trips: linkedTrips,
-          },
-          method: "POST",
-        };
-
   const response = await fetch(adminMonthlyInvoiceDraftsApiPath, {
-    body: JSON.stringify(request.body),
+    body: JSON.stringify({
+      ...sharedPayload,
+      customer_id: clean(group.customer_id) || null,
+      linked_trips: linkedTrips,
+    }),
     headers: {
       "Content-Type": "application/json",
       "x-prestige-admin-purpose": adminLegacyDataPurpose,
     },
-    method: request.method,
+    method: "POST",
   });
   const result = await response.json().catch(() => null);
 
@@ -13624,6 +13642,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pagination: null,
       status: "idle",
     });
+  const [adminMonthlyBillingDashboardClassificationState, setAdminMonthlyBillingDashboardClassificationState] =
+    useState<AdminMonthlyBillingDashboardClassificationState>({
+      billingMonth: "",
+      groups: [],
+      message: "",
+      status: "idle",
+    });
   const [adminEmailAiIntakeReadState, setAdminEmailAiIntakeReadState] =
     useState<AdminEmailAiIntakeReadState>({
       enabled: false,
@@ -14258,6 +14283,75 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       cancelled = true;
     };
   }, [activeTab, adminAppNotificationReadRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const billingMonth = adminAppNotificationReadState.notifications
+      .map(adminAppNotificationMonthlyBillingMonth)
+      .find(Boolean) || "";
+
+    if (activeTab !== "dashboard" || !billingMonth) {
+      setAdminMonthlyBillingDashboardClassificationState({
+        billingMonth: "",
+        groups: [],
+        message: "",
+        status: "idle",
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAdminMonthlyBillingDashboardClassificationState({
+      billingMonth,
+      groups: [],
+      message: "Loading completed-job billing classifications...",
+      status: "loading",
+    });
+
+    void (async () => {
+      try {
+        const { groups, pagination } = await loadAdminMonthlyBillingGroupsRead({
+          billingMonth,
+          customerAccountSearch: "",
+          limit: 250,
+          page: 1,
+          readinessStatus: "all",
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (pagination?.has_next_page) {
+          throw new Error("Monthly billing classification group limit exceeded.");
+        }
+
+        setAdminMonthlyBillingDashboardClassificationState({
+          billingMonth,
+          groups,
+          message: "",
+          status: "loaded",
+        });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminMonthlyBillingDashboardClassificationState({
+          billingMonth,
+          groups: [],
+          message: "Completed-job classifications could not be read safely. No draft was changed.",
+          status: "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminAppNotificationReadState.notifications]);
 
   useEffect(() => {
     let cancelled = false;
@@ -31100,7 +31194,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const monthlyInvoiceDraftSaving = adminMonthlyInvoiceDraftAction === "save-draft-prep";
   const monthlyInvoiceDraftSaveDisabled =
     !monthlyBillingSavedGroupingPrimaryGroup ||
-    monthlyBillingSavedGroupingTotalTrips < 1 ||
+    monthlyBillingSavedGroupingReadyTripsCount < 1 ||
     monthlyBillingSavedGroupingLoading ||
     monthlyInvoiceDraftLoading ||
     monthlyInvoiceDraftSaving;
@@ -46034,6 +46128,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
 	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
 	                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
+                  const monthlyBillingMonth = adminAppNotificationMonthlyBillingMonth(notification);
+                  const monthlyBillingClassifications =
+                    monthlyBillingMonth &&
+                    adminMonthlyBillingDashboardClassificationState.billingMonth === monthlyBillingMonth
+                      ? adminMonthlyBillingDashboardClassificationState.groups.flatMap(
+                          (group) => group.jobs || [],
+                        )
+                      : [];
                   const isNewBookingRequestNotification =
                     clean(notification.workflow_area) === "new_booking_request" ||
                     clean(notification.safe_title).toLowerCase() === "new booking request";
@@ -46156,7 +46258,73 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                   ))}
                                 </dl>
                               ) : null}
-		                        </div>
+												{monthlyBillingMonth ? (
+                                <div
+                                  className="mt-2 space-y-1 rounded-md border border-sky-100 bg-sky-50/60 p-2"
+                                  data-admin-monthly-billing-dashboard-classifications="true"
+                                  data-admin-monthly-billing-dashboard-month={monthlyBillingMonth}
+                                >
+                                  <p className="text-xs font-semibold text-slate-800">
+                                    Completed jobs for {adminMonthlyBillingGroupingMonthLabel(monthlyBillingMonth)}
+                                  </p>
+                                  {adminMonthlyBillingDashboardClassificationState.status === "loading" ? (
+                                    <p className="text-xs text-slate-600">Loading classifications...</p>
+                                  ) : adminMonthlyBillingDashboardClassificationState.status === "error" ? (
+                                    <p className="text-xs font-medium text-rose-700">
+                                      {adminMonthlyBillingDashboardClassificationState.message}
+                                    </p>
+                                  ) : monthlyBillingClassifications.length > 0 ? (
+                                    <div className="grid gap-1" data-admin-monthly-billing-dashboard-classification-rows="true">
+                                      {monthlyBillingClassifications.map((job) => {
+                                        const status = job.safe_billing_status || "blocked";
+                                        const statusLabel =
+                                          status === "ready"
+                                            ? "Ready"
+                                            : status === "covered"
+                                              ? "Already invoiced"
+                                              : "Blocked";
+                                        const reference =
+                                          clean(job.display_booking_reference) ||
+                                          clean(job.booking_reference) ||
+                                          "Reference unavailable";
+
+                                        return (
+                                          <div
+                                            className="grid gap-1 rounded border border-sky-100 bg-white px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+                                            data-admin-monthly-billing-dashboard-classification-row={status}
+                                            key={`${clean(job.booking_reference)}-${status}`}
+                                          >
+                                            <div className="min-w-0">
+                                              <p className="break-words font-semibold text-slate-900">
+                                                {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
+                                              </p>
+                                              <p className="mt-0.5 break-words text-[11px] text-slate-600">
+                                                {clean(job.safe_reason) || "Billing review reason unavailable."}
+                                              </p>
+                                            </div>
+                                            <span
+                                              className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                                status === "ready"
+                                                  ? "bg-emerald-100 text-emerald-800"
+                                                  : status === "covered"
+                                                    ? "bg-slate-200 text-slate-800"
+                                                    : "bg-amber-100 text-amber-900"
+                                              }`}
+                                            >
+                                              {statusLabel}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-slate-600">
+                                      No completed jobs were classified for this billing month.
+                                    </p>
+                                  )}
+                                </div>
+                              ) : null}
+											</div>
 	                        <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
 	                          {notificationPriority}
                         </span>

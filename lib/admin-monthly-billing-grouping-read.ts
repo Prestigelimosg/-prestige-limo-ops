@@ -12,9 +12,20 @@ import {
 } from "./admin-booking-supabase-adapter";
 
 export const adminMonthlyBillingGroupingReadVersion =
-  "stage-4a-442-admin-monthly-billing-grouping-read-v2";
+  "stage-4a-443-admin-monthly-billing-classification-read-v3";
 
 export type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
+export type AdminMonthlyBillingJobStatus = "ready" | "covered" | "blocked";
+
+export type AdminMonthlyBillingJobClassification = {
+  billing_month: string;
+  booking_reference: string;
+  customer_account: string;
+  customer_id: string | null;
+  display_booking_reference: string;
+  safe_billing_status: AdminMonthlyBillingJobStatus;
+  safe_reason: string;
+};
 
 export type AdminMonthlyBillingGroupingReadParams = {
   billing_month: string | null;
@@ -25,10 +36,13 @@ export type AdminMonthlyBillingGroupingReadParams = {
 };
 
 export type AdminMonthlyBillingGroup = {
+  classified_count: number;
   billing_month: string;
   blocked_count: number;
+  covered_count: number;
   customer_account: string;
   customer_id: string | null;
+  jobs: AdminMonthlyBillingJobClassification[];
   ready_count: number;
   safe_readiness_status: AdminMonthlyBillingGroupingReadinessStatus;
   total_count: number;
@@ -36,6 +50,8 @@ export type AdminMonthlyBillingGroup = {
 
 export type AdminMonthlyBillingGroupingSummary = {
   blocked_count: number;
+  classified_count: number;
+  covered_count: number;
   group_count: number;
   ready_count: number;
   total_count: number;
@@ -63,7 +79,9 @@ type BillingCandidate = {
   bookingReference: string;
   customerAccount: string;
   customerId: string | null;
-  ready: boolean;
+  displayBookingReference: string;
+  safeBillingStatus: AdminMonthlyBillingJobStatus;
+  safeReason: string;
 };
 
 const defaultGroupingLimit = 25;
@@ -85,9 +103,11 @@ const safeMonthlyBillingGroupingReadError =
 const monthlyBillingCloseoutSelect =
   "booking_reference, closeout_status, completed_job_status, dsp_actual_hours_readiness, extra_charges_readiness, billing_prep_readiness, updated_at";
 const monthlyBillingCurrentBookingSelect =
-  "booking_reference, customer_id, customer_display_name, pickup_at, admin_internal_status";
+  "booking_reference, public_booking_reference, customer_id, customer_display_name, pickup_at, admin_internal_status";
 const monthlyBillingFoundationBookingSelect =
-  "booking_reference, customer_id, customer_display_name, pickup_datetime, admin_internal_status";
+  "booking_reference, public_booking_reference, customer_id, customer_display_name, pickup_datetime, admin_internal_status";
+const monthlyBillingIssuedRecordSelect =
+  "customer_id, reference, line_items, document_type, document_state";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const forbiddenSafeTextFragments = [
   "customer_price",
@@ -98,7 +118,6 @@ const forbiddenSafeTextFragments = [
   "paynow",
   "pay_now",
   "payout",
-  "invoice",
   "invoice_number",
   "payment",
   "payment_link",
@@ -518,15 +537,14 @@ function getServerOnlyMonthlyBillingGroupingSupabaseClient(
   }
 }
 
-async function loadBookingRowsWithFallback(
+async function loadCompletedBookingRowsWithFallback(
   client: SupabaseClient,
-  bookingReferences: string[],
 ): Promise<AdminBookingResult<UnknownRecord[]>> {
   const buildQuery = (selectedColumns: string) =>
     client
       .from("bookings")
       .select(selectedColumns)
-      .in("booking_reference", bookingReferences)
+      .eq("admin_internal_status", "completed")
       .limit(maxReadRows);
 
   const currentResult = await buildQuery(monthlyBillingCurrentBookingSelect);
@@ -552,6 +570,65 @@ async function loadBookingRowsWithFallback(
   };
 }
 
+function issuedRecordBookingReferences(row: UnknownRecord) {
+  if (
+    textOrNull(row.document_type) !== "invoice" ||
+    textOrNull(row.document_state) !== "issued"
+  ) {
+    return [];
+  }
+
+  return [
+    textOrNull(row.reference),
+    ...asArray(row.line_items).map((item) => textOrNull(asRecord(item).bookingReference)),
+  ].filter((reference): reference is string => Boolean(reference));
+}
+
+function issuedCoverageKey(customerId: string, bookingReference: string) {
+  return `${customerId}::${bookingReference}`;
+}
+
+async function loadIssuedCoverageKeys(
+  client: SupabaseClient,
+  customerIds: string[],
+): Promise<AdminBookingResult<Set<string>>> {
+  if (customerIds.length === 0) {
+    return {
+      data: new Set(),
+      ok: true,
+    };
+  }
+
+  const { data, error } = await client
+    .from("customer_invoice_records")
+    .select(monthlyBillingIssuedRecordSelect)
+    .in("customer_id", customerIds)
+    .limit(maxReadRows);
+
+  if (error) {
+    return safeAdapterFailure(safeMonthlyBillingGroupingReadError, 500, error);
+  }
+
+  const coverageKeys = new Set<string>();
+
+  for (const row of asArray(data).map(asRecord)) {
+    const customerId = safeCustomerId(row.customer_id);
+
+    if (!customerId) {
+      continue;
+    }
+
+    for (const reference of issuedRecordBookingReferences(row)) {
+      coverageKeys.add(issuedCoverageKey(customerId, reference));
+    }
+  }
+
+  return {
+    data: coverageKeys,
+    ok: true,
+  };
+}
+
 function closeoutIsReady(row: UnknownRecord) {
   const closeoutStatus = textOrNull(row.closeout_status);
   const completedJobStatus = textOrNull(row.completed_job_status);
@@ -568,31 +645,51 @@ function closeoutIsReady(row: UnknownRecord) {
   );
 }
 
-function closeoutCanEnterGrouping(row: UnknownRecord) {
-  return (
-    textOrNull(row.booking_reference) &&
-    (textOrNull(row.completed_job_status) === "completed" ||
-      textOrNull(row.closeout_status) === "ready_for_billing_prep" ||
-      textOrNull(row.closeout_status) === "closed")
-  );
-}
-
 function bookingCanEnterGrouping(row: UnknownRecord) {
   return textOrNull(row.admin_internal_status) === "completed";
 }
 
-function buildBillingCandidate(
-  closeoutRow: UnknownRecord,
-  bookingRow: UnknownRecord | undefined,
-): BillingCandidate | null {
-  if (!bookingRow) {
-    return null;
+function blockedReason(closeoutRow: UnknownRecord | undefined) {
+  if (!closeoutRow) {
+    return "Completed job closeout is missing.";
   }
 
-  const bookingReference = textOrNull(closeoutRow.booking_reference);
+  if (
+    !["completed", "completion_exception"].includes(
+      textOrNull(closeoutRow.completed_job_status) || "",
+    )
+  ) {
+    return "Completion evidence needs review.";
+  }
+
+  if (
+    !["ready", "not_applicable"].includes(
+      textOrNull(closeoutRow.dsp_actual_hours_readiness) || "",
+    )
+  ) {
+    return "DSP billing time needs review.";
+  }
+
+  if (
+    !["ready", "none"].includes(
+      textOrNull(closeoutRow.extra_charges_readiness) || "",
+    )
+  ) {
+    return "Extra charges need review.";
+  }
+
+  return "Completed job billing closeout needs review.";
+}
+
+function buildBillingCandidate(
+  bookingRow: UnknownRecord,
+  closeoutRow: UnknownRecord | undefined,
+  issuedCoverageKeys: Set<string>,
+): BillingCandidate | null {
+  const bookingReference = textOrNull(bookingRow.booking_reference);
   const billingMonth = billingMonthFromDate(bookingRow.pickup_at || bookingRow.pickup_datetime);
 
-  if (!bookingReference || !billingMonth || !closeoutCanEnterGrouping(closeoutRow)) {
+  if (!bookingReference || !billingMonth || !bookingCanEnterGrouping(bookingRow)) {
     return null;
   }
 
@@ -601,12 +698,33 @@ function buildBillingCandidate(
     "Customer/account to confirm",
   );
 
+  const customerId = safeCustomerId(bookingRow.customer_id);
+  const publicBookingReference = safeDisplayText(
+    bookingRow.public_booking_reference,
+    bookingReference,
+  );
+  const isCovered = Boolean(
+    customerId &&
+      [bookingReference, publicBookingReference].some((reference) =>
+        issuedCoverageKeys.has(issuedCoverageKey(customerId, reference)),
+      ),
+  );
+  const isReady = Boolean(customerId && closeoutRow && closeoutIsReady(closeoutRow));
+
   return {
     billingMonth,
     bookingReference,
     customerAccount,
-    customerId: safeCustomerId(bookingRow.customer_id),
-    ready: closeoutIsReady(closeoutRow) && bookingCanEnterGrouping(bookingRow),
+    customerId,
+    displayBookingReference: publicBookingReference,
+    safeBillingStatus: isCovered ? "covered" : isReady ? "ready" : "blocked",
+    safeReason: isCovered
+      ? "An issued customer bill already covers this booking."
+      : !customerId
+        ? "Customer identity is missing."
+        : isReady
+          ? "Ready and not covered by an issued customer bill."
+          : blockedReason(closeoutRow),
   };
 }
 
@@ -625,22 +743,38 @@ function groupCandidates(
     const group =
       groups.get(key) ||
       {
+        classified_count: 0,
         billing_month: candidate.billingMonth,
         blocked_count: 0,
+        covered_count: 0,
         customer_account: candidate.customerAccount,
         customer_id: candidate.customerId,
+        jobs: [],
         ready_count: 0,
         safe_readiness_status: "blocked" as AdminMonthlyBillingGroupingReadinessStatus,
         total_count: 0,
       };
 
-    if (candidate.ready) {
+    if (candidate.safeBillingStatus === "ready") {
       group.ready_count += 1;
-    } else {
+      group.total_count += 1;
+    } else if (candidate.safeBillingStatus === "blocked") {
       group.blocked_count += 1;
+      group.total_count += 1;
+    } else {
+      group.covered_count += 1;
     }
 
-    group.total_count += 1;
+    group.classified_count += 1;
+    group.jobs.push({
+      billing_month: candidate.billingMonth,
+      booking_reference: candidate.bookingReference,
+      customer_account: candidate.customerAccount,
+      customer_id: candidate.customerId,
+      display_booking_reference: candidate.displayBookingReference,
+      safe_billing_status: candidate.safeBillingStatus,
+      safe_reason: candidate.safeReason,
+    });
     group.safe_readiness_status =
       group.ready_count > 0 && group.blocked_count > 0
         ? "mixed"
@@ -648,6 +782,12 @@ function groupCandidates(
           ? "ready"
           : "blocked";
     groups.set(key, group);
+  }
+
+  for (const group of groups.values()) {
+    group.jobs.sort((first, second) =>
+      first.display_booking_reference.localeCompare(second.display_booking_reference),
+    );
   }
 
   return [...groups.values()]
@@ -704,12 +844,16 @@ function summarizeGroups(groups: AdminMonthlyBillingGroup[]): AdminMonthlyBillin
   return groups.reduce(
     (summary, group) => ({
       blocked_count: summary.blocked_count + group.blocked_count,
+      classified_count: summary.classified_count + group.classified_count,
+      covered_count: summary.covered_count + group.covered_count,
       group_count: summary.group_count + 1,
       ready_count: summary.ready_count + group.ready_count,
       total_count: summary.total_count + group.total_count,
     }),
     {
       blocked_count: 0,
+      classified_count: 0,
+      covered_count: 0,
       group_count: 0,
       ready_count: 0,
       total_count: 0,
@@ -733,21 +877,15 @@ export async function loadAdminMonthlyBillingGroups(
     return clientResult;
   }
 
-  const { data: closeoutRowsData, error: closeoutError } = await clientResult.data
-    .from("completed_booking_closeouts")
-    .select(monthlyBillingCloseoutSelect)
-    .limit(maxReadRows);
+  const bookingRowsResult = await loadCompletedBookingRowsWithFallback(clientResult.data);
 
-  if (closeoutError) {
-    return safeAdapterFailure(safeMonthlyBillingGroupingReadError, 500, closeoutError);
+  if (!bookingRowsResult.ok) {
+    return bookingRowsResult;
   }
 
-  const closeoutRows = asArray(closeoutRowsData).map(asRecord);
-  const bookingReferences = [
-    ...new Set(closeoutRows.map((row) => textOrNull(row.booking_reference)).filter(Boolean)),
-  ] as string[];
+  const completedBookingRows = bookingRowsResult.data.filter(bookingCanEnterGrouping);
 
-  if (bookingReferences.length === 0) {
+  if (completedBookingRows.length === 0) {
     const filteredGroups: AdminMonthlyBillingGroup[] = [];
 
     return {
@@ -761,25 +899,45 @@ export async function loadAdminMonthlyBillingGroups(
     };
   }
 
-  const bookingRowsResult = await loadBookingRowsWithFallback(
-    clientResult.data,
-    bookingReferences.slice(0, maxReadRows),
-  );
+  const bookingReferences = [
+    ...new Set(
+      completedBookingRows.map((row) => textOrNull(row.booking_reference)).filter(Boolean),
+    ),
+  ] as string[];
+  const { data: closeoutRowsData, error: closeoutError } = await clientResult.data
+    .from("completed_booking_closeouts")
+    .select(monthlyBillingCloseoutSelect)
+    .in("booking_reference", bookingReferences.slice(0, maxReadRows))
+    .limit(maxReadRows);
 
-  if (!bookingRowsResult.ok) {
-    return bookingRowsResult;
+  if (closeoutError) {
+    return safeAdapterFailure(safeMonthlyBillingGroupingReadError, 500, closeoutError);
   }
 
-  const bookingRowsByReference = new Map(
-    bookingRowsResult.data
+  const closeoutRowsByReference = new Map(
+    asArray(closeoutRowsData)
+      .map(asRecord)
       .map((row) => [textOrNull(row.booking_reference), row] as const)
       .filter((entry): entry is [string, UnknownRecord] => Boolean(entry[0])),
   );
-  const candidates = closeoutRows
-    .map((closeoutRow) =>
+  const customerIds = [
+    ...new Set(completedBookingRows.map((row) => safeCustomerId(row.customer_id)).filter(Boolean)),
+  ] as string[];
+  const issuedCoverageResult = await loadIssuedCoverageKeys(
+    clientResult.data,
+    customerIds.slice(0, maxReadRows),
+  );
+
+  if (!issuedCoverageResult.ok) {
+    return issuedCoverageResult;
+  }
+
+  const candidates = completedBookingRows
+    .map((bookingRow) =>
       buildBillingCandidate(
-        closeoutRow,
-        bookingRowsByReference.get(textOrNull(closeoutRow.booking_reference) || ""),
+        bookingRow,
+        closeoutRowsByReference.get(textOrNull(bookingRow.booking_reference) || ""),
+        issuedCoverageResult.data,
       ),
     )
     .filter((candidate): candidate is BillingCandidate => Boolean(candidate));

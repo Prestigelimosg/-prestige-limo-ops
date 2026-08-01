@@ -12,6 +12,8 @@ const groupingPath = "lib/admin-monthly-billing-grouping-read.ts";
 const candidatesPath = "lib/admin-monthly-invoice-draft-trip-candidates.ts";
 const draftsPath = "lib/admin-monthly-invoice-draft-persistence.ts";
 const notificationPath = "lib/admin-app-notification-persistence.ts";
+const notificationEventsPath = "lib/admin-app-notification-events.ts";
+const dashboardPath = "app/page.tsx";
 const vercelConfigPath = "vercel.json";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -148,6 +150,8 @@ function installRuntimeMock(overrides = {}) {
   const group = {
     billing_month: "2026-06",
     blocked_count: 0,
+    classified_count: 1,
+    covered_count: 0,
     customer_account: "Safe Customer",
     customer_id: "safe-customer-id",
     ready_count: 1,
@@ -193,6 +197,12 @@ function installRuntimeMock(overrides = {}) {
       data: {
         groups: [group],
         pagination: { has_next_page: false, total_group_count: 1 },
+        summary: {
+          blocked_count: 0,
+          classified_count: 1,
+          covered_count: 0,
+          ready_count: 1,
+        },
       },
       ok: true,
     },
@@ -219,6 +229,8 @@ const [
   candidates,
   drafts,
   notification,
+  notificationEvents,
+  dashboard,
   vercelConfig,
   ledger,
   preactivationSuite,
@@ -230,6 +242,8 @@ const [
   readFile(candidatesPath, "utf8"),
   readFile(draftsPath, "utf8"),
   readFile(notificationPath, "utf8"),
+  readFile(notificationEventsPath, "utf8"),
+  readFile(dashboardPath, "utf8"),
   readFile(vercelConfigPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
@@ -243,8 +257,10 @@ for (const fragment of [
   "createAdminMonthlyInvoiceDraftFromGroup",
   "createMonthlyInvoiceDraftAutomationSummaryAppEvent",
   "pending_admin_review",
-  "existingDraftKeys.has",
-  "candidateResult.data.summary.total_count !== group.total_count",
+  "existingDraftsByKey",
+  "candidateResult.data.summary.total_count !== group.ready_count",
+  "candidate.trip_readiness_status !== \"ready\"",
+  "sameReferences",
   "calendar_auto_write_enabled: false",
   "customer_driver_email_auto_send_enabled: false",
   "external_send: false",
@@ -267,6 +283,24 @@ assertIncludes(adapter, '"codex-monthly-invoice-automation-surface"');
 assertIncludes(adapter, 'actor_label: "Codex monthly invoice automation"');
 for (const source of [grouping, candidates, drafts, notification]) {
   assertIncludes(source, "isVerifiedCodexMonthlyInvoiceAutomationActor");
+}
+
+for (const fragment of [
+  "classified_count: classifiedCount",
+  "covered_count: coveredCount",
+  "ready_count: readyCount",
+]) {
+  assertIncludes(notificationEvents, fragment, `monthly classification notification ${fragment}`);
+}
+
+for (const fragment of [
+  'data-admin-monthly-billing-dashboard-classifications="true"',
+  "data-admin-monthly-billing-dashboard-classification-row={status}",
+  'status === "covered"',
+  '"Already invoiced"',
+  "loadAdminMonthlyBillingGroupsRead",
+]) {
+  assertIncludes(dashboard, fragment, `monthly classification Dashboard ${fragment}`);
 }
 
 const vercelConfigValue = JSON.parse(vercelConfig);
@@ -298,11 +332,11 @@ for (const phrase of [
   "08:00 Singapore time on the first calendar day of each month",
   "previous Singapore billing month",
   "Automation OFF or unavailable performs zero grouping, candidate, draft, or notification writes",
-  "skips any customer/month that already has a saved draft",
+  "refreshes an unlocked existing customer/month draft when its exact ready trip set changes",
   "`pending_admin_review`",
   "one consolidated internal admin-app notification",
-  "250 customer groups and 250 trip candidates per customer group",
-  "existing grouping reader examines at most 500 closeout rows",
+  "250 customer groups and 250 ready trip candidates per customer group",
+  "existing grouping reader examines at most 500 completed booking rows and 500 matching issued-document rows",
   "No customer/invoice page layout, invoice issue, invoice number, PDF, payment, payout, calendar, customer/driver message, or external send changed",
   "### Monthly Invoice Draft Production Scheduler Activation",
   "fresh random 64-character secret",
@@ -363,11 +397,27 @@ try {
   assert.equal(preparedMock.draftCreateCalls[0].input.draft_status, "pending_admin_review");
   assert.equal(preparedMock.draftCreateCalls[0].input.linked_trips.length, 1);
   assert.equal(preparedMock.notificationCalls.length, 1);
+  assert.deepEqual(preparedMock.notificationCalls[0].input, {
+    billingMonth: "2026-06",
+    blockedCount: 0,
+    classifiedCount: 1,
+    coveredCount: 0,
+    failedCount: 0,
+    preparedCount: 1,
+    readyCount: 1,
+    skippedExistingCount: 0,
+  });
 
   const existingMock = installRuntimeMock({
     draftReadResult: {
       data: {
-        invoice_drafts: [{ billing_month: "2026-06", customer_account: "Safe Customer" }],
+        invoice_drafts: [
+          {
+            billing_month: "2026-06",
+            customer_account: "Safe Customer",
+            linked_trips: [{ booking_reference: "SAFE-MONTHLY-001" }],
+          },
+        ],
         pagination: { has_next_page: false, total_draft_count: 1 },
       },
       ok: true,
@@ -378,9 +428,69 @@ try {
   });
   assert.equal(existing.reason, "no_work");
   assert.equal(existing.skipped_existing_count, 1);
-  assert.equal(existingMock.candidateCalls.length, 0);
+  assert.equal(existingMock.candidateCalls.length, 1);
   assert.equal(existingMock.draftCreateCalls.length, 0);
-  assert.equal(existingMock.notificationCalls.length, 0);
+  assert.equal(existingMock.notificationCalls.length, 1);
+
+  const refreshMock = installRuntimeMock({
+    draftReadResult: {
+      data: {
+        invoice_drafts: [
+          {
+            billing_month: "2026-06",
+            customer_account: "Safe Customer",
+            linked_trips: [],
+          },
+        ],
+        pagination: { has_next_page: false, total_draft_count: 1 },
+      },
+      ok: true,
+    },
+  });
+  const refreshed = await harness.helper.runCodexMonthlyInvoiceDraftAutoPreparation({
+    now: new Date("2026-07-01T00:00:00.000Z"),
+  });
+  assert.equal(refreshed.reason, "prepared");
+  assert.equal(refreshMock.draftCreateCalls.length, 1);
+  assert.deepEqual(
+    refreshMock.draftCreateCalls[0].input.linked_trips.map((trip) => trip.booking_reference),
+    ["SAFE-MONTHLY-001"],
+  );
+
+  const coveredOnlyMock = installRuntimeMock({
+    groupResult: {
+      data: {
+        groups: [
+          {
+            billing_month: "2026-06",
+            blocked_count: 0,
+            classified_count: 1,
+            covered_count: 1,
+            customer_account: "Covered Customer",
+            customer_id: "covered-customer-id",
+            ready_count: 0,
+            safe_readiness_status: "blocked",
+            total_count: 0,
+          },
+        ],
+        pagination: { has_next_page: false, total_group_count: 1 },
+        summary: {
+          blocked_count: 0,
+          classified_count: 1,
+          covered_count: 1,
+          ready_count: 0,
+        },
+      },
+      ok: true,
+    },
+  });
+  const coveredOnly = await harness.helper.runCodexMonthlyInvoiceDraftAutoPreparation({
+    now: new Date("2026-07-01T00:00:00.000Z"),
+  });
+  assert.equal(coveredOnly.reason, "no_work");
+  assert.equal(coveredOnlyMock.candidateCalls.length, 0);
+  assert.equal(coveredOnlyMock.draftCreateCalls.length, 0);
+  assert.equal(coveredOnlyMock.notificationCalls.length, 1);
 
   const mismatchMock = installRuntimeMock({
     candidateResult: {

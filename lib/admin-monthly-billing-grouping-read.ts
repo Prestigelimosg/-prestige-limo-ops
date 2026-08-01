@@ -12,7 +12,7 @@ import {
 } from "./admin-booking-supabase-adapter";
 
 export const adminMonthlyBillingGroupingReadVersion =
-  "stage-4a-443-admin-monthly-billing-classification-read-v3";
+  "stage-4a-444-admin-monthly-billing-dsp-time-validation-v4";
 
 export type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
 export type AdminMonthlyBillingJobStatus = "ready" | "covered" | "blocked";
@@ -83,6 +83,11 @@ type BillingCandidate = {
   safeBillingStatus: AdminMonthlyBillingJobStatus;
   safeReason: string;
 };
+type DspBillingIntervalEvidence = {
+  endedAtMs: number;
+  source: "admin_correction" | "automatic";
+  startedAtMs: number | null;
+};
 
 const defaultGroupingLimit = 25;
 const maxGroupingLimit = 250;
@@ -90,6 +95,7 @@ const maxGroupingPage = 1000;
 const maxReadRows = 500;
 const maxCustomerAccountSearchLength = 80;
 const maxSafeTextLength = 160;
+const maxDspBillingMinutes = 60 * 24 * 30;
 const disabledMonthlyBillingGroupingReadError =
   "Admin monthly billing grouping read is not enabled on this server.";
 const safeMonthlyBillingGroupingConfigError =
@@ -103,11 +109,17 @@ const safeMonthlyBillingGroupingReadError =
 const monthlyBillingCloseoutSelect =
   "booking_reference, closeout_status, completed_job_status, dsp_actual_hours_readiness, extra_charges_readiness, billing_prep_readiness, updated_at";
 const monthlyBillingCurrentBookingSelect =
-  "booking_reference, public_booking_reference, customer_id, customer_display_name, pickup_at, admin_internal_status";
+  "booking_reference, public_booking_reference, customer_id, customer_display_name, pickup_at, service_type, booking_type, admin_internal_status";
 const monthlyBillingFoundationBookingSelect =
-  "booking_reference, public_booking_reference, customer_id, customer_display_name, pickup_datetime, admin_internal_status";
+  "booking_reference, public_booking_reference, customer_id, customer_display_name, pickup_datetime, service_type, booking_type, admin_internal_status";
 const monthlyBillingIssuedRecordSelect =
   "customer_id, reference, line_items, document_type, document_state";
+const monthlyBillingDspCorrectionSelect =
+  "booking_reference, event_type, occurred_at, safe_event_note, safe_event_context, source_surface, actor_role, created_at";
+const monthlyBillingDspSummarySelect =
+  "booking_reference, dsp_ended_at, actual_time_status";
+const monthlyBillingDriverJcSelect =
+  "booking_reference, status_value, occurred_at";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const forbiddenSafeTextFragments = [
   "customer_price",
@@ -235,6 +247,222 @@ function billingMonthFromDate(value: unknown) {
   const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 
   return validBillingMonth(month);
+}
+
+function timestampMs(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  if (!cleaned || cleaned.length > 80) {
+    return null;
+  }
+
+  const parsed = new Date(cleaned).getTime();
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizedBookingServiceType(row: UnknownRecord) {
+  return (textOrNull(row.service_type) || textOrNull(row.booking_type) || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function bookingIsDsp(row: UnknownRecord) {
+  const normalized = normalizedBookingServiceType(row);
+
+  return (
+    normalized === "dsp" ||
+    normalized === "hourly" ||
+    normalized === "disposal" ||
+    normalized.includes("hourly") ||
+    normalized.includes("disposal")
+  );
+}
+
+function validDspDuration(startedAtMs: number, endedAtMs: number) {
+  const durationMinutes = Math.floor((endedAtMs - startedAtMs) / 60_000);
+
+  return durationMinutes > 0 && durationMinutes <= maxDspBillingMinutes;
+}
+
+function adminCorrectionEvidence(row: UnknownRecord) {
+  const context = asRecord(row.safe_event_context);
+  const startedAtMs = timestampMs(context.billing_started_at);
+  const endedAtMs = timestampMs(row.occurred_at);
+  const createdAtMs = timestampMs(row.created_at);
+  const reason = textOrNull(row.safe_event_note)?.replace(/\s+/g, " ").trim() || "";
+
+  if (
+    textOrNull(row.event_type) !== "dsp_end" ||
+    textOrNull(row.source_surface) !== "admin_api" ||
+    !["admin", "dispatcher"].includes(textOrNull(row.actor_role) || "") ||
+    textOrNull(context.actual_time_policy) !== "admin_billing_time_correction" ||
+    reason.length < 3 ||
+    reason.length > 500 ||
+    startedAtMs === null ||
+    endedAtMs === null ||
+    createdAtMs === null ||
+    !validDspDuration(startedAtMs, endedAtMs)
+  ) {
+    return null;
+  }
+
+  return {
+    createdAtMs,
+    evidence: {
+      endedAtMs,
+      source: "admin_correction" as const,
+      startedAtMs,
+    },
+  };
+}
+
+function latestAutomaticDspEndByReference(rows: UnknownRecord[]) {
+  const latest = new Map<string, number>();
+
+  for (const row of rows) {
+    const bookingReference = textOrNull(row.booking_reference);
+    const endedAtMs = timestampMs(row.dsp_ended_at || row.occurred_at);
+
+    if (!bookingReference || endedAtMs === null) {
+      continue;
+    }
+
+    const current = latest.get(bookingReference);
+
+    if (current === undefined || endedAtMs > current) {
+      latest.set(bookingReference, endedAtMs);
+    }
+  }
+
+  return latest;
+}
+
+async function loadDspBillingIntervalEvidence(
+  client: SupabaseClient,
+  bookingRows: UnknownRecord[],
+): Promise<AdminBookingResult<Map<string, DspBillingIntervalEvidence>>> {
+  const dspBookingReferences = [
+    ...new Set(
+      bookingRows
+        .filter(bookingIsDsp)
+        .map((row) => textOrNull(row.booking_reference))
+        .filter(Boolean),
+    ),
+  ].slice(0, maxReadRows) as string[];
+
+  if (dspBookingReferences.length === 0) {
+    return {
+      data: new Map(),
+      ok: true,
+    };
+  }
+
+  const [correctionResult, summaryResult, driverJcResult] = await Promise.all([
+    client
+      .from("driver_job_dsp_actual_time_events")
+      .select(monthlyBillingDspCorrectionSelect)
+      .in("booking_reference", dspBookingReferences)
+      .eq("event_type", "dsp_end")
+      .eq("source_surface", "admin_api")
+      .in("actor_role", ["admin", "dispatcher"])
+      .limit(maxReadRows),
+    client
+      .from("driver_job_dsp_actual_time_summaries")
+      .select(monthlyBillingDspSummarySelect)
+      .in("booking_reference", dspBookingReferences)
+      .eq("actual_time_status", "complete")
+      .limit(maxReadRows),
+    client
+      .from("driver_job_status_events")
+      .select(monthlyBillingDriverJcSelect)
+      .in("booking_reference", dspBookingReferences)
+      .eq("status_value", "completed")
+      .limit(maxReadRows),
+  ]);
+
+  const firstError = correctionResult.error || summaryResult.error || driverJcResult.error;
+
+  if (firstError) {
+    return safeAdapterFailure(safeMonthlyBillingGroupingReadError, 500, firstError);
+  }
+
+  const correctionByReference = new Map<
+    string,
+    { createdAtMs: number; evidence: DspBillingIntervalEvidence }
+  >();
+
+  for (const row of asArray(correctionResult.data).map(asRecord)) {
+    const bookingReference = textOrNull(row.booking_reference);
+    const correction = adminCorrectionEvidence(row);
+
+    if (!bookingReference || !correction) {
+      continue;
+    }
+
+    const current = correctionByReference.get(bookingReference);
+
+    if (!current || correction.createdAtMs > current.createdAtMs) {
+      correctionByReference.set(bookingReference, correction);
+    }
+  }
+
+  const summaryEnds = latestAutomaticDspEndByReference(
+    asArray(summaryResult.data).map(asRecord),
+  );
+  const persistedDriverJcEnds = latestAutomaticDspEndByReference(
+    asArray(driverJcResult.data).map(asRecord),
+  );
+  const evidenceByReference = new Map<string, DspBillingIntervalEvidence>();
+
+  for (const bookingReference of dspBookingReferences) {
+    const correction = correctionByReference.get(bookingReference);
+
+    if (correction) {
+      evidenceByReference.set(bookingReference, correction.evidence);
+      continue;
+    }
+
+    const endedAtMs = summaryEnds.get(bookingReference) ?? persistedDriverJcEnds.get(bookingReference);
+
+    if (endedAtMs !== undefined) {
+      evidenceByReference.set(bookingReference, {
+        endedAtMs,
+        source: "automatic",
+        startedAtMs: null,
+      });
+    }
+  }
+
+  return {
+    data: evidenceByReference,
+    ok: true,
+  };
+}
+
+function dspBillingIntervalIsReady(
+  bookingRow: UnknownRecord,
+  evidence: DspBillingIntervalEvidence | undefined,
+) {
+  if (!bookingIsDsp(bookingRow)) {
+    return true;
+  }
+
+  if (!evidence) {
+    return false;
+  }
+
+  if (evidence.source === "admin_correction") {
+    return (
+      evidence.startedAtMs !== null &&
+      validDspDuration(evidence.startedAtMs, evidence.endedAtMs)
+    );
+  }
+
+  const pickupAtMs = timestampMs(bookingRow.pickup_at || bookingRow.pickup_datetime);
+
+  return pickupAtMs !== null && validDspDuration(pickupAtMs, evidence.endedAtMs);
 }
 
 function positiveInteger(value: unknown, defaultValue: number, maxValue: number) {
@@ -685,6 +913,7 @@ function buildBillingCandidate(
   bookingRow: UnknownRecord,
   closeoutRow: UnknownRecord | undefined,
   issuedCoverageKeys: Set<string>,
+  dspBillingIntervalEvidence: DspBillingIntervalEvidence | undefined,
 ): BillingCandidate | null {
   const bookingReference = textOrNull(bookingRow.booking_reference);
   const billingMonth = billingMonthFromDate(bookingRow.pickup_at || bookingRow.pickup_datetime);
@@ -709,7 +938,16 @@ function buildBillingCandidate(
         issuedCoverageKeys.has(issuedCoverageKey(customerId, reference)),
       ),
   );
-  const isReady = Boolean(customerId && closeoutRow && closeoutIsReady(closeoutRow));
+  const dspBillingTimeReady = dspBillingIntervalIsReady(
+    bookingRow,
+    dspBillingIntervalEvidence,
+  );
+  const isReady = Boolean(
+    customerId &&
+    closeoutRow &&
+    closeoutIsReady(closeoutRow) &&
+    dspBillingTimeReady
+  );
 
   return {
     billingMonth,
@@ -724,6 +962,8 @@ function buildBillingCandidate(
         ? "Customer identity is missing."
         : isReady
           ? "Ready and not covered by an issued customer bill."
+          : bookingIsDsp(bookingRow) && !dspBillingTimeReady
+            ? "DSP billing time needs review."
           : blockedReason(closeoutRow),
   };
 }
@@ -932,12 +1172,22 @@ export async function loadAdminMonthlyBillingGroups(
     return issuedCoverageResult;
   }
 
+  const dspBillingIntervalResult = await loadDspBillingIntervalEvidence(
+    clientResult.data,
+    completedBookingRows,
+  );
+
+  if (!dspBillingIntervalResult.ok) {
+    return dspBillingIntervalResult;
+  }
+
   const candidates = completedBookingRows
     .map((bookingRow) =>
       buildBillingCandidate(
         bookingRow,
         closeoutRowsByReference.get(textOrNull(bookingRow.booking_reference) || ""),
         issuedCoverageResult.data,
+        dspBillingIntervalResult.data.get(textOrNull(bookingRow.booking_reference) || ""),
       ),
     )
     .filter((candidate): candidate is BillingCandidate => Boolean(candidate));

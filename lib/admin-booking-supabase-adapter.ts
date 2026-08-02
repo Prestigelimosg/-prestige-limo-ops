@@ -1213,7 +1213,7 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
   };
 }
 
-function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<SupabaseClient> {
+export function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<SupabaseClient> {
   const actorResult = validateActor(actor);
 
   if (!actorResult.ok) {

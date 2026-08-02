@@ -7,6 +7,9 @@ import { resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-au
 export const dynamic = "force-dynamic";
 
 const adminBookingPreviewPurpose = "admin-booking-preview";
+const bookingPreviewConfirmedHeader = "x-prestige-booking-preview-confirmed";
+const bookingConfirmationTokenHeader = "x-prestige-booking-confirmation-token";
+const bookingConfirmationExpiryHeader = "x-prestige-booking-confirmation-expires-at";
 
 function issue(
   code: string,
@@ -25,6 +28,7 @@ function safeResponse(
   validationIssues: ChatGptBookingPreviewValidationIssue[],
   missingRequiredFields: string[],
   status: number,
+  headers: HeadersInit = {},
 ) {
   return Response.json(
     {
@@ -32,7 +36,13 @@ function safeResponse(
       validation_issues: validationIssues,
       missing_required_fields: missingRequiredFields,
     },
-    { status },
+    {
+      headers: {
+        "cache-control": "no-store",
+        ...Object.fromEntries(new Headers(headers).entries()),
+      },
+      status,
+    },
   );
 }
 
@@ -59,7 +69,47 @@ export async function POST(request: Request) {
   }
 
   try {
-    const normalized = normalizeChatGptBookingPreview(await readJsonBody(request));
+    const previewInput = await readJsonBody(request);
+    const normalized = normalizeChatGptBookingPreview(previewInput);
+
+    if (
+      normalized.ok &&
+      normalized.canonical_payload &&
+      normalized.preview &&
+      request.headers.get(bookingPreviewConfirmedHeader) === "true"
+    ) {
+      const { issueAdminBookingConfirmationToken } = await import(
+        "../../../lib/admin-booking-confirmation"
+      );
+      const confirmation = issueAdminBookingConfirmationToken(
+        normalized.canonical_payload,
+        normalized.preview,
+        previewInput,
+      );
+
+      if (!confirmation.ok) {
+        return safeResponse(
+          normalized.preview,
+          [
+            ...normalized.validation_issues,
+            issue(confirmation.code, confirmation.message),
+          ],
+          [],
+          503,
+        );
+      }
+
+      return safeResponse(
+        normalized.preview,
+        normalized.validation_issues,
+        [],
+        200,
+        {
+          [bookingConfirmationExpiryHeader]: confirmation.expires_at,
+          [bookingConfirmationTokenHeader]: confirmation.token,
+        },
+      );
+    }
 
     return safeResponse(
       normalized.preview,

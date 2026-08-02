@@ -28346,7 +28346,7 @@ export default function Home() {
       </div>
       {dayOfTripActiveJobVisibleBookings.length > 0 ? (
         <div className={`mt-3 grid gap-2 ${dayOfTripActiveJobGridClass}`}>
-          {dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
+          {dayOfTripActiveJobVisibleBookings.map((activeJobBooking, activeJobIndex) => {
             const activeJobBookingReference = getActiveJobBookingReference(activeJobBooking);
             const isSelectedActiveJob =
               Boolean(activeJobBookingReference) &&
@@ -28492,17 +28492,21 @@ export default function Home() {
             );
             const activeJobPickupApproachEvidence =
               adminPickupApproachEvidenceByReference[activeJobBookingReference] || null;
+            const activeJobAlternateColour = activeJobIndex % 2 === 0 ? "sky" : "violet";
+            const activeJobAlternateCardClass =
+              activeJobAlternateColour === "sky"
+                ? `${isSelectedActiveJob ? "border-lime-400" : "border-sky-300"} bg-sky-50/80`
+                : `${isSelectedActiveJob ? "border-lime-400" : "border-violet-300"} bg-violet-50/80`;
             const activeJobCardStateClass = adminPickupRiskMonitorEnabled
               ? adminPickupRiskCardClass(activeJobPickupRiskState.level)
-              : isSelectedActiveJob
-                ? "border-lime-400 bg-white"
-                : "border-lime-100 bg-white";
+              : activeJobAlternateCardClass;
 
             return (
               <article
-                className={`min-w-0 rounded-md border px-2.5 py-2 text-sm ${
+                className={`min-w-0 rounded-md border-2 px-2.5 py-2 text-sm shadow-sm ${
                   activeJobCardStateClass
                 } ${activeJobPickupRiskState.pulse ? "animate-pulse" : ""}`}
+                data-admin-active-job-alternate-colour={activeJobAlternateColour}
                 data-admin-multi-driver-active-job={
                   activeJobBookingReference || activeJobKey
                 }

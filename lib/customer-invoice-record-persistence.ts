@@ -67,6 +67,7 @@ export type CustomerInvoiceCreateInput = {
   documentState?: unknown;
   documentType?: unknown;
   dueDateIso?: unknown;
+  guestAccountBillingEnabled?: unknown;
   lineItems?: unknown;
   originalInvoiceNumber?: unknown;
   reference?: unknown;
@@ -517,6 +518,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
   documentState: CustomerBillingDocumentState;
   documentType: CustomerBillingDocumentType;
   dueDate: Date;
+  guestAccountBillingEnabled: boolean;
   lineItems: CustomerLocalInvoiceLineItem[];
   originalInvoiceNumber: string | null;
   reference: string;
@@ -582,6 +584,7 @@ function sanitizeCreateInput(input: CustomerInvoiceCreateInput): CustomerInvoice
       documentState,
       documentType,
       dueDate,
+      guestAccountBillingEnabled: input.guestAccountBillingEnabled === true,
       lineItems,
       originalInvoiceNumber,
       reference,
@@ -622,12 +625,20 @@ async function verifyIssuedInvoiceBookingOwnership(
     bookerId: number | null;
     bookingReference: string | null;
     customerId: string;
+    guestAccountBillingEnabled: boolean;
     lineItems: CustomerLocalInvoiceLineItem[];
     travelerId: number | null;
   },
   invoiceClient: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<true>> {
-  if (!input.bookerId || !input.bookingReference || !input.travelerId) {
+  if (!input.bookingReference) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const hasVerifiedIdentity = Boolean(input.bookerId && input.travelerId);
+  const hasPartialVerifiedIdentity = Boolean(input.bookerId) !== Boolean(input.travelerId);
+
+  if (hasPartialVerifiedIdentity || (!hasVerifiedIdentity && !input.guestAccountBillingEnabled)) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -645,13 +656,33 @@ async function verifyIssuedInvoiceBookingOwnership(
     return safeFailure("Selected jobs are not ready for billing.", 409);
   }
 
-  const { data: ownedBookings, error: ownedBookingsError } = await invoiceClient
+  if (!hasVerifiedIdentity) {
+    const { data: guestCustomer, error: guestCustomerError } = await invoiceClient
+      .from("customers")
+      .select("id, customer_type")
+      .eq("id", input.customerId)
+      .eq("customer_type", "hotel")
+      .single();
+    const verifiedCustomerId = safeText(asRecord(guestCustomer).id, 160);
+
+    if (guestCustomerError || verifiedCustomerId !== input.customerId) {
+      return safeFailure(safeValidationError, 403);
+    }
+  }
+
+  let ownedBookingsQuery = invoiceClient
     .from("bookings")
     .select("booking_reference, traveler_id")
     .in("booking_reference", bookingReferences)
-    .eq("customer_id", input.customerId)
-    .eq("booker_id", input.bookerId)
-    .eq("traveler_id", input.travelerId);
+    .eq("customer_id", input.customerId);
+
+  if (hasVerifiedIdentity) {
+    ownedBookingsQuery = ownedBookingsQuery
+      .eq("booker_id", input.bookerId)
+      .eq("traveler_id", input.travelerId);
+  }
+
+  const { data: ownedBookings, error: ownedBookingsError } = await ownedBookingsQuery;
   const ownedBookingReferences = new Set(
     asArray(ownedBookings)
       .map((row) => safeText(asRecord(row).booking_reference, 160))

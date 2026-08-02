@@ -18,6 +18,7 @@ import { formatSingaporePickupDisplay } from "../../../lib/singapore-pickup-disp
 
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
+const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
   "/api/admin-company-traveler-crm-runtime-write-action";
@@ -69,9 +70,10 @@ type CustomerFolderIssuedInvoiceRecord = {
 
 type CustomerFolderTravelerInvoiceGroup = {
   bookings: CustomerFolderSavedBookingRecord[];
-  bookerId: number;
+  bookerId: number | null;
+  guestAccountBillingEnabled: boolean;
   passengerName: string;
-  travelerId: number;
+  travelerId: number | null;
 };
 
 type CustomerFolderRateSetup = Omit<CustomerInvoiceRateSetupRecord, "companies" | "travelers"> & {
@@ -528,6 +530,7 @@ function customerFolderInvoiceHref(
   customerName: string,
   selectedBookings: CustomerFolderSavedBookingRecord[],
   reviews: CustomerFolderBillingReviews,
+  guestAccountBillingEnabled = false,
 ) {
   const baseHref = customerWorkspaceHref(booking, customerId, customerName, "open");
   const references = selectedBookings
@@ -541,7 +544,7 @@ function customerFolderInvoiceHref(
   const travelerId = Number(selectedBookings[0]?.traveler_id);
   const bookerId = Number(selectedBookings[0]?.booker_id);
 
-  if (
+  if (!guestAccountBillingEnabled && (
     !Number.isInteger(travelerId) ||
     travelerId <= 0 ||
     !Number.isInteger(bookerId) ||
@@ -551,7 +554,7 @@ function customerFolderInvoiceHref(
         Number(selectedBooking.traveler_id) !== travelerId ||
         Number(selectedBooking.booker_id) !== bookerId,
     )
-  ) {
+  )) {
     return "";
   }
 
@@ -562,6 +565,9 @@ function customerFolderInvoiceHref(
   const params = new URLSearchParams(baseHref.split("?")[1] || "");
 
   params.set("customer_invoice_action", "create");
+  if (guestAccountBillingEnabled) {
+    params.set("guest_account_billing", "1");
+  }
   params.set("selected_booking_references", references.join(","));
   params.set(
     customerFolderSelectedPriceReviewsParam,
@@ -573,7 +579,21 @@ function customerFolderInvoiceHref(
 
 function customerFolderTravelerInvoiceGroups(
   bookings: CustomerFolderSavedBookingRecord[],
+  guestAccountBillingEnabled = false,
 ): { error: string; groups: CustomerFolderTravelerInvoiceGroup[] } {
+  if (guestAccountBillingEnabled && bookings.length > 0) {
+    return {
+      error: "",
+      groups: [{
+        bookings,
+        bookerId: null,
+        guestAccountBillingEnabled: true,
+        passengerName: "customer account",
+        travelerId: null,
+      }],
+    };
+  }
+
   const groups = new Map<number, CustomerFolderTravelerInvoiceGroup>();
 
   for (const booking of bookings) {
@@ -605,6 +625,7 @@ function customerFolderTravelerInvoiceGroups(
     groups.set(travelerId, {
       bookings: [...(current?.bookings || []), booking],
       bookerId,
+      guestAccountBillingEnabled: false,
       passengerName: current?.passengerName || passengerName,
       travelerId,
     });
@@ -797,6 +818,7 @@ export function CustomerFolderSavedBookingsPanel({
   const [priceDraft, setPriceDraft] = useState("");
   const [expandedSavedBookingReference, setExpandedSavedBookingReference] = useState("");
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
+  const [guestAccountBillingEnabled, setGuestAccountBillingEnabled] = useState(false);
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
     issuedInvoiceBookingReferences: [],
     message: initialMessage(customerName),
@@ -1029,7 +1051,8 @@ export function CustomerFolderSavedBookingsPanel({
       if (focusBookingReference) {
         params.set("booking_reference", focusBookingReference);
       }
-      const [response, invoiceResponse] = await Promise.all([
+      const accountParams = new URLSearchParams({ customer_id: customerId, limit: "1" });
+      const [response, invoiceResponse, accountResponse] = await Promise.all([
         fetch(`${adminCustomerSavedBookingsApiPath}?${params.toString()}`, {
           headers: {
             "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -1043,9 +1066,17 @@ export function CustomerFolderSavedBookingsPanel({
           },
           method: "GET",
         }),
+        fetch(`${adminCustomerAccountsApiPath}?${accountParams.toString()}`, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "GET",
+        }),
       ]);
       const result = await response.json().catch(() => null);
       const invoiceResult = await invoiceResponse.json().catch(() => null);
+      const accountResult = await accountResponse.json().catch(() => null);
 
       if (!response.ok || !result?.ok) {
         throw new Error(result?.error || "Saved booking read could not be completed.");
@@ -1058,6 +1089,18 @@ export function CustomerFolderSavedBookingsPanel({
       ) {
         throw new Error("Customer invoice coverage could not be verified.");
       }
+
+      const exactAccount = Array.isArray(accountResult?.accounts) ? accountResult.accounts[0] : null;
+
+      if (
+        !accountResponse.ok ||
+        !accountResult?.ok ||
+        String(exactAccount?.customer_id || "") !== customerId
+      ) {
+        throw new Error("Customer account classification could not be verified.");
+      }
+
+      setGuestAccountBillingEnabled(exactAccount.guest_account_billing_enabled === true);
 
       const savedBookings = Array.isArray(result.saved_bookings)
         ? (result.saved_bookings as CustomerFolderSavedBookingRecord[])
@@ -1144,6 +1187,27 @@ export function CustomerFolderSavedBookingsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    function handleGuestAccountBillingUpdate(event: Event) {
+      const detail = (event as CustomEvent<{ customerId?: string; enabled?: boolean }>).detail;
+
+      if (detail?.customerId === customerId && typeof detail.enabled === "boolean") {
+        setGuestAccountBillingEnabled(detail.enabled);
+      }
+    }
+
+    window.addEventListener(
+      "prestige:customer-guest-account-billing-updated",
+      handleGuestAccountBillingUpdate,
+    );
+
+    return () =>
+      window.removeEventListener(
+        "prestige:customer-guest-account-billing-updated",
+        handleGuestAccountBillingUpdate,
+      );
+  }, [customerId]);
+
   const issuedInvoiceReferenceSet = new Set(
     readState.issuedInvoiceBookingReferences,
   );
@@ -1157,7 +1221,10 @@ export function CustomerFolderSavedBookingsPanel({
 
     return reference && selectedReferences[reference];
   });
-  const selectedTravelerInvoiceGrouping = customerFolderTravelerInvoiceGroups(selectedUnbilledBookings);
+  const selectedTravelerInvoiceGrouping = customerFolderTravelerInvoiceGroups(
+    selectedUnbilledBookings,
+    guestAccountBillingEnabled,
+  );
   const selectedTravelerInvoiceGroups = selectedTravelerInvoiceGrouping.groups.map((group) => ({
     ...group,
     href: customerFolderInvoiceHref(
@@ -1166,6 +1233,7 @@ export function CustomerFolderSavedBookingsPanel({
       customerName,
       group.bookings,
       billingReviews,
+      group.guestAccountBillingEnabled,
     ),
   }));
   const selectedPricesReviewed =
@@ -2644,27 +2712,43 @@ export function CustomerFolderSavedBookingsPanel({
                       data-customer-folder-create-invoice-selected="true"
                       data-customer-folder-traveler-invoice-group="true"
                       href={group.href}
-                      key={group.travelerId}
+                      key={group.guestAccountBillingEnabled ? "guest-account" : group.travelerId}
                     >
                       Load {group.passengerName} invoice
                     </Link>
                   ))}
                 </div>
               ) : (
-                <button
-                  className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-400"
-                  data-customer-folder-create-invoice-selected-disabled="true"
-                  disabled
-                  type="button"
-                >
-                  {selectedUnbilledBookings.length === 0
-                    ? "Select jobs first"
-                    : selectedTravelerInvoiceGrouping.error
-                      ? selectedTravelerInvoiceGrouping.error
-                    : !selectedPublicReferencesReady
-                      ? "Public reference required"
-                      : "Customer price required"}
-                </button>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-400"
+                    data-customer-folder-create-invoice-selected-disabled="true"
+                    disabled
+                    type="button"
+                  >
+                    {selectedUnbilledBookings.length === 0
+                      ? "Select jobs first"
+                      : selectedTravelerInvoiceGrouping.error
+                        ? selectedTravelerInvoiceGrouping.error
+                      : !selectedPublicReferencesReady
+                        ? "Public reference required"
+                        : "Customer price required"}
+                  </button>
+                  {selectedTravelerInvoiceGrouping.error && selectedUnbilledBookings.length === 1 ? (
+                    <button
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-2.5 text-[11px] font-bold text-white hover:bg-sky-700"
+                      data-customer-folder-blocked-proceed="true"
+                      onClick={() =>
+                        void openInlineBookingEditor(selectedUnbilledBookings[0], {
+                          surface: "invoice-review",
+                        })
+                      }
+                      type="button"
+                    >
+                      Proceed for this booking
+                    </button>
+                  ) : null}
+                </div>
               )}
             </div>
             {selectedUnbilledBookings.length > 0 ? (

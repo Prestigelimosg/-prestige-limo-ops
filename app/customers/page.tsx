@@ -463,6 +463,7 @@ type PlainInvoiceForm = {
   crmCustomerId: string;
   crmCustomerName: string;
   dueDateIso: string;
+  guestAccountBillingEnabled: boolean;
   isPaid: boolean;
   lineItems: PlainInvoiceAdditionalLineItem[];
   lineDescription: string;
@@ -1128,6 +1129,7 @@ function plainInvoiceInitialForm(): PlainInvoiceForm {
     crmCustomerId: "",
     crmCustomerName: "",
     dueDateIso: invoiceDateInputDaysFromNow(7),
+    guestAccountBillingEnabled: false,
     isPaid: false,
     lineItems: [],
     lineDescription: "",
@@ -5030,6 +5032,7 @@ export default function MockCustomerDashboardPage() {
     invoiceAction = "",
     selectedBookingReferences = "",
     selectedBookingPriceReviews = "",
+    guestAccountBillingEnabled = false,
   ) {
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
@@ -5280,15 +5283,14 @@ export default function MockCustomerDashboardPage() {
             );
             if (
               mismatchedCustomer ||
-              mismatchedBooker ||
-              mismatchedTraveler ||
-              !exactTravelerId ||
+              (!guestAccountBillingEnabled &&
+                (mismatchedBooker || mismatchedTraveler || !exactBookerId || !exactTravelerId)) ||
               missingPublicReference ||
               !firstInvoiceRow
             ) {
               const selectedJobBlockDetail = missingPublicReference
                 ? "Selected, but its saved five-digit public reference is missing. Repair that reference before billing."
-                : mismatchedTraveler || !exactTravelerId
+                : !guestAccountBillingEnabled && (mismatchedTraveler || !exactTravelerId)
                   ? "Selected, but the selected jobs do not share one verified traveller."
                   : "Selected, but the selected jobs do not share one verified customer and PA / booker.";
               setSelectedJobInvoiceHandoffLines((current) =>
@@ -5301,7 +5303,7 @@ export default function MockCustomerDashboardPage() {
               setPlainInvoiceFeedback(
                 missingPublicReference
                   ? "A selected job has no saved public booking reference. Repair its five-digit reference before invoice preparation."
-                  : mismatchedTraveler || !exactTravelerId
+                  : !guestAccountBillingEnabled && (mismatchedTraveler || !exactTravelerId)
                     ? "The selected jobs do not share one verified traveller. Issue and Email are blocked."
                   : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
               );
@@ -5309,7 +5311,7 @@ export default function MockCustomerDashboardPage() {
               return;
             }
 
-            const cardOptionDefaultEnabled = mismatchedCompany
+            const cardOptionDefaultEnabled = mismatchedCompany || guestAccountBillingEnabled
               ? false
               : await readCustomerInvoiceCardOptionDefault(
                   exactCompanyId,
@@ -5322,11 +5324,12 @@ export default function MockCustomerDashboardPage() {
                 : "",
               billToEmail: exactRecipientEmails.length === 1 ? exactRecipientEmails[0] : "",
               billToName: exactCustomerName,
-              bookerId: exactBookerId,
+              bookerId: guestAccountBillingEnabled ? null : exactBookerId,
               bookingReference: firstInvoiceRow.bookingReference,
               cardPaymentEnabled: cardOptionDefaultEnabled,
               crmCustomerId: exactCustomerId,
               crmCustomerName: exactCustomerName,
+              guestAccountBillingEnabled,
               lineDescription: firstInvoiceRow.lineDescription,
               quantity: "1",
               recipientEmails: exactRecipientEmails,
@@ -5347,16 +5350,18 @@ export default function MockCustomerDashboardPage() {
                 invoiceRows.length === 1
                   ? firstInvoiceRow.service
                   : `Selected customer jobs (${invoiceRows.length})`,
-              travelerId: exactTravelerId,
+              travelerId: guestAccountBillingEnabled ? null : exactTravelerId,
             };
 
             setPlainInvoiceSavedBookings(targetBookings);
             setSelectedJobInvoiceHandoffLines(
               invoiceRows.map((row) => ({
                 bookingReference: row.bookingReference,
-                detail: exactBookerId
-                  ? "Loaded as an exact line in the final invoice review."
-                  : "Loaded in the final invoice review; a verified PA / booker is still required before Send or PDF Download.",
+                detail: guestAccountBillingEnabled
+                  ? "Loaded for the verified Hotel / Tour Agency customer account."
+                  : exactBookerId
+                    ? "Loaded as an exact line in the final invoice review."
+                    : "Loaded in the final invoice review; a verified PA / booker is still required before Send or PDF Download.",
                 publicReference: row.publicReference,
                 status: "Loaded",
               })),
@@ -5365,7 +5370,7 @@ export default function MockCustomerDashboardPage() {
             void loadPlainInvoiceRecipientOptions(exactCustomerName, exactRecipientEmails);
             setPlainInvoicePreview(plainInvoicePreviewFromForm(nextPlainInvoiceForm));
 
-            if (!exactBookerId) {
+            if (!guestAccountBillingEnabled && !exactBookerId) {
               setPlainInvoiceFeedback(
                 "The selected jobs are shown for review but do not have one verified PA / booker. Send and PDF Download remain blocked.",
               );
@@ -5377,7 +5382,9 @@ export default function MockCustomerDashboardPage() {
             }
 
             setPlainInvoiceFeedback(
-              `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA and their reviewed customer prices. Use Edit for any final adjustment; Send and PDF Download stay blocked until the compact review is current.`,
+              guestAccountBillingEnabled
+                ? `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded for the verified Hotel / Tour Agency customer account with reviewed customer prices. Use Edit for any final adjustment.`
+                : `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA and their reviewed customer prices. Use Edit for any final adjustment; Send and PDF Download stay blocked until the compact review is current.`,
             );
             setPlainInvoiceFeedbackTone("success");
             window.setTimeout(() => {
@@ -5442,6 +5449,7 @@ export default function MockCustomerDashboardPage() {
     ).slice(0, 1000);
     const requestedAction = searchParams.get("customer_job_action");
     const invoiceAction = cleanCustomerFolderText(searchParams.get("customer_invoice_action"), 40);
+    const guestAccountBillingEnabled = searchParams.get("guest_account_billing") === "1";
     const action = requestedAction === "delete" ? "delete" : requestedAction === "edit" ? "edit" : "open";
 
     if (!customerId || !customerName) {
@@ -5456,6 +5464,7 @@ export default function MockCustomerDashboardPage() {
       selectedBookingPriceReviews,
       action,
       invoiceAction,
+      guestAccountBillingEnabled ? "guest-account" : "traveller-account",
     ].join("::");
 
     if (customerFolderUrlHandoffRef.current === handoffKey) {
@@ -5471,6 +5480,7 @@ export default function MockCustomerDashboardPage() {
       invoiceAction,
       selectedBookingReferences,
       selectedBookingPriceReviews,
+      guestAccountBillingEnabled,
     );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5770,6 +5780,7 @@ export default function MockCustomerDashboardPage() {
       crmCustomerId: group.customerId,
       crmCustomerName: group.customerName,
       dueDateIso: invoiceDateInputDaysFromNow(7),
+      guestAccountBillingEnabled: false,
       isPaid: false,
       lineDescription: monthlyBillingInvoiceLineDescription(firstRow),
       quantity: "1",
@@ -6072,6 +6083,7 @@ export default function MockCustomerDashboardPage() {
         nextForm.crmCustomerName = "";
         nextForm.bookerId = null;
         nextForm.bookingReference = "";
+        nextForm.guestAccountBillingEnabled = false;
         nextForm.travelerId = null;
       }
 
@@ -6083,6 +6095,7 @@ export default function MockCustomerDashboardPage() {
       ) {
         nextForm.bookerId = null;
         nextForm.bookingReference = "";
+        nextForm.guestAccountBillingEnabled = false;
         nextForm.travelerId = null;
       }
 
@@ -6134,6 +6147,7 @@ export default function MockCustomerDashboardPage() {
       bookingReference: "",
       cardFeeApplies: false,
       cardPaymentEnabled: false,
+      guestAccountBillingEnabled: false,
       recipientEmails: [],
       travelerId: null,
     }));
@@ -6190,6 +6204,7 @@ export default function MockCustomerDashboardPage() {
       cardFeeApplies: false,
       cardPaymentEnabled: false,
       reference: selectedBooking ? bookingReference : currentForm.reference,
+      guestAccountBillingEnabled: false,
       travelerId: selectedBooking?.traveler_id ?? null,
     }));
     setPlainInvoicePreview(null);
@@ -6392,6 +6407,7 @@ export default function MockCustomerDashboardPage() {
       customerName: plainInvoicePreview.customerName,
       bookerId: plainInvoiceForm.bookerId,
       bookingReference: plainInvoiceForm.bookingReference,
+      guestAccountBillingEnabled: plainInvoiceForm.guestAccountBillingEnabled,
       documentState,
       documentType: "invoice" as CustomerBillingDocumentType,
       dueDateIso: plainInvoicePreview.dueDateIso,
@@ -6476,7 +6492,11 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId) {
+    if (
+      !plainInvoiceForm.bookingReference ||
+      (!plainInvoiceForm.guestAccountBillingEnabled &&
+        (!plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId))
+    ) {
       setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before issuing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
@@ -6566,7 +6586,11 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId) {
+    if (
+      !plainInvoiceForm.bookingReference ||
+      (!plainInvoiceForm.guestAccountBillingEnabled &&
+        (!plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId))
+    ) {
       setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before emailing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();

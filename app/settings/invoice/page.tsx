@@ -5,5 +5,5 @@ export const metadata = {
 };
 
 export default function InvoiceSettingsPage() {
-  return <Home initialTab="company" />;
+  return <Home />;
 }

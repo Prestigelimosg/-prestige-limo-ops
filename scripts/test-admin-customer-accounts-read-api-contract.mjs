@@ -156,11 +156,33 @@ class MockSupabaseQuery {
     return this;
   }
 
+  single() {
+    this.singleResult = true;
+
+    return this;
+  }
+
+  update(payload) {
+    this.updatePayload = clone(payload);
+
+    return this;
+  }
+
   then(onFulfilled, onRejected) {
     return Promise.resolve(this.execute()).then(onFulfilled, onRejected);
   }
 
   execute() {
+    if (this.updatePayload) {
+      return this.client.updateRows(
+        this.table,
+        this.filters,
+        this.updatePayload,
+        this.selectedColumns,
+        this.singleResult,
+      );
+    }
+
     return this.client.selectRows(this.table, this.filters, this.selectedColumns, this.resultLimit);
   }
 }
@@ -209,6 +231,27 @@ class MockSupabaseClient {
       data: rows.map((row) => clone(row)),
       error: null,
     };
+  }
+
+  updateRows(table, filters, payload, selectedColumns, singleResult) {
+    this.operations.push({
+      filters: clone(filters),
+      payload: clone(payload),
+      selectedColumns,
+      singleResult,
+      table,
+      type: "update",
+    });
+    const row = this.tables[table].find((candidate) =>
+      filters.every((filter) => String(candidate[filter.column]) === String(filter.value)),
+    );
+
+    if (!row) {
+      return { data: null, error: { code: "PGRST116", message: "not found" } };
+    }
+
+    Object.assign(row, payload);
+    return { data: clone(row), error: null };
   }
 }
 
@@ -319,9 +362,9 @@ const seed = {
     },
   ],
   customers: [
-    { account_status: "active", display_name: "UBS", id: 101, status: "active" },
-    { account_status: "active", display_name: "Ritz Carlton", id: 102, status: "active" },
-    { account_status: "active", display_name: "Directory Only Customer", id: 103, status: "active" },
+    { account_status: "active", customer_type: "corporate", display_name: "UBS", id: 101, status: "active" },
+    { account_status: "active", customer_type: "hotel", display_name: "Ritz Carlton", id: 102, status: "active" },
+    { account_status: "active", customer_type: null, display_name: "Directory Only Customer", id: 103, status: "active" },
   ],
 };
 
@@ -333,6 +376,7 @@ try {
   assert.equal(reader.adminCustomerAccountsReadVersion, "admin-customer-accounts-read-v1");
   assert.deepEqual(reader.parseAdminCustomerAccountsReadParams(new URLSearchParams()), {
     data: {
+      customerId: null,
       limit: 10,
       search: null,
     },
@@ -340,6 +384,7 @@ try {
   });
   assert.deepEqual(reader.parseAdminCustomerAccountsReadParams({ limit: "2" }), {
     data: {
+      customerId: null,
       limit: 2,
       search: null,
     },
@@ -347,6 +392,7 @@ try {
   });
   assert.deepEqual(reader.parseAdminCustomerAccountsReadParams({ limit: "10", search: "ri" }), {
     data: {
+      customerId: null,
       limit: 10,
       search: "ri",
     },
@@ -436,6 +482,7 @@ try {
       customer_account: "UBS",
       customer_folder_key: "101::boss_alpha",
       customer_id: "101",
+      guest_account_billing_enabled: false,
       latest_booking_reference: "UBS-SAFE-002",
       latest_public_booking_reference: "UBS-00002",
       latest_pickup_at: "2026-06-20T10:00:00.000Z",
@@ -451,6 +498,7 @@ try {
       customer_account: "Ritz Carlton",
       customer_folder_key: "102::booker_traveller_not_set",
       customer_id: "102",
+      guest_account_billing_enabled: true,
       latest_booking_reference: "RITZ-SAFE-001",
       latest_public_booking_reference: "RITZ-00001",
       latest_pickup_at: "2026-06-18T10:00:00.000Z",
@@ -466,6 +514,7 @@ try {
       customer_account: "UBS",
       customer_folder_key: "101::boss_beta",
       customer_id: "101",
+      guest_account_billing_enabled: false,
       latest_booking_reference: "UBS-SAFE-001",
       latest_public_booking_reference: "UBS-00001",
       latest_pickup_at: "2026-06-15T10:00:00.000Z",
@@ -481,6 +530,7 @@ try {
       customer_account: "Directory Only Customer",
       customer_folder_key: "103::customer_account",
       customer_id: "103",
+      guest_account_billing_enabled: false,
       latest_booking_reference: null,
       latest_public_booking_reference: null,
       latest_pickup_at: null,
@@ -560,6 +610,80 @@ try {
   assert.equal(limitedMock.client.operations.length, 0);
   assert.equal(limitedMock.client.selectHistory.length, 2);
   assertNoLeaks(limitedResult, "limited customer accounts response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const exactMock = installMockClient(seed);
+  const exactResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=102&limit=1", {
+        headers: sessionHeaders({
+          referer: "http://localhost/customers/102",
+          "x-prestige-admin-session-token": undefined,
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(exactResult.status, 200);
+  assert.equal(exactResult.body.accounts.length, 1);
+  assert.equal(exactResult.body.accounts[0].customer_id, "102");
+  assert.equal(exactResult.body.accounts[0].guest_account_billing_enabled, true);
+  assert.equal(exactMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const updateMock = installMockClient(seed);
+  const updateResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({
+          customer_id: "101",
+          guest_account_billing_enabled: true,
+        }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(updateResult.status, 200);
+  assert.equal(updateResult.body.account.customer_id, "101");
+  assert.equal(updateResult.body.account.guest_account_billing_enabled, true);
+  assert.deepEqual(updateMock.client.operations, [{
+    filters: [{ column: "id", type: "eq", value: "101" }],
+    payload: { customer_type: "hotel" },
+    selectedColumns: "id, display_name, customer_type",
+    singleResult: true,
+    table: "customers",
+    type: "update",
+  }]);
+
+  setEnv(enabledEnv());
+
+  const blockedUpdateMock = installMockClient(seed);
+  const blockedUpdateResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({ customer_id: "101", guest_account_billing_enabled: true }),
+        headers: {
+          ...sessionHeaders({ referer: "http://evil.test/customers/101" }),
+          "content-type": "application/json",
+          origin: "http://evil.test",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(blockedUpdateResult.status, 403);
+  assertNoSupabaseTouched(blockedUpdateMock, "cross-origin guest-account update");
 
   setEnv(enabledEnv());
 

@@ -97,6 +97,22 @@ function safeFailureResponse(operation: string) {
   });
 }
 
+function isConfirmedChatGptRequest(request: Request) {
+  return request.headers.get("x-prestige-booking-request-source") === "chatgpt-confirmed-preview";
+}
+
+function confirmedChatGptResponse(result: {
+  body: unknown;
+  status: number;
+}) {
+  return Response.json(result.body, {
+    headers: {
+      "cache-control": "no-store",
+    },
+    status: result.status,
+  });
+}
+
 type CustomerRequestDecisionNotificationResult =
   | {
       notification: CustomerDriverAppNotificationSafeRecord;
@@ -284,13 +300,35 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const confirmedChatGptRequest = isConfirmedChatGptRequest(request);
     const boundary = requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {
+      if (confirmedChatGptRequest) {
+        const { confirmedChatGptBookingAccessDeniedResponse } = await import(
+          "../../../lib/admin-booking-confirmed-create"
+        );
+
+        return confirmedChatGptResponse(confirmedChatGptBookingAccessDeniedResponse());
+      }
+
       return boundary.response;
     }
 
-    const parsed = parseAdminBookingPersistencePayload(await readJsonBody(request));
+    const body = await readJsonBody(request);
+
+    if (confirmedChatGptRequest) {
+      const { createConfirmedAdminBooking } = await import(
+        "../../../lib/admin-booking-confirmed-create"
+      );
+      const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+
+      return confirmedChatGptResponse(
+        await createConfirmedAdminBooking(body, actor),
+      );
+    }
+
+    const parsed = parseAdminBookingPersistencePayload(body);
 
     if (!parsed.ok) {
       return Response.json(

@@ -2524,6 +2524,18 @@ type AiDraftBooking = AiParseResult["bookings"][number];
 
 type AiAssistMode = "parser" | "conversation";
 
+type MobileDispatchBookingStep = "message" | "details" | "options" | "review";
+
+const mobileDispatchBookingSteps: Array<{
+  label: string;
+  step: MobileDispatchBookingStep;
+}> = [
+  { label: "Message", step: "message" },
+  { label: "Details", step: "details" },
+  { label: "Options", step: "options" },
+  { label: "Review", step: "review" },
+];
+
 type AdminAiConversationMessage = {
   role: "admin" | "assistant";
   text: string;
@@ -13671,6 +13683,8 @@ export default function Home() {
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
+  const [mobileDispatchBookingStep, setMobileDispatchBookingStep] =
+    useState<MobileDispatchBookingStep>("message");
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
   const [showParserDebug, setShowParserDebug] = useState(false);
   const [multiBookingNotice, setMultiBookingNotice] = useState<ParsedBooking | null>(null);
@@ -18540,6 +18554,7 @@ export default function Home() {
     setShowParserDebug(false);
     setMultiBookingNotice(null);
     setBookingSaveMessage(null);
+    setMobileDispatchBookingStep("review");
   }
 
   function updateDefaultCustomerRate(
@@ -19001,7 +19016,7 @@ export default function Home() {
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
-      return;
+      return false;
     }
 
     setBooking(() => createInitialBooking());
@@ -19015,7 +19030,7 @@ export default function Home() {
         tone: "error",
         text: "No booking details detected. Add labels like pickup, dropoff, date, time, name, or flight.",
       });
-      return;
+      return false;
     }
 
     if (parsedBooking.multipleBookingsDetected) {
@@ -19038,7 +19053,7 @@ export default function Home() {
         tone: "error",
         text: parsedBooking.parserWarning || "Multiple bookings detected. Please select one extracted booking.",
       });
-      return;
+      return false;
     }
 
     setMultiBookingNotice(null);
@@ -19061,7 +19076,7 @@ export default function Home() {
     });
 
     if (getNeedsReviewWarnings(finalForm).length > 0) {
-      return;
+      return true;
     }
 
     if (activeAdminEmailAiIntakeId) {
@@ -19075,7 +19090,7 @@ export default function Home() {
           ? `Parsed ${detectedFields} fields. Email AI customer check loaded; confirm whether this is a repeated or new customer before Save + CRM.`
           : `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
       });
-      return;
+      return true;
     }
 
     const nameMemory = await lookupNameMemory(parsedBooking.name || "");
@@ -19097,10 +19112,16 @@ export default function Home() {
         text: `Parsed ${detectedFields} fields and applied CRM memory. Review before saving.`,
       });
     }
+
+    return true;
   }
 
   async function handleParseBookingMessage() {
-    await applyParsedBookingMessage(bookingMessage);
+    const parsed = await applyParsedBookingMessage(bookingMessage);
+
+    if (parsed) {
+      setMobileDispatchBookingStep("review");
+    }
   }
 
   async function handleAiAssistParse() {
@@ -19271,6 +19292,7 @@ export default function Home() {
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
     setAiAssistMode("parser");
+    setMobileDispatchBookingStep("message");
     setBookingMessage(canonicalBookingText || normalizedText);
     setAiDraft(sanitizeAiParseResult(record.booking_parse_result));
     setAiConversationMessages([]);
@@ -21287,6 +21309,13 @@ export default function Home() {
     );
     setActiveTab("dispatch");
     clearBookingMessageInput();
+    setMobileDispatchBookingStep(
+      options.focusJobCard
+        ? "review"
+        : options.focusCustomerCopy || options.focusDriverJobLink
+          ? "options"
+          : "details",
+    );
     setMessage({
       tone: "success",
       text: options.focusDriverJobLink
@@ -32629,8 +32658,11 @@ export default function Home() {
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-3 sm:px-4 lg:px-6">
-        <header className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+        <header
+          className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-end sm:justify-between"
+          data-admin-mobile-compact-header="true"
+        >
+          <div data-admin-mobile-header-title="true">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Internal limousine operations
             </p>
@@ -32646,8 +32678,14 @@ export default function Home() {
               Build {deployedBuildCommitShort}
             </p>
           </div>
-          <div className="flex flex-col gap-1.5 sm:min-w-80">
-            <div className="grid grid-cols-4 gap-1.5 text-center">
+          <div
+            className="flex flex-col gap-1.5 sm:min-w-80"
+            data-admin-mobile-header-actions="true"
+          >
+            <div
+              className="grid grid-cols-4 gap-1.5 text-center"
+              data-admin-mobile-header-status="true"
+            >
               <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
                 <p className="text-[11px] text-slate-500">Saved</p>
                 <p className="text-base font-semibold">{operationalBookings.length}</p>
@@ -32697,6 +32735,7 @@ export default function Home() {
         <nav
           aria-label="Primary operations tabs"
           className="sticky top-0 z-10 grid grid-cols-3 gap-1 rounded-md border border-stone-200 bg-stone-100/95 p-1 shadow-sm backdrop-blur sm:grid-cols-7"
+          data-admin-mobile-primary-tabs="true"
           role="tablist"
         >
           {appTabs.map((tab) => {
@@ -32820,7 +32859,10 @@ export default function Home() {
               </p>
               <p className="text-[11px] text-slate-500">Routes</p>
             </div>
-            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
+            <div
+              className="grid min-w-0 flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6"
+              data-admin-mobile-access-links="true"
+            >
               {adminAccessLinks.map((link) => (
                 <Link
                   className="inline-flex min-h-8 items-center justify-center rounded border border-stone-200 bg-stone-50 px-2 text-center text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
@@ -39216,8 +39258,37 @@ export default function Home() {
         ) : null}
 
         {activeTab === "dispatch" ? (
-        <section className="flex min-w-0 flex-col gap-2.5" data-dispatch-workflow="true">
+        <section
+          className="flex min-w-0 flex-col gap-2.5"
+          data-dispatch-workflow="true"
+          data-mobile-dispatch-step={mobileDispatchBookingStep}
+        >
           <div className="contents">
+            <nav
+              aria-label="Quick booking steps"
+              className="order-0 grid grid-cols-4 gap-1 rounded-md border border-slate-200 bg-white p-1 md:hidden"
+              data-mobile-dispatch-quick-booking="true"
+            >
+              {mobileDispatchBookingSteps.map(({ label, step }) => (
+                <button
+                  aria-current={mobileDispatchBookingStep === step ? "step" : undefined}
+                  className={`min-h-10 rounded px-1.5 py-1 text-[11px] font-semibold transition ${
+                    mobileDispatchBookingStep === step
+                      ? "bg-slate-950 text-white"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                  }`}
+                  data-mobile-dispatch-quick-step={step}
+                  key={step}
+                  onClick={() => setMobileDispatchBookingStep(step)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+              <p className="col-span-4 px-1 pb-0.5 text-[10px] leading-4 text-slate-500">
+                Paste, review, then use the existing Save + CRM. Nothing saves automatically.
+              </p>
+            </nav>
             <section
               className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
               data-dispatch-workflow-step="booking-input-parser"
@@ -39234,6 +39305,7 @@ export default function Home() {
                   setBooking(() => createInitialBooking());
                   clearLoadedBookingSelectionContext();
                   clearBookingMessageInput();
+                  setMobileDispatchBookingStep("message");
                 }}
               >
                 Clear
@@ -39367,6 +39439,7 @@ export default function Home() {
                     onClick={() => {
                       clearLoadedBookingSelectionContext();
                       clearBookingMessageInput();
+                      setMobileDispatchBookingStep("message");
                     }}
                     style={{ minHeight: 44 }}
                     type="button"
@@ -40187,7 +40260,10 @@ export default function Home() {
             </section>
 
             {shouldShowParserDebugPanel && parsedDebugBooking ? (
-              <div className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div
+                className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3"
+                data-mobile-dispatch-review-panel="parser-debug-details"
+              >
                 {parsedDebugBooking.parserWarning ? (
                   <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
                     {parsedDebugBooking.parserWarning}
@@ -40251,7 +40327,10 @@ export default function Home() {
             ) : null}
 
             {parsedDebugBooking ? (
-              <div className="order-[100] flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div
+                className="order-[100] flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                data-mobile-dispatch-review-panel="parser-debug-control"
+              >
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Parser debug</p>
                   <p className="text-xs text-slate-500">Hidden by default for daily operations.</p>
@@ -40267,7 +40346,10 @@ export default function Home() {
             ) : null}
 
             {hasNeedsReviewWarnings ? (
-              <div className="order-[33] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div
+                className="order-[33] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                data-mobile-dispatch-review-panel="review-notes"
+              >
                 <p className="font-semibold">Review notes</p>
                 <p className="mt-1">Check these data-quality notes when practical. Admin can still save drafts.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">

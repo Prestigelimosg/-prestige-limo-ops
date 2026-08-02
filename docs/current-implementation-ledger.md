@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Save + CRM Lost Successful Response Recovery (2026-08-02)
+
+- Signed-in Production diagnosis reproduced a false failure after the owner used the existing Dispatch `Save + CRM` action for SIPEF: the UI showed `Booking save failed: Failed to fetch`, but Vercel recorded the exact `/api/admin-bookings` POST as HTTP 200 and Supabase proved customer, company contact, and booking `10861` were already saved. The browser had lost the successful response, so the client did not receive the saved record and did not start the existing Operations Calendar handoff. Admin must not retry that failed-looking save because the original booking exists.
+- Only the existing `Save + CRM` booking POST response handling is repaired. If that POST throws before the browser receives a response, the client performs one guarded GET for the exact unique `booking_reference` already submitted. Recovery succeeds only when the returned booking matches the submitted safe booking fields, verified identity IDs, pickup/drop-off timestamps, route points, and service items. A missing, mismatched, partial, or unreadable record continues failing visibly; the POST is never retried and no duplicate booking is created.
+- A verified recovered record rejoins the existing saved-booking continuation so the same current Email AI closeout, Operations Calendar auto-sync, saved reference state, and feedback run unchanged. No Calendar action, API, event identity, credential, payload, reminder, UI, invoice, pricing, driver, customer/CRM writer, schema, migration, provider, or environment behavior is modified.
+- The existing booking UI browser guard now reproduces one successful booking write whose response is lost, proves exactly one POST and one exact-reference guarded recovery GET occur, rejects the false `Booking save failed` message, and requires the unchanged single Google Calendar auto-sync handoff. The normal successful Save + CRM path remains covered by the existing personal-booking scenario.
+
 ### Save + CRM Company Contact And Invoice Email Meaning Repair (2026-08-02)
 
 - Read-only Production and Supabase diagnosis reproduced the owner-reported gap: Dispatch `Save + CRM` persisted Booker phone/email on the booking and booking-contact row, but did not write the customer company profile. The exact-customer heading continued using its saved customer/account display name while the profile editor used the separate `companies.company_name`, so an Admin capitalization correction in the profile did not rewrite the old customer/account display record.

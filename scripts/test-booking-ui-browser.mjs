@@ -20898,6 +20898,9 @@ async function runChromeTest() {
       window.__prestigeCrmCompanyIdentityRequests = [];
       window.__prestigeCrmCompanyWriteRequests = [];
       window.__prestigeCrmProfileConfirmMessages = [];
+      window.__prestigeCrmSaveBookingResponseLossCount = 0;
+      window.__prestigeCrmSaveBookingRecoveryReads = [];
+      window.__prestigeCrmSavePersistedBooking = null;
       window.__prestigeOriginalConfirm = window.__prestigeOriginalConfirm || window.confirm.bind(window);
       window.confirm = (message) => {
         window.__prestigeCrmProfileConfirmMessages.push(String(message));
@@ -21156,16 +21159,39 @@ async function runChromeTest() {
           } catch {}
 
           if (method === "POST") {
-            return jsonResponse({
-              booking: {
-                ...parsedBody?.booking,
-                booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
-                route_points: parsedBody?.route_points || [],
-                service_items: parsedBody?.service_items || [],
-              },
-              ok: true,
-              version: "browser-admin-bookings-safe-create-mock",
+            window.__prestigeCrmSavePersistedBooking = {
+              ...parsedBody?.booking,
+              booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
+              route_points: parsedBody?.route_points || [],
+              service_items: parsedBody?.service_items || [],
+            };
+            window.__prestigeCrmSaveBookingResponseLossCount += 1;
+            throw new TypeError("Failed to fetch");
+          }
+
+          if (method === "GET") {
+            const recoveryUrl = new URL(url, window.location.href);
+            const bookingReference = recoveryUrl.searchParams.get("booking_reference") || "";
+
+            window.__prestigeCrmSaveBookingRecoveryReads.push({
+              bookingReference,
+              headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
+              method,
+              url,
             });
+
+            if (
+              bookingReference &&
+              bookingReference === window.__prestigeCrmSavePersistedBooking?.booking_reference
+            ) {
+              return jsonResponse({
+                booking: window.__prestigeCrmSavePersistedBooking,
+                ok: true,
+                version: "browser-admin-bookings-response-loss-recovery-mock",
+              });
+            }
+
+            return jsonResponse({ error: "Recovery booking not found.", ok: false }, 404);
           }
         }
 
@@ -21334,6 +21360,8 @@ async function runChromeTest() {
                 emailAiRequests: window.__prestigeCrmSaveEmailAiRequests || [],
                 googleCalendarSyncRequests,
                 fetchCalls: window.__prestigeFetchCalls || [],
+                bookingRecoveryReads: window.__prestigeCrmSaveBookingRecoveryReads || [],
+                bookingResponseLossCount: window.__prestigeCrmSaveBookingResponseLossCount || 0,
                 requestBodies: window.__prestigeSaveRequestBodies || [],
                 savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -21353,6 +21381,37 @@ async function runChromeTest() {
       [],
       `Expected all Supabase calls to be mocked, got ${crmSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
+    assert.equal(
+      crmSaveState.bookingResponseLossCount,
+      1,
+      "Expected the browser fixture to reproduce one lost successful booking POST response",
+    );
+    const exactBookingResponseLossRecoveryReads = crmSaveState.bookingRecoveryReads.filter(
+      (request) =>
+        request.bookingReference === crmSaveState.bookingInsert?.booking?.booking_reference,
+    );
+    assert.equal(
+      exactBookingResponseLossRecoveryReads.length,
+      1,
+      "Expected Save + CRM to reconcile the exact submitted booking after the response was lost",
+    );
+    assert.equal(exactBookingResponseLossRecoveryReads[0]?.method, "GET");
+    assert.equal(
+      exactBookingResponseLossRecoveryReads[0]?.bookingReference,
+      crmSaveState.bookingInsert?.booking?.booking_reference,
+    );
+    assert.equal(
+      exactBookingResponseLossRecoveryReads[0]?.headers?.["x-prestige-admin-purpose"],
+      "admin-booking-persistence",
+    );
+    assert.equal(
+      crmSaveState.fetchCalls.filter(
+        (call) => call === "POST /api/admin-bookings",
+      ).length,
+      1,
+      "Expected response-loss recovery not to retry the booking POST or create a duplicate",
+    );
+    assert.doesNotMatch(crmSaveState.bodyText, /Booking save failed: Failed to fetch/i);
     assert.equal(
       crmSaveState.savedBookingReadRequests.every(({ method }) => method === "GET"),
       true,

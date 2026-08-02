@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Compact Dated Airport Departure Parser Repair (2026-08-03)
+
+- The owner reproduced exact Dispatch input `3 Aug 1500hrs. 22 Berrima Road to Airport Mrs. Lee` parsing the date, time, Departure service, and Changi Airport while leaving passenger and pickup blank. The existing parser required a labelled/standalone passenger and a route marker before this compact one-line structure, so the visible phone summary correctly exposed those missing fields instead of guessing.
+- The established deterministic parser now recognizes only the bounded structure `dated time + numbered address + to airport + trailing honorific passenger`. It extracts `Mrs Lee`, `22 Berrima Road`, and `Changi Airport` without adding another parser, form, route, API, or save path. The exact regression failed before the repair and is protected in `scripts/test-booking-parser.mjs` alongside all existing parser fixtures.
+- This repair is local and committed only while an active driver is OTW. No push, merge, deployment, booking/CRM write, Driver Reports or private Driver Job Link change, Calendar action, customer/driver message, billing, invoice, payment, payout, PayNow, live location, provider, database, schema, migration, environment, or Production record is authorized by this checkpoint.
+
 ### Mobile Dispatch Quick Booking Focus (2026-08-03)
 
 - The existing Dispatch page now has a phone-only four-step focus bar: `Message`, `Details`, `Options`, and `Review`. A narrow screen shows one existing workflow group at a time instead of rendering every large Dispatch card in one continuous page. The phone header hides the non-actionable status-card grid, keeps Customers & Payments available, and presents the same primary tabs and Admin route links as compact horizontal rows. Desktop continues showing the complete established header and Dispatch layout.

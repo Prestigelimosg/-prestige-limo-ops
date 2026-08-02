@@ -203,8 +203,12 @@ assert.ok(
   "Save + CRM must run validation before persistence writes.",
 );
 assert.ok(
-  saveBookingSection.includes("customerDisplayNameOverride: billingIdentityResolution.accountLabel"),
-  "Save + CRM must pass confirmed billing identity into persisted customer account.",
+  saveBookingSection.includes("clean(billingIdentityResolution.accountLabel) ||\n        saveCrmDefaultCustomerAccount(booking)"),
+  "Save + CRM must preserve the confirmed billing identity or its established customer-account fallback before profile resolution.",
+);
+assert.ok(
+  saveBookingSection.includes("companyProfileResolution?.companyName || saveCrmCustomerAccountLabel"),
+  "Save + CRM must persist the exact canonical company profile name when resolved and preserve the established personal-account fallback otherwise.",
 );
 
 const persistenceSaveSection = appSource.slice(

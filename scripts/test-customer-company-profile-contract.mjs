@@ -53,6 +53,12 @@ assert.match(
 assert.match(editorSource, />\s*Contact name\s*<input/,
   "the existing primary_contact_name field must be clearly labelled Contact name",
 );
+assert.match(editorSource, />\s*Secondary email\s*<input/,
+  "the existing billing_email storage field must be presented to Admin as Secondary email",
+);
+assert.doesNotMatch(editorSource, />\s*Billing email\s*<input/,
+  "the customer profile must not present the secondary address as the default billing email",
+);
 assert.doesNotMatch(editorSource, /Primary contact person/,
   "the customer profile must not show a second ambiguous contact-name label",
 );

@@ -20895,6 +20895,14 @@ async function runChromeTest() {
       window.__prestigeCrmSaveCalendarDownloads = [];
       window.__prestigeCrmSaveCalendarBlobTypes = [];
       window.__prestigeCrmSaveEmailAiRequests = [];
+      window.__prestigeCrmCompanyIdentityRequests = [];
+      window.__prestigeCrmCompanyWriteRequests = [];
+      window.__prestigeCrmProfileConfirmMessages = [];
+      window.__prestigeOriginalConfirm = window.__prestigeOriginalConfirm || window.confirm.bind(window);
+      window.confirm = (message) => {
+        window.__prestigeCrmProfileConfirmMessages.push(String(message));
+        return true;
+      };
       window.URL.createObjectURL = (blob) => {
         window.__prestigeCrmSaveCalendarBlobTypes.push(blob?.type || "");
         return "blob:prestige-crm-save-calendar-test";
@@ -21097,6 +21105,49 @@ async function runChromeTest() {
           });
         }
 
+        if (url.includes("/api/admin-companies-crm-identity")) {
+          window.__prestigeCrmCompanyIdentityRequests.push({ method, url });
+
+          if (method === "GET") {
+            return jsonResponse({
+              company: null,
+              ok: true,
+              version: "browser-admin-companies-crm-identity-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Company identity mock is read-only." }, 405);
+        }
+
+        if (url.includes("/api/admin-company-traveler-crm-runtime-write-action")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmCompanyWriteRequests.push({ body: parsedBody, method, url });
+
+          if (method === "POST" && parsedBody?.action_type === "company_create") {
+            return jsonResponse({
+              no_op: false,
+              ok: true,
+              reason: "saved",
+              record: {
+                company_name: parsedBody.company_name,
+                id: companyRecord.id,
+                mobile_phone: parsedBody.mobile_phone || null,
+                operations_email: parsedBody.operations_email || null,
+                primary_contact_name: parsedBody.primary_contact_name || null,
+              },
+              status: "saved",
+              version: "browser-company-profile-save-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Company profile save mock rejected the request." }, 400);
+        }
+
         if (url.includes("/api/admin-bookings")) {
           let parsedBody = null;
 
@@ -21277,6 +21328,9 @@ async function runChromeTest() {
                 calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
                 calendarRequests: window.__prestigeCrmSaveCalendarRequests || [],
                 calendarSyncStatusRequests: window.__prestigeCrmSaveCalendarSyncStatusRequests || [],
+                companyIdentityRequests: window.__prestigeCrmCompanyIdentityRequests || [],
+                companyProfileConfirmMessages: window.__prestigeCrmProfileConfirmMessages || [],
+                companyWriteRequests: window.__prestigeCrmCompanyWriteRequests || [],
                 emailAiRequests: window.__prestigeCrmSaveEmailAiRequests || [],
                 googleCalendarSyncRequests,
                 fetchCalls: window.__prestigeFetchCalls || [],
@@ -21304,6 +21358,31 @@ async function runChromeTest() {
       true,
       "Expected safe Save Booking + CRM to use only guarded saved-bookings GET reloads",
     );
+    assert.equal(crmSaveState.companyIdentityRequests.length, 1);
+    assert.equal(crmSaveState.companyIdentityRequests[0]?.method, "GET");
+    assert.match(
+      crmSaveState.companyIdentityRequests[0]?.url || "",
+      /\/api\/admin-companies-crm-identity\?company_name=BROWSER\+UI\+TEST\+COMPANY\+%5BBROWSER\+UI\+TEST\+TRAVELER%5D/,
+      "Expected Save + CRM to exact-read the confirmed customer company profile before writing",
+    );
+    assert.deepEqual(
+      crmSaveState.companyWriteRequests.map(({ body, method }) => ({ body, method })),
+      [
+        {
+          body: {
+            action_type: "company_create",
+            company_name: "BROWSER UI TEST COMPANY [BROWSER UI TEST TRAVELER]",
+            mobile_phone: "+65 9000 0333",
+            operations_email: "browserui@example.com",
+            primary_contact_name: "BROWSER UI TEST BOOKER",
+          },
+          method: "POST",
+        },
+      ],
+      "Expected Save + CRM to write only the approved company name and Booker contact fields",
+    );
+    assert.equal(crmSaveState.companyProfileConfirmMessages.length, 1);
+    assert.match(crmSaveState.companyProfileConfirmMessages[0], /Create and link the new CRM company profile/);
     assert.deepEqual(
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
@@ -21425,6 +21504,11 @@ async function runChromeTest() {
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_display_name, "BROWSER UI TEST BOOKER");
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_phone, "+65 9000 0333");
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_email, "browserui@example.com");
+    assert.equal(crmSaveState.bookingInsert?.booking?.company_id, 601);
+    assert.equal(
+      crmSaveState.bookingInsert?.booking?.customer_display_name,
+      "BROWSER UI TEST COMPANY [BROWSER UI TEST TRAVELER]",
+    );
     assert.equal(crmSaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
     assert.equal(crmSaveState.bookingInsert?.booking?.flight_no, "SQ333");
     assert.equal(crmSaveState.bookingInsert?.booking?.driver_name, "TEST DRIVER CRM 20260516");
@@ -21534,6 +21618,7 @@ async function runChromeTest() {
       "Expected safe Save Booking + CRM not to create a legacy Recent Bookings row",
     );
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
+    await evaluate(`window.confirm = window.__prestigeOriginalConfirm || window.confirm`);
     await clickTab("Dispatch", "Dispatcher Intake");
 
     const focusedMultiBookingTextarea = await evaluate(`(() => {

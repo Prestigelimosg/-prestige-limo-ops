@@ -85,6 +85,22 @@ for (const fragment of [
   assert.ok(customersPage.includes(fragment), `Missing multi-recipient invoice UI fragment: ${fragment}`);
 }
 
+assert.match(
+  customersPage,
+  /\["Accounts email", company\.accounts_email\],[\s\S]*\["Operations email", company\.operations_email\],[\s\S]*\["Secondary email", company\.billing_email\]/,
+  "invoice recipient choices must use the approved Accounts, Operations, Secondary order",
+);
+assert.match(
+  customersPage,
+  /const defaultInvoiceEmail =\s*accountsEmail \|\| operationsEmail;/,
+  "invoice email must default to Accounts, then fall back to Operations",
+);
+assert.doesNotMatch(
+  customersPage,
+  /const defaultBillingEmail =/,
+  "the legacy billing_email field must no longer be the automatic invoice recipient",
+);
+
 for (const fragment of [
   "selectedCustomerInvoiceRecipients(",
   "customerInvoiceRecipientsAllowed(recipients, allowlist)",

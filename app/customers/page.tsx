@@ -4164,9 +4164,9 @@ export default function MockCustomerDashboardPage() {
 
       const company = result.company as Record<string, unknown>;
       const profileEmailOptions: Array<[string, unknown]> = [
-        ["Billing email", company.billing_email],
         ["Accounts email", company.accounts_email],
         ["Operations email", company.operations_email],
+        ["Secondary email", company.billing_email],
       ];
 
       profileEmailOptions.forEach(([label, value]) => {
@@ -4177,17 +4177,20 @@ export default function MockCustomerDashboardPage() {
       });
       setPlainInvoiceRecipientOptions([...options.values()]);
 
-      const defaultBillingEmail =
-        typeof company.billing_email === "string" ? company.billing_email.trim().toLowerCase() : "";
+      const accountsEmail =
+        typeof company.accounts_email === "string" ? company.accounts_email.trim().toLowerCase() : "";
+      const operationsEmail =
+        typeof company.operations_email === "string" ? company.operations_email.trim().toLowerCase() : "";
+      const defaultInvoiceEmail = accountsEmail || operationsEmail;
 
-      if (defaultBillingEmail) {
+      if (defaultInvoiceEmail) {
         setPlainInvoiceForm((currentForm) =>
           currentForm.recipientEmails.length > 0 || currentForm.billToEmail.trim()
             ? currentForm
             : {
                 ...currentForm,
-                billToEmail: defaultBillingEmail,
-                recipientEmails: [defaultBillingEmail],
+                billToEmail: defaultInvoiceEmail,
+                recipientEmails: [defaultInvoiceEmail],
               },
         );
       }

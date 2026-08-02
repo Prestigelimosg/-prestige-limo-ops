@@ -25,12 +25,14 @@ for (const fragment of [
   'data-admin-active-job-driver-message-input="true"',
   'data-admin-active-job-driver-message-send="true"',
   'data-admin-active-job-driver-message-open-link-setup="true"',
+  'data-admin-active-job-driver-message-closed="true"',
   ">Messages</div>",
   "Send to Driver",
   "Send to Customer",
   "Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.",
   "Queued to Customer App at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.",
   "Open Driver Link Setup",
+  "Driver messaging closed after Job Completed.",
   "Visible to admin and this driver only. Customers cannot see this message.",
   "Visible to admin and this customer only. Driver cannot see this message.",
   "sendAdminTodayJobMessage",
@@ -48,6 +50,16 @@ for (const fragment of [
   'method: "POST"',
 ]) {
   assert.ok(monitor.includes(fragment) || app.includes(fragment), `Missing Active Assigned Jobs message fragment: ${fragment}`);
+}
+
+for (const fragment of [
+  'const activeJobDriverMessagingClosed =',
+  'activeJobDriverStatusLatest?.status_value === "completed"',
+  'activeJobDriverMessagingClosed &&',
+  '!activeJobDriverMessagingClosed &&',
+  'activeJobDriverMessageState.audience === "driver"',
+]) {
+  assert.ok(monitor.includes(fragment), `Missing completed-driver messaging closure: ${fragment}`);
 }
 
 assert.equal(

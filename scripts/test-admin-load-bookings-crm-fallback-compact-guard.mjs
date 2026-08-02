@@ -205,8 +205,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'export default function Home({ initialTab = "dispatch" }: HomeProps = {})',
-  "Dispatch default tab prop",
+  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";',
+  "Dispatch default and invoice-settings Company route selection",
 );
 assertIncludes(appPage, "useState<AppTab>(initialTab)", "Dashboard default tab state");
 assertIncludes(

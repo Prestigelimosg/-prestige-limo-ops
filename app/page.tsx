@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   mergeParsedBookingState,
@@ -2511,10 +2512,6 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "company", label: "Company" },
   { id: "rates", label: "Rates" },
 ];
-
-type HomeProps = {
-  initialTab?: AppTab;
-};
 
 const adminAccessLinks = [
   { href: "/", label: "Admin Home" },
@@ -13664,7 +13661,8 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
   return `Company settings could not be ${actionLabel}. Reload Company Settings and try again.`;
 }
 
-export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
+export default function Home() {
+  const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");

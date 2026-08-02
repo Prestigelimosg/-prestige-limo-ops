@@ -25,18 +25,18 @@ const preactivationSuite = read("scripts/test-preactivation-verification-suite.m
 
 assertIncludes(
   adminPage,
-  "type HomeProps = {",
-  "Root admin app must accept direct-link page props.",
+  'import { usePathname } from "next/navigation";',
+  "Root admin app must use the supported pathname boundary for its direct-link route.",
 );
 assertIncludes(
   adminPage,
-  'initialTab?: AppTab;',
-  "Root admin app must expose the initial tab prop.",
+  'export default function Home()',
+  "Root admin route must not accept unsupported custom page props.",
 );
 assertIncludes(
   adminPage,
-  'export default function Home({ initialTab = "dispatch" }: HomeProps = {})',
-  "Root admin app must still default normal visits to Dispatch.",
+  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";',
+  "Invoice settings must open Company while normal visits still open Dispatch.",
 );
 assertIncludes(
   adminPage,
@@ -61,8 +61,13 @@ assertIncludes(
 );
 assertIncludes(
   invoiceSettingsPage,
-  '<Home initialTab="company" />',
+  '<Home />',
   "Invoice settings route must open the existing Company tab directly.",
+);
+assertNotIncludes(
+  invoiceSettingsPage,
+  "initialTab=",
+  "Invoice settings route must not pass unsupported custom props to a Next.js page.",
 );
 
 for (const forbidden of [

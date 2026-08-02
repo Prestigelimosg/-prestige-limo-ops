@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Next.js Route Page Props Compatibility Repair (2026-08-02)
+
+- Next.js 16.2.11 generated route types rejected the root `app/page.tsx` because it accepted a custom optional `initialTab` prop and `app/settings/invoice/page.tsx` imported that route page with `<Home initialTab="company" />`. Route pages may accept only the supported Next.js page props boundary, so `npx tsc --noEmit` failed before the unrelated customer-account invoice repair could complete verification.
+- The existing direct invoice-settings route still reuses the same admin app, but the root page now accepts no custom props and derives only its initial tab from the current pathname: `/settings/invoice` opens the established Company tab and `/` keeps Dispatch. The existing tab state, Company settings auto-load, route, metadata, controls, and every downstream workflow remain unchanged.
+- Focused protection remains in `scripts/test-invoice-settings-direct-link-guard.mjs` and `scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs`. No invoice layout, calculation, PDF, email, payment, booking, CRM, driver, Calendar, messaging, provider, persistence, schema, migration, environment, or Production record is changed.
+
 ### Save + CRM Lost Successful Response Recovery (2026-08-02)
 
 - Signed-in Production diagnosis reproduced a false failure after the owner used the existing Dispatch `Save + CRM` action for SIPEF: the UI showed `Booking save failed: Failed to fetch`, but Vercel recorded the exact `/api/admin-bookings` POST as HTTP 200 and Supabase proved customer, company contact, and booking `10861` were already saved. The browser had lost the successful response, so the client did not receive the saved record and did not start the existing Operations Calendar handoff. Admin must not retry that failed-looking save because the original booking exists.

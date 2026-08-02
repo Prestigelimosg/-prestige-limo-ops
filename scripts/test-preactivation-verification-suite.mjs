@@ -210,6 +210,10 @@ const guardChecks = [
     script: "scripts/test-core-booking-persistence-safe-path-guard.mjs",
   },
   {
+    label: "ChatGPT booking preview API contract guard",
+    script: "scripts/test-chatgpt-booking-preview-api-contract.mjs",
+  },
+  {
     label: "admin booking read contract disabled setup guard",
     script: "scripts/test-admin-booking-read-contract-disabled-setup-api-contract.mjs",
   },

@@ -9120,6 +9120,131 @@ type AdminDispatchReturnTripPersistencePayload = {
   payload: AdminBookingPersistenceRequestBody;
 };
 
+function adminBookingRecoveryText(value: unknown) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function adminBookingRecoveryTimestamp(value: unknown) {
+  const cleanedValue = adminBookingRecoveryText(value);
+  const timestamp = Date.parse(cleanedValue);
+
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : cleanedValue;
+}
+
+function adminBookingRecoveryIdentity(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function adminBookingRecoveryRoutePoints(
+  routePoints: AdminBookingPersistenceRecord["route_points"],
+) {
+  return (routePoints || [])
+    .map((routePoint) => ({
+      location: clean(routePoint.location_text || routePoint.location),
+      pointType: clean(routePoint.point_type),
+      sequence: Number(routePoint.sequence_number ?? routePoint.sequence ?? 0),
+      timingNote: clean(routePoint.timing_note || routePoint.notes),
+    }))
+    .sort((first, second) => first.sequence - second.sequence);
+}
+
+function adminBookingRecoveryServiceItems(
+  serviceItems: AdminBookingPersistenceRecord["service_items"],
+) {
+  return (serviceItems || [])
+    .map((serviceItem) => ({
+      blocksCount: Number(serviceItem.blocks_count ?? 0),
+      itemType: clean(serviceItem.service_item_type || serviceItem.item_type),
+      notes: clean(serviceItem.notes),
+      quantity: Number(serviceItem.quantity ?? 0),
+    }))
+    .sort((first, second) => first.itemType.localeCompare(second.itemType));
+}
+
+function adminBookingMatchesResponseLossRecovery(
+  record: AdminBookingPersistenceRecord,
+  payload: AdminBookingPersistenceRequestBody,
+) {
+  const booking = payload.booking;
+  const textPairs: Array<[unknown, unknown]> = [
+    [record.booking_reference, booking.booking_reference],
+    [record.pickup_location, booking.pickup_location],
+    [record.dropoff_location, booking.dropoff_location],
+    [record.service_type || record.route_type, booking.service_type || booking.route_type],
+    [record.route_summary, booking.route_summary],
+    [record.customer_display_name, booking.customer_display_name],
+    [record.contact_display_name, booking.contact_display_name],
+    [record.contact_phone, booking.contact_phone],
+    [record.contact_email, booking.contact_email],
+    [record.passenger_name, booking.passenger_name],
+    [record.flight_no, booking.flight_no],
+    [record.driver_contact, booking.driver_contact],
+    [record.driver_name, booking.driver_name],
+    [record.driver_plate_number, booking.driver_plate_number],
+    [record.vehicle_type_or_category, booking.vehicle_type_or_category],
+  ];
+  const identityPairs: Array<[unknown, unknown]> = [
+    [record.company_id, booking.company_id],
+    [record.booker_id, booking.booker_id],
+    [record.traveler_id, booking.traveler_id],
+    [record.driver_id, booking.driver_id],
+  ];
+
+  return (
+    textPairs.every(
+      ([actual, expected]) =>
+        adminBookingRecoveryText(actual) === adminBookingRecoveryText(expected),
+    ) &&
+    identityPairs.every(
+      ([actual, expected]) =>
+        adminBookingRecoveryIdentity(actual) === adminBookingRecoveryIdentity(expected),
+    ) &&
+    Number(record.pax_count ?? 0) === Number(booking.pax_count ?? 0) &&
+    adminBookingRecoveryTimestamp(record.pickup_datetime || record.pickup_at) ===
+      adminBookingRecoveryTimestamp(booking.pickup_datetime) &&
+    adminBookingRecoveryTimestamp(record.dropoff_datetime) ===
+      adminBookingRecoveryTimestamp(booking.dropoff_datetime) &&
+    JSON.stringify(adminBookingRecoveryRoutePoints(record.route_points)) ===
+      JSON.stringify(adminBookingRecoveryRoutePoints(payload.route_points)) &&
+    JSON.stringify(adminBookingRecoveryServiceItems(record.service_items)) ===
+      JSON.stringify(adminBookingRecoveryServiceItems(payload.service_items))
+  );
+}
+
+async function recoverAdminBookingAfterPostResponseLoss(
+  payload: AdminBookingPersistenceRequestBody,
+) {
+  const bookingReference = clean(payload.booking.booking_reference);
+
+  if (!bookingReference) {
+    return null;
+  }
+
+  try {
+    const params = new URLSearchParams({ booking_reference: bookingReference });
+    const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as {
+      booking?: AdminBookingPersistenceRecord | null;
+      ok?: boolean;
+    } | null;
+    const recoveredBooking = result?.booking ?? null;
+
+    return response.ok && result?.ok === true && recoveredBooking &&
+      adminBookingMatchesResponseLossRecovery(recoveredBooking, payload)
+      ? recoveredBooking
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function adminDispatchReturnTripRequested(bookingValue: BookingForm) {
   return clean(bookingValue.returnTripRequested) === "yes";
 }
@@ -20561,25 +20686,46 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       }> = [];
 
       for (const bookingPayload of bookingPayloads) {
-        const response = await fetch("/api/admin-bookings", {
-          body: JSON.stringify(bookingPayload.payload),
-          headers: {
-            "Content-Type": "application/json",
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "POST",
-        });
-        const responseBody = (await response.json().catch(() => null)) as {
+        let responseOk = false;
+        let responseBody: {
           booking?: AdminBookingPersistenceRecord | null;
           error?: string;
           ok?: boolean;
           safe_error_category?: string;
           safe_error_operation?: string;
-        } | null;
+        } | null = null;
+
+        try {
+          const response = await fetch("/api/admin-bookings", {
+            body: JSON.stringify(bookingPayload.payload),
+            headers: {
+              "Content-Type": "application/json",
+              "x-prestige-admin-purpose": "admin-booking-persistence",
+            },
+            method: "POST",
+          });
+          responseOk = response.ok;
+          responseBody = (await response.json().catch(() => null)) as typeof responseBody;
+        } catch (error) {
+          const recoveredBooking = await recoverAdminBookingAfterPostResponseLoss(
+            bookingPayload.payload,
+          );
+
+          if (!recoveredBooking) {
+            throw error;
+          }
+
+          responseOk = true;
+          responseBody = {
+            booking: recoveredBooking,
+            ok: true,
+          };
+        }
+
         const savedBooking = responseBody?.booking ?? null;
         const savedBookingReference = clean(savedBooking?.booking_reference);
 
-        if (!response.ok || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
+        if (!responseOk || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
           const errorMessage = adminBookingPersistenceFailureDetail(
             responseBody,
             "Admin booking persistence request failed.",

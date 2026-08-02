@@ -39285,9 +39285,18 @@ export default function Home() {
                   {label}
                 </button>
               ))}
-              <p className="col-span-4 px-1 pb-0.5 text-[10px] leading-4 text-slate-500">
-                Paste, review, then use the existing Save + CRM. Nothing saves automatically.
-              </p>
+              <div
+                className="col-span-4 min-w-0 border-t border-slate-200 px-1 pt-1 text-[10px] leading-4 text-slate-600"
+                data-mobile-dispatch-booking-summary="true"
+              >
+                <p className="truncate font-semibold text-slate-900">
+                  {clean(booking.name) || "Passenger not set"} · {String(Number(clean(booking.pax)) || 1)} pax
+                </p>
+                <p className="truncate">
+                  {clean(booking.pickup) || "Pickup not set"} → {clean(booking.dropoff) || "Drop-off not set"}
+                </p>
+                <p className="text-slate-500">Nothing saves automatically.</p>
+              </div>
             </nav>
             <section
               className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"

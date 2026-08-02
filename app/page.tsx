@@ -571,6 +571,20 @@ type CompanyRecord = {
   transzend_excel_privacy?: boolean | null;
 };
 
+type AdminCompanyCrmIdentityRecord = {
+  company_name?: string | null;
+  id?: number | string | null;
+  mobile_phone?: string | null;
+  operations_email?: string | null;
+  primary_contact_name?: string | null;
+};
+
+type AdminCompanyCrmIdentityReadResponse = {
+  company?: AdminCompanyCrmIdentityRecord | null;
+  error?: string;
+  ok?: boolean;
+};
+
 type RateSettingsRecord = {
   child_seat_customer_surcharge?: number | null;
   child_seat_driver_payout?: number | null;
@@ -6055,6 +6069,9 @@ async function saveDefaultRateSettingsScalarRuntime(
 
 type CompanyCrmIdentityContactPayload = {
   company_name: string;
+  mobile_phone?: string;
+  operations_email?: string;
+  primary_contact_name?: string;
 };
 
 type TravelerCrmIdentityContactPayload = {
@@ -6078,9 +6095,14 @@ type CompanyTravelerCrmRuntimeWriteResponse = {
   ok?: boolean;
   reason?: string;
   record?: {
+    company_name?: string | null;
     id?: number | string | null;
+    mobile_phone?: string | null;
+    operations_email?: string | null;
+    primary_contact_name?: string | null;
   } | null;
   rejected_fields?: unknown;
+  status?: string;
 };
 
 type CustomerRatesRuntimeWritePayload = {
@@ -6263,6 +6285,281 @@ function customerRatesRuntimeRejectedFields(value: CustomerRatesRuntimeWriteResp
   return Array.isArray(value?.rejected_fields)
     ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
     : [];
+}
+
+type SaveCrmCompanyProfileResolution =
+  | {
+      companyId: number;
+      companyName: string;
+      ok: true;
+      profileWritePerformed: boolean;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+function buildSaveCrmCompanyProfileContactPayload(
+  bookingValue: BookingForm,
+  companyName: string,
+): CompanyCrmIdentityContactPayload {
+  return {
+    company_name: companyName,
+    ...(clean(bookingValue.booker)
+      ? { primary_contact_name: clean(bookingValue.booker) }
+      : {}),
+    ...(clean(bookingValue.bookerContact)
+      ? { mobile_phone: clean(bookingValue.bookerContact) }
+      : {}),
+    ...(clean(bookingValue.bookerEmail)
+      ? { operations_email: clean(bookingValue.bookerEmail).toLowerCase() }
+      : {}),
+  };
+}
+
+function normalizeSaveCrmCompanyProfileValue(value: string | null | undefined) {
+  return clean(value).toLowerCase();
+}
+
+function saveCrmCompanyProfileConflictFields(
+  existingCompany: AdminCompanyCrmIdentityRecord,
+  incomingPayload: CompanyCrmIdentityContactPayload,
+) {
+  const comparisons: Array<{
+    existing: string | null | undefined;
+    incoming: string | undefined;
+    label: string;
+  }> = [
+    {
+      existing: existingCompany.primary_contact_name,
+      incoming: incomingPayload.primary_contact_name,
+      label: "contact name",
+    },
+    {
+      existing: existingCompany.mobile_phone,
+      incoming: incomingPayload.mobile_phone,
+      label: "mobile",
+    },
+    {
+      existing: existingCompany.operations_email,
+      incoming: incomingPayload.operations_email,
+      label: "operations email",
+    },
+  ];
+
+  return comparisons
+    .filter(({ existing, incoming }) => {
+      const existingValue = normalizeSaveCrmCompanyProfileValue(existing);
+      const incomingValue = normalizeSaveCrmCompanyProfileValue(incoming);
+
+      return existingValue && incomingValue && existingValue !== incomingValue;
+    })
+    .map(({ label }) => label);
+}
+
+function saveCrmCompanyProfileNeedsWrite(
+  existingCompany: AdminCompanyCrmIdentityRecord,
+  incomingPayload: CompanyCrmIdentityContactPayload,
+) {
+  return [
+    [existingCompany.primary_contact_name, incomingPayload.primary_contact_name],
+    [existingCompany.mobile_phone, incomingPayload.mobile_phone],
+    [existingCompany.operations_email, incomingPayload.operations_email],
+  ].some(([existing, incoming]) => {
+    const incomingValue = normalizeSaveCrmCompanyProfileValue(incoming);
+
+    return Boolean(
+      incomingValue &&
+        normalizeSaveCrmCompanyProfileValue(existing) !== incomingValue,
+    );
+  });
+}
+
+async function loadSaveCrmCompanyProfileForSave(
+  companyId: number | null,
+  companyName: string,
+): Promise<AdminCompanyCrmIdentityRecord | null> {
+  const params = new URLSearchParams(
+    companyId ? { id: String(companyId) } : { company_name: companyName },
+  );
+  const response = await fetch(`${adminCompaniesCrmIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminCompanyCrmIdentityReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "The exact CRM company profile could not be verified. No booking was saved.",
+    );
+  }
+
+  if (!responseBody.company) {
+    return null;
+  }
+
+  const recordId = adminDispatchVerifiedIdentityId(responseBody.company.id);
+  const recordName = clean(responseBody.company.company_name);
+
+  if (
+    !recordId ||
+    !recordName ||
+    (companyId && recordId !== companyId) ||
+    (!companyId && !billingIdentityMatches(recordName, companyName))
+  ) {
+    throw new Error(
+      "The CRM company lookup did not return the one exact requested profile. No booking was saved.",
+    );
+  }
+
+  return responseBody.company;
+}
+
+async function saveCrmCompanyProfileForBooking(
+  payload: CompanyTravelerCrmIdentityContactRuntimePayload,
+): Promise<AdminCompanyCrmIdentityRecord> {
+  const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
+    body: JSON.stringify(payload),
+    headers: {
+      "content-type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | CompanyTravelerCrmRuntimeWriteResponse
+    | null;
+  const recordId = crmRuntimeRecordId(responseBody);
+
+  if (
+    !response.ok ||
+    responseBody?.ok !== true ||
+    responseBody?.status !== "saved" ||
+    !recordId ||
+    !responseBody.record
+  ) {
+    throw new Error(
+      crmRuntimeWriteError(
+        responseBody,
+        "The guarded CRM company profile save did not complete. No booking was saved.",
+      ),
+    );
+  }
+
+  return responseBody.record;
+}
+
+async function resolveSaveCrmCompanyProfileForSave(
+  bookingValue: BookingForm,
+  confirmedAccountLabel: string,
+): Promise<SaveCrmCompanyProfileResolution> {
+  const requestedCompanyId = adminDispatchVerifiedIdentityId(bookingValue.companyId);
+  const requestedCompanyName = clean(confirmedAccountLabel);
+
+  if (!requestedCompanyName) {
+    return {
+      message: "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  const existingCompany = await loadSaveCrmCompanyProfileForSave(
+    requestedCompanyId,
+    requestedCompanyName,
+  );
+
+  if (requestedCompanyId && !existingCompany) {
+    return {
+      message: "The selected verified company profile no longer exists. Reload CRM identities and review the booking. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  if (!existingCompany) {
+    if (
+      !window.confirm(
+        `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
+      )
+    ) {
+      return {
+        message: "Save + CRM cancelled before creating the new company profile. No booking was saved.",
+        ok: false,
+      };
+    }
+
+    const createdCompany = await saveCrmCompanyProfileForBooking({
+      action_type: "company_create",
+      ...buildSaveCrmCompanyProfileContactPayload(bookingValue, requestedCompanyName),
+    });
+    const createdCompanyId = adminDispatchVerifiedIdentityId(createdCompany.id);
+    const createdCompanyName = clean(createdCompany.company_name) || requestedCompanyName;
+
+    if (!createdCompanyId) {
+      throw new Error("The new CRM company profile returned no verified ID. No booking was saved.");
+    }
+
+    return {
+      companyId: createdCompanyId,
+      companyName: createdCompanyName,
+      ok: true,
+      profileWritePerformed: true,
+    };
+  }
+
+  const existingCompanyId = adminDispatchVerifiedIdentityId(existingCompany.id);
+  const existingCompanyName = clean(existingCompany.company_name);
+
+  if (!existingCompanyId || !existingCompanyName) {
+    throw new Error("The exact CRM company profile is incomplete. No booking was saved.");
+  }
+
+  const contactPayload = buildSaveCrmCompanyProfileContactPayload(
+    bookingValue,
+    existingCompanyName,
+  );
+  const conflictFields = saveCrmCompanyProfileConflictFields(existingCompany, contactPayload);
+  const linkConfirmationRequired = !requestedCompanyId;
+
+  if (
+    (linkConfirmationRequired || conflictFields.length > 0) &&
+    !window.confirm(
+      conflictFields.length > 0
+        ? `${linkConfirmationRequired ? "Link this booking to" : "Use"} the existing CRM company profile "${existingCompanyName}" and replace its ${conflictFields.join(", ")} with this booking's Booker details? Accounts and Secondary email, rates, invoices, Calendar, and payments stay unchanged.`
+        : `Link this booking to the existing CRM company profile "${existingCompanyName}" and sync the Booker contact into that profile? This does not change rates, invoices, Calendar, payments, or send a message.`,
+    )
+  ) {
+    return {
+      message: "Save + CRM cancelled before linking or updating the existing company profile. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  if (!saveCrmCompanyProfileNeedsWrite(existingCompany, contactPayload)) {
+    return {
+      companyId: existingCompanyId,
+      companyName: existingCompanyName,
+      ok: true,
+      profileWritePerformed: false,
+    };
+  }
+
+  const savedCompany = await saveCrmCompanyProfileForBooking({
+    action_type: "company_update",
+    id: existingCompanyId,
+    ...contactPayload,
+  });
+
+  return {
+    companyId: existingCompanyId,
+    companyName: clean(savedCompany.company_name) || existingCompanyName,
+    ok: true,
+    profileWritePerformed: true,
+  };
 }
 
 function isCustomerRatesRuntimeWriteBlockedNoOp(value: CustomerRatesRuntimeWriteResponse | null) {
@@ -20206,11 +20503,52 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
 
     try {
+      const saveCrmCustomerAccountLabel =
+        clean(billingIdentityResolution.accountLabel) ||
+        saveCrmDefaultCustomerAccount(booking);
+      const companyProfileSyncRequired = Boolean(
+        adminDispatchVerifiedIdentityId(booking.companyId) ||
+        saveCrmExplicitCompanyAccount(booking),
+      );
+      const companyProfileResolution = companyProfileSyncRequired
+        ? await resolveSaveCrmCompanyProfileForSave(
+            booking,
+            saveCrmCustomerAccountLabel,
+          )
+        : null;
+
+      if (companyProfileResolution && !companyProfileResolution.ok) {
+        const cancelledMessage = {
+          tone: "info",
+          text: companyProfileResolution.message,
+        } satisfies Message;
+
+        setMessage(cancelledMessage);
+        setBookingSaveMessage(cancelledMessage);
+        setAdminBookingPersistenceMessage(cancelledMessage);
+        return null;
+      }
+
+      const bookingForSave = {
+        ...booking,
+        ...(companyProfileResolution
+          ? { companyId: String(companyProfileResolution.companyId) }
+          : {}),
+      };
+
+      if (companyProfileResolution) {
+        setBooking((currentBooking) => ({
+          ...currentBooking,
+          companyId: String(companyProfileResolution.companyId),
+        }));
+      }
+
       const bookingPayloads = buildAdminDispatchReturnTripPersistencePayloads(
-        booking,
+        bookingForSave,
         currentTimeMs,
         {
-          customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+          customerDisplayNameOverride:
+            companyProfileResolution?.companyName || saveCrmCustomerAccountLabel,
           parserSourceReferenceOverride: activeAdminEmailAiIntakeId
             ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
             : undefined,
@@ -20257,7 +20595,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   "save",
                   new Error(errorMessage),
                 )}`
-              : adminBookingPersistenceFailureMessage("save", new Error(errorMessage)),
+              : `${
+                  companyProfileResolution?.profileWritePerformed
+                    ? "Company profile saved, but "
+                    : ""
+                }${adminBookingPersistenceFailureMessage("save", new Error(errorMessage))}`,
           } satisfies Message;
 
           setMessage(saveMessage);

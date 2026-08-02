@@ -363,7 +363,7 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
-          Billing email
+          Secondary email
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-billing-email={customerId}

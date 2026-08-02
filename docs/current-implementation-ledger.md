@@ -2034,6 +2034,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The broader public runtime-gate lock now follows the established verified PA request payload (`verifiedRequestPayload`) rather than the superseded raw request variable; customer booking behavior was not changed by this messaging pass.
 - The existing production notification evidence harness now carries the current customer portal access-account, access-link, and runtime-session-map dependencies and creates one exact temporary active Driver Job Link because `driver_app` writes must remain link-bound. Controlled production evidence passed admin save/load/mark-read, all access/unsafe-content gates, exact outbox deletion, exact temporary-link deletion, and zero-row verification on both tables. No external send or real booking/customer write occurred; this repairs the isolated harness only and does not change customer authentication runtime behavior.
 
+### Completed Driver Message Closure Repair (2026-08-02)
+
+- Production screenshot evidence reproduced a completed Dashboard `Active Assigned Jobs` card retaining the Driver composer after the driver had persisted `Job Completed`. The completed-status persistence correctly expired the booking's active Driver Job Link, so a typed Admin message could not be queued and the generic missing-link fallback misleadingly offered `Open Driver Link Setup`.
+- The established Messages card now derives one presentation-only closed state from the exact latest persisted driver report. When that report is `completed` and the selected audience is Driver, the existing textarea and send action are disabled, the missing-link setup fallback stays hidden, and the card shows `Driver messaging closed after Job Completed.`
+- Customer audience selection and Admin-to-Customer messaging remain unchanged. Driver Job Link expiry, acknowledgement, reporting evidence, OTS photo, explicit `Admin confirm completed`, Calendar, booking status, notification persistence and reads, customer/driver privacy, external providers, and every invoice/payment/payout lane remain untouched.
+- Focused lock: `scripts/test-today-jobs-admin-driver-message-guard.mjs`.
+
 ### Driver-to-Customer One-Tap Replies
 
 - The existing token-scoped Driver Job page now shows one visible `Message Customer` card with four approved fixed replies: on the way, arrived, meet at pickup, and waiting nearby. One tap uses the established `/api/driver-job/[token]/quick-replies` route and existing notification outbox; no free-text field, duplicate route, external provider, or new write lane was added.

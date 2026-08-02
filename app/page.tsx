@@ -28468,6 +28468,8 @@ export default function Home() {
                 message: "",
                 status: "idle" as const,
               };
+            const activeJobDriverMessagingClosed =
+              activeJobDriverStatusLatest?.status_value === "completed";
             const activeJobMessageHistory = adminTodayJobMessageHistories[activeJobBookingReference] || {
               messages: [],
               status: "idle" as const,
@@ -28761,8 +28763,12 @@ export default function Home() {
                       Message
                       <textarea
                         aria-label={`Message ${activeJobDriverMessageState.audience} for ${activeJobBookingReference}`}
-                        className="min-h-20 w-full rounded-md border border-sky-300 bg-white p-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-700"
+                        className="min-h-20 w-full rounded-md border border-sky-300 bg-white p-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         data-admin-active-job-driver-message-input="true"
+                        disabled={
+                          activeJobDriverMessagingClosed &&
+                          activeJobDriverMessageState.audience === "driver"
+                        }
                         maxLength={500}
                         onChange={(event) =>
                           updateAdminTodayJobDriverMessageDraft(
@@ -28780,7 +28786,9 @@ export default function Home() {
                         data-admin-active-job-driver-message-send="true"
                         disabled={
                           activeJobDriverMessageState.status === "loading" ||
-                          !clean(activeJobDriverMessageState.draft)
+                          !clean(activeJobDriverMessageState.draft) ||
+                          (activeJobDriverMessagingClosed &&
+                            activeJobDriverMessageState.audience === "driver")
                         }
                         onClick={() => void sendAdminTodayJobMessage(activeJobBookingReference)}
                         type="button"
@@ -28794,6 +28802,7 @@ export default function Home() {
                             : "Send to Customer"}
                       </button>
                       {activeJobDriverMessageState.status === "error" &&
+                      !activeJobDriverMessagingClosed &&
                       activeJobDriverMessageState.audience === "driver" &&
                       activeJobDriverMessageState.message.startsWith("Driver link required") ? (
                         <button
@@ -28806,7 +28815,15 @@ export default function Home() {
                         </button>
                       ) : null}
                     </div>
-                    {activeJobDriverMessageState.message ? (
+                    {activeJobDriverMessagingClosed &&
+                    activeJobDriverMessageState.audience === "driver" ? (
+                      <p
+                        className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 font-semibold text-slate-800"
+                        data-admin-active-job-driver-message-closed="true"
+                      >
+                        Driver messaging closed after Job Completed.
+                      </p>
+                    ) : activeJobDriverMessageState.message ? (
                       <p
                         className={`rounded-md border px-2 py-1 font-semibold ${
                           activeJobDriverMessageState.status === "success"

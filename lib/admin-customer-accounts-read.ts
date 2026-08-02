@@ -12,6 +12,7 @@ import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supaba
 export const adminCustomerAccountsReadVersion = "admin-customer-accounts-read-v1";
 
 export type AdminCustomerAccountsReadParams = {
+  customerId: string | null;
   limit: number;
   search: string | null;
 };
@@ -23,6 +24,7 @@ export type AdminCustomerAccountSafeRecord = {
   customer_account: string;
   customer_folder_key: string;
   customer_id: string | null;
+  guest_account_billing_enabled: boolean;
   latest_booking_reference: string | null;
   latest_public_booking_reference: string | null;
   latest_pickup_at: string | null;
@@ -57,7 +59,7 @@ const customerDirectoryReadLimit = 200;
 const malformedParamsError = "Admin customer accounts read parameters are malformed.";
 const forbiddenParamsError =
   "Admin customer accounts read parameters include unsupported or unsafe fields.";
-const allowedParams = new Set(["limit", "search"]);
+const allowedParams = new Set(["customer_id", "limit", "search"]);
 const forbiddenSafeTextFragments = [
   "admin_finance",
   "admin_note",
@@ -267,6 +269,7 @@ function toSafeAccount(account: MutableCustomerAccount): AdminCustomerAccountSaf
     customer_account: account.customer_account,
     customer_folder_key: account.customer_folder_key,
     customer_id: account.customer_id,
+    guest_account_billing_enabled: account.guest_account_billing_enabled,
     latest_booking_reference: account.latest_booking_reference,
     latest_public_booking_reference: account.latest_public_booking_reference,
     latest_pickup_at: account.latest_pickup_at,
@@ -301,6 +304,7 @@ function toCustomerAccounts(
         customer_account: customerAccount,
         customer_folder_key: key,
         customer_id: customerId,
+        guest_account_billing_enabled: false,
         latest_booking_reference: null,
         latest_public_booking_reference: null,
         latest_pickup_at: null,
@@ -393,8 +397,24 @@ function mergeCustomerDirectoryRows(
   bookingAccounts: AdminCustomerAccountSafeRecord[],
   rows: unknown[],
 ) {
+  const directoryRowsByCustomerId = new Map(
+    rows.flatMap((row) => {
+      const record = row !== null && typeof row === "object" && !Array.isArray(row)
+        ? (row as UnknownRecord)
+        : {};
+      const customerId = exactCustomerId(record.id);
+
+      return customerId ? [[customerId, record] as const] : [];
+    }),
+  );
+  const enrichedBookingAccounts = bookingAccounts.map((account) => ({
+    ...account,
+    guest_account_billing_enabled:
+      directoryRowsByCustomerId.get(exactCustomerId(account.customer_id) || "")?.customer_type ===
+      "hotel",
+  }));
   const linkedCustomerIds = new Set(
-    bookingAccounts.map((account) => exactCustomerId(account.customer_id)).filter(Boolean),
+    enrichedBookingAccounts.map((account) => exactCustomerId(account.customer_id)).filter(Boolean),
   );
   const directoryOnlyAccounts = rows.flatMap((row) => {
     const record = row !== null && typeof row === "object" && !Array.isArray(row)
@@ -414,6 +434,7 @@ function mergeCustomerDirectoryRows(
       customer_account: customerAccount,
       customer_folder_key: `${customerId}::customer_account`,
       customer_id: customerId,
+      guest_account_billing_enabled: record.customer_type === "hotel",
       latest_booking_reference: null,
       latest_public_booking_reference: null,
       latest_pickup_at: null,
@@ -424,7 +445,7 @@ function mergeCustomerDirectoryRows(
     }];
   });
 
-  return [...bookingAccounts, ...directoryOnlyAccounts];
+  return [...enrichedBookingAccounts, ...directoryOnlyAccounts];
 }
 
 export function parseAdminCustomerAccountsReadParams(
@@ -442,8 +463,12 @@ export function parseAdminCustomerAccountsReadParams(
 
   const limit = positiveInteger(readParamsValue(params, "limit"), defaultLimit, maxLimit);
   const search = searchText(readParamsValue(params, "search"));
+  const rawCustomerId = readParamsValue(params, "customer_id");
+  const customerId = rawCustomerId === undefined || rawCustomerId === null || rawCustomerId === ""
+    ? null
+    : exactCustomerId(rawCustomerId);
 
-  if (!limit || search === false) {
+  if (!limit || search === false || (rawCustomerId && !customerId)) {
     return {
       error: malformedParamsError,
       ok: false,
@@ -453,6 +478,7 @@ export function parseAdminCustomerAccountsReadParams(
 
   return {
     data: {
+      customerId,
       limit,
       search,
     },
@@ -490,7 +516,7 @@ export async function loadAdminCustomerAccounts(
 
   const { data: customerRows, error: customerError } = await client
     .from("customers")
-    .select("id, display_name, account_status, status")
+    .select("id, display_name, account_status, status, customer_type")
     .order("display_name", { ascending: true })
     .limit(customerDirectoryReadLimit);
 
@@ -503,7 +529,10 @@ export async function loadAdminCustomerAccounts(
   }
 
   const accounts = mergeCustomerDirectoryRows(toCustomerAccounts(bookingsResult.data), customerRows);
-  const filteredAccounts = filterAccountsBySearch(accounts, parsed.data.search);
+  const exactAccounts = parsed.data.customerId
+    ? accounts.filter((account) => account.customer_id === parsed.data.customerId)
+    : accounts;
+  const filteredAccounts = filterAccountsBySearch(exactAccounts, parsed.data.search);
   const returnedAccounts = filteredAccounts.slice(0, parsed.data.limit);
 
   return {
@@ -515,6 +544,64 @@ export async function loadAdminCustomerAccounts(
         total_account_count: accounts.length,
       },
       version: adminCustomerAccountsReadVersion,
+    },
+    ok: true,
+  };
+}
+
+export async function updateAdminCustomerGuestAccountBilling(
+  input: UnknownRecord,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<AdminCustomerAccountSafeRecord>> {
+  const allowedWriteFields = new Set(["customer_id", "guest_account_billing_enabled"]);
+
+  if (Object.keys(input).some((key) => !allowedWriteFields.has(key))) {
+    return { error: forbiddenParamsError, ok: false, status: 400 };
+  }
+
+  const customerId = exactCustomerId(input.customer_id);
+  const enabled = input.guest_account_billing_enabled;
+
+  if (!customerId || typeof enabled !== "boolean" || !actor?.actor_role) {
+    return { error: malformedParamsError, ok: false, status: 400 };
+  }
+
+  const client: Pick<SupabaseClient, "from"> | null = customerDirectoryClient();
+
+  if (!client) {
+    return { error: "Admin customer directory configuration is not ready.", ok: false, status: 503 };
+  }
+
+  const { data, error } = await client
+    .from("customers")
+    .update({ customer_type: enabled ? "hotel" : "corporate" })
+    .eq("id", customerId)
+    .select("id, display_name, customer_type")
+    .single();
+  const record = data !== null && typeof data === "object" ? (data as UnknownRecord) : {};
+  const savedCustomerId = exactCustomerId(record.id);
+  const customerAccount = safeText(record.display_name, 120);
+
+  if (error || savedCustomerId !== customerId || !customerAccount) {
+    return { error: "Admin customer guest-account billing update failed safely.", ok: false, status: 500 };
+  }
+
+  return {
+    data: {
+      account_scope_key: "customer_account",
+      account_scope_label: null,
+      completed_count: 0,
+      customer_account: customerAccount,
+      customer_folder_key: `${customerId}::customer_account`,
+      customer_id: customerId,
+      guest_account_billing_enabled: record.customer_type === "hotel",
+      latest_booking_reference: null,
+      latest_public_booking_reference: null,
+      latest_pickup_at: null,
+      latest_service_type: null,
+      saved_booking_count: 0,
+      source: "customer_directory",
+      upcoming_count: 0,
     },
     ok: true,
   };

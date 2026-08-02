@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /setProfile\(blankCreateProfile\(customerName\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{customerName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
+  /setProfile\(blankCreateProfile\(customerName, guestAccountBillingEnabled\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{customerName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
   "not-found lookup results must visibly open the create customer company profile form",
 );
 

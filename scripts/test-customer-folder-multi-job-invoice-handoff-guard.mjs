@@ -302,7 +302,10 @@ assert.equal(
 );
 
 const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");
-const missingBookerBlockIndex = customersPage.indexOf("if (!exactBookerId)", selectedFormSetIndex);
+const missingBookerBlockIndex = customersPage.indexOf(
+  "if (!guestAccountBillingEnabled && !exactBookerId)",
+  selectedFormSetIndex,
+);
 assert.equal(
   selectedFormSetIndex !== -1 && selectedFormSetIndex < missingBookerBlockIndex,
   true,

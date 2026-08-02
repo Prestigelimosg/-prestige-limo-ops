@@ -35,6 +35,7 @@ for (const fragment of [
   'type MobileDispatchBookingStep = "message" | "details" | "options" | "review";',
   'data-mobile-dispatch-step={mobileDispatchBookingStep}',
   'data-mobile-dispatch-quick-booking="true"',
+  'data-mobile-dispatch-booking-summary="true"',
   'data-mobile-dispatch-quick-step={step}',
   'data-admin-mobile-compact-header="true"',
   'data-admin-mobile-header-status="true"',
@@ -45,6 +46,8 @@ for (const fragment of [
   '{ label: "Options", step: "options" }',
   '{ label: "Review", step: "review" }',
   'Nothing saves automatically.',
+  '{clean(booking.name) || "Passenger not set"} · {String(Number(clean(booking.pax)) || 1)} pax',
+  '{clean(booking.pickup) || "Pickup not set"} → {clean(booking.dropoff) || "Drop-off not set"}',
 ]) {
   assert.equal(appPage.includes(fragment), true, `Mobile quick booking must include ${fragment}`);
 }

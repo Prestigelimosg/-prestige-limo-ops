@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Mobile Dispatch Quick Booking Focus (2026-08-03)
+
+- The existing Dispatch page now has a phone-only four-step focus bar: `Message`, `Details`, `Options`, and `Review`. A narrow screen shows one existing workflow group at a time instead of rendering every large Dispatch card in one continuous page. The phone header hides the non-actionable status-card grid, keeps Customers & Payments available, and presents the same primary tabs and Admin route links as compact horizontal rows. Desktop continues showing the complete established header and Dispatch layout.
+- `Message` keeps the existing paste area and `Create Job Card` parser action. A successful deterministic parse advances only the phone presentation to `Review`; invalid or multi-booking input remains in the existing visible error/review lane. `Details` exposes the existing CRM identity and trip fields, `Options` exposes the existing secondary Dispatch controls, and `Review` exposes the existing Job Card Preview, review notes, and parser-debug disclosure.
+- The existing Job Card Preview `Save + CRM` button and `handleJobCardPrimaryBookingAction` remain the only save handoff. Nothing saves automatically. No parser, booking DTO, route, API, booking/CRM writer, Calendar, driver assignment, Driver Job Link, messaging, billing, invoice, payment, payout, live location, provider, database, schema, migration, environment, or Production record changed.
+- Focused protection is `scripts/test-mobile-dispatch-quick-booking-guard.mjs`, alongside the existing Dispatch compact-feedback, route-flow, AI Assistant, booking UI browser, privacy, and staged-application guards.
+
 ### Next.js Route Page Props Compatibility Repair (2026-08-02)
 
 - Next.js 16.2.11 generated route types rejected the root `app/page.tsx` because it accepted a custom optional `initialTab` prop and `app/settings/invoice/page.tsx` imported that route page with `<Home initialTab="company" />`. Route pages may accept only the supported Next.js page props boundary, so `npx tsc --noEmit` failed before the unrelated customer-account invoice repair could complete verification.

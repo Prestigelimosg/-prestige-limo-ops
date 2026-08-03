@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Selected-Job Invoice Drop-Off Handoff Repair (2026-08-03)
+
+- Signed-in Production Chrome reproduced one exact selected-job invoice defect on booking `10868`: Section 3 retained drop-off `5 Raffles Ave., Singapore 039797`, while the Section 4 MNG line description rendered `NIL` in the established drop-off position.
+- Source tracing proved the exact saved booking retained `dropoff_location` and the shared formatter correctly consumes it, but the existing Section 3 to Section 4 selected-job handoff omitted that one field from its formatter call. The handoff now passes the already-loaded exact saved drop-off into the same established formatter.
+- The formatter, invoice layout, price and Paid calculations, PDF renderer, API, persistence, database, customer and driver records, issue/download/email actions, Calendar, messaging, payout, PayNow, GPS, providers, schema, migrations, and environment remain unchanged. Focused protection is added to `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs` so this caller cannot silently omit the saved drop-off again.
+- Live reproduction confirmed the new Paid handoff separately: booking `10868` showed Paid, total SGD80.00, Payment Made SGD80.00, and Balance Due SGD0.00 without creating, issuing, downloading, or emailing an invoice. The source repair still requires its normal focused checks and post-deployment live read before it is considered Production-accepted.
+
 ### Section 3 Prepaid Exact-Booking Invoice Handoff (2026-08-03)
 
 - The owner approved one compact `Paid` checkbox immediately beside the existing exact-job `Edit` action in `3 · Pending jobs for payment`. The checkbox is local review state only: ticking it does not write a booking, create an invoice, record a payment, send email, charge a card, or contact a customer. The existing exact-row `Invoice` action remains the only handoff into the established selected-job invoice review.

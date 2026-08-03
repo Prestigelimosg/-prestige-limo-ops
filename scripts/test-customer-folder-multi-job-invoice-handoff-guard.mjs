@@ -152,6 +152,18 @@ for (const fragment of [
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
 }
 
+const selectedInvoiceRowsStart = customersPage.indexOf("const invoiceRows = exactBookings.map");
+const selectedInvoiceRowsEnd = customersPage.indexOf(
+  "const [firstInvoiceRow, ...additionalInvoiceRows] = invoiceRows;",
+  selectedInvoiceRowsStart,
+);
+const selectedInvoiceRows = customersPage.slice(selectedInvoiceRowsStart, selectedInvoiceRowsEnd);
+includes(
+  selectedInvoiceRows,
+  "dropoffLocation: booking.dropoff_location,",
+  "selected-job invoice handoff must pass the exact saved drop-off into the shared formatter",
+);
+
 for (const fragment of [
   'return "ARRIVAL";',
   'return "DEPARTURE";',

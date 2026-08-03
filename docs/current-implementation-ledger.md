@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Preview Admin 403 Diagnosis And Readiness Guard Harness Repair (2026-08-03)
+
+- Read-only inspection corrected the earlier broad Preview `403` report. The exact PR #184 Preview `/api/ai-parse` same-origin Admin request returns HTTP 200 in the established review-only mock mode with `write_action: false` and `external_send: false`. The exact Preview `/api/admin-bookings` read returns the expected HTTP 503 `Admin booking persistence is not enabled on this server.` because that Preview has none of the Production admin-session, Supabase, or booking-persistence environment variables. No auth route is broadened and no Production secret is copied into Preview.
+- The required `scripts/test-admin-booking-persistence-enable-readiness.mjs` guard had drifted behind the established public booking route: its temporary compiled harness omitted the existing customer booking invitation and phone-proof modules, and its successful `/book` boundary fixture omitted the now-required phone proof. The harness now supplies only bounded test doubles for those existing dependencies, adds the safe proof header, and expects the exact preliminary `bookings` lookup introduced by phone-proof replay protection. Application routes and runtime behavior are unchanged.
+- A visible isolated local Mac browser check ran with Supabase and admin persistence variables explicitly absent and `AI_PARSE_MODE=mock`. The existing AI safety checkbox enabled the same `AI Parse Booking` control, which returned the visible review-only mock draft through one HTTP 200 `/api/ai-parse` request. No booking POST, CRM write, OpenAI request, provider send, database write, Calendar action, driver action, invoice, payment, payout, PayNow, schema, migration, environment, Preview configuration, or Production change occurred; browser errors and warnings were zero.
+
 ### Mobile Active Bookings Direct-Route Deduplication (2026-08-03)
 
 - The owner's phone screenshot reproduced one active Bookings card displaying the same direct Pickup to Drop-off path three times: once in the collapsed summary, once as separate Pickup and Drop-off rows, and once more as the combined `Route:` row in the expanded details.

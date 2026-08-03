@@ -25383,6 +25383,9 @@ export default function Home() {
           const routeText =
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+          const routeRepeatsPickupAndDropoff =
+            clean(routeText).toLocaleLowerCase() ===
+            clean(`${pickup} > ${dropoff}`).toLocaleLowerCase();
           const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
           const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
@@ -25574,7 +25577,16 @@ export default function Home() {
                       <OperationalCardSection section="route" title="Route">
                         <p>Pickup: <AdminOperationalUppercaseValue field="pickup">{pickup}</AdminOperationalUppercaseValue></p>
                         <p>Drop-off: <AdminOperationalUppercaseValue field="dropoff">{dropoff}</AdminOperationalUppercaseValue></p>
-                        <p className="break-words">Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue></p>
+                        <p
+                          className={`break-words ${routeRepeatsPickupAndDropoff ? "hidden md:block" : ""}`}
+                          data-bookings-route-detail={
+                            routeRepeatsPickupAndDropoff
+                              ? "duplicate-direct-route"
+                              : "additional-route-detail"
+                          }
+                        >
+                          Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue>
+                        </p>
                       </OperationalCardSection>
                     </div>
                     <div className="grid gap-2" data-operational-card-summary-grid={bookingId}>

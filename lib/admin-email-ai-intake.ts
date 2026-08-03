@@ -58,6 +58,8 @@ Write a short internal summary. Always return suggestedReply as an empty string.
 
 Respect labelled email sections exactly. Content under a PAYMENT heading is payment metadata only. Never copy Stripe or another payment method/provider into booking pickup, drop-off, extraStopLocation, extraStops, route, or notes. Leave those location fields empty unless the email explicitly places the value under ROUTE, ROUTE LOCATIONS, PICKUP LOCATION, DROP OFF LOCATION, or ITINERARY.
 
+For a Prestige Transport booking-form notification, keep the labelled passenger separate from the Booker. CLIENT DETAILS can contain the passenger's name beside an email belonging to a different requester. If the labelled client name repeats the passenger while the labelled email clearly names somebody else, leave bookerName empty and require Admin to confirm the Booker. Never invent a Booker name from an email address. VEHICLE > Passengers count is vehicle capacity; CLIENT DETAILS > Passangers is the booked passenger count.
+
 For confirmed_booking, amendment, cancellation, or a booking-like enquiry, extract every supported trip into bookingResult using the established service meanings: MNG is an arrival or meet-and-greet pickup from an airport or seaport; DEP is a departure drop-off at an airport or seaport; TRF is a point-to-point transfer that is not an arrival or departure; DSP is hourly, disposal, or standby. Leave unknown fields empty and list uncertainties. For unrelated mail, return an empty bookingResult.`;
 
 type SupabaseError = {
@@ -801,6 +803,144 @@ function messageIdHash(parsed: ParsedMail, source: Buffer) {
   return createHash("sha256").update(stableValue).digest("hex");
 }
 
+const prestigeTransportBookerConflictReason =
+  "Booker name conflicts with the labelled client email; confirm the Booker before Save + CRM.";
+const ignoredPersonIdentityTokens = new Set([
+  "dr",
+  "miss",
+  "mr",
+  "mrs",
+  "ms",
+]);
+
+function personIdentityTokens(value: unknown) {
+  return cleanText(value, 240)
+    .normalize("NFKD")
+    .toLowerCase()
+    .match(/[a-z0-9]+/g)
+    ?.filter(
+      (token) =>
+        token.length > 1 && !ignoredPersonIdentityTokens.has(token),
+    ) || [];
+}
+
+function samePersonIdentity(left: unknown, right: unknown) {
+  const leftTokens = personIdentityTokens(left);
+  const rightTokens = personIdentityTokens(right);
+
+  return (
+    leftTokens.length > 0 &&
+    rightTokens.length > 0 &&
+    leftTokens.join(" ") === rightTokens.join(" ")
+  );
+}
+
+function emailLocalPartLooksLikeAnotherPerson(
+  email: string,
+  clientName: string,
+) {
+  const localPart = cleanText(email, 320).toLowerCase().split("@")[0] || "";
+  const emailTokens = localPart
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 1);
+  const clientNameTokens = new Set(personIdentityTokens(clientName));
+
+  return (
+    emailTokens.length >= 2 &&
+    emailTokens.every((token) => !clientNameTokens.has(token))
+  );
+}
+
+function prestigeTransportClientIdentity(input: {
+  body: string;
+  subject: string;
+}) {
+  if (
+    !/^New booking\s+"Prestige Transport \d+"\s+has been received$/i.test(
+      cleanText(input.subject, 240),
+    )
+  ) {
+    return null;
+  }
+
+  const labelledIdentity = cleanMultilineText(
+    input.body,
+    maximumAiInputCharacters,
+  ).match(
+    /\bClient details\b[\s\S]*?\bFirst name\s+(.+?)\s+Last name\s+(.+?)\s+E-mail address\s+([^\s]+)/i,
+  );
+  const firstName = cleanText(labelledIdentity?.[1], 120);
+  const lastName = cleanText(labelledIdentity?.[2], 120);
+  const email = cleanText(labelledIdentity?.[3], 320).toLowerCase();
+
+  if (!firstName || !lastName || !email.includes("@")) {
+    return null;
+  }
+
+  return {
+    clientName: `${firstName} ${lastName}`,
+    email,
+  };
+}
+
+function enforcePrestigeTransportIdentityConsistency(
+  input: {
+    body: string;
+    subject: string;
+  },
+  analysis: AdminEmailAiAnalysis,
+) {
+  const labelledIdentity = prestigeTransportClientIdentity(input);
+
+  if (!labelledIdentity) {
+    return analysis;
+  }
+
+  let conflictFound = false;
+  const bookings = analysis.bookingResult.bookings.map((booking) => {
+    const bookerEmail = cleanText(booking.bookerEmail, 320).toLowerCase();
+    const hasConflict =
+      bookerEmail === labelledIdentity.email &&
+      samePersonIdentity(booking.bookerName, labelledIdentity.clientName) &&
+      samePersonIdentity(booking.passengerName, labelledIdentity.clientName) &&
+      emailLocalPartLooksLikeAnotherPerson(
+        labelledIdentity.email,
+        labelledIdentity.clientName,
+      );
+
+    if (!hasConflict) {
+      return booking;
+    }
+
+    conflictFound = true;
+
+    return {
+      ...booking,
+      bookerName: "",
+      needsReviewReasons: cleanReviewReasons([
+        prestigeTransportBookerConflictReason,
+        ...booking.needsReviewReasons,
+      ]),
+    };
+  });
+
+  if (!conflictFound) {
+    return analysis;
+  }
+
+  return {
+    ...analysis,
+    bookingResult: {
+      ...analysis.bookingResult,
+      bookings,
+    },
+    reviewReasons: cleanReviewReasons([
+      prestigeTransportBookerConflictReason,
+      ...analysis.reviewReasons,
+    ]),
+  };
+}
+
 async function analyseAllowedEmail(input: {
   body: string;
   subject: string;
@@ -839,8 +979,13 @@ async function analyseAllowedEmail(input: {
       };
     }
 
+    const analysis = enforcePrestigeTransportIdentityConsistency(
+      input,
+      sanitizeAdminEmailAiAnalysis(parsed),
+    );
+
     return {
-      analysis: sanitizeAdminEmailAiAnalysis(parsed),
+      analysis,
       inputTokens: cleanPositiveInteger(response.usage?.input_tokens),
       model: cleanModel(response.model || model),
       ok: true,

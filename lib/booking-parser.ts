@@ -2657,6 +2657,12 @@ function detectName(text: string, flight: string) {
     return narratedTravelerName;
   }
 
+  const datedAddressAirportDeparture = detectDatedAddressAirportDepartureShorthand(text);
+
+  if (datedAddressAirportDeparture.passenger) {
+    return datedAddressAirportDeparture.passenger;
+  }
+
   const inlineName = firstMatch(text, [
     /\bname\s+is\s+([A-Za-z][A-Za-z.' -]{1,60})/i,
     /\b(?:name|passenger|guest|pax name|principal|traveller|traveler)\s*[:=-]\s*([A-Za-z][A-Za-z.' -]{1,60})/i,
@@ -3193,7 +3199,34 @@ function detectBookerValue(text: string, context: { booker: string; company: str
   );
 }
 
+function detectDatedAddressAirportDepartureShorthand(text: string) {
+  const match = clean(text).match(
+    /^(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(?:20)?\d{2})?)\s+(?:[01]?\d|2[0-3])(?:(?::|\.)?[0-5]\d)?\s*(?:am|pm|hrs?)?\s*[.,;:-]*\s+(\d{1,5}[A-Za-z]?\s+[A-Za-z0-9][A-Za-z0-9.' /-]{1,100}?)\s+to\s+((?:changi\s+)?airport(?:\s+(?:t|terminal)\s*[1-4])?)\s+((?:mr|mrs|ms|mdm|miss|dr)\.?\s+[A-Za-z][A-Za-z.' -]{0,60})\.?$/i,
+  );
+  const pickup = cleanLocation(match?.[1] || "");
+  const passenger = normalizeNarratedPersonName(match?.[3] || "");
+
+  if (!pickup || !looksLikePersonName(passenger)) {
+    return { pickup: "", dropoff: "", passenger: "" };
+  }
+
+  return {
+    pickup,
+    dropoff: airportLocationFromText(match?.[2] || "airport"),
+    passenger,
+  };
+}
+
 function detectRoute(text: string, flight = "") {
+  const datedAddressAirportDeparture = detectDatedAddressAirportDepartureShorthand(text);
+
+  if (datedAddressAirportDeparture.pickup) {
+    return {
+      pickup: datedAddressAirportDeparture.pickup,
+      dropoff: datedAddressAirportDeparture.dropoff,
+    };
+  }
+
   const rawPickup = lineValue(text, [
     "pickup",
     "pickup address",

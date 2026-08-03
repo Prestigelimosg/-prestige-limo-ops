@@ -1694,6 +1694,19 @@ assert.equal(parsedTonightAirportArrivalShorthand.name, 'Dr Poh So Kok');
 
 const dispatcherRouteAddressShorthandRegressionCases = [
   {
+    label: 'dated numbered-address airport departure with trailing passenger',
+    input: '3 Aug 1500hrs. 22 Berrima Road to Airport Mrs. Lee',
+    expected: {
+      company: '',
+      bookingType: 'DEP',
+      date: '2026-08-03',
+      time: '1500hrs',
+      pickup: '22 Berrima Road',
+      dropoff: 'Changi Airport',
+      name: 'Mrs Lee',
+    },
+  },
+  {
     label: 'frm/to route shorthand',
     input: `Date: today
 Time: 0615

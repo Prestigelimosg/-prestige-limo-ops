@@ -153,6 +153,10 @@ for (const fragment of [
   'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'const paidLabelStreamLines = paidInvoice',
+  'pdfRect(50, 743, 66, 26, "0.02 0.45 0.25 rg")',
+  'pdfTextAt("PAID", 62, 751, 14, "1 g")',
+  "...paidLabelStreamLines",
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",
 ]) {

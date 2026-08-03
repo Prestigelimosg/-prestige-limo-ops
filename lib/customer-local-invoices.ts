@@ -607,6 +607,12 @@ export function createCustomerInvoicePdfBytes(
   const paidInvoice = documentType === "invoice" && invoice.status === "Paid";
   const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";
   const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;
+  const paidLabelStreamLines = paidInvoice
+    ? [
+        pdfRect(50, 743, 66, 26, "0.02 0.45 0.25 rg"),
+        pdfTextAt("PAID", 62, 751, 14, "1 g"),
+      ]
+    : [];
   const logoDisplayWidth = 150;
   const logoDisplayHeight = logoImage
     ? Math.max(40, Math.min(76, Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)))
@@ -682,6 +688,7 @@ export function createCustomerInvoicePdfBytes(
   const notesY = 118;
   const termsY = 45;
   const streamLines = [
+    ...paidLabelStreamLines,
     ...logoStreamLines,
     pdfRightTextAt(documentTitle, 562, 725, 30),
     pdfRightTextAt(`${documentNumberLabel} ${invoice.invoiceNumber}`, 562, 700, 9),

@@ -4407,6 +4407,36 @@ assert.equal(narratedPassengerDeparture.name, 'Jwalant');
 assert.equal(narratedPassengerDeparture.extraStopCount ?? '', '');
 assert.equal(narratedPassengerDeparture.extraStopLocation ?? '', '');
 
+const compactOriginArrivalMessage = `Tue 4 Aug
+Arrive from Bangalore
+SQ 509, ETA 19:00 Mr. Jwalant. 82 Grange Road`;
+const compactOriginArrival = parseBookingMessage(compactOriginArrivalMessage, {
+  referenceDate: new Date('2026-08-03T12:00:00+08:00'),
+});
+assert.deepEqual(compactOriginArrival, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-08-04',
+  time: '1900hrs',
+  flight: 'SQ509',
+  pickup: 'Changi Airport',
+  dropoff: '82 Grange Road',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Jwalant',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Tue 4 Aug',
+    'Arrive from Bangalore',
+    'SQ 509, ETA 19:00 Mr. Jwalant. 82 Grange Road',
+  ],
+});
+
 const jobCard = [
   `${finalBooking.vehicle} ${finalBooking.bookingType}`,
   `${finalBooking.date}, ${finalBooking.time}`,

@@ -1089,6 +1089,33 @@ function detectNamedAddressTransferContext(text: string) {
   };
 }
 
+function detectCompactAirportArrivalContext(text: string) {
+  const arrivalOrigin = firstMatch(text, [
+    /(?:^|\n)\s*arriv(?:e|ing)\s+from\s+([A-Za-z][A-Za-z.' -]{1,80})(?=\n|$)/i,
+  ]);
+  const namedAddress = detectNamedAddressTransferContext(text);
+
+  if (
+    !arrivalOrigin ||
+    !/\bETA\b/i.test(text) ||
+    !/\b[A-Z]{2}\s?\d{1,4}\b/i.test(text) ||
+    !namedAddress.passenger ||
+    !namedAddress.address
+  ) {
+    return {
+      arrivalOrigin: "",
+      passenger: "",
+      dropoff: "",
+    };
+  }
+
+  return {
+    arrivalOrigin,
+    passenger: namedAddress.passenger,
+    dropoff: namedAddress.address,
+  };
+}
+
 function detectLoosePickupStayRoute(text: string) {
   const lines = text
     .split(/\n+/)
@@ -1797,6 +1824,10 @@ function detectBookerCompanyContext(text: string) {
   ];
 
   for (const candidate of contextCandidates) {
+    if (/^arriv(?:e|ing)\s+from\s+/i.test(candidate)) {
+      continue;
+    }
+
     const match = contextPatterns
       .map((pattern) => candidate.match(pattern))
       .find((result) => result?.[1] && result?.[2]);
@@ -3218,6 +3249,15 @@ function detectDatedAddressAirportDepartureShorthand(text: string) {
 }
 
 function detectRoute(text: string, flight = "") {
+  const compactAirportArrival = detectCompactAirportArrivalContext(text);
+
+  if (compactAirportArrival.dropoff && flight) {
+    return {
+      pickup: airportLocationFromText(text),
+      dropoff: compactAirportArrival.dropoff,
+    };
+  }
+
   const datedAddressAirportDeparture = detectDatedAddressAirportDepartureShorthand(text);
 
   if (datedAddressAirportDeparture.pickup) {
@@ -3575,9 +3615,11 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const structuredClientName = detectStructuredClientName(operationalText);
   const paxNameAndNumber = detectPaxNameAndNumber(operationalText);
   const labeledTravelerName = detectLabeledTravelerName(operationalText);
+  const compactAirportArrival = detectCompactAirportArrivalContext(operationalText);
   const name =
     terminalFlightDetails?.passenger ||
     freeformMultiLocationTransfer?.passenger ||
+    compactAirportArrival.passenger ||
     detectNarratedDeparturePassenger(operationalText) ||
     detectStandaloneHonorificNameLine(operationalText) ||
     detectStandbyName(operationalText) ||

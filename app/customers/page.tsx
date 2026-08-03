@@ -5267,6 +5267,7 @@ export default function MockCustomerDashboardPage() {
                 amountCents: reviewedPricesByReference.get(reference) ?? null,
                 bookingReference: reference,
                 lineDescription: formatCustomerInvoiceLineDescription({
+                  dropoffLocation: booking.dropoff_location,
                   dspEndedAt: dspActualTimeSummary?.dsp_ended_at,
                   dspStartedAt:
                     dspActualTimeSummary?.billing_time_source === "admin_correction"

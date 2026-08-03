@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
+import { CustomerVerifiedIdentitiesEditor } from "./customer-verified-identities-editor";
 
 const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCompanyProfileWriteApiPath = "/api/admin-company-traveler-crm-runtime-write-action";
@@ -473,6 +474,13 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
       </div>
+
+      {profile.id ? (
+        <CustomerVerifiedIdentitiesEditor
+          companyId={profile.id}
+          companyName={profile.company_name}
+        />
+      ) : null}
 
       <p className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${feedbackClass(status)}`}>
         {message}

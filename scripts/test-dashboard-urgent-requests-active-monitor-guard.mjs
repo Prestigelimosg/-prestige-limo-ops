@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const appPagePath = "app/page.tsx";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const savedBookingReadPath = "lib/admin-saved-booking-read.ts";
 const guardScript = "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs";
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -40,16 +42,22 @@ function assertSourceOrder(source, fragments, label) {
   }
 }
 
-const [appPage, ledger, preactivationSuite] = await Promise.all([
+const [appPage, ledger, preactivationSuite, savedBookingRead] = await Promise.all([
   readFile(appPagePath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
+  readFile(savedBookingReadPath, "utf8"),
 ]);
 
 const helperSection = sliceBetween(
   appPage,
   "function bookingRecordPickupDateTimeMs",
   "function sortBookingHistoryNewestFirst",
+);
+const pickupRiskFunctionSource = sliceBetween(
+  appPage,
+  "function computeAdminPickupRiskState",
+  "\nfunction sortBookingHistoryNewestFirst",
 );
 const derivedRequestSection = sliceBetween(
   appPage,
@@ -75,6 +83,21 @@ const saveBookingSection = sliceBetween(
   appPage,
   "async function saveBooking()",
   "function bookingRecordReferenceCandidates",
+);
+const bookingStatusUpdateSection = sliceBetween(
+  appPage,
+  "async function updateBookingStatusOnly(",
+  "async function markBookingCompleted(",
+);
+const dashboardOverdueResolutionSection = sliceBetween(
+  appPage,
+  "async function resolveDashboardOverdueBooking(",
+  "async function adminConfirmBookingCompletedByPhone(",
+);
+const loadBookingsSection = sliceBetween(
+  appPage,
+  "async function loadBookings(",
+  "function rememberHandledCustomerBookingRequest(",
 );
 const activeMonitorSource = sliceBetween(
   appPage,
@@ -105,9 +128,11 @@ const ledgerSection = sliceBetween(
 for (const fragment of [
   "function bookingRecordPickupDateTimeMs",
   "function bookingRecordIsPickupWithinNextHours",
+  "function bookingRecordIsPickupOverdue",
   "function bookingRecordIsInsideActiveJobMonitorWindow",
   "pickupTimeMs >= currentTimeMs",
   "pickupTimeMs - currentTimeMs < hours * 60 * 60 * 1000",
+  "pickupTimeMs < currentTimeMs",
   "const monitorWindowStartMs = pickupTimeMs - 60 * 60 * 1000;",
   "const monitorWindowEndMs = pickupTimeMs + 24 * 60 * 60 * 1000;",
 ]) {
@@ -166,21 +191,29 @@ assertExcludes(
 for (const fragment of [
   "Codex Prepared Job Cards",
   "Prepared from exact saved requests. Admin reviews every card before calendar action.",
-  "Calendar changes still require admin action in Dispatch.",
-  'data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}',
-  'data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}',
+  'data-codex-prepared-job-card-list="true"',
+  "customerBookingRequestDisplayItems.map",
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);",
   "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}",
   "Passenger: {passengerText}",
-  "Urgent >1h",
-  "New",
+  "{routeText}",
+  "data-admin-prepared-job-card-close={bookingId}",
+  "onClick={() => rememberHandledCustomerBookingRequest(requestBooking)}",
+  "Close",
+]) {
+  assertIncludes(codexPreparedJobCardsPanel, fragment, `Codex prepared queue fragment ${fragment}`);
+}
+for (const removedFragment of [
+  "Calendar changes still require admin action in Dispatch.",
   "Review Job Card",
   "Review Corrected Job Card",
   "loadSelectedBooking(requestBooking, {",
-  "bookingFormOverride: correctionReady",
-  "focusJobCard: true",
 ]) {
-  assertIncludes(codexPreparedJobCardsPanel, fragment, `Codex prepared queue fragment ${fragment}`);
+  assertExcludes(
+    codexPreparedJobCardsPanel,
+    removedFragment,
+    `Codex prepared close-only queue removes ${removedFragment}`,
+  );
 }
 
 for (const fragment of [
@@ -202,11 +235,21 @@ for (const fragment of [
   '"driver-tbc"',
   'data-dashboard-urgent-booking-request-row={bookingId}',
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);",
+  "const isOverdue =",
+  "bookingRecordIsPickupOverdue(bookingRecord, currentTimeMs)",
   "{getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}",
   "Passenger: {passengerText}",
   '"New / Urgent"',
   '"Driver TBC"',
+  'isOverdue ? "Overdue" : "Driver TBC under 1h"',
   "loadSelectedBooking(bookingRecord, { focusDriverJobLink: true })",
+  'data-dashboard-overdue-booking-actions={bookingId}',
+  'data-dashboard-overdue-booking-completed={bookingId}',
+  'data-dashboard-overdue-booking-cancel={bookingId}',
+  'resolveDashboardOverdueBooking(bookingRecord, "completed")',
+  'resolveDashboardOverdueBooking(bookingRecord, "cancelled")',
+  '"Completed"',
+  '"Cancel"',
   "customerBookingChangeRequestNotifications.map",
   "adminAppNotificationChangeRequestContext(notification)",
   'data-dashboard-change-cancel-request-row={safeRowKey}',
@@ -219,6 +262,96 @@ for (const fragment of [
   "No new, urgent, amendment, or cancellation requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "): Promise<boolean>",
+  "return true;",
+  "return false;",
+]) {
+  assertIncludes(bookingStatusUpdateSection, fragment, `booking status result fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'resolution: "completed" | "cancelled"',
+  "Mark this overdue job Completed?",
+  "Use Completed only if the trip happened.",
+  "Cancel this overdue job?",
+  "Use Cancel if the trip did not happen.",
+  "window.confirm(",
+  "await markBookingCompleted(bookingRecord)",
+  "await markBookingCancelled(bookingRecord)",
+  "setCompletedMonthFilter(bookingRecordCompletedHistoryMonthKey(bookingRecord))",
+  'selectAppTab("completed")',
+]) {
+  assertIncludes(
+    dashboardOverdueResolutionSection,
+    fragment,
+    `dashboard overdue resolution fragment ${fragment}`,
+  );
+}
+for (const forbidden of [
+  "fetch(",
+  "setInterval(",
+  "autoSyncSavedBookingGoogleCalendar",
+  "sendAdmin",
+  "notification",
+]) {
+  assertExcludes(
+    dashboardOverdueResolutionSection,
+    forbidden,
+    `dashboard overdue resolution duplicate side effect ${forbidden}`,
+  );
+}
+assert.equal(
+  (appPage.match(/fetch\(adminSavedBookingStatusesApiPath/g) || []).length,
+  1,
+  "Dashboard overdue actions must reuse the single saved-booking-status writer.",
+);
+for (const monitorFragment of [
+  "setCurrentTimeMs(Date.now());",
+  "}, 30 * 1000);",
+  'void loadBookings("Bookings synced.", { silent: true }).finally(() => {',
+  "}, 3 * 1000);",
+  "void refreshDashboardDriverJobStatusRead(bookingReference);",
+  "}, 10 * 1000);",
+]) {
+  assertIncludes(appPage, monitorFragment, `established booking monitor fragment ${monitorFragment}`);
+}
+assertExcludes(
+  appPage,
+  "syncBookingCompletedStatusFromDriverReport(",
+  "driver JC evidence must not auto-complete the saved booking",
+);
+for (const fragment of [
+  "adminMonitorableBookingListScope",
+  "fetchCompleteMonitorableSavedBookingList",
+  'scope: adminMonitorableBookingListScope',
+  "offset: String(pageIndex * Number(adminLoadBookingsListLimit))",
+  "monitorablePage.length < Number(adminLoadBookingsListLimit)",
+  "mergeSavedBookingMonitorCoverage",
+  "monitorableBookings = monitorableBookingsResult.bookings",
+  "if (monitoringCoverageError)",
+]) {
+  assertIncludes(loadBookingsSection, fragment, `complete monitor coverage fragment ${fragment}`);
+}
+for (const forbidden of ["setInterval(", "setTimeout(", "PATCH", "POST", "DELETE"] ) {
+  assertExcludes(
+    loadBookingsSection,
+    forbidden,
+    `complete monitor coverage duplicate timer or writer ${forbidden}`,
+  );
+}
+for (const fragment of [
+  'const allowedListReadQueryParams = new Set(["limit", "offset", "scope"]);',
+  'scope: "all" | "monitorable";',
+  'scope === "monitorable"',
+  "query.or(",
+  "`${statusColumn}.is.null,${statusColumn}.not.in.${terminalSavedBookingStatuses}`",
+  "return query.range(",
+  "parsed.data.offset + parsed.data.limit - 1",
+]) {
+  assertIncludes(savedBookingRead, fragment, `monitorable saved-booking read fragment ${fragment}`);
 }
 
 for (const fragment of [
@@ -239,7 +372,6 @@ assertSourceOrder(
     'data-dashboard-codex-system-notices="true"',
     'aria-label="Booking Requests"',
     "{codexPreparedJobCardsPanel}",
-    'data-admin-device-push-panel="true"',
   ],
   "single Codex workbench order",
 );
@@ -277,7 +409,7 @@ for (const fragment of [
   'data-dispatch-workflow-step="driver-job-link"',
   'data-driver-job-link-handoff-notice="true"',
   'data-driver-job-link-booking-details="true"',
-  "<p className=\"font-semibold\">Booking {dispatchReleaseWorkflowBookingReference}</p>",
+  'Booking {dispatchPublicBookingReference || "Reference unavailable"}',
   "Passenger",
   "Pickup",
   "Route",
@@ -366,6 +498,10 @@ for (const fragment of [
   "function adminPickupRiskBadgeClass",
   "function adminPickupRiskCardClass",
   "approachEvidence?: AdminPickupApproachEvidenceState | null",
+  'driverStatusReadStatus: AdminDriverJobStatusReadState["status"]',
+  "Checking latest Driver Report before assessing pickup risk.",
+  "Driver Report unavailable. Refresh reports before assessing pickup risk.",
+  'driverStatusReadStatus: readState?.status || "idle"',
   "Pickup approach evidence",
   "Route ETA",
   "Moving away",
@@ -380,6 +516,99 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `pickup risk helper fragment ${fragment}`);
 }
+
+assertSourceOrder(
+  helperSection,
+  [
+    'if (normalizedDriverStatus === "completed" || normalizedDriverStatus === "pob")',
+    'if (normalizedDriverStatus === "ots")',
+    'if (!normalizedDriverStatus && driverStatusReadStatus !== "loaded")',
+    "if (!liveLocation)",
+  ],
+  "pickup risk must clear persisted POB before neutral report loading and assess no-pin risk only after report load",
+);
+
+const pickupRiskFunctionJavaScript = ts.transpileModule(pickupRiskFunctionSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.None,
+    target: ts.ScriptTarget.ES2020,
+  },
+}).outputText;
+const computePickupRiskForGuard = new Function(
+  "clean",
+  "activeJobMinutesUntilPickup",
+  "formatAdminMapDistance",
+  "formatAdminMapDuration",
+  `${pickupRiskFunctionJavaScript}\nreturn computeAdminPickupRiskState;`,
+)(
+  (value) => String(value ?? "").trim(),
+  (bookingRecord) => bookingRecord.minutesUntilPickup,
+  (distanceMeters) => `${distanceMeters ?? 0} m`,
+  (durationSeconds) => `${durationSeconds ?? 0} sec`,
+);
+const pickupRiskGuardBase = {
+  approachEvidence: null,
+  bookingRecord: { minutesUntilPickup: -120 },
+  currentTimeMs: Date.parse("2026-07-26T15:00:00+08:00"),
+  liveLocation: null,
+  monitorEnabled: true,
+  runtimeStatus: "active",
+};
+
+assert.deepEqual(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "loading",
+    driverStatusValue: null,
+  }),
+  {
+    detail: "Checking latest Driver Report before assessing pickup risk.",
+    level: "pending",
+    pulse: false,
+    shortLabel: "Checking report",
+    title: "Pickup Risk: Checking",
+  },
+  "an unread POB during Driver Report loading must not raise a false red pickup risk",
+);
+assert.deepEqual(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "error",
+    driverStatusValue: null,
+  }),
+  {
+    detail: "Driver Report unavailable. Refresh reports before assessing pickup risk.",
+    level: "pending",
+    pulse: false,
+    shortLabel: "Report unavailable",
+    title: "Pickup Risk: Waiting",
+  },
+  "a failed Driver Report read must remain neutral instead of guessing pickup risk",
+);
+assert.equal(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "loading",
+    driverStatusValue: "pob",
+  }).shortLabel,
+  "POB",
+  "persisted POB evidence must clear pickup risk even while a refresh is in flight",
+);
+assert.deepEqual(
+  computePickupRiskForGuard({
+    ...pickupRiskGuardBase,
+    driverStatusReadStatus: "loaded",
+    driverStatusValue: null,
+  }),
+  {
+    detail: "No live pin near pickup time. Call driver or prepare replacement.",
+    level: "critical",
+    pulse: true,
+    shortLabel: "No pin",
+    title: "Pickup Risk: No live pin",
+  },
+  "authoritative loaded no-status evidence must preserve the established critical no-pin alert",
+);
 
 for (const fragment of [
   "bookingRecordHasDispatchActiveJobsMonitorDriver(bookingRecord)",
@@ -403,22 +632,37 @@ for (const fragment of [
   "const liveDispatchSlotSummaryLabel =",
   "const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join(\"|\");",
   'const todayJobsMonitorIsActive = activeTab === "dashboard";',
+  "refreshDashboardDriverJobLinksRead(bookingReferences)",
 ]) {
   assertIncludes(activeMonitorSource, fragment, `active monitor source fragment ${fragment}`);
 }
 
 for (const fragment of [
-  "Today's Jobs",
+  "Active Assigned Jobs",
   "All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.",
   "{dayOfTripActiveJobBookings.length} active",
   "No assigned active jobs to monitor.",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",
   "const activeJobPickupTime = formatPickupTimeFromRecord(activeJobBooking);",
+  "dayOfTripActiveJobVisibleBookings.map((activeJobBooking, activeJobIndex)",
+  'activeJobIndex % 2 === 0 ? "sky" : "violet"',
+  'data-admin-active-job-alternate-colour={activeJobAlternateColour}',
+  '${isSelectedActiveJob ? "border-lime-400" : "border-sky-300"} bg-sky-50/80',
+  '${isSelectedActiveJob ? "border-lime-400" : "border-violet-300"} bg-violet-50/80',
+  "rounded-md border-2 px-2.5 py-2 text-sm shadow-sm",
+  "adminPickupRiskCardClass(activeJobPickupRiskState.level)",
   'data-admin-active-job-passenger="true"',
   'data-admin-active-job-assigned-driver="true"',
   "Latest report: {activeJobDriverStatusLabel}",
   'data-admin-multi-driver-active-job-driver-report-history="true"',
   "History:</span> {activeJobDriverStatusHistory}",
+  "{activeJobDriverAcknowledgementState.label}",
+  'data-admin-multi-driver-active-job-acknowledgement="true"',
+  'data-admin-multi-driver-active-job-acknowledgement-state=',
+  'data-admin-multi-driver-active-jobs-waiting-count=',
+  'activeJobDriverStatusReferenceList.length === 0',
+  '? "0 waiting"',
+  "{activeJobDriverAcknowledgementWaitingCount} waiting",
   "(isSelectedActiveJob ? clean(booking.driverName) : \"\")",
   'data-dispatch-live-driver-map="true"',
   "Open Live Dispatch Map",

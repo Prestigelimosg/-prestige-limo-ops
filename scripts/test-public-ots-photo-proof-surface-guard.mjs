@@ -444,25 +444,6 @@ for (const path of publicClientPaths) {
       continue;
     }
 
-    if (path === "app/driver-job/[token]/page.tsx" && fragment === "URL.createObjectURL") {
-      assertIncludes(
-        source,
-        "function downloadDriverCalendarBlob(blob: Blob, filename: string)",
-        "driver calendar attachment blob download helper",
-      );
-      assertIncludes(
-        source,
-        "window.requestAnimationFrame(() => window.URL.revokeObjectURL(url));",
-        "driver calendar attachment blob URL cleanup",
-      );
-      assert.equal(
-        countMatches(source, "URL.createObjectURL"),
-        1,
-        "driver page must only use one object URL for the calendar attachment download",
-      );
-      continue;
-    }
-
     assertExcludes(source, fragment, `${path} OTS photo proof caller fragment`);
   }
 

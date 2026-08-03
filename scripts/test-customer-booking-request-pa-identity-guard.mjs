@@ -35,12 +35,30 @@ for (const fragment of [
   assert.ok(persistenceAdapter.includes(fragment), `Verified PA persistence must include ${fragment}`);
 }
 
-for (const fragment of [
-  'disabled={submitting || Boolean(confirmationStatus)}',
-  'confirmationStatus ? "Submitted" : submitting ? "Submitting..." : "Submit Booking Request"',
-]) {
-  assert.ok(bookPage.includes(fragment), `Successful submit button state must include ${fragment}`);
-}
+const submitMarker = 'data-customer-booking-submit="true"';
+const submitMarkerIndex = bookPage.indexOf(submitMarker);
+const submitButtonStart = bookPage.lastIndexOf("<button", submitMarkerIndex);
+const submitButtonEnd = bookPage.indexOf("</button>", submitMarkerIndex);
+assert.ok(
+  submitMarkerIndex >= 0 && submitButtonStart >= 0 && submitButtonEnd > submitMarkerIndex,
+  "The established customer booking submit button must remain present.",
+);
+const submitButton = bookPage.slice(submitButtonStart, submitButtonEnd);
+assert.match(
+  submitButton,
+  /disabled=\{\s*submitting\s*\|\|\s*Boolean\(confirmationStatus\)\s*\|\|\s*!bookingSubmissionAccessResolved\s*\|\|\s*!hasBookingSubmissionAccess\s*\}/,
+  "The submit button must retain its submitting, successful-submit, access-check, and verified-access locks.",
+);
+assert.match(
+  submitButton,
+  /\{confirmationStatus\s*\?\s*"Submitted"\s*:\s*submitting\s*\?\s*"Submitting\.\.\."\s*:\s*!bookingSubmissionAccessResolved\s*\?\s*"Checking booking access\.\.\."\s*:\s*!hasBookingSubmissionAccess\s*\?\s*"Phone verification required"\s*:\s*"Submit Booking Request"\}/,
+  "The submit button must retain its current success, progress, access-check, OTP, and ready labels.",
+);
+assert.match(
+  bookPage,
+  /function updateField\([\s\S]*?setConfirmationStatus\(null\);[\s\S]*?\n  \}/,
+  "Editing a safe booking field must continue clearing the successful-submit lock.",
+);
 
 assert.ok(
   appSmoke.includes('await setCustomerBookingField("luggage", "2 bags");') &&

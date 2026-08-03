@@ -427,6 +427,16 @@ try {
     "Booking driver assignment display must use a dedicated typed loader.",
   );
   assert.equal(
+    appPageSource.includes("const assignedDriverSelectValue = assignedDriverId;"),
+    true,
+    "Verified driver selection must remain empty until an explicit persisted driver ID is selected.",
+  );
+  assert.equal(
+    appPageSource.includes("assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : \"\")"),
+    false,
+    "Driver names must not make an unverified legacy assignment appear selected.",
+  );
+  assert.equal(
     appPageSource.includes("payout_preferences, driver_payout_rules"),
     true,
     "Full driver profile shim risk must remain visible/parked until a later write-path split.",

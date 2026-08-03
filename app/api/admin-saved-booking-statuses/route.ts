@@ -4,7 +4,11 @@ import {
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
-import { updateAdminSavedBookingStatus } from "../../../lib/admin-saved-booking-status-persistence";
+import {
+  type AdminSavedBookingStatusRecord,
+  updateAdminSavedBookingStatus,
+} from "../../../lib/admin-saved-booking-status-persistence";
+import { createCustomerDriverAppNotification } from "../../../lib/customer-driver-app-notification-persistence";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +79,61 @@ function safeFailureResponse() {
   );
 }
 
+const customerVisibleTerminalStatuses = new Set(["cancelled", "completed"]);
+
+function customerBookingStatusNotificationCopy(status: string) {
+  return status === "cancelled"
+    ? {
+        safe_message:
+          "Your Prestige Limo booking has been cancelled. Open My Bookings to review.",
+        safe_title: "Booking cancelled",
+      }
+    : {
+        safe_message:
+          "Your Prestige Limo booking has been completed. Open My Bookings to review.",
+        safe_title: "Booking completed",
+      };
+}
+
+async function maybeQueueAdminSavedBookingStatusCustomerNotification(
+  booking: AdminSavedBookingStatusRecord,
+  actor: ReturnType<typeof adminDispatcherBoundaryToPersistenceAdapterActor>,
+) {
+  if (
+    !customerVisibleTerminalStatuses.has(booking.status) ||
+    !booking.booking_reference
+  ) {
+    return null;
+  }
+
+  const copy = customerBookingStatusNotificationCopy(booking.status);
+  const result = await createCustomerDriverAppNotification(
+    {
+      booking_reference: booking.booking_reference,
+      delivery_surface: "customer_app",
+      driver_job_link_id: null,
+      event_key: `${booking.booking_reference}:customer_booking_status:${booking.status}:${booking.updated_at}`,
+      notification_status: "queued",
+      notification_type: "booking_status",
+      priority: "normal",
+      safe_context: {
+        customer_facing_status: booking.status,
+        external_send: false,
+        provider_send: false,
+        source: "admin_booking_status",
+      },
+      safe_message: copy.safe_message,
+      safe_title: copy.safe_title,
+      workflow_area: "customer_booking_status_updates",
+    },
+    actor,
+  );
+
+  return result.ok
+    ? { notification: result.data, ok: true }
+    : { error: result.error, ok: false, status: result.status };
+}
+
 export async function PATCH(request: Request) {
   try {
     const boundary = requireAdminDispatcherBoundary(request);
@@ -96,8 +155,15 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const customerNotification =
+      await maybeQueueAdminSavedBookingStatusCustomerNotification(
+        result.data.booking,
+        actor,
+      );
+
     return Response.json({
       booking: result.data.booking,
+      customer_notification: customerNotification,
       ok: true,
       version: result.data.version,
     });

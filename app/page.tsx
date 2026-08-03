@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   mergeParsedBookingState,
@@ -10,11 +11,11 @@ import {
   sanitizeAiParseResult,
   type AiParseResult,
 } from "../lib/ai-parser-schema";
-import { prepareCodexJobCardCorrection } from "../lib/codex-job-card-correction";
 import {
-  evaluateCodexCalendarConflict,
-  type CodexCalendarConflictBooking,
-} from "../lib/codex-calendar-conflict";
+  adminEmailAiClassificationAppearsInApp,
+  adminEmailAiSenderAddressIsAllowed,
+  type AdminEmailAiClassification,
+} from "../lib/admin-email-ai-intake-contract";
 import { mockCustomers } from "./customers/_data/mock-customers";
 import {
   calculateProfit,
@@ -54,7 +55,6 @@ import { formatWhatsAppJobCard } from "../lib/whatsapp-job-card";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
-const adminCodexJobCardReviewWorkflowArea = "admin_booking_review";
 const adminDriverJobLinksApiPath = "/api/admin-driver-job-links";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobStatusesApiPath = "/api/admin-driver-job-statuses";
@@ -80,6 +80,7 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminCompanyProfileApiPath = "/api/admin-company-profile";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminEmailAiIntakeApiPath = "/api/admin-email-ai-intake";
 const adminAutomationRuntimeApiPath = "/api/admin-automation-runtime";
 const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
 const adminCustomerDriverDetailsEmailReviewItemApiPath =
@@ -95,6 +96,7 @@ const adminEmailActivationPreflightApiPath =
 const adminCustomerDriverAppNotificationsApiPath =
   "/api/admin-customer-driver-app-notifications";
 const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
+const adminCustomerBookingInvitationsApiPath = "/api/admin-customer-booking-invitations";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
@@ -113,6 +115,9 @@ const adminFullDriverProfileRuntimeWriteActionApiPath =
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsListLimit = "100";
+const adminUpcomingBookingsPageSize = 20;
+const adminMonitorableBookingListScope = "monitorable";
+const adminMonitorableBookingMaxPages = 100;
 const dispatchHandoffReferenceQueryParam = "booking_reference";
 const dispatchHandoffAlternateReferenceQueryParam = "dispatch_booking_reference";
 const dispatchHandoffCustomerReturnQueryParam = "customer_return_url";
@@ -121,6 +126,9 @@ const completedHandoffActionQueryParam = "completed_action";
 const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
+const customerBookingInvitationCopyStateKey = "customer-booking-invitation";
+const adminDismissedPendingDriverAckLinksStorageKey =
+  "prestige-admin-dismissed-pending-driver-ack-links";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const driverJobLinkSuccessFeedbackResetMs = 3_000;
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -457,6 +465,8 @@ type BookingForm = {
   vehicle: string;
   date: string;
   time: string;
+  dspEndDate: string;
+  dspEndTime: string;
   flight: string;
   pickup: string;
   dropoff: string;
@@ -522,6 +532,8 @@ type LoadBookingsOperationalFormFields = Pick<
   | "company"
   | "companyId"
   | "date"
+  | "dspEndDate"
+  | "dspEndTime"
   | "driverContact"
   | "driverId"
   | "driverName"
@@ -551,12 +563,27 @@ type LoadBookingsFinancePayoutInternalFormFields = Pick<
 >;
 
 type CompanyRecord = {
+  card_option_default_enabled?: boolean | null;
   id: number;
   company_name: string | null;
   domain: string | null;
   customer_rates?: RateRules | null;
   driver_payout_rules?: DriverPayoutRules | null;
   transzend_excel_privacy?: boolean | null;
+};
+
+type AdminCompanyCrmIdentityRecord = {
+  company_name?: string | null;
+  id?: number | string | null;
+  mobile_phone?: string | null;
+  operations_email?: string | null;
+  primary_contact_name?: string | null;
+};
+
+type AdminCompanyCrmIdentityReadResponse = {
+  company?: AdminCompanyCrmIdentityRecord | null;
+  error?: string;
+  ok?: boolean;
 };
 
 type RateSettingsRecord = {
@@ -619,6 +646,17 @@ type AdminBookingsListReadResult =
       ok: false;
     };
 
+type AdminMonitorableBookingsReadResult =
+  | {
+      bookings: BookingRecord[];
+      ok: true;
+    }
+  | {
+      bookings: BookingRecord[];
+      error: string;
+      ok: false;
+    };
+
 type AdminSavedBookingStatusResponse = {
   booking?: {
     booking_reference?: string | null;
@@ -632,6 +670,7 @@ type AdminSavedBookingStatusResponse = {
 };
 
 type TravelerRecord = {
+  card_option_default_enabled?: boolean | null;
   id: number;
   company_id: number;
   traveler_name: string | null;
@@ -725,6 +764,7 @@ type AdminTravelerCrmIdentityApiResponse = {
 type BookingRecord = {
   id?: string | number | null;
   booking_reference?: string | null;
+  public_booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
   company_id: number | null;
@@ -740,6 +780,7 @@ type BookingRecord = {
   pickup_time: string | null;
   pickup_at?: string | null;
   pickup_datetime?: string | null;
+  dropoff_datetime?: string | null;
   pickup_address: string | null;
   pickup_location?: string | null;
   dropoff_address: string | null;
@@ -816,6 +857,7 @@ const loadBookingsOperationalDisplayFieldNames = [
   "audit_summary",
   "booking_id",
   "booking_reference",
+  "public_booking_reference",
   "booking_status",
   "booking_type",
   "booker_display_name",
@@ -948,13 +990,30 @@ type AdminDriverJobLinkRecord = {
   link_status: "active" | "expired" | "revoked";
   revoked_at: string | null;
   safe_summary: {
+    acknowledged: boolean;
+    acknowledged_at: string | null;
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
     assigned_driver_plate: string | null;
+    job_card_kind: "amendment" | "new" | "reissued" | null;
     pickup_datetime: string | null;
     route: string | null;
     vehicle: string | null;
   };
+};
+
+type AdminDriverJobLinkSafeOperationalPayload = {
+  assigned_driver_contact?: string;
+  assigned_driver_name?: string;
+  assigned_driver_plate?: string;
+  booking_type: string;
+  dropoff_location: string;
+  flight_no: string;
+  passenger_name: string;
+  pickup_date: string;
+  pickup_location: string;
+  pickup_time: string;
+  route: string;
 };
 
 type AdminDriverJobLinkAction = "create" | "load" | "revoke";
@@ -965,6 +1024,11 @@ type AdminDriverJobLinkState = {
   loadedReference: string;
   message: Message | null;
   oneTimeUrl: string;
+};
+
+type AdminDashboardDriverJobLinksReadState = {
+  linksByReference: Record<string, AdminDriverJobLinkRecord>;
+  status: "error" | "idle" | "loaded" | "loading";
 };
 
 type AdminManualTelegramCopyTarget = "customerDriverDetails" | "driverJobLink";
@@ -1109,18 +1173,10 @@ type AdminCustomerDriverDetailsCustomerInAppActionState = {
   notificationType: "trip_update";
 };
 
-type AdminCustomerDriverDetailsDriverInAppActionState = {
-  actionStatus: "idle" | "loading" | "loaded" | "error";
-  deliverySurface: "driver_app";
-  external_send: false;
-  loadedReference: string;
-  message: string;
-  noProviderSend: true;
-  notificationStatus: "queued" | "blocked";
-  notificationType: "trip_update";
-};
+type AdminTodayJobMessageAudience = "driver" | "customer";
 
 type AdminTodayJobDriverMessageState = {
+  audience: AdminTodayJobMessageAudience;
   draft: string;
   message: string;
   status: "idle" | "loading" | "success" | "error";
@@ -1128,10 +1184,19 @@ type AdminTodayJobDriverMessageState = {
 
 type AdminTodayJobMessageRecord = {
   actor_role?: string | null;
+  booking_reference?: string | null;
   created_at?: string | null;
+  delivery_surface?: string | null;
   id?: string | null;
+  safe_context?: Record<string, unknown> | null;
   safe_message?: string | null;
+  safe_title?: string | null;
   workflow_area?: string | null;
+};
+
+type AdminBookingDriverDetailsDeliveryStatus = {
+  occurredAt: string;
+  status: "acknowledged" | "sent";
 };
 
 type AdminTodayJobMessageHistoryState = {
@@ -1202,21 +1267,6 @@ function adminCustomerDriverDetailsCustomerInAppFallbackState(
   return {
     actionStatus: "idle",
     deliverySurface: "customer_app",
-    external_send: false,
-    loadedReference: "",
-    message,
-    noProviderSend: true,
-    notificationStatus: "blocked",
-    notificationType: "trip_update",
-  };
-}
-
-function adminCustomerDriverDetailsDriverInAppFallbackState(
-  message = "Load a saved booking with an active driver job link before sending Driver In-App.",
-): AdminCustomerDriverDetailsDriverInAppActionState {
-  return {
-    actionStatus: "idle",
-    deliverySurface: "driver_app",
     external_send: false,
     loadedReference: "",
     message,
@@ -1341,6 +1391,7 @@ type AdminActiveJobsMapLocation = {
   job_status?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  public_job_reference?: string | null;
   sharing_state?: string | null;
   speed_meters_per_second?: number | null;
   stale_after?: string | null;
@@ -1488,6 +1539,40 @@ type AdminAppNotificationReadState = {
   status: "idle" | "loading" | "loaded" | "error" | "unavailable";
 };
 
+type AdminEmailAiIntakeRecord = {
+  booking_parse_result?: unknown;
+  canonical_booking_text?: string | null;
+  classification?: AdminEmailAiClassification | string | null;
+  confidence?: number | null;
+  created_at?: string | null;
+  id?: string | null;
+  mailbox_address?: string | null;
+  normalized_text?: string | null;
+  processing_status?: string | null;
+  received_at?: string | null;
+  review_reasons?: string[] | null;
+  sender_address?: string | null;
+  subject?: string | null;
+  suggested_reply?: string | null;
+  summary?: string | null;
+};
+
+type AdminEmailAiTokenUsage = {
+  available: boolean;
+  input_tokens: number;
+  month_key: string;
+  output_tokens: number;
+  total_tokens: number;
+};
+
+type AdminEmailAiIntakeReadState = {
+  enabled: boolean;
+  message: Message | null;
+  records: AdminEmailAiIntakeRecord[];
+  status: "idle" | "loading" | "loaded" | "error" | "unavailable";
+  tokenUsage: AdminEmailAiTokenUsage | null;
+};
+
 type AdminAppNotificationAction = {
   notificationId: string;
   status: AdminAppNotificationUpdateStatus;
@@ -1584,11 +1669,24 @@ type AdminMonthlyBillingGroupingReadinessFilter =
   | "all"
   | AdminMonthlyBillingGroupingReadinessStatus;
 
+type AdminMonthlyBillingJobClassification = {
+  billing_month?: string | null;
+  booking_reference?: string | null;
+  customer_account?: string | null;
+  customer_id?: string | null;
+  display_booking_reference?: string | null;
+  safe_billing_status?: "ready" | "covered" | "blocked" | null;
+  safe_reason?: string | null;
+};
+
 type AdminMonthlyBillingGroup = {
   billing_month?: string | null;
   blocked_count?: number | null;
+  classified_count?: number | null;
+  covered_count?: number | null;
   customer_account?: string | null;
   customer_id?: string | null;
+  jobs?: AdminMonthlyBillingJobClassification[] | null;
   ready_count?: number | null;
   safe_readiness_status?: AdminMonthlyBillingGroupingReadinessStatus | null;
   total_count?: number | null;
@@ -1605,6 +1703,8 @@ type AdminMonthlyBillingGroupingPagination = {
 
 type AdminMonthlyBillingGroupingSummary = {
   blocked_count?: number | null;
+  classified_count?: number | null;
+  covered_count?: number | null;
   group_count?: number | null;
   ready_count?: number | null;
   total_count?: number | null;
@@ -1616,6 +1716,13 @@ type AdminMonthlyBillingGroupingReadState = {
   pagination: AdminMonthlyBillingGroupingPagination | null;
   status: "idle" | "loading" | "loaded" | "error";
   summary: AdminMonthlyBillingGroupingSummary | null;
+};
+
+type AdminMonthlyBillingDashboardClassificationState = {
+  billingMonth: string;
+  groups: AdminMonthlyBillingGroup[];
+  message: string;
+  status: "idle" | "loading" | "loaded" | "error";
 };
 
 type AdminCompletedBookingBillingReadinessAuditRequirement =
@@ -2199,6 +2306,7 @@ type MonthlyBillingMonthGroupingReviewStatus =
 
 type AdminBookingPersistenceRecord = {
   booking_reference: string;
+  public_booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
   customer_id?: number | string | null;
@@ -2207,6 +2315,7 @@ type AdminBookingPersistenceRecord = {
   traveler_id?: number | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
+  dropoff_datetime?: string | null;
   pickup_location?: string | null;
   dropoff_location?: string | null;
   route_type?: string | null;
@@ -2219,6 +2328,7 @@ type AdminBookingPersistenceRecord = {
   passenger_name?: string | null;
   passenger_phone?: string | null;
   flight_no?: string | null;
+  driver_id?: number | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -2262,6 +2372,7 @@ type AdminBookingPersistenceRequestBody = {
     booker_id?: number | null;
     traveler_id?: number | null;
     pickup_datetime: string | null;
+    dropoff_datetime?: string | null;
     pickup_location: string | null;
     dropoff_location: string | null;
     route_type: string | null;
@@ -2274,6 +2385,7 @@ type AdminBookingPersistenceRequestBody = {
     passenger_name: string | null;
     passenger_phone: string | null;
     flight_no: string | null;
+    driver_id?: number | null;
     driver_contact: string | null;
     driver_name: string | null;
     driver_plate_number: string | null;
@@ -2352,10 +2464,6 @@ type ServiceChangePriceReviewResolution =
     };
 
 type AdminBookingPersistenceAction = "save" | "load" | "update";
-type AdminCustomerRequestReviewDecisionKey =
-  | "needs-review"
-  | "approve-internally"
-  | "decline-internally";
 type AdminCustomerRequestStatusFilter =
   | "all"
   | "needs-review"
@@ -2364,39 +2472,6 @@ type AdminCustomerRequestStatusFilter =
   | "short-notice-review-required";
 const adminBookingPersistenceAllStatusFilter = "all";
 const adminCustomerRequestAllStatusFilter: AdminCustomerRequestStatusFilter = "all";
-const adminCustomerRequestReviewDecisions: Array<{
-  adminInternalStatus: string;
-  customerFacingStatus: string;
-  key: AdminCustomerRequestReviewDecisionKey;
-  label: string;
-  requestReviewStatus: string;
-  successLabel: string;
-}> = [
-  {
-    adminInternalStatus: "Admin Review Required",
-    customerFacingStatus: "pending_review",
-    key: "needs-review",
-    label: "Needs Review",
-    requestReviewStatus: "needs_review",
-    successLabel: "Needs Review",
-  },
-  {
-    adminInternalStatus: "Ready for Confirmation",
-    customerFacingStatus: "confirmed",
-    key: "approve-internally",
-    label: "Approve Internally",
-    requestReviewStatus: "approved",
-    successLabel: "Approved Internally",
-  },
-  {
-    adminInternalStatus: "Declined Internally",
-    customerFacingStatus: "declined",
-    key: "decline-internally",
-    label: "Decline Internally",
-    requestReviewStatus: "declined",
-    successLabel: "Declined Internally",
-  },
-];
 const adminCustomerRequestStatusFilterOptions: Array<{
   key: AdminCustomerRequestStatusFilter;
   label: string;
@@ -2438,10 +2513,6 @@ const appTabs: Array<{ id: AppTab; label: string }> = [
   { id: "rates", label: "Rates" },
 ];
 
-type HomeProps = {
-  initialTab?: AppTab;
-};
-
 const adminAccessLinks = [
   { href: "/", label: "Admin Home" },
   { href: "/book", label: "Book Request" },
@@ -2450,6 +2521,25 @@ const adminAccessLinks = [
 ] as const;
 
 type AiDraftBooking = AiParseResult["bookings"][number];
+
+type AiAssistMode = "parser" | "conversation";
+
+type MobileDispatchBookingStep = "message" | "details" | "options" | "review";
+
+const mobileDispatchBookingSteps: Array<{
+  label: string;
+  step: MobileDispatchBookingStep;
+}> = [
+  { label: "Message", step: "message" },
+  { label: "Details", step: "details" },
+  { label: "Options", step: "options" },
+  { label: "Review", step: "review" },
+];
+
+type AdminAiConversationMessage = {
+  role: "admin" | "assistant";
+  text: string;
+};
 
 type ParsedBooking = Partial<BookingForm> & {
   success?: boolean;
@@ -2500,29 +2590,11 @@ type ParsedDebugBooking = BookingForm & {
   multipleBookingsDetected?: boolean;
 };
 
-type CustomerMatchConfidence = "High" | "Medium" | "Needs review";
-type CustomerMatchSuggestedAction =
-  | "Create new customer folder"
-  | "Leave unlinked"
-  | "Link to existing customer"
-  | "Update existing customer contact";
-
-type MockCustomerMatchSuggestion = {
-  confidence: CustomerMatchConfidence;
-  customerId: string | null;
-  customerName: string;
-  isExistingCustomer: boolean;
-  matchReason: string;
-  suggestedAction: CustomerMatchSuggestedAction;
-};
-
-type CustomerMatchFeedback = Message & {
-  action: "create" | "leave" | "link";
-};
-
 type RateOverrideDraft = {
   companyName: string;
   bossName: string;
+  cardOptionDefaultEnabled: boolean;
+  cardOptionDefaultTouched: boolean;
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   transzendExcelPrivacy: boolean;
@@ -2599,31 +2671,6 @@ function AssignedDriverSummaryBlock({
   );
 }
 
-function DispatcherStatusSummaryBlock({
-  bookingRecord,
-  flush = false,
-  operationalCard,
-}: {
-  bookingRecord: BookingRecord;
-  flush?: boolean;
-  operationalCard?: LoadBookingsOperationalDisplayCard;
-}) {
-  const status = bookingRecordIsCancelledStatus(bookingRecord)
-    ? "cancelled"
-    : bookingRecordIsCompletedStatus(bookingRecord)
-      ? "completed"
-      : operationalCard?.booking_status || bookingRecord.status;
-
-  return (
-    <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-emerald-100 bg-emerald-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-dispatcher-status-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
-    >
-      <p className="font-semibold text-emerald-950">Status: {bookingStatusLabel(status)}</p>
-    </div>
-  );
-}
-
 function getOperationalReadinessSummary(
   bookingRecord: BookingRecord,
   operationalCard?: LoadBookingsOperationalDisplayCard,
@@ -2655,30 +2702,6 @@ function getOperationalReadinessSummary(
     exceptionReplacement,
     otsProof,
   };
-}
-
-function OperationalReadinessSummaryBlock({
-  bookingRecord,
-  flush = false,
-  operationalCard,
-}: {
-  bookingRecord: BookingRecord;
-  flush?: boolean;
-  operationalCard?: LoadBookingsOperationalDisplayCard;
-}) {
-  const readinessSummary = getOperationalReadinessSummary(bookingRecord, operationalCard);
-
-  return (
-    <div
-      className={`${flush ? "" : "mt-2 "}rounded-md border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-xs leading-5 text-slate-700`}
-      data-operational-readiness-summary={bookingRecordStableKey(bookingRecord, operationalCard)}
-    >
-      <p className="font-semibold text-amber-950">Ops: {readinessSummary.otsProof}</p>
-      <p className="mt-0.5 truncate text-slate-600">
-        Replacement: {readinessSummary.exceptionReplacement}
-      </p>
-    </div>
-  );
 }
 
 function OperationalCardSection({
@@ -2741,6 +2764,8 @@ function dispatchSummaryUppercaseField(label: string): AdminOperationalUppercase
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
+  cardOptionDefaultEnabled: false,
+  cardOptionDefaultTouched: false,
   customerRates: {},
   driverPayoutRules: {},
   transzendExcelPrivacy: false,
@@ -2889,6 +2914,8 @@ function createInitialBooking(): BookingForm {
     vehicle: "AVF",
     date: "",
     time: "",
+    dspEndDate: "",
+    dspEndTime: "",
     flight: "",
     pickup: "",
     dropoff: "",
@@ -2973,6 +3000,8 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   vehicle: "Vehicle",
   date: "Pickup date",
   time: "Pickup time",
+  dspEndDate: "DSP end date",
+  dspEndTime: "DSP end time",
   flight: "Flight number",
   pickup: "Pickup",
   dropoff: "Drop-off",
@@ -3023,8 +3052,10 @@ const tripRouteFieldOrder: Array<keyof BookingForm> = [
   "vehicle",
   "date",
   "time",
-  "flight",
   "bookingType",
+  "dspEndDate",
+  "dspEndTime",
+  "flight",
   "pickup",
   "dropoff",
 ];
@@ -3105,6 +3136,18 @@ function compactBookingReference(value: string | number | null | undefined) {
   return `${prefix}-${reference.slice(-6)}`;
 }
 
+function bookingPublicReference(
+  bookingRecord: Pick<
+    BookingRecord,
+    "booking_reference" | "id" | "public_booking_reference"
+  >,
+) {
+  return (
+    cleanReferenceText(bookingRecord.public_booking_reference) ||
+    "Reference unavailable"
+  );
+}
+
 function cleanDispatchHandoffBookingReference(value: string | number | null | undefined) {
   const cleaned = cleanReferenceText(value);
 
@@ -3127,6 +3170,23 @@ function formatAdminLiveLocationTimestamp(value: string | null | undefined) {
     month: "short",
     timeZone: "Asia/Singapore",
   })} SGT`;
+}
+
+function formatAdminBookingDriverDetailsStatusTime(value: string | null | undefined) {
+  const cleaned = clean(value);
+  const date = new Date(cleaned);
+
+  if (!cleaned || !Number.isFinite(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-SG", {
+    hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
+    minute: "2-digit",
+    timeZone: "Asia/Singapore",
+  }).format(date);
 }
 
 function googleMapsLocationUrl(latitude: number | null | undefined, longitude: number | null | undefined) {
@@ -3911,7 +3971,7 @@ function renderAdminActiveJobsBrowserMapTileFallback(
     const isStale = Boolean(entry.job.is_stale);
 
     marker.setAttribute("data-admin-active-jobs-map-tile-fallback-marker", reference);
-    marker.title = `${entry.job.driver_display_label || "Driver"} · ${compactBookingReference(reference)}`;
+    marker.title = `${entry.job.driver_display_label || "Driver"} · ${adminActiveJobsBrowserMapDisplayReference(entry)}`;
     marker.style.alignItems = "center";
     marker.style.background = isStale ? "#d97706" : index === 0 ? "#dc2626" : "#ea580c";
     marker.style.border = "2px solid #ffffff";
@@ -4010,6 +4070,13 @@ function adminActiveJobsBrowserMapReference(entry: AdminActiveJobsBrowserMapMark
   return cleanReferenceText(entry.job.assigned_job_reference) || cleanReferenceText(entry.job.assigned_job_label) || "unknown";
 }
 
+function adminActiveJobsBrowserMapDisplayReference(entry: AdminActiveJobsBrowserMapMarkerEntry) {
+  return (
+    cleanReferenceText(entry.job.public_job_reference) ||
+    "Reference unavailable"
+  );
+}
+
 function adminActiveJobsBrowserMapMarkerLabel(entry: AdminActiveJobsBrowserMapMarkerEntry) {
   return {
     color: "#ffffff",
@@ -4091,8 +4158,9 @@ function AdminActiveJobsBrowserMap({
     let cancelled = false;
     let tileFallbackInline = false;
     const hasActiveMarkers = activeMarkerJobs.length > 0;
+    const mapSlotElement = mapSlotRef.current;
 
-    if (!apiKey || !hasActiveMarkers) {
+    if (!apiKey || !hasActiveMarkers || !mapSlotElement) {
       return () => {
         cancelled = true;
       };
@@ -4102,10 +4170,11 @@ function AdminActiveJobsBrowserMap({
     const mapElement = document.createElement("div");
     mapElement.setAttribute("data-admin-active-jobs-map-google-base", "true");
     mapElement.style.background = "#e5e7eb";
+    mapElement.style.inset = "0";
     mapElement.style.overflow = "hidden";
-    mapElement.style.position = "fixed";
+    mapElement.style.position = "absolute";
     mapElement.style.zIndex = "5";
-    document.body.appendChild(mapElement);
+    mapSlotElement.appendChild(mapElement);
     mapElementRef.current = mapElement;
     const markGoogleMapUserAdjusted = () => {
       if (
@@ -4116,44 +4185,6 @@ function AdminActiveJobsBrowserMap({
       }
     };
 
-    const updateMapPortalRect = () => {
-      const slotElement = mapSlotRef.current;
-      const portalElement = mapElementRef.current;
-
-      if (!portalElement) {
-        return;
-      }
-
-      if (
-        tileFallbackInline ||
-        portalElement.getAttribute("data-admin-active-jobs-map-google-tile-base") === "true"
-      ) {
-        positionAdminActiveJobsBrowserMapTileFallbackElement(portalElement);
-        return;
-      }
-
-      if (!slotElement) {
-        portalElement.style.display = "none";
-        return;
-      }
-
-      const rect = slotElement.getBoundingClientRect();
-      portalElement.style.display =
-        rect.width > 0 && rect.height > 0 ? "block" : "none";
-      portalElement.style.height = `${Math.max(0, rect.height)}px`;
-      portalElement.style.left = `${rect.left}px`;
-      portalElement.style.top = `${rect.top}px`;
-      portalElement.style.width = `${Math.max(0, rect.width)}px`;
-    };
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(updateMapPortalRect)
-        : null;
-
-    updateMapPortalRect();
-    resizeObserver?.observe(mapSlotRef.current || document.body);
-    window.addEventListener("resize", updateMapPortalRect);
-    window.addEventListener("scroll", updateMapPortalRect, true);
     mapElement.addEventListener("pointerdown", markGoogleMapUserAdjusted);
     mapElement.addEventListener("wheel", markGoogleMapUserAdjusted);
 
@@ -4215,7 +4246,7 @@ function AdminActiveJobsBrowserMap({
           mapRef.current = null;
           mapsRuntimeRef.current = null;
           tileFallbackInline = true;
-          mapSlotRef.current?.prepend(mapElement);
+          mapSlotElement.prepend(mapElement);
           const latestMarkerJobs = activeMarkerJobsRef.current;
 
           if (latestMarkerJobs.length === 0) {
@@ -4223,7 +4254,7 @@ function AdminActiveJobsBrowserMap({
           }
 
           renderAdminActiveJobsBrowserMapTileFallback(mapElement, latestMarkerJobs);
-          updateMapPortalRect();
+          positionAdminActiveJobsBrowserMapTileFallbackElement(mapElement);
           await waitForAdminActiveJobsBrowserMapTileFallback(mapElement);
 
           if (!cancelled) {
@@ -4238,9 +4269,6 @@ function AdminActiveJobsBrowserMap({
 
     return () => {
       cancelled = true;
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", updateMapPortalRect);
-      window.removeEventListener("scroll", updateMapPortalRect, true);
       mapElement.removeEventListener("pointerdown", markGoogleMapUserAdjusted);
       mapElement.removeEventListener("wheel", markGoogleMapUserAdjusted);
       cleanupAdminActiveJobsBrowserMapTileFallback(mapElement);
@@ -4313,7 +4341,7 @@ function AdminActiveJobsBrowserMap({
 
     activeMarkerJobs.forEach((entry) => {
       const reference = adminActiveJobsBrowserMapReference(entry);
-      const title = `${entry.job.driver_display_label || "Driver"} · ${compactBookingReference(reference)}`;
+      const title = `${entry.job.driver_display_label || "Driver"} · ${adminActiveJobsBrowserMapDisplayReference(entry)}`;
       const existingMarker = markersRef.current.get(reference);
 
       activeReferences.add(reference);
@@ -4567,7 +4595,7 @@ function getDispatchReleaseTripWarnings(booking: BookingForm) {
     warnings.push("Pickup missing");
   }
 
-  if (!clean(booking.dropoff)) {
+  if (!clean(booking.dropoff) && bookingType !== "DSP") {
     warnings.push("Drop-off missing");
   }
 
@@ -4868,13 +4896,6 @@ function getPublicEmailLocalPart(value: string | null | undefined) {
   const [localPart, domain] = email.split("@");
 
   return localPart && isPublicEmailDomain(domain) ? localPart : "";
-}
-
-function getEmailDomain(value: string) {
-  const email = normaliseEmail(value);
-  const domain = normaliseEmailDomain(email.split("@")[1]);
-
-  return isIgnoredAccountEmailDomain(domain) ? "" : domain;
 }
 
 function normalizeCompanyAccount(value: string | null | undefined, email: string | null | undefined = "") {
@@ -5226,18 +5247,6 @@ function buildServiceChangePriceReview(
   };
 }
 
-const mockCustomerDomainMatches = new Map([
-  ["marriott.com", "ritz-carlton"],
-  ["ritzcarlton.com", "ritz-carlton"],
-  ["ritzcarlton.com.sg", "ritz-carlton"],
-  ["ubs.com", "ubs"],
-  ["ubs.com.sg", "ubs"],
-]);
-
-function findMockCustomerById(customerId: string | null | undefined) {
-  return mockCustomers.find((customer) => customer.id === customerId) ?? null;
-}
-
 function findMockCustomerByText(value: string | null | undefined, onlyIndividual = false) {
   const query = normalizeCompactSearch(value);
 
@@ -5279,113 +5288,6 @@ function deriveAdminMonthlyInvoicePrefix(customerAccount: string | null | undefi
   }
 
   return "INV";
-}
-
-function findMockCustomerByEmailDomain(domain: string | null | undefined) {
-  const emailDomain = normaliseEmailDomain(domain);
-  const mappedCustomer = findMockCustomerById(mockCustomerDomainMatches.get(emailDomain));
-
-  if (mappedCustomer) {
-    return mappedCustomer;
-  }
-
-  return findMockCustomerByText(emailDomain.replace(/\.[a-z]{2,}$/i, ""));
-}
-
-function getMockCustomerMatchSuggestion(bookingValue: BookingForm): MockCustomerMatchSuggestion {
-  const safeCompany = normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
-  const email = normaliseEmail(bookingValue.bookerEmail);
-  const rawEmailDomain = normaliseEmailDomain(email.split("@")[1]);
-  const organizationEmailDomain = getEmailDomain(email);
-  const hasPublicEmail = Boolean(rawEmailDomain && isPublicEmailDomain(rawEmailDomain));
-  const personName = clean(bookingValue.name) || clean(bookingValue.booker);
-  const contactValue = clean(bookingValue.bookerEmail) || clean(bookingValue.bookerContact);
-  const companyMatch = findMockCustomerByText(safeCompany);
-
-  if (organizationEmailDomain) {
-    const domainMatch = findMockCustomerByEmailDomain(organizationEmailDomain);
-
-    if (domainMatch) {
-      return {
-        confidence: "High",
-        customerId: domainMatch.id,
-        customerName: domainMatch.companyName,
-        isExistingCustomer: true,
-        matchReason: `Organization email domain ${organizationEmailDomain} matches an existing mock customer folder.`,
-        suggestedAction: "Link to existing customer",
-      };
-    }
-  }
-
-  if (companyMatch) {
-    return {
-      confidence: "High",
-      customerId: companyMatch.id,
-      customerName: companyMatch.companyName,
-      isExistingCustomer: true,
-      matchReason: `Company/account "${safeCompany}" matches an existing mock customer folder.`,
-      suggestedAction: "Link to existing customer",
-    };
-  }
-
-  if (organizationEmailDomain) {
-    return {
-      confidence: "Medium",
-      customerId: null,
-      customerName: "New customer suggested",
-      isExistingCustomer: false,
-      matchReason: `Organization email domain ${organizationEmailDomain} does not match a current mock customer.`,
-      suggestedAction: "Create new customer folder",
-    };
-  }
-
-  if (hasPublicEmail) {
-    const individualMatch =
-      findMockCustomerByText(personName, true) ||
-      findMockCustomerByText(contactValue, true);
-
-    if (individualMatch) {
-      return {
-        confidence: "Medium",
-        customerId: individualMatch.id,
-        customerName: individualMatch.companyName,
-        isExistingCustomer: true,
-        matchReason: `Public/personal email domain ${rawEmailDomain} is not used to create a company account; matched by individual name/email only.`,
-        suggestedAction: "Update existing customer contact",
-      };
-    }
-
-    return {
-      confidence: "Needs review",
-      customerId: null,
-      customerName: "New customer suggested",
-      isExistingCustomer: false,
-      matchReason: `Public/personal email domain ${rawEmailDomain} is not used to create or suggest a company account.`,
-      suggestedAction: "Create new customer folder",
-    };
-  }
-
-  const individualNameMatch = findMockCustomerByText(personName, true);
-
-  if (individualNameMatch) {
-    return {
-      confidence: "Medium",
-      customerId: individualNameMatch.id,
-      customerName: individualNameMatch.companyName,
-      isExistingCustomer: true,
-      matchReason: "Passenger/booker name matches an existing individual mock customer folder.",
-      suggestedAction: "Update existing customer contact",
-    };
-  }
-
-  return {
-    confidence: "Needs review",
-    customerId: null,
-    customerName: "New customer suggested",
-    isExistingCustomer: false,
-    matchReason: "No existing mock customer matched the parsed company, domain, name, email, or contact.",
-    suggestedAction: "Create new customer folder",
-  };
 }
 
 function isValidEmail(value: string) {
@@ -5503,6 +5405,9 @@ function mergeParsedBookingIntoForm(
   currentBooking: BookingForm,
   parsedBooking: ParsedBooking,
 ): BookingForm {
+  const parsedStandbyUntil = clean(
+    (parsedBooking as ParsedBooking & { standbyUntil?: string }).standbyUntil,
+  );
   const parsedName = clean(parsedBooking.name);
   const parsedExtraStopLocation = clean(parsedBooking.extraStopLocation);
   const parsedExtraStopCount = parsedExtraStopLocation ? clean(parsedBooking.extraStopCount) || "1" : parsedBooking.extraStopCount;
@@ -5515,6 +5420,7 @@ function mergeParsedBookingIntoForm(
     ...bookingFields,
     ...(parsedName ? { name: parsedName } : {}),
     ...(parsedExtraStopCount ? { extraStopCount: parsedExtraStopCount } : {}),
+    ...(parsedStandbyUntil ? { dspEndTime: parsedStandbyUntil } : {}),
   });
   const safeCompany = normalizeCompanyAccount(
     mergedBooking.company,
@@ -5539,6 +5445,9 @@ function mergeCrmUpdatesIntoForm(
   currentBooking: BookingForm,
   crmUpdates: ParsedBooking,
 ): BookingForm {
+  const crmStandbyUntil = clean(
+    (crmUpdates as ParsedBooking & { standbyUntil?: string }).standbyUntil,
+  );
   const currentName = clean(currentBooking.name);
   const crmName = clean(crmUpdates.name);
   const bookingFields = Object.fromEntries(
@@ -5549,6 +5458,7 @@ function mergeCrmUpdatesIntoForm(
   const mergedBooking = mergeParsedBookingState(currentBooking, {
     ...bookingFields,
     name: currentName || crmName,
+    ...(crmStandbyUntil ? { dspEndTime: crmStandbyUntil } : {}),
   });
   const safeCompany = normalizeCompanyAccount(
     mergedBooking.company,
@@ -5754,6 +5664,28 @@ function customerRateMatrixValue(
     0;
 }
 
+function customerRateOverrideMatrixValue(
+  rules: RateRules | null | undefined,
+  bookingType: keyof Required<RateRules>,
+  vehicleType: CustomerRateVehicleType,
+) {
+  const rate = rules?.[bookingType];
+
+  if (typeof rate === "number" && Number.isFinite(rate)) {
+    return rate;
+  }
+
+  if (!rate || typeof rate !== "object" || Array.isArray(rate)) {
+    return null;
+  }
+
+  const exactVehicleRate = rate[vehicleType];
+
+  return typeof exactVehicleRate === "number" && Number.isFinite(exactVehicleRate)
+    ? exactVehicleRate
+    : null;
+}
+
 function setCustomerRateMatrixValue(
   rules: RateRules,
   bookingType: keyof Required<RateRules>,
@@ -5947,8 +5879,37 @@ function formatOverrideSummary(
   };
 }
 
-function hasRateOverrideValues(record: Pick<CompanyRecord, "customer_rates" | "driver_payout_rules">) {
-  return formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides;
+function hasRateOverrideValues(
+  record: Pick<
+    CompanyRecord,
+    "card_option_default_enabled" | "customer_rates" | "driver_payout_rules"
+  > & { company_id?: number },
+) {
+  const hasCardDefault =
+    record.company_id === undefined
+      ? record.card_option_default_enabled === true
+      : typeof record.card_option_default_enabled === "boolean";
+
+  return (
+    formatOverrideSummary(record.customer_rates, record.driver_payout_rules).hasOverrides ||
+    hasCardDefault
+  );
+}
+
+function cardOptionDefaultSummary(
+  record: Pick<CompanyRecord, "card_option_default_enabled"> & { company_id?: number },
+  companyRecord?: Pick<CompanyRecord, "card_option_default_enabled"> | null,
+) {
+  if (
+    record.company_id !== undefined &&
+    typeof record.card_option_default_enabled !== "boolean"
+  ) {
+    return `Card default: Company default (${
+      companyRecord?.card_option_default_enabled ? "On" : "Off"
+    })`;
+  }
+
+  return `Card default: ${record.card_option_default_enabled ? "On" : "Off"}`;
 }
 
 function hasCustomerRateOverrideValues(rules: RateRules) {
@@ -6117,6 +6078,9 @@ async function saveDefaultRateSettingsScalarRuntime(
 
 type CompanyCrmIdentityContactPayload = {
   company_name: string;
+  mobile_phone?: string;
+  operations_email?: string;
+  primary_contact_name?: string;
 };
 
 type TravelerCrmIdentityContactPayload = {
@@ -6140,9 +6104,14 @@ type CompanyTravelerCrmRuntimeWriteResponse = {
   ok?: boolean;
   reason?: string;
   record?: {
+    company_name?: string | null;
     id?: number | string | null;
+    mobile_phone?: string | null;
+    operations_email?: string | null;
+    primary_contact_name?: string | null;
   } | null;
   rejected_fields?: unknown;
+  status?: string;
 };
 
 type CustomerRatesRuntimeWritePayload = {
@@ -6204,6 +6173,7 @@ type FullDriverProfileRuntimeWriteResponse = {
 };
 
 type CompanyRateOverridePayloadInput = {
+  cardOptionDefaultEnabled?: boolean | null;
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   includeCustomerRates?: boolean;
@@ -6213,6 +6183,7 @@ type CompanyRateOverridePayloadInput = {
 };
 
 type TravelerRateOverridePayloadInput = {
+  cardOptionDefaultEnabled?: boolean | null;
   customerRates: RateRules;
   driverPayoutRules: DriverPayoutRules;
   includeCustomerRates?: boolean;
@@ -6323,6 +6294,281 @@ function customerRatesRuntimeRejectedFields(value: CustomerRatesRuntimeWriteResp
   return Array.isArray(value?.rejected_fields)
     ? value.rejected_fields.map((field) => clean(field)).filter(Boolean)
     : [];
+}
+
+type SaveCrmCompanyProfileResolution =
+  | {
+      companyId: number;
+      companyName: string;
+      ok: true;
+      profileWritePerformed: boolean;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+function buildSaveCrmCompanyProfileContactPayload(
+  bookingValue: BookingForm,
+  companyName: string,
+): CompanyCrmIdentityContactPayload {
+  return {
+    company_name: companyName,
+    ...(clean(bookingValue.booker)
+      ? { primary_contact_name: clean(bookingValue.booker) }
+      : {}),
+    ...(clean(bookingValue.bookerContact)
+      ? { mobile_phone: clean(bookingValue.bookerContact) }
+      : {}),
+    ...(clean(bookingValue.bookerEmail)
+      ? { operations_email: clean(bookingValue.bookerEmail).toLowerCase() }
+      : {}),
+  };
+}
+
+function normalizeSaveCrmCompanyProfileValue(value: string | null | undefined) {
+  return clean(value).toLowerCase();
+}
+
+function saveCrmCompanyProfileConflictFields(
+  existingCompany: AdminCompanyCrmIdentityRecord,
+  incomingPayload: CompanyCrmIdentityContactPayload,
+) {
+  const comparisons: Array<{
+    existing: string | null | undefined;
+    incoming: string | undefined;
+    label: string;
+  }> = [
+    {
+      existing: existingCompany.primary_contact_name,
+      incoming: incomingPayload.primary_contact_name,
+      label: "contact name",
+    },
+    {
+      existing: existingCompany.mobile_phone,
+      incoming: incomingPayload.mobile_phone,
+      label: "mobile",
+    },
+    {
+      existing: existingCompany.operations_email,
+      incoming: incomingPayload.operations_email,
+      label: "operations email",
+    },
+  ];
+
+  return comparisons
+    .filter(({ existing, incoming }) => {
+      const existingValue = normalizeSaveCrmCompanyProfileValue(existing);
+      const incomingValue = normalizeSaveCrmCompanyProfileValue(incoming);
+
+      return existingValue && incomingValue && existingValue !== incomingValue;
+    })
+    .map(({ label }) => label);
+}
+
+function saveCrmCompanyProfileNeedsWrite(
+  existingCompany: AdminCompanyCrmIdentityRecord,
+  incomingPayload: CompanyCrmIdentityContactPayload,
+) {
+  return [
+    [existingCompany.primary_contact_name, incomingPayload.primary_contact_name],
+    [existingCompany.mobile_phone, incomingPayload.mobile_phone],
+    [existingCompany.operations_email, incomingPayload.operations_email],
+  ].some(([existing, incoming]) => {
+    const incomingValue = normalizeSaveCrmCompanyProfileValue(incoming);
+
+    return Boolean(
+      incomingValue &&
+        normalizeSaveCrmCompanyProfileValue(existing) !== incomingValue,
+    );
+  });
+}
+
+async function loadSaveCrmCompanyProfileForSave(
+  companyId: number | null,
+  companyName: string,
+): Promise<AdminCompanyCrmIdentityRecord | null> {
+  const params = new URLSearchParams(
+    companyId ? { id: String(companyId) } : { company_name: companyName },
+  );
+  const response = await fetch(`${adminCompaniesCrmIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminCompanyCrmIdentityReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "The exact CRM company profile could not be verified. No booking was saved.",
+    );
+  }
+
+  if (!responseBody.company) {
+    return null;
+  }
+
+  const recordId = adminDispatchVerifiedIdentityId(responseBody.company.id);
+  const recordName = clean(responseBody.company.company_name);
+
+  if (
+    !recordId ||
+    !recordName ||
+    (companyId && recordId !== companyId) ||
+    (!companyId && !billingIdentityMatches(recordName, companyName))
+  ) {
+    throw new Error(
+      "The CRM company lookup did not return the one exact requested profile. No booking was saved.",
+    );
+  }
+
+  return responseBody.company;
+}
+
+async function saveCrmCompanyProfileForBooking(
+  payload: CompanyTravelerCrmIdentityContactRuntimePayload,
+): Promise<AdminCompanyCrmIdentityRecord> {
+  const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
+    body: JSON.stringify(payload),
+    headers: {
+      "content-type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | CompanyTravelerCrmRuntimeWriteResponse
+    | null;
+  const recordId = crmRuntimeRecordId(responseBody);
+
+  if (
+    !response.ok ||
+    responseBody?.ok !== true ||
+    responseBody?.status !== "saved" ||
+    !recordId ||
+    !responseBody.record
+  ) {
+    throw new Error(
+      crmRuntimeWriteError(
+        responseBody,
+        "The guarded CRM company profile save did not complete. No booking was saved.",
+      ),
+    );
+  }
+
+  return responseBody.record;
+}
+
+async function resolveSaveCrmCompanyProfileForSave(
+  bookingValue: BookingForm,
+  confirmedAccountLabel: string,
+): Promise<SaveCrmCompanyProfileResolution> {
+  const requestedCompanyId = adminDispatchVerifiedIdentityId(bookingValue.companyId);
+  const requestedCompanyName = clean(confirmedAccountLabel);
+
+  if (!requestedCompanyName) {
+    return {
+      message: "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  const existingCompany = await loadSaveCrmCompanyProfileForSave(
+    requestedCompanyId,
+    requestedCompanyName,
+  );
+
+  if (requestedCompanyId && !existingCompany) {
+    return {
+      message: "The selected verified company profile no longer exists. Reload CRM identities and review the booking. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  if (!existingCompany) {
+    if (
+      !window.confirm(
+        `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
+      )
+    ) {
+      return {
+        message: "Save + CRM cancelled before creating the new company profile. No booking was saved.",
+        ok: false,
+      };
+    }
+
+    const createdCompany = await saveCrmCompanyProfileForBooking({
+      action_type: "company_create",
+      ...buildSaveCrmCompanyProfileContactPayload(bookingValue, requestedCompanyName),
+    });
+    const createdCompanyId = adminDispatchVerifiedIdentityId(createdCompany.id);
+    const createdCompanyName = clean(createdCompany.company_name) || requestedCompanyName;
+
+    if (!createdCompanyId) {
+      throw new Error("The new CRM company profile returned no verified ID. No booking was saved.");
+    }
+
+    return {
+      companyId: createdCompanyId,
+      companyName: createdCompanyName,
+      ok: true,
+      profileWritePerformed: true,
+    };
+  }
+
+  const existingCompanyId = adminDispatchVerifiedIdentityId(existingCompany.id);
+  const existingCompanyName = clean(existingCompany.company_name);
+
+  if (!existingCompanyId || !existingCompanyName) {
+    throw new Error("The exact CRM company profile is incomplete. No booking was saved.");
+  }
+
+  const contactPayload = buildSaveCrmCompanyProfileContactPayload(
+    bookingValue,
+    existingCompanyName,
+  );
+  const conflictFields = saveCrmCompanyProfileConflictFields(existingCompany, contactPayload);
+  const linkConfirmationRequired = !requestedCompanyId;
+
+  if (
+    (linkConfirmationRequired || conflictFields.length > 0) &&
+    !window.confirm(
+      conflictFields.length > 0
+        ? `${linkConfirmationRequired ? "Link this booking to" : "Use"} the existing CRM company profile "${existingCompanyName}" and replace its ${conflictFields.join(", ")} with this booking's Booker details? Accounts and Secondary email, rates, invoices, Calendar, and payments stay unchanged.`
+        : `Link this booking to the existing CRM company profile "${existingCompanyName}" and sync the Booker contact into that profile? This does not change rates, invoices, Calendar, payments, or send a message.`,
+    )
+  ) {
+    return {
+      message: "Save + CRM cancelled before linking or updating the existing company profile. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  if (!saveCrmCompanyProfileNeedsWrite(existingCompany, contactPayload)) {
+    return {
+      companyId: existingCompanyId,
+      companyName: existingCompanyName,
+      ok: true,
+      profileWritePerformed: false,
+    };
+  }
+
+  const savedCompany = await saveCrmCompanyProfileForBooking({
+    action_type: "company_update",
+    id: existingCompanyId,
+    ...contactPayload,
+  });
+
+  return {
+    companyId: existingCompanyId,
+    companyName: clean(savedCompany.company_name) || existingCompanyName,
+    ok: true,
+    profileWritePerformed: true,
+  };
 }
 
 function isCustomerRatesRuntimeWriteBlockedNoOp(value: CustomerRatesRuntimeWriteResponse | null) {
@@ -6617,6 +6863,7 @@ async function saveFullDriverProfileRuntime(
 }
 
 function buildCompanyRateOverridePayload({
+  cardOptionDefaultEnabled,
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
@@ -6628,6 +6875,9 @@ function buildCompanyRateOverridePayload({
   const driverPayoutFields = buildCompanyDriverPayoutOverridePayload({ driverPayoutRules });
 
   return {
+    ...(cardOptionDefaultEnabled === undefined
+      ? {}
+      : { card_option_default_enabled: cardOptionDefaultEnabled }),
     ...(includeCustomerRates ? { customer_rates: customerRateFields.customer_rates } : {}),
     ...(includeDriverPayoutRules
       ? { driver_payout_rules: driverPayoutFields.driver_payout_rules }
@@ -6638,6 +6888,7 @@ function buildCompanyRateOverridePayload({
 }
 
 function buildTravelerRateOverridePayload({
+  cardOptionDefaultEnabled,
   customerRates,
   driverPayoutRules,
   includeCustomerRates = true,
@@ -6648,6 +6899,9 @@ function buildTravelerRateOverridePayload({
   const driverPayoutFields = buildTravelerDriverPayoutOverridePayload({ driverPayoutRules });
 
   return {
+    ...(cardOptionDefaultEnabled === undefined
+      ? {}
+      : { card_option_default_enabled: cardOptionDefaultEnabled }),
     ...(includeCustomerRates ? { customer_rates: customerRateFields.customer_rates } : {}),
     ...(includeDriverPayoutRules
       ? { driver_payout_rules: driverPayoutFields.driver_payout_rules }
@@ -6733,6 +6987,7 @@ function buildTravelerDriverPayoutOverridePayload({
 }
 
 function buildLegacyCompanyRateOverrideInsertPayload({
+  cardOptionDefaultEnabled,
   companyName,
   customerRates,
   driverPayoutRules,
@@ -6743,6 +6998,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
   return {
     ...buildCompanyCrmIdentityContactPayload(companyName),
     ...buildCompanyRateOverridePayload({
+      cardOptionDefaultEnabled,
       customerRates,
       driverPayoutRules,
       includeCustomerRates,
@@ -6753,6 +7009,7 @@ function buildLegacyCompanyRateOverrideInsertPayload({
 }
 
 function buildLegacyTravelerRateOverrideInsertPayload({
+  cardOptionDefaultEnabled,
   companyId,
   customerRates,
   driverPayoutRules,
@@ -6763,6 +7020,7 @@ function buildLegacyTravelerRateOverrideInsertPayload({
   return {
     ...buildTravelerCrmIdentityContactPayload(companyId, travelerName),
     ...buildTravelerRateOverridePayload({
+      cardOptionDefaultEnabled,
       customerRates,
       driverPayoutRules,
       includeCustomerRates,
@@ -6920,6 +7178,16 @@ function formatBookingPickupDateTimeSgt(bookingRecord: BookingRecord) {
   return `${formatDate(dateValue)}, ${formattedTime}${formattedTime === "Time TBC" ? "" : " SGT"}`;
 }
 
+function formatBookingTimestampSgt(value: string | null | undefined) {
+  const timestampParts = singaporePickupDateTimePartsFromTimestamp(value);
+
+  if (!timestampParts) {
+    return "";
+  }
+
+  return `${formatDate(timestampParts.date)}, ${formatPickupTime(timestampParts.time)} SGT`;
+}
+
 function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefined) {
   const rawValue = clean(value);
   const localDateTimeMatch = rawValue.match(
@@ -6962,6 +7230,50 @@ function singaporePickupDateTimePartsFromTimestamp(value: string | null | undefi
         time: `${hour}${minute}`,
       }
     : null;
+}
+
+function adminDriverJobLinkCanonicalOperationalText(value: string | number | null | undefined) {
+  return clean(value).replace(/\s+/g, " ").toLocaleLowerCase("en-SG");
+}
+
+function adminDriverJobLinkCanonicalOperationalRoute(value: string | null | undefined) {
+  return adminDriverJobLinkCanonicalOperationalText(value)
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ");
+}
+
+function savedBookingMatchesDriverJobLinkOperationalPayload(
+  record: AdminBookingPersistenceRecord,
+  payload: AdminDriverJobLinkSafeOperationalPayload,
+) {
+  const pickupParts = singaporePickupDateTimePartsFromTimestamp(
+    clean(record.pickup_at) || clean(record.pickup_datetime),
+  );
+  const payloadPickupTime = clean(payload.pickup_time).replace(/[^0-9]/g, "").slice(0, 4);
+  const comparisons = [
+    [adminBookingPersistenceServiceType(record), payload.booking_type],
+    [record.pickup_location, payload.pickup_location],
+    [record.dropoff_location, payload.dropoff_location],
+    [record.passenger_name, payload.passenger_name],
+    [record.flight_no, payload.flight_no],
+    [record.driver_name, payload.assigned_driver_name],
+    [record.driver_contact, payload.assigned_driver_contact],
+    [record.driver_plate_number, payload.assigned_driver_plate],
+  ];
+
+  return (
+    comparisons.every(
+      ([savedValue, linkValue]) =>
+        adminDriverJobLinkCanonicalOperationalText(savedValue) ===
+        adminDriverJobLinkCanonicalOperationalText(linkValue),
+    ) &&
+    adminDriverJobLinkCanonicalOperationalRoute(adminBookingPersistenceRouteSummary(record)) ===
+      adminDriverJobLinkCanonicalOperationalRoute(payload.route) &&
+    pickupParts?.date === clean(payload.pickup_date) &&
+    pickupParts?.time === payloadPickupTime
+  );
 }
 
 function formatPickupTimeFromTimestamp(value: string | null | undefined) {
@@ -7032,6 +7344,23 @@ function sortBookingsNewestFirst(bookingRecords: BookingRecord[]) {
   return [...bookingRecords].sort(
     (firstBooking, secondBooking) => getBookingSortValue(secondBooking) - getBookingSortValue(firstBooking),
   );
+}
+
+function mergeSavedBookingMonitorCoverage(
+  recentBookingRecords: BookingRecord[],
+  monitorableBookingRecords: BookingRecord[],
+) {
+  const mergedRecordsByKey = new Map<string, BookingRecord>();
+
+  [...recentBookingRecords, ...monitorableBookingRecords].forEach((bookingRecord) => {
+    const bookingKey = bookingRecordStableKey(bookingRecord);
+
+    if (!mergedRecordsByKey.has(bookingKey)) {
+      mergedRecordsByKey.set(bookingKey, bookingRecord);
+    }
+  });
+
+  return sortBookingsNewestFirst([...mergedRecordsByKey.values()]);
 }
 
 function getBookingCompany(bookingRecord: BookingRecord) {
@@ -7274,14 +7603,20 @@ function bookingRecordPickupDateTimeMs(bookingRecord: BookingRecord) {
   );
 }
 
-function bookingRecordCalendarConflictPickupDateTimeMs(bookingRecord: BookingRecord) {
-  const canonicalPickupParts = singaporePickupDateTimePartsFromTimestamp(
-    clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime),
-  );
+function sortBookingPickupEarliestFirst(
+  firstBooking: BookingRecord,
+  secondBooking: BookingRecord,
+) {
+  const firstPickupTimeMs =
+    bookingRecordPickupDateTimeMs(firstBooking) ?? Number.POSITIVE_INFINITY;
+  const secondPickupTimeMs =
+    bookingRecordPickupDateTimeMs(secondBooking) ?? Number.POSITIVE_INFINITY;
 
-  return canonicalPickupParts
-    ? parsePickupDateTimeMs(canonicalPickupParts.date, canonicalPickupParts.time)
-    : null;
+  if (firstPickupTimeMs !== secondPickupTimeMs) {
+    return firstPickupTimeMs - secondPickupTimeMs;
+  }
+
+  return bookingRecordStableKey(firstBooking).localeCompare(bookingRecordStableKey(secondBooking));
 }
 
 function bookingRecordIsPickupWithinNextHours(
@@ -7296,6 +7631,15 @@ function bookingRecordIsPickupWithinNextHours(
     pickupTimeMs >= currentTimeMs &&
     pickupTimeMs - currentTimeMs < hours * 60 * 60 * 1000
   );
+}
+
+function bookingRecordIsPickupOverdue(
+  bookingRecord: BookingRecord,
+  currentTimeMs: number,
+) {
+  const pickupTimeMs = bookingRecordPickupDateTimeMs(bookingRecord);
+
+  return pickupTimeMs !== null && pickupTimeMs < currentTimeMs;
 }
 
 function bookingRecordIsInsideActiveJobMonitorWindow(
@@ -7410,6 +7754,7 @@ function computeAdminPickupRiskState({
   approachEvidence,
   bookingRecord,
   currentTimeMs,
+  driverStatusReadStatus,
   driverStatusValue,
   liveLocation,
   monitorEnabled,
@@ -7418,6 +7763,7 @@ function computeAdminPickupRiskState({
   approachEvidence?: AdminPickupApproachEvidenceState | null;
   bookingRecord: BookingRecord;
   currentTimeMs: number;
+  driverStatusReadStatus: AdminDriverJobStatusReadState["status"];
   driverStatusValue?: string | null;
   liveLocation?: AdminActiveJobsMapLocation | null;
   monitorEnabled: boolean;
@@ -7463,6 +7809,20 @@ function computeAdminPickupRiskState({
       pulse: false,
       shortLabel: "At pickup",
       title: "Pickup Risk: At pickup",
+    };
+  }
+
+  if (!normalizedDriverStatus && driverStatusReadStatus !== "loaded") {
+    const readFailed = driverStatusReadStatus === "error";
+
+    return {
+      detail: readFailed
+        ? "Driver Report unavailable. Refresh reports before assessing pickup risk."
+        : "Checking latest Driver Report before assessing pickup risk.",
+      level: "pending",
+      pulse: false,
+      shortLabel: readFailed ? "Report unavailable" : "Checking report",
+      title: readFailed ? "Pickup Risk: Waiting" : "Pickup Risk: Checking",
     };
   }
 
@@ -7740,6 +8100,7 @@ function bookingMatchesLocalSearch(bookingRecord: BookingRecord, searchValue: st
   const searchableText = [
     bookingRecord.id,
     bookingRecord.booking_reference,
+    bookingRecord.public_booking_reference,
     getBookingName(bookingRecord),
     getBookerName(bookingRecord),
     getBookingCompany(bookingRecord),
@@ -7890,23 +8251,42 @@ function buildCompletedBookingBillingReadinessAuditPayload(
 }
 
 function formatCreatedAt(value: string | null | undefined) {
-  if (!value) {
+  const cleaned = String(value ?? "").trim();
+
+  if (!cleaned) {
     return "";
   }
 
-  const date = new Date(value);
+  const legacyUtcValue = /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(cleaned)
+    ? `${cleaned}Z`
+    : cleaned;
+  const date = new Date(legacyUtcValue);
 
   if (Number.isNaN(date.getTime())) {
-    return clean(value);
+    return cleaned;
   }
 
-  return new Intl.DateTimeFormat("en-SG", {
+  const parts = new Intl.DateTimeFormat("en-SG", {
     day: "2-digit",
-    month: "short",
-    year: "numeric",
     hour: "2-digit",
+    hour12: false,
+    hourCycle: "h23",
     minute: "2-digit",
-  }).format(date);
+    month: "short",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(date);
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const day = partValue("day");
+  const month = partValue("month");
+  const year = partValue("year");
+  const hour = partValue("hour") === "24" ? "00" : partValue("hour");
+  const minute = partValue("minute");
+
+  return day && month && year && hour && minute
+    ? `${day} ${month} ${year}, ${hour}${minute}hrs SGT`
+    : cleaned;
 }
 
 function getRoutePoints(bookingRecord: BookingRecord) {
@@ -8074,6 +8454,10 @@ function buildLoadBookingsOperationalDisplayCard(
     ),
     booking_id: loadBookingsOperationalDisplayText(bookingRecord.id, 160),
     booking_reference: loadBookingsOperationalDisplayText(bookingRecord.booking_reference || bookingRecord.id, 160),
+    public_booking_reference: loadBookingsOperationalDisplayText(
+      bookingRecord.public_booking_reference,
+      40,
+    ),
     booking_status: loadBookingsOperationalDisplayText(bookingRecord.status, 120),
     booking_type: loadBookingsOperationalDisplayText(serviceType, 120),
     booker_display_name: loadBookingsOperationalDisplayText(bookerDisplay, 220),
@@ -8089,7 +8473,7 @@ function buildLoadBookingsOperationalDisplayCard(
     created_at: loadBookingsOperationalDisplayText(createdAt || bookingRecord.created_at, 120),
     customer_display_name: loadBookingsOperationalDisplayText(companyDisplay || passengerDisplay, 220),
     dropoff_address: loadBookingsOperationalDisplayText(dropoffAddress, 500),
-    dropoff_datetime: null,
+    dropoff_datetime: loadBookingsOperationalDisplayText(bookingRecord.dropoff_datetime, 120),
     extra_stop_display: loadBookingsOperationalDisplayText(
       extraStopCount > 0 ? `Extra stops: ${extraStopCount}` : null,
       220,
@@ -8276,6 +8660,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     "MNG";
   const pickupTime =
     normalizePickupTimeForStorage(formatPickupTimeFromRecord(bookingRecord));
+  const dspEndParts = singaporePickupDateTimePartsFromTimestamp(bookingRecord.dropoff_datetime);
   const vehicleDisplay =
     clean(bookingRecord.vehicle_type_or_category) ||
     clean(bookingRecord.vehicle_type) ||
@@ -8294,6 +8679,8 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
     time: pickupTime,
+    dspEndDate: dspEndParts?.date || "",
+    dspEndTime: dspEndParts?.time || "",
     flight: clean(bookingRecord.flight_no),
     pickup,
     extraStopLocation: extraStopLocations.join(" > "),
@@ -8393,6 +8780,7 @@ function bookingRecordToAdminBookingPersistenceRecord(
     admin_internal_status:
       archivedStatus || clean(bookingRecord.admin_internal_status) || clean(bookingRecord.status) || null,
     booking_reference: bookingReference,
+    public_booking_reference: clean(bookingRecord.public_booking_reference) || null,
     cancellation_review_status:
       isCancelledStatus ? "cancelled" : clean(bookingRecord.cancellation_review_status) || null,
     change_review_status: clean(bookingRecord.change_review_status) || null,
@@ -8410,6 +8798,7 @@ function bookingRecordToAdminBookingPersistenceRecord(
     driver_name: clean(bookingRecord.driver_name) || null,
     driver_plate_number: clean(bookingRecord.driver_plate_number) || null,
     dropoff_location: dropoffLocation || null,
+    dropoff_datetime: clean(bookingRecord.dropoff_datetime) || null,
     flight_no: clean(bookingRecord.flight_no) || null,
     passenger_name: getBookingName(bookingRecord) || null,
     passenger_phone: clean(bookingRecord.passenger_phone) || null,
@@ -8493,6 +8882,24 @@ function formatAdminBookingPickupDateTime(bookingValue: BookingForm) {
   return `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
 }
 
+function formatAdminBookingDspEndDateTime(bookingValue: BookingForm) {
+  const date = clean(bookingValue.dspEndDate);
+  const time = normalizePickupTimeForStorage(bookingValue.dspEndTime);
+
+  if (!date || time.length < 4) {
+    return null;
+  }
+
+  const hours = Number(time.slice(0, 2));
+  const minutes = Number(time.slice(2, 4));
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
+    return null;
+  }
+
+  return `${date}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+08:00`;
+}
+
 const adminDraftPickupDateTimeFallback = "2099-12-31T00:00:00+08:00";
 const adminDraftPickupFallback = "Pickup To Confirm";
 const adminDraftDropoffFallback = "Drop-off To Confirm";
@@ -8515,6 +8922,20 @@ function adminDispatchSaveCrmMissingPickupFields(bookingValue: BookingForm) {
 
   if (normalizePickupTimeForStorage(bookingValue.time).length < 4) {
     missingFields.push(fieldLabels.time);
+  }
+
+  const hasOptionalDspScheduledEnd =
+    normalizeBookingType(bookingValue.bookingType) === "DSP" &&
+    Boolean(clean(bookingValue.dspEndDate) || clean(bookingValue.dspEndTime));
+
+  if (hasOptionalDspScheduledEnd) {
+    if (!clean(bookingValue.dspEndDate)) {
+      missingFields.push(fieldLabels.dspEndDate);
+    }
+
+    if (normalizePickupTimeForStorage(bookingValue.dspEndTime).length < 4) {
+      missingFields.push(fieldLabels.dspEndTime);
+    }
   }
 
   return missingFields;
@@ -8657,6 +9078,10 @@ function buildAdminBookingPersistencePayload(
   const pickupDateTime =
     formatAdminBookingPickupDateTime(bookingValue) || adminDraftPickupDateTimeFallback;
   const serviceType = clean(bookingValue.bookingType) || "TRF";
+  const dspEndDateTime =
+    normalizeBookingType(serviceType) === "DSP"
+      ? formatAdminBookingDspEndDateTime(bookingValue)
+      : null;
 
   return {
     booking: {
@@ -8667,6 +9092,7 @@ function buildAdminBookingPersistencePayload(
       booker_id: adminDispatchVerifiedIdentityId(bookingValue.bookerId),
       traveler_id: adminDispatchVerifiedIdentityId(bookingValue.travelerId),
       pickup_datetime: pickupDateTime,
+      dropoff_datetime: dspEndDateTime,
       pickup_location: pickupLocation,
       dropoff_location: dropoffLocation,
       route_type: serviceType,
@@ -8679,6 +9105,7 @@ function buildAdminBookingPersistencePayload(
       passenger_name: clean(bookingValue.name) || null,
       passenger_phone: null,
       flight_no: clean(bookingValue.flight) || null,
+      driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId),
       driver_contact: clean(bookingValue.driverContact) || null,
       driver_name: clean(bookingValue.driverName) || null,
       driver_plate_number: clean(bookingValue.driverPlate) || null,
@@ -8701,6 +9128,131 @@ type AdminDispatchReturnTripPersistencePayload = {
   legLabel: "outbound" | "return";
   payload: AdminBookingPersistenceRequestBody;
 };
+
+function adminBookingRecoveryText(value: unknown) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function adminBookingRecoveryTimestamp(value: unknown) {
+  const cleanedValue = adminBookingRecoveryText(value);
+  const timestamp = Date.parse(cleanedValue);
+
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : cleanedValue;
+}
+
+function adminBookingRecoveryIdentity(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function adminBookingRecoveryRoutePoints(
+  routePoints: AdminBookingPersistenceRecord["route_points"],
+) {
+  return (routePoints || [])
+    .map((routePoint) => ({
+      location: clean(routePoint.location_text || routePoint.location),
+      pointType: clean(routePoint.point_type),
+      sequence: Number(routePoint.sequence_number ?? routePoint.sequence ?? 0),
+      timingNote: clean(routePoint.timing_note || routePoint.notes),
+    }))
+    .sort((first, second) => first.sequence - second.sequence);
+}
+
+function adminBookingRecoveryServiceItems(
+  serviceItems: AdminBookingPersistenceRecord["service_items"],
+) {
+  return (serviceItems || [])
+    .map((serviceItem) => ({
+      blocksCount: Number(serviceItem.blocks_count ?? 0),
+      itemType: clean(serviceItem.service_item_type || serviceItem.item_type),
+      notes: clean(serviceItem.notes),
+      quantity: Number(serviceItem.quantity ?? 0),
+    }))
+    .sort((first, second) => first.itemType.localeCompare(second.itemType));
+}
+
+function adminBookingMatchesResponseLossRecovery(
+  record: AdminBookingPersistenceRecord,
+  payload: AdminBookingPersistenceRequestBody,
+) {
+  const booking = payload.booking;
+  const textPairs: Array<[unknown, unknown]> = [
+    [record.booking_reference, booking.booking_reference],
+    [record.pickup_location, booking.pickup_location],
+    [record.dropoff_location, booking.dropoff_location],
+    [record.service_type || record.route_type, booking.service_type || booking.route_type],
+    [record.route_summary, booking.route_summary],
+    [record.customer_display_name, booking.customer_display_name],
+    [record.contact_display_name, booking.contact_display_name],
+    [record.contact_phone, booking.contact_phone],
+    [record.contact_email, booking.contact_email],
+    [record.passenger_name, booking.passenger_name],
+    [record.flight_no, booking.flight_no],
+    [record.driver_contact, booking.driver_contact],
+    [record.driver_name, booking.driver_name],
+    [record.driver_plate_number, booking.driver_plate_number],
+    [record.vehicle_type_or_category, booking.vehicle_type_or_category],
+  ];
+  const identityPairs: Array<[unknown, unknown]> = [
+    [record.company_id, booking.company_id],
+    [record.booker_id, booking.booker_id],
+    [record.traveler_id, booking.traveler_id],
+    [record.driver_id, booking.driver_id],
+  ];
+
+  return (
+    textPairs.every(
+      ([actual, expected]) =>
+        adminBookingRecoveryText(actual) === adminBookingRecoveryText(expected),
+    ) &&
+    identityPairs.every(
+      ([actual, expected]) =>
+        adminBookingRecoveryIdentity(actual) === adminBookingRecoveryIdentity(expected),
+    ) &&
+    Number(record.pax_count ?? 0) === Number(booking.pax_count ?? 0) &&
+    adminBookingRecoveryTimestamp(record.pickup_datetime || record.pickup_at) ===
+      adminBookingRecoveryTimestamp(booking.pickup_datetime) &&
+    adminBookingRecoveryTimestamp(record.dropoff_datetime) ===
+      adminBookingRecoveryTimestamp(booking.dropoff_datetime) &&
+    JSON.stringify(adminBookingRecoveryRoutePoints(record.route_points)) ===
+      JSON.stringify(adminBookingRecoveryRoutePoints(payload.route_points)) &&
+    JSON.stringify(adminBookingRecoveryServiceItems(record.service_items)) ===
+      JSON.stringify(adminBookingRecoveryServiceItems(payload.service_items))
+  );
+}
+
+async function recoverAdminBookingAfterPostResponseLoss(
+  payload: AdminBookingPersistenceRequestBody,
+) {
+  const bookingReference = clean(payload.booking.booking_reference);
+
+  if (!bookingReference) {
+    return null;
+  }
+
+  try {
+    const params = new URLSearchParams({ booking_reference: bookingReference });
+    const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as {
+      booking?: AdminBookingPersistenceRecord | null;
+      ok?: boolean;
+    } | null;
+    const recoveredBooking = result?.booking ?? null;
+
+    return response.ok && result?.ok === true && recoveredBooking &&
+      adminBookingMatchesResponseLossRecovery(recoveredBooking, payload)
+      ? recoveredBooking
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 function adminDispatchReturnTripRequested(bookingValue: BookingForm) {
   return clean(bookingValue.returnTripRequested) === "yes";
@@ -8744,9 +9296,10 @@ function adminDispatchLinkedReturnParserSource(
   bookingValue: BookingForm,
   groupReference: string,
   legLabel: "OUTBOUND" | "RETURN",
+  baseParserSourceReference?: string | null,
 ) {
   return [
-    parsedSourceReference(bookingValue),
+    clean(baseParserSourceReference) || parsedSourceReference(bookingValue),
     `Linked return group ${groupReference}`,
     legLabel,
   ]
@@ -8757,7 +9310,10 @@ function adminDispatchLinkedReturnParserSource(
 function buildAdminDispatchReturnTripPersistencePayloads(
   bookingValue: BookingForm,
   currentTimeMs: number,
-  options: { customerDisplayNameOverride?: string | null } = {},
+  options: {
+    customerDisplayNameOverride?: string | null;
+    parserSourceReferenceOverride?: string | null;
+  } = {},
 ): AdminDispatchReturnTripPersistencePayload[] {
   const returnTripRequested = adminDispatchReturnTripRequested(bookingValue);
   const groupReference = createAdminBookingReference();
@@ -8769,8 +9325,13 @@ function buildAdminDispatchReturnTripPersistencePayloads(
     {
       ...options,
       parserSourceReferenceOverride: returnTripRequested
-        ? adminDispatchLinkedReturnParserSource(bookingValue, groupReference, "OUTBOUND")
-        : undefined,
+        ? adminDispatchLinkedReturnParserSource(
+            bookingValue,
+            groupReference,
+            "OUTBOUND",
+            options.parserSourceReferenceOverride,
+          )
+        : options.parserSourceReferenceOverride,
     },
   );
 
@@ -8805,6 +9366,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
             returnBookingValue,
             groupReference,
             "RETURN",
+            options.parserSourceReferenceOverride,
           ),
         },
       ),
@@ -8895,140 +9457,6 @@ function adminBookingPersistenceRecordIsShortNotice(
     clean(record.short_notice_review_status) === "Admin Review Required" ||
     (Number.isFinite(pickupMs) && pickupMs - currentTimeMs < 24 * 60 * 60 * 1000)
   );
-}
-
-function adminCustomerRequestDecisionStatuses(
-  record: AdminBookingPersistenceRecord,
-  decision: (typeof adminCustomerRequestReviewDecisions)[number],
-  currentTimeMs: number,
-) {
-  const shortNoticeReviewRequired = adminBookingPersistenceRecordIsShortNotice(record, currentTimeMs);
-
-  return {
-    admin_internal_status: decision.adminInternalStatus,
-    customer_facing_status: decision.customerFacingStatus,
-    request_review_status: decision.requestReviewStatus,
-    short_notice_review_status:
-      shortNoticeReviewRequired && decision.key === "needs-review"
-        ? "Admin Review Required"
-        : shortNoticeReviewRequired
-          ? "reviewed"
-          : "Not Required",
-    shortNoticeReviewRequired,
-  };
-}
-
-function buildAdminCustomerRequestDecisionPayload(
-  record: AdminBookingPersistenceRecord,
-  decision: (typeof adminCustomerRequestReviewDecisions)[number],
-  currentTimeMs: number,
-): AdminBookingPersistenceRequestBody | null {
-  const bookingReference = clean(record.booking_reference);
-  const pickupDateTime = adminBookingPersistencePickupDateTime(record);
-  const pickupLocation = clean(record.pickup_location);
-  const dropoffLocation = clean(record.dropoff_location);
-  const routeType = adminBookingPersistenceServiceType(record);
-  const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
-  const contactPhone = clean(record.contact_phone);
-  const routePoints: AdminBookingPersistenceRequestBody["route_points"] = [];
-
-  for (const [index, routePoint] of (record.route_points || []).entries()) {
-    const locationText = adminBookingPersistenceRoutePointLocation(routePoint);
-
-    if (!routePoint.point_type || !locationText) {
-      continue;
-    }
-
-    routePoints.push({
-      point_type: routePoint.point_type,
-      sequence_number: adminBookingPersistenceRoutePointSequence(routePoint) || index + 1,
-      location_text: locationText,
-      timing_note: adminBookingPersistenceRoutePointNote(routePoint) || null,
-    });
-  }
-
-  const hasPickupRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "pickup");
-  const hasDropoffRoutePoint = routePoints.some((routePoint) => routePoint.point_type === "dropoff");
-  const resolvedPickupLocation =
-    pickupLocation || routePoints.find((routePoint) => routePoint.point_type === "pickup")?.location_text || "";
-  const resolvedDropoffLocation =
-    dropoffLocation || routePoints.find((routePoint) => routePoint.point_type === "dropoff")?.location_text || "";
-
-  if (
-    !bookingReference ||
-    !pickupDateTime ||
-    !resolvedPickupLocation ||
-    !resolvedDropoffLocation ||
-    !routeType ||
-    !customerDisplayName ||
-    !contactPhone ||
-    !hasPickupRoutePoint ||
-    !hasDropoffRoutePoint
-  ) {
-    return null;
-  }
-
-  const serviceItems: AdminBookingPersistenceRequestBody["service_items"] = [];
-
-  for (const serviceItem of record.service_items || []) {
-    const serviceItemType = adminBookingPersistenceServiceItemType(serviceItem);
-    const quantity = safeAdminBookingPersistenceCount(serviceItem.quantity);
-    const blocksCount = safeAdminBookingPersistenceCount(serviceItem.blocks_count);
-
-    if (!serviceItemType || ((quantity ?? 0) < 1 && (blocksCount ?? 0) < 1)) {
-      continue;
-    }
-
-    serviceItems.push({
-      service_item_type: serviceItemType,
-      quantity,
-      blocks_count: blocksCount,
-    });
-  }
-
-  const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
-  const routeSummary =
-    routePoints
-      .map((routePoint) => clean(routePoint.location_text))
-      .filter(Boolean)
-      .join(" > ") || null;
-
-  return {
-    booking: {
-      booking_reference: bookingReference,
-      source_channel: "customer-booking-request",
-      customer_id: safeAdminBookingPersistenceIdentifier(record.customer_id),
-      company_id: adminDispatchVerifiedIdentityId(record.company_id),
-      booker_id: adminDispatchVerifiedIdentityId(record.booker_id),
-      traveler_id: adminDispatchVerifiedIdentityId(record.traveler_id),
-      pickup_datetime: pickupDateTime,
-      pickup_location: resolvedPickupLocation,
-      dropoff_location: resolvedDropoffLocation,
-      route_type: routeType,
-      service_type: routeType,
-      route_summary: routeSummary,
-      customer_display_name: customerDisplayName,
-      contact_display_name: clean(record.contact_display_name) || null,
-      contact_phone: contactPhone,
-      contact_email: clean(record.contact_email) || null,
-      passenger_name: clean(record.passenger_name) || null,
-      passenger_phone: clean(record.passenger_phone) || null,
-      flight_no: clean(record.flight_no) || null,
-      driver_contact: null,
-      driver_name: null,
-      driver_plate_number: null,
-      pax_count: safeAdminBookingPersistenceCount(record.pax_count),
-      luggage_count: safeAdminBookingPersistenceCount(record.luggage_count),
-      vehicle_type_or_category: clean(record.vehicle_type_or_category) || null,
-      customer_facing_status: statuses.customer_facing_status,
-      admin_internal_status: statuses.admin_internal_status,
-      short_notice_review_status: statuses.short_notice_review_status,
-      request_review_status: statuses.request_review_status,
-      parser_source_reference: clean(record.parser_source_reference) || null,
-    },
-    route_points: routePoints,
-    service_items: serviceItems,
-  };
 }
 
 function buildAdminBookingCancellationRequestApplyPayload(
@@ -9390,9 +9818,13 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
   const bookingReference = clean(record.booking_reference);
   const customerDisplayName = adminBookingPersistenceCustomerDisplayName(record);
   const verifiedCompanyId = adminDispatchVerifiedIdentityId(record.company_id);
+  const calendarCompanyName = verifiedCompanyId
+    ? billingIdentityBaseAccount(customerDisplayName)
+    : "";
 
   return {
     booking_reference: bookingReference,
+    public_booking_reference: clean(record.public_booking_reference) || null,
     booking_type: adminBookingPersistenceServiceType(record) || null,
     booker_id: adminDispatchVerifiedIdentityId(record.booker_id),
     company_id: verifiedCompanyId,
@@ -9402,14 +9834,15 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     created_at: clean(record.created_at) || null,
     customer_display_name: customerDisplayName || null,
     companies:
-      verifiedCompanyId && customerDisplayName
+      verifiedCompanyId && calendarCompanyName
         ? {
-            company_name: customerDisplayName,
+            company_name: calendarCompanyName,
             domain: null,
           }
         : null,
     dropoff_address: dropoffLocation,
     dropoff_location: dropoffLocation,
+    dropoff_datetime: clean(record.dropoff_datetime) || null,
     driver_contact: clean(record.driver_contact) || null,
     driver_name: clean(record.driver_name) || null,
     driver_plate_number: clean(record.driver_plate_number) || null,
@@ -9457,6 +9890,7 @@ function adminBookingPersistenceSourceLabel(record: AdminBookingPersistenceRecor
 function adminBookingPersistenceSearchValues(record: AdminBookingPersistenceRecord) {
   return [
     clean(record.booking_reference),
+    clean(record.public_booking_reference),
     adminBookingPersistenceCustomerDisplayName(record),
     adminBookingPersistencePassengerDisplayName(record),
     clean(record.contact_display_name),
@@ -9840,6 +10274,40 @@ function adminDriverJobStatusTimeLabel(value: string | null | undefined) {
   ).padStart(2, "0")} SGT`;
 }
 
+function adminDriverJobAcknowledgementCompactTimeLabel(value: string | null | undefined) {
+  const fullLabel = adminDriverJobStatusTimeLabel(value);
+  const timeMatch = fullLabel.match(/(\d{2}:\d{2}) SGT$/);
+
+  return timeMatch?.[1] || "";
+}
+
+function adminDriverJobLinkIssuedCompactTimeLabel(value: string | null | undefined) {
+  return adminDriverJobAcknowledgementCompactTimeLabel(value) || "Time unavailable";
+}
+
+function adminDriverJobLinkWaitingMinutes(
+  value: string | null | undefined,
+  currentTimeMs: number,
+) {
+  const issuedAtMs = new Date(clean(value)).getTime();
+
+  if (!Number.isFinite(issuedAtMs)) {
+    return null;
+  }
+
+  return Math.max(0, Math.floor((currentTimeMs - issuedAtMs) / (60 * 1000)));
+}
+
+function adminDriverJobCardKindLabel(
+  value: AdminDriverJobLinkRecord["safe_summary"]["job_card_kind"],
+) {
+  if (value === "new") return "New";
+  if (value === "amendment") return "Amendment";
+  if (value === "reissued") return "Reissued";
+
+  return "Issued";
+}
+
 function adminAppNotificationFailureMessage(rawError: unknown) {
   const normalizedError =
     rawError instanceof Error ? clean(rawError.message).toLowerCase() : clean(String(rawError || "")).toLowerCase();
@@ -10012,6 +10480,18 @@ function adminAppNotificationSafeContext(notification: AdminAppNotificationRecor
     !Array.isArray(notification.safe_context)
       ? notification.safe_context
       : {};
+}
+
+function adminAppNotificationMonthlyBillingMonth(notification: AdminAppNotificationRecord) {
+  if (clean(notification.workflow_area) !== "monthly_billing_draft_prep") {
+    return "";
+  }
+
+  const billingMonth = adminAppNotificationContextValue(
+    adminAppNotificationSafeContext(notification).billing_month,
+  );
+
+  return /^\d{4}-\d{2}$/.test(billingMonth) ? billingMonth : "";
 }
 
 function adminAppNotificationBookingReference(notification: AdminAppNotificationRecord) {
@@ -10552,6 +11032,73 @@ async function loadAdminAppNotificationsRead() {
   };
 }
 
+async function loadAdminEmailAiIntakeRead() {
+  const response = await fetch(adminEmailAiIntakeApiPath, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": "admin-email-ai-intake",
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result?.external_send !== false ||
+    result?.write_action !== false
+  ) {
+    throw new Error(
+      result?.error || "Private email AI intake read failed.",
+    );
+  }
+
+  return {
+    enabled: result.enabled === true,
+    records: Array.isArray(result.records)
+      ? (result.records as AdminEmailAiIntakeRecord[]).filter((record) =>
+          adminEmailAiClassificationAppearsInApp(record.classification),
+        )
+      : [],
+    tokenUsage:
+      result.token_usage &&
+      typeof result.token_usage === "object" &&
+      typeof result.token_usage.available === "boolean" &&
+      typeof result.token_usage.month_key === "string" &&
+      typeof result.token_usage.total_tokens === "number"
+        ? (result.token_usage as AdminEmailAiTokenUsage)
+        : null,
+  };
+}
+
+async function markAdminEmailAiIntakeReviewed(intakeId: string) {
+  const response = await fetch(adminEmailAiIntakeApiPath, {
+    body: JSON.stringify({
+      intake_id: intakeId,
+      processing_status: "reviewed",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": "admin-email-ai-intake",
+    },
+    method: "PATCH",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    result?.ok !== true ||
+    result?.external_send !== false ||
+    result?.write_action !== true ||
+    clean(result?.intake_id) !== intakeId ||
+    result?.processing_status !== "reviewed"
+  ) {
+    throw new Error(
+      result?.error || "Email AI intake review update failed.",
+    );
+  }
+}
+
 async function updateAdminAppNotificationStatus(
   notificationId: string,
   notificationStatus: AdminAppNotificationUpdateStatus,
@@ -10574,6 +11121,130 @@ async function updateAdminAppNotificationStatus(
   }
 
   return result.notification as AdminAppNotificationRecord;
+}
+
+async function queueCustomerBookingConfirmationNotification(input: {
+  bookingReference: string;
+  eventKey: string;
+  failureLabel: string;
+  matchesExisting: (notification: AdminTodayJobMessageRecord) => boolean;
+  safeContext: Record<string, unknown>;
+  safeMessage: string;
+  safeTitle: string;
+  workflowArea: string;
+}) {
+  const params = new URLSearchParams({
+    booking_reference: input.bookingReference,
+    delivery_surface: "customer_app",
+    limit: "100",
+    page: "1",
+  });
+  const existingResponse = await fetch(
+    `${adminCustomerDriverAppNotificationsApiPath}?${params.toString()}`,
+    {
+      cache: "no-store",
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    },
+  );
+  const existingResult = await existingResponse.json().catch(() => null);
+
+  if (!existingResponse.ok || !existingResult?.ok || !Array.isArray(existingResult.notifications)) {
+    throw new Error(
+      existingResult?.error || `${input.failureLabel} could not be checked safely.`,
+    );
+  }
+
+  const existingNotification = (existingResult.notifications as AdminTodayJobMessageRecord[]).find(
+    (notification) =>
+      clean(notification.booking_reference) === input.bookingReference &&
+      notification.delivery_surface === "customer_app" &&
+      notification.workflow_area === input.workflowArea &&
+      input.matchesExisting(notification),
+  );
+
+  if (existingNotification) {
+    return existingNotification;
+  }
+
+  const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+    body: JSON.stringify({
+      booking_reference: input.bookingReference,
+      delivery_surface: "customer_app",
+      driver_job_link_id: null,
+      event_key: input.eventKey,
+      notification_status: "queued",
+      notification_type: "booking_status",
+      priority: "normal",
+      safe_context: input.safeContext,
+      safe_message: input.safeMessage,
+      safe_title: input.safeTitle,
+      workflow_area: input.workflowArea,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const result = await response.json().catch(() => null);
+
+  if (
+    !response.ok ||
+    !result?.ok ||
+    clean(result?.notification?.booking_reference) !== input.bookingReference ||
+    result?.notification?.delivery_surface !== "customer_app" ||
+    result?.notification?.workflow_area !== input.workflowArea
+  ) {
+    throw new Error(
+      result?.error || `${input.failureLabel} could not be queued safely.`,
+    );
+  }
+
+  return result.notification as AdminTodayJobMessageRecord;
+}
+
+async function queueCustomerBookingAmendmentConfirmedNotification(
+  bookingReference: string,
+  amendmentRequestId: string,
+) {
+  return queueCustomerBookingConfirmationNotification({
+    bookingReference,
+    eventKey: `${bookingReference}:customer-amendment-confirmed:${amendmentRequestId}`,
+    failureLabel: "Customer amendment confirmation",
+    matchesExisting: (notification) =>
+      notification.safe_context?.amendment_request_id === amendmentRequestId,
+    safeContext: {
+      amendment_request_id: amendmentRequestId,
+      external_send: false,
+      provider_send: false,
+      source: "customer_amendment_review",
+    },
+    safeMessage:
+      "Your booking amendment has been confirmed by Prestige Limo. Open My Bookings to review.",
+    safeTitle: "Booking amendment confirmed",
+    workflowArea: "customer_amendment_review",
+  });
+}
+
+async function queueCustomerBookingRequestConfirmedNotification(bookingReference: string) {
+  return queueCustomerBookingConfirmationNotification({
+    bookingReference,
+    eventKey: `${bookingReference}:customer_request_review:approved`,
+    failureLabel: "Customer booking confirmation",
+    matchesExisting: (notification) =>
+      notification.safe_context?.request_review_status === "approved",
+    safeContext: {
+      customer_facing_status: "confirmed",
+      request_review_status: "approved",
+      source: "customer_request_review",
+    },
+    safeMessage: "Your booking request has been confirmed by Prestige Limo.",
+    safeTitle: "Booking request confirmed",
+    workflowArea: "customer_request_review",
+  });
 }
 
 async function loadAdminDevicePushReadiness() {
@@ -11354,21 +12025,35 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
 }) {
   const customerAccount = clean(group.customer_account);
   const billingMonth = clean(group.billing_month);
-  const readyCount = adminMonthlyBillingGroupingCount(group.ready_count);
-  const blockedCount = adminMonthlyBillingGroupingCount(group.blocked_count);
-  const totalCount = adminMonthlyBillingGroupingCount(group.total_count);
-  const readinessStatus = group.safe_readiness_status || "blocked";
+  const expectedReadyCount = adminMonthlyBillingGroupingCount(group.ready_count);
 
-  if (!customerAccount || !billingMonth || totalCount < 1) {
+  if (!customerAccount || !billingMonth || expectedReadyCount < 1) {
     throw new Error("Monthly invoice draft preparation requires a saved customer/month group.");
   }
 
+  const linkedTrips = (await loadAdminMonthlyInvoiceDraftTripCandidatesRead(group)).map(
+    (candidate) => ({
+      billing_prep_readiness: clean(candidate.billing_prep_readiness) || null,
+      booking_reference: clean(candidate.booking_reference),
+      closeout_id: clean(candidate.closeout_id) || null,
+      closeout_status: clean(candidate.closeout_status) || null,
+      safe_trip_context: candidate.safe_trip_context || {},
+      trip_readiness_status: "ready" as const,
+    }),
+  ).filter((candidate) => Boolean(candidate.booking_reference));
+
+  if (linkedTrips.length !== expectedReadyCount) {
+    throw new Error("Monthly invoice draft preparation requires every ready unbilled trip.");
+  }
+
+  const readyCount = linkedTrips.length;
+  const blockedCount = 0;
+  const totalCount = readyCount;
+  const readinessStatus: AdminMonthlyBillingGroupingReadinessStatus = "ready";
+
   const safeDraftContext = {
-    draft_summary: `${totalCount} saved completed trip${totalCount === 1 ? "" : "s"} grouped for monthly draft prep.`,
-    next_action:
-      blockedCount > 0
-        ? "Review blocked saved trips before manager approval."
-        : "Review saved group counts before manager approval.",
+    draft_summary: `${totalCount} ready unbilled completed trip${totalCount === 1 ? "" : "s"} grouped for monthly draft prep.`,
+    next_action: "Review ready unbilled saved trips before manager approval.",
     review_status: existingDraft
       ? "Saved draft prep refreshed from grouped data."
       : "Saved draft prep created from grouped data.",
@@ -11393,47 +12078,17 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
     },
     total_count: totalCount,
   };
-  const linkedTrips = existingDraft?.id
-    ? []
-    : (await loadAdminMonthlyInvoiceDraftTripCandidatesRead(group)).map((candidate) => ({
-        billing_prep_readiness: clean(candidate.billing_prep_readiness) || null,
-        booking_reference: clean(candidate.booking_reference),
-        closeout_id: clean(candidate.closeout_id) || null,
-        closeout_status: clean(candidate.closeout_status) || null,
-        safe_trip_context: candidate.safe_trip_context || {},
-        trip_readiness_status:
-          candidate.trip_readiness_status === "blocked" ? "blocked" : "ready",
-      })).filter((candidate) => Boolean(candidate.booking_reference));
-
-  if (!existingDraft?.id && linkedTrips.length === 0) {
-    throw new Error("Monthly invoice draft preparation requires saved trip references.");
-  }
-
-  const request =
-    existingDraft?.id
-      ? {
-          body: {
-            ...sharedPayload,
-            draft_id: existingDraft.id,
-          },
-          method: "PATCH",
-        }
-      : {
-          body: {
-            ...sharedPayload,
-            customer_id: clean(group.customer_id) || null,
-            linked_trips: linkedTrips,
-          },
-          method: "POST",
-        };
-
   const response = await fetch(adminMonthlyInvoiceDraftsApiPath, {
-    body: JSON.stringify(request.body),
+    body: JSON.stringify({
+      ...sharedPayload,
+      customer_id: clean(group.customer_id) || null,
+      linked_trips: linkedTrips,
+    }),
     headers: {
       "Content-Type": "application/json",
       "x-prestige-admin-purpose": adminLegacyDataPurpose,
     },
-    method: request.method,
+    method: "POST",
   });
   const result = await response.json().catch(() => null);
 
@@ -13018,7 +13673,8 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
   return `Company settings could not be ${actionLabel}. Reload Company Settings and try again.`;
 }
 
-export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
+export default function Home() {
+  const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
@@ -13027,10 +13683,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const [bookingMessageResetKey, setBookingMessageResetKey] = useState(0);
+  const [mobileDispatchBookingStep, setMobileDispatchBookingStep] =
+    useState<MobileDispatchBookingStep>("message");
   const [parsedDebugBooking, setParsedDebugBooking] = useState<ParsedDebugBooking | null>(null);
   const [showParserDebug, setShowParserDebug] = useState(false);
   const [multiBookingNotice, setMultiBookingNotice] = useState<ParsedBooking | null>(null);
+  const [aiAssistMode, setAiAssistMode] = useState<AiAssistMode>("parser");
   const [aiDraft, setAiDraft] = useState<AiParseResult | null>(null);
+  const [aiConversationMessages, setAiConversationMessages] = useState<AdminAiConversationMessage[]>([]);
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const [aiAssistSafetyAccepted, setAiAssistSafetyAccepted] = useState(false);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
@@ -13040,6 +13700,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const [bookingGoogleCalendarStatuses, setBookingGoogleCalendarStatuses] =
     useState<Record<string, AdminBookingGoogleCalendarStatusValue>>({});
   const [bookingGoogleCalendarStatusMessage, setBookingGoogleCalendarStatusMessage] =
+    useState<Message | null>(null);
+  const [bookingDriverDetailsDeliveryStatuses, setBookingDriverDetailsDeliveryStatuses] =
+    useState<Record<string, AdminBookingDriverDetailsDeliveryStatus>>({});
+  const [bookingDriverDetailsDeliveryStatusMessage, setBookingDriverDetailsDeliveryStatusMessage] =
     useState<Message | null>(null);
   const bookingGoogleCalendarStatusSourceRef = useRef<BookingRecord[]>([]);
   const bookingGoogleCalendarStatusRequestRevisionRef = useRef(0);
@@ -13062,6 +13726,25 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       return Array.isArray(parsed)
         ? parsed.map(cleanReferenceText).filter(Boolean).slice(-200)
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [dismissedPendingDriverAckLinkIds, setDismissedPendingDriverAckLinkIds] = useState<
+    string[]
+  >(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(
+        window.localStorage.getItem(adminDismissedPendingDriverAckLinksStorageKey) || "[]",
+      );
+
+      return Array.isArray(parsed)
+        ? parsed.map(cleanReferenceText).filter(Boolean).slice(-500)
         : [];
     } catch {
       return [];
@@ -13110,11 +13793,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState<Record<string, AdminDriverJobStatusReadState>>({});
   const [dashboardDriverOtsPhotoProofReadStates, setDashboardDriverOtsPhotoProofReadStates] =
     useState<Record<string, AdminDriverOtsPhotoProofReadState>>({});
+  const [dashboardDriverJobLinksReadState, setDashboardDriverJobLinksReadState] =
+    useState<AdminDashboardDriverJobLinksReadState>({
+      linksByReference: {},
+      status: "idle",
+    });
+  const dashboardDriverJobLinksReadRequestRevisionRef = useRef(0);
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
-  const driverCompletedBookingStatusSyncRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
   const [bookingsSelectedDate, setBookingsSelectedDate] = useState(() => toDateKey(new Date()));
-  const [bookingsShowAllDates, setBookingsShowAllDates] = useState(true);
+  const [bookingsShowUpcoming, setBookingsShowUpcoming] = useState(true);
+  const [bookingsUpcomingPage, setBookingsUpcomingPage] = useState(1);
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [completedMonthFilter, setCompletedMonthFilter] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -13155,7 +13844,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState("");
   const [adminCustomerRequestStatusFilter, setAdminCustomerRequestStatusFilter] =
     useState<AdminCustomerRequestStatusFilter>(adminCustomerRequestAllStatusFilter);
-  const [customerMatchFeedback, setCustomerMatchFeedback] = useState<CustomerMatchFeedback | null>(null);
   const [saveCrmBillingIdentityConfirmation, setSaveCrmBillingIdentityConfirmation] =
     useState<SaveCrmBillingIdentityConfirmation | null>(null);
   const [saveCrmBillingIdentityMessage, setSaveCrmBillingIdentityMessage] =
@@ -13178,13 +13866,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     useState<AdminBookingWorkflowStatusRecord | null>(null);
   const [adminBookingWorkflowStatusAction, setAdminBookingWorkflowStatusAction] =
     useState<AdminBookingWorkflowStatusAction | null>(null);
-  const [codexJobCardInstructions, setCodexJobCardInstructions] =
-    useState<Record<string, string>>({});
-  const [codexJobCardReviewStatuses, setCodexJobCardReviewStatuses] =
-    useState<Record<string, AdminBookingWorkflowStatusRecord | null>>({});
-  const [codexJobCardReviewMessages, setCodexJobCardReviewMessages] =
-    useState<Record<string, Message>>({});
-  const [codexJobCardReviewAction, setCodexJobCardReviewAction] = useState<string | null>(null);
   const [completedBookingCloseoutRecord, setCompletedBookingCloseoutRecord] =
     useState<AdminCompletedBookingCloseoutRecord | null>(null);
   const [completedBookingCloseoutAction, setCompletedBookingCloseoutAction] =
@@ -13248,6 +13929,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pagination: null,
       status: "idle",
     });
+  const [adminMonthlyBillingDashboardClassificationState, setAdminMonthlyBillingDashboardClassificationState] =
+    useState<AdminMonthlyBillingDashboardClassificationState>({
+      billingMonth: "",
+      groups: [],
+      message: "",
+      status: "idle",
+    });
+  const [adminEmailAiIntakeReadState, setAdminEmailAiIntakeReadState] =
+    useState<AdminEmailAiIntakeReadState>({
+      enabled: false,
+      message: null,
+      records: [],
+      status: "idle",
+      tokenUsage: null,
+    });
+  const [activeAdminEmailAiIntakeId, setActiveAdminEmailAiIntakeId] =
+    useState("");
+  const adminEmailAiInitialLoadAttemptedRef = useRef(false);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
     target: AdminAlertLocatorTarget;
@@ -13419,12 +14118,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminCustomerDriverDetailsCustomerInAppActionState,
   ] = useState<AdminCustomerDriverDetailsCustomerInAppActionState>(() =>
     adminCustomerDriverDetailsCustomerInAppFallbackState(),
-  );
-  const [
-    adminCustomerDriverDetailsDriverInAppActionState,
-    setAdminCustomerDriverDetailsDriverInAppActionState,
-  ] = useState<AdminCustomerDriverDetailsDriverInAppActionState>(() =>
-    adminCustomerDriverDetailsDriverInAppFallbackState(),
   );
   const [adminTodayJobDriverMessageStates, setAdminTodayJobDriverMessageStates] = useState<
     Record<string, AdminTodayJobDriverMessageState>
@@ -13869,6 +14562,138 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           notifications: [],
           pagination: null,
           status: terminalFailure ? "unavailable" : "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminAppNotificationReadRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const billingMonth = adminAppNotificationReadState.notifications
+      .map(adminAppNotificationMonthlyBillingMonth)
+      .find(Boolean) || "";
+
+    if (activeTab !== "dashboard" || !billingMonth) {
+      setAdminMonthlyBillingDashboardClassificationState({
+        billingMonth: "",
+        groups: [],
+        message: "",
+        status: "idle",
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAdminMonthlyBillingDashboardClassificationState((current) => {
+      if (current.billingMonth === billingMonth && current.status === "loaded") {
+        return current;
+      }
+
+      return {
+        billingMonth,
+        groups: [],
+        message: "Loading completed-job billing classifications...",
+        status: "loading",
+      };
+    });
+
+    void (async () => {
+      try {
+        const { groups, pagination } = await loadAdminMonthlyBillingGroupsRead({
+          billingMonth,
+          customerAccountSearch: "",
+          limit: 250,
+          page: 1,
+          readinessStatus: "all",
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (pagination?.has_next_page) {
+          throw new Error("Monthly billing classification group limit exceeded.");
+        }
+
+        setAdminMonthlyBillingDashboardClassificationState({
+          billingMonth,
+          groups,
+          message: "",
+          status: "loaded",
+        });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminMonthlyBillingDashboardClassificationState({
+          billingMonth,
+          groups: [],
+          message: "Completed-job classifications could not be read safely. No draft was changed.",
+          status: "error",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminAppNotificationReadState.notifications]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (
+      activeTab !== "dashboard" &&
+      adminEmailAiInitialLoadAttemptedRef.current
+    ) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    adminEmailAiInitialLoadAttemptedRef.current = true;
+    setAdminEmailAiIntakeReadState((current) => ({
+      ...current,
+      message: null,
+      status: "loading",
+    }));
+
+    void (async () => {
+      try {
+        const result = await loadAdminEmailAiIntakeRead();
+
+        if (cancelled) {
+          return;
+        }
+
+        setAdminEmailAiIntakeReadState({
+          enabled: result.enabled,
+          message: null,
+          records: result.records,
+          status: "loaded",
+          tokenUsage: result.tokenUsage,
+        });
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setAdminEmailAiIntakeReadState({
+          enabled: false,
+          message: {
+            tone: "error",
+            text: "Private email AI review could not be loaded. No external reply was sent.",
+          },
+          records: [],
+          status: "unavailable",
+          tokenUsage: null,
         });
       }
     })();
@@ -14657,6 +15482,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         clean(record.short_notice_review_status) || payload.booking.short_notice_review_status;
       payload.booking.request_review_status =
         clean(record.request_review_status) || payload.booking.request_review_status;
+      payload.booking.change_review_status = "approved";
 
       setAdminBookingPersistenceAction("update");
       setAdminBookingPersistenceMessage({
@@ -14710,6 +15536,30 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         return;
       }
 
+      try {
+        await queueCustomerBookingAmendmentConfirmedNotification(
+          updatedBookingReference,
+          notificationId,
+        );
+      } catch (error) {
+        const message = {
+          tone: "error",
+          text: `Amendment applied for ${updatedBookingReference} and Google Calendar auto-synced, but the customer app confirmation could not be queued: ${
+            error instanceof Error ? error.message : "Customer notification failed safely."
+          } Request remains pending for retry.`,
+        } satisfies Message;
+
+        setMessage(message);
+        setBookingSaveMessage(message);
+        setAdminBookingPersistenceMessage(message);
+        setAdminAppNotificationReadState((current) => ({
+          ...current,
+          message,
+          status: "error",
+        }));
+        return;
+      }
+
       let handledId = notificationId;
 
       try {
@@ -14736,7 +15586,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const message = {
         tone: "success",
-        text: `Amendment applied for ${updatedBookingReference}. Google Calendar auto-synced on the same booking reference; request archived. No external message was sent.`,
+        text: `Amendment applied for ${updatedBookingReference}. Google Calendar auto-synced on the same booking reference; customer app confirmation queued; request archived. No external message was sent.`,
       } satisfies Message;
 
       removeHandledAdminAppNotification(handledId, message);
@@ -14839,7 +15689,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         loadedReference: bookingReference,
         message: {
           tone: "info",
-          text: `Checking saved driver job link for ${bookingReference}...`,
+          text: "Checking saved driver job link...",
         },
         oneTimeUrl: current.loadedReference === bookingReference ? current.oneTimeUrl : "",
       }));
@@ -14934,6 +15784,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   useEffect(() => {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
     let cancelled = false;
 
     async function loadWorkflowAreaStatus({
@@ -15025,11 +15876,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       await loadWorkflowAreaStatus({
         action: "load-dispatch-release",
-        missingStatusText: `No saved dispatch release workflow status for ${bookingReference}.`,
+        missingStatusText: `No saved dispatch release workflow status for ${displayBookingReference}.`,
         setMessage: setDispatchReleaseMessage,
         setStatus: setDispatchReleaseWorkflowStatus,
         successStatusText: (loadedStatus) =>
-          `Loaded dispatch release workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+          `Loaded dispatch release workflow status for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
             loadedStatus,
           )}.`,
         workflowArea: adminDispatchReleaseWorkflowArea,
@@ -15038,11 +15889,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       await loadWorkflowAreaStatus({
         action: "load-driver-acknowledgement",
-        missingStatusText: `No saved driver acknowledgement workflow status for ${bookingReference}.`,
+        missingStatusText: `No saved driver acknowledgement workflow status for ${displayBookingReference}.`,
         setMessage: setDriverAcknowledgementMessage,
         setStatus: setDriverAcknowledgementWorkflowStatus,
         successStatusText: (loadedStatus) =>
-          `Loaded driver acknowledgement workflow status for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+          `Loaded driver acknowledgement workflow status for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
             loadedStatus,
           )}.`,
         workflowArea: adminDriverAcknowledgementWorkflowArea,
@@ -15067,14 +15918,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             );
             setCompletedTripCloseoutReviewMessage({
               tone: "success",
-              text: `Loaded completed closeout for ${bookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
+              text: `Loaded completed closeout for ${displayBookingReference}: ${adminCompletedBookingCloseoutDisplayLabel(
                 loadedCloseout,
               )}.`,
             });
           } else {
             setCompletedTripCloseoutReviewMessage({
               tone: "info",
-              text: `No saved completed closeout for ${bookingReference}.`,
+              text: `No saved completed closeout for ${displayBookingReference}.`,
             });
           }
         } catch (error) {
@@ -15100,7 +15951,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           latestStatus: null,
           message: {
             tone: "info",
-            text: `Loading saved driver status for ${bookingReference}...`,
+            text: `Loading saved driver status for ${displayBookingReference}...`,
           },
           status: "loading",
           statuses: [],
@@ -15122,8 +15973,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 loadedDriverStatuses.statuses.length > 0
                   ? `Loaded ${loadedDriverStatuses.statuses.length} saved driver status event${
                       loadedDriverStatuses.statuses.length === 1 ? "" : "s"
-                    } for ${bookingReference}.`
-                  : `No saved driver status history for ${bookingReference}.`,
+                    } for ${displayBookingReference}.`
+                  : `No saved driver status history for ${displayBookingReference}.`,
             },
             status: "loaded",
             statuses: loadedDriverStatuses.statuses,
@@ -15152,7 +16003,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           latestProof: null,
           message: {
             tone: "info",
-            text: `Checking OTS photo proof for ${bookingReference}...`,
+            text: `Checking OTS photo proof for ${displayBookingReference}...`,
           },
           proofs: [],
           status: "loading",
@@ -15171,8 +16022,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             message: {
               tone: loadedProofs.latestProof ? "success" : "info",
               text: loadedProofs.latestProof
-                ? `OTS photo proof received for ${bookingReference}.`
-                : `No OTS photo proof for ${bookingReference} yet.`,
+                ? `OTS photo proof received for ${displayBookingReference}.`
+                : `No OTS photo proof for ${displayBookingReference} yet.`,
             },
             proofs: loadedProofs.proofs,
             status: "loaded",
@@ -15203,6 +16054,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return () => {
       cancelled = true;
     };
+  // The internal booking key is the intentional reload trigger; the public label is resolved from that exact loaded record.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatchReleaseWorkflowBookingReference, dispatchReleaseWorkflowLoadRevision]);
 
   useEffect(() => {
@@ -16138,6 +16991,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       appliedAdminBookingSnapshotReference,
     );
 
+  function adminVisibleBookingReference(reference: string | number | null | undefined) {
+    const internalReference = cleanReferenceText(reference);
+    const loadedRecord = findLoadedBookingRecordByReference(bookings, internalReference);
+    const savedRecord = findAdminBookingPersistenceRecordByReference(
+      adminBookingPersistenceRecords,
+      internalReference,
+    );
+    const record = loadedRecord || savedRecord;
+
+    return record ? bookingPublicReference(record) : "Booking";
+  }
+
   const route = useMemo(() => {
     const pickup = clean(booking.pickup);
     const dropoff = clean(booking.dropoff);
@@ -16349,14 +17214,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : "$0.00";
   const manualExtraChargesNotePreview = clean(booking.manualExtraChargesNote) || "Blank";
   const hasNeedsReviewWarnings = needsReviewWarnings.length > 0;
-  const customerMatchSuggestion = useMemo(
-    () =>
-      parsedDebugBooking && !parsedDebugBooking.multipleBookingsDetected
-        ? getMockCustomerMatchSuggestion(booking)
-        : null,
-    [booking, parsedDebugBooking],
-  );
-
   const displayedCompanyOverrideRecords = useMemo(
     () =>
       rateCompanies.filter(
@@ -16390,23 +17247,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [driverSearchTerm, driverProfileDisplayDrivers]);
   const driverDatabaseSearchQuery = clean(driverSearchTerm);
   const operationalBookings = useMemo(() => bookings.filter(isOperationalBooking), [bookings]);
-  const codexCalendarConflictLoadedBookings = useMemo<CodexCalendarConflictBooking[]>(
-    () =>
-      operationalBookings.map((bookingRecord) => ({
-        active:
-          !bookingRecordIsCancelledStatus(bookingRecord) &&
-          !bookingRecordIsCompletedStatus(bookingRecord),
-        driverId: bookingRecord.driver_id,
-        driverName: bookingRecord.driver_name,
-        identity: bookingRecordStableKey(bookingRecord),
-        pickupTimeMs: bookingRecordCalendarConflictPickupDateTimeMs(bookingRecord),
-        vehiclePlate: bookingRecord.driver_plate_number,
-      })),
-    [operationalBookings],
-  );
-  const codexCalendarConflictAutomationEnabled =
-    adminAutomationRuntimeState.automationEnabled &&
-    adminAutomationRuntimeState.status === "active";
   const completedHistorySourceBookings = useMemo(() => {
     if (!completedCancelHandoffBooking) {
       return operationalBookings;
@@ -16498,13 +17338,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       .map(({ displayItem }) => displayItem);
   }
   const assignedDriverId = clean(booking.driverId);
-  const assignedDriverName = clean(booking.driverName).toLowerCase();
-  const assignedDriverRecord = driverAssignmentDisplayDrivers.find(
-    (driver) =>
-      (assignedDriverId && String(driver.id) === assignedDriverId) ||
-      (assignedDriverName && clean(driver.driver_name).toLowerCase() === assignedDriverName),
-  );
-  const assignedDriverSelectValue = assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : "");
+  const assignedDriverRecord = assignedDriverId
+    ? driverAssignmentDisplayDrivers.find((driver) => String(driver.id) === assignedDriverId)
+    : undefined;
+  const assignedDriverSelectValue = assignedDriverId;
   const assignedDriverIsInactive = Boolean(assignedDriverRecord && isInactiveDriver(assignedDriverRecord));
   const showSavedAssignedDriverOption = Boolean(
     assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
@@ -16520,7 +17357,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     [booking, currentTimeMs],
   );
   const activeAdminDriverJobLink =
-    adminDriverJobLinkState.link?.link_status === "active" ? adminDriverJobLinkState.link : null;
+    adminDriverJobLinkState.link?.link_status === "active" &&
+    cleanReferenceText(adminDriverJobLinkState.link.booking_reference) ===
+      cleanReferenceText(dispatchReleaseWorkflowBookingReference)
+      ? adminDriverJobLinkState.link
+      : null;
+  const dispatchReleaseLoadedBookingRecord = loadedBookingId
+    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
+    : null;
+  const dispatchPublicBookingReference = appliedAdminBookingSnapshot
+    ? bookingPublicReference(appliedAdminBookingSnapshot)
+    : dispatchReleaseLoadedBookingRecord
+      ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
+      : "";
 
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
@@ -16555,7 +17404,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       [
         "CUSTOMER BOOKING DETAILS",
         clean(booking.name) ? `Passenger name: ${clean(booking.name)}` : "",
-        bookingReference ? `Booking reference: ${bookingReference}` : "",
+        dispatchPublicBookingReference
+          ? `Booking reference: ${dispatchPublicBookingReference}`
+          : "",
         serviceType ? `Service: ${serviceType}` : "",
         `Pickup date: ${formatDate(booking.date)}`,
         `Pickup time: ${formatPickupTime(booking.time)}`,
@@ -16577,6 +17428,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     assignedDriverRecord?.plate_number,
     assignedDriverRecord?.vehicle_type,
     booking,
+    dispatchPublicBookingReference,
     dispatchReleaseWorkflowBookingReference,
   ]);
 
@@ -16664,9 +17516,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return "";
     }
 
-    const bookingReference =
-      cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
-      cleanReferenceText(activeAdminDriverJobLink?.booking_reference);
+    const driverJobLinkPublicBookingReference = dispatchPublicBookingReference;
     const passengerLine = clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "";
     const flightLocationParts = dispatchCopyLocationFlightParts(booking);
     const driverJobLinkRoute = [
@@ -16687,7 +17537,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const linkSummary = activeAdminDriverJobLink
       ? [
           `Saved link status: ${activeAdminDriverJobLink.link_status}`,
-          activeAdminDriverJobLink.expires_at ? `Expires: ${activeAdminDriverJobLink.expires_at}` : "",
+          activeAdminDriverJobLink.expires_at
+            ? `Expires: ${formatBookingTimestampSgt(activeAdminDriverJobLink.expires_at)}`
+            : "",
         ]
       : ["Saved link status: No active driver job link loaded."];
     const sections = [
@@ -16700,7 +17552,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ],
       [
         "Job:",
-        bookingReference ? `Reference: ${bookingReference}` : "",
+        driverJobLinkPublicBookingReference
+          ? `Reference: ${driverJobLinkPublicBookingReference}`
+          : "",
         passengerLine,
         formatPickupDateTime(booking.date, booking.time),
         flightLocationParts.standaloneFlightLine,
@@ -16731,7 +17585,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     activeAdminDriverJobLink,
     adminDriverJobLinkState.oneTimeUrl,
     booking,
-    dispatchReleaseWorkflowBookingReference,
+    dispatchPublicBookingReference,
     isDspItinerary,
     itineraryDisplayStops,
   ]);
@@ -16837,25 +17691,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       adminDriverJobStatusReadStateIsCompleted(dashboardDriverStatusState)
     );
   }, [adminDriverJobStatusReadState, dashboardDriverJobStatusReadStates]);
-  const bookingRecordBelongsInCompletedHistoryWithDriverReport = useCallback(
+  const bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation = useCallback(
     (bookingRecord: BookingRecord) =>
-      bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey) ||
-      bookingRecordHasCompletedDriverReport(bookingRecord),
-    [bookingRecordHasCompletedDriverReport, todayKey],
+      bookingRecordBelongsInCompletedHistory(bookingRecord, todayKey),
+    [todayKey],
   );
   const earlierHistoryDashboardBookings = useMemo(
     () =>
       dashboardBookings.filter((bookingRecord) =>
-        bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord),
+        bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord),
       ),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, dashboardBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, dashboardBookings],
   );
   const completedBookings = useMemo(
     () =>
       completedHistorySourceBookings
-        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .sort(sortBookingHistoryNewestFirst),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, completedHistorySourceBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, completedHistorySourceBookings],
   );
   const completedBillingAuditBookings = useMemo(
     () => completedBookings.filter(bookingRecordIsCompletedStatus),
@@ -16908,7 +17761,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const urgentUnassignedSavedBookingRequests = useMemo(
     () =>
       operationalBookings
-        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
             !bookingRecordIsCustomerBookingRequest(bookingRecord) &&
@@ -16921,7 +17774,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
           return firstPickupTimeMs - secondPickupTimeMs;
         }),
-    [bookingRecordBelongsInCompletedHistoryWithDriverReport, currentTimeMs, operationalBookings],
+    [bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation, currentTimeMs, operationalBookings],
   );
   const dashboardUrgentBookingRequestBookings = useMemo(
     () =>
@@ -16951,26 +17804,31 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const filteredRecentBookings = useMemo(
     () =>
       operationalBookings
-        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))
+        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
-            bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
+            bookingsShowUpcoming || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
         )
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
     [
-      bookingRecordBelongsInCompletedHistoryWithDriverReport,
+      bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation,
       bookingsSearchTerm,
       bookingsSelectedDate,
-      bookingsShowAllDates,
+      bookingsShowUpcoming,
       operationalBookings,
     ],
   );
+  const completedExactDateSearchKey = /^\d{4}-\d{2}-\d{2}$/.test(clean(completedSearchTerm))
+    ? clean(completedSearchTerm)
+    : "";
   const filteredCompletedBookings = useMemo(
     () =>
       completedBookings.filter((bookingRecord) =>
-        bookingMatchesLocalSearch(bookingRecord, completedSearchTerm),
+        completedExactDateSearchKey
+          ? getBookingDateKey(bookingRecord) === completedExactDateSearchKey
+          : bookingMatchesLocalSearch(bookingRecord, completedSearchTerm),
       ),
-    [completedBookings, completedSearchTerm],
+    [completedBookings, completedExactDateSearchKey, completedSearchTerm],
   );
   const completedHistoryMonthOptions = useMemo(() => {
     const monthCounts = new Map<string, number>();
@@ -17015,7 +17873,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const hasBookingsSearch = Boolean(clean(bookingsSearchTerm));
   const selectedBookingsDateLabel = formatDateWithWeekday(bookingsSelectedDate);
-  const bookingsDateScopeLabel = bookingsShowAllDates ? "all active dates" : selectedBookingsDateLabel;
+  const bookingsDateScopeLabel = bookingsShowUpcoming ? "upcoming active jobs" : selectedBookingsDateLabel;
   const hasCompletedSearch = Boolean(clean(completedSearchTerm));
   const loadedBookingIds = new Set(operationalBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
   const completedBookingIds = new Set(completedBookings.map((bookingRecord) => bookingRecordStableKey(bookingRecord)));
@@ -17152,100 +18010,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     buildLoadBookingsOperationalDisplayItems(visibleCustomerBookingRequestBookings, {
       useTypedOperationalOrder: true,
     });
-  const codexPreparedJobCardBookingReferenceKey = visibleCustomerBookingRequestBookings
-    .map(bookingRecordPersistedReference)
-    .map(cleanReferenceText)
-    .filter(Boolean)
-    .join("\n");
-
-  useEffect(() => {
-    if (activeTab !== "dashboard" || !codexPreparedJobCardBookingReferenceKey) {
-      return;
-    }
-
-    const bookingReferences = codexPreparedJobCardBookingReferenceKey.split("\n").filter(Boolean);
-    let cancelled = false;
-
-    void Promise.all(
-      bookingReferences.map(async (bookingReference) => {
-        setCodexJobCardReviewMessages((current) => ({
-          ...current,
-          [bookingReference]: {
-            tone: "info",
-            text: "Loading saved Codex instruction...",
-          },
-        }));
-
-        try {
-          const loadedStatus = await loadAdminBookingWorkflowStatusRecord(
-            bookingReference,
-            adminCodexJobCardReviewWorkflowArea,
-          );
-
-          if (cancelled) {
-            return;
-          }
-
-          const savedInstruction = clean(loadedStatus?.safe_status_context?.safe_note);
-          setCodexJobCardReviewStatuses((current) => ({
-            ...current,
-            [bookingReference]: loadedStatus,
-          }));
-          if (savedInstruction) {
-            setCodexJobCardInstructions((current) =>
-              clean(current[bookingReference])
-                ? current
-                : {
-                    ...current,
-                    [bookingReference]: savedInstruction,
-                  },
-            );
-          }
-          setCodexJobCardReviewMessages((current) => ({
-            ...current,
-            [bookingReference]: {
-              tone: loadedStatus ? "success" : "info",
-              text: loadedStatus
-                ? `Saved internal Codex instruction loaded: ${adminBookingWorkflowStatusDisplayLabel(
-                    loadedStatus,
-                  )}.`
-                : "No instruction has been returned to Codex for this card.",
-            },
-          }));
-        } catch (error) {
-          if (cancelled) {
-            return;
-          }
-
-          setCodexJobCardReviewStatuses((current) => ({
-            ...current,
-            [bookingReference]: null,
-          }));
-          setCodexJobCardReviewMessages((current) => ({
-            ...current,
-            [bookingReference]: {
-              tone: "error",
-              text: adminBookingWorkflowStatusFailureMessage(error, "Codex job-card review"),
-            },
-          }));
-        }
-      }),
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, codexPreparedJobCardBookingReferenceKey]);
 
   const customerBookingRequestCount = bookingTabCustomerBookingRequestBookings.length;
   const newBookingRequestNotifications = adminAppNotificationReadState.notifications.filter(
     adminAppNotificationIsNewBookingRequest,
   );
   const newBookingRequestNotificationCount = newBookingRequestNotifications.length;
+  const adminEmailAiIntakeRecords =
+    adminEmailAiIntakeReadState.records.filter(
+      (record) =>
+        clean(record.mailbox_address).toLowerCase() ===
+          "booking@prestigelimo.sg" &&
+        adminEmailAiSenderAddressIsAllowed(record.sender_address),
+    );
+  const adminEmailAiIntakeCount = adminEmailAiIntakeRecords.length;
   const dashboardNewBookingRequestAttentionCount = Math.max(
     customerBookingRequestCount,
     newBookingRequestNotificationCount,
   );
+  const bookingsTabNewBookingRequestCount =
+    dashboardNewBookingRequestAttentionCount + adminEmailAiIntakeCount;
   const customerBookingChangeRequestNotifications = adminAppNotificationReadState.notifications.filter((notification) =>
     Boolean(adminAppNotificationChangeRequestContext(notification)),
   );
@@ -17257,19 +18041,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   );
   const bookingsTabUrgentUnderOneHourCount = dashboardUrgentBookingRequestBookings.length;
   const bookingsTabAttentionCount =
-    dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
+    bookingsTabNewBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;
   const bookingsTabAlertBadgeLabel = adminBookingsTabAlertBadgeLabel({
     changeRequestCount: customerBookingChangeRequestCount,
-    newBookingRequestCount: dashboardNewBookingRequestAttentionCount,
+    newBookingRequestCount: bookingsTabNewBookingRequestCount,
     totalCount: bookingsTabAttentionCount,
     urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
   });
   const bookingsTabAlertTypeCount = [
     customerBookingChangeRequestCount,
-    dashboardNewBookingRequestAttentionCount,
+    bookingsTabNewBookingRequestCount,
     bookingsTabUrgentUnderOneHourCount,
   ].filter((count) => count > 0).length;
-  const urgentCustomerBookingRequestCount = urgentCustomerBookingRequestBookings.length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -17288,12 +18071,41 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const dashboardBookingRequestRowCount =
     newBookingRequestNotificationCount +
     standaloneUrgentBookingRequestDisplayItems.length +
-    customerBookingChangeRequestCount;
-  const filteredRecentBookingDisplayItems =
-    buildLoadBookingsOperationalDisplayItems(filteredRecentBookings, { useTypedOperationalOrder: true });
+    customerBookingChangeRequestCount +
+    adminEmailAiIntakeCount;
+  const filteredRecentBookingDisplayItems = buildLoadBookingsOperationalDisplayItems(
+    filteredRecentBookings,
+    { useTypedOperationalOrder: true },
+  ).sort((firstItem, secondItem) =>
+    sortBookingPickupEarliestFirst(firstItem.bookingRecord, secondItem.bookingRecord),
+  );
+  const bookingsUpcomingPageCount = Math.max(
+    1,
+    Math.ceil(filteredRecentBookingDisplayItems.length / adminUpcomingBookingsPageSize),
+  );
+  const bookingsUpcomingCurrentPage = Math.min(bookingsUpcomingPage, bookingsUpcomingPageCount);
+  const bookingsUpcomingPageStartIndex =
+    (bookingsUpcomingCurrentPage - 1) * adminUpcomingBookingsPageSize;
+  const visibleRecentBookingDisplayItems = filteredRecentBookingDisplayItems.slice(
+    bookingsUpcomingPageStartIndex,
+    bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
+  );
+  const bookingsUpcomingVisibleStart =
+    filteredRecentBookingDisplayItems.length > 0 ? bookingsUpcomingPageStartIndex + 1 : 0;
+  const bookingsUpcomingVisibleEnd = Math.min(
+    bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
+    filteredRecentBookingDisplayItems.length,
+  );
   const bookingGoogleCalendarStatusPayloadSignature = JSON.stringify(
     operationalBookings.map(buildSavedBookingCalendarEventPayload),
   );
+  const bookingDriverDetailsDeliveryReferenceKey = Array.from(
+    new Set(
+      operationalBookings
+        .map((bookingRecord) => cleanReferenceText(bookingRecord.booking_reference).toLowerCase())
+        .filter(Boolean),
+    ),
+  ).join("\n");
   bookingGoogleCalendarStatusSourceRef.current = operationalBookings;
   const filteredCompletedBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
@@ -17304,7 +18116,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         cancelledCount: number;
         completedCount: number;
         displayItems: LoadBookingsOperationalDisplayItem[];
-        driverCompletedCount: number;
         earlierCount: number;
         monthKey: string;
         monthLabel: string;
@@ -17320,7 +18131,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           cancelledCount: 0,
           completedCount: 0,
           displayItems: [],
-          driverCompletedCount: 0,
           earlierCount: 0,
           monthKey,
           monthLabel: completedHistoryMonthLabel(monthKey),
@@ -17329,10 +18139,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       const isCompletedStatus = bookingRecordIsCompletedStatus(displayItem.bookingRecord);
       const isCancelledStatus = bookingRecordIsCancelledStatus(displayItem.bookingRecord);
-      const isDriverCompletedHistoryJob =
-        !isCompletedStatus &&
-        !isCancelledStatus &&
-        bookingRecordHasCompletedDriverReport(displayItem.bookingRecord);
       const isEarlierHistoryJob = bookingRecordIsEarlierJob(displayItem.bookingRecord, todayKey);
 
       existingGroup.displayItems.push(displayItem);
@@ -17346,10 +18152,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         existingGroup.cancelledCount += 1;
       }
 
-      if (isDriverCompletedHistoryJob) {
-        existingGroup.driverCompletedCount += 1;
-      }
-
       if (!isCompletedStatus && !isCancelledStatus && isEarlierHistoryJob) {
         existingGroup.earlierCount += 1;
       }
@@ -17360,14 +18162,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return Array.from(groups.values()).sort((firstGroup, secondGroup) =>
       sortCompletedHistoryMonthKeysNewestFirst(firstGroup.monthKey, secondGroup.monthKey),
     );
-  }, [
-    bookingRecordHasCompletedDriverReport,
-    filteredCompletedBookingDisplayItems,
-    todayKey,
-  ]);
+  }, [filteredCompletedBookingDisplayItems, todayKey]);
 
   function update(field: keyof BookingForm, value: string) {
-    setCustomerMatchFeedback(null);
     if (field === "pickup") {
       setAdminMapPickupLocation(null);
       setAdminMapRouteEstimate(null);
@@ -17473,6 +18270,107 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     };
   }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);
 
+  useEffect(() => {
+    if (activeTab !== "bookings") {
+      return;
+    }
+
+    const bookingReferences = bookingDriverDetailsDeliveryReferenceKey
+      .split("\n")
+      .filter(Boolean);
+
+    if (bookingReferences.length === 0) {
+      setBookingDriverDetailsDeliveryStatuses({});
+      setBookingDriverDetailsDeliveryStatusMessage(null);
+      return;
+    }
+
+    const bookingReferenceSet = new Set(bookingReferences);
+    let cancelled = false;
+
+    async function loadBookingDriverDetailsDeliveryStatuses() {
+      const nextStatuses: Record<string, AdminBookingDriverDetailsDeliveryStatus> = {};
+
+      for (let page = 1; page <= 5; page += 1) {
+        const params = new URLSearchParams({
+          delivery_surface: "customer_app",
+          limit: "100",
+          page: String(page),
+        });
+        const response = await fetch(
+          `${adminCustomerDriverAppNotificationsApiPath}?${params.toString()}`,
+          {
+            cache: "no-store",
+            headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+          },
+        );
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok || !Array.isArray(result.notifications)) {
+          throw new Error("Driver-details delivery status could not be loaded.");
+        }
+
+        for (const notification of result.notifications as AdminTodayJobMessageRecord[]) {
+          const bookingReference = cleanReferenceText(
+            notification.booking_reference,
+          ).toLowerCase();
+
+          if (!bookingReferenceSet.has(bookingReference) || nextStatuses[bookingReference]) {
+            continue;
+          }
+
+          if (
+            notification.delivery_surface === "customer_app" &&
+            notification.workflow_area === "customer_driver_details_acknowledgements"
+          ) {
+            nextStatuses[bookingReference] = {
+              occurredAt: clean(notification.created_at),
+              status: "acknowledged",
+            };
+          } else if (
+            notification.delivery_surface === "customer_app" &&
+            notification.workflow_area === "customer_app_updates"
+          ) {
+            nextStatuses[bookingReference] = {
+              occurredAt: clean(notification.created_at),
+              status: "sent",
+            };
+          }
+        }
+
+        if (
+          bookingReferences.every((bookingReference) => nextStatuses[bookingReference]) ||
+          result.pagination?.has_next_page !== true
+        ) {
+          break;
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      setBookingDriverDetailsDeliveryStatuses(nextStatuses);
+      setBookingDriverDetailsDeliveryStatusMessage(null);
+    }
+
+    void loadBookingDriverDetailsDeliveryStatuses().catch(() => {
+      if (cancelled) {
+        return;
+      }
+
+      setBookingDriverDetailsDeliveryStatuses({});
+      setBookingDriverDetailsDeliveryStatusMessage({
+        tone: "error",
+        text: "Driver-details delivery status unavailable. No sent or acknowledgement status is assumed.",
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, bookingDriverDetailsDeliveryReferenceKey]);
+
   async function resolveAdminMapLocation(
     field: AdminMapRouteAssistLocationField,
     options?: { silent?: boolean },
@@ -17567,7 +18465,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   function clearReviewAndSaveState() {
     setBookingSaveMessage(null);
-    setCustomerMatchFeedback(null);
     setSaveCrmBillingIdentityMessage(null);
     setServiceChangePriceReviewMessage(null);
   }
@@ -17589,6 +18486,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   function clearBookingMessageInput() {
     clearParseArtifacts();
+    setAiConversationMessages([]);
     setBookingMessage("");
     setBookingMessageResetKey((current) => current + 1);
 
@@ -17597,7 +18495,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
-  function clearLoadedBookingSelectionContext() {
+  function clearLoadedBookingSelectionContext(
+    options: { preserveAdminEmailAiReview?: boolean } = {},
+  ) {
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
     driverJobLinkHandoffFocusAppliedRef.current = "";
@@ -17606,6 +18506,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setDriverJobLinkHandoffReference("");
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
+
+    if (!options.preserveAdminEmailAiReview) {
+      setActiveAdminEmailAiIntakeId("");
+    }
   }
 
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
@@ -17650,39 +18554,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setShowParserDebug(false);
     setMultiBookingNotice(null);
     setBookingSaveMessage(null);
-    setCustomerMatchFeedback(null);
-  }
-
-  function setMockCustomerMatchAction(action: CustomerMatchFeedback["action"]) {
-    if (!customerMatchSuggestion) {
-      return;
-    }
-
-    if (action === "link") {
-      setCustomerMatchFeedback({
-        action,
-        tone: customerMatchSuggestion.isExistingCustomer ? "success" : "error",
-        text: customerMatchSuggestion.isExistingCustomer
-          ? `Mock link selected for ${customerMatchSuggestion.customerName}. No customer record was written.`
-          : "No existing mock customer folder is available to link. No customer record was written.",
-      });
-      return;
-    }
-
-    if (action === "create") {
-      setCustomerMatchFeedback({
-        action,
-        tone: "success",
-        text: `Mock create selected for ${customerMatchSuggestion.customerName}. No customer folder was created.`,
-      });
-      return;
-    }
-
-    setCustomerMatchFeedback({
-      action,
-      tone: "info",
-      text: "Mock booking left unlinked. No customer record was changed.",
-    });
+    setMobileDispatchBookingStep("review");
   }
 
   function updateDefaultCustomerRate(
@@ -18138,11 +19010,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function applyParsedBookingMessage(messageText: string) {
     clearParseArtifacts();
-    clearLoadedBookingSelectionContext();
+    clearLoadedBookingSelectionContext({
+      preserveAdminEmailAiReview: true,
+    });
 
     if (!clean(messageText)) {
       setMessage({ tone: "error", text: "Paste a booking message before parsing." });
-      return;
+      return false;
     }
 
     setBooking(() => createInitialBooking());
@@ -18156,7 +19030,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         tone: "error",
         text: "No booking details detected. Add labels like pickup, dropoff, date, time, name, or flight.",
       });
-      return;
+      return false;
     }
 
     if (parsedBooking.multipleBookingsDetected) {
@@ -18179,7 +19053,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         tone: "error",
         text: parsedBooking.parserWarning || "Multiple bookings detected. Please select one extracted booking.",
       });
-      return;
+      return false;
     }
 
     setMultiBookingNotice(null);
@@ -18202,7 +19076,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
 
     if (getNeedsReviewWarnings(finalForm).length > 0) {
-      return;
+      return true;
+    }
+
+    if (activeAdminEmailAiIntakeId) {
+      const crmLoadResult = await loadRates("Email AI customer check loaded.", {
+        preserveAction: true,
+      });
+
+      setMessage({
+        tone: crmLoadResult.ok ? "success" : "error",
+        text: crmLoadResult.ok
+          ? `Parsed ${detectedFields} fields. Email AI customer check loaded; confirm whether this is a repeated or new customer before Save + CRM.`
+          : `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
+      });
+      return true;
     }
 
     const nameMemory = await lookupNameMemory(parsedBooking.name || "");
@@ -18224,13 +19112,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         text: `Parsed ${detectedFields} fields and applied CRM memory. Review before saving.`,
       });
     }
+
+    return true;
   }
 
   async function handleParseBookingMessage() {
-    await applyParsedBookingMessage(bookingMessage);
+    const parsed = await applyParsedBookingMessage(bookingMessage);
+
+    if (parsed) {
+      setMobileDispatchBookingStep("review");
+    }
   }
 
-  async function handleMockAiAssistParse() {
+  async function handleAiAssistParse() {
     if (!aiAssistSafetyAccepted) {
       setAiDraft(null);
       setAiAssistResponseNote("");
@@ -18246,7 +19140,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setAiAssistResponseNote("");
       setAiAssistMessage({
         tone: "error",
-        text: "Paste a booking message before using AI Assist Parse.",
+        text: "Paste a booking message before using AI Parse Booking.",
       });
       return;
     }
@@ -18259,13 +19153,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     try {
       const response = await fetch("/api/ai-parse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-ai-assistant",
+        },
         body: JSON.stringify({ message: clean(bookingMessage) }),
       });
       const responseBody = await response.json().catch(() => ({})) as {
         ok?: unknown;
         error?: unknown;
+        message?: unknown;
+        mode?: unknown;
+        model?: unknown;
         result?: unknown;
+        usage?: { totalTokens?: unknown };
       };
 
       if (!response.ok || responseBody.ok !== true) {
@@ -18274,24 +19175,142 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           tone: "error",
           text: typeof responseBody.error === "string"
             ? responseBody.error
-            : "AI Assist Parse failed. Please try again.",
+            : "AI Parse Booking failed. Please try again.",
         });
         return;
       }
 
       setAiDraft(sanitizeAiParseResult(responseBody.result));
-      setAiAssistResponseNote("Mock AI Assist response from local API route. No OpenAI request was made.");
+      const model = typeof responseBody.model === "string" ? responseBody.model : "";
+      const totalTokens = typeof responseBody.usage?.totalTokens === "number"
+        ? responseBody.usage.totalTokens
+        : 0;
+      setAiAssistResponseNote(
+        responseBody.mode === "live"
+          ? `OpenAI review draft${model ? ` · ${model}` : ""}${totalTokens > 0 ? ` · ${totalTokens} tokens` : ""}. Nothing was saved.`
+          : "",
+      );
       setAiAssistMessage(null);
     } catch {
       setAiDraft(null);
       setAiAssistResponseNote("");
       setAiAssistMessage({
         tone: "error",
-        text: "AI Assist Parse failed. Local mock API route did not respond.",
+        text: "AI Parse Booking did not respond. Please try again.",
       });
     } finally {
       setAiAssistLoading(false);
     }
+  }
+
+  async function handleAdminAiConversation() {
+    if (!aiAssistSafetyAccepted) {
+      setAiAssistMessage({
+        tone: "error",
+        text: "Tick the AI safety checkbox to enable AI Assist.",
+      });
+      return;
+    }
+
+    const question = clean(bookingMessage);
+
+    if (!question) {
+      setAiAssistMessage({ tone: "error", text: "Enter a question before sending it to AI." });
+      return;
+    }
+
+    setAiAssistMessage(null);
+    setAiAssistLoading(true);
+
+    try {
+      const response = await fetch("/api/admin-ai-assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-ai-assistant",
+        },
+        body: JSON.stringify({
+          history: aiConversationMessages.slice(-6),
+          message: question,
+        }),
+      });
+      const responseBody = await response.json().catch(() => ({})) as {
+        answer?: unknown;
+        error?: unknown;
+        model?: unknown;
+        ok?: unknown;
+        usage?: { totalTokens?: unknown };
+      };
+
+      if (!response.ok || responseBody.ok !== true || typeof responseBody.answer !== "string") {
+        setAiAssistMessage({
+          tone: "error",
+          text: typeof responseBody.error === "string"
+            ? responseBody.error
+            : "AI conversation failed. Please try again.",
+        });
+        return;
+      }
+
+      setAiConversationMessages((current) => [
+        ...current,
+        { role: "admin", text: question },
+        { role: "assistant", text: responseBody.answer as string },
+      ]);
+      setBookingMessage("");
+      setAiAssistResponseNote(
+        `${typeof responseBody.model === "string" ? responseBody.model : "OpenAI"}`
+          + `${typeof responseBody.usage?.totalTokens === "number" ? ` · ${responseBody.usage.totalTokens} tokens` : ""}`
+          + " · Read-only reply. No app action was taken.",
+      );
+    } catch {
+      setAiAssistMessage({
+        tone: "error",
+        text: "AI conversation did not respond. Please try again.",
+      });
+    } finally {
+      setAiAssistLoading(false);
+    }
+  }
+
+  function openAdminEmailAiIntakeReview(
+    record: AdminEmailAiIntakeRecord,
+  ) {
+    const classification = clean(record.classification).toLowerCase();
+
+    if (!adminEmailAiClassificationAppearsInApp(classification)) {
+      return;
+    }
+
+    const subject = clean(record.subject) || "No subject";
+    const normalizedText = clean(record.normalized_text);
+    const canonicalBookingText = clean(record.canonical_booking_text);
+
+    clearParseArtifacts();
+    clearLoadedBookingSelectionContext();
+    setActiveAdminEmailAiIntakeId(clean(record.id));
+    setBooking(() => createInitialBooking());
+    setActiveTab("dispatch");
+    setAiAssistMode("parser");
+    setMobileDispatchBookingStep("message");
+    setBookingMessage(canonicalBookingText || normalizedText);
+    setAiDraft(sanitizeAiParseResult(record.booking_parse_result));
+    setAiConversationMessages([]);
+    setAiAssistResponseNote(
+      "Private email AI review draft. Nothing was saved or sent. Use the existing Create Job Card action only after review.",
+    );
+    setAiAssistMessage({
+      tone: "info",
+      text: `Email · booking@prestigelimo.sg · ${subject}`,
+    });
+
+    window.setTimeout(() => {
+      bookingMessageRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      bookingMessageRef.current?.focus();
+    }, 0);
   }
 
   async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
@@ -18483,10 +19502,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const overrideDriverPayoutRules = normalizeDriverPayoutRules(rateOverrideDraft.driverPayoutRules);
     const hasCustomerRateOverrides = hasCustomerRateOverrideValues(overrideCustomerRates);
     const hasDriverPayoutOverrides = hasDriverPayoutOverrideValues(overrideDriverPayoutRules);
-    const hasOverrideValues = formatOverrideSummary(
-      overrideCustomerRates,
-      overrideDriverPayoutRules,
-    ).hasOverrides;
+    const hasOverrideValues =
+      formatOverrideSummary(overrideCustomerRates, overrideDriverPayoutRules).hasOverrides ||
+      rateOverrideDraft.cardOptionDefaultTouched;
+    const companyCardOptionDefaultForWrite =
+      !bossName && rateOverrideDraft.cardOptionDefaultTouched
+        ? rateOverrideDraft.cardOptionDefaultEnabled
+        : undefined;
+    const travelerCardOptionDefaultForWrite =
+      bossName && rateOverrideDraft.cardOptionDefaultTouched
+        ? rateOverrideDraft.cardOptionDefaultEnabled
+        : undefined;
 
     if (!companyName && !bossName) {
       setMessage({
@@ -18507,7 +19533,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     if (!hasOverrideValues) {
       setMessage({
         tone: "error",
-        text: "Save rate override failed: Enter at least one customer or driver rate override before saving.",
+        text: "Save rate override failed: Enter a customer/driver rate or change the invoice card default before saving.",
       });
       return;
     }
@@ -18529,7 +19555,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (!company) {
         const existingCompany = await adminLegacyDataClient
           .from(adminLegacyTables.companies)
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
           .ilike("company_name", companyName || "Internal Account")
           .limit(1)
           .maybeSingle();
@@ -18553,6 +19579,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         if (companyIdentity.recordId) {
           company = {
+            card_option_default_enabled: false,
             company_name: companyName || "Internal Account",
             customer_rates: {},
             domain: null,
@@ -18568,6 +19595,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         const createdCompany = await adminLegacyDataClient
           .from(adminLegacyTables.companies)
           .insert(buildLegacyCompanyRateOverrideInsertPayload({
+            cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
             companyName: companyName || "Internal Account",
             customerRates: bossName ? {} : overrideCustomerRates,
             driverPayoutRules: bossName ? {} : overrideDriverPayoutRules,
@@ -18575,7 +19603,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             includeDriverPayoutRules: !shouldDeferCompanyDriverPayoutToRuntime,
             transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
           }))
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
           .single();
 
         if (createdCompany.error) {
@@ -18633,6 +19661,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         .from(adminLegacyTables.companies)
         .update(
           buildCompanyRateOverridePayload({
+            cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
             customerRates: mergedCompanyRates,
             driverPayoutRules: mergedCompanyPayouts,
             includeCustomerRates: !companyCustomerRatesRuntime.saved,
@@ -18642,7 +19671,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           }),
         )
         .eq("id", company.id)
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy")
+        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
         .single();
 
       if (companyUpdate.error) {
@@ -18654,7 +19683,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (bossName) {
         const existingTraveler = await adminLegacyDataClient
           .from(adminLegacyTables.travelers)
-          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
+          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
           .eq("company_id", company.id)
           .ilike("traveler_name", bossName)
           .limit(1)
@@ -18708,6 +19737,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             .from(adminLegacyTables.travelers)
             .update(
               buildTravelerRateOverridePayload({
+                cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                 customerRates: mergedTravelerRates,
                 driverPayoutRules: mergedTravelerPayouts,
                 includeCustomerRates: !travelerCustomerRatesRuntime.saved,
@@ -18768,6 +19798,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               .from(adminLegacyTables.travelers)
               .update(
                 buildTravelerRateOverridePayload({
+                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                   customerRates: overrideCustomerRates,
                   driverPayoutRules: overrideDriverPayoutRules,
                   includeCustomerRates: !travelerCustomerRatesRuntime.saved,
@@ -18785,6 +19816,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               .from(adminLegacyTables.travelers)
               .insert(
                 buildLegacyTravelerRateOverrideInsertPayload({
+                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                   companyId: company.id,
                   customerRates: overrideCustomerRates,
                   driverPayoutRules: overrideDriverPayoutRules,
@@ -18793,7 +19825,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   travelerName: bossName,
                 }),
               )
-              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules")
+              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
               .single();
 
             if (createdTraveler.error) {
@@ -18832,6 +19864,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 .from(adminLegacyTables.travelers)
                 .update(
                   buildTravelerRateOverridePayload({
+                    cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
                     customerRates: overrideCustomerRates,
                     driverPayoutRules: overrideDriverPayoutRules,
                     includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides,
@@ -18853,6 +19886,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setRateOverrideDraft({
         companyName: companyName || "Internal Account",
         bossName,
+        cardOptionDefaultEnabled: rateOverrideDraft.cardOptionDefaultEnabled,
+        cardOptionDefaultTouched: false,
         customerRates: overrideCustomerRates,
         driverPayoutRules: overrideDriverPayoutRules,
         transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
@@ -18928,6 +19963,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.companies)
         .update(buildCompanyRateOverridePayload({
+          cardOptionDefaultEnabled: false,
           customerRates: {},
           driverPayoutRules: {},
           includeCustomerRates: !companyCustomerRatesRuntime.saved,
@@ -18943,7 +19979,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setRateCompanies((current) =>
         current.map((candidate) =>
           candidate.id === companyRecord.id
-            ? { ...candidate, customer_rates: {}, driver_payout_rules: {} }
+            ? {
+                ...candidate,
+                card_option_default_enabled: false,
+                customer_rates: {},
+                driver_payout_rules: {},
+              }
             : candidate,
         ),
       );
@@ -18957,6 +19998,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         return {
           ...current,
+          cardOptionDefaultEnabled: false,
+          cardOptionDefaultTouched: false,
           customerRates: {},
           driverPayoutRules: {},
         };
@@ -19025,6 +20068,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const { error } = await adminLegacyDataClient
         .from(adminLegacyTables.travelers)
         .update(buildTravelerRateOverridePayload({
+          cardOptionDefaultEnabled: null,
           customerRates: {},
           driverPayoutRules: {},
           includeCustomerRates: !travelerCustomerRatesRuntime.saved,
@@ -19040,7 +20084,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setRateTravelers((current) =>
         current.map((candidate) =>
           candidate.id === travelerRecord.id
-            ? { ...candidate, customer_rates: {}, driver_payout_rules: {} }
+            ? {
+                ...candidate,
+                card_option_default_enabled: null,
+                customer_rates: {},
+                driver_payout_rules: {},
+              }
             : candidate,
         ),
       );
@@ -19054,6 +20103,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
         return {
           ...current,
+          cardOptionDefaultEnabled: false,
+          cardOptionDefaultTouched: false,
           customerRates: {},
           driverPayoutRules: {},
         };
@@ -19482,6 +20533,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  async function completeActiveAdminEmailAiReviewAfterSave() {
+    const intakeId = clean(activeAdminEmailAiIntakeId);
+
+    if (!intakeId) {
+      return true;
+    }
+
+    try {
+      await markAdminEmailAiIntakeReviewed(intakeId);
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        message: null,
+        records: current.records.filter(
+          (record) => clean(record.id) !== intakeId,
+        ),
+      }));
+      setActiveAdminEmailAiIntakeId("");
+      return true;
+    } catch {
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        message: {
+          tone: "error",
+          text:
+            "Booking saved, but its Email AI request could not be closed safely. Refresh Dashboard and retry the review.",
+        },
+      }));
+      return false;
+    }
+  }
+
   async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {
     setAdminBookingPersistenceMessage(null);
 
@@ -19537,6 +20619,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const lastSuccessfulBookingSave = lastSuccessfulBookingSaveRef.current;
 
     if (lastSuccessfulBookingSave?.key === bookingSaveGuardKey) {
+      await completeActiveAdminEmailAiReviewAfterSave();
       const saveMessage = {
         tone: "info",
         text: `Operational booking already saved: ${lastSuccessfulBookingSave.bookingId}. Change details before saving again.`,
@@ -19565,11 +20648,55 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setBookingSaveMessage({ tone: "info", text: "Saving booking + CRM..." });
 
     try {
+      const saveCrmCustomerAccountLabel =
+        clean(billingIdentityResolution.accountLabel) ||
+        saveCrmDefaultCustomerAccount(booking);
+      const companyProfileSyncRequired = Boolean(
+        adminDispatchVerifiedIdentityId(booking.companyId) ||
+        saveCrmExplicitCompanyAccount(booking),
+      );
+      const companyProfileResolution = companyProfileSyncRequired
+        ? await resolveSaveCrmCompanyProfileForSave(
+            booking,
+            saveCrmCustomerAccountLabel,
+          )
+        : null;
+
+      if (companyProfileResolution && !companyProfileResolution.ok) {
+        const cancelledMessage = {
+          tone: "info",
+          text: companyProfileResolution.message,
+        } satisfies Message;
+
+        setMessage(cancelledMessage);
+        setBookingSaveMessage(cancelledMessage);
+        setAdminBookingPersistenceMessage(cancelledMessage);
+        return null;
+      }
+
+      const bookingForSave = {
+        ...booking,
+        ...(companyProfileResolution
+          ? { companyId: String(companyProfileResolution.companyId) }
+          : {}),
+      };
+
+      if (companyProfileResolution) {
+        setBooking((currentBooking) => ({
+          ...currentBooking,
+          companyId: String(companyProfileResolution.companyId),
+        }));
+      }
+
       const bookingPayloads = buildAdminDispatchReturnTripPersistencePayloads(
-        booking,
+        bookingForSave,
         currentTimeMs,
         {
-          customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+          customerDisplayNameOverride:
+            companyProfileResolution?.companyName || saveCrmCustomerAccountLabel,
+          parserSourceReferenceOverride: activeAdminEmailAiIntakeId
+            ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
+            : undefined,
         },
       );
       const savedBookings: Array<{
@@ -19579,25 +20706,46 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       }> = [];
 
       for (const bookingPayload of bookingPayloads) {
-        const response = await fetch("/api/admin-bookings", {
-          body: JSON.stringify(bookingPayload.payload),
-          headers: {
-            "Content-Type": "application/json",
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "POST",
-        });
-        const responseBody = (await response.json().catch(() => null)) as {
+        let responseOk = false;
+        let responseBody: {
           booking?: AdminBookingPersistenceRecord | null;
           error?: string;
           ok?: boolean;
           safe_error_category?: string;
           safe_error_operation?: string;
-        } | null;
+        } | null = null;
+
+        try {
+          const response = await fetch("/api/admin-bookings", {
+            body: JSON.stringify(bookingPayload.payload),
+            headers: {
+              "Content-Type": "application/json",
+              "x-prestige-admin-purpose": "admin-booking-persistence",
+            },
+            method: "POST",
+          });
+          responseOk = response.ok;
+          responseBody = (await response.json().catch(() => null)) as typeof responseBody;
+        } catch (error) {
+          const recoveredBooking = await recoverAdminBookingAfterPostResponseLoss(
+            bookingPayload.payload,
+          );
+
+          if (!recoveredBooking) {
+            throw error;
+          }
+
+          responseOk = true;
+          responseBody = {
+            booking: recoveredBooking,
+            ok: true,
+          };
+        }
+
         const savedBooking = responseBody?.booking ?? null;
         const savedBookingReference = clean(savedBooking?.booking_reference);
 
-        if (!response.ok || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
+        if (!responseOk || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
           const errorMessage = adminBookingPersistenceFailureDetail(
             responseBody,
             "Admin booking persistence request failed.",
@@ -19613,7 +20761,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   "save",
                   new Error(errorMessage),
                 )}`
-              : adminBookingPersistenceFailureMessage("save", new Error(errorMessage)),
+              : `${
+                  companyProfileResolution?.profileWritePerformed
+                    ? "Company profile saved, but "
+                    : ""
+                }${adminBookingPersistenceFailureMessage("save", new Error(errorMessage))}`,
           } satisfies Message;
 
           setMessage(saveMessage);
@@ -19658,6 +20810,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         key: getBookingSaveGuardKey(primarySavedBookingReference),
         record: primarySavedBooking,
       };
+      await completeActiveAdminEmailAiReviewAfterSave();
 
       const calendarSyncResults = [];
 
@@ -19856,16 +21009,20 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         }
       }
       searchParams.set("limit", adminLoadBookingsListLimit);
+      const requestInit = {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      } satisfies RequestInit;
 
-      async function fetchAdminSavedBookingsList(): Promise<AdminBookingsListReadResult> {
-        const requestInit = {
-          headers: {
-            "x-prestige-admin-purpose": adminLegacyDataPurpose,
-          },
-          method: "GET",
-        } satisfies RequestInit;
-
-        const savedBookingsResponse = await fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`, requestInit);
+      async function fetchAdminSavedBookingsList(
+        listSearchParams: URLSearchParams,
+      ): Promise<AdminBookingsListReadResult> {
+        const savedBookingsResponse = await fetch(
+          `${adminSavedBookingsApiPath}?${listSearchParams.toString()}`,
+          requestInit,
+        );
         const savedBookingsBody = (await savedBookingsResponse.json().catch(() => null)) as
           | AdminSavedBookingReadResponse
           | null;
@@ -19890,7 +21047,44 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         };
       }
 
-      const bookingsListResult = await fetchAdminSavedBookingsList();
+      async function fetchCompleteMonitorableSavedBookingList(): Promise<AdminMonitorableBookingsReadResult> {
+        const monitorableBookings: BookingRecord[] = [];
+
+        for (let pageIndex = 0; pageIndex < adminMonitorableBookingMaxPages; pageIndex += 1) {
+          const monitorableSearchParams = new URLSearchParams({
+            limit: adminLoadBookingsListLimit,
+            offset: String(pageIndex * Number(adminLoadBookingsListLimit)),
+            scope: adminMonitorableBookingListScope,
+          });
+          const monitorablePageResult = await fetchAdminSavedBookingsList(monitorableSearchParams);
+
+          if (!monitorablePageResult.ok) {
+            return {
+              bookings: monitorableBookings,
+              error: monitorablePageResult.error,
+              ok: false,
+            };
+          }
+
+          const monitorablePage = monitorablePageResult.bookings;
+          monitorableBookings.push(...monitorablePage);
+
+          if (monitorablePage.length < Number(adminLoadBookingsListLimit)) {
+            return {
+              bookings: monitorableBookings,
+              ok: true,
+            };
+          }
+        }
+
+        return {
+          bookings: monitorableBookings,
+          error: "Active booking monitoring reached the safe 10,000-job read ceiling; additional active jobs may exist.",
+          ok: false,
+        };
+      }
+
+      const bookingsListResult = await fetchAdminSavedBookingsList(searchParams);
 
       if (!bookingsListResult.ok) {
         if (canShowMessage()) {
@@ -19900,7 +21094,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           });
         }
       } else {
-        const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);
+        let monitorableBookings: BookingRecord[] = [];
+        let monitoringCoverageError = "";
+
+        if (bookingsListResult.bookings.length === Number(adminLoadBookingsListLimit)) {
+          const monitorableBookingsResult = await fetchCompleteMonitorableSavedBookingList();
+          monitorableBookings = monitorableBookingsResult.bookings;
+
+          if (!monitorableBookingsResult.ok) {
+            monitoringCoverageError = formatSupabaseError(monitorableBookingsResult.error);
+          }
+        }
+
+        const loadedBookings = mergeSavedBookingMonitorCoverage(
+          bookingsListResult.bookings,
+          monitorableBookings,
+        );
         const selectedBookingReference =
           cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
           cleanReferenceText(loadedBookingIdRef.current);
@@ -19914,7 +21123,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         }
         setLoadBookingsTypedOperationalCardsById(typedOperationalDisplay?.cardsById ?? {});
         setLoadBookingsTypedOperationalCardOrder(typedOperationalDisplay?.orderedCardIds ?? []);
-        if (canShowMessage()) {
+        if (monitoringCoverageError) {
+          setMessage({
+            tone: "error",
+            text: `Monitoring coverage incomplete: ${monitoringCoverageError}`,
+          });
+        } else if (canShowMessage()) {
           if (loadedBookings.length === 0) {
             setMessage({ tone: "info", text: "No bookings found." });
           } else {
@@ -19965,6 +21179,33 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     });
   }
 
+  function dismissPendingDriverAckAlert(driverJobLinkId: string) {
+    const exactLinkId = cleanReferenceText(driverJobLinkId);
+
+    if (!exactLinkId) {
+      return;
+    }
+
+    setDismissedPendingDriverAckLinkIds((currentIds) => {
+      if (currentIds.includes(exactLinkId)) {
+        return currentIds;
+      }
+
+      const nextIds = [...currentIds, exactLinkId].slice(-500);
+
+      try {
+        window.localStorage.setItem(
+          adminDismissedPendingDriverAckLinksStorageKey,
+          JSON.stringify(nextIds),
+        );
+      } catch {
+        // Alert dismissal is a local admin convenience; the driver link remains active.
+      }
+
+      return nextIds;
+    });
+  }
+
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
@@ -19979,6 +21220,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       bookingRecordPersistedReference(bookingRecord) ||
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
+    const bookingDisplayReference = bookingPublicReference(bookingRecord);
 
     const loadedBookingForm = options.bookingFormOverride
       ? { ...options.bookingFormOverride }
@@ -19992,7 +21234,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       latestStatus: null,
       message: {
         tone: "info",
-        text: `Loading saved driver status for ${bookingReference}...`,
+        text: `Loading saved driver status for ${bookingDisplayReference}...`,
       },
       status: "loading",
       statuses: [],
@@ -20002,7 +21244,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       latestProof: null,
       message: {
         tone: "info",
-        text: `Checking OTS photo proof for ${bookingReference}...`,
+        text: `Checking OTS photo proof for ${bookingDisplayReference}...`,
       },
       proofs: [],
       status: "loading",
@@ -20067,17 +21309,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     );
     setActiveTab("dispatch");
     clearBookingMessageInput();
+    setMobileDispatchBookingStep(
+      options.focusJobCard
+        ? "review"
+        : options.focusCustomerCopy || options.focusDriverJobLink
+          ? "options"
+          : "details",
+    );
     setMessage({
       tone: "success",
       text: options.focusDriverJobLink
-        ? `Booking ${bookingReference || "selected booking"} loaded. Driver Job Link is ready for admin action.`
+        ? `Booking ${bookingDisplayReference} loaded. Driver Job Link is ready for admin action.`
         : options.focusJobCard
           ? options.correctionSummary
-            ? `Booking ${bookingReference || "selected booking"} loaded with review-only corrections (${options.correctionSummary}). Job Card Preview is ready for admin review. The saved booking, calendar, and external messages were not changed.`
-            : `Booking ${bookingReference || "selected booking"} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
+            ? `Booking ${bookingDisplayReference} loaded with review-only corrections (${options.correctionSummary}). Job Card Preview is ready for admin review. The saved booking, calendar, and external messages were not changed.`
+            : `Booking ${bookingDisplayReference} loaded. Job Card Preview is ready for admin review. No booking or external action was changed.`
         : options.focusCustomerCopy
-        ? `Booking ${bookingReference || "selected booking"} loaded. Customer Copy is ready for admin review.`
-        : `Booking ${bookingReference || "selected booking"} loaded.`,
+        ? `Booking ${bookingDisplayReference} loaded. Customer Copy is ready for admin review.`
+        : `Booking ${bookingDisplayReference} loaded.`,
     });
   }
 
@@ -20206,6 +21455,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     if (nextTab === "company" && !companyProfileLoaded && companyProfileAction === "idle") {
       void loadCompanyProfileSettings();
     }
+  }
+
+  function openCompletedHistoryForBookingsDate() {
+    const exactDate = clean(bookingsSelectedDate);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(exactDate)) {
+      return;
+    }
+
+    setCompletedMonthFilter(exactDate.slice(0, 7));
+    setCompletedSearchTerm(exactDate);
+    selectAppTab("completed");
+    void loadBookings(`Completed / History refreshed for ${formatDateWithWeekday(exactDate)}.`);
   }
 
   async function loadDispatchHandoffBookingFromUrl(targetBookingReference: string) {
@@ -20847,6 +22109,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
 
     const bookingReference = clean(record.booking_reference) || "selected snapshot";
+    const displayBookingReference = clean(record.public_booking_reference) || "Reference unavailable";
     const reviewSuffix =
       appliedSnapshot.reviewStatus === "Admin Review Required"
         ? " Admin Review Required."
@@ -20862,7 +22125,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     clearBookingMessageInput();
     setAdminBookingPersistenceMessage({
       tone: "success",
-      text: `Operational snapshot applied: ${bookingReference}.${reviewSuffix}`,
+      text: `Operational snapshot applied: ${displayBookingReference}.${reviewSuffix}`,
     });
   }
 
@@ -20965,12 +22228,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
+
     setAdminDriverOtsPhotoProofReadState({
       bookingReference,
       latestProof: null,
       message: {
         tone: "info",
-        text: `Checking OTS photo proof for ${bookingReference}...`,
+        text: `Checking OTS photo proof for ${displayBookingReference}...`,
       },
       proofs: [],
       status: "loading",
@@ -20992,8 +22257,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         message: {
           tone: loadedProofs.latestProof ? "success" : "info",
           text: loadedProofs.latestProof
-            ? `OTS photo proof received for ${bookingReference}.`
-            : `No OTS photo proof for ${bookingReference} yet.`,
+            ? `OTS photo proof received for ${displayBookingReference}.`
+            : `No OTS photo proof for ${displayBookingReference} yet.`,
         },
         proofs: loadedProofs.proofs,
         status: "loaded",
@@ -21038,12 +22303,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       return;
     }
 
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
+
     setAdminDriverJobStatusReadState({
       bookingReference,
       latestStatus: null,
       message: {
         tone: "info",
-        text: `Refreshing saved driver status for ${bookingReference}...`,
+        text: `Refreshing saved driver status for ${displayBookingReference}...`,
       },
       status: "loading",
       statuses: [],
@@ -21059,10 +22326,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         return;
       }
 
-      void syncBookingCompletedStatusFromDriverReport(
-        bookingReference,
-        loadedDriverStatuses.latestStatus,
-      );
       setAdminDriverJobStatusReadState({
         bookingReference,
         latestStatus: loadedDriverStatuses.latestStatus,
@@ -21072,8 +22335,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             loadedDriverStatuses.statuses.length > 0
               ? `Loaded ${loadedDriverStatuses.statuses.length} saved driver status event${
                   loadedDriverStatuses.statuses.length === 1 ? "" : "s"
-                } for ${bookingReference}.`
-              : `No saved driver status history for ${bookingReference}.`,
+                } for ${displayBookingReference}.`
+              : `No saved driver status history for ${displayBookingReference}.`,
         },
         status: "loaded",
         statuses: loadedDriverStatuses.statuses,
@@ -21139,6 +22402,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       job_status: clean(row.job_status) || "assigned",
       latitude,
       longitude,
+      public_job_reference: cleanReferenceText(row.public_job_reference),
       sharing_state: clean(row.sharing_state) || "active",
       speed_meters_per_second:
         typeof row.speed_meters_per_second === "number" ? row.speed_meters_per_second : null,
@@ -21248,9 +22512,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ? result.active_jobs
             .map(normalizeAdminActiveJobsMapLocation)
             .filter(isAdminActiveJobsMapLocation)
+            .map((location) => {
+              const bookingRecord = findLoadedBookingRecordByReference(
+                bookings,
+                cleanReferenceText(location.assigned_job_reference),
+              );
+
+              return {
+                ...location,
+                public_job_reference: bookingRecord
+                  ? bookingPublicReference(bookingRecord)
+                  : "Reference unavailable",
+              };
+            })
         : [];
       const activeJobs = collapseAdminActiveJobsMapDriverDuplicates(allActiveJobs);
       const duplicateCount = allActiveJobs.length - activeJobs.length;
+      const currentDriverCount = activeJobs.filter((job) => !job.is_stale).length;
+      const stalePinCount = activeJobs.length - currentDriverCount;
       const allowedBookingReferences = Array.isArray(result.allowed_booking_references)
         ? result.allowed_booking_references.map(cleanReferenceText).filter(Boolean)
         : null;
@@ -21261,16 +22540,22 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         activeJobs,
         allowedBookingReferences:
           allowedBookingReferences ?? current.allowedBookingReferences,
-        markerCount: activeJobs.length,
+        markerCount: currentDriverCount,
         message: {
-          tone: activeJobs.length > 0 ? "success" : "info",
+          tone: currentDriverCount > 0 ? "success" : "info",
           text:
-            activeJobs.length > 0
-              ? `Loaded live movement for ${activeJobs.length} driver${activeJobs.length === 1 ? "" : "s"}${
+            currentDriverCount > 0
+              ? `Loaded current live movement for ${currentDriverCount} driver${currentDriverCount === 1 ? "" : "s"}${
+                  stalePinCount > 0
+                    ? `; ${stalePinCount} stale pin${stalePinCount === 1 ? "" : "s"} shown`
+                    : ""
+                }${
                   duplicateCount > 0
-                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden.`
-                    : "."
-                }`
+                    ? `; ${duplicateCount} older duplicate${duplicateCount === 1 ? "" : "s"} hidden`
+                    : ""
+                }.`
+              : stalePinCount > 0
+                ? `No current live movement; ${stalePinCount} stale pin${stalePinCount === 1 ? " is" : "s are"} awaiting refresh or removal.`
               : "Live location is open, but no driver has shared live movement yet.",
         },
         runtimeStatus: "active",
@@ -21331,10 +22616,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
             clean(job.updated_at) !== updatedAt,
         ),
-        markerCount: Math.max(0, current.markerCount - 1),
+        markerCount: current.activeJobs.filter(
+          (job) =>
+            !job.is_stale &&
+            (cleanReferenceText(job.assigned_job_reference) !== bookingReference ||
+              clean(job.updated_at) !== updatedAt),
+        ).length,
         message: {
           tone: "success",
-          text: `Removed stale pin for ${compactBookingReference(bookingReference)}. Booking unchanged.`,
+          text: `Removed stale pin for ${adminVisibleBookingReference(bookingReference)}. Booking unchanged.`,
         },
       }));
     } catch (error) {
@@ -21500,7 +22790,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         latestStatus: null,
         message: {
           tone: "info",
-          text: `Loading driver report for ${compactBookingReference(bookingReference)}...`,
+          text: `Loading driver report for ${adminVisibleBookingReference(bookingReference)}...`,
         },
         status: "loading",
         statuses: [],
@@ -21510,10 +22800,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     try {
       const loadedDriverStatuses = await loadAdminDriverJobStatusRead(bookingReference);
 
-      void syncBookingCompletedStatusFromDriverReport(
-        bookingReference,
-        loadedDriverStatuses.latestStatus,
-      );
       setDashboardDriverJobStatusReadStates((currentStates) => ({
         ...currentStates,
         [bookingReference]: {
@@ -21523,8 +22809,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             tone: loadedDriverStatuses.statuses.length > 0 ? "success" : "info",
             text:
               loadedDriverStatuses.statuses.length > 0
-                ? `Loaded driver report for ${compactBookingReference(bookingReference)}.`
-                : `No driver report for ${compactBookingReference(bookingReference)} yet.`,
+                ? `Loaded driver report for ${adminVisibleBookingReference(bookingReference)}.`
+                : `No driver report for ${adminVisibleBookingReference(bookingReference)} yet.`,
           },
           status: "loaded",
           statuses: loadedDriverStatuses.statuses,
@@ -21547,6 +22833,93 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }
   }
 
+  async function refreshDashboardDriverJobLinksRead(bookingReferenceValues: string[]) {
+    const bookingReferences = Array.from(
+      new Set(bookingReferenceValues.map(cleanReferenceText).filter(Boolean)),
+    );
+    const requestRevision = dashboardDriverJobLinksReadRequestRevisionRef.current + 1;
+    dashboardDriverJobLinksReadRequestRevisionRef.current = requestRevision;
+
+    if (bookingReferences.length === 0) {
+      setDashboardDriverJobLinksReadState({
+        linksByReference: {},
+        status: "idle",
+      });
+      return;
+    }
+
+    setDashboardDriverJobLinksReadState((current) => ({
+      ...current,
+      status: "loading",
+    }));
+
+    try {
+      const requestedReferenceSet = new Set(bookingReferences);
+      const linksByReference: Record<string, AdminDriverJobLinkRecord> = {};
+      let page = 1;
+      let hasNextPage = true;
+
+      while (hasNextPage && Object.keys(linksByReference).length < requestedReferenceSet.size) {
+        const params = new URLSearchParams({
+          limit: "100",
+          link_status: "active",
+          page: String(page),
+        });
+        const response = await fetch(`${adminDriverJobLinksApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || "Driver job link acknowledgement read failed.");
+        }
+
+        if (dashboardDriverJobLinksReadRequestRevisionRef.current !== requestRevision) {
+          return;
+        }
+
+        const links = Array.isArray(result.links)
+          ? (result.links as AdminDriverJobLinkRecord[])
+          : [];
+
+        for (const link of links) {
+          const linkReference = cleanReferenceText(link.booking_reference);
+
+          if (
+            !linkReference ||
+            !requestedReferenceSet.has(linkReference) ||
+            link.link_status !== "active" ||
+            linksByReference[linkReference]
+          ) {
+            continue;
+          }
+
+          linksByReference[linkReference] = link;
+        }
+
+        hasNextPage = result.pagination?.has_next_page === true;
+        page += 1;
+      }
+
+      setDashboardDriverJobLinksReadState({
+        linksByReference,
+        status: "loaded",
+      });
+    } catch {
+      if (dashboardDriverJobLinksReadRequestRevisionRef.current !== requestRevision) {
+        return;
+      }
+
+      setDashboardDriverJobLinksReadState({
+        linksByReference: {},
+        status: "error",
+      });
+    }
+  }
+
   async function refreshDashboardDriverOtsPhotoProofRead(bookingReferenceValue: string) {
     const bookingReference = cleanReferenceText(bookingReferenceValue);
 
@@ -21561,7 +22934,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         latestProof: null,
         message: {
           tone: "info",
-          text: `Checking OTS photo for ${compactBookingReference(bookingReference)}...`,
+          text: `Checking OTS photo for ${adminVisibleBookingReference(bookingReference)}...`,
         },
         proofs: [],
         status: "loading",
@@ -21579,8 +22952,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           message: {
             tone: loadedProofs.latestProof ? "success" : "info",
             text: loadedProofs.latestProof
-              ? `OTS photo received for ${compactBookingReference(bookingReference)}.`
-              : `No OTS photo for ${compactBookingReference(bookingReference)} yet.`,
+              ? `OTS photo received for ${adminVisibleBookingReference(bookingReference)}.`
+              : `No OTS photo for ${adminVisibleBookingReference(bookingReference)} yet.`,
           },
           proofs: loadedProofs.proofs,
           status: "loaded",
@@ -21605,6 +22978,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function saveDispatchReleaseWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
 
     if (!dispatchReleaseConfirmedOnlyEligible) {
       setDispatchReleaseMessage({
@@ -21633,7 +23007,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminBookingWorkflowStatusAction("save-dispatch-release");
     setDispatchReleaseMessage({
       tone: "info",
-      text: `Saving dispatch release workflow status for ${bookingReference}...`,
+      text: `Saving dispatch release workflow status for ${displayBookingReference}...`,
     });
 
     try {
@@ -21666,7 +23040,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setDispatchReleaseWorkflowStatus(savedStatus);
       setDispatchReleaseMessage({
         tone: "success",
-        text: `Dispatch release workflow status saved for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+        text: `Dispatch release workflow status saved for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
           savedStatus,
         )}.`,
       });
@@ -21682,6 +23056,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   async function saveDriverAcknowledgementWorkflowStatus() {
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const displayBookingReference = adminVisibleBookingReference(bookingReference);
 
     if (!driverAcknowledgementReleaseEligible) {
       setDriverAcknowledgementMessage({
@@ -21710,7 +23085,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminBookingWorkflowStatusAction("save-driver-acknowledgement");
     setDriverAcknowledgementMessage({
       tone: "info",
-      text: `Saving driver acknowledgement workflow status for ${bookingReference}...`,
+      text: `Saving driver acknowledgement workflow status for ${displayBookingReference}...`,
     });
 
     try {
@@ -21741,7 +23116,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setDriverAcknowledgementWorkflowStatus(savedStatus);
       setDriverAcknowledgementMessage({
         tone: "success",
-        text: `Driver acknowledgement workflow status saved for ${bookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
+        text: `Driver acknowledgement workflow status saved for ${displayBookingReference}: ${adminBookingWorkflowStatusDisplayLabel(
           savedStatus,
         )}.`,
       });
@@ -21959,9 +23334,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       },
     );
     const appliedSnapshot = appliedAdminBookingSnapshot;
+    const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
 
     if (appliedSnapshot) {
       payload.booking.source_channel = clean(appliedSnapshot.source_channel) || payload.booking.source_channel;
+      payload.booking.source_surface = clean(appliedSnapshot.source_surface) || payload.booking.source_surface;
       payload.booking.customer_facing_status =
         clean(appliedSnapshot.customer_facing_status) || payload.booking.customer_facing_status;
       payload.booking.admin_internal_status =
@@ -21972,10 +23349,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         clean(appliedSnapshot.request_review_status) || payload.booking.request_review_status;
     }
 
+    if (acceptingCustomerRequest) {
+      payload.booking.source_channel = "customer-booking-request";
+      payload.booking.source_surface = "customer_booking_request";
+      payload.booking.request_review_status = "approved";
+      payload.booking.customer_facing_status = "confirmed";
+      payload.booking.admin_internal_status = "Ready for Confirmation";
+      payload.booking.short_notice_review_status = "reviewed";
+    }
+
     setAdminBookingPersistenceAction("update");
     setAdminBookingPersistenceMessage({
       tone: "info",
-      text: "Updating applied operational booking fields...",
+      text: acceptingCustomerRequest
+        ? "Accepting customer booking request and updating Google Calendar..."
+        : "Updating applied operational booking fields...",
     });
 
     try {
@@ -22003,16 +23391,37 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           ? " Admin Review Required."
           : "";
       markAdminBookingAsActiveForUpdates(updatedBookingReference, updatedBooking);
+      upsertLoadedBookingFromAdminRecord(updatedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
         text: `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Syncing Google Calendar...`,
       });
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
 
+      if (calendarSyncResult.ok && acceptingCustomerRequest) {
+        try {
+          await queueCustomerBookingRequestConfirmedNotification(updatedBookingReference);
+        } catch (error) {
+          const updateMessage = {
+            tone: "error",
+            text: `Customer booking request accepted: ${updatedBookingReference}. Google Calendar auto-synced, but the customer app confirmation could not be queued: ${
+              error instanceof Error ? error.message : "Customer notification failed safely."
+            }`,
+          } satisfies Message;
+
+          setAdminBookingPersistenceMessage(updateMessage);
+          setMessage(updateMessage);
+          setBookingSaveMessage(updateMessage);
+          return;
+        }
+      }
+
       const updateMessage = {
         tone: calendarSyncResult.ok ? "success" : "error",
         text: calendarSyncResult.ok
-          ? `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Google Calendar auto-synced; reminders included; no guest email sent.`
+          ? acceptingCustomerRequest
+            ? `Customer booking request accepted: ${updatedBookingReference}. Google Calendar auto-synced; customer app confirmation queued; no guest email sent.`
+            : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Google Calendar auto-synced; reminders included; no guest email sent.`
           : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} ${calendarSyncResult.message}`,
       } satisfies Message;
 
@@ -22034,172 +23443,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       });
     } finally {
       setAdminBookingPersistenceAction(null);
-    }
-  }
-
-  async function updateAdminCustomerRequestReviewDecision(
-    record: AdminBookingPersistenceRecord,
-    decisionKey: AdminCustomerRequestReviewDecisionKey,
-  ) {
-    const decision = adminCustomerRequestReviewDecisions.find((candidate) => candidate.key === decisionKey);
-    const targetBookingReference = clean(record.booking_reference);
-
-    if (!decision || !targetBookingReference || !adminBookingPersistenceRecordIsCustomerRequest(record)) {
-      setAdminBookingPersistenceMessage({
-        tone: "error",
-        text: "Customer request review decision could not be saved: loaded request details need review.",
-      });
-      return;
-    }
-
-    const payload = buildAdminCustomerRequestDecisionPayload(record, decision, currentTimeMs);
-
-    if (!payload) {
-      setAdminBookingPersistenceMessage({
-        tone: "error",
-        text: "Customer request review decision could not be saved: required operational details are missing.",
-      });
-      return;
-    }
-
-    const statuses = adminCustomerRequestDecisionStatuses(record, decision, currentTimeMs);
-
-    setAdminBookingPersistenceAction("update");
-    setAdminBookingPersistenceMessage({
-      tone: "info",
-      text: "Saving internal customer request review decision...",
-    });
-
-    try {
-      const response = await fetch("/api/admin-bookings", {
-        body: JSON.stringify({
-          target_booking_reference: targetBookingReference,
-          ...payload,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "PATCH",
-      });
-      const result = await response.json();
-
-      if (!response.ok || !result?.ok) {
-        throw new Error(adminBookingPersistenceFailureDetail(result, "Admin review decision update failed."));
-      }
-
-      const updatedBooking = result.booking as AdminBookingPersistenceRecord;
-      const customerNotificationResult = result.customer_notification as
-        | { ok?: boolean; error?: string }
-        | null
-        | undefined;
-      const updatedBookingReference = clean(updatedBooking.booking_reference) || targetBookingReference;
-      setAdminBookingPersistenceRecords((current) => [
-        updatedBooking,
-        ...current.filter(
-          (currentRecord) => clean(currentRecord.booking_reference) !== updatedBookingReference,
-        ),
-      ]);
-
-      if (clean(appliedAdminBookingSnapshotReference) === targetBookingReference) {
-        setAppliedAdminBookingSnapshotReference(updatedBookingReference);
-      }
-
-      setAdminBookingPersistenceMessage({
-        tone: "success",
-        text: `Internal review decision saved for ${updatedBookingReference}: ${decision.successLabel}.${
-          customerNotificationResult?.ok
-            ? " Customer in-app notification queued."
-            : customerNotificationResult
-              ? " Customer in-app notification could not be queued."
-              : " Customer notification not queued for this update."
-        }${
-          statuses.shortNoticeReviewRequired
-            ? " Short-notice review was handled by this decision."
-            : ""
-        }`,
-      });
-    } catch (error) {
-      setAdminBookingPersistenceMessage({
-        tone: "error",
-        text: adminBookingPersistenceFailureMessage("update", error),
-      });
-    } finally {
-      setAdminBookingPersistenceAction(null);
-    }
-  }
-
-  async function returnPreparedJobCardToCodex(bookingReference: string) {
-    const targetBookingReference = cleanReferenceText(bookingReference);
-    const instruction = clean(codexJobCardInstructions[targetBookingReference]);
-
-    if (!targetBookingReference || !instruction) {
-      setCodexJobCardReviewMessages((current) => ({
-        ...current,
-        [targetBookingReference || bookingReference]: {
-          tone: "error",
-          text: "Enter a short internal instruction before returning this card to Codex.",
-        },
-      }));
-      return;
-    }
-
-    setCodexJobCardReviewAction(targetBookingReference);
-    setCodexJobCardReviewMessages((current) => ({
-      ...current,
-      [targetBookingReference]: {
-        tone: "info",
-        text: "Saving internal Codex instruction...",
-      },
-    }));
-
-    try {
-      const response = await fetch(adminWorkflowStatusApiPath, {
-        body: JSON.stringify({
-          booking_reference: targetBookingReference,
-          safe_status_context: {
-            next_action: "Prepare corrected job card for admin review",
-            safe_note: instruction,
-          },
-          status_label: "Returned to Codex",
-          status_value: "needs_review",
-          workflow_area: adminCodexJobCardReviewWorkflowArea,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || !result?.ok || !result.status) {
-        throw new Error(result?.error || "Codex job-card review instruction save failed.");
-      }
-
-      const savedStatus = result.status as AdminBookingWorkflowStatusRecord;
-      setCodexJobCardReviewStatuses((current) => ({
-        ...current,
-        [targetBookingReference]: savedStatus,
-      }));
-      setCodexJobCardReviewMessages((current) => ({
-        ...current,
-        [targetBookingReference]: {
-          tone: "success",
-          text:
-            "Returned to the internal Codex review queue. Exact pickup-time or flight-number corrections are prepared below for review; ambiguous instructions remain unchanged. The saved booking and calendar were not changed.",
-        },
-      }));
-    } catch (error) {
-      setCodexJobCardReviewMessages((current) => ({
-        ...current,
-        [targetBookingReference]: {
-          tone: "error",
-          text: adminBookingWorkflowStatusFailureMessage(error, "Codex job-card review"),
-        },
-      }));
-    } finally {
-      setCodexJobCardReviewAction(null);
     }
   }
 
@@ -22339,23 +23582,31 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   async function createCustomerDriverDetailsPortalLink() {
     const bookingReference = customerDriverDetailsPortalBookingReference;
     const customerAccountReference = customerDriverDetailsPortalAccountReference;
+    const companyId = customerDriverDetailsPortalCompanyId;
+    const bookerId = customerDriverDetailsPortalBookerId;
 
     if (!bookingReference) {
       throw new Error("Load a saved booking before copying the customer app link.");
     }
 
-    if (!dispatchReleaseCustomerCopyReady) {
-      throw new Error("Complete trip and assigned-driver details before copying the customer app link.");
+    if (!customerDriverDetailsPortalLinkCopyReady) {
+      throw new Error("Complete the saved trip details before copying the customer app link.");
     }
 
     if (!customerAccountReference) {
       throw new Error("Customer app link requires a saved CRM customer account. Use Save + CRM or load the saved booking first.");
     }
 
+    if (!companyId || !bookerId) {
+      throw new Error("Customer app link requires a verified CRM company and booker. Select both and save the booking first.");
+    }
+
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
       body: JSON.stringify({
-        bookingReference,
+        bookerId,
+        companyId,
         customerAccountReference,
+        publicBookingReference: dispatchPublicBookingReference,
         safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
       }),
       cache: "no-store",
@@ -22378,21 +23629,82 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     return portalUrl;
   }
 
+  async function createCustomerBookingInvitationLink() {
+    const response = await fetch(adminCustomerBookingInvitationsApiPath, {
+      cache: "no-store",
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "POST",
+    });
+    const result = (await response.json().catch(() => null)) as {
+      expiresAt?: string;
+      ok?: boolean;
+      url?: string;
+    } | null;
+    const invitationUrl = typeof result?.url === "string" ? result.url.trim() : "";
+
+    if (!response.ok || result?.ok !== true || !invitationUrl) {
+      throw new Error("Customer booking invitation could not be created.");
+    }
+
+    return {
+      expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : "",
+      invitationUrl,
+    };
+  }
+
   async function copyCustomerDriverDetailsWithCustomerAppLink() {
     const bookingReference = customerDriverDetailsPortalBookingReference;
+    const bookingInvitationMode = !bookingReference;
+    const copyStateReference = bookingReference || customerBookingInvitationCopyStateKey;
+    const displayBookingReference = dispatchPublicBookingReference || "loaded booking";
     const messageText = getDispatchCopyText("customerCopy");
 
     setCustomerDriverDetailsPortalLinkCopyState({
       external_send: false,
-      loadedReference: bookingReference,
+      loadedReference: copyStateReference,
       noProviderSend: true,
       portalLinkCopied: false,
       portalUrl: "",
       tone: "info",
-      text: `Preparing customer app link for ${bookingReference || "loaded booking"}...`,
+      text: bookingInvitationMode
+        ? "Preparing one-time customer booking invitation..."
+        : `Preparing customer app link for ${displayBookingReference}...`,
     });
 
     try {
+      if (bookingInvitationMode) {
+        const invitation = await createCustomerBookingInvitationLink();
+        const expiryLine = invitation.expiresAt
+          ? `Expires: ${new Date(invitation.expiresAt).toLocaleString()}`
+          : "This link expires after 7 days.";
+        await navigator.clipboard.writeText(
+          [
+            "PRESTIGE LIMO BOOKING INVITATION",
+            "Please complete your booking request using this private one-time link:",
+            invitation.invitationUrl,
+            expiryLine,
+            "The link is used up after one booking request is saved.",
+          ].join("\n"),
+        );
+        setCustomerDriverDetailsPortalLinkCopyState({
+          external_send: false,
+          loadedReference: copyStateReference,
+          noProviderSend: true,
+          portalLinkCopied: true,
+          portalUrl: invitation.invitationUrl,
+          tone: "success",
+          text: "One-time customer booking invitation copied. Paste/send it manually; no SMS or provider message was sent.",
+        });
+        setCopyFeedback({
+          target: "customerCopy",
+          tone: "success",
+          text: "Customer booking invitation copied.",
+        });
+        return;
+      }
+
       if (!clean(messageText)) {
         throw new Error("Customer copy is empty. Load a saved booking first.");
       }
@@ -22403,12 +23715,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       );
       setCustomerDriverDetailsPortalLinkCopyState({
         external_send: false,
-        loadedReference: bookingReference,
+        loadedReference: copyStateReference,
         noProviderSend: true,
         portalLinkCopied: true,
         portalUrl,
         tone: "success",
-        text: `Customer driver details and customer app link copied for ${bookingReference}. Paste/send manually; no provider message was sent.`,
+        text: `Customer driver details and customer app link copied for ${displayBookingReference}. Paste/send manually; no provider message was sent.`,
       });
       setCopyFeedback({
         target: "customerCopy",
@@ -22423,7 +23735,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       setCustomerDriverDetailsPortalLinkCopyState({
         external_send: false,
-        loadedReference: bookingReference,
+        loadedReference: copyStateReference,
         noProviderSend: true,
         portalLinkCopied: false,
         portalUrl: "",
@@ -22515,7 +23827,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       clean(booking.vehicle);
     const pickupDateTime = formatPickupDateTime(booking.date, booking.time);
     const pickupLocation = clean(booking.pickup);
-    const dropoffLocation = clean(booking.dropoff);
+    const bookingType = normalizeBookingType(booking.bookingType);
+    const dropoffLocation =
+      clean(booking.dropoff) || (bookingType === "DSP" ? adminDraftDropoffFallback : "");
+    const driverJobRoute = [
+      pickupLocation || "Pickup",
+      clean(booking.extraStopLocation),
+      dropoffLocation || "Drop-off",
+    ].filter(Boolean).join(" > ");
     const passengerName = clean(booking.name);
 
     if (!bookingReference) {
@@ -22558,7 +23877,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       pickup_datetime: pickupDateTime,
       pickup_location: pickupLocation,
       pickup_time: formatPickupTime(booking.time),
-      route: route,
+      route: driverJobRoute,
       status: clean(dispatchReleaseAppliedStatus) || "assigned",
       waypoints: isDspItinerary
         ? itineraryDisplayStops.map((stop) => clean(stop.location)).filter(Boolean)
@@ -22577,11 +23896,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       driverJobPayload.assigned_driver_plate = driverPlate;
     }
 
+    if (
+      !appliedAdminBookingSnapshot ||
+      !savedBookingMatchesDriverJobLinkOperationalPayload(
+        appliedAdminBookingSnapshot,
+        driverJobPayload,
+      )
+    ) {
+      return {
+        error: "Save the booking amendment before creating a Driver Job Link.",
+        ok: false as const,
+      };
+    }
+
     return {
       data: {
         booking_reference: bookingReference,
         driver_job_payload: driverJobPayload,
-        ttl_hours: 48,
+        ttl_hours: 96,
       },
       ok: true as const,
     };
@@ -22609,7 +23941,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       action: "create",
       message: {
         tone: "info",
-        text: `Creating driver job link for ${payloadResult.data.booking_reference}...`,
+        text: `Creating driver job link for ${dispatchPublicBookingReference || "Booking"}...`,
       },
       oneTimeUrl: "",
     }));
@@ -22669,7 +24001,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           loadedReference: link.booking_reference,
           message: {
             tone: "success",
-            text: `Live movement is authorized for ${compactBookingReference(
+            text: `Live movement is authorized for ${adminVisibleBookingReference(
               link.booking_reference,
             )}. Driver still taps Share Location from the same link.`,
           },
@@ -22698,6 +24030,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         },
         oneTimeUrl: driverJobUrl,
       });
+      setDashboardDriverJobLinksReadState((current) => ({
+        linksByReference: {
+          ...current.linksByReference,
+          [cleanReferenceText(link.booking_reference)]: link,
+        },
+        status: "loaded",
+      }));
     } catch (error) {
       setAdminDriverJobLinkState((current) => ({
         ...current,
@@ -23085,7 +24424,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     loadingText: string,
     successText: string,
     errorPrefix: string,
-  ) {
+  ): Promise<boolean> {
     const bookingId = bookingRecordStableKey(bookingRecord);
     const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
 
@@ -23108,61 +24447,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setBookingCompletionMessage(bookingId, successMessage);
       await loadBookings("Bookings synced.", { silent: true });
       applyBookingStatusLocally(bookingRecord, [bookingStatusReference], nextStatus, result.updatedAt);
+      return true;
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "Unknown booking status error.";
       const errorMessage = { tone: "error", text: `${errorPrefix}: ${errorText}` } satisfies Message;
       setBookingCompletionMessage(bookingId, errorMessage);
+      return false;
     } finally {
       setCompletingBookingId(null);
     }
   }
 
-  async function syncBookingCompletedStatusFromDriverReport(
-    bookingReferenceValue: string,
-    latestStatus: AdminDriverJobStatusEvent | null,
-  ) {
-    if (clean(latestStatus?.status_value).toLowerCase() !== "completed") {
-      return;
-    }
-
-    const bookingStatusReference = cleanReferenceText(bookingReferenceValue);
-
-    if (!bookingStatusReference || driverCompletedBookingStatusSyncRequestedRef.current.has(bookingStatusReference)) {
-      return;
-    }
-
-    const matchingBooking = operationalBookings.find(
-      (bookingRecord) => getBookingDriverJobStatusReference(bookingRecord) === bookingStatusReference,
-    );
-
-    if (
-      !matchingBooking ||
-      bookingRecordIsCompletedStatus(matchingBooking) ||
-      bookingRecordIsCancelledStatus(matchingBooking)
-    ) {
-      return;
-    }
-
-    driverCompletedBookingStatusSyncRequestedRef.current.add(bookingStatusReference);
-    const result = await patchBookingStatusReference(
-      bookingStatusReference,
-      "completed",
-      matchingBooking,
-    );
-
-    if (!result.ok) {
-      driverCompletedBookingStatusSyncRequestedRef.current.delete(bookingStatusReference);
-      setMessage({
-        tone: "error",
-        text: `Driver reported Job Completed for ${compactBookingReference(
-          bookingStatusReference,
-        )}, but booking status was not changed: ${result.errorText}`,
-      });
-    }
-  }
-
   async function markBookingCompleted(bookingRecord: BookingRecord) {
-    await updateBookingStatusOnly(
+    return updateBookingStatusOnly(
       bookingRecord,
       "completed",
       "Marking booking completed...",
@@ -23172,13 +24469,57 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }
 
   async function markBookingCancelled(bookingRecord: BookingRecord) {
-    await updateBookingStatusOnly(
+    return updateBookingStatusOnly(
       bookingRecord,
       "cancelled",
       "Cancelling booking...",
       "Booking cancelled.",
       "Cancel booking failed",
     );
+  }
+
+  async function resolveDashboardOverdueBooking(
+    bookingRecord: BookingRecord,
+    resolution: "completed" | "cancelled",
+  ) {
+    const bookingId = bookingRecordStableKey(bookingRecord);
+    const referenceLabel = bookingPublicReference(bookingRecord);
+    const isCompletedResolution = resolution === "completed";
+    const confirmed = window.confirm(
+      [
+        isCompletedResolution
+          ? "Mark this overdue job Completed?"
+          : "Cancel this overdue job?",
+        "",
+        `Reference: ${referenceLabel}`,
+        "",
+        isCompletedResolution
+          ? "Use Completed only if the trip happened."
+          : "Use Cancel if the trip did not happen.",
+      ].join("\n"),
+    );
+
+    if (!confirmed) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "info",
+        text: isCompletedResolution
+          ? "Overdue completion cancelled."
+          : "Overdue cancellation cancelled.",
+      });
+      return;
+    }
+
+    const statusUpdated = isCompletedResolution
+      ? await markBookingCompleted(bookingRecord)
+      : await markBookingCancelled(bookingRecord);
+
+    if (!statusUpdated) {
+      return;
+    }
+
+    setCompletedMonthFilter(bookingRecordCompletedHistoryMonthKey(bookingRecord));
+    setCompletedSearchTerm("");
+    selectAppTab("completed");
   }
 
   async function adminConfirmBookingCompletedByPhone(
@@ -23189,8 +24530,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     } = {},
   ) {
     const bookingId = bookingRecordStableKey(bookingRecord);
-    const bookingStatusReference = bookingRecordStatusReference(bookingRecord);
-    const referenceLabel = compactBookingReference(bookingStatusReference);
+    const referenceLabel = bookingPublicReference(bookingRecord);
     const driverLabel = clean(context.driverLabel) || clean(bookingRecord.driver_name) || "Driver TBC";
     const latestDriverReportLabel = clean(context.latestDriverReportLabel) || "No completed driver report";
     const confirmed = window.confirm(
@@ -23328,10 +24668,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   function bookingRecordCanBeDeletedFromCompletedHistory(bookingRecord: BookingRecord) {
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-    const isDriverCompletedHistoryJob =
-      !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(bookingRecord);
 
-    return isCompletedStatus || isCancelledStatus || isDriverCompletedHistoryJob;
+    return isCompletedStatus || isCancelledStatus;
   }
 
   async function resolveCompletedHistoryDeleteBookingId(
@@ -23400,13 +24738,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
     const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
     const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-    const isDriverCompletedHistoryJob =
-      !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(bookingRecord);
 
-    if (!isCompletedStatus && !isCancelledStatus && !isDriverCompletedHistoryJob) {
+    if (!isCompletedStatus && !isCancelledStatus) {
       setBookingCompletionMessage(bookingId, {
         tone: "error",
-        text: "Delete job failed: only completed, cancelled, or driver-completed jobs can be deleted here.",
+        text: "Delete job failed: only completed or cancelled jobs can be deleted here.",
       });
       return;
     }
@@ -23434,18 +24770,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       if (!deleteBookingId) {
         throw new Error("saved booking id is missing. Reload bookings, then try again.");
-      }
-
-      if (isDriverCompletedHistoryJob) {
-        const statusResult = await patchBookingStatusReference(
-          bookingRecordStatusReference(bookingRecord),
-          "completed",
-          bookingRecord,
-        );
-
-        if (!statusResult.ok) {
-          throw new Error(`Driver completed status update failed: ${statusResult.errorText}`);
-        }
       }
 
       const response = await fetch(adminSavedBookingsApiPath, {
@@ -23599,6 +24923,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     </div>
   );
   const renderDispatchBookingField = (field: keyof BookingForm) => {
+    if (
+      (field === "dspEndDate" || field === "dspEndTime") &&
+      normalizeBookingType(booking.bookingType) !== "DSP"
+    ) {
+      return null;
+    }
+
     const fieldContainerClass =
       field === "pickup" ||
       field === "dropoff" ||
@@ -23608,6 +24939,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         : "";
     const isServiceTypeField = field === "bookingType";
     const isVehicleTypeField = field === "vehicle";
+    const displayFieldLabel =
+      field === "dropoff" && normalizeBookingType(booking.bookingType) === "DSP"
+        ? `${fieldLabels[field]} (optional for DSP)`
+        : fieldLabels[field];
 
     return (
       <div className={fieldContainerClass} key={field}>
@@ -23643,7 +24978,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           ) : (
             <>
               <span className="mb-0.5 block text-xs font-semibold text-slate-700">
-                {fieldLabels[field]}
+                {displayFieldLabel}
                 {requiredFields.includes(field) ? (
                   <span className="text-red-600"> *</span>
                 ) : null}
@@ -23658,10 +24993,12 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       : undefined
                 }
                 min={field === "pax" ? 1 : undefined}
+                data-admin-dispatch-dsp-end-date={field === "dspEndDate" ? "true" : undefined}
+                data-admin-dispatch-dsp-end-time={field === "dspEndTime" ? "true" : undefined}
                 onChange={(event) => update(field, event.target.value)}
-                placeholder={fieldLabels[field]}
+                placeholder={displayFieldLabel}
                 type={
-                  field === "date" || field === "returnDate"
+                  field === "date" || field === "returnDate" || field === "dspEndDate"
                     ? "date"
                     : field === "bookerEmail"
                       ? "email"
@@ -23679,6 +25016,77 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       </div>
     );
   };
+  const adminEmailAiPassengerName = clean(booking.name);
+  const adminEmailAiCompanyName = saveCrmExplicitCompanyAccount(booking);
+  const adminEmailAiBookerName = clean(booking.booker);
+  const adminEmailAiPassengerMatches = activeAdminEmailAiIntakeId
+    ? rateTravelers.filter((traveler) =>
+        Boolean(
+          adminDispatchVerifiedIdentityId(traveler.id) &&
+          adminDispatchVerifiedIdentityId(traveler.company_id) &&
+          adminDispatchVerifiedIdentityId(traveler.booker_id) &&
+          adminEmailAiPassengerName &&
+          billingIdentityMatches(traveler.traveler_name, adminEmailAiPassengerName),
+        ),
+      )
+    : [];
+  const adminEmailAiRepeatedCustomerCandidates = adminEmailAiPassengerMatches.filter(
+    (traveler) => {
+      const company = rateCompanies.find(
+        (candidate) => candidate.id === traveler.company_id,
+      );
+      const companyMatches =
+        Boolean(adminEmailAiCompanyName) &&
+        Boolean(company) &&
+        billingCompanyIdentityMatches(company?.company_name, adminEmailAiCompanyName);
+      const bookerMatches =
+        Boolean(adminEmailAiBookerName) &&
+        billingIdentityMatches(traveler.booker_name, adminEmailAiBookerName);
+
+      return companyMatches || bookerMatches;
+    },
+  );
+  const adminEmailAiRepeatedCustomerCandidate =
+    adminEmailAiRepeatedCustomerCandidates.length === 1
+      ? adminEmailAiRepeatedCustomerCandidates[0]
+      : null;
+  const adminEmailAiCustomerStatus = !activeAdminEmailAiIntakeId
+    ? null
+    : !ratesLoaded
+      ? savingRates
+        ? "checking"
+        : "unavailable"
+      : adminEmailAiRepeatedCustomerCandidate
+        ? "repeated"
+        : adminEmailAiPassengerMatches.length === 0
+          ? "new"
+          : "ambiguous";
+
+  function applyAdminEmailAiRepeatedCustomerCandidate() {
+    if (!adminEmailAiRepeatedCustomerCandidate) {
+      return;
+    }
+
+    const company = rateCompanies.find(
+      (candidate) => candidate.id === adminEmailAiRepeatedCustomerCandidate.company_id,
+    );
+
+    setBooking((current) => ({
+      ...current,
+      booker: clean(adminEmailAiRepeatedCustomerCandidate.booker_name) || current.booker,
+      bookerId: String(adminEmailAiRepeatedCustomerCandidate.booker_id),
+      company: clean(company?.company_name) || current.company,
+      companyId: String(adminEmailAiRepeatedCustomerCandidate.company_id),
+      name: clean(adminEmailAiRepeatedCustomerCandidate.traveler_name) || current.name,
+      travelerId: String(adminEmailAiRepeatedCustomerCandidate.id),
+    }));
+    setMessage({
+      tone: "success",
+      text:
+        "Repeated customer selected from the verified CRM chain. Review the company, PA / booker, traveller, and booking details before Save + CRM.",
+    });
+  }
+
   const adminDispatchVerifiedBookerOptions = Array.from(
     new Map(
       rateTravelers
@@ -23747,42 +25155,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       data-codex-prepared-job-cards="true"
       data-new-customer-booking-requests-panel="true"
     >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h4 className="text-sm font-semibold text-emerald-950">Codex Prepared Job Cards</h4>
-          <p className="text-xs text-emerald-800">
-            Prepared from exact saved requests. Admin reviews every card before calendar action.
-          </p>
-          <p className="text-xs text-emerald-800">Calendar changes still require admin action in Dispatch.</p>
-          <p className="text-xs text-emerald-800">
-            Loaded Prestige saved jobs only for conflict checks; no calendar write.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <span
-            className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200"
-            data-new-customer-booking-requests-urgent-count={String(urgentCustomerBookingRequestCount)}
-          >
-            {urgentCustomerBookingRequestCount} urgent
-          </span>
-          <span className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200">
-            {customerBookingRequestDisplayItems.length} Ready for Admin Review
-          </span>
-          <span
-            className="inline-flex w-fit rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-200"
-            data-codex-calendar-conflict-runtime={
-              codexCalendarConflictAutomationEnabled ? "active" : "off"
-            }
-          >
-            Conflict check {codexCalendarConflictAutomationEnabled ? "ON" : "OFF"}
-          </span>
-        </div>
+      <div>
+        <h4 className="text-sm font-semibold text-emerald-950">Codex Prepared Job Cards</h4>
+        <p className="text-xs text-emerald-800">
+          Prepared from exact saved requests. Admin reviews every card before calendar action.
+        </p>
       </div>
       <div
         className="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1"
         data-codex-prepared-job-card-list="true"
       >
-        {customerBookingRequestDisplayItems.length > 0 ? customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
+        {customerBookingRequestDisplayItems.map(({ bookingRecord: requestBooking, operationalCard }) => {
           const routePoints = getRoutePoints(requestBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -23793,38 +25176,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
           const bookingId = bookingRecordStableKey(requestBooking, operationalCard);
-          const bookingReference = cleanReferenceText(
-            bookingRecordPersistedReference(requestBooking),
-          );
-          const codexReviewStatus = codexJobCardReviewStatuses[bookingReference] || null;
-          const returnedToCodex =
-            clean(codexReviewStatus?.workflow_area) === adminCodexJobCardReviewWorkflowArea &&
-            clean(codexReviewStatus?.status_value) === "needs_review" &&
-            clean(codexReviewStatus?.status_label) === "Returned to Codex";
-          const requestRecord = bookingRecordToAdminBookingPersistenceRecord(requestBooking);
-          const correctionPreparation = prepareCodexJobCardCorrection(
-            bookingRecordToForm(requestBooking),
-            returnedToCodex ? clean(codexReviewStatus?.safe_status_context?.safe_note) : "",
-          );
-          const correctionReady = correctionPreparation.status === "ready";
           const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);
-          const isUrgentRequest = urgentCustomerBookingRequestKeySet.has(
-            getCustomerBookingRequestQueueKey(requestBooking),
-          );
           const pickupMetaText = [
             formatBookingPickupDateTimeSgt(requestBooking),
             operationalCard.job_card_display,
           ].filter(Boolean).join(" · ");
-          const calendarConflictCandidate = codexCalendarConflictLoadedBookings.find(
-            (loadedBooking) => loadedBooking.identity === bookingId,
-          );
-          const calendarConflictResult =
-            codexCalendarConflictAutomationEnabled && calendarConflictCandidate
-              ? evaluateCodexCalendarConflict(
-                  calendarConflictCandidate,
-                  codexCalendarConflictLoadedBookings,
-                )
-              : null;
 
           return (
             <article
@@ -23834,23 +25190,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   : ""
               }`}
               data-new-customer-booking-request-row={bookingId}
-              data-new-customer-booking-request-urgency={isUrgentRequest ? "urgent" : "new"}
               key={`customer-request-${bookingId}`}
             >
               <div className="min-w-0">
-                <span
-                  className={`mb-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${
-                    returnedToCodex
-                      ? "bg-amber-100 text-amber-900 ring-amber-200"
-                      : "bg-emerald-100 text-emerald-900 ring-emerald-200"
-                  }`}
-                >
-                  {correctionReady
-                    ? "Corrected Preview Ready"
-                    : returnedToCodex
-                      ? "Exact Value Needed"
-                      : "Ready for Admin Review"}
-                </span>
                 <p className="truncate font-semibold text-slate-950">
                   {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, requestBooking)}
                 </p>
@@ -23858,166 +25200,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-slate-800">Passenger: {passengerText}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      isUrgentRequest
-                        ? "bg-amber-100 text-amber-900 ring-1 ring-amber-200"
-                        : "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-100"
-                    }`}
-                  >
-                    {isUrgentRequest ? "Urgent >1h" : "New"}
-                  </span>
-                  <span className="truncate text-xs text-slate-500">
-                    {bookingStatusLabel(requestBooking.status)}
-                  </span>
-                </div>
               </div>
               <p className="min-w-0 truncate text-slate-700">{routeText}</p>
-              <div className="flex flex-wrap gap-1.5 md:justify-end">
-                <button
-                  className="min-h-9 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  data-new-customer-booking-request-load={bookingId}
-                  onClick={() =>
-                    loadSelectedBooking(requestBooking, {
-                      bookingFormOverride: correctionReady
-                        ? correctionPreparation.correctedBooking
-                        : undefined,
-                      correctionSummary: correctionReady
-                        ? correctionPreparation.changedFields.join("; ")
-                        : undefined,
-                      focusJobCard: true,
-                    })
-                  }
-                  type="button"
-                >
-                  {correctionReady ? "Review Corrected Job Card" : "Review Job Card"}
-                </button>
-                {requestRecord
-                  ? adminCustomerRequestReviewDecisions.map((decision) => (
-                      <button
-                        className="min-h-9 rounded-md border border-amber-300 bg-white px-2 text-xs font-semibold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                        data-new-customer-booking-request-decision-button={`${bookingId}:${decision.key}`}
-                        disabled={adminBookingPersistenceAction !== null}
-                        key={decision.key}
-                        onClick={() => updateAdminCustomerRequestReviewDecision(requestRecord, decision.key)}
-                        type="button"
-                      >
-                        {decision.label}
-                      </button>
-                    ))
-                  : null}
-              </div>
-              {calendarConflictResult ? (
-                <div
-                  className={`flex flex-col gap-0.5 rounded-md border px-2 py-1.5 text-xs sm:flex-row sm:items-center sm:justify-between md:col-span-4 ${
-                    calendarConflictResult.status === "conflict"
-                      ? "border-rose-200 bg-rose-50 text-rose-900"
-                      : calendarConflictResult.status === "no-conflict"
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                        : "border-amber-200 bg-amber-50 text-amber-900"
-                  }`}
-                  data-codex-calendar-conflict-status={bookingId}
-                  data-codex-calendar-conflict-state={calendarConflictResult.status}
-                >
-                  <span className="font-semibold">{calendarConflictResult.label}</span>
-                  <span>{calendarConflictResult.detail}</span>
-                </div>
-              ) : null}
-              <div className="rounded-md border border-emerald-100 bg-emerald-50/70 p-2 md:col-span-4">
-                <label className="block text-xs font-semibold text-emerald-950">
-                  Instruction to Codex (internal only)
-                  <textarea
-                    className="mt-1 min-h-16 w-full resize-y rounded-md border border-emerald-200 bg-white px-2 py-1.5 text-sm font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
-                    data-codex-job-card-instruction={bookingReference}
-                    disabled={!bookingReference || codexJobCardReviewAction === bookingReference}
-                    maxLength={500}
-                    onChange={(event) =>
-                      setCodexJobCardInstructions((current) => ({
-                        ...current,
-                        [bookingReference]: event.target.value,
-                      }))
-                    }
-                    placeholder="Exact format: Pickup time: 14:30 or Flight number: SQ123"
-                    rows={2}
-                    value={codexJobCardInstructions[bookingReference] || ""}
-                  />
-                </label>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 text-xs text-slate-600">
-                    {codexJobCardReviewStatuses[bookingReference] ? (
-                      <span className="font-semibold text-emerald-900">
-                        {adminBookingWorkflowStatusDisplayLabel(
-                          codexJobCardReviewStatuses[bookingReference],
-                        )}
-                      </span>
-                    ) : (
-                      "Internal queue instruction only; never shown to customers or drivers."
-                    )}
-                  </div>
-                  <button
-                    className="min-h-9 shrink-0 rounded-md border border-emerald-700 bg-white px-3 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-                    data-codex-job-card-return={bookingReference}
-                    disabled={
-                      !bookingReference ||
-                      !clean(codexJobCardInstructions[bookingReference]) ||
-                      codexJobCardReviewAction !== null
-                    }
-                    onClick={() => returnPreparedJobCardToCodex(bookingReference)}
-                    type="button"
-                  >
-                    {codexJobCardReviewAction === bookingReference ? "Returning..." : "Return to Codex"}
-                  </button>
-                </div>
-                {codexJobCardReviewMessages[bookingReference] ? (
-                  <p
-                    className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${statusClass(
-                      codexJobCardReviewMessages[bookingReference].tone,
-                    )}`}
-                    data-codex-job-card-review-feedback={bookingReference}
-                  >
-                    {codexJobCardReviewMessages[bookingReference].text}
-                  </p>
-                ) : null}
-                {returnedToCodex ? (
-                  <div
-                    className={`mt-2 rounded-md border p-2 ${
-                      correctionReady
-                        ? "border-emerald-300 bg-white text-emerald-950"
-                        : "border-amber-300 bg-amber-50 text-amber-950"
-                    }`}
-                    data-codex-job-card-correction-preparation={
-                      correctionReady ? "ready" : "needs-exact-value"
-                    }
-                  >
-                    <p className="text-xs font-semibold">
-                      {correctionReady ? "Corrected Preview Ready" : "Exact Value Needed"}
-                    </p>
-                    {correctionReady ? (
-                      <>
-                        <p className="mt-1 text-xs">
-                          {correctionPreparation.changedFields.join(" · ")}
-                        </p>
-                        <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-emerald-100 bg-emerald-50/60 p-2 text-xs text-slate-800">
-                          {formatWhatsAppJobCard(correctionPreparation.correctedBooking)}
-                        </pre>
-                        <p className="mt-1 text-xs">
-                          Review-only preview. The saved booking and calendar remain unchanged until admin uses the established Dispatch actions.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-1 text-xs">{correctionPreparation.reason}</p>
-                    )}
-                  </div>
-                ) : null}
-              </div>
+              <button
+                className="min-h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+                data-admin-prepared-job-card-close={bookingId}
+                onClick={() => rememberHandledCustomerBookingRequest(requestBooking)}
+                type="button"
+              >
+                Close
+              </button>
             </article>
           );
-        }) : (
-          <p className="rounded-md border border-emerald-100 bg-white px-3 py-3 text-sm text-slate-600">
-            No Codex-prepared job cards waiting for admin review.
-          </p>
-        )}
+        })}
       </div>
     </div>
   );
@@ -24032,25 +25227,29 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           </p>
         </div>
         <p className="text-xs font-medium text-slate-500" data-bookings-loaded-filter-summary="true">
-          Showing {filteredRecentBookings.length} of {operationalBookings.length} loaded for {bookingsDateScopeLabel}.
+          Showing {bookingsUpcomingVisibleStart}-{bookingsUpcomingVisibleEnd} of{" "}
+          {filteredRecentBookingDisplayItems.length} for {bookingsDateScopeLabel}.
         </p>
       </div>
       <div className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2">
         <div className="flex min-w-[56rem] items-center gap-2">
-        <button
-          aria-pressed={bookingsShowAllDates}
-          className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
-            bookingsShowAllDates
-              ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
-              : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
-          }`}
-          data-bookings-all-dates="true"
-          onClick={() => setBookingsShowAllDates(true)}
-          type="button"
-        >
-          All dates
-        </button>
-        <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
+          <button
+            aria-pressed={bookingsShowUpcoming}
+            className={`h-10 shrink-0 rounded-md border px-3 text-sm font-semibold transition ${
+              bookingsShowUpcoming
+                ? "border-slate-950 bg-slate-950 text-white hover:bg-slate-800"
+                : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50"
+            }`}
+            data-bookings-upcoming="true"
+            onClick={() => {
+              setBookingsShowUpcoming(true);
+              setBookingsUpcomingPage(1);
+            }}
+            type="button"
+          >
+            Upcoming
+          </button>
+          <label className="flex w-44 shrink-0 items-center gap-2 rounded-md border border-stone-300 bg-white px-2">
           <span className="text-xs font-semibold uppercase text-slate-500">Date</span>
           <span className="sr-only">Booking date</span>
           <input
@@ -24060,72 +25259,82 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               const nextDate = clean(event.target.value);
               if (nextDate) {
                 setBookingsSelectedDate(nextDate);
-                setBookingsShowAllDates(false);
+                setBookingsShowUpcoming(false);
+                setBookingsUpcomingPage(1);
               }
             }}
             type="date"
             value={bookingsSelectedDate}
           />
-        </label>
-        <button
+          </label>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-prev-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, -1));
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Prev Day
-        </button>
-        <div
+          </button>
+          <div
           className="h-10 w-44 shrink-0 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-center text-sm font-semibold text-slate-950"
           data-bookings-selected-date-label="true"
         >
           {selectedBookingsDateLabel}
-        </div>
-        <button
+          </div>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-next-day="true"
           onClick={() => {
             setBookingsSelectedDate((currentDate) => shiftDateKey(currentDate, 1));
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Next Day
-        </button>
-        <button
+          </button>
+          <button
           className="h-10 shrink-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           data-bookings-today="true"
           onClick={() => {
             setBookingsSelectedDate(todayKey);
-            setBookingsShowAllDates(false);
+            setBookingsShowUpcoming(false);
+            setBookingsUpcomingPage(1);
           }}
           type="button"
         >
           Today
-        </button>
-        <label className="relative min-w-72 flex-1">
+          </button>
+          <label className="relative min-w-72 flex-1">
           <span className="sr-only">Quick search loaded jobs</span>
           <input
             className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             data-bookings-search-input="true"
-            onChange={(event) => setBookingsSearchTerm(event.target.value)}
+            onChange={(event) => {
+              setBookingsSearchTerm(event.target.value);
+              setBookingsUpcomingPage(1);
+            }}
             placeholder="Quick search loaded jobs: ref, passenger, flight, route, driver"
             type="search"
             value={bookingsSearchTerm}
           />
-        </label>
-        {hasBookingsSearch ? (
-          <button
-            className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            onClick={() => setBookingsSearchTerm("")}
-            type="button"
-          >
-            Clear
-          </button>
-        ) : null}
+          </label>
+          {hasBookingsSearch ? (
+            <button
+              className="h-10 shrink-0 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              onClick={() => {
+                setBookingsSearchTerm("");
+                setBookingsUpcomingPage(1);
+              }}
+              type="button"
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -24143,6 +25352,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           {bookingGoogleCalendarStatusMessage.text}
         </p>
       ) : null}
+      {bookingDriverDetailsDeliveryStatusMessage ? (
+        <p
+          className={`mt-2 rounded-md border px-3 py-2 text-sm ${statusClass(
+            bookingDriverDetailsDeliveryStatusMessage.tone,
+          )}`}
+          data-bookings-driver-details-status-message="true"
+        >
+          {bookingDriverDetailsDeliveryStatusMessage.text}
+        </p>
+      ) : null}
       {hasBookingsSearch && filteredRecentBookings.length === 0 ? (
         <p
           className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
@@ -24152,8 +25371,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         </p>
       ) : null}
       {filteredRecentBookings.length > 0 ? (
-      <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
-        {filteredRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
+        <>
+          <div className="mt-3 max-h-[34rem] space-y-2 overflow-auto" data-current-upcoming-bookings-list="true">
+        {visibleRecentBookingDisplayItems.map(({ bookingRecord: savedBooking, operationalCard }, bookingIndex) => {
           const routePoints = getRoutePoints(savedBooking);
           const pickup = operationalCard.pickup_address || routePoints[0] || "Pickup";
           const dropoff =
@@ -24163,7 +25383,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           const routeText =
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-          const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);
+          const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
           const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
           const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
@@ -24187,6 +25407,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           const bookingsListStatus = bookingStatusLabel(savedBooking.status);
           const showBookingsListStatus = ![
             "admin_review_required",
+            "draft",
             "ops_pending_ots",
             "pending_ots",
           ].includes(clean(savedBooking.status).toLowerCase());
@@ -24204,6 +25425,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 : bookingGoogleCalendarStatus === "save_to_calendar"
                   ? "Save to Cal"
                   : "";
+          const bookingReferenceKey = cleanReferenceText(
+            operationalCard.booking_reference || savedBooking.booking_reference,
+          ).toLowerCase();
+          const bookingDriverDetailsDeliveryStatus =
+            bookingDriverDetailsDeliveryStatuses[bookingReferenceKey];
+          const bookingDriverDetailsDeliveryStatusTime =
+            formatAdminBookingDriverDetailsStatusTime(
+              bookingDriverDetailsDeliveryStatus?.occurredAt,
+            );
+          const bookingDriverDetailsDeliveryStatusLabel = bookingDriverDetailsDeliveryStatus
+            ? `${
+                bookingDriverDetailsDeliveryStatus.status === "acknowledged"
+                  ? "Acknowledged"
+                  : "Detail sent"
+              }${
+                bookingDriverDetailsDeliveryStatusTime
+                  ? ` ${bookingDriverDetailsDeliveryStatusTime}`
+                  : ""
+              }`
+            : "";
           const bookingAlternateColour = bookingIndex % 2 === 0 ? "sky" : "violet";
 
           return (
@@ -24226,7 +25467,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                         </AdminOperationalUppercaseValue>
                       </span>
-                      <span className="block truncate text-xs text-slate-500">
+                      <span className="block truncate text-sm font-bold text-slate-900">
                         {pickupMetaText}
                       </span>
                     </span>
@@ -24288,6 +25529,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           {bookingGoogleCalendarStatusLabel}
                         </span>
                       ) : null}
+                      {bookingDriverDetailsDeliveryStatusLabel ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
+                            bookingDriverDetailsDeliveryStatus?.status === "acknowledged"
+                              ? "bg-emerald-100 text-emerald-800 ring-emerald-200"
+                              : "bg-sky-100 text-sky-800 ring-sky-200"
+                          }`}
+                          data-bookings-driver-details-status={bookingId}
+                          data-bookings-driver-details-status-value={
+                            bookingDriverDetailsDeliveryStatus?.status
+                          }
+                        >
+                          {bookingDriverDetailsDeliveryStatusLabel}
+                        </span>
+                      ) : null}
                       {showBookingsListStatus ? (
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
@@ -24303,9 +25559,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-recent-operational-body={bookingId}>
                     <div className="grid gap-2 md:grid-cols-2">
                       <OperationalCardSection section="booking" title="Booking">
-                        {operationalCard.booking_reference ? (
-                          <p>Ref: {operationalCard.booking_reference}</p>
-                        ) : null}
+                        <p>
+                          Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
+                        </p>
                         {operationalCard.job_card_display ? (
                           <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
                         ) : null}
@@ -24384,13 +25640,67 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </article>
           );
         })}
-      </div>
+          </div>
+          <div
+            className="mt-3 flex flex-col gap-2 rounded-md border border-stone-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+            data-bookings-upcoming-pagination="true"
+          >
+        <p
+          className="text-sm font-bold text-slate-900"
+          data-bookings-upcoming-page-summary="true"
+        >
+          Page {bookingsUpcomingCurrentPage} of {bookingsUpcomingPageCount} · 20 jobs per page
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:w-64">
+          <button
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-bookings-upcoming-previous-page="true"
+            disabled={bookingsUpcomingCurrentPage <= 1}
+            onClick={() =>
+              setBookingsUpcomingPage(Math.max(1, bookingsUpcomingCurrentPage - 1))
+            }
+            type="button"
+          >
+            Previous
+          </button>
+          <button
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            data-bookings-upcoming-next-page="true"
+            disabled={bookingsUpcomingCurrentPage >= bookingsUpcomingPageCount}
+            onClick={() =>
+              setBookingsUpcomingPage(
+                Math.min(bookingsUpcomingPageCount, bookingsUpcomingCurrentPage + 1),
+              )
+            }
+            type="button"
+          >
+            Next
+          </button>
+        </div>
+          </div>
+        </>
       ) : (
         <div
           className="mt-3 rounded-md border border-dashed border-stone-300 bg-white p-4 text-center text-sm text-slate-500"
           data-current-upcoming-bookings-empty="true"
         >
-          No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in Completed / History.
+          No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in{" "}
+          {bookingsSelectedDate <= todayKey ? (
+            <a
+              className="font-semibold text-slate-900 underline decoration-slate-400 underline-offset-2 hover:decoration-slate-900"
+              data-bookings-completed-history-date-link="true"
+              href="#completed-history"
+              onClick={(event) => {
+                event.preventDefault();
+                openCompletedHistoryForBookingsDate();
+              }}
+            >
+              Completed / History
+            </a>
+          ) : (
+            "Completed / History"
+          )}
+          .
         </div>
       )}
     </div>
@@ -24551,7 +25861,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               const routeText =
                 operationalCard.route_points_summary ||
                 (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
-              const createdAt = operationalCard.created_at || formatCreatedAt(savedBooking.created_at);
+              const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
               const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
               const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
               const bookingCompletionMessage =
@@ -24566,17 +25876,32 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 operationalCard.assigned_driver_display_name ||
                 clean(savedBooking.driver_name) ||
                 "Driver TBC";
+              const completedDriverContact = getAssignedDriverSummary(savedBooking, operationalCard);
+              const completedOperationalReadiness = getOperationalReadinessSummary(
+                savedBooking,
+                operationalCard,
+              );
+              const isDspBooking =
+                normalizeBookingType(
+                  operationalCard.booking_type ||
+                    savedBooking.service_type ||
+                    savedBooking.route_type ||
+                    savedBooking.booking_type,
+                ) === "DSP";
+              const dspScheduledEndText = formatBookingTimestampSgt(
+                operationalCard.dropoff_datetime || savedBooking.dropoff_datetime,
+              );
               const pickupMetaText = [
-                formatBookingPickupDateTimeSgt(savedBooking),
+                isDspBooking
+                  ? `DSP start: ${formatBookingPickupDateTimeSgt(savedBooking)} · End: ${
+                      dspScheduledEndText || "Not set"
+                    }`
+                  : formatBookingPickupDateTimeSgt(savedBooking),
                 operationalCard.job_card_display,
               ].filter(Boolean).join(" · ");
               const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);
               const isCancelledStatus = bookingRecordIsCancelledStatus(savedBooking);
-              const isDriverCompletedHistoryJob =
-                !isCompletedStatus && !isCancelledStatus && bookingRecordHasCompletedDriverReport(savedBooking);
-              const completedHistoryDisplayStatus = isDriverCompletedHistoryJob
-                ? "completed"
-                : isCancelledStatus
+              const completedHistoryDisplayStatus = isCancelledStatus
                   ? "cancelled"
                   : isCompletedStatus
                     ? "completed"
@@ -24592,8 +25917,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       ? "completed"
                       : isCancelledStatus
                         ? "cancelled"
-                        : isDriverCompletedHistoryJob
-                        ? "driver-completed"
                         : isEarlierHistoryJob
                           ? "earlier"
                           : "history"
@@ -24609,7 +25932,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                               {getLoadBookingsOperationalDisplayTitle(operationalCard)}
                             </AdminOperationalUppercaseValue>
                           </span>
-                          <span className="block truncate text-xs text-slate-500">
+                          <span
+                            className={`block text-xs text-slate-500 ${isDspBooking ? "" : "truncate"}`}
+                            data-completed-dsp-schedule={isDspBooking ? bookingId : undefined}
+                          >
                             {pickupMetaText}
                           </span>
                         </span>
@@ -24648,43 +25974,34 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         </span>
                       </summary>
                       <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-completed-operational-body={bookingId}>
-                        <div className="grid gap-2 md:grid-cols-2">
+                        <div
+                          className="grid gap-2 md:grid-cols-2 xl:grid-cols-4"
+                          data-completed-operational-detail-grid={bookingId}
+                        >
                           <OperationalCardSection section="booking" title="Booking">
-                            {operationalCard.job_card_display ? (
-                              <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
-                            ) : null}
-                            {operationalCard.company_display_name ? (
-                              <p>Company: <AdminOperationalUppercaseValue field="company">{operationalCard.company_display_name}</AdminOperationalUppercaseValue></p>
-                            ) : null}
-                            <p>Booker: {bookerText}</p>
-                            <p>Name: <AdminOperationalUppercaseValue field="passenger">{passengerText}</AdminOperationalUppercaseValue></p>
+                            <p>
+                              Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
+                            </p>
                           </OperationalCardSection>
                           <OperationalCardSection section="route" title="Route">
                             <p>Pickup: <AdminOperationalUppercaseValue field="pickup">{pickup}</AdminOperationalUppercaseValue></p>
                             <p>Drop-off: <AdminOperationalUppercaseValue field="dropoff">{dropoff}</AdminOperationalUppercaseValue></p>
-                            <p className="break-words">Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue></p>
+                          </OperationalCardSection>
+                          <OperationalCardSection section="driver-contact" title="Driver contact">
+                            <p>Contact: {completedDriverContact.contact || "Not set"}</p>
+                            <p>
+                              Plate:{" "}
+                              <AdminOperationalUppercaseValue field="plate">
+                                {completedDriverContact.plate || "Not set"}
+                              </AdminOperationalUppercaseValue>
+                            </p>
+                          </OperationalCardSection>
+                          <OperationalCardSection section="operations" title="Operations">
+                            <p>OTS: {completedOperationalReadiness.otsProof}</p>
+                            <p>Replacement: {completedOperationalReadiness.exceptionReplacement}</p>
                           </OperationalCardSection>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-3" data-operational-card-summary-grid={bookingId}>
-                          <DispatcherStatusSummaryBlock
-                            bookingRecord={savedBooking}
-                            flush
-                            operationalCard={operationalCard}
-                          />
-                          <AssignedDriverSummaryBlock
-                            bookingRecord={savedBooking}
-                            flush
-                            operationalCard={operationalCard}
-                          />
-                          <OperationalReadinessSummaryBlock
-                            bookingRecord={savedBooking}
-                            flush
-                            operationalCard={operationalCard}
-                          />
-                        </div>
-                        <OperationalCardSection section="vehicle-pax-price" title="Vehicle / pax">
-                          <p>Vehicle: <AdminOperationalUppercaseValue field="vehicle">{operationalCard.vehicle_display || "Vehicle TBC"}</AdminOperationalUppercaseValue></p>
-                          <p>Pax: {operationalCard.pax_display || "1"}</p>
+                        <OperationalCardSection section="trip-details" title="Trip details">
                           {operationalCard.child_seat_display ? (
                             <p>{operationalCard.child_seat_display}</p>
                           ) : null}
@@ -24822,7 +26139,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     { label: "Company", value: clean(booking.company) || "Company not set" },
     {
       label: "Reference",
-      value: clean(dispatchReleaseWorkflowBookingReference) || "Not saved yet",
+      value: dispatchPublicBookingReference || "Not saved yet",
     },
     {
       label: "Service",
@@ -24858,9 +26175,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     Boolean(bookingSaveMessage && displayedSaveCrmBillingIdentityMessage && saveCrmBillingIdentityReview) &&
     clean(bookingSaveMessage?.text) === clean(displayedSaveCrmBillingIdentityMessage?.text);
   const showDriverJobLinkCopy = Boolean(cleanReferenceText(dispatchReleaseWorkflowBookingReference));
-  const dispatchReleaseLoadedBookingRecord = loadedBookingId
-    ? bookings.find((bookingRecord) => bookingRecordStableKey(bookingRecord) === loadedBookingId) ?? null
-    : null;
   const customerDriverDetailsPortalBookingReference =
     cleanReferenceText(dispatchReleaseWorkflowBookingReference) ||
     cleanReferenceText(appliedAdminBookingSnapshot?.booking_reference) ||
@@ -24874,6 +26188,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     cleanReferenceText(appliedAdminBookingSnapshot?.customer_id) ||
     cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id) ||
     cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id);
+  const customerDriverDetailsPortalCompanyId =
+    adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.company_id) ||
+    adminDispatchVerifiedIdentityId(dispatchReleaseLoadedBookingRecord?.company_id) ||
+    adminDispatchVerifiedIdentityId(customerDriverDetailsPortalLastSavedRecord?.company_id);
+  const customerDriverDetailsPortalBookerId =
+    adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.booker_id) ||
+    adminDispatchVerifiedIdentityId(dispatchReleaseLoadedBookingRecord?.booker_id) ||
+    adminDispatchVerifiedIdentityId(customerDriverDetailsPortalLastSavedRecord?.booker_id);
   const customerLiveLocationHelperText = customerDriverDetailsPortalAccountReference
     ? customerLiveLocation.helperText
     : "Save + CRM or load the saved booking first.";
@@ -24935,6 +26257,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     dispatchReleaseDriverReady &&
     clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS") &&
     !dispatchReleaseCustomerCopyHasPlaceholder;
+  const customerDriverDetailsPortalLinkCopyReady =
+    dispatchReleaseTripComplete &&
+    clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS");
   const dispatchReleaseDriverDispatchHasPlaceholder =
     /\bTBC\b|Pickup > Drop-off|Date TBC|Time TBC/i.test(driverDispatchCopyText);
   const dispatchReleaseDriverDispatchHasFinanceLine = /payout\s*:/i.test(driverDispatchCopyText);
@@ -25017,9 +26342,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     dispatchReleaseConfirmedOnlyEligible &&
     dispatchReleaseChecklist.every((item) => item.state === "ready");
   const dispatchReleaseContextLabel = appliedAdminBookingSnapshot
-    ? `Applied snapshot: ${clean(appliedAdminBookingSnapshot.booking_reference) || "selected operational snapshot"}`
+    ? `Applied snapshot: ${dispatchPublicBookingReference || "selected operational snapshot"}`
     : loadedBookingId
-      ? `Loaded booking: ${loadedBookingId}`
+      ? `Loaded booking: ${dispatchPublicBookingReference || "Booking"}`
       : "Current dispatch draft";
   const dispatchReleasePendingCount = dispatchReleaseChecklist.filter((item) => item.state !== "ready").length;
   const dispatchReleaseSavedReady =
@@ -25166,6 +26491,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const customerDriverDetailsEmailReviewVehicleType =
     clean(assignedDriverRecord?.vehicle_type) || clean(booking.vehicle);
   const adminCustomerDriverDetailsEmailReviewBookingReference = clean(dispatchReleaseWorkflowBookingReference);
+  const adminCustomerDriverDetailsEmailPublicReference = dispatchReleaseLoadedBookingRecord
+    ? bookingPublicReference(dispatchReleaseLoadedBookingRecord)
+    : compactBookingReference(adminCustomerDriverDetailsEmailReviewBookingReference);
   const adminCustomerDriverDetailsEmailReviewCustomerEmail = clean(booking.bookerEmail);
   const adminCustomerDriverDetailsEmailReviewCanReadApi = Boolean(
     adminCustomerDriverDetailsEmailReviewBookingReference &&
@@ -25216,9 +26544,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         }
 
         const blockers =
-          Array.isArray(result.blockers) && result.blockers.length > 0
+          Array.isArray(result.blockers)
             ? result.blockers
-            : Array.isArray(result.missing_requirements) && result.missing_requirements.length > 0
+            : Array.isArray(result.missing_requirements)
               ? result.missing_requirements
               : adminEmailActivationPreflightFallbackState().blockers;
 
@@ -25481,6 +26809,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         body: JSON.stringify({
           customer_booking_details: {
             booking_reference: bookingReference,
+            customer_visible_booking_reference: adminCustomerDriverDetailsEmailPublicReference,
             customer_facing_flight_number: clean(booking.flight) || null,
             customer_passenger_traveler_name: clean(booking.name) || null,
             drop_off_location: dropOffLocation,
@@ -25718,6 +27047,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         throw new Error(result?.error || "Customer In-App update could not be completed.");
       }
 
+      setBookingDriverDetailsDeliveryStatuses((current) => ({
+        ...current,
+        [bookingReference.toLowerCase()]: {
+          occurredAt: clean(result?.notification?.created_at),
+          status: "sent",
+        },
+      }));
+
       setAdminCustomerDriverDetailsCustomerInAppActionState({
         actionStatus: "loaded",
         deliverySurface: "customer_app",
@@ -25736,85 +27073,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
       setAdminCustomerDriverDetailsCustomerInAppActionState({
         ...adminCustomerDriverDetailsCustomerInAppFallbackState(errorText),
-        actionStatus: "error",
-        loadedReference: bookingReference,
-      });
-    }
-  }
-
-  async function sendAdminCustomerDriverDetailsDriverInAppNotification() {
-    const bookingReference = adminCustomerDriverDetailsEmailReviewBookingReference;
-    const driverJobLinkId = clean(activeAdminDriverJobLink?.id);
-
-    if (!bookingReference || !driverJobLinkId) {
-      setAdminCustomerDriverDetailsDriverInAppActionState({
-        ...adminCustomerDriverDetailsDriverInAppFallbackState(
-          "Load a saved booking with an active driver job link before sending Driver In-App.",
-        ),
-        actionStatus: "error",
-        loadedReference: bookingReference,
-      });
-      return;
-    }
-
-    setAdminCustomerDriverDetailsDriverInAppActionState({
-      ...adminCustomerDriverDetailsDriverInAppFallbackState(
-        `Sending one Driver In-App update for ${bookingReference}...`,
-      ),
-      actionStatus: "loading",
-      loadedReference: bookingReference,
-      notificationStatus: "queued",
-    });
-
-    try {
-      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
-        body: JSON.stringify({
-          booking_reference: bookingReference,
-          delivery_surface: "driver_app",
-          driver_job_link_id: driverJobLinkId,
-          notification_status: "queued",
-          notification_type: "trip_update",
-          priority: "normal",
-          safe_context: {
-            action: "admin_selected",
-            message_template: "review_assigned_trip",
-            provider_send: false,
-            source: "customer_copy_compact_row",
-          },
-          safe_message: "Please review this assigned trip in your Driver Job page.",
-          safe_title: "Dispatch update",
-          workflow_area: "driver_app_updates",
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || result?.ok !== true) {
-        throw new Error(result?.error || "Driver In-App update could not be completed.");
-      }
-
-      setAdminCustomerDriverDetailsDriverInAppActionState({
-        actionStatus: "loaded",
-        deliverySurface: "driver_app",
-        external_send: false,
-        loadedReference: bookingReference,
-        message: `Driver In-App update queued for ${bookingReference}.`,
-        noProviderSend: true,
-        notificationStatus: "queued",
-        notificationType: "trip_update",
-      });
-    } catch (error) {
-      const errorText =
-        error instanceof Error
-          ? error.message
-          : "Driver In-App update could not be completed.";
-
-      setAdminCustomerDriverDetailsDriverInAppActionState({
-        ...adminCustomerDriverDetailsDriverInAppFallbackState(errorText),
         actionStatus: "error",
         loadedReference: bookingReference,
       });
@@ -25928,31 +27186,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
           : dispatchReleaseCustomerCopyReady
             ? "In-App ready"
             : "Needs copy";
-  const adminCustomerDriverDetailsDriverInAppStateMatchesReference =
-    adminCustomerDriverDetailsDriverInAppActionState.loadedReference ===
-    adminCustomerDriverDetailsEmailReviewBookingReference;
-  const adminCustomerDriverDetailsDriverInAppDisplayState =
-    adminCustomerDriverDetailsDriverInAppStateMatchesReference
-      ? adminCustomerDriverDetailsDriverInAppActionState
-      : adminCustomerDriverDetailsDriverInAppFallbackState();
-  const adminCustomerDriverDetailsDriverInAppCanSend =
-    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
-    Boolean(activeAdminDriverJobLink?.id) &&
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus !== "loading";
-  const adminCustomerDriverDetailsDriverInAppActionLabel =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Queuing Driver In-App"
-      : "Send Driver In-App";
-  const adminCustomerDriverDetailsDriverInAppStatusText =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Driver In-App sending"
-      : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded"
-        ? "Driver In-App queued"
-        : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "error"
-          ? "Driver In-App blocked"
-          : activeAdminDriverJobLink
-            ? "Driver In-App ready"
-            : "Driver In-App needs link";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusDetail =
     "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.";
   const adminCustomerDriverDetailsMultiChannelDisabledStatusText = "SMS/WA off";
@@ -25966,11 +27199,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     adminEmailActivationPreflightDisplayState.blockers.filter((blocker) =>
       ["provider", "env", "approval"].includes(blocker),
     );
-  const adminEmailActivationPreflightBlockedText = `${
+  const adminEmailActivationPreflightBlockedText =
     adminEmailActivationPreflightBlockedRequirements.length > 0
-      ? adminEmailActivationPreflightBlockedRequirements.join("/")
-      : "provider/env/approval"
-  } blocked`;
+      ? `${adminEmailActivationPreflightBlockedRequirements.join("/")} blocked`
+      : "no blockers";
   const adminEmailActivationPreflightStatusDetail =
     adminEmailActivationPreflightDisplayState.status === "loading"
       ? "Preflight checking"
@@ -26240,8 +27472,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     .filter((bookingRecord) => {
       return (
         !bookingRecordIsCompletedStatus(bookingRecord) &&
-        !bookingRecordIsCancelledStatus(bookingRecord) &&
-        !bookingRecordHasCompletedDriverReport(bookingRecord)
+        !bookingRecordIsCancelledStatus(bookingRecord)
       );
     })
     .filter((bookingRecord) =>
@@ -26296,6 +27527,70 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const activeJobDriverStatusReferenceList = dayOfTripActiveJobVisibleBookings
     .map(getActiveJobBookingReference)
     .filter(Boolean);
+  const pendingDriverAckQueueEligibleBookings = operationalBookings
+    .filter((bookingRecord) => Boolean(getBookingDriverJobStatusReference(bookingRecord)))
+    .filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))
+    .filter((bookingRecord) => {
+      return (
+        !bookingRecordIsCompletedStatus(bookingRecord) &&
+        !bookingRecordIsCancelledStatus(bookingRecord)
+      );
+    })
+    .sort((firstBooking, secondBooking) => {
+      const firstDateBucket = activeJobDateBucket(firstBooking);
+      const secondDateBucket = activeJobDateBucket(secondBooking);
+
+      if (firstDateBucket !== secondDateBucket) {
+        return firstDateBucket - secondDateBucket;
+      }
+
+      const firstDate = getBookingDateKey(firstBooking);
+      const secondDate = getBookingDateKey(secondBooking);
+
+      if (firstDate !== secondDate) {
+        if (firstDateBucket === 1 && secondDateBucket === 1) {
+          return secondDate.localeCompare(firstDate);
+        }
+
+        return firstDate.localeCompare(secondDate);
+      }
+
+      return (
+        normaliseTimeForSort(formatPickupTimeFromRecord(firstBooking)) -
+        normaliseTimeForSort(formatPickupTimeFromRecord(secondBooking))
+      );
+    });
+  const pendingDriverAckQueueReferenceList = [
+    ...new Set(
+      pendingDriverAckQueueEligibleBookings
+        .map(getActiveJobBookingReference)
+        .map(cleanReferenceText)
+        .filter(Boolean),
+    ),
+  ];
+  const pendingDriverAckQueueReferenceKey = pendingDriverAckQueueReferenceList.join("|");
+  const pendingDriverAckQueueItems =
+    dashboardDriverJobLinksReadState.status === "loaded"
+      ? pendingDriverAckQueueEligibleBookings
+          .map((bookingRecord) => {
+            const bookingReference = getActiveJobBookingReference(bookingRecord);
+            const link = dashboardDriverJobLinksReadState.linksByReference[bookingReference] || null;
+
+            return link?.link_status === "active" &&
+              !link.safe_summary.acknowledged &&
+              !dismissedPendingDriverAckLinkIds.includes(link.id)
+              ? {
+                  bookingReference,
+                  issuedAt: link.issued_at,
+                  jobCardKind: link.safe_summary.job_card_kind,
+                  linkId: link.id,
+                  publicReference: bookingPublicReference(bookingRecord),
+                  waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
+                }
+              : null;
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      : [];
   const liveDispatchMapReferenceList = [
     ...new Set(
       liveDispatchMapEligibleBookings
@@ -26305,7 +27600,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     ),
   ];
   const activeJobsMapVisibleJobs = adminActiveJobsMapReadState.activeJobs;
-  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.length;
+  const activeJobsMapMarkerCount = activeJobsMapVisibleJobs.filter(
+    (job) => !job.is_stale,
+  ).length;
+  const activeJobsMapStalePinCount = activeJobsMapVisibleJobs.length - activeJobsMapMarkerCount;
   const liveDispatchPreparedSlotCount = liveDispatchMapReferenceList.length;
   const liveDispatchSlotSummaryLabel =
     liveDispatchPreparedSlotCount > 0
@@ -26314,9 +27612,18 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         } ready across assigned DEP/MNG/TRF/DSP jobs.`
       : "No active assigned jobs are ready for live map watching.";
   const activeJobDriverStatusReferenceKey = activeJobDriverStatusReferenceList.join("|");
+  const activeJobDriverAcknowledgementWaitingCount =
+    dashboardDriverJobLinksReadState.status === "loaded"
+      ? activeJobDriverStatusReferenceList.filter((bookingReference) => {
+          const activeLink = dashboardDriverJobLinksReadState.linksByReference[bookingReference];
+
+          return activeLink?.link_status === "active" && !activeLink.safe_summary.acknowledged;
+        }).length
+      : 0;
   const liveDispatchMapReferenceKey = liveDispatchMapReferenceList.join("|");
   const activeJobsMapAllowedReferenceKey = adminActiveJobsMapReadState.allowedBookingReferences.join("|");
   const todayJobsMonitorIsActive = activeTab === "dashboard";
+  const driverAckQueueMonitorIsActive = activeTab === "dashboard" || activeTab === "dispatch";
   const activeJobsMapLocationsByReference = new Map(
     activeJobsMapVisibleJobs
       .map((job) => [cleanReferenceText(job.assigned_job_reference), job] as const)
@@ -26423,6 +27730,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       approachEvidence: adminPickupApproachEvidenceByReference[activeJobBookingReference] || null,
       bookingRecord: activeJobBooking,
       currentTimeMs,
+      driverStatusReadStatus: readState?.status || "idle",
       driverStatusValue: readState?.latestStatus?.status_value,
       liveLocation: activeJobsMapLocationsByReference.get(activeJobBookingReference) || null,
       monitorEnabled: adminPickupRiskMonitorEnabled,
@@ -26666,6 +27974,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);
 
   useEffect(() => {
+    const bookingReferences = pendingDriverAckQueueReferenceKey.split("|").filter(Boolean);
+
+    if (!driverAckQueueMonitorIsActive || bookingReferences.length === 0) {
+      return;
+    }
+
+    void refreshDashboardDriverJobLinksRead(bookingReferences);
+
+    const intervalId = window.setInterval(() => {
+      void refreshDashboardDriverJobLinksRead(bookingReferences);
+    }, 10 * 1000);
+
+    return () => window.clearInterval(intervalId);
+    // The exact active-booking reference key controls queue membership; the read keeps only the newest active link per booking.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverAckQueueMonitorIsActive, pendingDriverAckQueueReferenceKey]);
+
+  useEffect(() => {
     if (!liveDispatchMapReferenceKey) {
       setAdminActiveJobsMapReadState((current) => {
         if (current.activeJobs.length === 0 && current.markerCount === 0) {
@@ -26719,6 +28045,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
       void refreshAdminTodayJobMessageHistory(bookingReference);
     }
+    void refreshDashboardDriverJobLinksRead(activeJobDriverStatusReferenceList);
   }
 
   async function refreshAdminTodayJobMessageHistory(bookingReferenceValue: string) {
@@ -26746,7 +28073,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       const messages = (result.notifications as AdminTodayJobMessageRecord[]).filter(
         (message) =>
           message.workflow_area === "customer_driver_quick_replies" ||
-          message.workflow_area === "admin_driver_job_messages",
+          message.workflow_area === "admin_driver_job_messages" ||
+          message.workflow_area === "admin_customer_job_messages",
       );
       setAdminTodayJobMessageHistories((current) => ({
         ...current,
@@ -26770,6 +28098,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminTodayJobDriverMessageStates((current) => ({
       ...current,
       [bookingReference]: {
+        audience: current[bookingReference]?.audience || "driver",
         draft,
         message: "",
         status: "idle",
@@ -26777,17 +28106,40 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     }));
   }
 
-  async function sendAdminTodayJobDriverMessage(bookingReferenceValue: string) {
+  function updateAdminTodayJobMessageAudience(
+    bookingReferenceValue: string,
+    audience: AdminTodayJobMessageAudience,
+  ) {
+    const bookingReference = cleanReferenceText(bookingReferenceValue);
+
+    if (!bookingReference) {
+      return;
+    }
+
+    setAdminTodayJobDriverMessageStates((current) => ({
+      ...current,
+      [bookingReference]: {
+        audience,
+        draft: current[bookingReference]?.draft || "",
+        message: "",
+        status: "idle",
+      },
+    }));
+  }
+
+  async function sendAdminTodayJobMessage(bookingReferenceValue: string) {
     const bookingReference = cleanReferenceText(bookingReferenceValue);
     const currentState = adminTodayJobDriverMessageStates[bookingReference];
+    const audience = currentState?.audience || "driver";
     const safeMessage = clean(currentState?.draft).slice(0, 500);
 
     if (!bookingReference || !safeMessage) {
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
+          audience,
           draft: current[bookingReference]?.draft || "",
-          message: "Type a message for the driver first.",
+          message: `Type a message for the ${audience} first.`,
           status: "error",
         },
       }));
@@ -26797,62 +28149,92 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     setAdminTodayJobDriverMessageStates((current) => ({
       ...current,
       [bookingReference]: {
+        audience,
         draft: current[bookingReference]?.draft || safeMessage,
-        message: "Checking the driver link...",
+        message: audience === "driver" ? "Checking the driver link..." : "Checking customer app access...",
         status: "loading",
       },
     }));
 
     try {
-      const linkParams = new URLSearchParams({
-        booking_reference: bookingReference,
-        limit: "1",
-        link_status: "active",
-        page: "1",
-      });
-      const linkResponse = await fetch(`${adminDriverJobLinksApiPath}?${linkParams.toString()}`, {
-        cache: "no-store",
-        headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
-        method: "GET",
-      });
-      const linkResult = await linkResponse.json().catch(() => null);
-      const activeLink = Array.isArray(linkResult?.links)
-        ? (linkResult.links as AdminDriverJobLinkRecord[]).find(
-            (link) =>
-              link.link_status === "active" &&
-              cleanReferenceText(link.booking_reference) === bookingReference,
-          ) || null
-        : null;
+      let activeDriverJobLinkId: string | null = null;
 
-      if (!linkResponse.ok || !linkResult?.ok) {
-        throw new Error(linkResult?.error || "Driver link could not be checked.");
-      }
-
-      if (!activeLink?.id) {
-        throw new Error("Driver link required. Open Driver Link Setup, create the link, and send it to the driver first.");
-      }
-
-      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
-        body: JSON.stringify({
+      if (audience === "driver") {
+        const linkParams = new URLSearchParams({
           booking_reference: bookingReference,
-          delivery_surface: "driver_app",
-          driver_job_link_id: activeLink.id,
-          event_key: `${bookingReference}:admin-driver-message:${Date.now()}`,
-          notification_status: "queued",
-          notification_type: "trip_update",
-          priority: "normal",
-          safe_context: {
-            audience: "admin_driver",
-            external_send: false,
-            provider_send: false,
-            recipient_role: "driver",
-            sender_role: "admin",
-            source: "today_jobs",
-          },
-          safe_message: safeMessage,
-          safe_title: "Message from dispatch",
-          workflow_area: "admin_driver_job_messages",
-        }),
+          limit: "1",
+          link_status: "active",
+          page: "1",
+        });
+        const linkResponse = await fetch(`${adminDriverJobLinksApiPath}?${linkParams.toString()}`, {
+          cache: "no-store",
+          headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+          method: "GET",
+        });
+        const linkResult = await linkResponse.json().catch(() => null);
+        const activeLink = Array.isArray(linkResult?.links)
+          ? (linkResult.links as AdminDriverJobLinkRecord[]).find(
+              (link) =>
+                link.link_status === "active" &&
+                cleanReferenceText(link.booking_reference) === bookingReference,
+            ) || null
+          : null;
+
+        if (!linkResponse.ok || !linkResult?.ok) {
+          throw new Error(linkResult?.error || "Driver link could not be checked.");
+        }
+
+        if (!activeLink?.id) {
+          throw new Error("Driver link required. Open Driver Link Setup, create the link, and send it to the driver first.");
+        }
+
+        activeDriverJobLinkId = activeLink.id;
+      }
+
+      const notificationPayload =
+        audience === "customer"
+          ? {
+              booking_reference: bookingReference,
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: `${bookingReference}:admin-customer-message:${Date.now()}`,
+              notification_status: "queued",
+              notification_type: "trip_update",
+              priority: "normal",
+              safe_context: {
+                audience: "admin_customer",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "customer",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: safeMessage,
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }
+          : {
+              booking_reference: bookingReference,
+              delivery_surface: "driver_app",
+              driver_job_link_id: activeDriverJobLinkId,
+              event_key: `${bookingReference}:admin-driver-message:${Date.now()}`,
+              notification_status: "queued",
+              notification_type: "trip_update",
+              priority: "normal",
+              safe_context: {
+                audience: "admin_driver",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "driver",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: safeMessage,
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_driver_job_messages",
+            };
+      const response = await fetch(adminCustomerDriverAppNotificationsApiPath, {
+        body: JSON.stringify(notificationPayload),
         headers: {
           "Content-Type": "application/json",
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -26864,17 +28246,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       if (
         !response.ok ||
         !result?.ok ||
-        result?.notification?.delivery_surface !== "driver_app" ||
+        result?.notification?.delivery_surface !== notificationPayload.delivery_surface ||
         cleanReferenceText(result?.notification?.booking_reference) !== bookingReference
       ) {
-        throw new Error(result?.error || "Message could not be queued for this driver.");
+        throw new Error(result?.error || `Message could not be queued for this ${audience}.`);
       }
 
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
+          audience,
           draft: "",
-          message: "Message queued in the driver’s job page.",
+          message:
+            audience === "driver"
+              ? `Queued to Driver Job page at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`
+              : `Queued to Customer App at ${adminDriverJobStatusTimeLabel(new Date().toISOString())}.`,
           status: "success",
         },
       }));
@@ -26883,8 +28269,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       setAdminTodayJobDriverMessageStates((current) => ({
         ...current,
         [bookingReference]: {
+          audience,
           draft: current[bookingReference]?.draft || safeMessage,
-          message: error instanceof Error ? error.message : "Message could not be queued for this driver.",
+          message: error instanceof Error ? error.message : `Message could not be queued for this ${audience}.`,
           status: "error",
         },
       }));
@@ -26893,7 +28280,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
   const activeJobsMonitorPanel = (
     <section
-      aria-label="Today's Jobs"
+      aria-label="Active Assigned Jobs"
       className="rounded-md border border-lime-200 bg-lime-50/70 p-2 sm:p-3"
       data-dashboard-day-of-trip-operations-monitor="true"
       data-dispatch-day-of-trip-operations-monitor="true"
@@ -26901,7 +28288,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-lime-950">Today&apos;s Jobs</h3>
+          <h3 className="text-base font-semibold text-lime-950">Active Assigned Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
             All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.
           </p>
@@ -26950,6 +28337,35 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             Pickup risk {adminPickupRiskMonitorEnabled ? "On" : "Off"}
           </button>
           <span
+            className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
+              dashboardDriverJobLinksReadState.status === "error"
+                ? "bg-rose-100 text-rose-900 ring-rose-200"
+                : activeJobDriverStatusReferenceList.length === 0
+                  ? "bg-emerald-100 text-emerald-900 ring-emerald-200"
+                : dashboardDriverJobLinksReadState.status !== "loaded"
+                  ? "bg-slate-100 text-slate-700 ring-slate-200"
+                  : activeJobDriverAcknowledgementWaitingCount > 0
+                    ? "bg-amber-100 text-amber-950 ring-amber-200"
+                    : "bg-emerald-100 text-emerald-900 ring-emerald-200"
+            }`}
+            data-admin-multi-driver-active-jobs-waiting-count={
+              activeJobDriverStatusReferenceList.length === 0
+                ? "0"
+                : dashboardDriverJobLinksReadState.status === "loaded"
+                ? String(activeJobDriverAcknowledgementWaitingCount)
+                : "unknown"
+            }
+          >
+            {activeJobDriverStatusReferenceList.length === 0
+              ? "0 waiting"
+              : dashboardDriverJobLinksReadState.status === "idle" ||
+                  dashboardDriverJobLinksReadState.status === "loading"
+              ? "Checking acknowledgements"
+              : dashboardDriverJobLinksReadState.status === "error"
+                ? "Acknowledgement read error"
+                : <>{activeJobDriverAcknowledgementWaitingCount} waiting</>}
+          </span>
+          <span
             className="w-fit rounded-full bg-lime-100 px-2.5 py-1 text-xs font-semibold uppercase text-lime-900 ring-1 ring-lime-200"
             data-admin-multi-driver-active-jobs-count={String(dayOfTripActiveJobBookings.length)}
           >
@@ -26959,7 +28375,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       </div>
       {dayOfTripActiveJobVisibleBookings.length > 0 ? (
         <div className={`mt-3 grid gap-2 ${dayOfTripActiveJobGridClass}`}>
-          {dayOfTripActiveJobVisibleBookings.map((activeJobBooking) => {
+          {dayOfTripActiveJobVisibleBookings.map((activeJobBooking, activeJobIndex) => {
             const activeJobBookingReference = getActiveJobBookingReference(activeJobBooking);
             const isSelectedActiveJob =
               Boolean(activeJobBookingReference) &&
@@ -27008,6 +28424,48 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   )
                   .join(" → ")
               : "No driver reports yet";
+            const activeJobDriverLink =
+              dashboardDriverJobLinksReadState.linksByReference[activeJobBookingReference] || null;
+            const activeJobDriverAcknowledgementState =
+              dashboardDriverJobLinksReadState.status === "error"
+                ? {
+                    label: "Acknowledgement read error",
+                    state: "error" as const,
+                    title: "The active Driver Job Link acknowledgement could not be read safely.",
+                  }
+                : dashboardDriverJobLinksReadState.status !== "loaded" && !activeJobDriverLink
+                  ? {
+                      label: "Checking acknowledgement",
+                      state: "checking" as const,
+                      title: "Checking the exact active Driver Job Link.",
+                    }
+                  : !activeJobDriverLink
+                    ? {
+                        label: "No active link",
+                        state: "no-link" as const,
+                        title: "This booking has no active Driver Job Link.",
+                      }
+                    : activeJobDriverLink.safe_summary.acknowledged
+                      ? {
+                          label: `Acknowledged${
+                            adminDriverJobAcknowledgementCompactTimeLabel(
+                              activeJobDriverLink.safe_summary.acknowledged_at,
+                            )
+                              ? ` ${adminDriverJobAcknowledgementCompactTimeLabel(
+                                  activeJobDriverLink.safe_summary.acknowledged_at,
+                                )}`
+                              : ""
+                          }`,
+                          state: "acknowledged" as const,
+                          title: `Driver acknowledged ${adminDriverJobStatusTimeLabel(
+                            activeJobDriverLink.safe_summary.acknowledged_at,
+                          )}.`,
+                        }
+                      : {
+                          label: "Waiting for driver",
+                          state: "waiting" as const,
+                          title: "The exact active Driver Job Link has not been acknowledged yet.",
+                        };
             const activeJobDriverOtsPhotoProofReadState =
               activeJobDriverOtsPhotoProofReadStateForBooking(
                 activeJobBookingReference,
@@ -27031,21 +28489,29 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             const activeJobDriverOtsPhotoProofTime = activeJobDriverOtsPhotoProofLatest
               ? adminDriverJobStatusTimeLabel(activeJobDriverOtsPhotoProofLatest.uploaded_at)
               : "";
-            const activeJobStatus =
-              activeJobDriverStatusLatest
-                ? activeJobDriverStatusLabel
-                : bookingStatusLabel(activeJobBooking.status);
             const activeJobKey = bookingRecordStableKey(activeJobBooking);
             const activeJobDriverMessageState =
               adminTodayJobDriverMessageStates[activeJobBookingReference] || {
+                audience: "driver" as const,
                 draft: "",
                 message: "",
                 status: "idle" as const,
               };
+            const activeJobDriverMessagingClosed =
+              activeJobDriverStatusLatest?.status_value === "completed";
             const activeJobMessageHistory = adminTodayJobMessageHistories[activeJobBookingReference] || {
               messages: [],
               status: "idle" as const,
             };
+            const activeJobLatestAdminCustomerMessage = activeJobMessageHistory.messages.find(
+              (message) =>
+                message.workflow_area === "admin_customer_job_messages" &&
+                message.delivery_surface === "customer_app",
+            );
+            const activeJobCustomerMessageQueuedTime =
+              adminDriverJobAcknowledgementCompactTimeLabel(
+                activeJobLatestAdminCustomerMessage?.created_at,
+              );
             const activeJobCompletionMessage =
               bookingCompletionMessages[activeJobKey] ?? null;
             const activeJobPickupRiskState = pickupRiskStateForActiveJob(
@@ -27055,17 +28521,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             );
             const activeJobPickupApproachEvidence =
               adminPickupApproachEvidenceByReference[activeJobBookingReference] || null;
+            const activeJobAlternateColour = activeJobIndex % 2 === 0 ? "sky" : "violet";
+            const activeJobAlternateCardClass =
+              activeJobAlternateColour === "sky"
+                ? `${isSelectedActiveJob ? "border-lime-400" : "border-sky-300"} bg-sky-50/80`
+                : `${isSelectedActiveJob ? "border-lime-400" : "border-violet-300"} bg-violet-50/80`;
             const activeJobCardStateClass = adminPickupRiskMonitorEnabled
               ? adminPickupRiskCardClass(activeJobPickupRiskState.level)
-              : isSelectedActiveJob
-                ? "border-lime-400 bg-white"
-                : "border-lime-100 bg-white";
+              : activeJobAlternateCardClass;
 
             return (
               <article
-                className={`min-w-0 rounded-md border px-2.5 py-2 text-sm ${
+                className={`min-w-0 rounded-md border-2 px-2.5 py-2 text-sm shadow-sm ${
                   activeJobCardStateClass
                 } ${activeJobPickupRiskState.pulse ? "animate-pulse" : ""}`}
+                data-admin-active-job-alternate-colour={activeJobAlternateColour}
                 data-admin-multi-driver-active-job={
                   activeJobBookingReference || activeJobKey
                 }
@@ -27083,7 +28553,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-lime-950">
-                      {compactBookingReference(activeJobBookingReference)}
+                      {bookingPublicReference(activeJobBooking)}
                     </p>
                     <p className="truncate text-xs text-lime-800">
                       {formatPickupDateTime(
@@ -27093,12 +28563,40 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
+                    {activeJobLatestAdminCustomerMessage ? (
+                      <span
+                        className="max-w-[12rem] truncate rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-950"
+                        data-admin-active-job-customer-message-queued="true"
+                        title={`${activeJobBookingReference || "Booking"}: Admin message queued to the customer app${
+                          activeJobCustomerMessageQueuedTime
+                            ? ` at ${activeJobCustomerMessageQueuedTime} SGT`
+                            : ""
+                        }. Customer receipt or read is not claimed.`}
+                      >
+                        Customer msg queued{activeJobCustomerMessageQueuedTime
+                          ? ` ${activeJobCustomerMessageQueuedTime}`
+                          : ""}
+                      </span>
+                    ) : null}
                     <span
-                      className={`max-w-[7rem] truncate rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        isSelectedActiveJob ? "bg-lime-700 text-white" : "bg-slate-100 text-slate-700"
+                      className={`max-w-[10rem] truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                        activeJobDriverAcknowledgementState.state === "acknowledged"
+                          ? "border-emerald-300 bg-emerald-100 text-emerald-900"
+                          : activeJobDriverAcknowledgementState.state === "waiting"
+                            ? "border-amber-300 bg-amber-100 text-amber-950"
+                            : activeJobDriverAcknowledgementState.state === "error"
+                              ? "border-rose-300 bg-rose-100 text-rose-900"
+                              : "border-slate-300 bg-slate-100 text-slate-700"
+                      }`}
+                      data-admin-multi-driver-active-job-acknowledgement="true"
+                      data-admin-multi-driver-active-job-acknowledgement-state={
+                        activeJobDriverAcknowledgementState.state
+                      }
+                      title={`${activeJobBookingReference || "Booking"}: ${
+                        activeJobDriverAcknowledgementState.title
                       }`}
                     >
-                      {isSelectedActiveJob ? "Open" : activeJobStatus}
+                      {activeJobDriverAcknowledgementState.label}
                     </span>
                     {adminPickupRiskMonitorEnabled ? (
                       <span
@@ -27244,7 +28742,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                 ? "Customer → Driver"
                                 : message.actor_role === "driver"
                                   ? "Driver → Customer"
-                                  : "Admin → Driver"}
+                                  : message.delivery_surface === "customer_app"
+                                    ? "Admin → Customer"
+                                    : "Admin → Driver"}
                             </p>
                             <p className="mt-0.5 break-words text-slate-800">{message.safe_message || "Message unavailable"}</p>
                             {message.created_at ? <p className="mt-0.5 text-[10px] text-slate-500">{adminDriverJobStatusTimeLabel(message.created_at)}</p> : null}
@@ -27258,12 +28758,50 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     )}
                   </div>
                   <div className="mt-2 grid gap-2">
+                    <fieldset
+                      className="grid gap-1"
+                      data-admin-active-job-message-audience="true"
+                    >
+                      <legend className="font-semibold">Send message to</legend>
+                      <div className="grid grid-cols-2 gap-1 rounded-md border border-sky-200 bg-white p-1">
+                        {(["driver", "customer"] as const).map((audience) => {
+                          const isSelectedAudience = activeJobDriverMessageState.audience === audience;
+                          const audienceLabel = audience === "driver" ? "Driver" : "Customer";
+
+                          return (
+                            <button
+                              aria-pressed={isSelectedAudience}
+                              className={`h-7 rounded px-2 font-semibold transition ${
+                                isSelectedAudience
+                                  ? "bg-sky-700 text-white"
+                                  : "bg-white text-sky-900 hover:bg-sky-50"
+                              }`}
+                              data-admin-active-job-message-audience-option={audience}
+                              key={audience}
+                              onClick={() =>
+                                updateAdminTodayJobMessageAudience(
+                                  activeJobBookingReference,
+                                  audience,
+                                )
+                              }
+                              type="button"
+                            >
+                              {audienceLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                     <label className="grid gap-1 font-semibold">
                       Message
                       <textarea
-                        aria-label={`Message driver for ${activeJobBookingReference}`}
-                        className="min-h-20 w-full rounded-md border border-sky-300 bg-white p-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-700"
+                        aria-label={`Message ${activeJobDriverMessageState.audience} for ${activeJobBookingReference}`}
+                        className="min-h-20 w-full rounded-md border border-sky-300 bg-white p-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                         data-admin-active-job-driver-message-input="true"
+                        disabled={
+                          activeJobDriverMessagingClosed &&
+                          activeJobDriverMessageState.audience === "driver"
+                        }
                         maxLength={500}
                         onChange={(event) =>
                           updateAdminTodayJobDriverMessageDraft(
@@ -27271,7 +28809,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             event.target.value,
                           )
                         }
-                        placeholder="Type a short instruction for this driver"
+                        placeholder={`Type a short job message for this ${activeJobDriverMessageState.audience}`}
                         value={activeJobDriverMessageState.draft}
                       />
                     </label>
@@ -27281,14 +28819,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         data-admin-active-job-driver-message-send="true"
                         disabled={
                           activeJobDriverMessageState.status === "loading" ||
-                          !clean(activeJobDriverMessageState.draft)
+                          !clean(activeJobDriverMessageState.draft) ||
+                          (activeJobDriverMessagingClosed &&
+                            activeJobDriverMessageState.audience === "driver")
                         }
-                        onClick={() => void sendAdminTodayJobDriverMessage(activeJobBookingReference)}
+                        onClick={() => void sendAdminTodayJobMessage(activeJobBookingReference)}
                         type="button"
                       >
-                        {activeJobDriverMessageState.status === "loading" ? "Checking link" : "Send to Driver"}
+                        {activeJobDriverMessageState.status === "loading"
+                          ? activeJobDriverMessageState.audience === "driver"
+                            ? "Checking link"
+                            : "Checking access"
+                          : activeJobDriverMessageState.audience === "driver"
+                            ? "Send to Driver"
+                            : "Send to Customer"}
                       </button>
                       {activeJobDriverMessageState.status === "error" &&
+                      !activeJobDriverMessagingClosed &&
+                      activeJobDriverMessageState.audience === "driver" &&
                       activeJobDriverMessageState.message.startsWith("Driver link required") ? (
                         <button
                           className="h-8 flex-1 rounded-md border border-indigo-300 bg-white px-2 font-semibold text-indigo-900 hover:bg-indigo-50"
@@ -27300,7 +28848,15 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         </button>
                       ) : null}
                     </div>
-                    {activeJobDriverMessageState.message ? (
+                    {activeJobDriverMessagingClosed &&
+                    activeJobDriverMessageState.audience === "driver" ? (
+                      <p
+                        className="rounded-md border border-slate-300 bg-slate-100 px-2 py-1 font-semibold text-slate-800"
+                        data-admin-active-job-driver-message-closed="true"
+                      >
+                        Driver messaging closed after Job Completed.
+                      </p>
+                    ) : activeJobDriverMessageState.message ? (
                       <p
                         className={`rounded-md border px-2 py-1 font-semibold ${
                           activeJobDriverMessageState.status === "success"
@@ -27315,7 +28871,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       </p>
                     ) : null}
                     <p className="text-[11px] text-sky-800">
-                      Visible to admin and this driver only. Customers cannot see this message.
+                      {activeJobDriverMessageState.audience === "driver"
+                        ? "Visible to admin and this driver only. Customers cannot see this message."
+                        : "Visible to admin and this customer only. Driver cannot see this message."}
                     </p>
                   </div>
                 </div>
@@ -27403,8 +28961,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 className="rounded-full bg-lime-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lime-900 sm:px-2 sm:text-[10px]"
                 data-dispatch-live-driver-map-marker-count={activeJobsMapMarkerCount}
               >
-                {activeJobsMapMarkerCount} driver
-                {activeJobsMapMarkerCount === 1 ? "" : "s"}
+                {activeJobsMapMarkerCount} live
+                {activeJobsMapStalePinCount > 0
+                  ? ` · ${activeJobsMapStalePinCount} stale`
+                  : ""}
               </span>
               <span
                 className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-900 sm:px-2 sm:text-[10px]"
@@ -27565,7 +29125,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     <div className="min-w-0">
                       <p className="break-words font-semibold leading-3">
                         {job.driver_display_label || "Assigned driver"} ·{" "}
-                        {compactBookingReference(job.assigned_job_reference || "")}
+                        {cleanReferenceText(job.public_job_reference) ||
+                          "Reference unavailable"}
                       </p>
                       <p className="break-words text-[10px] leading-3 text-lime-900">
                         {job.is_stale ? "Stale" : "Current"} ·{" "}
@@ -29984,7 +31545,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   const monthlyInvoiceDraftSaving = adminMonthlyInvoiceDraftAction === "save-draft-prep";
   const monthlyInvoiceDraftSaveDisabled =
     !monthlyBillingSavedGroupingPrimaryGroup ||
-    monthlyBillingSavedGroupingTotalTrips < 1 ||
+    monthlyBillingSavedGroupingReadyTripsCount < 1 ||
     monthlyBillingSavedGroupingLoading ||
     monthlyInvoiceDraftLoading ||
     monthlyInvoiceDraftSaving;
@@ -30783,6 +32344,24 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : bookingSaveMessage?.tone === "error"
       ? "error"
       : null;
+  const appliedAdminBookingSnapshotHasQueuedCustomerRequestNotification = Boolean(
+    appliedAdminBookingSnapshotReference &&
+      newBookingRequestNotifications.some(
+        (notification) =>
+          adminAppNotificationBookingReference(notification).toLowerCase() ===
+          appliedAdminBookingSnapshotReference.toLowerCase(),
+      ),
+  );
+  const appliedAdminBookingSnapshotRequestReviewStatus = clean(
+    appliedAdminBookingSnapshot?.request_review_status,
+  ).toLowerCase();
+  const appliedAdminBookingSnapshotIsPendingCustomerRequest = Boolean(
+    appliedAdminBookingSnapshot &&
+      (adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot) ||
+        appliedAdminBookingSnapshotHasQueuedCustomerRequestNotification) &&
+      appliedAdminBookingSnapshotRequestReviewStatus !== "approved" &&
+      appliedAdminBookingSnapshotRequestReviewStatus !== "declined",
+  );
   const bookingSaveButtonLabel = saving
     ? "Saving..."
     : bookingUpdateInFlight
@@ -30790,7 +32369,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : bookingSaveSucceededForCurrentDraft
       ? "Saved"
       : activeAppliedBookingReference
-        ? "Update + Cal"
+        ? appliedAdminBookingSnapshotIsPendingCustomerRequest
+          ? "Accept + Cal"
+          : "Update + Cal"
       : "Save + CRM";
   function handleJobCardPrimaryBookingAction() {
     if (activeAppliedBookingReference) {
@@ -30808,7 +32389,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     customerCopyFeedback?.tone === "success" && /copied/i.test(customerCopyFeedback.text);
   const customerDriverDetailsPortalLinkCopyMatchesReference =
     !customerDriverDetailsPortalLinkCopyState?.loadedReference ||
-    customerDriverDetailsPortalLinkCopyState.loadedReference === customerDriverDetailsPortalBookingReference;
+    customerDriverDetailsPortalLinkCopyState.loadedReference ===
+      (customerDriverDetailsPortalBookingReference || customerBookingInvitationCopyStateKey);
   const customerDriverDetailsPortalLinkCopyDisplayState =
     customerDriverDetailsPortalLinkCopyMatchesReference
       ? customerDriverDetailsPortalLinkCopyState
@@ -30824,11 +32406,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       ? "Copying link"
       : customerDriverDetailsPortalLinkCopyDisplayState?.portalLinkCopied
         ? "Copied + link"
-        : "Copy + App Link";
+        : customerDriverDetailsPortalBookingReference
+          ? "Copy + App Link"
+          : "Copy Booking Invite";
   const customerDriverDetailsPortalLinkCopyDisabled =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info" ||
-    !dispatchReleaseCustomerCopyReady ||
-    !customerDriverDetailsPortalAccountReference;
+    (Boolean(customerDriverDetailsPortalBookingReference) &&
+      (!customerDriverDetailsPortalLinkCopyReady ||
+        !customerDriverDetailsPortalAccountReference ||
+        !customerDriverDetailsPortalCompanyId ||
+        !customerDriverDetailsPortalBookerId));
   const driverDispatchCopied =
     driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
   const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
@@ -30907,20 +32494,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
       : adminCustomerDriverDetailsCustomerInAppSent
         ? "In-App queued"
         : "Send In-App";
-  const adminCustomerDriverDetailsDriverInAppSent =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loaded";
-  const adminCustomerDriverDetailsDriverInAppButtonTone: Message["tone"] | null =
-    adminCustomerDriverDetailsDriverInAppSent
-      ? "success"
-      : adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "error"
-        ? "error"
-        : null;
-  const adminCustomerDriverDetailsDriverInAppButtonLabel =
-    adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus === "loading"
-      ? "Queuing Driver In-App"
-      : adminCustomerDriverDetailsDriverInAppSent
-        ? "Driver In-App queued"
-        : "Send Driver In-App";
   const driverJobLinkCreated =
     adminDriverJobLinkState.message?.tone === "success" &&
     /created/i.test(adminDriverJobLinkState.message.text);
@@ -31054,6 +32627,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
   ) {
     dashboardSystemNoticeCandidates.push(adminAppNotificationReadState.message);
   }
+  if (adminEmailAiIntakeReadState.message?.text) {
+    dashboardSystemNoticeCandidates.push(adminEmailAiIntakeReadState.message);
+  }
 
   const dashboardSystemNotices = Array.from(
     new Map(
@@ -31067,12 +32643,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
     : dashboardSystemNotices.some((notice) => notice.tone === "info")
       ? "info"
       : "success";
+  const adminEmailAiTokenUsage = adminEmailAiIntakeReadState.tokenUsage;
+  const adminEmailAiTokenUsageLabel =
+    adminEmailAiIntakeReadState.status === "loading" ||
+    adminEmailAiIntakeReadState.status === "idle"
+      ? "..."
+      : adminEmailAiTokenUsage?.available
+        ? new Intl.NumberFormat("en-SG", {
+            maximumFractionDigits: 1,
+            notation: "compact",
+          }).format(adminEmailAiTokenUsage.total_tokens)
+        : "—";
 
   return (
     <main className="admin-ops-shell min-h-screen bg-stone-50 text-slate-950">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 py-3 sm:px-4 lg:px-6">
-        <header className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+        <header
+          className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-end sm:justify-between"
+          data-admin-mobile-compact-header="true"
+        >
+          <div data-admin-mobile-header-title="true">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Internal limousine operations
             </p>
@@ -31088,11 +32678,40 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               Build {deployedBuildCommitShort}
             </p>
           </div>
-          <div className="flex flex-col gap-1.5 sm:min-w-72">
-            <div className="grid grid-cols-3 gap-1.5 text-center">
+          <div
+            className="flex flex-col gap-1.5 sm:min-w-80"
+            data-admin-mobile-header-actions="true"
+          >
+            <div
+              className="grid grid-cols-4 gap-1.5 text-center"
+              data-admin-mobile-header-status="true"
+            >
               <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
                 <p className="text-[11px] text-slate-500">Saved</p>
                 <p className="text-base font-semibold">{operationalBookings.length}</p>
+              </div>
+              <div
+                className="rounded-md border border-stone-200 bg-white px-2 py-1.5"
+                data-admin-email-ai-monthly-token-usage="true"
+                data-admin-email-ai-monthly-token-usage-available={
+                  adminEmailAiTokenUsage?.available ? "true" : "false"
+                }
+                data-admin-email-ai-monthly-token-usage-month={
+                  adminEmailAiTokenUsage?.month_key || ""
+                }
+                data-admin-email-ai-monthly-token-usage-total={
+                  adminEmailAiTokenUsage?.available
+                    ? String(adminEmailAiTokenUsage.total_tokens)
+                    : ""
+                }
+                title="Current Singapore-month Email AI usage. OpenAI API has no fixed token balance."
+              >
+                <p className="text-[11px] text-slate-500">Email AI</p>
+                <p className="text-sm font-semibold">
+                  {adminEmailAiTokenUsage?.available
+                    ? `${adminEmailAiTokenUsageLabel} used`
+                    : adminEmailAiTokenUsageLabel}
+                </p>
               </div>
               <div className="rounded-md border border-stone-200 bg-white px-2 py-1.5">
                 <p className="text-[11px] text-slate-500">Status</p>
@@ -31116,6 +32735,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         <nav
           aria-label="Primary operations tabs"
           className="sticky top-0 z-10 grid grid-cols-3 gap-1 rounded-md border border-stone-200 bg-stone-100/95 p-1 shadow-sm backdrop-blur sm:grid-cols-7"
+          data-admin-mobile-primary-tabs="true"
           role="tablist"
         >
           {appTabs.map((tab) => {
@@ -31138,7 +32758,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                data-app-tab={tab.id}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
-                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}
+	                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}
                 data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
 	                data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
@@ -31239,7 +32859,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </p>
               <p className="text-[11px] text-slate-500">Routes</p>
             </div>
-            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6">
+            <div
+              className="grid min-w-0 flex-1 grid-cols-3 gap-1.5 sm:grid-cols-6"
+              data-admin-mobile-access-links="true"
+            >
               {adminAccessLinks.map((link) => (
                 <Link
                   className="inline-flex min-h-8 items-center justify-center rounded border border-stone-200 bg-stone-50 px-2 text-center text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-white"
@@ -37635,8 +39258,46 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ) : null}
 
         {activeTab === "dispatch" ? (
-        <section className="flex min-w-0 flex-col gap-2.5" data-dispatch-workflow="true">
+        <section
+          className="flex min-w-0 flex-col gap-2.5"
+          data-dispatch-workflow="true"
+          data-mobile-dispatch-step={mobileDispatchBookingStep}
+        >
           <div className="contents">
+            <nav
+              aria-label="Quick booking steps"
+              className="order-0 grid grid-cols-4 gap-1 rounded-md border border-slate-200 bg-white p-1 md:hidden"
+              data-mobile-dispatch-quick-booking="true"
+            >
+              {mobileDispatchBookingSteps.map(({ label, step }) => (
+                <button
+                  aria-current={mobileDispatchBookingStep === step ? "step" : undefined}
+                  className={`min-h-10 rounded px-1.5 py-1 text-[11px] font-semibold transition ${
+                    mobileDispatchBookingStep === step
+                      ? "bg-slate-950 text-white"
+                      : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                  }`}
+                  data-mobile-dispatch-quick-step={step}
+                  key={step}
+                  onClick={() => setMobileDispatchBookingStep(step)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+              <div
+                className="col-span-4 min-w-0 border-t border-slate-200 px-1 pt-1 text-[10px] leading-4 text-slate-600"
+                data-mobile-dispatch-booking-summary="true"
+              >
+                <p className="truncate font-semibold text-slate-900">
+                  {clean(booking.name) || "Passenger not set"} · {String(Number(clean(booking.pax)) || 1)} pax
+                </p>
+                <p className="truncate">
+                  {clean(booking.pickup) || "Pickup not set"} → {clean(booking.dropoff) || "Drop-off not set"}
+                </p>
+                <p className="text-slate-500">Nothing saves automatically.</p>
+              </div>
+            </nav>
             <section
               className="order-10 min-w-0 rounded-md border border-stone-200 bg-white p-2.5"
               data-dispatch-workflow-step="booking-input-parser"
@@ -37653,6 +39314,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   setBooking(() => createInitialBooking());
                   clearLoadedBookingSelectionContext();
                   clearBookingMessageInput();
+                  setMobileDispatchBookingStep("message");
                 }}
               >
                 Clear
@@ -37660,9 +39322,41 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </div>
 
             <div className="mb-2.5 rounded-md border border-stone-200 bg-stone-50 p-2">
+              <div
+                aria-label="AI Assist mode"
+                className="mb-2 grid max-w-md grid-cols-2 gap-1 rounded-md border border-indigo-200 bg-indigo-50 p-1"
+                data-ai-assist-mode-selector="true"
+                role="group"
+              >
+                {([
+                  ["parser", "Booking Parser"],
+                  ["conversation", "Ask AI"],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    aria-pressed={aiAssistMode === mode}
+                    className={`min-h-11 rounded px-3 py-2 text-xs font-semibold transition md:min-h-9 ${
+                      aiAssistMode === mode
+                        ? "bg-indigo-900 text-white shadow-sm"
+                        : aiAssistLoading
+                          ? "cursor-not-allowed bg-white text-indigo-300"
+                          : "bg-white text-indigo-900 hover:bg-indigo-100"
+                    }`}
+                    data-ai-assist-mode={mode}
+                    disabled={aiAssistLoading}
+                    key={mode}
+                    onClick={() => {
+                      setAiAssistMode(mode);
+                      clearParseArtifacts();
+                    }}
+                    type="button"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <label>
                 <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Paste Booking Message
+                  {aiAssistMode === "parser" ? "Paste Booking Message" : "Ask AI"}
                 </span>
                 <textarea
                   key={bookingMessageResetKey}
@@ -37674,7 +39368,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     setAiAssistMessage(null);
                     setAiAssistResponseNote("");
                   }}
-                  placeholder="Paste WhatsApp, email, or screenshot OCR text here."
+                  placeholder={
+                    aiAssistMode === "parser"
+                      ? "Paste WhatsApp, email, or screenshot OCR text here."
+                      : "Ask a question or paste text for a read-only AI review."
+                  }
                   value={bookingMessage}
                 />
               </label>
@@ -37691,10 +39389,16 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                       }`}
                       disabled={!aiAssistSafetyAccepted || aiAssistLoading}
-                      onClick={handleMockAiAssistParse}
+                      onClick={
+                        aiAssistMode === "parser"
+                          ? handleAiAssistParse
+                          : handleAdminAiConversation
+                      }
                       type="button"
                     >
-                      AI Assist Parse (Mock)
+                      {aiAssistLoading
+                        ? aiAssistMode === "parser" ? "Parsing..." : "Sending..."
+                        : aiAssistMode === "parser" ? "AI Parse Booking" : "Send to AI"}
                     </button>
                     <label
                       className="flex min-h-11 w-full items-center gap-2 rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-tight text-indigo-950 md:min-h-9"
@@ -37712,7 +39416,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         type="checkbox"
                       />
                       <span>
-                        Tick the AI safety checkbox to enable AI Assist
+                        AI is review-only and cannot change or send anything
                       </span>
                     </label>
                     {aiAssistLoading ? (
@@ -37721,13 +39425,19 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                         className="text-xs font-medium text-indigo-900"
                         data-ai-assist-loading="true"
                       >
-                        Loading mock AI Assist draft...
+                        {aiAssistMode === "parser" ? "Preparing AI review draft..." : "Waiting for AI reply..."}
                       </p>
                     ) : null}
                   </div>
                   <button
-                    className="min-h-11 w-full rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 md:min-h-9"
+                    className={`min-h-11 w-full rounded-md px-2.5 py-1.5 text-xs font-semibold transition md:min-h-9 ${
+                      aiAssistMode === "parser"
+                        ? "bg-slate-950 text-white hover:bg-slate-800"
+                        : "cursor-not-allowed bg-slate-200 text-slate-500"
+                    }`}
+                    disabled={aiAssistMode !== "parser"}
                     onClick={handleParseBookingMessage}
+                    title={aiAssistMode === "parser" ? undefined : "Switch to Booking Parser to create a job card."}
                     type="button"
                   >
                     Create Job Card
@@ -37738,6 +39448,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     onClick={() => {
                       clearLoadedBookingSelectionContext();
                       clearBookingMessageInput();
+                      setMobileDispatchBookingStep("message");
                     }}
                     style={{ minHeight: 44 }}
                     type="button"
@@ -37759,7 +39470,39 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   {aiAssistMessage.text}
                 </p>
               ) : null}
-              {aiDraft ? (
+              {aiAssistMode === "conversation" ? (
+                <div
+                  aria-live="polite"
+                  className="mt-3 max-h-96 space-y-2 overflow-y-auto rounded-lg border border-indigo-200 bg-white p-3"
+                  data-admin-ai-conversation="true"
+                >
+                  {aiConversationMessages.length > 0 ? (
+                    aiConversationMessages.map((conversationMessage, index) => (
+                      <div
+                        className={`rounded-md px-3 py-2 text-sm ${
+                          conversationMessage.role === "admin"
+                            ? "ml-6 bg-slate-900 text-white"
+                            : "mr-6 border border-indigo-200 bg-indigo-50 text-indigo-950"
+                        }`}
+                        key={`${conversationMessage.role}-${index}`}
+                      >
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                          {conversationMessage.role === "admin" ? "Admin" : "AI"}
+                        </p>
+                        <p className="whitespace-pre-wrap">{conversationMessage.text}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Ask about the text you provide. AI cannot access or change live app data.
+                    </p>
+                  )}
+                  {aiAssistResponseNote ? (
+                    <p className="text-xs font-medium text-indigo-900">{aiAssistResponseNote}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {aiAssistMode === "parser" && aiDraft ? (
                 <div
                   className="mt-3 rounded-lg border-2 border-indigo-300 bg-indigo-50 p-4 shadow-sm"
                   data-ai-assist-draft="true"
@@ -37988,6 +39731,69 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     {adminDispatchVerifiedTravelerOptions.map((traveler) => <option key={traveler.id} value={traveler.id}>{clean(traveler.traveler_name) || `Traveler ${traveler.id}`}</option>)}
                   </select>
                 </label>
+                {adminEmailAiCustomerStatus ? (
+                  <div
+                    className={`rounded-md border px-3 py-2 text-xs font-semibold md:col-span-3 ${
+                      adminEmailAiCustomerStatus === "repeated"
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                        : adminEmailAiCustomerStatus === "new"
+                          ? "border-sky-300 bg-sky-50 text-sky-950"
+                          : "border-amber-300 bg-amber-50 text-amber-950"
+                    }`}
+                    data-admin-email-ai-customer-status="true"
+                    data-admin-email-ai-customer-status-value={adminEmailAiCustomerStatus}
+                  >
+                    {adminEmailAiCustomerStatus === "checking" ? (
+                      <p>Checking Email AI customer against the verified CRM list.</p>
+                    ) : adminEmailAiCustomerStatus === "unavailable" ? (
+                      <>
+                        <p>Customer check unavailable</p>
+                        <p className="font-medium">
+                          The verified CRM list did not load. No new or repeated customer is
+                          assumed; reload the CRM identities before Save + CRM.
+                        </p>
+                      </>
+                    ) : adminEmailAiCustomerStatus === "repeated" &&
+                      adminEmailAiRepeatedCustomerCandidate ? (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p>Repeated customer</p>
+                          <p className="font-medium">
+                            {clean(adminEmailAiRepeatedCustomerCandidate.traveler_name)} ·{" "}
+                            {clean(adminEmailAiRepeatedCustomerCandidate.booker_name)}. Confirm the
+                            exact verified CRM chain before saving.
+                          </p>
+                        </div>
+                        <button
+                          className="h-8 shrink-0 rounded-md border border-emerald-700 bg-white px-3 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+                          data-admin-email-ai-use-repeated-customer="true"
+                          onClick={applyAdminEmailAiRepeatedCustomerCandidate}
+                          type="button"
+                        >
+                          Use repeated customer
+                        </button>
+                      </div>
+                    ) : adminEmailAiCustomerStatus === "new" ? (
+                      <>
+                        <p>New customer</p>
+                        <p className="font-medium">
+                          No verified CRM traveller matches this Email AI passenger. Review the
+                          customer information before Save + CRM; invoicing remains blocked until
+                          an exact verified PA / booker and traveller are selected.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>Ambiguous customer</p>
+                        <p className="font-medium">
+                          A passenger-name match exists, but the verified company or PA / booker
+                          evidence does not identify one exact CRM chain. Select the exact company,
+                          PA / booker, and traveller manually.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 {!ratesLoaded ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.")} type="button">Load CRM identities</button> : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -38192,102 +39998,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </p>
                           </div>
             </details>
-
-            {customerMatchSuggestion ? (
-              <section
-                className="order-[100] rounded-md border border-emerald-200 bg-emerald-50 p-3"
-                data-customer-match-suggestion="true"
-                data-dispatch-workflow-step="admin-lower-customer-match"
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h3 className="text-base font-semibold text-emerald-950">Customer Match Suggestion</h3>
-                    <p className="mt-1 text-sm text-emerald-900">
-                      Mock/local only. Dispatcher must confirm; no customer record, CRM record, payment record, or
-                      Supabase row is created.
-                    </p>
-                  </div>
-                  <span
-                    className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-950"
-                    data-customer-match-confidence="true"
-                  >
-                    {customerMatchSuggestion.confidence}
-                  </span>
-                </div>
-
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                  <div className="rounded-md border border-emerald-200 bg-white p-3">
-                    <dt className="font-semibold text-emerald-950">Suggested customer/folder</dt>
-                    <dd className="mt-1 text-slate-900" data-customer-match-name="true">
-                      {customerMatchSuggestion.customerId ? (
-                        <Link
-                          className="font-bold text-emerald-900 underline underline-offset-4"
-                          href={`/customers/${customerMatchSuggestion.customerId}`}
-                        >
-                          {customerMatchSuggestion.customerName}
-                        </Link>
-                      ) : (
-                        customerMatchSuggestion.customerName
-                      )}
-                    </dd>
-                  </div>
-                  <div className="rounded-md border border-emerald-200 bg-white p-3">
-                    <dt className="font-semibold text-emerald-950">Suggested action</dt>
-                    <dd className="mt-1 text-slate-900" data-customer-match-action="true">
-                      {customerMatchSuggestion.suggestedAction}
-                    </dd>
-                  </div>
-                  <div className="rounded-md border border-emerald-200 bg-white p-3 sm:col-span-2">
-                    <dt className="font-semibold text-emerald-950">Match reason</dt>
-                    <dd className="mt-1 text-slate-900" data-customer-match-reason="true">
-                      {customerMatchSuggestion.matchReason}
-                    </dd>
-                  </div>
-                </dl>
-
-                <p className="mt-3 text-xs leading-5 text-emerald-950">
-                  Mock action choices: Link to existing customer, Create new customer folder, Update existing customer
-                  contact, or Leave unlinked. This does not auto-create or overwrite any account.
-                </p>
-
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <button
-                    className="h-10 rounded-md bg-emerald-900 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
-                    data-customer-match-action-button="link"
-                    onClick={() => setMockCustomerMatchAction("link")}
-                    type="button"
-                  >
-                    Link Mock Customer
-                  </button>
-                  <button
-                    className="h-10 rounded-md border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-100"
-                    data-customer-match-action-button="create"
-                    onClick={() => setMockCustomerMatchAction("create")}
-                    type="button"
-                  >
-                    Create Mock Customer
-                  </button>
-                  <button
-                    className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                    data-customer-match-action-button="leave"
-                    onClick={() => setMockCustomerMatchAction("leave")}
-                    type="button"
-                  >
-                    Leave Unlinked
-                  </button>
-                </div>
-
-                {customerMatchFeedback ? (
-                  <p
-                    aria-live="polite"
-                    className={`mt-3 rounded-md border px-3 py-2 text-sm font-medium ${statusClass(customerMatchFeedback.tone)}`}
-                    data-customer-match-feedback={customerMatchFeedback.action}
-                  >
-                    {customerMatchFeedback.text}
-                  </p>
-                ) : null}
-              </section>
-            ) : null}
 
             <div className="order-[32]" data-dispatch-workflow-step="admin-lower-pricing">
               {pricingPanel}
@@ -38559,7 +40269,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             </section>
 
             {shouldShowParserDebugPanel && parsedDebugBooking ? (
-              <div className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div
+                className="order-[100] rounded-md border border-slate-200 bg-slate-50 p-3"
+                data-mobile-dispatch-review-panel="parser-debug-details"
+              >
                 {parsedDebugBooking.parserWarning ? (
                   <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
                     {parsedDebugBooking.parserWarning}
@@ -38623,7 +40336,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             ) : null}
 
             {parsedDebugBooking ? (
-              <div className="order-[100] flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div
+                className="order-[100] flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                data-mobile-dispatch-review-panel="parser-debug-control"
+              >
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Parser debug</p>
                   <p className="text-xs text-slate-500">Hidden by default for daily operations.</p>
@@ -38639,7 +40355,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
             ) : null}
 
             {hasNeedsReviewWarnings ? (
-              <div className="order-[33] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <div
+                className="order-[33] rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                data-mobile-dispatch-review-panel="review-notes"
+              >
                 <p className="font-semibold">Review notes</p>
                 <p className="mt-1">Check these data-quality notes when practical. Admin can still save drafts.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -38984,7 +40703,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         <div className="min-w-0">
                           <p className="break-words font-semibold text-emerald-950">
-                            {record.booking_reference}
+                            {bookingPublicReference(record)}
                           </p>
                           <p className="mt-0.5 break-words text-slate-500">
                             {adminBookingPersistencePickupDisplay(record)}
@@ -42142,10 +43861,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       disabled={customerDriverDetailsPortalLinkCopyDisabled}
                       onClick={copyCustomerDriverDetailsWithCustomerAppLink}
                       title={
-                        !dispatchReleaseCustomerCopyReady
-                          ? "Complete trip and assigned-driver details first. Live location is not required for the app link."
+                        !customerDriverDetailsPortalBookingReference
+                          ? "Copy a private one-time /book invitation for a genuine new customer. Paste/send it manually; no SMS or provider message is sent."
+                          : !customerDriverDetailsPortalLinkCopyReady
+                          ? "Complete the saved trip details first. Driver assignment and live location are not required for the app link."
                           : !customerDriverDetailsPortalAccountReference
                             ? "Save + CRM or load the saved booking before copying a customer app link."
+                            : !customerDriverDetailsPortalCompanyId || !customerDriverDetailsPortalBookerId
+                              ? "Select and save the verified CRM company and booker before copying a customer app link."
                             : "Copy customer-safe driver details with a customer app link. Live location appears only when ready; no provider message is sent."
                       }
                       type="button"
@@ -42241,6 +43964,13 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       data-admin-customer-driver-details-manual-channel-note="true"
                     >
                       WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.
+                    </p>
+                    <p
+                      className="mt-1 min-w-0 break-all text-[10px] leading-4 text-emerald-900"
+                      data-admin-customer-driver-details-email-recipient="true"
+                    >
+                      <span className="font-semibold">Email recipient:</span>{" "}
+                      {adminCustomerDriverDetailsEmailReviewCustomerEmail || "Not set"}
                     </p>
                     <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
@@ -42491,8 +44221,8 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               data-driver-message-disclosure="true"
             >
               <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <h2 className="text-lg font-semibold">Driver Message</h2>
-                <p className="text-xs text-slate-500">Short update or manual fallback for the assigned driver.</p>
+                <h2 className="text-lg font-semibold">Manual WhatsApp Copy — Optional</h2>
+                <p className="text-xs text-slate-500">Copy the assigned-driver update, then paste it into WhatsApp manually.</p>
               </summary>
               <div className="mt-3">
               <div className="mb-2 flex flex-col items-start gap-2 sm:items-end">
@@ -42549,36 +44279,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     >
                       {driverDispatchCopied ? "Copied" : "Copy"}
                     </button>
-                    <button
-                      aria-label="Send Driver In-App update to the assigned driver"
-                      className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 ${
-                        actionFeedbackButtonClass(
-                          adminCustomerDriverDetailsDriverInAppButtonTone,
-                          "border-sky-300 bg-white text-sky-900 hover:bg-sky-50",
-                        )
-                      }`}
-                      data-admin-customer-driver-details-driver-in-app-send-action="true"
-                      data-admin-customer-driver-details-driver-in-app-send-action-state={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.actionStatus
-                      }
-                      data-admin-customer-driver-details-driver-in-app-send-delivery-surface={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.deliverySurface
-                      }
-                      data-admin-customer-driver-details-driver-in-app-send-external-send="false"
-                      data-admin-customer-driver-details-driver-in-app-send-loaded-reference={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.loadedReference
-                      }
-                      data-admin-customer-driver-details-driver-in-app-send-no-provider-send="true"
-                      data-admin-customer-driver-details-driver-in-app-send-notification-status={
-                        adminCustomerDriverDetailsDriverInAppDisplayState.notificationStatus
-                      }
-                      disabled={!adminCustomerDriverDetailsDriverInAppCanSend}
-                      onClick={sendAdminCustomerDriverDetailsDriverInAppNotification}
-                      title={adminCustomerDriverDetailsDriverInAppActionLabel}
-                      type="button"
-                    >
-                      {adminCustomerDriverDetailsDriverInAppButtonLabel}
-                    </button>
                   </div>
                   {driverDispatchFeedback?.tone === "error" ? (
                     <div
@@ -42588,19 +44288,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       {driverDispatchFeedback.text}
                     </div>
                   ) : null}
-                  <details
-                    className="rounded-md border border-sky-100 bg-sky-50/70 px-2 py-1 text-xs font-medium text-sky-950"
-                    data-dispatch-compact-panel="driver-in-app-admin-checks"
-                    data-admin-customer-driver-details-driver-in-app-send-status="true"
-                  >
-                    <summary
-                      className="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
-                      title={adminCustomerDriverDetailsDriverInAppDisplayState.message}
-                    >
-                      Driver In-App status
-                    </summary>
-                    <p className="mt-1">{adminCustomerDriverDetailsDriverInAppStatusText}</p>
-                  </details>
                 </div>
               </div>
               {driverDispatchCopyEditState.isEditing ? (
@@ -42748,7 +44435,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     data-driver-job-link-booking-details="true"
                     data-driver-job-link-handoff-notice="true"
                   >
-                    <p className="font-semibold">Booking {dispatchReleaseWorkflowBookingReference}</p>
+                    <p className="font-semibold">
+                      Booking {dispatchPublicBookingReference || "Reference unavailable"}
+                    </p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div>
                         <p className="text-xs font-semibold uppercase text-indigo-700">Passenger</p>
@@ -42898,6 +44587,77 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
               </div>
             ) : null}
 
+            <section
+              className={`order-[55] min-w-0 rounded-md border p-3 transition ${
+                pendingDriverAckQueueItems.length > 0
+                  ? "animate-pulse border-amber-400 bg-amber-50 motion-reduce:animate-none"
+                  : "border-emerald-200 bg-emerald-50"
+              }`}
+              data-pending-driver-ack-queue="true"
+              data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}
+              data-pending-driver-ack-queue-pulsing={
+                pendingDriverAckQueueItems.length > 0 ? "true" : "false"
+              }
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    Pending for Driver ACK Queue
+                  </h2>
+                  <p className="text-xs text-slate-600">
+                    Newest active Driver Job Link for each exact booking. Link issued means created in this app.
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-sm font-bold ${
+                    pendingDriverAckQueueItems.length > 0
+                      ? "border-amber-400 bg-white text-amber-950"
+                      : "border-emerald-300 bg-white text-emerald-900"
+                  }`}
+                  data-pending-driver-ack-queue-count-badge="true"
+                >
+                  {pendingDriverAckQueueItems.length} pending
+                </span>
+              </div>
+              {pendingDriverAckQueueItems.length > 0 ? (
+                <ol
+                  className="mt-3 max-h-64 space-y-2 overflow-y-auto"
+                  data-pending-driver-ack-queue-list="true"
+                >
+                  {pendingDriverAckQueueItems.map((item, index) => (
+                    <li
+                      className="flex flex-col gap-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950 sm:flex-row sm:items-center sm:justify-between"
+                      data-pending-driver-ack-queue-booking-reference={item.bookingReference}
+                      data-pending-driver-ack-queue-item="true"
+                      data-pending-driver-ack-queue-link-id={item.linkId}
+                      key={item.linkId}
+                    >
+                      <span>
+                        {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
+                        {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
+                          ? "Waiting"
+                          : `Waiting ${item.waitingMinutes} min`}
+                      </span>
+                      <button
+                        aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}
+                        className="min-h-11 shrink-0 rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                        data-pending-driver-ack-dismiss={item.linkId}
+                        onClick={() => dismissPendingDriverAckAlert(item.linkId)}
+                        title="Dismiss this alert only. The driver job link remains active."
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-3 text-sm font-semibold text-emerald-900">
+                  No driver acknowledgements pending.
+                </p>
+              )}
+            </section>
+
             <div className="order-[100]" data-dispatch-workflow-step="admin-lower-status">
               {statusPanel}
             </div>
@@ -42914,7 +44674,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
         ) : null}
 
         {activeTab === "completed" ? (
-        <section className="rounded-md border border-stone-200 bg-white p-3">
+        <section
+          className="rounded-md border border-stone-200 bg-white p-3"
+          id="completed-history"
+        >
           <div className="mb-3">
             <h2 className="text-lg font-semibold">Completed / History</h2>
             <p className="text-xs text-slate-500">
@@ -43404,6 +45167,21 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                 </div>
 
                 <label>
+                  <span className="mb-1 block text-sm font-medium text-slate-700">
+                    Invoice sign-off name (admin)
+                  </span>
+                  <input
+                    className="h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+                    data-company-profile-field="invoice_signoff_name"
+                    onChange={(event) =>
+                      updateCompanyProfileDraft("invoice_signoff_name", event.target.value)
+                    }
+                    placeholder="Finance Team"
+                    value={companyProfileDraft.invoice_signoff_name}
+                  />
+                </label>
+
+                <label>
                   <span className="mb-1 block text-sm font-medium text-slate-700">Invoice footer terms</span>
                   <textarea
                     className="min-h-24 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
@@ -43461,6 +45239,17 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   ) : (
                     <p className="mt-2">Stripe card: not shown.</p>
                   )}
+                </div>
+                <div className="mt-3 rounded-md border border-white bg-white p-2 text-xs leading-5 text-slate-700">
+                  <p className="font-semibold text-slate-900">Invoice sign-off</p>
+                  <p>Thank you for your business</p>
+                  <p className="mt-2">Best Regards,</p>
+                  <p>{companyProfileDraft.invoice_signoff_name}</p>
+                  <p>{companyProfileDraft.phone}</p>
+                </div>
+                <div className="mt-3 rounded-md border border-white bg-white p-2 text-xs leading-5 text-slate-700">
+                  <p className="font-semibold text-slate-900">Terms &amp; Conditions</p>
+                  <p className="whitespace-pre-wrap">{companyProfileDraft.invoice_footer_terms}</p>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-slate-500">
                   Customer-facing public settings only. This does not generate invoices, payment links,
@@ -43659,7 +45448,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
           <div className="mt-6 border-t border-stone-200 pt-5">
             <h3 className="text-base font-semibold">Company / Boss Overrides</h3>
-            <div className="mt-3 grid gap-3 lg:grid-cols-4">
+            <div className="mt-3 grid gap-3 lg:grid-cols-5">
               <label>
                 <span className="mb-1 block text-sm font-medium text-slate-700">Company / Account</span>
                 <input
@@ -43694,6 +45483,26 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   type="checkbox"
                 />
                 Transzend privacy
+              </label>
+              <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
+                <input
+                  checked={rateOverrideDraft.cardOptionDefaultEnabled}
+                  data-rate-card-option-default="true"
+                  onChange={(event) =>
+                    setRateOverrideDraft((current) => ({
+                      ...current,
+                      cardOptionDefaultEnabled: event.target.checked,
+                      cardOptionDefaultTouched: true,
+                    }))
+                  }
+                  type="checkbox"
+                />
+                <span>
+                  Invoice card option on by default
+                  <span className="block text-[11px] font-normal text-slate-500">
+                    Company applies to all its invoices. Boss / Name may override it.
+                  </span>
+                </span>
               </label>
               <div className="self-end">
                 <button
@@ -43737,7 +45546,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             onChange={(event) => updateCompanyOverrideRate(bookingType, vehicleType, event.target.value)}
                             placeholder="-"
                             type="number"
-                            value={customerRateValue(rateOverrideDraft.customerRates, bookingType, vehicleType) ?? ""}
+                            value={customerRateOverrideMatrixValue(
+                              rateOverrideDraft.customerRates,
+                              bookingType,
+                              vehicleType,
+                            ) ?? ""}
                           />
                         </td>
                       ))}
@@ -43813,6 +45626,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             <p className="font-medium">{companyRecord.company_name}</p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
                             <p className="text-xs text-slate-600">{summary.driverText}</p>
+                            <p className="text-xs text-slate-600">
+                              {cardOptionDefaultSummary(companyRecord)}
+                            </p>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
                               <button
                                 className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
@@ -43821,6 +45637,10 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord.company_name),
                                     bossName: "",
+                                    cardOptionDefaultEnabled: Boolean(
+                                      companyRecord.card_option_default_enabled,
+                                    ),
+                                    cardOptionDefaultTouched: false,
                                     customerRates: normalizeCustomerRateRules(companyRecord.customer_rates),
                                     driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
                                     transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
@@ -43902,6 +45722,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             </p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
                             <p className="text-xs text-slate-600">{summary.driverText}</p>
+                            <p className="text-xs text-slate-600">
+                              {cardOptionDefaultSummary(travelerRecord, companyRecord)}
+                            </p>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
                               <button
                                 className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
@@ -43910,6 +45733,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord?.company_name),
                                     bossName: clean(travelerRecord.traveler_name),
+                                    cardOptionDefaultEnabled:
+                                      typeof travelerRecord.card_option_default_enabled === "boolean"
+                                        ? travelerRecord.card_option_default_enabled
+                                        : Boolean(companyRecord?.card_option_default_enabled),
+                                    cardOptionDefaultTouched: false,
                                     customerRates: normalizeCustomerRateRules(travelerRecord.customer_rates),
                                     driverPayoutRules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
                                     transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),
@@ -44056,7 +45884,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-semibold text-slate-950">
-                            {compactBookingReference(bookingReference)}
+                            {bookingPublicReference(bookingRecord)}
                           </span>
                           <span className="block truncate text-xs text-slate-500">
                             {formatPickupDateTime(
@@ -44103,7 +45931,11 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   Internal admin inbox only. External messages are not sent from here.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <div
+                className="flex flex-wrap items-center gap-2 sm:justify-end"
+                data-admin-device-push-panel="true"
+                data-admin-device-push-state={adminDevicePushState.status}
+              >
                 <span
                   className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-sky-800"
                   data-admin-app-notification-feed-state="true"
@@ -44118,6 +45950,46 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                           ? `${otherAdminAppNotifications.length} other`
                           : "Ready"}
                 </span>
+                <button
+                  aria-checked={adminDevicePushState.status === "enabled"}
+                  className={`h-7 rounded-full border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
+                    adminDevicePushState.status === "enabled"
+                      ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
+                      : "border-sky-300 bg-white text-sky-800 hover:bg-sky-50"
+                  }`}
+                  data-admin-device-push-compact-control="true"
+                  data-admin-device-push-toggle="true"
+                  disabled={
+                    adminDevicePushAction !== null ||
+                    !adminDevicePushState.supported ||
+                    (adminDevicePushState.status !== "enabled" && !adminDevicePushState.publicKey)
+                  }
+                  onClick={
+                    adminDevicePushState.status === "enabled"
+                      ? handleAdminDevicePushDisable
+                      : handleAdminDevicePushEnable
+                  }
+                  role="switch"
+                  title={adminDevicePushState.message?.text}
+                  type="button"
+                >
+                  {adminDevicePushAction
+                    ? adminDevicePushAction === "enable"
+                      ? "Turning ON..."
+                      : "Turning OFF..."
+                    : adminDevicePushState.status === "enabled"
+                      ? "Push ON"
+                      : "Push OFF"}
+                </button>
+                {adminDevicePushState.message ? (
+                  <span
+                    aria-live="polite"
+                    className="sr-only"
+                    data-admin-device-push-feedback="true"
+                  >
+                    {adminDevicePushState.message.text}
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -44195,14 +46067,84 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                   >
                     {customerBookingChangeRequestCount} change/cancel
                   </span>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase ring-1 ${
+                      adminEmailAiIntakeCount > 0
+                        ? "bg-indigo-100 text-indigo-900 ring-indigo-200"
+                        : "bg-white text-slate-600 ring-stone-200"
+                    }`}
+                    data-dashboard-email-ai-intake-count={String(adminEmailAiIntakeCount)}
+                  >
+                    {adminEmailAiIntakeCount} email
+                  </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-600 sm:text-sm">
                     New, urgent, Driver TBC, amendment, and cancellation work in one place. Each row states its job type.
+                    Only confirmed booking, amendment, and cancellation email reviews appear here.
                   </p>
                 </div>
               </div>
             {dashboardBookingRequestRowCount > 0 ? (
               <div className="mt-3 grid gap-2" data-dashboard-new-booking-request-rows="true">
+                {adminEmailAiIntakeRecords.map((record) => {
+                  const intakeId = clean(record.id);
+                  const classification = clean(record.classification).toLowerCase();
+                  const classificationLabel =
+                    classification === "confirmed_booking"
+                      ? "Confirmed booking"
+                      : classification === "amendment"
+                          ? "Amendment"
+                          : classification === "cancellation"
+                            ? "Cancellation"
+                            : "Needs review";
+                  const confidence = Math.round(
+                    Math.min(1, Math.max(0, Number(record.confidence) || 0)) * 100,
+                  );
+
+                  return (
+                    <article
+                      className="rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm shadow-sm"
+                      data-dashboard-email-ai-intake-row={intakeId || "email-review"}
+                      key={`email-ai-intake-${intakeId || clean(record.created_at)}`}
+                    >
+                      <div className="grid gap-2 md:grid-cols-[minmax(12rem,0.9fr)_minmax(12rem,1fr)_auto] md:items-center">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-900 ring-1 ring-indigo-200">
+                              Email · booking@prestigelimo.sg
+                            </span>
+                            <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                              {classificationLabel}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate font-semibold text-slate-950">
+                            {clean(record.subject) || "No subject"}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            From {clean(record.sender_address)} · {confidence}% confidence
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-slate-800">
+                            {clean(record.summary) || "Manual review required."}
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-slate-500">
+                            AI review only · no reply sent · no booking saved
+                          </p>
+                        </div>
+                        <div className="flex md:justify-end">
+                          <button
+                            className="h-8 rounded-md border border-indigo-300 bg-indigo-800 px-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                            onClick={() => openAdminEmailAiIntakeReview(record)}
+                            type="button"
+                          >
+                            Review in Dispatch
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
                 {newBookingRequestNotifications.map((notification, index) => {
                   const notificationId = clean(notification.id);
                   const bookingReference = adminAppNotificationBookingReference(notification);
@@ -44221,6 +46163,9 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     : savedRecord;
                   const displayRecord = loadedRecord ||
                     (savedRecord ? adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord) : null);
+                  const displayReference = displayRecord
+                    ? bookingPublicReference(displayRecord)
+                    : "New booking request";
                   const routeText = safeRecord
                     ? adminBookingPersistenceRouteSummary(safeRecord) ||
                       [clean(safeRecord.pickup_location), clean(safeRecord.dropoff_location)]
@@ -44258,7 +46203,7 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                             {isUrgent ? "New / Urgent" : "New"}
                           </span>
                           <p className="mt-1 truncate font-semibold text-slate-950">
-                            {bookingReference || clean(notification.safe_title) || "New booking request"}
+                            {displayReference}
                           </p>
                           <p className="truncate text-xs text-slate-500">
                             {displayRecord ? formatBookingPickupDateTimeSgt(displayRecord) : "Pickup time pending review"}
@@ -44303,45 +46248,89 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                     operationalCard.route_points_summary ||
                     (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
                   const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
+                  const statusBookingId = bookingRecordStableKey(bookingRecord);
                   const isCustomerRequest = bookingRecordIsCustomerBookingRequest(bookingRecord);
+                  const isOverdue =
+                    !isCustomerRequest && bookingRecordIsPickupOverdue(bookingRecord, currentTimeMs);
                   const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, bookingRecord);
+                  const overdueResolutionMessage = bookingCompletionMessages[statusBookingId] || null;
 
                   return (
-                    <button
-                      className="grid min-h-10 gap-1 rounded-md border border-amber-200 bg-white px-3 py-2 text-left text-sm transition hover:bg-amber-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                    <article
+                      className="overflow-hidden rounded-md border border-amber-200 bg-white text-sm"
                       data-dashboard-new-booking-request-row={bookingId}
                       data-dashboard-urgent-booking-request-kind={
                         isCustomerRequest ? "customer-request" : "driver-tbc"
                       }
                       data-dashboard-urgent-booking-request-row={bookingId}
                       key={`dashboard-request-${bookingId}`}
-                      onClick={() => {
-                        loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
-                      }}
-                      type="button"
                     >
-                      <span className="min-w-0">
-                        <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
-                          {isCustomerRequest ? "New / Urgent" : "Driver TBC"}
+                      <button
+                        className="grid min-h-10 w-full gap-1 px-3 py-2 text-left transition hover:bg-amber-50 md:grid-cols-[minmax(9rem,0.8fr)_minmax(10rem,0.8fr)_minmax(12rem,1.2fr)] md:items-center"
+                        data-dashboard-overdue-booking-open={isOverdue ? bookingId : undefined}
+                        onClick={() => {
+                          loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
+                        }}
+                        type="button"
+                      >
+                        <span className="min-w-0">
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                            {isCustomerRequest ? "New / Urgent" : "Driver TBC"}
+                          </span>
+                          <span className="block truncate font-semibold text-slate-950">
+                            {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}
+                          </span>
+                          <span className="block truncate text-xs text-slate-500">
+                            {formatBookingPickupDateTimeSgt(bookingRecord)}
+                          </span>
                         </span>
-                        <span className="block truncate font-semibold text-slate-950">
-                          {getLoadBookingsOperationalRequestDisplayTitle(operationalCard, bookingRecord)}
+                        <span className="truncate text-slate-800">
+                          Passenger: {passengerText}
                         </span>
-                        <span className="block truncate text-xs text-slate-500">
-                          {formatBookingPickupDateTimeSgt(bookingRecord)}
+                        <span className="truncate text-slate-700">
+                          {isCustomerRequest
+                            ? `Needs driver link | ${routeText}`
+                            : `${isOverdue ? "Overdue" : "Driver TBC under 1h"} | ${routeText}`}
                         </span>
-                      </span>
-                      <span className="truncate text-slate-800">
-                        Passenger: {passengerText}
-                      </span>
-                      <span className="truncate text-slate-700">
-                        {isCustomerRequest
-                          ? `Needs driver link | ${routeText}`
-                          : `Driver TBC under 1h | ${routeText}`}
-                      </span>
                       </button>
-                    );
-                  })}
+                      {isOverdue ? (
+                        <div
+                          className="flex flex-wrap justify-end gap-2 border-t border-amber-100 bg-amber-50/70 px-3 py-2"
+                          data-dashboard-overdue-booking-actions={bookingId}
+                        >
+                          <button
+                            className="h-8 rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-dashboard-overdue-booking-completed={bookingId}
+                            disabled={completingBookingId === statusBookingId}
+                            onClick={() => void resolveDashboardOverdueBooking(bookingRecord, "completed")}
+                            type="button"
+                          >
+                            {completingBookingId === statusBookingId ? "Working..." : "Completed"}
+                          </button>
+                          <button
+                            className="h-8 rounded-md border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            data-dashboard-overdue-booking-cancel={bookingId}
+                            disabled={completingBookingId === statusBookingId}
+                            onClick={() => void resolveDashboardOverdueBooking(bookingRecord, "cancelled")}
+                            type="button"
+                          >
+                            {completingBookingId === statusBookingId ? "Working..." : "Cancel"}
+                          </button>
+                        </div>
+                      ) : null}
+                      {isOverdue && overdueResolutionMessage ? (
+                        <p
+                          className={`border-t px-3 py-2 text-xs font-semibold ${statusClass(
+                            overdueResolutionMessage.tone,
+                          )}`}
+                          data-dashboard-overdue-booking-message={bookingId}
+                        >
+                          {overdueResolutionMessage.text}
+                        </p>
+                      ) : null}
+                    </article>
+                  );
+                })}
                 {customerBookingChangeRequestNotifications.map((notification) => {
                   const notificationId = clean(notification.id);
                   const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
@@ -44450,60 +46439,6 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 
             {codexPreparedJobCardsPanel}
 
-            <div
-              className="mt-2 rounded-md border border-sky-100 bg-white p-2"
-              data-admin-device-push-panel="true"
-              data-admin-device-push-state={adminDevicePushState.status}
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <h4 className="text-sm font-semibold text-slate-950">Device Push Alerts</h4>
-	                  <p className="text-xs text-slate-600">
-	                    Optional phone/Mac browser alert for new booking requests. This does not change the booking queue.
-	                  </p>
-                </div>
-                <button
-                  aria-checked={adminDevicePushState.status === "enabled"}
-                  className={`h-8 rounded-full border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
-                    adminDevicePushState.status === "enabled"
-                      ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
-                      : "border-sky-300 bg-white text-sky-800 hover:bg-sky-50"
-                  }`}
-                  data-admin-device-push-toggle="true"
-                  disabled={
-                    adminDevicePushAction !== null ||
-                    !adminDevicePushState.supported ||
-                    (adminDevicePushState.status !== "enabled" && !adminDevicePushState.publicKey)
-                  }
-                  onClick={
-                    adminDevicePushState.status === "enabled"
-                      ? handleAdminDevicePushDisable
-                      : handleAdminDevicePushEnable
-                  }
-                  role="switch"
-                  type="button"
-                >
-                  {adminDevicePushAction
-                    ? adminDevicePushAction === "enable"
-                      ? "Turning ON..."
-                      : "Turning OFF..."
-                    : adminDevicePushState.status === "enabled"
-                      ? "Push alerts ON"
-                      : "Push alerts OFF"}
-                </button>
-              </div>
-              {adminDevicePushState.message ? (
-                <div
-                  className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${statusClass(
-                    adminDevicePushState.message.tone,
-                  )}`}
-                  data-admin-device-push-feedback="true"
-                >
-                  {adminDevicePushState.message.text}
-                </div>
-              ) : null}
-            </div>
-
             {otherAdminAppNotifications.length > 0 ? (
               <div
                 className="mt-2 grid gap-2"
@@ -44517,6 +46452,14 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
 	                  const notificationStatus = adminAppNotificationDisplayLabel(notification.notification_status);
 	                  const createdTime = adminAppNotificationTimeLabel(notification.created_at);
 	                  const changeRequestContext = adminAppNotificationChangeRequestContext(notification);
+                  const monthlyBillingMonth = adminAppNotificationMonthlyBillingMonth(notification);
+                  const monthlyBillingClassifications =
+                    monthlyBillingMonth &&
+                    adminMonthlyBillingDashboardClassificationState.billingMonth === monthlyBillingMonth
+                      ? adminMonthlyBillingDashboardClassificationState.groups.flatMap(
+                          (group) => group.jobs || [],
+                        )
+                      : [];
                   const isNewBookingRequestNotification =
                     clean(notification.workflow_area) === "new_booking_request" ||
                     clean(notification.safe_title).toLowerCase() === "new booking request";
@@ -44639,7 +46582,73 @@ export default function Home({ initialTab = "dispatch" }: HomeProps = {}) {
                                   ))}
                                 </dl>
                               ) : null}
-		                        </div>
+												{monthlyBillingMonth ? (
+                                <div
+                                  className="mt-2 space-y-1 rounded-md border border-sky-100 bg-sky-50/60 p-2"
+                                  data-admin-monthly-billing-dashboard-classifications="true"
+                                  data-admin-monthly-billing-dashboard-month={monthlyBillingMonth}
+                                >
+                                  <p className="text-xs font-semibold text-slate-800">
+                                    Completed jobs for {adminMonthlyBillingGroupingMonthLabel(monthlyBillingMonth)}
+                                  </p>
+                                  {adminMonthlyBillingDashboardClassificationState.status === "loading" ? (
+                                    <p className="text-xs text-slate-600">Loading classifications...</p>
+                                  ) : adminMonthlyBillingDashboardClassificationState.status === "error" ? (
+                                    <p className="text-xs font-medium text-rose-700">
+                                      {adminMonthlyBillingDashboardClassificationState.message}
+                                    </p>
+                                  ) : monthlyBillingClassifications.length > 0 ? (
+                                    <div className="grid gap-1" data-admin-monthly-billing-dashboard-classification-rows="true">
+                                      {monthlyBillingClassifications.map((job) => {
+                                        const status = job.safe_billing_status || "blocked";
+                                        const statusLabel =
+                                          status === "ready"
+                                            ? "Ready"
+                                            : status === "covered"
+                                              ? "Already invoiced"
+                                              : "Blocked";
+                                        const reference =
+                                          clean(job.display_booking_reference) ||
+                                          clean(job.booking_reference) ||
+                                          "Reference unavailable";
+
+                                        return (
+                                          <div
+                                            className="grid gap-1 rounded border border-sky-100 bg-white px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+                                            data-admin-monthly-billing-dashboard-classification-row={status}
+                                            key={`${clean(job.booking_reference)}-${status}`}
+                                          >
+                                            <div className="min-w-0">
+                                              <p className="break-words font-semibold text-slate-900">
+                                                {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
+                                              </p>
+                                              <p className="mt-0.5 break-words text-[11px] text-slate-600">
+                                                {clean(job.safe_reason) || "Billing review reason unavailable."}
+                                              </p>
+                                            </div>
+                                            <span
+                                              className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                                status === "ready"
+                                                  ? "bg-emerald-100 text-emerald-800"
+                                                  : status === "covered"
+                                                    ? "bg-slate-200 text-slate-800"
+                                                    : "bg-amber-100 text-amber-900"
+                                              }`}
+                                            >
+                                              {statusLabel}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-slate-600">
+                                      No completed jobs were classified for this billing month.
+                                    </p>
+                                  )}
+                                </div>
+                              ) : null}
+											</div>
 	                        <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
 	                          {notificationPriority}
                         </span>

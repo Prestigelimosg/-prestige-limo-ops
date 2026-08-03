@@ -105,6 +105,7 @@ const nonShortNoticeAdminSnapshotPickupDateText = [
 function customerPortalSmokePickupAt(monthKey, day, hour = 9, minute = 0) {
   return `${monthKey}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`;
 }
+let customerPortalSmokePublicReferenceSequence = 92000;
 function customerPortalSmokeSavedBooking({
   bookingReference,
   day,
@@ -120,6 +121,7 @@ function customerPortalSmokeSavedBooking({
   return {
     booking_month: monthKey,
     booking_reference: bookingReference,
+    public_booking_reference: String(++customerPortalSmokePublicReferenceSequence),
     created_at: customerPortalSmokePickupAt(monthKey, Math.max(1, day - 1), 8, 0),
     customer_driver_details: null,
     customer_facing_status: status,
@@ -162,15 +164,23 @@ const customerPortalSavedBookingsSmokePayload = {
     page_size: 25,
   },
   saved_bookings: [
-    customerPortalSmokeSavedBooking({
-      bookingReference: "booking-001",
-      day: 13,
-      dropoffLocation: "Raffles Singapore",
-      passengerName: "Alicia Tan",
-      pickupLocation: "Changi Airport T3",
-      serviceType: "Airport Arrival",
-      status: "confirmed",
-    }),
+    {
+      ...customerPortalSmokeSavedBooking({
+        bookingReference: "booking-001",
+        day: 13,
+        dropoffLocation: "Raffles Singapore",
+        passengerName: "Alicia Tan",
+        pickupLocation: "Changi Airport T3",
+        serviceType: "Airport Arrival",
+        status: "confirmed",
+      }),
+      customer_driver_details: {
+        car_plate: "SMA1234A",
+        car_type: "Mercedes V-Class",
+        driver_contact: "90000001",
+        driver_name: "Simon",
+      },
+    },
     customerPortalSmokeSavedBooking({
       bookingReference: "booking-002",
       day: 14,
@@ -547,7 +557,7 @@ const requiredVisibleText = [
   "Pricing",
   "Route Extras & Child Seat",
   "Job Card Preview",
-  "Driver Message",
+  "Manual WhatsApp Copy — Optional",
   "Find saved jobs",
   "No completed bookings loaded yet.",
   "Operations Dashboard",
@@ -670,25 +680,78 @@ const customerBookingRequestApiPattern = /\/api\/customer-booking-requests(?:[/?
 const customerBookingMemoryApiPattern = /\/api\/customer-booking-memory(?:[/?#]|$)/i;
 const customerPortalSavedBookingsApiPattern = /\/api\/customer-saved-bookings(?:[/?#]|$)/i;
 const customerPortalChangeRequestApiPattern = /\/api\/customer-booking-change-requests(?:[/?#]|$)/i;
+const customerPortalDevicePushApiPattern = /\/api\/customer-device-push-subscriptions(?:[/?#]|$)/i;
 const customerPortalInvoicesApiPattern = /\/api\/customer-invoices(?:[/?#]|$)/i;
 const customerPortalTripUpdatesApiPattern = /\/api\/customer-app-notifications(?:[/?#]|$)/i;
 const combineAllowedRuntimePatterns = (...patterns) =>
   new RegExp(patterns.map((pattern) => pattern.source).join("|"), "i");
-const customerBookingPageRuntimeAllowedPattern = publicCompanyProfileApiPattern;
-const customerBookingMemoryRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerBookingMemoryApiPattern,
+const withAllowedRuntimeCalls = (pattern, ...allowedCalls) => ({
+  test(value) {
+    return pattern.test(value) || allowedCalls.some((allowedCall) => allowedCall(value));
+  },
+});
+const exactSameOriginRscPrefetchCall = (call, targetUrl) => {
+  const requestMatch = /^GET (\S+)$/.exec(call);
+
+  if (!requestMatch) {
+    return false;
+  }
+
+  try {
+    const requestUrl = new URL(requestMatch[1]);
+    const expectedUrl = new URL(targetUrl);
+    const searchEntries = [...requestUrl.searchParams.entries()];
+
+    return (
+      requestUrl.origin === expectedUrl.origin &&
+      requestUrl.pathname === expectedUrl.pathname &&
+      requestUrl.username === "" &&
+      requestUrl.password === "" &&
+      requestUrl.hash === "" &&
+      searchEntries.length === 1 &&
+      searchEntries[0][0] === "_rsc" &&
+      /^[A-Za-z0-9_-]+$/.test(searchEntries[0][1])
+    );
+  } catch {
+    return false;
+  }
+};
+const exactCustomerPortalRscPrefetchCall = (call) =>
+  exactSameOriginRscPrefetchCall(call, customerPortalUrl);
+const exactCustomerBookingRscPrefetchCall = (call) =>
+  exactSameOriginRscPrefetchCall(call, customerBookingUrl);
+const customerBookingPageRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerBookingMemoryApiPattern,
+  ),
+  exactCustomerPortalRscPrefetchCall,
 );
-const customerBookingRequestRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerBookingRequestApiPattern,
+const customerBookingMemoryRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerBookingMemoryApiPattern,
+  ),
+  exactCustomerPortalRscPrefetchCall,
 );
-const customerPortalRuntimeAllowedPattern = combineAllowedRuntimePatterns(
-  publicCompanyProfileApiPattern,
-  customerPortalSavedBookingsApiPattern,
-  customerPortalChangeRequestApiPattern,
-  customerPortalInvoicesApiPattern,
-  customerPortalTripUpdatesApiPattern,
+const customerBookingRequestRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerBookingMemoryApiPattern,
+    customerBookingRequestApiPattern,
+  ),
+  exactCustomerPortalRscPrefetchCall,
+);
+const customerPortalRuntimeAllowedPattern = withAllowedRuntimeCalls(
+  combineAllowedRuntimePatterns(
+    publicCompanyProfileApiPattern,
+    customerPortalSavedBookingsApiPattern,
+    customerPortalChangeRequestApiPattern,
+    customerPortalDevicePushApiPattern,
+    customerPortalInvoicesApiPattern,
+    customerPortalTripUpdatesApiPattern,
+  ),
+  exactCustomerBookingRscPrefetchCall,
 );
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
@@ -785,6 +848,50 @@ function assertNoPublicRouteRuntimeCalls(integrationCalls, resourceCalls, contex
   );
 }
 
+function assertCustomerNavigationRscPrefetchBoundary() {
+  const allowedPortalCall = `GET ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`;
+  const allowedBookingCall = `GET ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH`;
+  const forbiddenCalls = [
+    `POST ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`,
+    `BEACON ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk`,
+    "GET https://example.com/my-bookings?_rsc=q9AXDFxzgqR_RnIk",
+    `GET ${customerPortalUrl}`,
+    `GET ${customerPortalUrl}?_rsc=`,
+    `GET ${customerPortalUrl}?_rsc=q9AXDFxzgqR_RnIk&extra=1`,
+    `GET ${customerPortalUrl}?extra=1&_rsc=q9AXDFxzgqR_RnIk`,
+    `GET ${customerPortalUrl}?_rsc=one&_rsc=two`,
+    `GET ${new URL("/api/customer-saved-bookings", appUrl)}?_rsc=q9AXDFxzgqR_RnIk`,
+    `POST ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH`,
+    `BEACON ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH`,
+    "GET https://example.com/book?_rsc=JuHZozMZvHGet0MH",
+    `GET ${customerBookingUrl}`,
+    `GET ${customerBookingUrl}?_rsc=`,
+    `GET ${customerBookingUrl}?_rsc=JuHZozMZvHGet0MH&extra=1`,
+    `GET ${customerBookingUrl}?extra=1&_rsc=JuHZozMZvHGet0MH`,
+    `GET ${customerBookingUrl}?_rsc=one&_rsc=two`,
+    `GET ${new URL("/api/customer-booking-requests", appUrl)}?_rsc=JuHZozMZvHGet0MH`,
+  ];
+
+  assert.equal(
+    exactCustomerPortalRscPrefetchCall(allowedPortalCall),
+    true,
+    "Expected the exact same-origin read-only Customer Portal RSC prefetch to be allowed",
+  );
+  assert.equal(
+    exactCustomerBookingRscPrefetchCall(allowedBookingCall),
+    true,
+    "Expected the exact same-origin read-only Booking Request RSC prefetch to be allowed",
+  );
+  assert.deepEqual(
+    forbiddenCalls.filter(
+      (call) =>
+        exactCustomerPortalRscPrefetchCall(call) || exactCustomerBookingRscPrefetchCall(call),
+    ),
+    [],
+    "Expected non-GET, external, empty, duplicate, extra-query, and API customer navigation calls to remain blocked",
+  );
+}
+
 function assertNoBrowserPersistenceLeaks(state, context) {
   assert.deepEqual(state.localStorageValues, [], `${context}: expected no localStorage persistence`);
   assert.deepEqual(state.sessionStorageValues, [], `${context}: expected no sessionStorage persistence`);
@@ -855,6 +962,8 @@ async function terminateChromeProcess(chrome) {
 async function runChromeTest() {
   const reporter = createBrowserTestReporter("app-smoke-browser");
   const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
+
+  assertCustomerNavigationRscPrefetchBoundary();
 
   if (!Number.isInteger(chromeDebugPort) || chromeDebugPort <= 0) {
     throw new Error(`Invalid Chrome debug port: ${chromeDebugPort}`);
@@ -927,15 +1036,36 @@ async function runChromeTest() {
         const savedBookingsPayload = ${JSON.stringify(customerPortalSavedBookingsSmokePayload)};
         const savedBookingsPattern = /\\/api\\/customer-saved-bookings(?:[/?#]|$)/i;
         const changeRequestPattern = /\\/api\\/customer-booking-change-requests(?:[/?#]|$)/i;
+        const devicePushPattern = /\\/api\\/customer-device-push-subscriptions(?:[/?#]|$)/i;
+        const tripUpdatesPattern = /\\/api\\/customer-app-notifications(?:[/?#]|$)/i;
+        const quickRepliesPattern = /\\/api\\/customer-driver-quick-replies(?:[/?#]|$)/i;
         const isCustomerPortalPage = () => window.location.pathname === "/my-bookings";
         const originalFetch = window.fetch.bind(window);
 
         window.__customerPortalChangeRequestCalls = [];
+        window.__customerPortalDriverDetailsAcknowledged = false;
+        window.__customerPortalDriverDetailsAcknowledgementCalls = [];
 
         window.fetch = async (input, init = {}) => {
           const target = input?.url || input;
           const method = init?.method || input?.method || "GET";
           const url = String(target);
+
+          if (isCustomerPortalPage() && method === "GET" && devicePushPattern.test(url)) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  ok: true,
+                  readiness: {
+                    enabled: false,
+                    public_key: null,
+                    ready: false,
+                  },
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              ),
+            );
+          }
 
           if (isCustomerPortalPage() && savedBookingsPattern.test(url)) {
             if (Array.isArray(window.__customerPortalIntegrationCalls)) {
@@ -979,6 +1109,122 @@ async function runChromeTest() {
                   status: 200,
                 },
               ),
+            );
+          }
+
+          if (isCustomerPortalPage() && tripUpdatesPattern.test(url)) {
+            const notifications = [
+              ...(window.__customerPortalDriverDetailsAcknowledged
+                ? [
+                    {
+                      booking_reference: "booking-001",
+                      created_at: "2026-07-17T01:02:00.000Z",
+                      delivery_surface: "customer_app",
+                      notification_status: "queued",
+                      notification_type: "trip_update",
+                      priority: "normal",
+                      safe_context: {
+                        direction: "customer_to_admin",
+                        template_key: "customer_driver_details_acknowledged",
+                      },
+                      safe_message: "Driver details acknowledged.",
+                      safe_title: "Driver details acknowledged",
+                      updated_at: "2026-07-17T01:02:00.000Z",
+                      workflow_area: "customer_driver_details_acknowledgements",
+                    },
+                  ]
+                : []),
+              {
+                booking_reference: "booking-001",
+                created_at: "2026-07-17T01:01:00.000Z",
+                delivery_surface: "customer_app",
+                notification_status: "queued",
+                notification_type: "trip_update",
+                priority: "normal",
+                safe_context: {
+                  action: "admin_selected",
+                  message_template: "driver_details_ready",
+                  provider_send: false,
+                  source: "customer_copy_compact_row",
+                },
+                safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+                safe_title: "Driver details ready",
+                updated_at: "2026-07-17T01:01:00.000Z",
+                workflow_area: "customer_app_updates",
+              },
+            ];
+
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  delivery_surface: "customer_app",
+                  external_send: false,
+                  notification_count: notifications.length,
+                  notifications,
+                  ok: true,
+                  provider_send: false,
+                  version: "browser-customer-driver-details-acknowledgement-read-mock",
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              ),
+            );
+          }
+
+          if (isCustomerPortalPage() && quickRepliesPattern.test(url)) {
+            let body = {};
+
+            try {
+              body = JSON.parse(init?.body || input?.body || "{}");
+            } catch {
+              body = {};
+            }
+
+            window.__customerPortalDriverDetailsAcknowledgementCalls.push({ body, method, url });
+
+            if (
+              method === "POST" &&
+              body.booking_reference === "booking-001" &&
+              body.template_key === "customer_driver_details_acknowledged"
+            ) {
+              window.__customerPortalDriverDetailsAcknowledged = true;
+
+              return Promise.resolve(
+                new Response(
+                  JSON.stringify({
+                    delivery_surface: "customer_app",
+                    direction: "customer_to_admin",
+                    external_send: false,
+                    no_provider_send: true,
+                    notification: {
+                      booking_reference: "booking-001",
+                      created_at: "2026-07-17T01:02:00.000Z",
+                      delivery_surface: "customer_app",
+                      notification_status: "queued",
+                      notification_type: "trip_update",
+                      priority: "normal",
+                      safe_context: {
+                        direction: "customer_to_admin",
+                        template_key: "customer_driver_details_acknowledged",
+                      },
+                      safe_message: "Driver details acknowledged.",
+                      safe_title: "Driver details acknowledged",
+                      updated_at: "2026-07-17T01:02:00.000Z",
+                      workflow_area: "customer_driver_details_acknowledgements",
+                    },
+                    ok: true,
+                    provider_send: false,
+                    version: "browser-customer-driver-details-acknowledgement-write-mock",
+                  }),
+                  { headers: { "Content-Type": "application/json" }, status: 200 },
+                ),
+              );
+            }
+
+            return Promise.resolve(
+              new Response(JSON.stringify({ error: "Quick reply blocked by browser guard.", ok: false }), {
+                headers: { "Content-Type": "application/json" },
+                status: 400,
+              }),
             );
           }
 
@@ -1046,7 +1292,9 @@ async function runChromeTest() {
             : [],
           indexedDbNames: await readIndexedDbNames(),
           localStorageValues: readStorage(localStorage),
-          sessionStorageValues: readStorage(sessionStorage),
+          sessionStorageValues: readStorage(sessionStorage).filter(
+            (value) => !value.startsWith("__next_debug_channel:"),
+          ),
         };
       })()`);
 
@@ -1076,7 +1324,7 @@ async function runChromeTest() {
             expectedTabLabels.every((label) => visibleTabLabels.includes(label)) &&
             text.includes("Dispatcher Intake") &&
             text.includes("Job Card Preview") &&
-            text.includes("Driver Message"),
+            text.includes("Manual WhatsApp Copy — Optional"),
           toggleHeight: Math.round(toggle?.getBoundingClientRect().height || 0),
         };
       })()`);
@@ -1304,6 +1552,8 @@ async function runChromeTest() {
             updated_at: "2026-06-08T02:00:00.000Z",
           },
         ];
+        window.__adminCustomerDriverAppNotificationCalls = [];
+        window.__adminCustomerDriverAppNotifications = [];
         window.__adminDriverJobStatusCalls = [];
         window.__adminDriverJobStatusRows = {
           "LOADED-OPS-001": [
@@ -1348,6 +1598,46 @@ async function runChromeTest() {
           const [target, options = {}] = args;
           const url = typeof target === "string" ? target : target?.url || "";
           const method = options?.method || target?.method || "GET";
+
+          if (String(url).includes("/api/admin-customer-driver-app-notifications")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            window.__adminCustomerDriverAppNotificationCalls.push({
+              body,
+              method,
+              url: String(url),
+            });
+
+            if (method === "GET") {
+              return new Response(
+                JSON.stringify({
+                  notifications: window.__adminCustomerDriverAppNotifications,
+                  ok: true,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
+            if (method === "POST") {
+              const notification = {
+                ...body,
+                created_at: "2026-06-08T02:05:00.000Z",
+                id: "app-smoke-customer-booking-confirmation",
+                updated_at: "2026-06-08T02:05:00.000Z",
+              };
+              window.__adminCustomerDriverAppNotifications = [
+                notification,
+                ...window.__adminCustomerDriverAppNotifications,
+              ];
+
+              return new Response(
+                JSON.stringify({
+                  notification,
+                  ok: true,
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+          }
 
           if (String(url).includes("/api/admin-app-notifications")) {
             const parsedUrl = new URL(String(url), window.location.origin);
@@ -1857,7 +2147,10 @@ async function runChromeTest() {
             );
           }
 
-          if (String(url).includes("/api/admin-bookings")) {
+          if (
+            String(url).includes("/api/admin-bookings") ||
+            String(url).includes("/api/admin-saved-bookings")
+          ) {
             const body = options?.body ? JSON.parse(String(options.body)) : null;
             window.__adminBookingPersistenceCalls.push({ body, method, url: String(url) });
 
@@ -1965,6 +2258,7 @@ async function runChromeTest() {
                   bookings: [
                     {
                       booking_reference: "SECOND-OPS-002",
+                      public_booking_reference: "91002",
                       source_channel: "admin-dashboard",
                       customer_id: null,
                       pickup_datetime: "2026-06-05T14:45:00+08:00",
@@ -2042,6 +2336,7 @@ async function runChromeTest() {
                   bookings: [
                     {
                       booking_reference: "LOADED-OPS-001",
+                      public_booking_reference: "91001",
                       source_channel: "admin-dashboard",
                       customer_id: null,
                       pickup_datetime: "2026-06-02T08:15:00+08:00",
@@ -2096,6 +2391,7 @@ async function runChromeTest() {
                     },
                     {
                       booking_reference: "BROKEN-OPS-001",
+                      public_booking_reference: "91004",
                       source_channel: "admin-dashboard",
                       customer_id: null,
                       pickup_datetime: null,
@@ -2129,6 +2425,7 @@ async function runChromeTest() {
                 bookings: [
                   {
                     booking_reference: "LOW-REQ-003",
+                    public_booking_reference: "91003",
                     source_channel: "customer-booking-request",
                     customer_id: null,
                     pickup_datetime: "2030-06-05T14:45:00+08:00",
@@ -2166,6 +2463,7 @@ async function runChromeTest() {
                   },
                   {
                     booking_reference: "LOADED-OPS-001",
+                    public_booking_reference: "91001",
                     source_channel: "customer-booking-request",
                     customer_id: null,
                     pickup_datetime: "2026-06-02T08:15:00+08:00",
@@ -2224,6 +2522,7 @@ async function runChromeTest() {
                   },
                   {
                     booking_reference: "SECOND-OPS-002",
+                    public_booking_reference: "91002",
                     source_channel: "admin-dashboard",
                     customer_id: null,
                     pickup_datetime: "2026-06-05T14:45:00+08:00",
@@ -3367,6 +3666,8 @@ async function runChromeTest() {
               ?.textContent.trim() || "";
             const calls = window.__adminBookingPersistenceCalls || [];
             const calendarSyncCalls = window.__adminBookingCalendarSyncCalls || [];
+            const customerNotificationCalls =
+              window.__adminCustomerDriverAppNotificationCalls || [];
             const matchingPatchCalls = calls.filter(
               (call) => call.method === "PATCH" && call.body?.booking?.pickup_location === "Updated Ops Pickup",
             );
@@ -3374,8 +3675,9 @@ async function runChromeTest() {
             const body = patchCall?.body;
 
             if (
-              !feedback.includes("Operational booking updated: LOADED-OPS-001") ||
+              !feedback.includes("Customer booking request accepted: LOADED-OPS-001") ||
               !feedback.includes("Google Calendar auto-synced") ||
+              !feedback.includes("customer app confirmation queued") ||
               !body
             ) {
               return false;
@@ -3403,6 +3705,7 @@ async function runChromeTest() {
               appliedReference,
               body,
               calendarSyncCalls,
+              customerNotificationCalls,
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
               matchingPatchCalls: matchingPatchCalls.length,
@@ -3418,6 +3721,13 @@ async function runChromeTest() {
         1,
         "Expected applied snapshot update to send exactly one edited mocked admin booking PATCH call",
       );
+      assert.equal(
+        updateState.feedback.includes("Customer booking request accepted: LOADED-OPS-001") &&
+          updateState.feedback.includes("Google Calendar auto-synced") &&
+          updateState.feedback.includes("customer app confirmation queued"),
+        true,
+        `Expected successful customer request acceptance feedback, received: ${updateState.feedback}`,
+      );
       assert.equal(updateState.body.target_booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.pickup_location, "Updated Ops Pickup");
@@ -3426,10 +3736,10 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
       assert.equal(updateState.body.booking.pax_count, 2);
       assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
-      assert.equal(updateState.body.booking.customer_facing_status, "Received");
-      assert.equal(updateState.body.booking.admin_internal_status, "Admin Review Required");
-      assert.equal(updateState.body.booking.request_review_status, "pending_review");
-      assert.equal(updateState.body.booking.short_notice_review_status, "Admin Review Required");
+      assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
+      assert.equal(updateState.body.booking.admin_internal_status, "Ready for Confirmation");
+      assert.equal(updateState.body.booking.request_review_status, "approved");
+      assert.equal(updateState.body.booking.short_notice_review_status, "reviewed");
       assert.equal(
         updateState.calendarSyncCalls.filter((call) => call.method === "POST").length,
         2,
@@ -3446,6 +3756,18 @@ async function runChromeTest() {
         "Expected update payload service items to remain operational only",
       );
       assert.equal(updateState.body.service_items[0].quantity, 2);
+      const customerConfirmationPostCalls = updateState.customerNotificationCalls.filter(
+        (call) =>
+          call.method === "POST" &&
+          call.body?.booking_reference === "LOADED-OPS-001" &&
+          call.body?.delivery_surface === "customer_app" &&
+          call.body?.workflow_area === "customer_request_review",
+      );
+      assert.equal(
+        customerConfirmationPostCalls.length,
+        1,
+        "Expected one in-memory customer app confirmation for the accepted request",
+      );
       assert.deepEqual(
         updateState.forbiddenKeys,
         [],
@@ -3453,8 +3775,8 @@ async function runChromeTest() {
       );
       assert.equal(
         updateState.feedback.includes("Admin Review Required"),
-        true,
-        "Expected updated review-pending customer request snapshot to retain Admin Review Required",
+        false,
+        "Expected the accepted customer request feedback to leave the pending-review state",
       );
       assert.equal(
         updateState.appliedReference.includes("LOADED-OPS-001"),
@@ -3624,7 +3946,7 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-applied-reference]")
               ?.textContent.trim() || "";
 
-            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+            return feedback.includes("Operational snapshot applied: 91001") &&
               appliedReference.includes("LOADED-OPS-001");
           })()`),
         10000,
@@ -3944,7 +4266,7 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-applied-reference]")
               ?.textContent.trim() || "";
 
-            return feedback.includes("Operational snapshot applied: LOADED-OPS-001") &&
+            return feedback.includes("Operational snapshot applied: 91001") &&
               appliedReference.includes("LOADED-OPS-001");
           })()`),
         10000,
@@ -4567,7 +4889,29 @@ async function runChromeTest() {
       };
       const customerBookingBoundaryError =
         "Booking requests can be submitted only from the customer booking form.";
+      const customerBookingPhoneVerificationBoundaryError =
+        "Phone verification is required for this public booking request.";
       const customerBookingSecretLeakPattern = /service_role|sql|stack|secret|key/i;
+      const assertCustomerBookingSafeBoundary = (body, message) => {
+        const error = String(body.error || "");
+        assert.equal(
+          [
+            customerBookingBoundaryError,
+            customerBookingPhoneVerificationBoundaryError,
+          ].includes(error),
+          true,
+          `${message}: expected the customer form or public phone-verification boundary`,
+        );
+        assert.equal(
+          customerBookingSecretLeakPattern.test(JSON.stringify(body)),
+          false,
+          `${message}: expected customer boundary response to hide server internals`,
+        );
+
+        return error === customerBookingPhoneVerificationBoundaryError
+          ? "phone-verification-boundary"
+          : "customer-form-boundary";
+      };
       const assertCustomerBookingBoundaryOrValidation = (
         response,
         body,
@@ -4578,18 +4922,7 @@ async function runChromeTest() {
         },
       ) => {
         if (response.status === 403) {
-          assert.equal(
-            String(body.error || ""),
-            customerBookingBoundaryError,
-            `${message}: expected safe customer form boundary when browser referer is not /book`,
-          );
-          assert.equal(
-            customerBookingSecretLeakPattern.test(JSON.stringify(body)),
-            false,
-            `${message}: expected customer boundary response to hide server internals`,
-          );
-
-          return "customer-form-boundary";
+          return assertCustomerBookingSafeBoundary(body, message);
         }
 
         assert.equal(response.status, 400, message);
@@ -4608,18 +4941,7 @@ async function runChromeTest() {
       };
       const assertCustomerBookingBoundaryOrDisabledConfig = (response, body, message) => {
         if (response.status === 403) {
-          assert.equal(
-            String(body.error || ""),
-            customerBookingBoundaryError,
-            `${message}: expected safe customer form boundary when browser referer is not /book`,
-          );
-          assert.equal(
-            customerBookingSecretLeakPattern.test(JSON.stringify(body)),
-            false,
-            `${message}: expected customer boundary response to hide server internals`,
-          );
-
-          return "customer-form-boundary";
+          return assertCustomerBookingSafeBoundary(body, message);
         }
 
         assert.equal(response.status, 503, message);
@@ -5097,7 +5419,7 @@ async function runChromeTest() {
         );
 
         if (label === "Dispatch") {
-          const dispatchControlsVisible = await evaluate(`document.body.innerText.includes("AI Assist Parse (Mock)") &&
+          const dispatchControlsVisible = await evaluate(`document.body.innerText.includes("AI Parse Booking") &&
             document.body.innerText.includes("Create Job Card") &&
             document.body.innerText.includes("Clear Message")`);
           assert.equal(
@@ -32294,13 +32616,10 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, customerBookingUrl);
-      await waitForSelector(
-        evaluate,
-        "[data-customer-booking-page]",
-        `${viewport.label} customer-facing booking route`,
-      );
-      await evaluate(`(() => {
+      const { identifier: customerBookingFixtureIdentifier } = await client.send(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+          source: `(() => {
         window.__customerBookingIntegrationCalls = [];
         window.__customerBookingRequestCalls = [];
         window.__customerBookingRequestMockMode = "success";
@@ -32350,6 +32669,9 @@ async function runChromeTest() {
                 request: {
                   booking_reference: "CUST-REQUEST-001",
                   customer_facing_status: "Request Received",
+                  receipt_status: "sent",
+                  return_booking_reference: null,
+                  return_trip_requested: false,
                   short_notice_review_required: body.pickupDate === "2026-06-02",
                 },
               }),
@@ -32360,6 +32682,7 @@ async function runChromeTest() {
           if (url.includes("/api/customer-booking-memory")) {
             return new Response(
               JSON.stringify({
+                booker_profile: null,
                 memories: [
                   {
                     dropoff_location: "Changi Airport Terminal 3",
@@ -32379,6 +32702,15 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
+                travelers: [
+                  {
+                    default_dropoff_address: "Registered Traveller Dropoff",
+                    default_pickup_address: "Registered Traveller Pickup",
+                    id: 901,
+                    preferred_vehicle: "Mercedes S-Class",
+                    traveler_name: "Registered Traveller",
+                  },
+                ],
                 version: "customer-booking-memory-read-v1",
               }),
               { headers: { "Content-Type": "application/json" }, status: 200 },
@@ -32408,7 +32740,9 @@ async function runChromeTest() {
           const OriginalWebSocket = window.WebSocket;
           window.__customerBookingOriginalWebSocket = OriginalWebSocket;
           window.WebSocket = function CustomerBookingWebSocket(url, protocols) {
-            window.__customerBookingIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            if (!String(url).includes("/_next/webpack-hmr")) {
+              window.__customerBookingIntegrationCalls.push(\`WEBSOCKET \${String(url)}\`);
+            }
             return protocols === undefined
               ? new OriginalWebSocket(url)
               : new OriginalWebSocket(url, protocols);
@@ -32416,7 +32750,22 @@ async function runChromeTest() {
           window.WebSocket.prototype = OriginalWebSocket.prototype;
           Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
         }
-      })()`);
+      })()`,
+        },
+      );
+
+      try {
+        await navigateWithLoadEvent(client, customerBookingUrl);
+        await waitForSelector(
+          evaluate,
+          "[data-customer-booking-page]",
+          `${viewport.label} customer-facing booking route`,
+        );
+      } finally {
+        await client.send("Page.removeScriptToEvaluateOnNewDocument", {
+          identifier: customerBookingFixtureIdentifier,
+        });
+      }
     };
 
     const setCustomerBookingField = async (field, value) => {
@@ -32482,6 +32831,36 @@ async function runChromeTest() {
         return input.value === ${JSON.stringify(value)};
       })()`);
       assert.equal(selected, true, `Expected customer booking memory passenger ${value} to be selectable`);
+    };
+
+    const chooseCustomerBookingRegisteredTraveler = async (travelerId) => {
+      const selected = await evaluate(`(async () => {
+        const trigger = document.querySelector("[data-customer-booking-traveler-menu-trigger]");
+
+        if (!trigger) {
+          return false;
+        }
+
+        trigger.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const option = document.querySelector(
+          "[data-customer-booking-traveler-option='" + ${JSON.stringify(travelerId)} + "']",
+        );
+
+        if (!option) {
+          return false;
+        }
+
+        option.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return true;
+      })()`);
+      assert.equal(
+        selected,
+        true,
+        `Expected registered customer traveler ${travelerId} to be explicitly selectable`,
+      );
     };
 
     const clickCustomerBookingSubmit = async (description) => {
@@ -32563,6 +32942,7 @@ async function runChromeTest() {
                 field,
                 {
                   control: control?.getAttribute("data-customer-booking-time-control") || "",
+                  ariaInvalid: hidden?.getAttribute("aria-invalid") || "",
                   label: hidden?.closest("label")?.innerText.trim() || "",
                   required: Boolean(hidden?.required),
                   step: hidden?.getAttribute("step") || "",
@@ -32578,6 +32958,7 @@ async function runChromeTest() {
               field,
               {
                 label: input?.closest("label")?.innerText.trim() || "",
+                ariaInvalid: input?.getAttribute("aria-invalid") || "",
                 required: Boolean(input?.required),
                 step: input?.getAttribute("step") || "",
                 value: input?.value || "",
@@ -32921,6 +33302,48 @@ async function runChromeTest() {
               ...document.querySelectorAll("[data-customer-booking-memory-passenger-option]"),
             ].map((option) => option.value),
           },
+          registeredTraveler: {
+            alignedWithFlightNumber: (() => {
+              const passenger = document.querySelector("[data-customer-booking-new-passenger-input]");
+              const flight = document.querySelector("[data-customer-booking-field='flightNumber']");
+              const passengerRect = passenger?.getBoundingClientRect();
+              const flightRect = flight?.getBoundingClientRect();
+              return Boolean(
+                passengerRect &&
+                  flightRect &&
+                  Math.abs(passengerRect.top - flightRect.top) <= 1 &&
+                  Math.abs(passengerRect.height - flightRect.height) <= 1,
+              );
+            })(),
+            fieldValue:
+              document.querySelector("[data-customer-booking-new-passenger-input]")?.value || "",
+            menuTriggerVisible: (() => {
+              const trigger = document.querySelector("[data-customer-booking-traveler-menu-trigger]");
+              const rect = trigger?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height >= 40);
+            })(),
+            nativeSuggestionList:
+              document.querySelector("[data-customer-booking-new-passenger-input]")?.getAttribute("list") || "",
+            newPassengerInputVisible: (() => {
+              const input = document.querySelector("[data-customer-booking-new-passenger-input]");
+              const rect = input?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height >= 40);
+            })(),
+            required: Boolean(
+              document.querySelector("[data-customer-booking-new-passenger-input]")?.required,
+            ),
+            value:
+              document.querySelector("[data-customer-booking-field='travelerId']")?.value || "",
+            visibleControlCount: [
+              ...document.querySelectorAll(
+                "[data-customer-booking-passenger-control] input:not([type='hidden']), " +
+                  "[data-customer-booking-passenger-control] select",
+              ),
+            ].filter((control) => {
+              const rect = control.getBoundingClientRect();
+              return rect.width > 0 && rect.height >= 40;
+            }).length,
+          },
           missingFields: [...document.querySelectorAll("[data-customer-booking-missing-field]")].map((field) =>
             field.textContent.trim(),
           ),
@@ -33206,6 +33629,20 @@ async function runChromeTest() {
         true,
         "Expected /book to show clear team review notice",
       );
+      assert.deepEqual(
+        initialState.registeredTraveler,
+        {
+          alignedWithFlightNumber: true,
+          fieldValue: "",
+          menuTriggerVisible: true,
+          nativeSuggestionList: "",
+          newPassengerInputVisible: true,
+          required: true,
+          value: "",
+          visibleControlCount: 1,
+        },
+        "Expected one aligned Passenger name field with a registered-traveller menu.",
+      );
       assertNoNativeAppOnlyLanguage(initialState.text, "/book desktop");
       for (const expectedField of [
         "Customer / company name",
@@ -33261,6 +33698,24 @@ async function runChromeTest() {
       assert.equal(initialState.fieldState.pickupTime.required, true, "Expected pickup time to be required");
       assert.equal(initialState.fieldState.pickupLocation.required, true, "Expected pickup location to be required");
       assert.equal(initialState.fieldState.dropoffLocation.required, true, "Expected drop-off location to be required");
+
+      await setCustomerBookingField("serviceType", "Hourly / Disposal");
+      const hourlyOptionalDropoffState = await readCustomerBookingPageState();
+      assert.equal(
+        hourlyOptionalDropoffState.fieldState.dropoffLocation.required,
+        false,
+        "Expected Hourly / Disposal customer requests not to require a final drop-off.",
+      );
+      assert.match(
+        hourlyOptionalDropoffState.fieldState.dropoffLocation.label,
+        /Drop-off location \(optional\)/,
+      );
+      assert.equal(
+        hourlyOptionalDropoffState.fieldState.dropoffLocation.ariaInvalid,
+        "false",
+        "Expected Hourly / Disposal blank drop-off not to be flagged red.",
+      );
+      await setCustomerBookingField("serviceType", "");
       assert.equal(
         initialState.fieldState.pickupTime.control,
         "compact-selects",
@@ -33379,7 +33834,15 @@ async function runChromeTest() {
       assert.equal(invalidState.confirmationStatus.visible, false, "Expected invalid /book submit not to show request status");
       assert.deepEqual(
         invalidState.missingFields,
-        ["Contact no.", "Passenger name", "Pickup date", "Pickup time", "Pickup location", "Drop-off location"],
+        [
+          "Contact no.",
+          "Email address",
+          "Passenger name",
+          "Pickup date",
+          "Pickup time",
+          "Pickup location",
+          "Drop-off location",
+        ],
         "Expected invalid /book submit to list required operational request fields only",
       );
       assert.equal(
@@ -33398,7 +33861,7 @@ async function runChromeTest() {
         invalidState.integrationCalls,
         invalidState.resourceCalls,
         "/book invalid submit",
-        customerBookingPageRuntimeAllowedPattern,
+        customerBookingMemoryRuntimeAllowedPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/book invalid submit"),
@@ -33408,6 +33871,47 @@ async function runChromeTest() {
         /[A-Z]{2,}-\d{3,}/.test(invalidState.text),
         false,
         "Expected invalid /book submit not to create an invoice-style number",
+      );
+
+      await chooseCustomerBookingRegisteredTraveler("901");
+      const registeredTravelerState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.registeredTraveler.value === "901" &&
+            candidateState.registeredTraveler.fieldValue === "Registered Traveller"
+            ? candidateState
+            : false;
+        },
+        10000,
+        "registered traveller selection",
+      );
+      assert.equal(
+        registeredTravelerState.registeredTraveler.fieldValue,
+        "Registered Traveller",
+        "Expected the established verified traveller choice to remain available.",
+      );
+      assert.equal(
+        registeredTravelerState.registeredTraveler.visibleControlCount,
+        1,
+        "Expected a saved traveller selection to stay inside the single Passenger name field.",
+      );
+      await setCustomerBookingField("passengerName", "");
+      const newPassengerState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.registeredTraveler.value === "" &&
+            candidateState.registeredTraveler.newPassengerInputVisible &&
+            candidateState.registeredTraveler.fieldValue === ""
+            ? candidateState
+            : false;
+        },
+        10000,
+        "new passenger entry after registered traveller selection",
+      );
+      assert.equal(
+        newPassengerState.fieldState.passengerName.value,
+        "",
+        "Expected manual passenger typing to clear the verified traveler ID in the same field.",
       );
 
       await setCustomerBookingField("pickupDate", "2026-06-05");
@@ -33425,7 +33929,18 @@ async function runChromeTest() {
         "customer booking memory autofill",
       );
       assert.deepEqual(memoryState.bookingMemory.options, ["Boss A", "Boss B"]);
-      assert.equal(memoryState.bookingMemory.calls.length, 1);
+      assert.equal(
+        memoryState.bookingMemory.calls.length >= 1 && memoryState.bookingMemory.calls.length <= 2,
+        true,
+        "Expected one production mount read or the two read-only React development Strict Mode mount attempts.",
+      );
+      assert.equal(
+        memoryState.bookingMemory.calls.every((call) =>
+          /^GET \/api\/customer-booking-memory(?:\?|$)/.test(call),
+        ),
+        true,
+        "Expected every observed customer booking memory attempt to remain an exact read-only GET.",
+      );
       assert.deepEqual(
         {
           dropoffLocation: memoryState.fieldState.dropoffLocation.value,
@@ -33510,7 +34025,7 @@ async function runChromeTest() {
         termsRequiredState.integrationCalls,
         termsRequiredState.resourceCalls,
         "/book terms-required submit",
-        customerBookingPageRuntimeAllowedPattern,
+        customerBookingMemoryRuntimeAllowedPattern,
       );
 
       await acceptCustomerBookingTerms();
@@ -33518,7 +34033,8 @@ async function runChromeTest() {
       const validState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText.includes("Booking request received. Our team will review")
+          return candidateState.feedbackText ===
+            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -33528,8 +34044,8 @@ async function runChromeTest() {
       assert.equal(validState.feedbackTone, "success", "Expected valid /book submit to show a local success message");
       assert.equal(
         validState.feedbackText,
-        "Booking request received. Our team will review and confirm availability.",
-        "Expected customer-safe not-confirmed success feedback",
+        "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com.",
+        "Expected customer-safe receipt success feedback",
       );
       assert.equal(validState.confirmationStatus.visible, true, "Expected valid /book submit to show request status");
       assert.equal(
@@ -33539,14 +34055,14 @@ async function runChromeTest() {
       );
       assert.equal(
         validState.confirmationStatus.detail,
-        "This is not confirmed yet. We will contact you after review.",
-        "Expected /book status detail to state request is not confirmed yet",
+        "CUST-REQUEST-001. This is not confirmed yet. We will contact you after review.",
+        "Expected /book status detail to include the saved reference and state it is not confirmed yet",
       );
       assert.equal(validState.feedbackDistanceFromSubmit < 160, true, "Expected valid /book feedback near the submit button");
       assert.equal(
-        /[A-Z]{2,}-\d{3,}/.test(validState.text),
+        /[A-Z]{2,}-\d{3,}/.test(validState.text.replaceAll("CUST-REQUEST-001", "")),
         false,
-        "Expected valid /book submit not to create an invoice-style number",
+        "Expected valid /book submit to show only its safe booking reference, never an invoice-style number",
       );
       assert.deepEqual(
         validState.integrationCalls.filter((call) => blockedCustomerIntegrationPattern.test(call)),
@@ -33587,6 +34103,7 @@ async function runChromeTest() {
           "returnPickupTime",
           "returnTripRequested",
           "serviceType",
+          "travelerId",
           "vehicleType",
         ],
         "Expected /book customer request payload to include only approved safe operational and return-trip fields",
@@ -33635,6 +34152,7 @@ async function runChromeTest() {
           returnPickupTime: validState.customerBookingRequestCalls[0].body.returnPickupTime,
           returnTripRequested: validState.customerBookingRequestCalls[0].body.returnTripRequested,
           serviceType: validState.customerBookingRequestCalls[0].body.serviceType,
+          travelerId: validState.customerBookingRequestCalls[0].body.travelerId,
           vehicleType: validState.customerBookingRequestCalls[0].body.vehicleType,
         },
         {
@@ -33658,6 +34176,7 @@ async function runChromeTest() {
           returnPickupTime: "",
           returnTripRequested: "",
           serviceType: "Airport Arrival",
+          travelerId: "",
           vehicleType: "Alphard / Vellfire",
         },
         "Expected /book payload values to match safe customer request and inactive return-trip fields",
@@ -33686,7 +34205,7 @@ async function runChromeTest() {
         async () => {
           const candidateState = await readCustomerBookingPageState();
           return candidateState.feedbackText ===
-            "Booking request received. Our team will review and confirm availability."
+            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -33695,12 +34214,12 @@ async function runChromeTest() {
       );
       assert.equal(
         sameTimeRepeatState.feedbackText,
-        "Booking request received. Our team will review and confirm availability.",
+        "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com.",
         "Expected same-date/same-time /book submit to remain a staff-reviewed request",
       );
       assert.equal(
         sameTimeRepeatState.confirmationStatus.detail,
-        "This is not confirmed yet. We will contact you after review.",
+        "CUST-REQUEST-001. This is not confirmed yet. We will contact you after review.",
         "Expected repeated /book submit to keep request-only status wording",
       );
       assert.deepEqual(
@@ -33734,7 +34253,7 @@ async function runChromeTest() {
         async () => {
           const candidateState = await readCustomerBookingPageState();
           return candidateState.feedbackText ===
-            "This booking is within 24 hours, so our team will review and confirm availability."
+            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -33744,8 +34263,8 @@ async function runChromeTest() {
       assert.equal(shortNoticeState.feedbackTone, "success", "Expected short-notice submit to show success review message");
       assert.equal(
         shortNoticeState.confirmationStatus.detail,
-        "This booking is within 24 hours, so our team will review and confirm availability.",
-        "Expected short-notice status detail to preserve exact customer wording",
+        "CUST-REQUEST-001. This booking is within 24 hours and needs availability review.",
+        "Expected short-notice status detail to include the saved reference and review wording",
       );
       assert.equal(
         shortNoticeState.customerBookingRequestCalls.at(-1)?.body.pickupDate,
@@ -33971,7 +34490,7 @@ async function runChromeTest() {
         mobileState.integrationCalls,
         mobileState.resourceCalls,
         "/book mobile",
-        customerBookingPageRuntimeAllowedPattern,
+        customerBookingMemoryRuntimeAllowedPattern,
       );
       assertNoBrowserPersistenceLeaks(
         await readBrowserPersistenceState("/book mobile"),
@@ -33999,7 +34518,7 @@ async function runChromeTest() {
       };
     };
 
-    const setCustomerPortalViewportAndLoad = async (viewport) => {
+    const setCustomerPortalViewportAndLoad = async (viewport, routeUrl = customerPortalUrl) => {
       await client.send("Emulation.setDeviceMetricsOverride", {
         deviceScaleFactor: viewport.scale,
         height: viewport.height,
@@ -34007,7 +34526,7 @@ async function runChromeTest() {
         width: viewport.width,
       });
 
-      await navigateWithLoadEvent(client, customerPortalUrl);
+      await navigateWithLoadEvent(client, routeUrl);
       await waitForSelector(
         evaluate,
         "[data-customer-portal-page]",
@@ -34882,6 +35401,29 @@ async function runChromeTest() {
       const desktopViewport = { height: 900, label: "desktop customer portal", mobile: false, scale: 1, width: 1440 };
       const mobileViewport = { height: 812, label: "mobile customer portal", mobile: true, scale: 3, width: 375 };
 
+      await setCustomerPortalViewportAndLoad(
+        desktopViewport,
+        `${customerPortalUrl}?booking=92001&tracking=1`,
+      );
+      const publicDeepLinkState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerPortalState();
+          return candidateState.detailId === "saved-booking-001" ? candidateState : false;
+        },
+        10000,
+        "customer portal public booking deep link",
+      );
+      assert.equal(
+        publicDeepLinkState.text.includes("REF: 92001"),
+        true,
+        "Expected the public deep link to open the matching public booking reference.",
+      );
+      assert.equal(
+        await evaluate(`window.location.search.includes("booking-001")`),
+        false,
+        "Expected the customer-visible deep-link query not to contain the internal booking key.",
+      );
+
       await setCustomerPortalViewportAndLoad(desktopViewport);
 
       const initialState = await waitForCondition(
@@ -35196,6 +35738,16 @@ async function runChromeTest() {
         "Expected customer portal Edit action to open staff-reviewed form",
       );
       assert.equal(editOpenedState.feedbackRowId, "saved-booking-001", "Expected Edit feedback near the clicked row");
+      assert.equal(
+        editOpenedState.text.includes("New type of service"),
+        true,
+        "Expected customer portal Edit action to show the established service change selector",
+      );
+      assert.equal(
+        editOpenedState.text.includes("Service changes require staff price review before confirmation."),
+        true,
+        "Expected customer portal service change to disclose staff price review",
+      );
 
       await submitCustomerPortalChangeRequest("saved-booking-001");
       const emptyEditState = await waitForCondition(
@@ -35212,7 +35764,7 @@ async function runChromeTest() {
         "Expected empty customer portal Edit request not to submit",
       );
 
-      await setCustomerPortalChangeField("requested-pickup-location", "Customer requested updated pickup");
+      await setCustomerPortalChangeField("requested-service-type", "Hourly / Disposal");
       await submitCustomerPortalChangeRequest("saved-booking-001");
       const editState = await waitForCondition(
         async () => {
@@ -35237,15 +35789,15 @@ async function runChromeTest() {
         {
           booking_reference: editState.customerPortalChangeRequestCalls[0]?.body.booking_reference,
           request_kind: editState.customerPortalChangeRequestCalls[0]?.body.request_kind,
-          requested_pickup_location:
-            editState.customerPortalChangeRequestCalls[0]?.body.requested_pickup_location,
+          requested_service_type:
+            editState.customerPortalChangeRequestCalls[0]?.body.requested_service_type,
         },
         {
           booking_reference: "booking-001",
           request_kind: "amendment",
-          requested_pickup_location: "Customer requested updated pickup",
+          requested_service_type: "Hourly / Disposal",
         },
-        "Expected customer portal Edit submit payload to stay customer-review scoped",
+        "Expected customer portal service Edit submit payload to stay customer-review scoped",
       );
       assert.deepEqual(
         blockedCustomerIntegrationCalls(editState.integrationCalls, customerPortalRuntimeAllowedPattern),
@@ -35447,7 +35999,11 @@ async function runChromeTest() {
             };
           })()`);
 
-          return candidateState.pathname === "/book" && candidateState.visible && candidateState.submitVisible
+          return candidateState.pathname === "/book" &&
+            candidateState.visible &&
+            candidateState.submitVisible &&
+            candidateState.text.includes("Verify your mobile for a first public booking") &&
+            candidateState.text.includes("Phone verification required")
             ? candidateState
             : false;
         },
@@ -35460,9 +36016,10 @@ async function runChromeTest() {
         "Expected /my-bookings New Booking Request to open the canonical /book form",
       );
       assert.equal(
-        routedBookingRequestState.text.includes("Submit Booking Request"),
+        routedBookingRequestState.text.includes("Verify your mobile for a first public booking") &&
+          routedBookingRequestState.text.includes("Phone verification required"),
         true,
-        "Expected routed /book form to keep the customer-safe submit button",
+        "Expected the mock portal navigation without a real customer session to retain the public OTP boundary",
       );
       assertNoCustomerFacingPriceVisibilityLeaks(
         routedBookingRequestState.text,
@@ -35554,6 +36111,81 @@ async function runChromeTest() {
       ]) {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
+
+      const driverDetailsAcknowledgementReadyState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const card = document.querySelector(
+              '[data-customer-portal-driver-details-card="saved-booking-001"]',
+            );
+            const button = document.querySelector(
+              '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
+            );
+
+            return card && button?.textContent.trim() === "Acknowledge driver details"
+              ? {
+                  buttonText: button.textContent.trim(),
+                  acknowledgementCallCount: (
+                    window.__customerPortalDriverDetailsAcknowledgementCalls || []
+                  ).length,
+                  cardText: card.textContent.replace(/\s+/g, " ").trim(),
+                  driverReplyCount: document.querySelectorAll(
+                    '[data-customer-driver-quick-reply]',
+                  ).length,
+                }
+              : false;
+          })()`),
+        10000,
+        "customer driver-details acknowledgement button",
+      );
+      assert.match(driverDetailsAcknowledgementReadyState.cardText, /Simon/);
+      assert.equal(driverDetailsAcknowledgementReadyState.buttonText, "Acknowledge driver details");
+      assert.equal(
+        driverDetailsAcknowledgementReadyState.acknowledgementCallCount,
+        0,
+        "Expected loading and viewing driver details not to acknowledge them",
+      );
+      assert.equal(
+        driverDetailsAcknowledgementReadyState.driverReplyCount,
+        4,
+        "Expected the separate customer-to-driver quick replies to remain unchanged",
+      );
+
+      const acknowledgementClicked = await evaluate(`(() => {
+        const button = document.querySelector(
+          '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
+        );
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(acknowledgementClicked, true, "Expected explicit customer acknowledgement click");
+
+      const driverDetailsAcknowledgedState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector(
+              '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
+            );
+            const calls = window.__customerPortalDriverDetailsAcknowledgementCalls || [];
+            return button?.textContent.trim() === "Acknowledged 09:02" && calls.length === 1
+              ? {
+                  buttonDisabled: button.disabled,
+                  buttonText: button.textContent.trim(),
+                  calls,
+                }
+              : false;
+          })()`),
+        10000,
+        "customer driver-details acknowledged state",
+      );
+      assert.equal(driverDetailsAcknowledgedState.buttonDisabled, true);
+      assert.deepEqual(driverDetailsAcknowledgedState.calls[0].body, {
+        booking_reference: "booking-001",
+        template_key: "customer_driver_details_acknowledged",
+      });
+      assert.equal(driverDetailsAcknowledgedState.calls[0].method, "POST");
+      await evaluate(`window.__customerPortalIntegrationCalls = []`);
 
       await clickCustomerPortalRequestEdit("saved-booking-001");
       const changeState = await waitForCondition(
@@ -39379,6 +40011,9 @@ async function runChromeTest() {
       { context: "/driver-job/[token]", expectedText: "Prestige Limo Driver Job", url: driverJobWorkflowUrl },
     ]) {
       reporter.step(`route leak guards: ${route.context}`);
+      if (route.context === "/driver-job/[token]") {
+        await resetDriverJobWorkflowMock();
+      }
       await navigateWithLoadEvent(client, route.url);
       await waitForBodyText(evaluate, route.expectedText, `${route.context} archive boundary`);
       if (route.context === "/driver-job/[token]") {

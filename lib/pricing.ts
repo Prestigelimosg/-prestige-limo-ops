@@ -1,3 +1,5 @@
+import { calculateDspBillableMinutes } from "./hourly-billing";
+
 export type BookingType = "MNG" | "DEP" | "TRF" | "DSP";
 export type CustomerRateVehicleType = "AVF" | "S" | "VVV" | "Combi";
 
@@ -44,6 +46,16 @@ export type PricingResult = {
   childSeatDriverPayout: number;
   childSeatDriverAmount: number;
   pricingSource: string;
+};
+
+export type DspCustomerInvoiceAmountCalculation = {
+  actualMinutes: number;
+  amountCents: number;
+  baseAmountCents: number;
+  billableHours: number;
+  billableMinutes: number;
+  hourlyRate: number;
+  surchargeAmountCents: number;
 };
 
 type PricingRecord = {
@@ -379,5 +391,36 @@ export function calculateProfit(
     profit: customerPrice - driverPayout,
     customerPriceSource: manualCustomerPrice !== null ? "manual" : pricing.pricingSource,
     driverPayoutSource: manualDriverPayout !== null ? "manual" : pricing.driverPayoutSource,
+  };
+}
+
+export function calculateDspCustomerInvoiceAmountCents(
+  actualMinutes: number | null | undefined,
+  pricing: PricingResult,
+): DspCustomerInvoiceAmountCalculation | null {
+  const billableMinutes = calculateDspBillableMinutes(actualMinutes);
+  const hourlyRate = numericRate(pricing.customerRate);
+
+  if (billableMinutes === null || hourlyRate <= 0) {
+    return null;
+  }
+
+  const billableHours = billableMinutes / 60;
+  const baseAmountCents = Math.round(billableHours * hourlyRate * 100);
+  const surchargeAmountCents = Math.round(
+    (pricing.midnightSurcharge +
+      pricing.extraStopCustomerAmount +
+      pricing.childSeatCustomerAmount) *
+      100,
+  );
+
+  return {
+    actualMinutes: Number(actualMinutes),
+    amountCents: baseAmountCents + surchargeAmountCents,
+    baseAmountCents,
+    billableHours,
+    billableMinutes,
+    hourlyRate,
+    surchargeAmountCents,
   };
 }

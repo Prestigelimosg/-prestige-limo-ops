@@ -12,6 +12,7 @@ export type CustomerLocalInvoiceLineItem = {
   amountLabel: string;
   bookingReference?: string;
   description: string;
+  quantity?: number;
 };
 
 export type CustomerLocalInvoiceRecord = {
@@ -114,7 +115,7 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] {
   }
 
   return value
-    .map((item) => {
+    .map<CustomerLocalInvoiceLineItem | null>((item) => {
       if (!isRecord(item)) {
         return null;
       }
@@ -122,14 +123,21 @@ function safeLineItems(value: unknown): CustomerLocalInvoiceLineItem[] {
       const description = text(item.description);
       const amountLabel = text(item.amountLabel);
       const bookingReference = text(item.bookingReference);
+      const quantityValue = numberValue(item.quantity, 1);
+      const quantity =
+        quantityValue > 0 &&
+        quantityValue <= 999 &&
+        Math.round(quantityValue * 100) === quantityValue * 100
+          ? quantityValue
+          : 1;
 
       if (!description || !amountLabel) {
         return null;
       }
 
       return bookingReference
-        ? { amountLabel, bookingReference, description }
-        : { amountLabel, description };
+        ? { amountLabel, bookingReference, description, quantity }
+        : { amountLabel, description, quantity };
     })
     .filter((item): item is CustomerLocalInvoiceLineItem => Boolean(item));
 }
@@ -340,23 +348,32 @@ function escapePdfText(value: string) {
 }
 
 function wrapText(value: string, maxLength = 86) {
-  const words = ascii(value).split(/\s+/).filter(Boolean);
   const lines: string[] = [];
-  let line = "";
+  const manualLines = value.replace(/\r\n?/g, "\n").split("\n");
 
-  for (const word of words) {
-    const nextLine = line ? `${line} ${word}` : word;
+  for (const manualLine of manualLines) {
+    const words = ascii(manualLine).split(/\s+/).filter(Boolean);
+    let line = "";
 
-    if (nextLine.length > maxLength && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = nextLine;
+    if (words.length === 0) {
+      lines.push("");
+      continue;
     }
-  }
 
-  if (line) {
-    lines.push(line);
+    for (const word of words) {
+      const nextLine = line ? `${line} ${word}` : word;
+
+      if (nextLine.length > maxLength && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = nextLine;
+      }
+    }
+
+    if (line) {
+      lines.push(line);
+    }
   }
 
   return lines.length > 0 ? lines : [""];
@@ -572,6 +589,7 @@ export function createCustomerInvoicePdfBytes(
     .split(/\n+/)
     .flatMap((line) => wrapText(line, 62))
     .slice(0, 9);
+  const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;
   const termsLines = wrapText(
     companyProfile.invoice_footer_terms ||
       defaultCompanyProfile.invoice_footer_terms ||
@@ -586,6 +604,9 @@ export function createCustomerInvoicePdfBytes(
   ];
   const amountValue = invoiceMoneyValue(invoice.amountLabel);
   const sgdAmount = invoiceSgdValue(invoice.amountLabel);
+  const paidInvoice = documentType === "invoice" && invoice.status === "Paid";
+  const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";
+  const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;
   const logoDisplayWidth = 150;
   const logoDisplayHeight = logoImage
     ? Math.max(40, Math.min(76, Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)))
@@ -640,29 +661,32 @@ export function createCustomerInvoicePdfBytes(
     const descriptionLines = wrapText(item.description, 60).slice(0, 7);
     const rowHeight = Math.max(42, 18 + descriptionLines.length * 11);
     const itemAmountValue = invoiceMoneyValue(item.amountLabel);
+    const quantity = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;
+    const itemAmountCents = parseInvoiceAmountToCents(item.amountLabel) || 0;
+    const itemRateValue = invoiceMoneyValue(formatInvoiceAmount(Math.round(itemAmountCents / quantity)));
 
     lineItemCommands.push(pdfTextAt(String(index + 1), 62, rowY, 8));
     descriptionLines.forEach((line, lineIndex) => {
       lineItemCommands.push(pdfTextAt(line, 90, rowY - lineIndex * 10, lineIndex === 0 ? 8 : 7));
     });
-    lineItemCommands.push(pdfRightTextAt("1.00", 435, rowY, 8));
-    lineItemCommands.push(pdfRightTextAt(itemAmountValue, 495, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(quantity.toFixed(2), 435, rowY, 8));
+    lineItemCommands.push(pdfRightTextAt(itemRateValue, 495, rowY, 8));
     lineItemCommands.push(pdfRightTextAt(itemAmountValue, 552, rowY, 8));
     rowY -= rowHeight;
     lineItemCommands.push(pdfLinePath(50, rowY + 11, 562, rowY + 11));
   });
 
-  const totalsY = Math.max(360, rowY - 8);
-  const signoffY = 320;
-  const paymentY = 260;
-  const notesY = 135;
-  const termsY = 55;
+  const totalsY = Math.min(360, rowY - 8);
+  const signoffY = 260;
+  const paymentY = 203;
+  const notesY = 118;
+  const termsY = 45;
   const streamLines = [
     ...logoStreamLines,
     pdfRightTextAt(documentTitle, 562, 725, 30),
     pdfRightTextAt(`${documentNumberLabel} ${invoice.invoiceNumber}`, 562, 700, 9),
     pdfRightTextAt(balanceLabel, 562, 672, 8),
-    pdfRightTextAt(sgdAmount, 562, 654, 12),
+    pdfRightTextAt(balanceDueValue, 562, 654, 12),
     ...companyHeaderCommands,
     ...billToCommands,
     ...dateCommands,
@@ -671,16 +695,24 @@ export function createCustomerInvoicePdfBytes(
     pdfRightTextAt(amountValue, 562, totalsY, 8),
     pdfRightTextAt("Total", 495, totalsY - 24, 9),
     pdfRightTextAt(sgdAmount, 562, totalsY - 24, 9),
-    pdfRect(338, totalsY - 58, 224, 26, "0.94 g"),
-    pdfRightTextAt(balanceLabel, 495, totalsY - 50, 9),
-    pdfRightTextAt(sgdAmount, 562, totalsY - 50, 9),
+    ...(documentType === "invoice"
+      ? [
+          pdfRightTextAt("Payment Made", 495, totalsY - 44, 8),
+          pdfRightTextAt(paymentMadeValue, 562, totalsY - 44, 8),
+        ]
+      : []),
+    pdfRect(338, totalsY - 78, 224, 26, "0.94 g"),
+    pdfRightTextAt(balanceLabel, 495, totalsY - 70, 9),
+    pdfRightTextAt(balanceDueValue, 562, totalsY - 70, 9),
     pdfLinePath(50, totalsY + 22, 562, totalsY + 22, 0.8, "0.75 G"),
     pdfTextAt("Thank you for your business", 50, signoffY, 8),
     pdfTextAt("Best Regards,", 50, signoffY - 21, 8),
-    pdfTextAt("Finance Team", 50, signoffY - 32, 8),
-    pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8),
-    pdfTextAt("Bank information", 50, paymentY, 8, "0.35 g"),
-    ...paymentLines.map((line, index) => pdfTextAt(line, 50, paymentY - 15 - index * 8, 7)),
+    pdfTextAt(companyProfile.invoice_signoff_name, 50, signoffY - 32, 8),
+    pdfTextAt(companyProfile.phone, 50, signoffY - 43, 8),
+    pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g"),
+    ...paymentDetailLines.map((line, index) =>
+      pdfTextAt(line, 50, paymentY - 15 - index * 8, 7),
+    ),
     pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
     ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
     pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),

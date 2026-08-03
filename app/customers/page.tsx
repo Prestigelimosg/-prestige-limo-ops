@@ -19,6 +19,20 @@ import {
 } from "../../lib/hourly-billing";
 import { formatSingaporePickupDisplay } from "../../lib/singapore-pickup-display";
 import {
+  companyProfilePaymentSummary,
+  defaultCompanyProfile,
+  type PublicCompanyProfile,
+} from "../../lib/company-profile-shared";
+import { loadPublicCompanyProfile } from "../../lib/public-company-profile-adapter";
+import { normalizeBookingType } from "../../lib/pricing";
+import {
+  calculateCustomerDspBillingActualMinutes,
+  calculateCustomerDspInvoiceReview,
+  customerInvoiceCardOptionDefaultEnabled,
+  type CustomerInvoiceRateSetupRecord,
+} from "../../lib/customer-dsp-invoice-review";
+import { formatCustomerInvoiceLineDescription } from "../../lib/customer-invoice-line-description";
+import {
   downloadCustomerInvoicePdf,
   formatInvoiceAmount,
   formatInvoiceDate,
@@ -35,6 +49,7 @@ import {
 } from "../../lib/customer-local-invoices";
 
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
+const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
@@ -44,6 +59,7 @@ const adminCustomerInvoiceEmailApiPath = "/api/admin-customer-invoice-email";
 const adminCompletedBookingCloseoutApiPath = "/api/admin-completed-booking-closeouts";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
+const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerFolderDispatchHandoffTab = "dispatch";
 const customerFolderDispatchHandoffReferenceParam = "booking_reference";
 const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
@@ -249,6 +265,12 @@ type UnbilledCustomerRow = {
   customerId: string;
   companyId: number | null;
   bookerId: number | null;
+  travelerId: number | null;
+  bookingType: string;
+  vehicleType: string;
+  pickupAt: string;
+  childSeatCount: number;
+  extraStopCount: number;
   customerName: string;
   dateLabel: string;
   invoiceLineDescription?: string;
@@ -274,6 +296,8 @@ type CustomerMonthlyBillingGroup = {
 
 type CustomerInvoiceDriverActualTimeSummary = {
   actual_time_status?: "complete" | "not_started" | "started" | string | null;
+  billing_time_correction_reason?: string | null;
+  billing_time_source?: "admin_correction" | "automatic" | null;
   booking_reference?: string | null;
   dsp_billable_minutes?: number | null;
   dsp_ended_at?: string | null;
@@ -322,6 +346,7 @@ type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
   emailSentAt?: string | null;
   pdfFilename?: string;
   storageSource?: "local" | "server";
+  travelerId?: number;
 };
 
 type InvoiceSafetyActionConfirmation = {
@@ -438,18 +463,35 @@ type PlainInvoiceForm = {
   crmCustomerId: string;
   crmCustomerName: string;
   dueDateIso: string;
+  guestAccountBillingEnabled: boolean;
   isPaid: boolean;
   lineItems: PlainInvoiceAdditionalLineItem[];
   lineDescription: string;
+  quantity: string;
+  recipientEmails: string[];
   reference: string;
   route: string;
   service: string;
+  travelerId: number | null;
 };
 
 type PlainInvoiceAdditionalLineItem = {
   amount: string;
   bookingReference?: string;
   lineDescription: string;
+  quantity: string;
+};
+
+type PlainInvoiceRecipientOption = {
+  email: string;
+  label: string;
+};
+
+type SelectedJobInvoiceHandoffLine = {
+  bookingReference: string;
+  detail: string;
+  publicReference: string;
+  status: "Blocked" | "Checking" | "Loaded";
 };
 
 type RegularCustomerBookingForm = typeof initialRegularCustomerBookingForm;
@@ -513,6 +555,8 @@ type RegularCustomerSavedBookingReadRecord = {
   customer_account?: string | null;
   customer_id?: string | null;
   company_id?: number | null;
+  traveler_id?: number | null;
+  vehicle_type_or_category?: string | null;
   customer_price_amount?: number | null;
   customer_price_override_reason?: string | null;
   customer_rate?: number | null;
@@ -524,6 +568,7 @@ type RegularCustomerSavedBookingReadRecord = {
   midnight_surcharge?: number | null;
   pickup_at?: string | null;
   pricing_source?: string | null;
+  public_booking_reference?: string | null;
   route_type?: string | null;
   service_type?: string | null;
 };
@@ -573,6 +618,7 @@ type CustomerFolderExactBookingRecord = {
   pickup_at?: string | null;
   pickup_datetime?: string | null;
   pickup_location?: string | null;
+  public_booking_reference?: string | null;
   request_review_status?: string | null;
   route_points?: CustomerFolderExactBookingRoutePoint[] | null;
   route_summary?: string | null;
@@ -582,6 +628,7 @@ type CustomerFolderExactBookingRecord = {
   short_notice_review_status?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
+  traveler_id?: number | null;
   vehicle_type_or_category?: string | null;
 };
 
@@ -626,6 +673,7 @@ type RegularCustomerAccountReadRecord = {
   customer_folder_key?: string | null;
   customer_id?: string | null;
   latest_booking_reference?: string | null;
+  latest_public_booking_reference?: string | null;
   latest_pickup_at?: string | null;
   latest_service_type?: string | null;
   saved_booking_count?: number | null;
@@ -841,7 +889,7 @@ function appendCustomerInvoiceCardPaymentNote(
     return description;
   }
 
-  const suffix = ` ${note}`;
+  const suffix = `\n${note}`;
   const fullDescription = `${description}${suffix}`;
 
   if (fullDescription.length <= customerInvoiceLineDescriptionMaxLength) {
@@ -864,6 +912,7 @@ function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
       amount: form.amount,
       bookingReference: form.bookingReference,
       lineDescription: form.lineDescription,
+      quantity: form.quantity,
       required: true,
       rowNumber: 1,
     },
@@ -871,6 +920,7 @@ function plainInvoiceLineItemRows(form: PlainInvoiceForm) {
       amount: item.amount,
       bookingReference: item.bookingReference || form.bookingReference,
       lineDescription: item.lineDescription,
+      quantity: item.quantity,
       required: false,
       rowNumber: index + 2,
     })),
@@ -898,6 +948,10 @@ function plainInvoiceLineItemValidationMessage(form: PlainInvoiceForm) {
     if (!parseInvoiceAmountToCents(row.amount)) {
       return `Enter line item ${row.rowNumber} amount before previewing Create Invoice.`;
     }
+
+    if (!plainInvoiceQuantity(row.quantity)) {
+      return `Enter a quantity from 0.01 to 999 for line item ${row.rowNumber}.`;
+    }
   }
 
   return "";
@@ -917,6 +971,7 @@ function plainInvoiceLineItemsFromForm(
         amountLabel: formatInvoiceAmount(amountCents),
         bookingReference: row.bookingReference.trim() || undefined,
         description: row.lineDescription.trim(),
+        quantity: plainInvoiceQuantity(row.quantity) || 1,
       };
     });
 
@@ -939,6 +994,91 @@ function plainInvoiceTotalAmountCents(form: PlainInvoiceForm) {
   return plainInvoiceLineItemsFromForm(form).reduce(
     (total, item) => total + item.amountCents,
     0,
+  );
+}
+
+function plainInvoiceQuantity(value: string | number | null | undefined) {
+  const normalized = String(value ?? "").trim();
+
+  if (!/^(?:\d+|\d*\.\d{1,2})$/.test(normalized)) {
+    return null;
+  }
+
+  const quantity = Number(normalized);
+
+  return Number.isFinite(quantity) && quantity > 0 && quantity <= 999 ? quantity : null;
+}
+
+function plainInvoiceQuantityLabel(value: string | number | null | undefined) {
+  return (plainInvoiceQuantity(value) || 1).toFixed(2);
+}
+
+function plainInvoiceLineItemRateLabel(item: CustomerLocalInvoiceLineItem) {
+  const amountCents = parseInvoiceAmountToCents(item.amountLabel);
+  const quantity = plainInvoiceQuantity(item.quantity) || 1;
+
+  return amountCents ? formatInvoiceAmount(Math.round(amountCents / quantity)) : "Review required";
+}
+
+function PlainInvoiceRecipientSelector({
+  manualEmail,
+  onManualEmailChange,
+  onToggle,
+  options,
+  selectedEmails,
+}: {
+  manualEmail: string;
+  onManualEmailChange: (value: string) => void;
+  onToggle: (email: string, checked: boolean) => void;
+  options: PlainInvoiceRecipientOption[];
+  selectedEmails: string[];
+}) {
+  return (
+    <fieldset
+      className="rounded-md border border-slate-200 bg-white px-2 py-1.5"
+      data-plain-invoice-recipient-options="true"
+    >
+      <legend className="px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+        Invoice recipients
+      </legend>
+      {options.length > 0 ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {options.map((option) => {
+            const checked = selectedEmails.includes(option.email);
+            const selectionFull = selectedEmails.length >= 3;
+
+            return (
+              <label className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-slate-700" key={option.email}>
+                <input
+                  checked={checked}
+                  className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
+                  data-plain-invoice-recipient-option={option.label}
+                  disabled={!checked && selectionFull}
+                  onChange={(event) => onToggle(option.email, event.target.checked)}
+                  type="checkbox"
+                />
+                <span>{option.label}: {option.email}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
+      <label className="mt-1 grid gap-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
+        {options.length > 0 ? "Other email (used when none above is checked)" : "Recipient email"}
+        <input
+          className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold normal-case tracking-normal text-slate-950 disabled:bg-slate-100"
+          data-plain-invoice-bill-to-email="true"
+          disabled={selectedEmails.length > 0}
+          inputMode="email"
+          onChange={(event) => onManualEmailChange(event.target.value)}
+          type="email"
+          value={selectedEmails.length > 0 ? selectedEmails.join(", ") : manualEmail}
+        />
+      </label>
+      <p className="mt-1 text-[10px] font-semibold text-slate-500">
+        Select up to 3. One Send click uses the same guarded invoice email.
+      </p>
+    </fieldset>
   );
 }
 
@@ -989,12 +1129,115 @@ function plainInvoiceInitialForm(): PlainInvoiceForm {
     crmCustomerId: "",
     crmCustomerName: "",
     dueDateIso: invoiceDateInputDaysFromNow(7),
+    guestAccountBillingEnabled: false,
     isPaid: false,
     lineItems: [],
     lineDescription: "",
+    quantity: "1",
+    recipientEmails: [],
     reference: plainInvoiceDefaultReference(),
     route: "",
     service: "Ad hoc service",
+    travelerId: null,
+  };
+}
+
+function plainInvoiceRecipientEmailsFromForm(form: PlainInvoiceForm) {
+  const selected = Array.from(
+    new Set(form.recipientEmails.map((email) => email.trim().toLowerCase()).filter(Boolean)),
+  ).slice(0, 3);
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  const manualRecipient = form.billToEmail.trim().toLowerCase();
+
+  return manualRecipient ? [manualRecipient] : [];
+}
+
+function plainInvoicePreviewKeyFromForm(form: PlainInvoiceForm) {
+  const billToName = form.billToName.trim();
+  const reference = form.reference.trim();
+  const service = form.service.trim();
+  const lineItems = plainInvoiceLineItemsFromForm(form, {
+    includeCardPaymentNote: true,
+  });
+  const amountCents = plainInvoiceTotalAmountCents(form);
+  const recipientEmails = plainInvoiceRecipientEmailsFromForm(form);
+  const lineItemsKey = lineItems
+    .map((item) => `${item.bookingReference || ""}:${item.quantity || 1}:${item.amountLabel}:${item.description}`)
+    .join(";;");
+
+  if (
+    !billToName ||
+    !reference ||
+    !service ||
+    !lineItemsKey ||
+    !amountCents ||
+    plainInvoiceLineItemValidationMessage(form)
+  ) {
+    return "";
+  }
+
+  return [
+    "plain-invoice",
+    billToName,
+    recipientEmails.join(","),
+    form.crmCustomerId.trim(),
+    form.crmCustomerName.trim(),
+    form.bookingReference,
+    form.bookerId ?? "",
+    form.travelerId ?? "",
+    reference,
+    service,
+    form.route.trim(),
+    lineItemsKey,
+    amountCents,
+    form.dueDateIso,
+    form.cardPaymentEnabled ? "card-on" : "card-off",
+    form.cardFeeApplies ? "card-fee-on" : "card-fee-off",
+    form.isPaid ? "paid" : "unpaid",
+  ].join("|");
+}
+
+function plainInvoicePreviewFromForm(form: PlainInvoiceForm): CustomerInvoicePreview | null {
+  const previewKey = plainInvoicePreviewKeyFromForm(form);
+  const dueDate = new Date(`${form.dueDateIso}T00:00:00+08:00`);
+
+  if (!previewKey || Number.isNaN(dueDate.getTime())) {
+    return null;
+  }
+
+  const amountCents = plainInvoiceTotalAmountCents(form);
+  const lineItems = plainInvoiceLineItemsFromForm(form, {
+    includeCardPaymentNote: true,
+  }).map(({ amountLabel, bookingReference, description, quantity }) => ({
+    amountLabel,
+    bookingReference,
+    description,
+    quantity,
+  }));
+
+  return {
+    amountCents,
+    amountLabel: formatInvoiceAmount(amountCents),
+    cardFeeApplies: form.cardFeeApplies,
+    cardPaymentEnabled: form.cardPaymentEnabled,
+    customerName: form.crmCustomerName.trim() || form.billToName.trim(),
+    documentType: "invoice",
+    dueDateIso: form.dueDateIso,
+    dueDateLabel: formatInvoiceDate(dueDate),
+    folder: form.isPaid ? "Paid" : "Unpaid",
+    lineDescription: lineItems[0]?.description || "",
+    lineItems,
+    previewKey,
+    reference: form.reference.trim(),
+    route: form.route.trim() || "Ad-hoc invoice / no trip route",
+    service: form.service.trim(),
+    sourceLabel: form.crmCustomerId
+      ? "Linked CRM billing account"
+      : "Create Invoice manual entry",
   };
 }
 
@@ -1091,6 +1334,14 @@ function customerFolderStatusToken(value: unknown) {
 
 function customerFolderExactBookingReference(booking: CustomerFolderExactBookingRecord | null | undefined) {
   return cleanCustomerFolderText(booking?.booking_reference, 160);
+}
+
+function customerFolderPublicBookingReference(
+  booking: CustomerFolderExactBookingRecord | RegularCustomerSavedBookingReadRecord | null | undefined,
+) {
+  const reference = cleanCustomerFolderText(booking?.public_booking_reference, 80).toUpperCase();
+
+  return /^(?:[A-Z][A-Z0-9]{0,19}-)?\d{5}$/.test(reference) ? reference : "";
 }
 
 function customerFolderExactBookingId(booking: CustomerFolderExactBookingRecord | null | undefined) {
@@ -1351,9 +1602,11 @@ function customerFolderExactBookingPayload(
         booking_reference: bookingReference,
         cancellation_review_status: cleanCustomerFolderText(booking.cancellation_review_status, 80) || null,
         change_review_status: cleanCustomerFolderText(booking.change_review_status, 80) || null,
+        company_id: booking.company_id ?? null,
         contact_display_name: cleanCustomerFolderText(booking.contact_display_name, 160) || null,
         contact_email: cleanCustomerFolderText(booking.contact_email, 160) || null,
         contact_phone: contactPhone,
+        booker_id: booking.booker_id ?? null,
         customer_display_name: customerDisplayName,
         customer_facing_status: cleanCustomerFolderText(booking.customer_facing_status, 80) || "Received",
         customer_id: booking.customer_id ?? null,
@@ -1382,6 +1635,7 @@ function customerFolderExactBookingPayload(
           cleanCustomerFolderText(booking.source_surface, 80) ||
           cleanCustomerFolderText(booking.source_channel, 80) ||
           "admin-dashboard",
+        traveler_id: booking.traveler_id ?? null,
         vehicle_type_or_category: cleanCustomerFolderText(form.vehicleType, 80) || null,
       },
       route_points: customerFolderExactBookingRoutePoints(booking, form),
@@ -1517,6 +1771,7 @@ function customerFolderRowFromSavedAccount(account: RegularCustomerAccountReadRe
     folderHref: customerFolderHrefFor(customerId, customerAccount),
     historyRows: Number(account.saved_booking_count ?? 0),
     latestBookingReference: account.latest_booking_reference ?? null,
+    latestPublicBookingReference: account.latest_public_booking_reference ?? null,
     latestPickupAt: account.latest_pickup_at ?? null,
     latestServiceType: account.latest_service_type ?? null,
     source: "saved-account-read" as const,
@@ -1543,6 +1798,41 @@ function selectedInvoiceBookingReferences(value: string) {
         .filter((reference) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(reference)),
     ),
   ).slice(0, plainInvoiceMaxLineItems);
+}
+
+function selectedInvoicePriceReviews(value: string, selectedReferences: string[]) {
+  const selectedReferenceSet = new Set(selectedReferences);
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed) || parsed.length > plainInvoiceMaxLineItems) {
+      return new Map<string, number>();
+    }
+
+    return new Map(
+      parsed
+        .map((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            return null;
+          }
+
+          const record = entry as Record<string, unknown>;
+          const reference = String(record.booking_reference ?? "").trim();
+          const amountCents = Number(record.amount_cents);
+
+          return selectedReferenceSet.has(reference) &&
+            Number.isSafeInteger(amountCents) &&
+            amountCents > 0 &&
+            amountCents <= 100_000_000
+            ? ([reference, amountCents] as const)
+            : null;
+        })
+        .filter((entry): entry is readonly [string, number] => Boolean(entry)),
+    );
+  } catch {
+    return new Map<string, number>();
+  }
 }
 
 function customerFolderJobDispatchHref(booking: RegularCustomerSavedBookingReadRecord) {
@@ -1765,13 +2055,17 @@ function customerFolderLatestPickupDisplay(value: string | null | undefined) {
 
 function customerFolderLatestSummary(customer: {
   latestBookingReference?: string | null;
+  latestPublicBookingReference?: string | null;
   latestPickupAt?: string | null;
   latestServiceType?: string | null;
 }) {
   const summaryParts = [
     customerFolderLatestPickupDisplay(customer.latestPickupAt),
     savedBookingDisplayText(customer.latestServiceType, ""),
-    compactCustomerBookingReference(customer.latestBookingReference, ""),
+    compactCustomerBookingReference(
+      customer.latestPublicBookingReference || customer.latestBookingReference,
+      "",
+    ),
   ].filter(Boolean);
 
   return summaryParts.join(" | ") || "Latest saved service not available";
@@ -1842,6 +2136,12 @@ function savedBookingUnbilledRow(
     customerId,
     companyId: booking.company_id ?? null,
     bookerId: booking.booker_id ?? null,
+    travelerId: booking.traveler_id ?? null,
+    bookingType: String(booking.booking_type || booking.service_type || booking.route_type || ""),
+    vehicleType: String(booking.vehicle_type_or_category || "AVF"),
+    pickupAt: String(booking.pickup_at || ""),
+    childSeatCount: Number(booking.child_seat_count) || 0,
+    extraStopCount: Number(booking.extra_stop_count) || 0,
     customerName,
     dateLabel: savedBookingDateLabel(booking),
     invoiceLineDescription: `${billableServiceLabel} - ${reference}`,
@@ -2244,10 +2544,14 @@ export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
+  const plainInvoiceRecipientRequestSequenceRef = useRef(0);
   const plainInvoiceSavedBookingRequestSequenceRef = useRef(0);
+  const plainInvoiceCardDefaultRequestSequenceRef = useRef(0);
   const customerInvoicePrepRowKeyRef = useRef("");
   const customerFolderUrlHandoffRef = useRef("");
   const customerFolderReturnHrefRef = useRef("");
+  const [companyProfile, setCompanyProfile] =
+    useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [searchTerm, setSearchTerm] = useState("");
   const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);
   const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState("");
@@ -2255,6 +2559,9 @@ export default function MockCustomerDashboardPage() {
   const [plainInvoiceCrmPickerOpen, setPlainInvoiceCrmPickerOpen] = useState(false);
   const [selectedPlainInvoiceCrmFolderKey, setSelectedPlainInvoiceCrmFolderKey] = useState("");
   const [plainInvoiceCrmSearchTerm, setPlainInvoiceCrmSearchTerm] = useState("");
+  const [plainInvoiceRecipientOptions, setPlainInvoiceRecipientOptions] = useState<
+    PlainInvoiceRecipientOption[]
+  >([]);
   const [regularCustomerBookingForm, setRegularCustomerBookingForm] = useState<RegularCustomerBookingForm>(
     initialRegularCustomerBookingForm,
   );
@@ -2415,6 +2722,12 @@ export default function MockCustomerDashboardPage() {
   );
   const [plainInvoicePreview, setPlainInvoicePreview] =
     useState<CustomerInvoicePreview | null>(null);
+  const [plainInvoiceSelectedJobReviewActive, setPlainInvoiceSelectedJobReviewActive] =
+    useState(false);
+  const [plainInvoiceSelectedJobEditing, setPlainInvoiceSelectedJobEditing] =
+    useState(false);
+  const [plainInvoiceIssuedRecord, setPlainInvoiceIssuedRecord] =
+    useState<CustomerDisplayedInvoiceRecord | null>(null);
   const [plainInvoiceFeedback, setPlainInvoiceFeedback] = useState(
     "Create Invoice is ready for manual bill-to. No invoice number is created until Draft or Issue.",
   );
@@ -2422,6 +2735,9 @@ export default function MockCustomerDashboardPage() {
     useState<RegularCustomerBookingFeedbackTone>("info");
   const [plainInvoiceSavedBookings, setPlainInvoiceSavedBookings] = useState<
     RegularCustomerSavedBookingReadRecord[]
+  >([]);
+  const [selectedJobInvoiceHandoffLines, setSelectedJobInvoiceHandoffLines] = useState<
+    SelectedJobInvoiceHandoffLine[]
   >([]);
   const [plainInvoiceSavedBookingsLoading, setPlainInvoiceSavedBookingsLoading] = useState(false);
   const [customerInvoiceDrafts, setCustomerInvoiceDrafts] = useState<CustomerInvoiceDraftRecord[]>([]);
@@ -2448,9 +2764,8 @@ export default function MockCustomerDashboardPage() {
   const [archivedCustomerTestInvoiceReferences, setArchivedCustomerTestInvoiceReferences] = useState<
     string[]
   >([]);
-  const [issuedCustomerInvoices, setIssuedCustomerInvoices] = useState<CustomerDisplayedInvoiceRecord[]>(() =>
-    readCustomerLocalInvoices().map(displayLocalInvoice),
-  );
+  const [issuedCustomerInvoices, setIssuedCustomerInvoices] =
+    useState<CustomerDisplayedInvoiceRecord[]>([]);
   const [customerBillingDocumentPage, setCustomerBillingDocumentPage] = useState(1);
   const [customerInvoiceWorkspaceTab, setCustomerInvoiceWorkspaceTab] =
     useState<CustomerInvoiceWorkspaceTab>("create-invoice");
@@ -2526,6 +2841,7 @@ export default function MockCustomerDashboardPage() {
         row.customerId,
         row.accountScopeLabel,
         row.latestBookingReference ?? "",
+        row.latestPublicBookingReference ?? "",
         row.latestPickupAt ?? "",
         row.latestServiceType ?? "",
       ]
@@ -3265,6 +3581,7 @@ export default function MockCustomerDashboardPage() {
     [customerInvoicePrepRowKey, unbilledCustomerRows],
   );
   const advancedInvoiceWorkbenchVisible =
+    plainInvoiceSelectedJobReviewActive ||
     !selectedCustomerWorkspaceOpen ||
     Boolean(customerInvoicePrepRow) ||
     Boolean(plainInvoicePreview) ||
@@ -3314,55 +3631,54 @@ export default function MockCustomerDashboardPage() {
     () => plainInvoiceTotalAmountCents(plainInvoiceForm),
     [plainInvoiceForm],
   );
-  const plainInvoiceCurrentPreviewKey = useMemo(() => {
-    const billToName = plainInvoiceForm.billToName.trim();
-    const crmCustomerId = plainInvoiceForm.crmCustomerId.trim();
-    const crmCustomerName = plainInvoiceForm.crmCustomerName.trim();
-    const reference = plainInvoiceForm.reference.trim();
-    const service = plainInvoiceForm.service.trim();
-    const lineItems = plainInvoiceLineItemsFromForm(plainInvoiceForm, {
-      includeCardPaymentNote: true,
-    });
-    const lineItemsKey = lineItems
-      .map((item) => `${item.bookingReference || ""}:${item.amountLabel}:${item.description}`)
-      .join(";;");
-
-    if (
-      !billToName ||
-      !reference ||
-      !service ||
-      !lineItemsKey ||
-      !plainInvoiceAmountCents ||
-      plainInvoiceLineItemValidationMessage(plainInvoiceForm)
-    ) {
-      return "";
-    }
-
-    return [
-      "plain-invoice",
-      billToName,
-      plainInvoiceForm.billToEmail.trim(),
-      crmCustomerId,
-      crmCustomerName,
-      plainInvoiceForm.bookingReference,
-      plainInvoiceForm.bookerId ?? "",
-      reference,
-      service,
-      plainInvoiceForm.route.trim(),
-      lineItemsKey,
-      plainInvoiceAmountCents,
-      plainInvoiceForm.dueDateIso,
-      plainInvoiceForm.cardPaymentEnabled ? "card-on" : "card-off",
-      plainInvoiceForm.cardFeeApplies ? "card-fee-on" : "card-fee-off",
-      plainInvoiceForm.isPaid ? "paid" : "unpaid",
-    ].join("|");
-  }, [
-    plainInvoiceAmountCents,
-    plainInvoiceForm,
-  ]);
+  const plainInvoiceCurrentPreviewKey = useMemo(
+    () => plainInvoicePreviewKeyFromForm(plainInvoiceForm),
+    [plainInvoiceForm],
+  );
   const isPlainInvoicePreviewCurrent =
     Boolean(plainInvoicePreview) &&
     plainInvoicePreview?.previewKey === plainInvoiceCurrentPreviewKey;
+  const plainInvoiceSelectedJobReviewStatus =
+    plainInvoiceIssuedRecord?.status ?? plainInvoicePreview?.folder ?? "Unpaid";
+  const plainInvoiceSelectedJobReviewAmountCents =
+    plainInvoiceIssuedRecord?.amountCents ?? plainInvoicePreview?.amountCents ?? 0;
+  const plainInvoiceSelectedJobPaymentMadeLabel = formatInvoiceAmount(
+    plainInvoiceSelectedJobReviewStatus === "Paid"
+      ? plainInvoiceSelectedJobReviewAmountCents
+      : 0,
+  );
+  const plainInvoiceSelectedJobBalanceLabel = formatInvoiceAmount(
+    plainInvoiceSelectedJobReviewStatus === "Paid"
+      ? 0
+      : plainInvoiceSelectedJobReviewAmountCents,
+  );
+  const plainInvoiceCompanyPaymentLines = useMemo(
+    () => companyProfilePaymentSummary(companyProfile).split(/\n+/).filter(Boolean),
+    [companyProfile],
+  );
+  const [plainInvoiceCompanyPaymentHeading = "Bank Details", ...plainInvoiceCompanyPaymentDetailLines] =
+    plainInvoiceCompanyPaymentLines;
+  const plainInvoiceSelectedJobReviewLines =
+    plainInvoiceIssuedRecord?.lineItems ??
+    plainInvoicePreview?.lineItems ??
+    [
+      {
+        amount: plainInvoiceForm.amount,
+        bookingReference: plainInvoiceForm.bookingReference,
+        lineDescription: plainInvoiceForm.lineDescription,
+        quantity: plainInvoiceForm.quantity,
+      },
+      ...plainInvoiceForm.lineItems,
+    ].map((item) => {
+      const amountCents = parseInvoiceAmountToCents(item.amount);
+
+      return {
+        amountLabel: amountCents ? formatInvoiceAmount(amountCents) : "Review required",
+        bookingReference: item.bookingReference,
+        description: item.lineDescription,
+        quantity: plainInvoiceQuantity(item.quantity) || 1,
+      };
+    });
   const plainInvoiceCrmPickerLabel =
     (selectedPlainInvoiceCrmAccountOption
       ? `${selectedPlainInvoiceCrmAccountOption.customerName}${
@@ -3402,6 +3718,19 @@ export default function MockCustomerDashboardPage() {
     customerBillingDocumentStartIndex + customerBillingDocumentPageSize,
     issuedCustomerInvoices.length,
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadInvoiceCompanyProfile() {
+      const profile = await loadPublicCompanyProfile({ signal: controller.signal });
+      setCompanyProfile(profile || defaultCompanyProfile);
+    }
+
+    void loadInvoiceCompanyProfile();
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3446,9 +3775,7 @@ export default function MockCustomerDashboardPage() {
 
           setArchivedCustomerTestInvoiceReferences(archivedReferences);
           setCustomerInvoiceDrafts(serverDraftRecords.map(invoiceDraftRecordFromDisplayedInvoice));
-          setIssuedCustomerInvoices(
-            mergeDisplayedInvoices(serverIssuedRecords, localInvoices),
-          );
+          setIssuedCustomerInvoices(serverIssuedRecords);
           return;
         }
       } catch {
@@ -3804,6 +4131,73 @@ export default function MockCustomerDashboardPage() {
         summary: null,
         tone: "error",
       });
+    }
+  }
+
+  async function loadPlainInvoiceRecipientOptions(
+    customerName: string,
+    bookingEmails: string[] = [],
+  ) {
+    const requestId = plainInvoiceRecipientRequestSequenceRef.current + 1;
+    plainInvoiceRecipientRequestSequenceRef.current = requestId;
+    const options = new Map<string, PlainInvoiceRecipientOption>();
+
+    bookingEmails.forEach((email) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail) options.set(normalizedEmail, { email: normalizedEmail, label: "Job contact" });
+    });
+    setPlainInvoiceRecipientOptions([...options.values()]);
+
+    if (!customerName.trim()) return;
+
+    try {
+      const params = new URLSearchParams({ company_name: customerName.trim() });
+      const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+        headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.ok !== true || !result.company) {
+        return;
+      }
+
+      if (requestId !== plainInvoiceRecipientRequestSequenceRef.current) return;
+
+      const company = result.company as Record<string, unknown>;
+      const profileEmailOptions: Array<[string, unknown]> = [
+        ["Accounts email", company.accounts_email],
+        ["Operations email", company.operations_email],
+        ["Secondary email", company.billing_email],
+      ];
+
+      profileEmailOptions.forEach(([label, value]) => {
+        const normalizedEmail = typeof value === "string" ? value.trim().toLowerCase() : "";
+        if (normalizedEmail && !options.has(normalizedEmail)) {
+          options.set(normalizedEmail, { email: normalizedEmail, label });
+        }
+      });
+      setPlainInvoiceRecipientOptions([...options.values()]);
+
+      const accountsEmail =
+        typeof company.accounts_email === "string" ? company.accounts_email.trim().toLowerCase() : "";
+      const operationsEmail =
+        typeof company.operations_email === "string" ? company.operations_email.trim().toLowerCase() : "";
+      const defaultInvoiceEmail = accountsEmail || operationsEmail;
+
+      if (defaultInvoiceEmail) {
+        setPlainInvoiceForm((currentForm) =>
+          currentForm.recipientEmails.length > 0 || currentForm.billToEmail.trim()
+            ? currentForm
+            : {
+                ...currentForm,
+                billToEmail: defaultInvoiceEmail,
+                recipientEmails: [defaultInvoiceEmail],
+              },
+        );
+      }
+    } catch {
+      // Existing exact-booking or manual recipient remains available when the profile read fails safely.
     }
   }
 
@@ -4637,6 +5031,8 @@ export default function MockCustomerDashboardPage() {
     action: "edit" | "delete" | "open",
     invoiceAction = "",
     selectedBookingReferences = "",
+    selectedBookingPriceReviews = "",
+    guestAccountBillingEnabled = false,
   ) {
     customerFolderReturnHrefRef.current =
       action === "edit" || action === "delete" ? customerFolderHrefFor(customerId, customerName) : "";
@@ -4671,6 +5067,10 @@ export default function MockCustomerDashboardPage() {
       );
       const savedBookings = result.savedBookings;
       const requestedInvoiceReferences = selectedInvoiceBookingReferences(selectedBookingReferences);
+      const reviewedPricesByReference = selectedInvoicePriceReviews(
+        selectedBookingPriceReviews,
+        requestedInvoiceReferences,
+      );
       const targetReferences =
         invoiceAction === "create" && requestedInvoiceReferences.length > 0
           ? requestedInvoiceReferences
@@ -4691,6 +5091,34 @@ export default function MockCustomerDashboardPage() {
             (booking) => safeCustomerFolderDispatchHandoffReference(booking) === reference,
           ),
       );
+      const missingReviewedPriceReference = targetReferences.find(
+        (reference) => !reviewedPricesByReference.has(reference),
+      );
+      const selectedHandoffLines = targetReferences.map((reference) => {
+        const selectedBooking = targetBookings.find(
+          (booking) => safeCustomerFolderDispatchHandoffReference(booking) === reference,
+        );
+
+        return {
+          bookingReference: reference,
+          detail: selectedBooking
+            ? "Selected and waiting for exact booking verification."
+            : "Selected, but the exact job was not returned for this customer. Repair its verified customer identity before billing.",
+          publicReference: customerFolderPublicBookingReference(selectedBooking) || reference,
+          status: selectedBooking ? ("Checking" as const) : ("Blocked" as const),
+        };
+      });
+
+      if (invoiceAction === "create") {
+        setPlainInvoiceForm(plainInvoiceInitialForm());
+        setPlainInvoicePreview(null);
+        setPlainInvoiceSavedBookings([]);
+        setPlainInvoiceSelectedJobReviewActive(true);
+        setPlainInvoiceSelectedJobEditing(false);
+        setPlainInvoiceIssuedRecord(null);
+        setSelectedJobInvoiceHandoffLines(selectedHandoffLines);
+        setCustomerInvoiceWorkspaceTab("statements");
+      }
 
       setCustomerFolderJobViewState({
         customerId,
@@ -4704,11 +5132,37 @@ export default function MockCustomerDashboardPage() {
         tone: missingTargetReference ? "error" : savedBookings.length > 0 ? "success" : "info",
       });
 
+      if (invoiceAction === "create" && (!targetBooking || missingTargetReference)) {
+        setPlainInvoiceFeedback(
+          `Selected job ${missingTargetReference || targetReferences[0] || "reference unavailable"} remains listed below but is blocked because it was not returned for this exact customer. Repair its verified customer identity before billing.`,
+        );
+        setPlainInvoiceFeedbackTone("error");
+        window.setTimeout(() => {
+          plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+        return;
+      }
+
       if (targetBooking && !missingTargetReference) {
         if (invoiceAction === "create") {
-          setPlainInvoiceForm(plainInvoiceInitialForm());
-          setPlainInvoicePreview(null);
-          setPlainInvoiceSavedBookings([]);
+          if (missingReviewedPriceReference) {
+            setSelectedJobInvoiceHandoffLines((current) =>
+              current.map((line) =>
+                line.bookingReference === missingReviewedPriceReference
+                  ? {
+                      ...line,
+                      detail: "Selected, but its customer price must be reviewed before billing.",
+                      status: "Blocked",
+                    }
+                  : line,
+              ),
+            );
+            setPlainInvoiceFeedback(
+              `Selected job ${missingReviewedPriceReference} remains listed below but is blocked until its customer price is reviewed in Jobs not billed yet.`,
+            );
+            setPlainInvoiceFeedbackTone("error");
+            return;
+          }
         }
         const exactBookings =
           invoiceAction === "create"
@@ -4742,6 +5196,8 @@ export default function MockCustomerDashboardPage() {
             const exactCustomerName =
               String(exactBooking.customer_display_name ?? customerName).trim() || customerName;
             const exactBookerId = exactBooking.booker_id ?? targetBooking.booker_id ?? null;
+            const exactCompanyId = exactBooking.company_id ?? targetBooking.company_id ?? null;
+            const exactTravelerId = exactBooking.traveler_id ?? targetBooking.traveler_id ?? null;
             const mismatchedCustomer = exactBookings.some(
               (booking, index) =>
                 String(booking.customer_id ?? targetBookings[index]?.customer_id ?? customerId).trim() !==
@@ -4751,9 +5207,37 @@ export default function MockCustomerDashboardPage() {
               (booking, index) =>
                 (booking.booker_id ?? targetBookings[index]?.booker_id ?? null) !== exactBookerId,
             );
+            const mismatchedCompany = exactBookings.some(
+              (booking, index) =>
+                (booking.company_id ?? targetBookings[index]?.company_id ?? null) !==
+                exactCompanyId,
+            );
+            const mismatchedTraveler = exactBookings.some(
+              (booking, index) =>
+                (booking.traveler_id ?? targetBookings[index]?.traveler_id ?? null) !== exactTravelerId,
+            );
+            const dspActualTimeSummaries = await Promise.all(
+              exactBookings.map((booking, index) => {
+                const selectedBooking = targetBookings[index];
+                const serviceType = String(
+                  booking.service_type ?? selectedBooking?.service_type ?? "",
+                ).trim();
+
+                return normalizeBookingType(serviceType) === "DSP"
+                  ? readCustomerInvoiceDriverActualTimeSummary(
+                      customerFolderExactBookingReference(booking),
+                    )
+                  : Promise.resolve(null);
+              }),
+            );
             const invoiceRows = exactBookings.map((booking, index) => {
               const selectedBooking = targetBookings[index];
+              const dspActualTimeSummary = dspActualTimeSummaries[index];
               const reference = customerFolderExactBookingReference(booking);
+              const publicReference =
+                customerFolderPublicBookingReference(booking) ||
+                customerFolderPublicBookingReference(selectedBooking) ||
+                "Reference unavailable";
               const service = String(booking.service_type ?? selectedBooking?.service_type ?? "").trim();
               const route =
                 String(booking.route_summary ?? "").trim() ||
@@ -4764,58 +5248,156 @@ export default function MockCustomerDashboardPage() {
                 String(booking.route_type ?? selectedBooking?.route_type ?? "").trim();
 
               return {
+                amountCents: reviewedPricesByReference.get(reference) ?? null,
                 bookingReference: reference,
-                lineDescription: [service || "Service", reference, route].filter(Boolean).join(" | "),
+                lineDescription: formatCustomerInvoiceLineDescription({
+                  dspEndedAt: dspActualTimeSummary?.dsp_ended_at,
+                  dspStartedAt:
+                    dspActualTimeSummary?.billing_time_source === "admin_correction"
+                      ? dspActualTimeSummary?.dsp_started_at
+                      : booking.pickup_at || booking.pickup_datetime,
+                  flightNumber: booking.flight_no,
+                  passengerName: booking.passenger_name,
+                  pickupAt: booking.pickup_at || booking.pickup_datetime,
+                  pickupLocation: booking.pickup_location,
+                  publicReference,
+                  route,
+                  serviceType: service,
+                  vehicleType: booking.vehicle_type_or_category,
+                }),
+                publicReference,
                 route,
                 service: service || "Service",
               };
             });
             const [firstInvoiceRow, ...additionalInvoiceRows] = invoiceRows;
-
-            if (!exactBookerId || mismatchedCustomer || mismatchedBooker || !firstInvoiceRow) {
+            const missingPublicReference = invoiceRows.some(
+              (row) => row.publicReference === "Reference unavailable",
+            );
+            const exactRecipientEmails = Array.from(
+              new Set(
+                exactBookings
+                  .map((booking) => cleanCustomerFolderText(booking.contact_email, 160).toLowerCase())
+                  .filter(Boolean),
+              ),
+            );
+            if (
+              mismatchedCustomer ||
+              (!guestAccountBillingEnabled &&
+                (mismatchedBooker || mismatchedTraveler || !exactBookerId || !exactTravelerId)) ||
+              missingPublicReference ||
+              !firstInvoiceRow
+            ) {
+              const selectedJobBlockDetail = missingPublicReference
+                ? "Selected, but its saved five-digit public reference is missing. Repair that reference before billing."
+                : !guestAccountBillingEnabled && (mismatchedTraveler || !exactTravelerId)
+                  ? "Selected, but the selected jobs do not share one verified traveller."
+                  : "Selected, but the selected jobs do not share one verified customer and PA / booker.";
+              setSelectedJobInvoiceHandoffLines((current) =>
+                current.map((line) => ({
+                  ...line,
+                  detail: selectedJobBlockDetail,
+                  status: "Blocked",
+                })),
+              );
               setPlainInvoiceFeedback(
-                !exactBookerId
-                  ? "The selected jobs do not have one verified PA / booker. Draft remains admin-only; Issue and Email are blocked."
+                missingPublicReference
+                  ? "A selected job has no saved public booking reference. Repair its five-digit reference before invoice preparation."
+                  : !guestAccountBillingEnabled && (mismatchedTraveler || !exactTravelerId)
+                    ? "The selected jobs do not share one verified traveller. Issue and Email are blocked."
                   : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
               );
               setPlainInvoiceFeedbackTone("error");
               return;
             }
 
-            setPlainInvoiceSavedBookings(targetBookings);
-            setPlainInvoiceForm({
+            const cardOptionDefaultEnabled = mismatchedCompany || guestAccountBillingEnabled
+              ? false
+              : await readCustomerInvoiceCardOptionDefault(
+                  exactCompanyId,
+                  exactTravelerId,
+                );
+            const nextPlainInvoiceForm: PlainInvoiceForm = {
               ...plainInvoiceInitialForm(),
+              amount: firstInvoiceRow.amountCents
+                ? (firstInvoiceRow.amountCents / 100).toFixed(2)
+                : "",
+              billToEmail: exactRecipientEmails.length === 1 ? exactRecipientEmails[0] : "",
               billToName: exactCustomerName,
-              bookerId: exactBookerId,
+              bookerId: guestAccountBillingEnabled ? null : exactBookerId,
               bookingReference: firstInvoiceRow.bookingReference,
+              cardPaymentEnabled: cardOptionDefaultEnabled,
               crmCustomerId: exactCustomerId,
               crmCustomerName: exactCustomerName,
+              guestAccountBillingEnabled,
               lineDescription: firstInvoiceRow.lineDescription,
+              quantity: "1",
+              recipientEmails: exactRecipientEmails,
               lineItems: additionalInvoiceRows.map((row) => ({
-                amount: "",
+                amount: row.amountCents ? (row.amountCents / 100).toFixed(2) : "",
                 bookingReference: row.bookingReference,
                 lineDescription: row.lineDescription,
+                quantity: "1",
               })),
               reference:
                 invoiceRows.length === 1
-                  ? firstInvoiceRow.bookingReference
-                  : `MULTI-${firstInvoiceRow.bookingReference}-${invoiceRows.length}`.slice(0, 160),
+                  ? firstInvoiceRow.publicReference
+                  : `MULTI-${firstInvoiceRow.publicReference}-${invoiceRows.length}`.slice(0, 160),
               route: `${invoiceRows.length} job${invoiceRows.length === 1 ? "" : "s"}: ${invoiceRows
-                .map((row) => row.bookingReference)
+                .map((row) => row.publicReference)
                 .join(", ")}`,
               service:
                 invoiceRows.length === 1
                   ? firstInvoiceRow.service
                   : `Selected customer jobs (${invoiceRows.length})`,
-            });
+              travelerId: guestAccountBillingEnabled ? null : exactTravelerId,
+            };
+
+            setPlainInvoiceSavedBookings(targetBookings);
+            setSelectedJobInvoiceHandoffLines(
+              invoiceRows.map((row) => ({
+                bookingReference: row.bookingReference,
+                detail: guestAccountBillingEnabled
+                  ? "Loaded for the verified Hotel / Tour Agency customer account."
+                  : exactBookerId
+                    ? "Loaded as an exact line in the final invoice review."
+                    : "Loaded in the final invoice review; a verified PA / booker is still required before Send or PDF Download.",
+                publicReference: row.publicReference,
+                status: "Loaded",
+              })),
+            );
+            setPlainInvoiceForm(nextPlainInvoiceForm);
+            void loadPlainInvoiceRecipientOptions(exactCustomerName, exactRecipientEmails);
+            setPlainInvoicePreview(plainInvoicePreviewFromForm(nextPlainInvoiceForm));
+
+            if (!guestAccountBillingEnabled && !exactBookerId) {
+              setPlainInvoiceFeedback(
+                "The selected jobs are shown for review but do not have one verified PA / booker. Send and PDF Download remain blocked.",
+              );
+              setPlainInvoiceFeedbackTone("error");
+              window.setTimeout(() => {
+                plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }, 100);
+              return;
+            }
+
             setPlainInvoiceFeedback(
-              `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA. Enter and review every approved amount, then Preview before Draft, Issue, or Email.`,
+              guestAccountBillingEnabled
+                ? `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded for the verified Hotel / Tour Agency customer account with reviewed customer prices. Use Edit for any final adjustment.`
+                : `All ${invoiceRows.length} selected job${invoiceRows.length === 1 ? "" : "s"} loaded with one verified PA and their reviewed customer prices. Use Edit for any final adjustment; Send and PDF Download stay blocked until the compact review is current.`,
             );
             setPlainInvoiceFeedbackTone("success");
             window.setTimeout(() => {
               plainInvoicePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 100);
           } else {
+            setSelectedJobInvoiceHandoffLines((current) =>
+              current.map((line) => ({
+                ...line,
+                detail: "Selected, but exact booking verification failed before billing.",
+                status: "Blocked",
+              })),
+            );
             setPlainInvoiceFeedback(
               `Exact booking ${bookingReference} could not be verified for Create Invoice. Issue and Email remain blocked.`,
             );
@@ -4824,6 +5406,19 @@ export default function MockCustomerDashboardPage() {
         }
       }
     } catch (error) {
+      if (invoiceAction === "create") {
+        setSelectedJobInvoiceHandoffLines((current) =>
+          current.map((line) => ({
+            ...line,
+            detail: "Selected, but the exact saved-job read failed safely. Retry before billing.",
+            status: "Blocked",
+          })),
+        );
+        setPlainInvoiceFeedback(
+          "Every selected job remains listed below, but exact saved-job verification failed safely. Retry before billing.",
+        );
+        setPlainInvoiceFeedbackTone("error");
+      }
       setCustomerFolderJobViewState({
         customerId,
         customerName,
@@ -4849,8 +5444,12 @@ export default function MockCustomerDashboardPage() {
       searchParams.get("selected_booking_references"),
       500,
     );
+    const selectedBookingPriceReviews = String(
+      searchParams.get("selected_booking_price_reviews") ?? "",
+    ).slice(0, 1000);
     const requestedAction = searchParams.get("customer_job_action");
     const invoiceAction = cleanCustomerFolderText(searchParams.get("customer_invoice_action"), 40);
+    const guestAccountBillingEnabled = searchParams.get("guest_account_billing") === "1";
     const action = requestedAction === "delete" ? "delete" : requestedAction === "edit" ? "edit" : "open";
 
     if (!customerId || !customerName) {
@@ -4862,8 +5461,10 @@ export default function MockCustomerDashboardPage() {
       customerName,
       bookingReference,
       selectedBookingReferences,
+      selectedBookingPriceReviews,
       action,
       invoiceAction,
+      guestAccountBillingEnabled ? "guest-account" : "traveller-account",
     ].join("::");
 
     if (customerFolderUrlHandoffRef.current === handoffKey) {
@@ -4878,6 +5479,8 @@ export default function MockCustomerDashboardPage() {
       action,
       invoiceAction,
       selectedBookingReferences,
+      selectedBookingPriceReviews,
+      guestAccountBillingEnabled,
     );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4997,7 +5600,117 @@ export default function MockCustomerDashboardPage() {
     ).slice(0, customerInvoiceLineDescriptionMaxLength);
   }
 
-  function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup) {
+  async function readAdminRateSetupForDspInvoice() {
+    const response = await fetch(adminRateSetupApiPath, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | (CustomerInvoiceRateSetupRecord & { error?: string; ok?: boolean })
+      | null;
+
+    if (!response.ok || result?.ok !== true) {
+      throw new Error(result?.error || "CRM rate setup could not be loaded.");
+    }
+
+    return result;
+  }
+
+  async function readCustomerInvoiceCardOptionDefault(
+    companyId: number | null | undefined,
+    travelerId: number | null | undefined,
+  ) {
+    if (!companyId) {
+      return false;
+    }
+
+    try {
+      const rateSetup = await readAdminRateSetupForDspInvoice();
+
+      return customerInvoiceCardOptionDefaultEnabled(
+        { companyId, travelerId },
+        rateSetup,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async function prepareMonthlyBillingDspRowsForInvoice(rows: UnbilledCustomerRow[]) {
+    const hasDspRows = rows.some(
+      (row) => normalizeBookingType(row.bookingType || row.service) === "DSP",
+    );
+
+    if (!hasDspRows) {
+      return rows;
+    }
+
+    const rateSetup = await readAdminRateSetupForDspInvoice();
+
+    return Promise.all(
+      rows.map(async (row) => {
+        if (normalizeBookingType(row.bookingType || row.service) !== "DSP") {
+          return row;
+        }
+
+        const summary = await readCustomerInvoiceDriverActualTimeSummary(row.reference);
+        const billingStartAt =
+          summary?.billing_time_source === "admin_correction"
+            ? summary?.dsp_started_at
+            : row.pickupAt;
+        const billingActualMinutes = calculateCustomerDspBillingActualMinutes(
+          billingStartAt,
+          summary?.dsp_ended_at,
+        );
+
+        if (billingActualMinutes === null) {
+          throw new Error(
+            `DSP billing timing is incomplete for ${row.reference}. Confirm the saved booking pickup time and complete Driver JC before invoice preparation.`,
+          );
+        }
+
+        const calculation = calculateCustomerDspInvoiceReview(
+          {
+            actualMinutes: billingActualMinutes,
+            childSeatCount: row.childSeatCount,
+            companyId: row.companyId,
+            extraStopCount: row.extraStopCount,
+            pickupAt: row.pickupAt,
+            travelerId: row.travelerId,
+            vehicleType: row.vehicleType,
+          },
+          rateSetup,
+        );
+
+        if (!calculation) {
+          throw new Error(
+            `DSP CRM rate calculation is unavailable for ${row.reference}. Review the verified traveler/company rate setup.`,
+          );
+        }
+
+        const surchargeLabel = calculation.surchargeAmountCents
+          ? ` + ${formatInvoiceAmount(calculation.surchargeAmountCents)} surcharges`
+          : "";
+
+        return {
+          ...row,
+          amount: formatInvoiceAmount(calculation.amountCents),
+          billingBreakdown:
+            `${calculation.actualMinutes} booking-to-JC min → ${calculation.billableHours} billable hr × ` +
+            `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr${surchargeLabel}. ` +
+            `CRM source: ${calculation.customerRateSource}.`,
+          invoiceLineDescription:
+            `DSP ${row.dateLabel} | ${calculation.billableHours} hr @ ` +
+            `${formatInvoiceAmount(calculation.hourlyRateCents)}/hr | ${row.reference}`,
+          statusLabel: "Closeout ready / booking time, Driver JC, and CRM rate applied",
+        };
+      }),
+    );
+  }
+
+  async function prepareMonthlyBillingGroupForInvoice(group: CustomerMonthlyBillingGroup) {
     if (group.rows.length === 0) {
       setPlainInvoiceFeedback("No jobs are available in this billing account/month group.");
       setPlainInvoiceFeedbackTone("error");
@@ -5012,15 +5725,50 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    const preparedRows = group.rows.slice(0, plainInvoiceMaxLineItems);
+    const exactTravelerId = group.rows[0]?.travelerId ?? null;
+    const exactBookerId = group.rows[0]?.bookerId ?? null;
+
+    if (
+      !exactTravelerId ||
+      !exactBookerId ||
+      group.rows.some(
+        (row) => row.travelerId !== exactTravelerId || row.bookerId !== exactBookerId,
+      )
+    ) {
+      setPlainInvoiceFeedback(
+        "Monthly bill prep is blocked because the selected jobs do not share one verified traveller and PA / booker.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    setPreparingMonthlyBillingGroupKey(group.key);
+    let preparedRows: UnbilledCustomerRow[];
+
+    try {
+      preparedRows = await prepareMonthlyBillingDspRowsForInvoice(
+        group.rows.slice(0, plainInvoiceMaxLineItems),
+      );
+    } catch (error) {
+      setPreparingMonthlyBillingGroupKey("");
+      setPlainInvoiceFeedback(
+        error instanceof Error ? error.message : "DSP invoice preparation failed safely.",
+      );
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
     const overflowCount = Math.max(0, group.rows.length - preparedRows.length);
     const [firstRow, ...additionalRows] = preparedRows;
+    const cardOptionDefaultEnabled = await readCustomerInvoiceCardOptionDefault(
+      firstRow.companyId,
+      exactTravelerId,
+    );
     const referenceList = group.rows.map((row) => row.reference).filter(Boolean);
     const groupLabel = group.accountScopeLabel
       ? `${group.customerName} / ${group.accountScopeLabel}`
       : group.customerName;
 
-    setPreparingMonthlyBillingGroupKey(group.key);
     setPlainInvoiceForm({
       amount: monthlyBillingInvoiceAmountInput(firstRow),
       billToEmail: "",
@@ -5028,19 +5776,24 @@ export default function MockCustomerDashboardPage() {
       bookerId: firstRow.bookerId,
       bookingReference: firstRow.reference,
       cardFeeApplies: false,
-      cardPaymentEnabled: false,
+      cardPaymentEnabled: cardOptionDefaultEnabled,
       crmCustomerId: group.customerId,
       crmCustomerName: group.customerName,
       dueDateIso: invoiceDateInputDaysFromNow(7),
+      guestAccountBillingEnabled: false,
       isPaid: false,
       lineDescription: monthlyBillingInvoiceLineDescription(firstRow),
+      quantity: "1",
+      recipientEmails: [],
       lineItems: additionalRows.map((row) => ({
         amount: monthlyBillingInvoiceAmountInput(row),
         lineDescription: monthlyBillingInvoiceLineDescription(row),
+        quantity: "1",
       })),
       reference: monthlyBillingGroupReference(group),
       route: `${group.rows.length} job${group.rows.length === 1 ? "" : "s"}: ${referenceList.join(", ")}`,
       service: `Monthly billing - ${group.billingMonthLabel}`,
+      travelerId: exactTravelerId,
     });
     setSelectedPlainInvoiceCrmFolderKey(group.key);
     setPlainInvoicePreview(null);
@@ -5078,7 +5831,7 @@ export default function MockCustomerDashboardPage() {
     }
 
     setSelectedMonthlyBillingGroupKey(selectedCustomerPrimaryMonthlyBillingGroup.key);
-    prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);
+    void prepareMonthlyBillingGroupForInvoice(selectedCustomerPrimaryMonthlyBillingGroup);
   }
 
   async function readCustomerInvoiceDriverActualTimeSummary(bookingReference: string) {
@@ -5122,16 +5875,28 @@ export default function MockCustomerDashboardPage() {
     const shouldReadDriverActualTime = isHourlyCustomerInvoiceRow(row) && Boolean(bookingReference);
 
     setPreparingUnbilledCustomerRowKey(row.key);
+    customerInvoicePrepRowKeyRef.current = row.key;
+    const cardOptionDefaultEnabled = await readCustomerInvoiceCardOptionDefault(
+      row.companyId,
+      row.travelerId,
+    );
+
+    if (customerInvoicePrepRowKeyRef.current !== row.key) {
+      return;
+    }
+
+    setPlainInvoiceSelectedJobReviewActive(false);
+    setPlainInvoiceSelectedJobEditing(false);
+    setPlainInvoiceIssuedRecord(null);
     setSelectedUnbilledCustomerRowKey(row.key);
     setCustomerInvoicePrepRowKey(row.key);
-    customerInvoicePrepRowKeyRef.current = row.key;
     setCustomerInvoiceWorkspaceTab("statements");
     setCustomerInvoiceIssueAmount(suggestedAmountCents ? row.amount.replace(/^\$/, "") : "");
     setCustomerInvoiceIssueDueDate(invoiceDateInputDaysFromNow(7));
     setCustomerInvoiceIssueStatus("Unpaid");
     setCustomerInvoiceDocumentType("invoice");
     setCustomerInvoiceRecipientEmail("");
-    setCustomerInvoiceCardPaymentEnabled(false);
+    setCustomerInvoiceCardPaymentEnabled(cardOptionDefaultEnabled);
     setCustomerInvoiceCardFeeApplies(false);
     setCustomerInvoicePreview(null);
     setCustomerInvoiceAdjustmentReason("");
@@ -5266,6 +6031,9 @@ export default function MockCustomerDashboardPage() {
   }
 
   function focusPlainInvoicePanel() {
+    setPlainInvoiceSelectedJobReviewActive(false);
+    setPlainInvoiceSelectedJobEditing(false);
+    setPlainInvoiceIssuedRecord(null);
     setCustomerInvoiceWorkspaceTab("statements");
     setPlainInvoiceFeedback(
       "Create Invoice form ready. Preview first; Draft or Issue creates the invoice number.",
@@ -5301,6 +6069,10 @@ export default function MockCustomerDashboardPage() {
         nextForm.cardFeeApplies = false;
       }
 
+      if (field === "billToEmail") {
+        nextForm.recipientEmails = [];
+      }
+
       if (
         field === "billToName" &&
         typeof value === "string" &&
@@ -5311,6 +6083,8 @@ export default function MockCustomerDashboardPage() {
         nextForm.crmCustomerName = "";
         nextForm.bookerId = null;
         nextForm.bookingReference = "";
+        nextForm.guestAccountBillingEnabled = false;
+        nextForm.travelerId = null;
       }
 
       if (
@@ -5321,6 +6095,8 @@ export default function MockCustomerDashboardPage() {
       ) {
         nextForm.bookerId = null;
         nextForm.bookingReference = "";
+        nextForm.guestAccountBillingEnabled = false;
+        nextForm.travelerId = null;
       }
 
       return nextForm;
@@ -5335,11 +6111,29 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
+  function togglePlainInvoiceRecipient(email: string, checked: boolean) {
+    setPlainInvoiceForm((currentForm) => {
+      const normalizedEmail = email.trim().toLowerCase();
+      const nextRecipients = checked
+        ? Array.from(new Set([...currentForm.recipientEmails, normalizedEmail])).slice(0, 3)
+        : currentForm.recipientEmails.filter((recipient) => recipient !== normalizedEmail);
+
+      return {
+        ...currentForm,
+        billToEmail: nextRecipients[0] || "",
+        recipientEmails: nextRecipients,
+      };
+    });
+  }
+
   async function updatePlainInvoiceCrmBillingAccount(customerFolderKey: string) {
     const selectedAccount =
       plainInvoiceCrmAccountOptions.find((account) => account.customerFolderKey === customerFolderKey) || null;
 
     setSelectedPlainInvoiceCrmFolderKey(selectedAccount?.customerFolderKey || "");
+    setPlainInvoiceSelectedJobReviewActive(false);
+    setPlainInvoiceSelectedJobEditing(false);
+    setPlainInvoiceIssuedRecord(null);
     const requestId = plainInvoiceSavedBookingRequestSequenceRef.current + 1;
     plainInvoiceSavedBookingRequestSequenceRef.current = requestId;
     setPlainInvoiceSavedBookings([]);
@@ -5351,7 +6145,13 @@ export default function MockCustomerDashboardPage() {
       crmCustomerName: selectedAccount?.customerName || "",
       bookerId: null,
       bookingReference: "",
+      cardFeeApplies: false,
+      cardPaymentEnabled: false,
+      guestAccountBillingEnabled: false,
+      recipientEmails: [],
+      travelerId: null,
     }));
+    setPlainInvoiceRecipientOptions([]);
 
     setPlainInvoiceFeedback(
       selectedAccount
@@ -5362,6 +6162,8 @@ export default function MockCustomerDashboardPage() {
     setPlainInvoiceCrmPickerOpen(false);
 
     if (!selectedAccount) return;
+
+    void loadPlainInvoiceRecipientOptions(selectedAccount.customerName);
 
     try {
       const result = await readRegularCustomerSavedBookingsForTarget({
@@ -5389,7 +6191,9 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
-  function updatePlainInvoiceSavedBooking(bookingReference: string) {
+  async function updatePlainInvoiceSavedBooking(bookingReference: string) {
+    const requestId = plainInvoiceCardDefaultRequestSequenceRef.current + 1;
+    plainInvoiceCardDefaultRequestSequenceRef.current = requestId;
     const selectedBooking = plainInvoiceSavedBookingOptions.find(
       (booking) => savedBookingReference(booking) === bookingReference,
     );
@@ -5397,7 +6201,11 @@ export default function MockCustomerDashboardPage() {
       ...currentForm,
       bookerId: selectedBooking?.booker_id ?? null,
       bookingReference: selectedBooking ? bookingReference : "",
+      cardFeeApplies: false,
+      cardPaymentEnabled: false,
       reference: selectedBooking ? bookingReference : currentForm.reference,
+      guestAccountBillingEnabled: false,
+      travelerId: selectedBooking?.traveler_id ?? null,
     }));
     setPlainInvoicePreview(null);
     setPlainInvoiceFeedback(
@@ -5408,6 +6216,28 @@ export default function MockCustomerDashboardPage() {
         : "Choose an exact saved booking before issuing or emailing this invoice.",
     );
     setPlainInvoiceFeedbackTone(selectedBooking && !selectedBooking.booker_id ? "error" : "info");
+
+    if (!selectedBooking) {
+      return;
+    }
+
+    const cardOptionDefaultEnabled = await readCustomerInvoiceCardOptionDefault(
+      selectedBooking.company_id,
+      selectedBooking.traveler_id,
+    );
+
+    if (requestId !== plainInvoiceCardDefaultRequestSequenceRef.current) {
+      return;
+    }
+
+    setPlainInvoiceForm((currentForm) =>
+      currentForm.bookingReference === bookingReference
+        ? {
+            ...currentForm,
+            cardPaymentEnabled: cardOptionDefaultEnabled,
+          }
+        : currentForm,
+    );
   }
 
   function updatePlainInvoiceCrmSearchTerm(value: string) {
@@ -5448,6 +6278,7 @@ export default function MockCustomerDashboardPage() {
         {
           amount: "",
           lineDescription: "",
+          quantity: "1",
         },
       ],
     }));
@@ -5466,7 +6297,11 @@ export default function MockCustomerDashboardPage() {
 
   function clearPlainInvoiceForm() {
     setPlainInvoiceForm(plainInvoiceInitialForm());
+    setPlainInvoiceRecipientOptions([]);
     setPlainInvoicePreview(null);
+    setPlainInvoiceSelectedJobReviewActive(false);
+    setPlainInvoiceSelectedJobEditing(false);
+    setPlainInvoiceIssuedRecord(null);
     setPlainInvoiceFeedback(
       "Create Invoice cleared. No invoice number, PDF, email, payment, or customer folder was created.",
     );
@@ -5475,19 +6310,11 @@ export default function MockCustomerDashboardPage() {
 
   function previewPlainInvoice() {
     const billToName = plainInvoiceForm.billToName.trim();
-    const billingCustomerName = plainInvoiceForm.crmCustomerName.trim() || billToName;
     const reference = plainInvoiceForm.reference.trim();
     const service = plainInvoiceForm.service.trim();
     const amountCents = plainInvoiceAmountCents;
     const dueDate = new Date(`${plainInvoiceForm.dueDateIso}T00:00:00+08:00`);
     const lineItemsValidationMessage = plainInvoiceLineItemValidationMessage(plainInvoiceForm);
-    const lineItems = plainInvoiceLineItemsFromForm(plainInvoiceForm, {
-      includeCardPaymentNote: true,
-    }).map(({ amountLabel, bookingReference, description }) => ({
-      amountLabel,
-      bookingReference,
-      description,
-    }));
 
     if (!billToName) {
       setPlainInvoiceFeedback("Enter the bill-to name before previewing Create Invoice.");
@@ -5531,34 +6358,34 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    setPlainInvoicePreview({
-      amountCents,
-      amountLabel: formatInvoiceAmount(amountCents),
-      cardFeeApplies: plainInvoiceForm.cardFeeApplies,
-      cardPaymentEnabled: plainInvoiceForm.cardPaymentEnabled,
-      customerName: billingCustomerName,
-      documentType: "invoice",
-      dueDateIso: plainInvoiceForm.dueDateIso,
-      dueDateLabel: formatInvoiceDate(dueDate),
-      folder: plainInvoiceForm.isPaid ? "Paid" : "Unpaid",
-      lineDescription: lineItems[0]?.description || "",
-      lineItems,
-      previewKey: plainInvoiceCurrentPreviewKey,
-      reference,
-      route: plainInvoiceForm.route.trim() || "Ad-hoc invoice / no trip route",
-      service,
-      sourceLabel: plainInvoiceForm.crmCustomerId
-        ? "Linked CRM billing account"
-        : "Create Invoice manual entry",
-    });
+    const nextPreview = plainInvoicePreviewFromForm(plainInvoiceForm);
+
+    if (!nextPreview) {
+      setPlainInvoiceFeedback("Review the invoice fields before updating the preview.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    setPlainInvoicePreview(nextPreview);
+    setPlainInvoiceSelectedJobEditing(false);
     setPlainInvoiceFeedback(
-      `Create Invoice preview ready with ${lineItems.length} line item${
-        lineItems.length === 1 ? "" : "s"
-      }. Draft or Issue will create the invoice number.`,
+      plainInvoiceSelectedJobReviewActive
+        ? `Compact invoice review updated with ${nextPreview.lineItems.length} selected job${
+            nextPreview.lineItems.length === 1 ? "" : "s"
+          }. Send and PDF Download use this exact reviewed content.`
+        : `Create Invoice preview ready with ${nextPreview.lineItems.length} line item${
+            nextPreview.lineItems.length === 1 ? "" : "s"
+          }. Draft or Issue will create the invoice number.`,
     );
     setPlainInvoiceFeedbackTone("success");
     window.setTimeout(() => {
-      document.querySelector<HTMLElement>("[data-plain-invoice-issue-action='true']")?.focus();
+      document
+        .querySelector<HTMLElement>(
+          plainInvoiceSelectedJobReviewActive
+            ? "[data-selected-job-invoice-send='true']"
+            : "[data-plain-invoice-issue-action='true']",
+        )
+        ?.focus();
     }, 50);
   }
 
@@ -5570,7 +6397,7 @@ export default function MockCustomerDashboardPage() {
     return {
       amountCents: plainInvoicePreview.amountCents,
       billingMonthLabel: formatInvoiceMonth(new Date()),
-      customerEmail: plainInvoiceForm.billToEmail,
+      customerEmail: plainInvoiceRecipientEmailsFromForm(plainInvoiceForm)[0] || null,
       customerId:
         plainInvoiceForm.crmCustomerId.trim() ||
         plainInvoiceCustomerId(
@@ -5580,6 +6407,7 @@ export default function MockCustomerDashboardPage() {
       customerName: plainInvoicePreview.customerName,
       bookerId: plainInvoiceForm.bookerId,
       bookingReference: plainInvoiceForm.bookingReference,
+      guestAccountBillingEnabled: plainInvoiceForm.guestAccountBillingEnabled,
       documentState,
       documentType: "invoice" as CustomerBillingDocumentType,
       dueDateIso: plainInvoicePreview.dueDateIso,
@@ -5588,6 +6416,7 @@ export default function MockCustomerDashboardPage() {
       route: plainInvoicePreview.route,
       service: plainInvoicePreview.service,
       status: plainInvoicePreview.folder,
+      travelerId: plainInvoiceForm.travelerId,
     };
   }
 
@@ -5663,8 +6492,12 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId) {
-      setPlainInvoiceFeedback("Select an exact saved booking with a verified PA / booker before issuing Create Invoice.");
+    if (
+      !plainInvoiceForm.bookingReference ||
+      (!plainInvoiceForm.guestAccountBillingEnabled &&
+        (!plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId))
+    ) {
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before issuing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
@@ -5711,12 +6544,15 @@ export default function MockCustomerDashboardPage() {
 
       saveCustomerLocalInvoice(issuedInvoice);
       updateIssuedInvoiceState(issuedInvoice);
+      setPlainInvoiceIssuedRecord(issuedInvoice);
       setPlainInvoiceFeedback(
         `Create Invoice ${issuedInvoice.invoiceNumber} stored with PDF. PDF download started.`,
       );
       setPlainInvoiceFeedbackTone("success");
       await downloadStoredCustomerInvoicePdf(issuedInvoice);
-      setPlainInvoicePreview(null);
+      if (!plainInvoiceSelectedJobReviewActive) {
+        setPlainInvoicePreview(null);
+      }
     } catch (error) {
       setPlainInvoiceFeedback(customerInvoiceActionFailureMessage("Create Invoice issue", error));
       setPlainInvoiceFeedbackTone("error");
@@ -5733,10 +6569,10 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    const recipientEmail = plainInvoiceForm.billToEmail.trim();
+    const recipientEmails = plainInvoiceRecipientEmailsFromForm(plainInvoiceForm);
 
-    if (!recipientEmail) {
-      setPlainInvoiceFeedback("Enter an email address before emailing Create Invoice.");
+    if (recipientEmails.length === 0) {
+      setPlainInvoiceFeedback("Select at least one recipient email before emailing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-email='true']")?.focus();
       return;
@@ -5750,8 +6586,12 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!plainInvoiceForm.bookingReference || !plainInvoiceForm.bookerId) {
-      setPlainInvoiceFeedback("Select an exact saved booking with a verified PA / booker before emailing Create Invoice.");
+    if (
+      !plainInvoiceForm.bookingReference ||
+      (!plainInvoiceForm.guestAccountBillingEnabled &&
+        (!plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId))
+    ) {
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before emailing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
@@ -5765,7 +6605,7 @@ export default function MockCustomerDashboardPage() {
           "This creates an issued invoice number, stores the PDF, then sends the invoice email through the guarded route.",
         customerName: plainInvoicePreview.customerName,
         documentLabel: "Invoice",
-        recipientEmail,
+        recipientEmail: recipientEmails.join(", "),
         reference: plainInvoicePreview.reference,
       })
     ) {
@@ -5803,11 +6643,12 @@ export default function MockCustomerDashboardPage() {
       issuedInvoiceNumber = issuedInvoice.invoiceNumber;
       saveCustomerLocalInvoice(issuedInvoice);
       updateIssuedInvoiceState(issuedInvoice);
+      setPlainInvoiceIssuedRecord(issuedInvoice);
 
       const emailResponse = await fetch(adminCustomerInvoiceEmailApiPath, {
         body: JSON.stringify({
           invoiceNumber: issuedInvoice.invoiceNumber,
-          recipientEmail,
+          recipientEmails,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -5818,19 +6659,24 @@ export default function MockCustomerDashboardPage() {
       const emailResult = await emailResponse.json().catch(() => null);
 
       if (emailResult?.invoice) {
-        updateIssuedInvoiceState({
+        const emailedInvoice = {
           ...(emailResult.invoice as CustomerDisplayedInvoiceRecord),
-          storageSource: "server",
-        });
+          storageSource: "server" as const,
+        };
+
+        updateIssuedInvoiceState(emailedInvoice);
+        setPlainInvoiceIssuedRecord(emailedInvoice);
       }
 
       if (!emailResponse.ok || !emailResult?.ok) {
         throw new Error(emailResult?.error || "Create Invoice email could not be sent.");
       }
 
-      setPlainInvoiceFeedback(`Create Invoice ${issuedInvoice.invoiceNumber} emailed to ${recipientEmail}.`);
+      setPlainInvoiceFeedback(`Create Invoice ${issuedInvoice.invoiceNumber} emailed to ${recipientEmails.join(", ")}.`);
       setPlainInvoiceFeedbackTone("success");
-      setPlainInvoicePreview(null);
+      if (!plainInvoiceSelectedJobReviewActive) {
+        setPlainInvoicePreview(null);
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Create Invoice email could not be sent.";
@@ -5844,6 +6690,65 @@ export default function MockCustomerDashboardPage() {
     } finally {
       window.setTimeout(() => setIssuingCustomerInvoiceKey(""), 700);
     }
+  }
+
+  function toggleSelectedJobInvoiceEditing() {
+    if (plainInvoiceIssuedRecord) {
+      setPlainInvoiceFeedback(
+        `${plainInvoiceIssuedRecord.invoiceNumber} is already issued. Its stored invoice content is locked so the screen, PDF, and email attachment remain identical.`,
+      );
+      setPlainInvoiceFeedbackTone("info");
+      return;
+    }
+
+    setPlainInvoiceSelectedJobEditing((current) => !current);
+  }
+
+  async function sendSelectedJobInvoice() {
+    if (!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent) {
+      setPlainInvoiceSelectedJobEditing(true);
+      setPlainInvoiceFeedback("Use Edit to complete every amount and update the invoice review before sending.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    const recipientEmails = plainInvoiceRecipientEmailsFromForm(plainInvoiceForm);
+
+    if (recipientEmails.length === 0) {
+      setPlainInvoiceSelectedJobEditing(true);
+      setPlainInvoiceFeedback("Enter the verified recipient email before sending this invoice.");
+      setPlainInvoiceFeedbackTone("error");
+      window.setTimeout(() => {
+        document.querySelector<HTMLElement>("[data-plain-invoice-bill-to-email='true']")?.focus();
+      }, 50);
+      return;
+    }
+
+    if (plainInvoiceIssuedRecord) {
+      await handleCustomerInvoiceEmailAction(
+        plainInvoiceIssuedRecord,
+        recipientEmails,
+      );
+      return;
+    }
+
+    await emailPlainInvoice();
+  }
+
+  async function downloadSelectedJobInvoicePdf() {
+    if (!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent) {
+      setPlainInvoiceSelectedJobEditing(true);
+      setPlainInvoiceFeedback("Use Edit to complete every amount and update the invoice review before creating the PDF.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+
+    if (plainInvoiceIssuedRecord) {
+      await downloadIssuedCustomerInvoice(plainInvoiceIssuedRecord);
+      return;
+    }
+
+    await issuePlainInvoice();
   }
 
   function customerInvoiceLineDescriptionForPreview(
@@ -5991,12 +6896,20 @@ export default function MockCustomerDashboardPage() {
       route: customerInvoicePrepRow.route,
       service: customerInvoicePrepRow.service,
       status: customerInvoicePreview.folder,
+      travelerId: customerInvoicePrepRow.travelerId,
     };
   }
 
   async function saveCustomerInvoiceDraft() {
     if (!customerInvoicePrepRow) {
       setCustomerInvoiceIssueFeedback("Choose Prepare monthly invoice in the selected customer workspace before saving a draft.");
+      return;
+    }
+
+    if (!customerInvoicePrepRow.bookerId || !customerInvoicePrepRow.travelerId) {
+      setCustomerInvoiceIssueFeedback(
+        "Draft save is blocked until the exact booking has one verified traveller and PA / booker.",
+      );
       return;
     }
 
@@ -6061,9 +6974,9 @@ export default function MockCustomerDashboardPage() {
       return;
     }
 
-    if (!customerInvoicePrepRow.bookerId) {
+    if (!customerInvoicePrepRow.bookerId || !customerInvoicePrepRow.travelerId) {
       setCustomerInvoiceIssueFeedback(
-        "Assign a verified PA / booker to the exact saved booking before issuing. Draft saving remains admin-only.",
+        "Assign a verified traveller and PA / booker to the exact saved booking before issuing. Draft saving remains admin-only.",
       );
       return;
     }
@@ -6179,10 +7092,15 @@ export default function MockCustomerDashboardPage() {
     }
   }
 
-  async function handleCustomerInvoiceEmailAction(invoice: CustomerDisplayedInvoiceRecord) {
-    const recipientEmail = invoice.customerEmail || customerInvoiceRecipientEmail.trim();
+  async function handleCustomerInvoiceEmailAction(
+    invoice: CustomerDisplayedInvoiceRecord,
+    recipientEmailOverride: string | string[] = "",
+  ) {
+    const recipientEmails = Array.isArray(recipientEmailOverride)
+      ? recipientEmailOverride.map((email) => email.trim().toLowerCase()).filter(Boolean).slice(0, 3)
+      : [recipientEmailOverride.trim() || invoice.customerEmail || customerInvoiceRecipientEmail.trim()].filter(Boolean);
 
-    if (!recipientEmail) {
+    if (recipientEmails.length === 0) {
       setCustomerInvoiceIssueFeedback("Enter a customer email before sending this invoice.");
       return;
     }
@@ -6204,7 +7122,7 @@ export default function MockCustomerDashboardPage() {
         customerName: invoice.customerName,
         documentLabel,
         invoiceNumber: invoice.invoiceNumber,
-        recipientEmail,
+        recipientEmail: recipientEmails.join(", "),
         reference: invoice.reference,
       })
     ) {
@@ -6218,7 +7136,7 @@ export default function MockCustomerDashboardPage() {
       const response = await fetch(adminCustomerInvoiceEmailApiPath, {
         body: JSON.stringify({
           invoiceNumber: invoice.invoiceNumber,
-          recipientEmail,
+          recipientEmails,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -6229,17 +7147,22 @@ export default function MockCustomerDashboardPage() {
       const result = await response.json().catch(() => null);
 
       if (result?.invoice) {
-        updateIssuedInvoiceState({
+        const emailedInvoice = {
           ...(result.invoice as CustomerDisplayedInvoiceRecord),
-          storageSource: "server",
-        });
+          storageSource: "server" as const,
+        };
+
+        updateIssuedInvoiceState(emailedInvoice);
+        if (plainInvoiceIssuedRecord?.invoiceNumber === emailedInvoice.invoiceNumber) {
+          setPlainInvoiceIssuedRecord(emailedInvoice);
+        }
       }
 
       if (!response.ok || !result?.ok) {
         throw new Error(result?.error || "Customer invoice email");
       }
 
-      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} emailed to ${recipientEmail}.`);
+      setCustomerInvoiceIssueFeedback(`${invoice.invoiceNumber} emailed to ${recipientEmails.join(", ")}.`);
     } catch (error) {
       setCustomerInvoiceIssueFeedback(customerInvoiceActionFailureMessage(`${invoice.invoiceNumber} email`, error));
     } finally {
@@ -7506,7 +8429,8 @@ export default function MockCustomerDashboardPage() {
                               ? [
                                   customer.latestPickupAt,
                                   customer.latestServiceType,
-                                  customer.latestBookingReference,
+                                  customer.latestPublicBookingReference ||
+                                    customer.latestBookingReference,
                                 ]
                                   .filter(Boolean)
                                   .join(" | ")
@@ -7859,6 +8783,7 @@ export default function MockCustomerDashboardPage() {
                         const bookingReference =
                           savedBookingReference(booking) ||
                           `${booking.customer_id || "customer"}-${booking.pickup_at || "job"}`;
+                        const publicBookingReference = customerFolderPublicBookingReference(booking);
                         const isExpanded = expandedCustomerFolderJobReference === bookingReference;
                         const dispatchHandoffHref = customerFolderJobDispatchHref(booking);
                         const exactEditorIsCurrent =
@@ -7887,16 +8812,18 @@ export default function MockCustomerDashboardPage() {
                             <div className="min-w-0">
                               <p
                                 className="truncate font-bold text-slate-950"
-                                title={savedBookingDisplayText(booking.booking_reference, "Reference unavailable")}
+                                title={publicBookingReference || "Reference unavailable"}
                               >
-                                {compactCustomerBookingReference(booking.booking_reference, "Reference unavailable")}
+                                {publicBookingReference || "Reference unavailable"}
                               </p>
                               <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">
                                 Account: {savedBookingDisplayText(booking.customer_id, "Not linked")}
                               </p>
                             </div>
                             <p className="min-w-0 text-xs font-semibold text-slate-600">
-                              <span className="block truncate">{savedBookingDateLabel(booking)}</span>
+                              <span className="block truncate">
+                                {formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")}
+                              </span>
                               <span className="block truncate">
                                 {savedBookingDisplayText(booking.service_type, "Service not set")}
                               </span>
@@ -7924,7 +8851,7 @@ export default function MockCustomerDashboardPage() {
                                     <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
                                       Reference
                                     </span>
-                                    {savedBookingDisplayText(booking.booking_reference)}
+                                    {publicBookingReference || "Reference unavailable"}
                                   </p>
                                   <p>
                                     <span className="block text-[10px] uppercase tracking-[0.12em] text-slate-500">
@@ -8176,30 +9103,57 @@ export default function MockCustomerDashboardPage() {
 
         {advancedInvoiceWorkbenchVisible ? (
           <details
-            className="rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"
+            className={
+              plainInvoiceSelectedJobReviewActive
+                ? "bg-transparent"
+                : "rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"
+            }
             data-customer-billing-workbench-drawer="true"
             open={
+              plainInvoiceSelectedJobReviewActive ||
               Boolean(customerInvoicePrepRow) ||
               Boolean(plainInvoicePreview) ||
               Boolean(plainInvoiceForm.billToName.trim())
             }
           >
-          <summary
-            className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
-            data-customer-billing-workbench-summary="true"
-          >
-	            Advanced invoice workbench
-            <span className="text-xs font-semibold text-slate-500">Open only after review</span>
-          </summary>
+          {plainInvoiceSelectedJobReviewActive ? (
+            <summary aria-hidden="true" className="hidden">
+              Selected jobs invoice review
+            </summary>
+          ) : (
+            <summary
+              className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-900 [&::-webkit-details-marker]:hidden"
+              data-customer-billing-workbench-summary="true"
+            >
+	              Advanced invoice workbench
+              <span className="text-xs font-semibold text-slate-500">Open only after review</span>
+            </summary>
+          )}
           <div
-            className="grid gap-4 border-t border-slate-200 p-4 sm:p-5"
+            className={
+              plainInvoiceSelectedJobReviewActive
+                ? "grid gap-3"
+                : "grid gap-4 border-t border-slate-200 p-4 sm:p-5"
+            }
             data-customer-billing-workbench-contents="true"
           >
         <section
-          className="rounded-lg border border-slate-200 bg-white shadow-sm"
+          className={
+            plainInvoiceSelectedJobReviewActive
+              ? "bg-transparent"
+              : "rounded-lg border border-slate-200 bg-white shadow-sm"
+          }
           data-customer-invoice-workspace="true"
         >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
+          <div
+            className={
+              plainInvoiceSelectedJobReviewActive
+                ? ""
+                : "border-b border-slate-200 p-4 sm:p-5"
+            }
+          >
+            {!plainInvoiceSelectedJobReviewActive ? (
+              <>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
@@ -8597,7 +9551,7 @@ export default function MockCustomerDashboardPage() {
                           </dd>
                         </div>
                       </dl>
-                      <p className="mt-2 font-semibold" data-customer-invoice-preview-line="true">
+                      <p className="mt-2 whitespace-pre-wrap font-semibold" data-customer-invoice-preview-line="true">
                         {customerInvoicePreview.lineDescription}
                       </p>
                       <p className="mt-1 text-slate-700">{customerInvoicePreview.route}</p>
@@ -8627,11 +9581,443 @@ export default function MockCustomerDashboardPage() {
                   </p>
                 </div>
               ) : null}
+              </div>
+              </>
+            ) : null}
               <div
-                className="mt-3 border-t border-slate-200 pt-3"
+                className={
+                  plainInvoiceSelectedJobReviewActive
+                    ? ""
+                    : "mt-3 border-t border-slate-200 pt-3"
+                }
                 data-plain-invoice-panel="true"
                 ref={plainInvoicePanelRef}
               >
+                {plainInvoiceSelectedJobReviewActive ? (
+                  <div data-selected-job-invoice-review="true">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Selected jobs invoice review
+                        </p>
+                        <p className="text-xs font-semibold text-slate-700">
+                          {plainInvoiceSelectedJobReviewLines.length} job
+                          {plainInvoiceSelectedJobReviewLines.length === 1 ? "" : "s"} · {plainInvoiceSelectedJobReviewStatus}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5" data-selected-job-invoice-actions="true">
+                        <button
+                          aria-disabled={Boolean(plainInvoiceIssuedRecord)}
+                          className={`inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-bold transition ${
+                            plainInvoiceIssuedRecord
+                              ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                              : plainInvoiceSelectedJobEditing
+                                ? "border-amber-300 bg-amber-50 text-amber-900"
+                                : "border-slate-300 bg-white text-slate-800 hover:border-slate-600"
+                          }`}
+                          data-selected-job-invoice-edit="true"
+                          disabled={Boolean(plainInvoiceIssuedRecord)}
+                          onClick={toggleSelectedJobInvoiceEditing}
+                          type="button"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          aria-disabled={!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent}
+                          className={`inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-bold transition ${
+                            issuingCustomerInvoiceKey === plainInvoiceEmailActionKey ||
+                            emailingCustomerInvoiceNumber === plainInvoiceIssuedRecord?.invoiceNumber
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                              : plainInvoiceIssuedRecord || isPlainInvoicePreviewCurrent
+                                ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
+                                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                          }`}
+                          data-selected-job-invoice-send="true"
+                          onClick={sendSelectedJobInvoice}
+                          type="button"
+                        >
+                          {issuingCustomerInvoiceKey === plainInvoiceEmailActionKey ||
+                          emailingCustomerInvoiceNumber === plainInvoiceIssuedRecord?.invoiceNumber
+                            ? "Sending"
+                            : "Send"}
+                        </button>
+                        <button
+                          aria-disabled={!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent}
+                          className={`inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-bold transition ${
+                            issuingCustomerInvoiceKey === plainInvoiceIssueActionKey ||
+                            downloadingCustomerInvoiceNumber === plainInvoiceIssuedRecord?.invoiceNumber
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                              : plainInvoiceIssuedRecord || isPlainInvoicePreviewCurrent
+                                ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                          }`}
+                          data-selected-job-invoice-pdf-download="true"
+                          onClick={downloadSelectedJobInvoicePdf}
+                          type="button"
+                        >
+                          {issuingCustomerInvoiceKey === plainInvoiceIssueActionKey ||
+                          downloadingCustomerInvoiceNumber === plainInvoiceIssuedRecord?.invoiceNumber
+                            ? "Preparing PDF"
+                            : "PDF Download"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {selectedJobInvoiceHandoffLines.length > 0 ? (
+                      <div
+                        className="mb-3 rounded-md border border-slate-200 bg-white p-2"
+                        data-selected-job-invoice-coverage="true"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Selected job coverage
+                          </p>
+                          <p className="text-xs font-semibold text-slate-700">
+                            {selectedJobInvoiceHandoffLines.filter((line) => line.status === "Loaded").length} of{" "}
+                            {selectedJobInvoiceHandoffLines.length} loaded
+                          </p>
+                        </div>
+                        <div className="mt-2 grid gap-1.5">
+                          {selectedJobInvoiceHandoffLines.map((line) => (
+                            <div
+                              className="grid gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 sm:grid-cols-[7rem_5rem_minmax(0,1fr)] sm:items-center"
+                              data-selected-job-invoice-coverage-line={line.bookingReference}
+                              key={`selected-job-invoice-coverage-${line.bookingReference}`}
+                            >
+                              <strong className="text-xs text-slate-950">{line.publicReference}</strong>
+                              <span
+                                className={`text-[11px] font-bold ${
+                                  line.status === "Loaded"
+                                    ? "text-emerald-700"
+                                    : line.status === "Blocked"
+                                      ? "text-rose-700"
+                                      : "text-amber-700"
+                                }`}
+                              >
+                                {line.status}
+                              </span>
+                              <span className="text-xs font-semibold leading-5 text-slate-600">{line.detail}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plainInvoiceSelectedJobEditing && !plainInvoiceIssuedRecord ? (
+                      <div
+                        className="mb-2 grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2"
+                        data-selected-job-invoice-editor="true"
+                      >
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <PlainInvoiceRecipientSelector
+                            manualEmail={plainInvoiceForm.billToEmail}
+                            onManualEmailChange={(value) => updatePlainInvoiceForm("billToEmail", value)}
+                            onToggle={togglePlainInvoiceRecipient}
+                            options={plainInvoiceRecipientOptions}
+                            selectedEmails={plainInvoiceForm.recipientEmails}
+                          />
+                          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Due date
+                            <input
+                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-950"
+                              data-plain-invoice-due-date="true"
+                              onChange={(event) => updatePlainInvoiceForm("dueDateIso", event.target.value)}
+                              type="date"
+                              value={plainInvoiceForm.dueDateIso}
+                            />
+                          </label>
+                        </div>
+                        <div className="space-y-2">
+                          {[
+                            {
+                              amount: plainInvoiceForm.amount,
+                              lineDescription: plainInvoiceForm.lineDescription,
+                              quantity: plainInvoiceForm.quantity,
+                            },
+                            ...plainInvoiceForm.lineItems,
+                          ].map((item, index) => (
+                            <div
+                              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem]"
+                              data-selected-job-invoice-editor-line={index + 1}
+                              key={`selected-job-invoice-editor-${index + 1}`}
+                            >
+                              <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                                Item {index + 1}
+                                <textarea
+                                  className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold leading-5 text-slate-950"
+                                  data-plain-invoice-line-description={index === 0 ? "true" : undefined}
+                                  maxLength={500}
+                                  onChange={(event) =>
+                                    index === 0
+                                      ? updatePlainInvoiceForm("lineDescription", event.target.value)
+                                      : updatePlainInvoiceAdditionalLineItem(
+                                          index - 1,
+                                          "lineDescription",
+                                          event.target.value,
+                                        )
+                                  }
+                                  value={item.lineDescription}
+                                />
+                              </label>
+                              <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                                Qty
+                                <input
+                                  className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-950"
+                                  data-plain-invoice-quantity={index === 0 ? "true" : undefined}
+                                  inputMode="decimal"
+                                  min="0.01"
+                                  onChange={(event) =>
+                                    index === 0
+                                      ? updatePlainInvoiceForm("quantity", event.target.value)
+                                      : updatePlainInvoiceAdditionalLineItem(index - 1, "quantity", event.target.value)
+                                  }
+                                  step="0.01"
+                                  type="number"
+                                  value={item.quantity}
+                                />
+                              </label>
+                              <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                                Amount
+                                <input
+                                  className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-950"
+                                  data-plain-invoice-amount={index === 0 ? "true" : undefined}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    index === 0
+                                      ? updatePlainInvoiceForm("amount", event.target.value)
+                                      : updatePlainInvoiceAdditionalLineItem(index - 1, "amount", event.target.value)
+                                  }
+                                  placeholder="0.00"
+                                  value={item.amount}
+                                />
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        <div
+                          className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-2"
+                          data-selected-job-invoice-payment-options="true"
+                        >
+                          <p className="mr-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Payment options
+                          </p>
+                          <label className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                            <input
+                              checked={plainInvoiceForm.cardPaymentEnabled}
+                              className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900"
+                              data-selected-job-invoice-card-payment-enabled="true"
+                              onChange={(event) =>
+                                updatePlainInvoiceForm("cardPaymentEnabled", event.target.checked)
+                              }
+                              type="checkbox"
+                            />
+                            <span>Allow card payment for this invoice</span>
+                          </label>
+                          <label
+                            className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+                              plainInvoiceForm.cardPaymentEnabled ? "text-slate-700" : "text-slate-400"
+                            }`}
+                          >
+                            <input
+                              checked={plainInvoiceForm.cardFeeApplies}
+                              className="h-3.5 w-3.5 rounded border-slate-400 text-slate-900 disabled:border-slate-300"
+                              data-selected-job-invoice-card-fee-applies="true"
+                              disabled={!plainInvoiceForm.cardPaymentEnabled}
+                              onChange={(event) =>
+                                updatePlainInvoiceForm("cardFeeApplies", event.target.checked)
+                              }
+                              type="checkbox"
+                            />
+                            <span>Apply 10% card fee</span>
+                          </label>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-slate-600">
+                            Issuing creates an Unpaid invoice. Payment status is managed separately after receipt.
+                          </p>
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-700"
+                            data-selected-job-invoice-update-preview="true"
+                            onClick={previewPlainInvoice}
+                            type="button"
+                          >
+                            Update preview
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <article
+                      className="mx-auto w-full max-w-4xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-800 shadow-sm sm:px-6"
+                      data-selected-job-invoice-paper="true"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="max-w-[55%]">
+                          <Image
+                            alt={`${companyProfile.company_name} logo`}
+                            className="h-auto w-36 object-contain object-left"
+                            height={72}
+                            src={companyProfile.logo_image_url || defaultCompanyProfile.logo_image_url}
+                            width={180}
+                          />
+                          <p className="mt-2 font-bold text-slate-950">{companyProfile.company_name}</p>
+                          <p className="mt-0.5 max-w-xs leading-4 text-slate-600">
+                            {companyProfile.address}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <h3 className="text-2xl font-medium tracking-wide text-slate-950">INVOICE</h3>
+                          <p className="mt-1 font-bold" data-selected-job-invoice-number="true">
+                            Invoice# {plainInvoiceIssuedRecord?.invoiceNumber || "Not issued"}
+                          </p>
+                          <p className="mt-4 text-[11px] font-semibold text-slate-500">Balance Due</p>
+                          <p className="text-base font-bold text-slate-950" data-selected-job-invoice-top-balance="true">
+                            SGD{plainInvoiceSelectedJobBalanceLabel.replace(/^\$/, "")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <p className="font-semibold text-slate-500">Bill To</p>
+                          <p className="mt-1 font-bold text-sky-700" data-plain-invoice-preview-bill-to="true">
+                            {plainInvoiceIssuedRecord?.customerName ||
+                              plainInvoicePreview?.customerName ||
+                              plainInvoiceForm.crmCustomerName ||
+                              plainInvoiceForm.billToName}
+                          </p>
+                          <p className="mt-1 text-slate-600">CRM account {plainInvoiceForm.crmCustomerId}</p>
+                          <p className="text-slate-600">Reference {plainInvoiceForm.reference}</p>
+                        </div>
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 sm:justify-self-end">
+                          <dt className="font-semibold text-slate-500">Invoice Date:</dt>
+                          <dd className="text-right font-semibold">
+                            {plainInvoiceIssuedRecord?.issueDateLabel || "Not issued"}
+                          </dd>
+                          <dt className="font-semibold text-slate-500">Terms:</dt>
+                          <dd className="text-right font-semibold">Due by date shown</dd>
+                          <dt className="font-semibold text-slate-500">Due Date:</dt>
+                          <dd className="text-right font-semibold">
+                            {plainInvoiceIssuedRecord?.dueDateLabel ||
+                              plainInvoicePreview?.dueDateLabel ||
+                              formatInvoiceDate(new Date(`${plainInvoiceForm.dueDateIso}T00:00:00+08:00`))}
+                          </dd>
+                          <dt className="font-semibold text-slate-500">Status:</dt>
+                          <dd className="text-right font-bold" data-selected-job-invoice-status="true">
+                            {plainInvoiceSelectedJobReviewStatus}
+                          </dd>
+                        </dl>
+                      </div>
+
+                      <div className="mt-5 overflow-x-auto">
+                        <table className="w-full min-w-[560px] text-left">
+                          <thead className="bg-slate-900 text-white">
+                            <tr>
+                              <th className="px-2 py-2">#</th>
+                              <th className="px-2 py-2">Item &amp; Description</th>
+                              <th className="px-2 py-2 text-right">Qty</th>
+                              <th className="px-2 py-2 text-right">Rate</th>
+                              <th className="px-2 py-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody data-selected-job-invoice-lines="true">
+                            {plainInvoiceSelectedJobReviewLines.map((item, index) => (
+                              <tr className="border-b border-slate-200 align-top" key={`${item.description}-${index}`}>
+                                <td className="px-2 py-2">{index + 1}</td>
+                                <td className="whitespace-pre-wrap px-2 py-2 font-semibold text-slate-950">{item.description}</td>
+                                <td className="px-2 py-2 text-right">{plainInvoiceQuantityLabel(item.quantity)}</td>
+                                <td className="px-2 py-2 text-right">{plainInvoiceLineItemRateLabel(item)}</td>
+                                <td className="px-2 py-2 text-right font-bold">{item.amountLabel}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="ml-auto mt-3 w-full max-w-xs space-y-2">
+                        <div className="flex justify-between gap-4">
+                          <span>Sub Total</span>
+                          <strong>{formatInvoiceAmount(plainInvoiceSelectedJobReviewAmountCents)}</strong>
+                        </div>
+                        <div className="flex justify-between gap-4 text-sm">
+                          <strong>Total</strong>
+                          <strong>SGD{formatInvoiceAmount(plainInvoiceSelectedJobReviewAmountCents).replace(/^\$/, "")}</strong>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span>Payment Made</span>
+                          <span>{plainInvoiceSelectedJobPaymentMadeLabel}</span>
+                        </div>
+                        <div className="flex justify-between gap-4 bg-slate-100 px-2 py-2" data-selected-job-invoice-balance="true">
+                          <strong>Balance Due</strong>
+                          <strong>SGD{plainInvoiceSelectedJobBalanceLabel.replace(/^\$/, "")}</strong>
+                        </div>
+                      </div>
+
+                      {!isPlainInvoicePreviewCurrent && !plainInvoiceIssuedRecord ? (
+                        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 font-semibold text-amber-900">
+                          Review required: use Edit to complete every amount before Send or PDF Download.
+                        </p>
+                      ) : null}
+
+                      <div className="mt-6 max-w-lg" data-selected-job-invoice-signoff="true">
+                        <p>Thank you for your business</p>
+                        <p className="mt-3">Best Regards,</p>
+                        <p>{companyProfile.invoice_signoff_name}</p>
+                        <p>{companyProfile.phone}</p>
+                      </div>
+
+                      <details
+                        className="mt-5 max-w-lg break-words leading-4"
+                        data-selected-job-invoice-bank="true"
+                      >
+                        <summary className="w-fit cursor-pointer font-bold underline underline-offset-2">
+                          {plainInvoiceCompanyPaymentHeading}
+                        </summary>
+                        <div className="mt-1">
+                          {plainInvoiceCompanyPaymentDetailLines.map((line, index) => (
+                            <p key={`${index}-${line}`}>{line}</p>
+                          ))}
+                        </div>
+                      </details>
+
+                      <div
+                        className="mt-6 grid max-w-3xl gap-3 border-t border-slate-200 pt-3 text-[11px] leading-4 text-slate-600 sm:grid-cols-2"
+                        data-selected-job-invoice-lower-disclosures="true"
+                      >
+                        <details data-selected-job-invoice-notes="true">
+                          <summary className="w-fit cursor-pointer font-semibold text-slate-800 underline underline-offset-2">
+                            Notes
+                          </summary>
+                          <div className="mt-1">
+                            <p>Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.</p>
+                            <p>Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.</p>
+                            <p>Additional waiting time: $15 per 15-minute block.</p>
+                            <p>Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.</p>
+                          </div>
+                        </details>
+
+                        <details className="break-words" data-selected-job-invoice-terms="true">
+                          <summary className="w-fit cursor-pointer font-semibold text-slate-800 underline underline-offset-2">
+                            Terms &amp; Conditions
+                          </summary>
+                          <p className="mt-1">{companyProfile.invoice_footer_terms}</p>
+                        </details>
+                      </div>
+                    </article>
+
+                    <p
+                      aria-live="polite"
+                      className={`mx-auto mt-2 max-w-4xl rounded-md border px-2 py-1.5 text-xs font-semibold ${regularCustomerBookingFeedbackClass(
+                        plainInvoiceFeedbackTone,
+                      )}`}
+                      data-plain-invoice-feedback="true"
+                      data-plain-invoice-feedback-tone={plainInvoiceFeedbackTone}
+                    >
+                      {plainInvoiceFeedback}
+                    </p>
+                  </div>
+                ) : (
+                  <>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -8809,18 +10195,13 @@ export default function MockCustomerDashboardPage() {
                       value={plainInvoiceForm.billToName}
                     />
                   </label>
-                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                    Email
-                    <input
-                      className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
-                      data-plain-invoice-bill-to-email="true"
-                      inputMode="email"
-                      onChange={(event) => updatePlainInvoiceForm("billToEmail", event.target.value)}
-                      placeholder="optional"
-                      type="email"
-                      value={plainInvoiceForm.billToEmail}
-                    />
-                  </label>
+                  <PlainInvoiceRecipientSelector
+                    manualEmail={plainInvoiceForm.billToEmail}
+                    onManualEmailChange={(value) => updatePlainInvoiceForm("billToEmail", value)}
+                    onToggle={togglePlainInvoiceRecipient}
+                    options={plainInvoiceRecipientOptions}
+                    selectedEmails={plainInvoiceForm.recipientEmails}
+                  />
                   <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                     Reference
                     <input
@@ -8920,19 +10301,33 @@ export default function MockCustomerDashboardPage() {
                   </div>
                   <div className="mt-2 space-y-2">
                     <div
-                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]"
+                      className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem]"
                       data-plain-invoice-line-item-row="1"
                     >
                       <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                         Item 1
-                        <input
-                          className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                        <textarea
+                          className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold leading-5 text-slate-950 outline-none focus:border-slate-700"
                           data-plain-invoice-line-description="true"
+                          maxLength={500}
                           onChange={(event) =>
                             updatePlainInvoiceForm("lineDescription", event.target.value)
                           }
                           placeholder="Service description printed on invoice"
                           value={plainInvoiceForm.lineDescription}
+                        />
+                      </label>
+                      <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                        Qty
+                        <input
+                          className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                          data-plain-invoice-quantity="true"
+                          inputMode="decimal"
+                          min="0.01"
+                          onChange={(event) => updatePlainInvoiceForm("quantity", event.target.value)}
+                          step="0.01"
+                          type="number"
+                          value={plainInvoiceForm.quantity}
                         />
                       </label>
                       <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -8952,15 +10347,16 @@ export default function MockCustomerDashboardPage() {
 
                       return (
                         <div
-                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]"
+                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem_auto]"
                           data-plain-invoice-line-item-row={rowNumber}
                           key={`plain-invoice-line-item-${rowNumber}`}
                         >
                           <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
                             Item {rowNumber}
-                            <input
-                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                            <textarea
+                              className="mt-1 min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold leading-5 text-slate-950 outline-none focus:border-slate-700"
                               data-plain-invoice-extra-line-description={rowNumber}
+                              maxLength={500}
                               onChange={(event) =>
                                 updatePlainInvoiceAdditionalLineItem(
                                   index,
@@ -8970,6 +10366,21 @@ export default function MockCustomerDashboardPage() {
                               }
                               placeholder="Additional service / return trip"
                               value={item.lineDescription}
+                            />
+                          </label>
+                          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                            Qty
+                            <input
+                              className="mt-1 h-8 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-950 outline-none focus:border-slate-700"
+                              data-plain-invoice-extra-line-quantity={rowNumber}
+                              inputMode="decimal"
+                              min="0.01"
+                              onChange={(event) =>
+                                updatePlainInvoiceAdditionalLineItem(index, "quantity", event.target.value)
+                              }
+                              step="0.01"
+                              type="number"
+                              value={item.quantity}
                             />
                           </label>
                           <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">
@@ -9176,8 +10587,10 @@ export default function MockCustomerDashboardPage() {
                   send, payout, or GPS/live-location action. Email issues the invoice first, then uses the existing
                   guarded email route. Paid only changes invoice status; it does not record a payment.
                 </p>
+                  </>
+                )}
               </div>
-              {customerInvoiceDrafts.length > 0 ? (
+              {!plainInvoiceSelectedJobReviewActive && customerInvoiceDrafts.length > 0 ? (
                 <div
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-draft-list="true"
@@ -9221,7 +10634,7 @@ export default function MockCustomerDashboardPage() {
                   </div>
                 </div>
               ) : null}
-              {issuedCustomerInvoices.length > 0 ? (
+              {!plainInvoiceSelectedJobReviewActive && issuedCustomerInvoices.length > 0 ? (
                 <div
                   className="mt-3 border-t border-slate-200 pt-3"
                   data-customer-invoice-issued-local-list="true"
@@ -9430,7 +10843,6 @@ export default function MockCustomerDashboardPage() {
                 </div>
               ) : null}
             </div>
-          </div>
         </section>
 
           </div>

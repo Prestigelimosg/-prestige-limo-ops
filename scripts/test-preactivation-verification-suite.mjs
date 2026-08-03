@@ -2,6 +2,14 @@ import { spawnSync } from "node:child_process";
 
 const guardChecks = [
   {
+    label: "customer booking phone OTP guard",
+    script: "scripts/test-customer-booking-phone-otp-guard.mjs",
+  },
+  {
+    label: "admin booking browser fixture boundary guard",
+    script: "scripts/test-admin-booking-browser-fixture-boundary-guard.mjs",
+  },
+  {
     label: "global pre-activation no-live guard",
     script: "scripts/test-global-preactivation-no-live-guard.mjs",
   },
@@ -54,6 +62,62 @@ const guardChecks = [
     script: "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs",
   },
   {
+    label: "customer invoice line-description format tests",
+    script: "scripts/test-customer-invoice-line-description-format.mjs",
+  },
+  {
+    label: "customer traveller invoice separation guard",
+    script: "scripts/test-customer-traveler-invoice-separation-guard.mjs",
+  },
+  {
+    label: "customer guest-account invoice guard",
+    script: "scripts/test-customer-guest-account-invoice-guard.mjs",
+  },
+  {
+    label: "customer folder public reference and inline job edit guard",
+    script: "scripts/test-customer-folder-inline-job-edit-guard.mjs",
+  },
+  {
+    label: "customer folder price review guard",
+    script: "scripts/test-customer-folder-price-review-guard.mjs",
+  },
+  {
+    label: "customer folder DSP billing-time correction guard",
+    script: "scripts/test-customer-folder-dsp-billing-time-correction-guard.mjs",
+  },
+  {
+    label: "customer folder amended unpaid-invoice link guard",
+    script: "scripts/test-customer-folder-amended-unpaid-invoice-link-guard.mjs",
+  },
+  {
+    label: "customer folder issued-invoice eligibility guard",
+    script: "scripts/test-customer-folder-issued-invoice-eligibility-guard.mjs",
+  },
+  {
+    label: "customer folder issued-invoice edit guard",
+    script: "scripts/test-customer-folder-issued-invoice-edit-guard.mjs",
+  },
+  {
+    label: "customer folder issued-invoice DSP calculation guard",
+    script: "scripts/test-customer-folder-issued-invoice-dsp-calculation-guard.mjs",
+  },
+  {
+    label: "customer card-option default override guard",
+    script: "scripts/test-customer-card-option-default-override-guard.mjs",
+  },
+  {
+    label: "customer invoice multi-recipient email guard",
+    script: "scripts/test-customer-invoice-multi-recipient-email-guard.mjs",
+  },
+  {
+    label: "customer invoice amended-email idempotency guard",
+    script: "scripts/test-customer-invoice-amended-email-idempotency-guard.mjs",
+  },
+  {
+    label: "customer invoice reminder and payment action guard",
+    script: "scripts/test-customer-invoice-reminder-payment-actions-guard.mjs",
+  },
+  {
     label: "business-grade forward completion sequence guard",
     script: "scripts/test-business-grade-forward-completion-sequence.mjs",
   },
@@ -80,6 +144,10 @@ const guardChecks = [
   {
     label: "admin Driver Acknowledgement Dispatch Release boundary guard",
     script: "scripts/test-admin-driver-acknowledgement-dispatch-release-boundary-guard.mjs",
+  },
+  {
+    label: "pending Driver ACK Queue guard",
+    script: "scripts/test-pending-driver-ack-queue-guard.mjs",
   },
   {
     label: "admin Day-of-Trip Dispatch Monitor existing workflow lock guard",
@@ -140,6 +208,14 @@ const guardChecks = [
   {
     label: "core booking persistence safe path guard",
     script: "scripts/test-core-booking-persistence-safe-path-guard.mjs",
+  },
+  {
+    label: "ChatGPT booking preview API contract guard",
+    script: "scripts/test-chatgpt-booking-preview-api-contract.mjs",
+  },
+  {
+    label: "ChatGPT confirmed booking create API contract guard",
+    script: "scripts/test-chatgpt-confirmed-booking-create-api-contract.mjs",
   },
   {
     label: "admin booking read contract disabled setup guard",
@@ -294,6 +370,10 @@ const guardChecks = [
     script: "scripts/test-customer-hourly-invoice-auto-calculation-guard.mjs",
   },
   {
+    label: "admin Dispatch DSP scheduled-end and invoice wiring guard",
+    script: "scripts/test-admin-dispatch-dsp-scheduled-end-invoice-wiring-guard.mjs",
+  },
+  {
     label: "customer invoice driver JC timing and override guard",
     script: "scripts/test-customer-invoice-driver-jc-override-guard.mjs",
   },
@@ -322,6 +402,30 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
+    label: "customer device push notification guard",
+    script: "scripts/test-customer-device-push-notification-guard.mjs",
+  },
+  {
+    label: "customer booking status device alert guard",
+    script: "scripts/test-customer-booking-status-device-alert-guard.mjs",
+  },
+  {
+    label: "Driver Job acknowledgement device push alert guard",
+    script: "scripts/test-driver-job-device-push-alert-guard.mjs",
+  },
+  {
+    label: "Driver one-hour pickup app push reminder guard",
+    script: "scripts/test-driver-one-hour-pickup-push-reminder-guard.mjs",
+  },
+  {
+    label: "Driver Portal encrypted session and exact-driver jobs guard",
+    script: "scripts/test-driver-portal-session-jobs-guard.mjs",
+  },
+  {
+    label: "web app install manifest guard",
+    script: "scripts/test-web-app-install-manifest-guard.mjs",
+  },
+  {
     label: "public customer/driver visibility boundary guard",
     script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
   },
@@ -346,6 +450,10 @@ const guardChecks = [
     script: "scripts/test-public-api-request-input-boundary-guard.mjs",
   },
   {
+    label: "admin-issued customer booking invitation guard",
+    script: "scripts/test-customer-booking-invitation-guard.mjs",
+  },
+  {
     label: "public API session cookie/cache boundary guard",
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
   },
@@ -364,6 +472,14 @@ const guardChecks = [
   {
     label: "public client navigation boundary guard",
     script: "scripts/test-public-client-navigation-boundary-guard.mjs",
+  },
+  {
+    label: "release hardening security guard",
+    script: "scripts/test-release-hardening-security-guard.mjs",
+  },
+  {
+    label: "Driver Job demo Production privacy guard",
+    script: "scripts/test-driver-job-demo-production-privacy-guard.mjs",
   },
   {
     label: "public customer form surface boundary guard",
@@ -412,6 +528,10 @@ const guardChecks = [
   {
     label: "driver job details admin sync guard",
     script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
+  },
+  {
+    label: "driver acknowledgement calendar identity persistence contract",
+    script: "scripts/test-driver-job-status-persistence-api-contract.mjs",
   },
   {
     label: "dispatch flight-location copy guard",
@@ -504,6 +624,18 @@ const guardChecks = [
   {
     label: "customer portal access link guard",
     script: "scripts/test-customer-portal-access-link-guard.mjs",
+  },
+  {
+    label: "customer permanent-link rebooking and receipt guard",
+    script: "scripts/test-customer-rebooking-permanent-link-receipt-guard.mjs",
+  },
+  {
+    label: "customer permanent-link revision runtime guard",
+    script: "scripts/test-customer-portal-link-revision-runtime-guard.mjs",
+  },
+  {
+    label: "customer booking receipt email guard",
+    script: "scripts/test-customer-booking-receipt-email-guard.mjs",
   },
   {
     label: "public customer booking memory surface guard",
@@ -811,8 +943,12 @@ const guardChecks = [
     script: "scripts/test-driver-in-app-notification-admin-button-guard.mjs",
   },
   {
-    label: "Driver Job calendar download guard",
+    label: "Driver Job personal Google Calendar guard",
     script: "scripts/test-driver-job-calendar-download-guard.mjs",
+  },
+  {
+    label: "Google Calendar OAuth public pages guard",
+    script: "scripts/test-google-calendar-oauth-public-pages-guard.mjs",
   },
   {
     label: "Customer In-App Notification admin button guard",
@@ -915,6 +1051,10 @@ const guardChecks = [
     script: "scripts/test-driver-live-location-gated-runtime-path-guard.mjs",
   },
   {
+    label: "Driver Live Location assigned-active eligibility guard",
+    script: "scripts/test-driver-live-location-assigned-active-eligibility-guard.mjs",
+  },
+  {
     label: "Driver Live Location admin-controlled runtime gate readiness guard",
     script: "scripts/test-driver-live-location-admin-runtime-gate-readiness-guard.mjs",
   },
@@ -989,6 +1129,10 @@ const guardChecks = [
   {
     label: "Driver Live Location stale/offline readiness contract guard",
     script: "scripts/test-driver-live-location-stale-offline-readiness-contract-guard.mjs",
+  },
+  {
+    label: "Driver Companion iPhone/Android background-location foundation guard",
+    script: "scripts/test-driver-companion-background-location-foundation-guard.mjs",
   },
   {
     label: "Customer Live Location link readiness contract guard",

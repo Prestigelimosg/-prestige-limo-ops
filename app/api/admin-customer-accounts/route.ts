@@ -4,7 +4,10 @@ import {
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
-import { loadAdminCustomerAccounts } from "../../../lib/admin-customer-accounts-read";
+import {
+  loadAdminCustomerAccounts,
+  updateAdminCustomerGuestAccountBilling,
+} from "../../../lib/admin-customer-accounts-read";
 
 export const dynamic = "force-dynamic";
 
@@ -136,7 +139,10 @@ function routeLocalCustomerFolderBoundary(request: Request): AdminDispatcherBoun
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathPrefixes: ["/customers"],
+    allowServerSessionRoleMethodsWithoutRequestToken: ["PATCH"],
+  });
 
   if (boundary.ok) {
     return {
@@ -146,6 +152,16 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
   }
 
   return routeLocalCustomerFolderBoundary(request);
+}
+
+async function readJsonBody(request: Request) {
+  try {
+    const body = await request.json();
+
+    return body !== null && typeof body === "object" && !Array.isArray(body) ? body : {};
+  } catch {
+    return {};
+  }
 }
 
 function safeFailureResponse() {
@@ -185,6 +201,30 @@ export async function GET(request: Request) {
       summary: result.data.summary,
       version: result.data.version,
     });
+  } catch {
+    return safeFailureResponse();
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const boundary = requireAdminDispatcherBoundary(request);
+
+    if (!boundary.ok) {
+      return boundary.response;
+    }
+
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const result = await updateAdminCustomerGuestAccountBilling(
+      await readJsonBody(request),
+      actor,
+    );
+
+    if (!result.ok) {
+      return Response.json({ error: result.error, ok: false }, { status: result.status });
+    }
+
+    return Response.json({ account: result.data, ok: true });
   } catch {
     return safeFailureResponse();
   }

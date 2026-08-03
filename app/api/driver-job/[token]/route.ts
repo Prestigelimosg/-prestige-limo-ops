@@ -14,6 +14,9 @@ import {
   mockDriverJobLinks,
   resetMockDriverJobLinkDataForTests,
 } from "../../../../lib/driver-job-link-mock-store.ts";
+import {
+  getDriverDevicePushReadiness,
+} from "../../../../lib/driver-device-push-notification.ts";
 
 type DriverJobRouteContext = {
   params: Promise<{
@@ -32,12 +35,43 @@ const blockedStatusByReason = {
   unauthorized: 401,
 } as const;
 
+function publicDriverDeviceAlertReadiness() {
+  const readiness = getDriverDevicePushReadiness();
+
+  return {
+    enabled: readiness.enabled,
+    public_key: readiness.public_key,
+    ready: readiness.ready,
+  };
+}
+
+function publicDriverDeviceAlertRegistration(result: {
+  link_key: string | null;
+  subscription_registered: boolean;
+}) {
+  return {
+    link_key: result.link_key,
+    subscription_registered: result.subscription_registered,
+  };
+}
+
+function publicDriverPortalEnrollment(result: {
+  jobKey: string | null;
+  ok: boolean;
+}) {
+  return {
+    enrolled: result.ok,
+    link_key: result.ok ? result.jobKey : null,
+  };
+}
+
 function readDriverDetailsBody(body: unknown) {
   const record = body && typeof body === "object" && !Array.isArray(body)
     ? body as Record<string, unknown>
     : {};
 
   return {
+    devicePushSubscription: record.device_push_subscription,
     driverContact: record.driver_contact ?? record.driverContact,
     driverName: record.driver_name ?? record.driverName,
     driverPlateNumber: record.driver_plate_number ?? record.driverPlateNumber ?? record.driverPlate,
@@ -53,6 +87,7 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
 
     if (result.ok) {
       return Response.json({
+        device_alerts: publicDriverDeviceAlertReadiness(),
         ok: true,
         mode: "production",
         payload: result.payload,
@@ -86,6 +121,7 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
 
   // Mock-backed route skeleton only. No Supabase reads, no Driver Database reads, no production token table yet.
   return Response.json({
+    device_alerts: publicDriverDeviceAlertReadiness(),
     ok: true,
     mode: "mock",
     payload: result.payload,
@@ -98,16 +134,28 @@ export async function PATCH(request: Request, context: DriverJobRouteContext) {
 
   if (isProductionDriverJobLinkMode()) {
     const result = await applyProductionDriverJobDetailsUpdate({
+      driverPortalCookieHeader: request.headers.get("cookie"),
       token,
       ...details,
     });
 
     if (result.ok) {
-      return Response.json({
-        ok: true,
-        mode: "production",
-        payload: result.payload,
+      const headers = new Headers({
+        "Cache-Control": "no-store",
       });
+      if (result.driver_portal.ok) {
+        headers.set("Set-Cookie", result.driver_portal.cookie);
+      }
+      return Response.json(
+        {
+          device_alerts: publicDriverDeviceAlertRegistration(result.device_alerts),
+          driver_portal: publicDriverPortalEnrollment(result.driver_portal),
+          ok: true,
+          mode: "production",
+          payload: result.payload,
+        },
+        { headers },
+      );
     }
 
     return Response.json(result, { status: blockedStatusByReason[result.reason] });
@@ -132,6 +180,14 @@ export async function PATCH(request: Request, context: DriverJobRouteContext) {
   }
 
   return Response.json({
+    device_alerts: {
+      link_key: null,
+      subscription_registered: false,
+    },
+    driver_portal: {
+      enrolled: false,
+      link_key: null,
+    },
     ok: true,
     mode: "mock",
     payload: result.payload,

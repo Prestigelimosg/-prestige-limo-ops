@@ -13,14 +13,32 @@ import {
   type DriverJobProductionStatusUpdateResult,
   type DriverJobStatusPersistenceClient,
 } from "./driver-job-status-persistence.ts";
+import {
+  registerDriverDevicePushSubscriptionForAcknowledgedLink,
+  type DriverDevicePushRegistrationResult,
+} from "./driver-device-push-notification.ts";
+import {
+  issueDriverPortalSessionForAcknowledgedToken,
+  type DriverPortalEnrollmentResult,
+} from "./driver-portal-session.ts";
 
 export type ProductionDriverJobDetailsUpdateInput = {
+  devicePushSubscription?: unknown;
+  driverPortalCookieHeader?: string | null;
   driverContact?: unknown;
   driverName?: unknown;
   driverPlateNumber?: unknown;
   driverVehicleModel?: unknown;
   token: string;
 };
+
+export type ProductionDriverJobDetailsUpdateResult =
+  | (Extract<DriverJobProductionDetailsUpdateResult, { ok: true }> & {
+      device_alerts: DriverDevicePushRegistrationResult;
+      driver_portal: DriverPortalEnrollmentResult;
+    })
+  | Exclude<DriverJobProductionDetailsUpdateResult, { ok: true }>
+  | DriverJobLinkDisabledResult;
 
 export type ProductionDriverJobStatusUpdateInput = {
   completionNote?: unknown;
@@ -30,6 +48,13 @@ export type ProductionDriverJobStatusUpdateInput = {
   status: string;
   token: string;
 };
+
+const adminDevicePushEventForDriverStatus = {
+  driver_otw: "driver_otw",
+  ots: "driver_ots",
+  pob: "driver_pob",
+  completed: "driver_completed",
+} as const;
 
 let driverJobProductionClientForTests: DriverJobStatusPersistenceClient | null = null;
 
@@ -86,21 +111,21 @@ export async function getProductionDriverJobPayloadForToken(
 // verified job token. It does not expose pricing, payout, provider, GPS, or
 // billing fields, and it does not send customer/provider messages.
 export async function applyProductionDriverJobDetailsUpdate({
+  devicePushSubscription,
+  driverPortalCookieHeader,
   driverContact,
   driverName,
   driverPlateNumber,
   driverVehicleModel,
   token,
-}: ProductionDriverJobDetailsUpdateInput): Promise<
-  DriverJobProductionDetailsUpdateResult | DriverJobLinkDisabledResult
-> {
+}: ProductionDriverJobDetailsUpdateInput): Promise<ProductionDriverJobDetailsUpdateResult> {
   const clientResult = resolveProductionClient();
 
   if (!clientResult.ok) {
     return clientResult;
   }
 
-  return saveDriverJobDetailsThroughStatusPersistence({
+  const detailsResult = await saveDriverJobDetailsThroughStatusPersistence({
     client: clientResult.client,
     driverContact,
     driverName,
@@ -108,6 +133,55 @@ export async function applyProductionDriverJobDetailsUpdate({
     driverVehicleModel,
     token,
   });
+
+  if (!detailsResult.ok) {
+    return detailsResult;
+  }
+
+  const deviceAlerts = await registerDriverDevicePushSubscriptionForAcknowledgedLink({
+    client: clientResult.client,
+    subscription: devicePushSubscription,
+    token,
+  });
+  const driverPortal = await issueDriverPortalSessionForAcknowledgedToken({
+    client: clientResult.client,
+    cookieHeader: driverPortalCookieHeader ?? null,
+    token,
+  });
+
+  try {
+    const { syncAcknowledgedDriverDetailsToOperationsCalendar } = await import(
+      "./driver-job-operations-calendar-sync.ts"
+    );
+    const operationsCalendarSynced =
+      await syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: detailsResult.booking_reference,
+        client: clientResult.client,
+        pickupAt: detailsResult.payload.pickupDateTime,
+      });
+
+    if (!operationsCalendarSynced) {
+      console.warn("Driver acknowledgement Operations Calendar sync failed safely.");
+    }
+  } catch {
+    // A saved acknowledgement must not fail because Operations Calendar is unavailable.
+    console.warn("Driver acknowledgement Operations Calendar sync failed safely.");
+  }
+
+  try {
+    const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
+    await sendAdminDevicePushAlert("driver_acknowledged", {
+      vehiclePlate: detailsResult.payload.assignedDriver.plate,
+    });
+  } catch {
+    // A saved acknowledgement must not fail because Admin device push is unavailable.
+  }
+
+  return {
+    ...detailsResult,
+    device_alerts: deviceAlerts,
+    driver_portal: driverPortal,
+  };
 }
 
 // Status updates insert one event for the verified token/link only, may queue
@@ -130,7 +204,7 @@ export async function applyProductionDriverJobStatusUpdate({
     return clientResult;
   }
 
-  return saveDriverJobStatusThroughStatusPersistence({
+  const result = await saveDriverJobStatusThroughStatusPersistence({
     client: clientResult.client,
     completionNote,
     exceptionReason,
@@ -139,4 +213,17 @@ export async function applyProductionDriverJobStatusUpdate({
     status,
     token,
   });
+
+  if (result.ok) {
+    try {
+      const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification.ts");
+      await sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status], {
+        vehiclePlate: result.payload.assignedDriver.plate,
+      });
+    } catch {
+      // A saved driver status must not fail because Admin device push is unavailable.
+    }
+  }
+
+  return result;
 }

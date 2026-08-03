@@ -195,7 +195,7 @@ assertExcludes(typedDisplayBridgeBlock, "setBookings", "typed display bridge mus
 assertExcludes(typedDisplayBridgeBlock, legacySavedBookingsPath, "typed display bridge must not call legacy route");
 
 const typedDisplayFetchFragment = "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)";
-const legacySavedBookingsFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`";
+const legacySavedBookingsFetchFragment = "fetchAdminSavedBookingsList(searchParams)";
 assertIncludes(appPage, 'const adminLoadBookingsListLimit = "100";', "bounded admin booking list limit");
 assertIncludes(loadBookingsBlock, `${typedDisplayFetchFragment}.catch(() => null)`, "typed display best-effort fetch");
 assertIncludes(
@@ -206,7 +206,7 @@ assertIncludes(
 assertIncludes(loadBookingsBlock, legacySavedBookingsFetchFragment, "legacy saved-bookings fetch");
 assertIncludes(loadBookingsBlock, "function fetchAdminSavedBookingsList", "saved-bookings-only list helper");
 assertExcludes(loadBookingsBlock, "adminBookingsApiPath", "retired admin-bookings list fallback");
-assertIncludes(loadBookingsBlock, "const loadedBookings = sortBookingsNewestFirst(bookingsListResult.bookings);", "admin list result source");
+assertIncludes(loadBookingsBlock, "const loadedBookings = mergeSavedBookingMonitorCoverage(", "admin list result source");
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "legacy BookingRecord state source");
 assertIncludes(
   loadBookingsBlock,

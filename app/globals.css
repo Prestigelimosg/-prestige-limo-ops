@@ -126,3 +126,135 @@ input {
     padding-block: 0.375rem;
   }
 }
+
+/*
+ * Phone-only focus for the established Dispatch lane. The same parser, fields,
+ * previews, and Save + CRM controls remain mounted; this changes only which
+ * existing section is visible at one time on a narrow screen.
+ */
+@media (max-width: 639px) {
+  [data-admin-mobile-compact-header="true"] {
+    gap: 0.375rem;
+    padding-bottom: 0.5rem;
+  }
+
+  [data-admin-mobile-header-title="true"] > p:first-child,
+  [data-admin-mobile-header-status="true"] {
+    display: none;
+  }
+
+  [data-admin-mobile-header-title="true"] > h1 {
+    font-size: 1.25rem;
+    line-height: 1.5rem;
+    margin-top: 0;
+  }
+
+  [data-admin-mobile-header-title="true"]
+    > [data-admin-deployment-commit-marker="true"] {
+    margin-top: 0.125rem;
+  }
+
+  [data-admin-mobile-header-actions="true"] {
+    gap: 0;
+  }
+
+  [data-admin-mobile-header-actions="true"]
+    > [data-customers-payments-entry="true"] {
+    min-height: 2rem;
+  }
+
+  [data-admin-mobile-primary-tabs="true"] {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  [data-admin-mobile-primary-tabs="true"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-admin-mobile-primary-tabs="true"] > div {
+    flex: 0 0 4.75rem;
+    width: 4.75rem;
+  }
+
+  [data-admin-access-hub="true"] {
+    padding: 0.25rem;
+  }
+
+  [data-admin-access-hub="true"] > div {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  [data-admin-access-hub="true"] > div > div:first-child > p:last-child {
+    display: none;
+  }
+
+  [data-admin-mobile-access-links="true"] {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  [data-admin-mobile-access-links="true"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-admin-mobile-access-links="true"] > a {
+    flex: 0 0 auto;
+  }
+
+  [data-dispatch-workflow="true"][data-mobile-dispatch-step] > .contents > * {
+    display: none;
+  }
+
+  [data-dispatch-workflow="true"]
+    > .contents
+    > [data-mobile-dispatch-quick-booking="true"] {
+    display: grid;
+  }
+
+  [data-mobile-dispatch-step="message"]
+    > .contents
+    > [data-dispatch-workflow-step="booking-input-parser"],
+  [data-mobile-dispatch-step="details"]
+    > .contents
+    > [data-dispatch-workflow-step="booking-details"],
+  [data-mobile-dispatch-step="details"]
+    > .contents
+    > [data-dispatch-workflow-step="pickup-dropoff-vehicle"],
+  [data-mobile-dispatch-step="details"]
+    > .contents
+    > [data-dispatch-workflow-step="map-route-assist"],
+  [data-mobile-dispatch-step="review"]
+    > .contents
+    > [data-dispatch-workflow-step="job-card-preview"],
+  [data-mobile-dispatch-step="review"]
+    > .contents
+    > [data-mobile-dispatch-review-panel] {
+    display: revert;
+  }
+
+  [data-mobile-dispatch-step="options"]
+    > .contents
+    > :not([data-mobile-dispatch-quick-booking="true"]):not(
+      [data-dispatch-workflow-step="booking-input-parser"]
+    ):not([data-dispatch-workflow-step="booking-details"]):not(
+      [data-dispatch-workflow-step="pickup-dropoff-vehicle"]
+    ):not([data-dispatch-workflow-step="map-route-assist"]):not(
+      [data-dispatch-workflow-step="job-card-preview"]
+    ):not([data-mobile-dispatch-review-panel]):not([hidden]):not(.hidden) {
+    display: revert;
+  }
+}
+
+@media (min-width: 640px) {
+  [data-mobile-dispatch-quick-booking="true"] {
+    display: none;
+  }
+}

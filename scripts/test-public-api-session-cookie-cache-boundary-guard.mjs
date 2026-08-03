@@ -20,6 +20,7 @@ const publicApiRoutePaths = [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",
   "app/api/driver-job/[token]/flight-eta-acknowledgement-setup/route.ts",
   "app/api/driver-job-bids/route.ts",
+  "app/api/driver-portal/jobs/route.ts",
 ];
 
 const sourcePaths = [
@@ -33,6 +34,9 @@ const sourcePaths = [
   "lib/customer-portal-saved-bookings-adapter.ts",
   "lib/customer-portal-session-issue.ts",
   "lib/customer-saved-bookings-read.ts",
+  "lib/driver-portal-jobs.ts",
+  "lib/driver-portal-session.ts",
+  "app/driver-portal/page.tsx",
   "scripts/test-customer-booking-page-api-audit.mjs",
   "scripts/test-customer-booking-memory-ui-contract.mjs",
   "scripts/test-customer-portal-saved-bookings-adapter.mjs",
@@ -41,6 +45,17 @@ const sourcePaths = [
 ];
 
 const contractChecks = [
+  {
+    label: "driver portal encrypted session and jobs contract",
+    script: "scripts/test-driver-portal-session-jobs-guard.mjs",
+    requiredFragments: [
+      "Driver Portal cookie must include",
+      "Tampered Driver Portal sessions must fail closed.",
+      "Only one newest non-terminal exact-driver job may appear.",
+      "Driver Portal session and exact-driver jobs guard passed.",
+    ],
+    stripTypes: false,
+  },
   {
     label: "customer portal session issue cookie/cache contract",
     script: "scripts/test-customer-portal-session-issue-api-contract.mjs",
@@ -199,13 +214,13 @@ const ledgerSection = sectionBetween(ledger, "### Public API Session Cookie Cach
 
 for (const phrase of [
   "Public customer/driver API session, cookie, and cache boundaries are guarded across customer portal session issue, customer saved bookings, customer booking memory, customer booking status, customer booking request, customer app notifications, driver job, driver job notifications, driver issue-alert, driver flight ETA setup, and driver bidding routes.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "Only the customer portal session issue route may issue a live session cookie. The customer booking request route may only expire obsolete customer portal cookies after verified identity resolution fails, returns no booking write, and responds `Cache-Control: no-store`; all other public routes remain forbidden from setting cookies.",
+  "The owner-approved reusable Driver Portal supersedes only the former driver-cookie prohibition; customer, booking, messaging, Calendar, location, photo, billing, payment, payout, and provider boundaries remain unchanged.",
+  "Only the customer portal session issue route and a successful exact private Driver Job acknowledgement may issue a live session cookie. The customer booking request route may only expire obsolete customer portal cookies after verified identity resolution fails, returns no booking write, and responds `Cache-Control: no-store`; all other public routes remain forbidden from setting cookies.",
   "Customer portal session cookies must stay HttpOnly, Secure, SameSite=Lax, Priority=High, path-scoped, max-age limited, server-token backed, and fail closed for unsafe configured cookie names.",
   "Customer booking request, booking memory, and portal saved-bookings client adapters must use `credentials: \"same-origin\"`, `cache: \"no-store\"`, and purpose headers while never manually attaching Cookie, Authorization, or customer session-token headers.",
   "Customer saved-bookings and booking-memory reads may accept a server-validated same-origin session cookie; ambiguous, wrong, unsafe, placeholder, or duplicate cookie values fail closed.",
   "Customer booking status stays on its explicit server session-token header contract and does not set cookies.",
-  "Driver public APIs must remain cookie-free and must not set session cookies.",
+  "Driver public APIs remain cookie-free except the exact acknowledgement PATCH that issues the encrypted Driver Portal cookie and the read-only same-origin Driver Portal jobs route that validates it.",
   "Public API session/cache contracts must continue checking secure cookie attributes, no-store responses, no manual client auth headers, and cookie-backed fail-closed reads through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -221,21 +236,32 @@ assertIncludes(preactivationSuite, guardScript, "preactivation public API sessio
 const routesWithSetCookie = publicApiRoutePaths.filter((path) => files[path].includes("Set-Cookie"));
 assert.deepEqual(
   routesWithSetCookie,
-  ["app/api/customer-booking-requests/route.ts", "app/api/customer-portal-sessions/route.ts"],
+  [
+    "app/api/customer-booking-requests/route.ts",
+    "app/api/customer-portal-sessions/route.ts",
+    "app/api/driver-job/[token]/route.ts",
+  ],
   "public API Set-Cookie routes",
 );
 
 const routesWithCacheControl = publicApiRoutePaths.filter((path) => files[path].includes("Cache-Control"));
 assert.deepEqual(
   routesWithCacheControl,
-  ["app/api/customer-booking-requests/route.ts", "app/api/customer-portal-sessions/route.ts"],
+  [
+    "app/api/customer-booking-requests/route.ts",
+    "app/api/customer-portal-sessions/route.ts",
+    "app/api/driver-job/[token]/route.ts",
+    "app/api/driver-portal/jobs/route.ts",
+  ],
   "public API Cache-Control routes",
 );
 
 for (const routePath of publicApiRoutePaths) {
   assertExcludes(files[routePath], /cookies\s*\(/, `${routePath} direct Next cookies API`);
   assertExcludes(files[routePath], /headers\s*\(/, `${routePath} direct Next headers API`);
-  assertExcludes(files[routePath], /request\.headers\.get\(["']cookie["']\)/i, `${routePath} raw cookie header parsing`);
+  if (!["app/api/driver-job/[token]/route.ts", "app/api/driver-portal/jobs/route.ts"].includes(routePath)) {
+    assertExcludes(files[routePath], /request\.headers\.get\(["']cookie["']\)/i, `${routePath} raw cookie header parsing`);
+  }
 }
 
 const portalSessionRoute = files["app/api/customer-portal-sessions/route.ts"];
@@ -370,9 +396,31 @@ assertIncludes(
 );
 assertExcludes(bookingStatusRead, "request.headers.get(\"cookie\")", "customer booking status cookie parsing");
 
-for (const driverRoutePath of publicApiRoutePaths.filter((path) => path.includes("/driver-job"))) {
+for (const driverRoutePath of publicApiRoutePaths.filter(
+  (path) => path.includes("/driver-job") && path !== "app/api/driver-job/[token]/route.ts",
+)) {
   assertExcludes(files[driverRoutePath], /Set-Cookie|Cache-Control|request\.headers\.get\(["']cookie["']\)/i, `${driverRoutePath} cookie/cache surface`);
 }
+
+const driverJobRoute = files["app/api/driver-job/[token]/route.ts"];
+for (const fragment of [
+  'driverPortalCookieHeader: request.headers.get("cookie")',
+  'headers.set("Set-Cookie", result.driver_portal.cookie)',
+  '"Cache-Control": "no-store"',
+]) {
+  assertIncludes(driverJobRoute, fragment, `Driver Portal acknowledgement cookie boundary ${fragment}`);
+}
+
+const driverPortalJobsRoute = files["app/api/driver-portal/jobs/route.ts"];
+for (const fragment of [
+  'request.headers.get("cookie")',
+  '"Cache-Control": "no-store"',
+  'Vary: "Cookie"',
+  '"driver-portal-jobs-read"',
+]) {
+  assertIncludes(driverPortalJobsRoute, fragment, `Driver Portal jobs session boundary ${fragment}`);
+}
+assertExcludes(driverPortalJobsRoute, /Set-Cookie|driver_id|token_hash/i, "Driver Portal jobs public response secrets");
 
 for (const { label, requiredFragments, script } of contractChecks) {
   const source = files[script];

@@ -153,8 +153,8 @@ assertIncludes(
 );
 assertIncludes(
   newTravelerCreate,
-  ".select(\"id, company_id, traveler_name, customer_rates, driver_payout_rules\")",
-  "Traveler create must return id for runtime customer_rates boundary",
+  ".select(\"id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled\")",
+  "Traveler create must return the runtime customer_rates fields plus the established invoice card default",
 );
 assertIncludes(
   newTravelerCreate,

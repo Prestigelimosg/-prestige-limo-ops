@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
+const agentsPath = "AGENTS.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-driver-job-details-admin-sync-guard.mjs";
+const persistenceContractScript = "scripts/test-driver-job-status-persistence-api-contract.mjs";
 
 const appPagePath = "app/page.tsx";
 const driverJobRoutePath = "app/api/driver-job/[token]/route.ts";
 const driverJobPagePath = "app/driver-job/[token]/page.tsx";
 const driverJobContractPath = "lib/driver-job-link-contract.ts";
 const driverJobProductionPath = "lib/driver-job-link-production.ts";
+const driverJobOperationsCalendarSyncPath = "lib/driver-job-operations-calendar-sync.ts";
 const driverStatusPersistencePath = "lib/driver-job-status-persistence.ts";
 const adminBookingAdapterPath = "lib/admin-booking-supabase-adapter.ts";
 
@@ -44,6 +47,7 @@ function sliceBetween(source, startMarker, endMarker) {
 }
 
 const [
+  agents,
   ledger,
   preactivationSuite,
   appPage,
@@ -51,9 +55,11 @@ const [
   driverJobPage,
   driverJobContract,
   driverJobProduction,
+  driverJobOperationsCalendarSync,
   driverStatusPersistence,
   adminBookingAdapter,
 ] = await Promise.all([
+  readFile(agentsPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   readFile(appPagePath, "utf8"),
@@ -61,11 +67,67 @@ const [
   readFile(driverJobPagePath, "utf8"),
   readFile(driverJobContractPath, "utf8"),
   readFile(driverJobProductionPath, "utf8"),
+  readFile(driverJobOperationsCalendarSyncPath, "utf8"),
   readFile(driverStatusPersistencePath, "utf8"),
   readFile(adminBookingAdapterPath, "utf8"),
 ]);
 
+const operationsCalendarAgentLockSection = sectionBetween(
+  agents,
+  "# Owner-locked automatic Driver ACK to Operations Calendar sync — do not break",
+  "\n# ",
+);
+for (const phrase of [
+  "`Save & Acknowledge Job` must automatically",
+  "same deterministic Operations Calendar event",
+  "must not normally click `Update + Cal` merely to add or refresh driver name, contact, plate, or vehicle",
+  "booking amendments, explicit recovery, or events created before this automatic handoff existed",
+  "must never create a duplicate event",
+  "`sendUpdates=none`",
+  "personal Driver Calendar",
+  "scripts/test-admin-booking-google-calendar-sync-api-contract.mjs",
+  guardScript,
+  persistenceContractScript,
+]) {
+  assertIncludes(
+    operationsCalendarAgentLockSection,
+    phrase,
+    `Automatic Driver ACK Operations Calendar owner lock ${phrase}`,
+  );
+}
+
 const ledgerSection = sectionBetween(ledger, "### Driver Save And Acknowledge Details Admin Sync");
+const calendarIdentityLedgerSection = sectionBetween(
+  ledger,
+  "### Driver Acknowledgement To Calendar Identity Handoff Repair (2026-07-20)",
+);
+const indicatorLedgerSection = sectionBetween(ledger, "### Driver Job Acknowledgement Indicators");
+
+for (const phrase of [
+  "acknowledgement updated the link context and booking display fields but never persisted the hidden `driver_id` required by the established Calendar context check.",
+  "The driver still enters/confirms the same four visible details and never sees or types an internal ID.",
+  "The existing page layout, labels, inputs, `Save & Acknowledge Job` button, single `Add / Update Calendar` button, OAuth route/scope, encrypted credential, Google event writer, deterministic driver-ID-plus-booking-reference event key, amendment behavior, private reporting shortcut, OTW/OTS/POB/Job Completed controls, customer/admin messaging, live location, and separate Operations Calendar lane are unchanged.",
+  "a first acknowledgement creates only the five safe driver fields and binds the same ID to booking and link, while a future job with the exact same saved contact reuses the existing driver row without a duplicate.",
+]) {
+  assertIncludes(
+    calendarIdentityLedgerSection,
+    phrase,
+    `Driver acknowledgement Calendar identity ledger phrase ${phrase}`,
+  );
+}
+
+for (const phrase of [
+  "The driver’s established `Save & Acknowledge Job` action remains the only acknowledgement write.",
+  "prefilled or merely visible driver details never count as acknowledgement.",
+  "The existing admin Driver Job Link read projects only an admin-safe acknowledgement boolean and timestamp inside its existing `safe_summary`.",
+  "Dispatch keeps one compact booking-specific acknowledgement pill in the existing Create/Copy/Telegram/Revoke control row.",
+  "The existing Active Assigned Jobs header shows one compact waiting count, including a settled green `0 waiting` empty state, and each existing job card shows one compact exact-booking acknowledgement pill.",
+  "Each refresh batches up to 100 active links per page, stops when every visible job is matched or the established result set ends, and never starts a per-job acknowledgement read.",
+  "No second polling timer, route, panel, table, status writer, notification, provider send, schema, or acknowledgement workflow is added.",
+  "Late or stale reads are request-revision guarded and filtered to the exact visible booking references.",
+]) {
+  assertIncludes(indicatorLedgerSection, phrase, `Driver acknowledgement indicator ledger phrase ${phrase}`);
+}
 
 for (const phrase of [
   "Driver job link `Save & Acknowledge Job` now persists safe driver name/contact/plate/vehicle details through the verified driver job token path.",
@@ -77,10 +139,39 @@ for (const phrase of [
   "The admin Dispatch page quietly refreshes the existing active driver job link read once when booking sync sees driver name/contact/plate but no vehicle model on the currently loaded booking, so the safe vehicle summary can catch up after driver `Save & Acknowledge Job` without a manual refresh.",
   "If the loaded Dispatch booking already has driver name/contact/plate but no vehicle model, the same one-shot active driver job link safe-summary fallback starts immediately on load.",
   "This is not a customer send; admin still reviews Customer Copy before any customer-facing send.",
-  "The auto-sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, provider sends, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, calendar, or shims.",
+  "The three-second admin display sync uses existing admin-safe booking read paths only and does not add public reads, broad writes, Email/Resend/Telegram/WhatsApp/SMS, push sends, live GPS/customer map, billing/payment/PDF/invoice/payout, parser, or shims.",
   "Guard coverage lives in `scripts/test-driver-job-details-admin-sync-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `Driver details sync ledger phrase ${phrase}`);
+}
+
+const operationsCalendarLedgerSection = sectionBetween(
+  ledger,
+  "### Verified Driver Details To Operations Calendar Repair (2026-07-26)",
+);
+for (const phrase of [
+  "booking `10846` / `ADM-20260725150239`",
+  "same-event update behavior",
+  "Calendar provider failure never rolls back or blocks the saved driver acknowledgement",
+  "personal Driver Calendar",
+  "owner-locked in `AGENTS.md`",
+  "scripts/test-admin-booking-google-calendar-sync-api-contract.mjs",
+  guardScript,
+  persistenceContractScript,
+  "booking `10851` / `ADM-20260729110409`",
+  "`10851 · Reissued · Link issued 17:33`",
+  "`Driver details saved and job acknowledged. Device alerts are enabled on this device.`",
+  "`0 pending` and `No driver acknowledgements pending.`",
+  "`9999 > William Test Traveller - TRF - Prestige`",
+  "`Status: Draft`, `Vehicle: AVF`, `Driver: Me / 9999 / 9999999`",
+  "Initial Calendar reference search returned only the separate `Will Soh` personal Driver Calendar event and therefore triggered a stop-and-inspect rather than a failure claim.",
+  "No Admin `Update + Cal`, personal `Add / Update Calendar`, driver message, OTW, OTS, POB, Job Completed, live location, issue alert, invoice, payment, payout, PayNow, schema, environment, application-code repair, or external message was used.",
+]) {
+  assertIncludes(
+    operationsCalendarLedgerSection,
+    phrase,
+    `Driver acknowledgement Operations Calendar ledger phrase ${phrase}`,
+  );
 }
 
 for (const forbidden of [
@@ -99,6 +190,11 @@ for (const forbidden of [
 }
 
 assertIncludes(preactivationSuite, guardScript, "preactivation driver details sync guard registration");
+assertIncludes(
+  preactivationSuite,
+  persistenceContractScript,
+  "preactivation driver acknowledgement Calendar identity persistence contract registration",
+);
 
 assertIncludes(driverJobRoute, "export async function PATCH", "Driver job route details PATCH");
 assertIncludes(driverJobRoute, "readDriverDetailsBody", "Driver job route detail parser");
@@ -124,6 +220,81 @@ assertIncludes(driverJobContract, "invalid_details", "Mock invalid details block
 
 assertIncludes(driverJobProduction, "applyProductionDriverJobDetailsUpdate", "Production details update export");
 assertIncludes(driverJobProduction, "saveDriverJobDetailsThroughStatusPersistence", "Production persistence helper");
+for (const fragment of [
+  "syncAcknowledgedDriverDetailsToOperationsCalendar",
+  "bookingReference: detailsResult.booking_reference",
+  "client: clientResult.client",
+  "pickupAt: detailsResult.payload.pickupDateTime",
+  "const operationsCalendarSynced",
+  "if (!operationsCalendarSynced)",
+  'console.warn("Driver acknowledgement Operations Calendar sync failed safely.")',
+  "A saved acknowledgement must not fail because Operations Calendar is unavailable.",
+]) {
+  assertIncludes(
+    driverJobProduction,
+    fragment,
+    `Driver acknowledgement Operations Calendar handoff ${fragment}`,
+  );
+}
+assertExcludes(
+  driverJobRoute,
+  "syncAcknowledgedDriverDetailsToOperationsCalendar",
+  "public Driver Job route must not own a second Calendar write lane",
+);
+
+for (const fragment of [
+  'import "server-only";',
+  'from("bookings")',
+  ".eq(\"booking_reference\", exactBookingReference)",
+  "syncVerifiedDriverDetailsToAdminBookingCalendar",
+  "bookings: [booking]",
+  "driver_name: cleanText(booking.driver_name, 160)",
+  "driver_contact: cleanText(booking.driver_contact, 120)",
+  "driver_plate_number: cleanText(booking.driver_plate_number, 80)",
+  "vehicle: cleanText(booking.vehicle_type_or_category, 120)",
+  "singaporeCalendarPickupAt(booking.pickup_at)",
+  "cleanText(pickupAtOverride, 80)",
+  'timeZone: "Asia/Singapore"',
+  "const payload = {",
+  "if (result.status !== 502)",
+  "const providerTrace: string[] = []",
+  "fetcher: observedFetcher",
+  "safeProviderMethod(init?.method)",
+  "safeProviderTrace(providerTrace)",
+  "calendar_error=${JSON.stringify(result.error)}",
+  "calendar_error=${JSON.stringify(retryResult.error)}",
+  "Driver acknowledgement Operations Calendar result failed safely:",
+  "const retryResult = await syncer(payload, {",
+  "return retryResult.ok",
+]) {
+  assertIncludes(
+    driverJobOperationsCalendarSync,
+    fragment,
+    `Driver acknowledgement Operations Calendar safe helper ${fragment}`,
+  );
+}
+for (const forbidden of [
+  "customer_price",
+  "customer_rate",
+  "driver_payout",
+  "paynow",
+  "invoice",
+  "payment",
+  "billing",
+  "internal_admin_note",
+  "parser",
+  "raw_token",
+  "token_hash",
+  "live_location",
+  "proof",
+  "photo",
+]) {
+  assertExcludes(
+    driverJobOperationsCalendarSync.toLowerCase(),
+    forbidden,
+    `Driver acknowledgement Operations Calendar helper forbidden field ${forbidden}`,
+  );
+}
 
 const detailsPersistenceBlock = sliceBetween(
   driverStatusPersistence,
@@ -134,17 +305,55 @@ const detailsPersistenceBlock = sliceBetween(
 for (const fragment of [
   "safeDriverDetailsFromInput(input)",
   "resolveLinkForToken(input)",
+  "resolveAcknowledgedDriverIdentity(",
   '.from("driver_job_links")',
-  ".update({ safe_link_context: nextSafeContext })",
+  "driver_id: verifiedDriverId",
+  "safe_link_context: nextSafeContext",
   '.from("bookings")',
   "driver_contact: nextDetails.contact || null",
+  "driver_id: verifiedDriverId",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate || null",
   "bookingDriverDetailsUpdate.vehicle_type_or_category = nextDetails.vehicleModel",
   ".eq(\"booking_reference\", resolvedLink.link.booking_reference)",
+  "booking_reference: resolvedLink.link.booking_reference",
   "payloadForLink(",
 ]) {
   assertIncludes(detailsPersistenceBlock, fragment, `Driver details persistence fragment ${fragment}`);
+}
+
+assertIncludes(
+  driverStatusPersistence,
+  'const driverJobLinkSelect =\n  "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at";',
+  "Driver acknowledgement link identity select",
+);
+
+for (const safeDriverIdentityField of [
+  "availability_status: \"available\"",
+  "contact_number: nextDetails.contact",
+  "driver_name: nextDetails.name",
+  "plate_number: nextDetails.plate || null",
+  "vehicle_type: nextDetails.vehicleModel || null",
+]) {
+  assertIncludes(
+    driverStatusPersistence,
+    safeDriverIdentityField,
+    `Driver acknowledgement identity field ${safeDriverIdentityField}`,
+  );
+}
+
+for (const forbiddenIdentityField of [
+  "payout_preferences",
+  "driver_payout_rules",
+  "notes:",
+  "preferred_areas",
+  "airport_permit_notes",
+]) {
+  assertExcludes(
+    driverStatusPersistence,
+    forbiddenIdentityField,
+    `Driver acknowledgement identity forbidden field ${forbiddenIdentityField}`,
+  );
 }
 
 for (const forbidden of [
@@ -209,9 +418,29 @@ for (const fragment of [
   "safeDriverVehicleModelDisplay(booking.driverVehicleModel)",
   "safeDriverVehicleModelDisplay(assignedDriverRecord?.vehicle_type)",
   "Vehicle: ${driverVehicleModel}",
+  "acknowledged: boolean;",
+  "acknowledged_at: string | null;",
+  "dashboardDriverJobLinksReadState",
+  "dashboardDriverJobLinksReadRequestRevisionRef",
+  "refreshDashboardDriverJobLinksRead",
+  "while (hasNextPage && Object.keys(linksByReference).length < requestedReferenceSet.size)",
+  "result.pagination?.has_next_page === true",
+  "pendingDriverAckQueueItems",
+  'data-pending-driver-ack-queue="true"',
+  'data-pending-driver-ack-queue-item="true"',
+  "activeJobDriverAcknowledgementState",
+  'data-admin-multi-driver-active-job-acknowledgement="true"',
+  'data-admin-multi-driver-active-jobs-waiting-count=',
+  "void refreshDashboardDriverJobLinksRead(bookingReferences);",
 ]) {
   assertIncludes(appPage, fragment, `Admin booking details auto-sync fragment ${fragment}`);
 }
+
+assertExcludes(
+  appPage,
+  'data-admin-driver-job-link-acknowledgement="true"',
+  "replaced single-booking Driver Job Link acknowledgement pill",
+);
 
 for (const fragment of [
   "setDriverDetails(loadedDriverDetails)",

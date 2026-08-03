@@ -180,7 +180,7 @@ assertExcludes(adminSavedBookingRead, writePathPattern, "saved-booking read help
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(loadBookingsBlock, "fetchLoadBookingsTypedOperationalDisplayResult(searchParams).catch(() => null)", "typed display safe fallback");
-assertIncludes(loadBookingsBlock, "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`", "legacy saved-bookings read");
+assertIncludes(loadBookingsBlock, "fetchAdminSavedBookingsList(searchParams)", "saved-bookings list read");
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "legacy BookingRecord source");
 assertExcludes(loadBookingsBlock, "setBookings(typedOperationalDisplay", "typed display must not replace records");
 

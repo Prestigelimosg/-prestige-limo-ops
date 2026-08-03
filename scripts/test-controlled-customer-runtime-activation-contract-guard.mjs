@@ -65,6 +65,48 @@ const activationSection = sectionBetween(
   "### Controlled Customer Portal + Customer In-App Runtime Activation Contract Guard Lock",
 );
 
+const booking10851ActivationSection = sectionBetween(
+  ledger,
+  "### Booking 10851 Customer In-App Exact-Two Production Activation (2026-07-30)",
+);
+
+for (const phrase of [
+  "Signed-in Production Chrome reproduced the existing compact Customer Copy `Send In-App` failure for booking `10851` before any write.",
+  "a read-only database check confirmed zero rows for event key `ADM-20260729110409:customer-in-app:driver-details-ready`.",
+  "booking `10851` belongs to active customer account `150`, while the prior one-customer Production activation covered account `128`.",
+  "`PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE` changed to `small-allowlist`",
+  "`PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST` preserved account `128` while adding account `150`.",
+  "The same application build `cac1922a` was redeployed without an application-code change; Vercel deployment `3oJ4jdpGzvHH7b3a1tHNrozUs9Lu` reached `Ready` on `app.prestigelimo.sg`.",
+  "One and only one post-deployment click on the existing booking-`10851` `Send In-App` action produced one queued `customer_app` row",
+  "no provider send.",
+  "No WhatsApp, Telegram, Email, SMS, or other external/manual message was sent during this acceptance.",
+  "The customer surface showed only the safe booking and driver handoff fields",
+  "During the initial In-App send acceptance, customer acknowledgement and customer quick replies were deliberately not clicked.",
+  "follow-up read-only inspection found no `customer_access_accounts` row and no current booking for `128`",
+  "The owner then approved removing only that stale Production Customer In-App allowlist entry.",
+  "`PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST` now contains only account `150`, while `PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE` remains `small-allowlist`.",
+  "Vercel deployment `2MtRCbptu9L7v1GadHwnqndSbPZr` reached `Ready` on `app.prestigelimo.sg`.",
+  "A fresh customer-portal reload retained booking `10851`, its exact safe driver details, and the existing `Driver details ready` notification.",
+  "A read-only database check still returned exactly one queued row for the event key, proving that no second notification was created during cleanup verification.",
+  "Account `150` is the only runtime path proven and retained in this acceptance.",
+  "During the stale-allowlist cleanup, no customer acknowledgement or quick reply was clicked and no external/manual message was sent.",
+  "The owner later approved one exact live customer acknowledgement for booking `10851`.",
+  "the exact acknowledgement event key had zero rows.",
+  "One click on `Acknowledge driver details` changed the customer control to disabled `Acknowledged 17:12`",
+  "The database then contained exactly one queued `customer_app` / `customer_driver_details_acknowledgements` row",
+  "`customer_to_admin` direction, verified-customer actor evidence, no Driver Job Link, and no provider send.",
+  "one read-only page reload changed it to `Acknowledged 17:12`, so no application repair was required.",
+  "No repeated acknowledgement, customer quick reply, driver message, external/manual send, invoice, Calendar, booking, pricing, payout, PayNow, payment, PDF, environment, schema, or application-code change occurred.",
+  "This configuration-only activation changes no invoice workflow or layout, Customer Portal environment/session mapping, Driver Job Link, Driver ACK, Operations Calendar, personal Driver Calendar, booking, pricing/rates, payout, PayNow, payment, PDF, Email/WhatsApp/SMS/Telegram provider send, schema, migration, notification template, or automatic messaging behavior.",
+  "Manual customer delivery remains a separate owner action.",
+]) {
+  assertIncludes(
+    booking10851ActivationSection,
+    phrase,
+    `booking 10851 controlled Customer In-App activation phrase: ${phrase}`,
+  );
+}
+
 for (const phrase of [
   "This is a docs/test-only guard for a future separately approved controlled customer-facing runtime activation lane.",
   "This lock does not activate customer portal runtime, customer auth/session/cookie creation, customer in-app production read/write, notification row writes, env changes, DB reads/writes, provider sends, Google Maps/OneMap/FlightAware calls, deploy, production activation, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, pricing/rates/customer_rates changes, `driver_payout_rules` changes, payout/payment/PDF/billing/invoice activation, OTS/photo/storage activation, calendar activation, UI sector/card expansion, or shims.",

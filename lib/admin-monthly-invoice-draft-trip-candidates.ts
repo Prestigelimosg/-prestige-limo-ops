@@ -10,10 +10,11 @@ import {
   checkAdminBookingPersistenceStagingConfigReadiness,
   type AdminBookingPersistenceAdapterActor,
 } from "./admin-booking-supabase-adapter";
+import { loadAdminMonthlyBillingGroups } from "./admin-monthly-billing-grouping-read";
 import type { AdminMonthlyInvoiceDraftTripReadinessStatus } from "./admin-monthly-invoice-draft-persistence";
 
 export const adminMonthlyInvoiceDraftTripCandidatesVersion =
-  "stage-monthly-invoice-draft-trip-candidates-v2";
+  "stage-monthly-invoice-draft-ready-unbilled-candidates-v3";
 
 export type AdminMonthlyInvoiceDraftTripCandidateParams = {
   billing_month: string;
@@ -83,7 +84,8 @@ const tripCandidateCurrentBookingSelect =
   "booking_reference, customer_id, customer_display_name, pickup_at, admin_internal_status";
 const tripCandidateFoundationBookingSelect =
   "booking_reference, customer_id, customer_display_name, pickup_datetime, admin_internal_status";
-const tripCandidateDraftLinkSelect = "booking_reference";
+const tripCandidateDraftLinkSelect = "booking_reference, draft_id";
+const tripCandidateDraftSelect = "id, customer_account, billing_month";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const forbiddenSafeTextFragments = [
   "amount_due",
@@ -541,6 +543,7 @@ async function loadBookingRowsWithFallback(
 async function loadLinkedDraftBookingReferences(
   client: SupabaseClient,
   bookingReferences: string[],
+  params: AdminMonthlyInvoiceDraftTripCandidateParams,
 ): Promise<AdminBookingResult<Set<string>>> {
   if (bookingReferences.length === 0) {
     return {
@@ -549,6 +552,23 @@ async function loadLinkedDraftBookingReferences(
     };
   }
 
+  const { data: matchingDraftRows, error: matchingDraftError } = await client
+    .from("monthly_invoice_drafts")
+    .select(tripCandidateDraftSelect)
+    .eq("customer_account", params.customer_account)
+    .eq("billing_month", params.billing_month)
+    .limit(25);
+
+  if (matchingDraftError) {
+    return safeAdapterFailure(safeTripCandidatesReadError, 500, matchingDraftError);
+  }
+
+  const allowedDraftIds = new Set(
+    asArray(matchingDraftRows)
+      .map(asRecord)
+      .map((row) => safeText(row.id, 120))
+      .filter((draftId): draftId is string => Boolean(draftId)),
+  );
   const { data, error } = await client
     .from("monthly_invoice_draft_trip_links")
     .select(tripCandidateDraftLinkSelect)
@@ -563,6 +583,7 @@ async function loadLinkedDraftBookingReferences(
     data: new Set(
       asArray(data)
         .map(asRecord)
+        .filter((row) => !allowedDraftIds.has(safeText(row.draft_id, 120) || ""))
         .map((row) => safeText(row.booking_reference, 120))
         .filter((bookingReference): bookingReference is string => Boolean(bookingReference)),
     ),
@@ -717,9 +738,55 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
     return clientResult;
   }
 
+  const groupingResult = await loadAdminMonthlyBillingGroups(
+    {
+      billing_month: parsed.data.billing_month,
+      customer_account_search: parsed.data.customer_account,
+      limit: maxCandidateLimit,
+      page: 1,
+      readiness_status: null,
+    },
+    actor,
+  );
+
+  if (!groupingResult.ok || groupingResult.data.pagination.has_next_page) {
+    return {
+      error: safeTripCandidatesReadError,
+      ok: false,
+      status: groupingResult.ok ? 409 : groupingResult.status,
+    };
+  }
+
+  const matchingGroup = groupingResult.data.groups.find(
+    (group) =>
+      group.billing_month === parsed.data.billing_month &&
+      group.customer_account === parsed.data.customer_account &&
+      (!parsed.data.customer_id || group.customer_id === parsed.data.customer_id),
+  );
+  const readyBookingReferences = new Set(
+    (matchingGroup?.jobs || [])
+      .filter((job) => job.safe_billing_status === "ready")
+      .map((job) => job.booking_reference),
+  );
+
+  if (readyBookingReferences.size === 0) {
+    const emptyCandidates: AdminMonthlyInvoiceDraftTripCandidate[] = [];
+
+    return {
+      data: {
+        pagination: buildPagination(emptyCandidates, parsed.data),
+        summary: summarizeCandidates(emptyCandidates),
+        trip_candidates: emptyCandidates,
+        version: adminMonthlyInvoiceDraftTripCandidatesVersion,
+      },
+      ok: true,
+    };
+  }
+
   const { data: closeoutRowsData, error: closeoutError } = await clientResult.data
     .from("completed_booking_closeouts")
     .select(tripCandidateCloseoutSelect)
+    .in("booking_reference", [...readyBookingReferences])
     .limit(maxReadRows);
 
   if (closeoutError) {
@@ -748,6 +815,7 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
   const linkedDraftBookingReferencesResult = await loadLinkedDraftBookingReferences(
     clientResult.data,
     bookingReferences.slice(0, maxReadRows),
+    parsed.data,
   );
 
   if (!linkedDraftBookingReferencesResult.ok) {
@@ -771,6 +839,7 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
   const filteredCandidates = closeoutRows
     .filter(
       (closeoutRow) =>
+        readyBookingReferences.has(safeText(closeoutRow.booking_reference, 120) || "") &&
         !linkedDraftBookingReferencesResult.data.has(
           safeText(closeoutRow.booking_reference, 120) || "",
         ),
@@ -783,6 +852,7 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
       ),
     )
     .filter((candidate): candidate is AdminMonthlyInvoiceDraftTripCandidate => Boolean(candidate))
+    .filter((candidate) => candidate.trip_readiness_status === "ready")
     .sort((first, second) => first.booking_reference.localeCompare(second.booking_reference));
   const tripCandidates = paginateCandidates(filteredCandidates, parsed.data);
 

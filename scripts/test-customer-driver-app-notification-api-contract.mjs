@@ -29,6 +29,7 @@ const unsafeNotificationLeakPattern =
   /contact_phone|contact_email|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|driver_job_link_id|event_key|source_surface|actor_label/i;
 const sourceFiles = [
   "lib/customer-runtime-session-map.ts",
+  "lib/driver-device-push-notification.ts",
   "lib/customer-driver-app-notification-persistence.ts",
   "lib/customer-portal-access-account.ts",
   "lib/customer-portal-access-link.ts",
@@ -40,6 +41,7 @@ const sourceFiles = [
   "lib/driver-job-status-workflow.ts",
   "app/api/admin-customer-driver-app-notifications/route.ts",
   "app/api/customer-app-notifications/route.ts",
+  "app/api/customer-driver-quick-replies/route.ts",
   "app/api/driver-job/[token]/notifications/route.ts",
 ];
 const originalEnv = {
@@ -63,6 +65,10 @@ const originalEnv = {
     process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED,
   PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE:
     process.env.PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE,
+  PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED:
+    process.env.PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED,
+  PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE:
+    process.env.PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE,
   PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
     process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST,
   PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED:
@@ -111,6 +117,8 @@ function validEnv() {
       "customer-runtime-account-001",
     PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: "true",
     PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: "one-customer",
+    PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED: "true",
+    PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE: "controlled-runtime",
     PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
       "customer-runtime-account-001",
     PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED: "true",
@@ -126,6 +134,14 @@ function validAdminHeaders(extra = {}) {
     referer: "http://localhost/",
     "x-prestige-admin-purpose": "admin-booking-persistence",
     "x-prestige-admin-session-token": serverSessionToken,
+    ...extra,
+  };
+}
+
+function validDashboardHeaders(extra = {}) {
+  return {
+    referer: "http://localhost/",
+    "x-prestige-admin-purpose": "admin-booking-persistence",
     ...extra,
   };
 }
@@ -204,9 +220,11 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(webPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -221,6 +239,10 @@ async function writeMockModules(tempDir) {
       "}",
       "module.exports = { createClient };",
     ].join("\n"),
+  );
+  await writeFile(
+    webPushPath,
+    "module.exports = { setVapidDetails() {}, async sendNotification() {} };",
   );
 }
 
@@ -239,7 +261,11 @@ async function loadHarness() {
     adminRoute: require(path.join(tempDir, "app/api/admin-customer-driver-app-notifications/route.js")),
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
     customerRoute: require(path.join(tempDir, "app/api/customer-app-notifications/route.js")),
+    customerQuickReplyRoute: require(path.join(tempDir, "app/api/customer-driver-quick-replies/route.js")),
     driverRoute: require(path.join(tempDir, "app/api/driver-job/[token]/notifications/route.js")),
+    notificationPersistence: require(
+      path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
+    ),
   };
 }
 
@@ -600,9 +626,81 @@ function seededNotification(overrides = {}) {
 }
 
 try {
-  const { adminRoute, cleanup, customerRoute, driverRoute } = await loadHarness();
+  const {
+    adminRoute,
+    cleanup,
+    customerRoute,
+    customerQuickReplyRoute,
+    driverRoute,
+    notificationPersistence,
+  } = await loadHarness();
 
   try {
+    setEnv({
+      ...validEnv(),
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_ENABLED: undefined,
+      PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: undefined,
+    });
+    const terminalStatusMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUSTOMER-STATUS-001",
+          customer_id: 150,
+        },
+      ],
+    });
+    const terminalStatusNotification =
+      await notificationPersistence.createCustomerDriverAppNotification(
+        {
+          booking_reference: "BOOK-CUSTOMER-STATUS-001",
+          delivery_surface: "customer_app",
+          driver_job_link_id: null,
+          event_key:
+            "BOOK-CUSTOMER-STATUS-001:customer_booking_status:cancelled:2026-07-22T14:59:30.938Z",
+          notification_status: "queued",
+          notification_type: "booking_status",
+          priority: "normal",
+          safe_context: {
+            customer_facing_status: "cancelled",
+            external_send: false,
+            provider_send: false,
+            source: "admin_booking_status",
+          },
+          safe_message:
+            "Your Prestige Limo booking has been cancelled. Open My Bookings to review.",
+          safe_title: "Booking cancelled",
+          workflow_area: "customer_booking_status_updates",
+        },
+        {
+          actor_label: "Notification contract admin",
+          actor_role: "admin",
+          boundary_mode: "server-session-role-surface",
+          source_surface: "admin_api",
+        },
+      );
+
+    assert.equal(terminalStatusNotification.ok, true);
+    assert.equal(terminalStatusMock.client.insertHistory.length, 1);
+    assert.deepEqual(
+      {
+        booking_reference:
+          terminalStatusMock.client.insertHistory[0].payload.booking_reference,
+        delivery_surface:
+          terminalStatusMock.client.insertHistory[0].payload.delivery_surface,
+        safe_title: terminalStatusMock.client.insertHistory[0].payload.safe_title,
+        workflow_area:
+          terminalStatusMock.client.insertHistory[0].payload.workflow_area,
+      },
+      {
+        booking_reference: "BOOK-CUSTOMER-STATUS-001",
+        delivery_surface: "customer_app",
+        safe_title: "Booking cancelled",
+        workflow_area: "customer_booking_status_updates",
+      },
+      "Exact Admin cancellation must use the established customer outbox even when the retired pilot allowlist is closed.",
+    );
+
     setEnv(validEnv());
     const postMock = installMockClient({
       bookings: [
@@ -672,6 +770,161 @@ try {
       unsafeNotificationLeakPattern.test(JSON.stringify(postResult.body.notification)),
       false,
       "Expected admin POST response to omit link internals, actors, finance, auth, parser, and send fields",
+    );
+
+    setEnv(validEnv());
+    const dashboardPostMock = installMockClient({
+      driver_job_links: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          expires_at: "2099-12-31T23:59:59.000Z",
+          id: "11111111-1111-4111-8111-111111111111",
+          link_status: "active",
+        },
+      ],
+    });
+    const dashboardPostResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "driver_app",
+              driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-driver-message:dashboard",
+              notification_type: "trip_update",
+              safe_context: {
+                audience: "admin_driver",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "driver",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please review the amended pickup time in your Driver Job page.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_driver_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+
+    assert.equal(
+      dashboardPostResult.status,
+      200,
+      "Expected the same-origin dashboard POST to use the verified server-session role without exposing the private request token.",
+    );
+    assert.equal(dashboardPostResult.body.notification.delivery_surface, "driver_app");
+    assert.equal(
+      dashboardPostMock.client.insertHistory.length,
+      1,
+      "Expected exactly one dashboard-scoped driver-app notification insert.",
+    );
+
+    setEnv(validEnv());
+    const dashboardCustomerPostMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const dashboardCustomerPostResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-customer-message:dashboard",
+              safe_context: {
+                audience: "admin_customer",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "customer",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please meet your driver at the hotel lobby for this booking.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+
+    assert.equal(
+      dashboardCustomerPostResult.status,
+      200,
+      "Expected the same-origin dashboard POST to queue the approved exact-booking customer message.",
+    );
+    assert.equal(dashboardCustomerPostResult.body.notification.delivery_surface, "customer_app");
+    assert.equal(dashboardCustomerPostResult.body.notification.workflow_area, "admin_customer_job_messages");
+    assert.equal(
+      dashboardCustomerPostMock.client.insertHistory.length,
+      1,
+      "Expected exactly one dashboard-scoped customer-app notification insert.",
+    );
+    assert.equal(
+      dashboardCustomerPostMock.client.selectHistory.some(
+        (entry) => entry.table === "driver_job_links",
+      ),
+      false,
+      "Admin-to-customer messages must not depend on or write through the driver-link lane.",
+    );
+
+    setEnv(validEnv());
+    const wrongCustomerAudienceMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const wrongCustomerAudienceResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-customer-message:wrong-audience",
+              safe_context: {
+                audience: "admin_driver",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "driver",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please meet at the hotel lobby for this booking.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+    assert.equal(wrongCustomerAudienceResult.status, 400);
+    assert.equal(
+      wrongCustomerAudienceMock.client.insertHistory.length,
+      0,
+      "A customer-app message carrying driver audience context must fail closed.",
     );
 
     setEnv({
@@ -932,6 +1185,128 @@ try {
 
     setEnv(validEnv());
     const portalToken = createPortalAccessToken("customer-runtime-account-001");
+    const customerDriverDetailsAcknowledgementMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          actor_label: "Notification contract admin",
+          actor_role: "admin",
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          id: "notification-driver-details-ready",
+          notification_type: "trip_update",
+          safe_context: {
+            action: "admin_selected",
+            message_template: "driver_details_ready",
+            provider_send: false,
+            source: "customer_copy_compact_row",
+          },
+          safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+          safe_title: "Driver details ready",
+          source_surface: "admin_api",
+          workflow_area: "customer_app_updates",
+        }),
+      ],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+      customer_access_accounts: [
+        {
+          account_status: "active",
+          customer_account_reference: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const acknowledgementRequest = () =>
+      new Request("http://localhost/api/customer-driver-quick-replies", {
+        body: JSON.stringify({
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          template_key: "customer_driver_details_acknowledged",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: `prestige_customer_saved_bookings_session=${portalToken}`,
+          referer: "http://localhost/my-bookings?booking=BOOK-CUST-DRIVER-NOTIFY-001",
+          "x-prestige-customer-purpose": "customer-driver-quick-reply",
+        },
+        method: "POST",
+      });
+    const customerDriverDetailsAcknowledgement = await responseJson(
+      await customerQuickReplyRoute.POST(acknowledgementRequest()),
+    );
+
+    assert.equal(
+      customerDriverDetailsAcknowledgement.status,
+      200,
+      JSON.stringify(customerDriverDetailsAcknowledgement.body),
+    );
+    assert.equal(customerDriverDetailsAcknowledgement.body.direction, "customer_to_admin");
+    assert.equal(customerDriverDetailsAcknowledgement.body.delivery_surface, "customer_app");
+    assert.equal(customerDriverDetailsAcknowledgementMock.client.insertHistory.length, 1);
+    assert.deepEqual(
+      {
+        actor_role: customerDriverDetailsAcknowledgementMock.client.insertHistory[0].payload.actor_role,
+        delivery_surface:
+          customerDriverDetailsAcknowledgementMock.client.insertHistory[0].payload.delivery_surface,
+        driver_job_link_id:
+          customerDriverDetailsAcknowledgementMock.client.insertHistory[0].payload.driver_job_link_id,
+        safe_message:
+          customerDriverDetailsAcknowledgementMock.client.insertHistory[0].payload.safe_message,
+        safe_title:
+          customerDriverDetailsAcknowledgementMock.client.insertHistory[0].payload.safe_title,
+        workflow_area:
+          customerDriverDetailsAcknowledgementMock.client.insertHistory[0].payload.workflow_area,
+      },
+      {
+        actor_role: "customer",
+        delivery_surface: "customer_app",
+        driver_job_link_id: null,
+        safe_message: "Driver details acknowledged.",
+        safe_title: "Driver details acknowledged",
+        workflow_area: "customer_driver_details_acknowledgements",
+      },
+      "Expected explicit customer acknowledgement to remain admin-visible and off the driver surface.",
+    );
+
+    const repeatedCustomerDriverDetailsAcknowledgement = await responseJson(
+      await customerQuickReplyRoute.POST(acknowledgementRequest()),
+    );
+    assert.equal(repeatedCustomerDriverDetailsAcknowledgement.status, 200);
+    assert.equal(repeatedCustomerDriverDetailsAcknowledgement.body.direction, "customer_to_admin");
+    assert.equal(
+      customerDriverDetailsAcknowledgementMock.client.insertHistory.length,
+      1,
+      "Expected repeated acknowledgement to return the existing row without a duplicate insert.",
+    );
+
+    setEnv(validEnv());
+    const acknowledgementWithoutSendMock = installMockClient({
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          customer_id: "customer-runtime-account-001",
+        },
+      ],
+      customer_access_accounts: [
+        {
+          account_status: "active",
+          customer_account_reference: "customer-runtime-account-001",
+        },
+      ],
+    });
+    const acknowledgementWithoutSend = await responseJson(
+      await customerQuickReplyRoute.POST(acknowledgementRequest()),
+    );
+    assert.equal(acknowledgementWithoutSend.status, 409);
+    assert.equal(
+      acknowledgementWithoutSendMock.client.insertHistory.length,
+      0,
+      "Expected acknowledgement without the prior exact-booking admin send to fail without a write.",
+    );
+
+    setEnv(validEnv());
     const customerPortalReadMock = installMockClient({
       [notificationTable]: [
         seededNotification({
@@ -950,6 +1325,27 @@ try {
           safe_message: "Your Prestige Limo driver is on the way to pickup.",
           safe_title: "Driver on the way",
           workflow_area: "driver_status_customer_in_app",
+        }),
+        seededNotification({
+          actor_role: "admin",
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          created_at: "2026-06-08T02:00:00.000Z",
+          delivery_surface: "customer_app",
+          id: "notification-admin-customer-message",
+          notification_type: "trip_update",
+          safe_message: "Please meet your driver at the hotel lobby for this booking.",
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_customer_job_messages",
+        }),
+        seededNotification({
+          actor_role: "admin",
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
+          id: "notification-admin-driver-hidden-from-customer",
+          notification_type: "trip_update",
+          safe_message: "Private instruction for the driver.",
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_driver_job_messages",
         }),
         seededNotification({
           booking_reference: "BOOK-CUST-DRIVER-NOTIFY-OTHER",
@@ -1004,6 +1400,13 @@ try {
           notification_type: "driver_status",
           safe_message: "Your Prestige Limo driver is on the way to pickup.",
           safe_title: "Driver on the way",
+        },
+        {
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          notification_type: "trip_update",
+          safe_message: "Please meet your driver at the hotel lobby for this booking.",
+          safe_title: "Message from dispatch",
         },
       ],
       "Expected customer portal access cookie to read only its booking-scoped driver status update",
@@ -1276,6 +1679,10 @@ try {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
           delivery_surface: "customer_app",
           id: "notification-customer-hidden",
+          notification_type: "trip_update",
+          safe_message: "Please meet your driver at the hotel lobby for this booking.",
+          safe_title: "Message from dispatch",
+          workflow_area: "admin_customer_job_messages",
         }),
         seededNotification({
           booking_reference: "BOOK-OTHER-NOTIFY-001",

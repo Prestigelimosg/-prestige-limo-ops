@@ -30,6 +30,7 @@ const sourceFiles = [
   "lib/admin-booking-calendar-policy.ts",
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-booking-google-calendar-sync.ts",
+  "lib/driver-job-operations-calendar-sync.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-booking-calendar-google-sync/route.ts",
 ];
@@ -191,6 +192,9 @@ async function loadHarness() {
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    driverDetailsCalendarSync: require(
+      path.join(tempDir, "lib/driver-job-operations-calendar-sync.js"),
+    ),
     googleSync: require(path.join(tempDir, "lib/admin-booking-google-calendar-sync.js")),
     route: require(path.join(tempDir, "app/api/admin-booking-calendar-google-sync/route.js")),
   };
@@ -331,7 +335,7 @@ function parseJsonBody(call) {
 const harness = await loadHarness();
 
 try {
-  const { googleSync, route } = harness;
+  const { driverDetailsCalendarSync, googleSync, route } = harness;
 
   assert.equal(
     googleSync.adminBookingGoogleCalendarSyncVersion,
@@ -418,11 +422,21 @@ try {
   );
   assert.match(
     calendarPersistenceMapperSource,
-    /company_id: verifiedCompanyId,[\s\S]*?customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies:[\s\S]*?verifiedCompanyId && customerDisplayName[\s\S]*?company_name: customerDisplayName,[\s\S]*?domain: null/,
-    "Save + CRM and Update + Cal must carry the saved company into Calendar payloads only when its CRM company ID is verified.",
+    /const calendarCompanyName = verifiedCompanyId[\s\S]*?billingIdentityBaseAccount\(customerDisplayName\)[\s\S]*?company_id: verifiedCompanyId,[\s\S]*?customer_display_name: customerDisplayName \|\| null,[\s\S]*?companies:[\s\S]*?verifiedCompanyId && calendarCompanyName[\s\S]*?company_name: calendarCompanyName,[\s\S]*?domain: null/,
+    "Save + CRM and Update + Cal must carry the canonical verified company into Calendar payloads without the traveller-scoped billing suffix.",
   );
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(savedBooking\);/);
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);
+  const updateAppliedSnapshotSource = sourceBetween(
+    appSource,
+    "async function updateAppliedAdminBookingOperationalSnapshot()",
+    "function getDispatchCopyText(",
+  );
+  assert.match(
+    updateAppliedSnapshotSource,
+    /markAdminBookingAsActiveForUpdates\(updatedBookingReference, updatedBooking\);[\s\S]*?upsertLoadedBookingFromAdminRecord\(updatedBooking\);[\s\S]*?await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/,
+    "Update + Cal must publish the exact persisted driver-bearing response to the loaded booking state before syncing that same response to Calendar.",
+  );
   assert.doesNotMatch(appSource, /Sync Google is backup\./);
   assert.match(calendarPayloadSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);
   assert.match(calendarPayloadSource, /const pickupTime = formatPickupTimeFromRecord\(bookingRecord\);/);
@@ -528,8 +542,328 @@ try {
 
   {
     setEnv(validEnv());
+    const calls = installFetchMock({ eventStatuses: [409, 200] });
+    const result = await googleSync.syncVerifiedDriverDetailsToAdminBookingCalendar({
+      bookings: [
+        safeBooking({
+          booking_reference: "ADM-DRIVER-DETAILS-CALENDAR-001",
+          booking_type: "DSP",
+          driver_contact: "97366292",
+          driver_name: "Simon",
+          driver_plate_number: "SNP9124S",
+          traveler_name: "Mr. Jenn Bin Tan",
+          vehicle: "AVF",
+        }),
+      ],
+      date_label: "ADM-DRIVER-DETAILS-CALENDAR-001",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.sync.events_synced, 1);
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 2);
+    assert.equal(providerCalls[0].method, "POST");
+    assert.equal(providerCalls[1].method, "PUT");
+    assert.equal(providerCalls[1].searchParams.sendUpdates, "none");
+    const event = parseJsonBody(providerCalls[1]);
+    assert.equal(
+      event.summary,
+      "SNP9124S > Mr. Jenn Bin Tan - DSP - Prestige",
+    );
+    assert.match(event.description, /Driver: Simon \/ SNP9124S \/ 97366292/);
+    assert.match(event.description, /Vehicle: AVF/);
+    assert.equal(event.attendees, undefined);
+    assertNoLeaks(
+      event,
+      "verified Driver Job detail Calendar upsert must retain the admin Calendar privacy boundary",
+    );
+  }
+
+  {
+    setEnv(validEnv());
+    const filters = [];
+    let selectedColumns = "";
+    let syncPayload = null;
+    const bookingRow = {
+      admin_internal_status: "Admin Review Required",
+      booking_reference: "ADM-20260725150239",
+      bookers: {
+        booker_name: "Mr. Jenn Bin Tan",
+      },
+      companies: null,
+      company_id: null,
+      contact_display_name: "Mr. Jenn Bin Tan",
+      customer_facing_status: "Confirmed",
+      driver_contact: "97366292",
+      driver_name: "Simon",
+      driver_plate_number: "SNP9124S",
+      dropoff_location: "Drop-off To Confirm",
+      flight_no: null,
+      passenger_name: "Mr. Jenn Bin Tan",
+      pax_count: 1,
+      pickup_at: "2026-07-26T13:00:00+08:00",
+      pickup_location: "Wallich Street",
+      route_summary: "Wallich Street > Drop-off To Confirm",
+      route_type: "DSP",
+      service_type: "DSP",
+      short_notice_review_status: null,
+      vehicle_type_or_category: "AVF",
+    };
+    const query = {
+      eq(column, value) {
+        filters.push({ column, value });
+        return this;
+      },
+      async maybeSingle() {
+        return { data: bookingRow, error: null };
+      },
+      select(columns) {
+        selectedColumns = columns;
+        return this;
+      },
+    };
+    const client = {
+      from(table) {
+        assert.equal(table, "bookings");
+        return query;
+      },
+    };
+
+    const synced =
+      await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: "ADM-20260725150239",
+        client,
+        async syncer(payload) {
+          syncPayload = payload;
+          return {
+            data: {
+              sync: {
+                events_synced: 1,
+              },
+            },
+            ok: true,
+          };
+        },
+      });
+
+    assert.equal(synced, true);
+    assert.deepEqual(filters, [
+      {
+        column: "booking_reference",
+        value: "ADM-20260725150239",
+      },
+    ]);
+    assert.match(selectedColumns, /driver_name, driver_contact, driver_plate_number/);
+    assert.doesNotMatch(selectedColumns, unsafeLeakPattern);
+    assert.deepEqual(syncPayload, {
+      bookings: [
+        {
+          booking_reference: "ADM-20260725150239",
+          booking_type: "DSP",
+          booker_name: "Mr. Jenn Bin Tan",
+          company_name: "",
+          driver_contact: "97366292",
+          driver_name: "Simon",
+          driver_plate_number: "SNP9124S",
+          dropoff_address: "Drop-off To Confirm",
+          flight_no: "",
+          id: "ADM-20260725150239",
+          pax: 1,
+          pickup_address: "Wallich Street",
+          pickup_at: "2026-07-26 13:00",
+          route: "Wallich Street > Drop-off To Confirm",
+          status: "Admin Review Required",
+          traveler_name: "Mr. Jenn Bin Tan",
+          vehicle: "AVF",
+        },
+      ],
+      date_label: "ADM-20260725150239",
+    });
+    assertNoLeaks(
+      syncPayload,
+      "token-verified Driver Job detail Calendar handoff must use the existing safe event payload",
+    );
+  }
+
+  {
+    setEnv(validEnv());
+    let normalizedPickupAt = "";
+    let safeFetcherObserved = false;
+    let syncAttempts = 0;
+    const bookingRow = {
+      admin_internal_status: "approved_internal",
+      booking_reference: "CUST-20260725115928-WORYU7",
+      bookers: {
+        booker_name: "William Test",
+      },
+      companies: {
+        company_name: "CODEX CUSTOMER REBOOKING TEST",
+      },
+      company_id: 1,
+      contact_display_name: "William Test",
+      customer_facing_status: "Ready for Confirmation",
+      driver_contact: "97366292",
+      driver_name: "Simon",
+      driver_plate_number: "SNP9124S",
+      dropoff_location: "CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      flight_no: null,
+      passenger_name: "Otis JULY",
+      pax_count: 1,
+      pickup_at: "2026-07-29T17:00:00+00:00",
+      pickup_location: "Orchard Hotel Singapore",
+      route_summary:
+        "Orchard Hotel Singapore > CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      route_type: "TRF",
+      service_type: "TRF",
+      short_notice_review_status: null,
+      vehicle_type_or_category: "AVF",
+    };
+    const query = {
+      eq() {
+        return this;
+      },
+      async maybeSingle() {
+        return { data: bookingRow, error: null };
+      },
+      select() {
+        return this;
+      },
+    };
+    const client = {
+      from(table) {
+        assert.equal(table, "bookings");
+        return query;
+      },
+    };
+
+    const synced =
+      await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: "CUST-20260725115928-WORYU7",
+        client,
+        pickupAt: "2026-07-30T01:00",
+        async syncer(payload, options) {
+          normalizedPickupAt = payload.bookings[0]?.pickup_at || "";
+          safeFetcherObserved = typeof options?.fetcher === "function";
+          syncAttempts += 1;
+
+          if (syncAttempts === 1) {
+            return {
+              error: "Google Calendar provider request failed safely.",
+              ok: false,
+              status: 502,
+            };
+          }
+
+          return {
+            data: {
+              sync: {
+                events_synced: 1,
+              },
+            },
+            ok: true,
+          };
+        },
+      });
+
+    assert.equal(
+      synced,
+      true,
+      "one transient provider failure must retry the same deterministic Operations Calendar upsert",
+    );
+    assert.equal(syncAttempts, 2, "the automatic acknowledgement handoff must retry only once");
+    assert.equal(
+      safeFetcherObserved,
+      true,
+      "the automatic acknowledgement handoff must provide its internal-only provider status observer",
+    );
+    assert.equal(
+      normalizedPickupAt,
+      "2026-07-30 01:00",
+      "the persisted UTC pickup must use the established Singapore-local Calendar builder input",
+    );
+  }
+
+  {
+    setEnv(validEnv());
+    const bookingRow = {
+      admin_internal_status: "approved_internal",
+      booking_reference: "CUST-20260725115928-WORYU7",
+      bookers: {
+        booker_name: "William Test",
+      },
+      companies: {
+        company_name: "CODEX CUSTOMER REBOOKING TEST",
+      },
+      company_id: 26,
+      contact_display_name: "William Test",
+      customer_facing_status: "confirmed",
+      driver_contact: "97366292",
+      driver_name: "Simon",
+      driver_plate_number: "SNP9124S",
+      dropoff_location: "CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      flight_no: null,
+      passenger_name: "Otis JULY",
+      pax_count: null,
+      pickup_at: "2026-07-29T17:00:00+00:00",
+      pickup_location: "Orchard Hotel Singapore",
+      route_summary:
+        "Orchard Hotel Singapore > CODEX AUTO PREP TEST DROPOFF - CHANGI AIRPORT",
+      route_type: null,
+      service_type: "TRF",
+      short_notice_review_status: "reviewed",
+      vehicle_type_or_category: "AVF",
+    };
+    const query = {
+      eq() {
+        return this;
+      },
+      async maybeSingle() {
+        return { data: bookingRow, error: null };
+      },
+      select() {
+        return this;
+      },
+    };
+    const calls = installFetchMock({ eventStatuses: [200] });
+    const synced =
+      await driverDetailsCalendarSync.syncAcknowledgedDriverDetailsToOperationsCalendar({
+        bookingReference: "CUST-20260725115928-WORYU7",
+        client: {
+          from() {
+            return query;
+          },
+        },
+        pickupAt: "2026-07-30T01:00",
+      });
+
+    assert.equal(
+      synced,
+      true,
+      "the exact Production-shaped acknowledgement must pass the real Calendar builder and writer",
+    );
+    const providerCalls = calendarCalls(calls);
+    assert.equal(providerCalls.length, 1);
+    const event = parseJsonBody(providerCalls[0]);
+    assert.equal(
+      event.summary,
+      "MIDNIGHT JOB - SNP9124S > Otis JULY - TRF - Prestige",
+    );
+    assert.equal(event.start.dateTime, "2026-07-29T23:30:00");
+    assert.equal(event.end.dateTime, "2026-07-30T01:00:00");
+    assert.match(event.description, /Status: Ready for Confirmation/);
+    assert.match(event.description, /Driver: Simon \/ SNP9124S \/ 97366292/);
+    assert.match(event.description, /Vehicle: AVF/);
+    assert.equal(event.attendees, undefined);
+  }
+
+  {
+    setEnv(validEnv());
     const statusBookings = [
       safeBooking({ booking_reference: "PL-CAL-STATUS-CURRENT" }),
+      safeBooking({
+        booking_reference: "PL-CAL-STATUS-WRONG-PASSENGER-SUFFIX",
+        pickup_time: "1700hrs",
+      }),
       safeBooking({
         booking_reference: "PL-CAL-STATUS-OUTDATED",
         pickup_time: "1800hrs",
@@ -547,15 +881,27 @@ try {
     assert.equal(preparationResponse.status, 200);
     const expectedProviderEvents = calendarCalls(preparationCalls).map(parseJsonBody);
     const providerEventsById = new Map(
-      expectedProviderEvents.slice(0, 2).map((event, index) => [
+      expectedProviderEvents.slice(0, 3).map((event, index) => [
         event.id,
         index === 0
           ? {
               ...event,
+              description: event.description.replace(
+                "Customer: Safe Corporate",
+                "Customer: Safe Corporate [Safe Traveler]",
+              ),
               end: { ...event.end, dateTime: `${event.end.dateTime}+08:00` },
               start: { ...event.start, dateTime: `${event.start.dateTime}+08:00` },
             }
-          : { ...event, summary: `${event.summary} OUTDATED` },
+          : index === 1
+            ? {
+                ...event,
+                description: event.description.replace(
+                  "Customer: Safe Corporate",
+                  "Customer: Safe Corporate [Different Traveler]",
+                ),
+              }
+            : { ...event, summary: `${event.summary} OUTDATED` },
       ]),
     );
     const calls = [];
@@ -595,13 +941,24 @@ try {
     assert.equal(body.ok, true);
     assert.deepEqual(body.statuses, [
       { booking_reference: "PL-CAL-STATUS-CURRENT", status: "cal_saved" },
+      {
+        booking_reference: "PL-CAL-STATUS-WRONG-PASSENGER-SUFFIX",
+        status: "update_calendar",
+      },
       { booking_reference: "PL-CAL-STATUS-OUTDATED", status: "update_calendar" },
       { booking_reference: "PL-CAL-STATUS-MISSING", status: "save_to_calendar" },
     ]);
+    assert.equal(
+      providerEventsById.get(expectedProviderEvents[0].id).description.includes(
+        "Customer: Safe Corporate [Safe Traveler]",
+      ),
+      true,
+      "A successful legacy Calendar write with the exact traveller-scoped company label must stay green after refresh.",
+    );
     assertNoLeaks(body, "Google Calendar status response must not leak provider or unsafe fields");
 
     const providerCalls = calendarCalls(calls);
-    assert.equal(providerCalls.length, 3);
+    assert.equal(providerCalls.length, 4);
     for (const call of providerCalls) {
       assert.equal(call.method, "GET");
       assert.deepEqual(call.searchParams, {});
@@ -668,11 +1025,21 @@ try {
       pickupTime: "0000hrs",
       reference: "PL-MIDNIGHT-0000",
     },
+    {
+      actualPickupText: "30 July 2026, 01:00hrs",
+      date: "2026-07-30",
+      expectedEnd: "2026-07-30T01:00:00",
+      expectedStart: "2026-07-29T23:30:00",
+      midnight: true,
+      pickupAt: "2026-07-29T17:00:00+00:00",
+      pickupTime: "0100hrs",
+      reference: "PL-MIDNIGHT-UTC-FALLBACK",
+    },
   ]) {
     setEnv(validEnv());
     const sourceBooking = safeBooking({
       booking_reference: calendarCase.reference,
-      date: calendarCase.pickupAt.slice(0, 10),
+      date: calendarCase.date || calendarCase.pickupAt.slice(0, 10),
       pickup_at: calendarCase.pickupAt,
       pickup_datetime: calendarCase.pickupAt,
       pickup_time: calendarCase.pickupTime,

@@ -301,9 +301,10 @@ assertIncludes(
   'new Set(["booking_id", "booking_reference", "id"])',
   "typed detail query params",
 );
-assertIncludes(savedBookingRead, 'new Set(["limit"])', "typed list query params");
+assertIncludes(savedBookingRead, 'new Set(["limit", "offset", "scope"])', "typed list query params");
 assertIncludes(savedBookingRead, "const defaultListLimit = 25;", "typed list default limit");
 assertIncludes(savedBookingRead, "const maxListLimit = 100;", "typed list max limit");
+assertIncludes(savedBookingRead, "const maxListOffset = 10_000;", "typed list max offset");
 assertIncludes(savedBookingRead, ".from(\"bookings\")", "typed read bookings table");
 assertExcludes(savedBookingRead, /\.from\((?!["']bookings["'])/i, "typed read non-bookings table");
 assertIncludes(savedBookingRead, "loadAdminSavedBookingsWithSchemaFallback", "typed read schema fallback helper");
@@ -317,7 +318,7 @@ assertIncludes(
 );
 assertIncludes(savedBookingRead, ".order(\"created_at\", { ascending: false })", "typed list order");
 assertIncludes(savedBookingRead, ".limit(1)", "typed detail limit");
-assertIncludes(savedBookingRead, ".limit(parsed.data.limit)", "typed list limit");
+assertIncludes(savedBookingRead, "parsed.data.offset + parsed.data.limit - 1", "typed list bounded range");
 assertIncludes(savedBookingRead, ".maybeSingle()", "typed detail maybeSingle");
 assertExcludes(savedBookingRead, ".select(\"*\")", "typed read wildcard select");
 assertExcludes(savedBookingRead, writePathPattern, "typed read helper write path");
@@ -387,7 +388,7 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy fallback endpoint",
 );
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "Legacy records remain form/detail source");

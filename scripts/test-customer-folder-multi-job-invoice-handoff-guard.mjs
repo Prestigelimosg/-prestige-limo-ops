@@ -2,15 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const guardScript = "scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs";
-const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, invoicePersistence, localInvoices, ledger, preactivation, appSmoke] =
+const [folderPage, folderShell, invoiceFolder, savedBookingsRead, customersPage, bookingAdapter, invoicePersistence, localInvoices, lineDescriptionFormatter, ledger, preactivation, appSmoke] =
   await Promise.all([
     readFile("app/customers/[customerId]/saved-bookings-panel.tsx", "utf8"),
     readFile("app/customers/[customerId]/page.tsx", "utf8"),
     readFile("app/customers/[customerId]/customer-invoice-folder-panel.tsx", "utf8"),
     readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
     readFile("app/customers/page.tsx", "utf8"),
+    readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
     readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
     readFile("lib/customer-local-invoices.ts", "utf8"),
+    readFile("lib/customer-invoice-line-description.ts", "utf8"),
     readFile("docs/current-implementation-ledger.md", "utf8"),
     readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
     readFile("scripts/test-app-smoke-browser.mjs", "utf8"),
@@ -27,6 +29,9 @@ for (const fragment of [
   'data-customer-folder-selected-invoice-layout="true"',
   "data-customer-folder-selected-invoice-job",
   "Review invoice &amp; email",
+  "Ticking a job confirms its displayed customer price for this invoice.",
+  "Review required · tick to confirm",
+  "Load {group.passengerName} invoice",
   "selected_booking_references",
   "selectedUnbilledBookings.map((booking)",
   'limit: "200"',
@@ -80,23 +85,323 @@ for (const fragment of [
   "readCustomerFolderExactBooking(safeCustomerFolderDispatchHandoffReference(booking))",
   "mismatchedCustomer",
   "mismatchedBooker",
+  "company_id: booking.company_id ?? null",
+  "booker_id: booking.booker_id ?? null",
+  "traveler_id: booking.traveler_id ?? null",
   "setPlainInvoiceSavedBookings(targetBookings)",
   "bookingReference: firstInvoiceRow.bookingReference",
   "bookingReference: row.bookingReference",
   "All ${invoiceRows.length} selected job",
+  "setPlainInvoiceSelectedJobReviewActive(true)",
+  "setSelectedJobInvoiceHandoffLines(selectedHandoffLines)",
+  'data-selected-job-invoice-coverage="true"',
+  "data-selected-job-invoice-coverage-line={line.bookingReference}",
+  'status: "Blocked"',
+  'status: "Loaded"',
+  "Loaded as an exact line in the final invoice review.",
+  "plainInvoicePreviewFromForm(nextPlainInvoiceForm)",
+  'data-selected-job-invoice-review="true"',
+  'data-selected-job-invoice-actions="true"',
+  'data-selected-job-invoice-edit="true"',
+  'data-selected-job-invoice-payment-options="true"',
+  'data-selected-job-invoice-card-payment-enabled="true"',
+  'data-selected-job-invoice-card-fee-applies="true"',
+  'data-selected-job-invoice-send="true"',
+  'data-selected-job-invoice-pdf-download="true"',
+  'data-selected-job-invoice-paper="true"',
+  'data-selected-job-invoice-status="true"',
+  'data-selected-job-invoice-balance="true"',
+  'data-selected-job-invoice-notes="true"',
+  'data-selected-job-invoice-signoff="true"',
+  'data-selected-job-invoice-bank="true"',
+  'data-selected-job-invoice-terms="true"',
+  '<summary aria-hidden="true" className="hidden">',
+  "Selected jobs invoice review",
+  "toggleSelectedJobInvoiceEditing",
+  "sendSelectedJobInvoice",
+  "downloadSelectedJobInvoicePdf",
+  "plainInvoiceIssuedRecord",
+  "PDF Download",
+  "loadPublicCompanyProfile",
+  "companyProfile.invoice_signoff_name",
+  "companyProfilePaymentSummary(companyProfile)",
+  "companyProfile.invoice_footer_terms",
+  "plainInvoiceCompanyPaymentHeading",
+  "plainInvoiceCompanyPaymentDetailLines",
+  "Allow card payment for this invoice",
+  'data-plain-invoice-quantity="true"',
+  "plainInvoiceLineItemRateLabel(item)",
+  "plainInvoiceQuantityLabel(item.quantity)",
+  "whitespace-pre-wrap",
+  "<textarea",
+  "formatCustomerInvoiceLineDescription({",
+  "readCustomerInvoiceDriverActualTimeSummary(",
 ]) {
   includes(customersPage, fragment, `multi-job invoice handoff fragment ${fragment}`);
 }
 
 for (const fragment of [
+  'return "ARRIVAL";',
+  'return "DEPARTURE";',
+  'return "CITY TRANSFER";',
+  'return "HOURLY";',
+  'AVF: "ALPHARD"',
+  '"E / AVF": "MERCEDES E-CLASS / ALPHARD"',
+  'VVV: "MERCEDES VIANO / V-CLASS"',
+  "const serviceFields =",
+  "compactInvoiceDescriptionTime(",
+  "return [...serviceFields, vehicle, passenger, `REF ${reference}`].join(",
+  "invoiceDescriptionText(input.dropoffLocation)",
+  "invoiceDescriptionText(input.pickupLocation)",
+  'const nilLabel = "NIL";',
+]) {
+  includes(lineDescriptionFormatter, fragment, `invoice line-description format ${fragment}`);
+}
+
+const selectionToggleStart = folderPage.indexOf("function toggleSelectedBooking(");
+const selectionToggleEnd = folderPage.indexOf("function toggleSavedBookingDescription(", selectionToggleStart);
+const selectionToggle = folderPage.slice(selectionToggleStart, selectionToggleEnd);
+for (const fragment of [
+  "if (selected) {",
+  "const displayedPrice = current[reference];",
+  'message: "Reviewed"',
+  'status: "reviewed"',
+]) {
+  includes(selectionToggle, fragment, `selected displayed price confirmation ${fragment}`);
+}
+
+const saveJobStart = folderPage.indexOf("async function saveInlineBookingDetails(");
+const saveJobEnd = folderPage.indexOf("function openPriceReview(", saveJobStart);
+const saveJob = folderPage.slice(saveJobStart, saveJobEnd);
+for (const fragment of [
+  'setExpandedSavedBookingReference("");',
+  'setEditingPriceReference("");',
+  'setPriceDraft("");',
+  "setInlineEditState(initialInlineEditState);",
+]) {
+  includes(saveJob, fragment, `successful saved-job editor close ${fragment}`);
+}
+
+const savePriceStart = folderPage.indexOf("function savePriceReview(");
+const savePriceEnd = folderPage.indexOf("return (", savePriceStart);
+const savePrice = folderPage.slice(savePriceStart, savePriceEnd);
+for (const fragment of [
+  "Saved customer price for ${publicBookingReferenceDisplay(booking)}.",
+  'setExpandedSavedBookingReference("");',
+  'setEditingPriceReference("");',
+  'setPriceDraft("");',
+  "setInlineEditState(initialInlineEditState);",
+]) {
+  includes(savePrice, fragment, `successful saved-price editor close ${fragment}`);
+}
+
+const selectedCoverageSetIndex = customersPage.indexOf(
+  "setSelectedJobInvoiceHandoffLines(selectedHandoffLines);",
+);
+const missingSelectedJobBlockIndex = customersPage.indexOf(
+  'if (invoiceAction === "create" && (!targetBooking || missingTargetReference))',
+);
+assert.equal(
+  selectedCoverageSetIndex !== -1 && selectedCoverageSetIndex < missingSelectedJobBlockIndex,
+  true,
+  "every selected reference must be represented before an exact-customer blocker can stop billing",
+);
+
+for (const fragment of [
+  "const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);",
+  "let customerId = requestedCustomerId || existingCustomerId;",
+  "if (!customerId) {",
+]) {
+  includes(bookingAdapter, fragment, `stable verified booking identity fragment ${fragment}`);
+}
+
+assert.equal(
+  bookingAdapter.includes("bookingCustomerIdentityChanged(existing, input.booking)"),
+  false,
+  "Safe display, contact, passenger, or route edits must not replace an existing customer ID.",
+);
+
+const selectedReviewStart = customersPage.indexOf('data-selected-job-invoice-review="true"');
+const selectedReviewEnd = customersPage.indexOf('data-plain-invoice-crm-account="true"', selectedReviewStart);
+assert.notEqual(selectedReviewStart, -1, "selected-job invoice review must exist");
+assert.notEqual(selectedReviewEnd, -1, "selected-job invoice review must end before the generic CRM workbench");
+const selectedReview = customersPage.slice(selectedReviewStart, selectedReviewEnd);
+
+includes(
+  selectedReview,
+  "src={companyProfile.logo_image_url || defaultCompanyProfile.logo_image_url}",
+  "selected-job invoice review must fall back to the approved default logo when the saved URL is blank",
+);
+assert.equal(
+  selectedReview.includes("src={companyProfile.logo_image_url}"),
+  false,
+  "selected-job invoice review must not pass a blank saved logo URL directly to Next Image",
+);
+
+const notesIndex = selectedReview.indexOf('data-selected-job-invoice-notes="true"');
+const signoffIndex = selectedReview.indexOf('data-selected-job-invoice-signoff="true"');
+const bankIndex = selectedReview.indexOf('data-selected-job-invoice-bank="true"');
+const termsIndex = selectedReview.indexOf('data-selected-job-invoice-terms="true"');
+assert.equal(
+  signoffIndex < bankIndex && bankIndex < notesIndex && notesIndex < termsIndex,
+  true,
+  "admin selected-job review must keep sign-off and Bank Details above the bottom Notes and Terms disclosures",
+);
+const lowerDisclosuresIndex = selectedReview.indexOf('data-selected-job-invoice-lower-disclosures="true"');
+assert.equal(
+  bankIndex < lowerDisclosuresIndex && lowerDisclosuresIndex < notesIndex && selectedReview.includes("sm:grid-cols-2"),
+  true,
+  "admin selected-job review must place Notes beside Terms in one responsive bottom row",
+);
+assert.equal(
+  selectedReview.includes("Click to view") ||
+    selectedReview.includes('data-selected-job-invoice-footer="true"'),
+  false,
+  "selected-job invoice disclosures must reuse their headings and must not restore the duplicate replacement footer",
+);
+assert.equal(
+  (selectedReview.match(/<details/g) || []).length === 3 &&
+    (selectedReview.match(/<\/details>/g) || []).length === 3,
+  true,
+  "selected-job invoice review must contain exactly the three approved lower-content disclosures",
+);
+for (const [marker, heading] of [
+  ['data-selected-job-invoice-notes="true"', "Notes"],
+  ['data-selected-job-invoice-bank="true"', "plainInvoiceCompanyPaymentHeading"],
+  ['data-selected-job-invoice-terms="true"', "Terms &amp; Conditions"],
+]) {
+  const markerIndex = selectedReview.indexOf(marker);
+  const detailsStart = selectedReview.lastIndexOf("<details", markerIndex);
+  const detailsEnd = selectedReview.indexOf("</details>", markerIndex);
+  const disclosure = selectedReview.slice(detailsStart, detailsEnd);
+  assert.equal(
+    detailsStart !== -1 && detailsEnd !== -1 && disclosure.includes("<summary") && disclosure.includes(heading),
+    true,
+    `selected-job invoice ${heading} must reuse its existing heading as one disclosure`,
+  );
+  assert.equal(
+    selectedReview.slice(detailsStart, markerIndex).includes(" open"),
+    false,
+    `selected-job invoice ${heading} disclosure must be closed by default`,
+  );
+}
+assert.equal(
+  selectedReview.includes('className="mt-5 max-w-lg break-words leading-4"') &&
+    selectedReview.includes("{plainInvoiceCompanyPaymentHeading}") &&
+    selectedReview.includes("plainInvoiceCompanyPaymentDetailLines.map"),
+  true,
+  "selected-job bank disclosure must retain the saved Company Profile payment lines",
+);
+const lowerDisclosureContent = selectedReview.slice(notesIndex, selectedReview.indexOf("</article>", termsIndex));
+assert.equal(
+  lowerDisclosureContent.includes("<button") ||
+    lowerDisclosureContent.includes("<Link") ||
+    lowerDisclosureContent.includes('href="/terms"'),
+  false,
+  "lower invoice disclosures must not add duplicate buttons, links, routes, or the unrelated Driver Calendar terms page",
+);
+
+const selectedFormSetIndex = customersPage.indexOf("setPlainInvoiceForm(nextPlainInvoiceForm);");
+const missingBookerBlockIndex = customersPage.indexOf(
+  "if (!guestAccountBillingEnabled && !exactBookerId)",
+  selectedFormSetIndex,
+);
+assert.equal(
+  selectedFormSetIndex !== -1 && selectedFormSetIndex < missingBookerBlockIndex,
+  true,
+  "verified customer/job display must load before missing-booker Send/PDF block",
+);
+
+includes(
+  customersPage,
+  "plainInvoiceSelectedJobReviewActive ? (",
+  "selected-job review must suppress the browser default Details summary",
+);
+
+for (const label of ["Edit", ': "Send"', ': "PDF Download"']) {
+  includes(selectedReview, label, `compact selected-job invoice action ${label.trim()}`);
+}
+
+for (const forbiddenControl of [
+  'data-plain-invoice-draft-action="true"',
+  'data-plain-invoice-issue-action="true"',
+  'data-plain-invoice-clear-action="true"',
+  "Advanced invoice workbench",
+]) {
+  assert.equal(
+    selectedReview.includes(forbiddenControl),
+    false,
+    `selected-job invoice review must not render ${forbiddenControl}`,
+  );
+}
+
+for (const fragment of [
   "bookingReference?: string;",
+  "quantity?: number;",
   "const bookingReference = text(item.bookingReference);",
+  "const quantityValue = numberValue(item.quantity, 1);",
 ]) {
   includes(localInvoices, fragment, `stored invoice line reference fragment ${fragment}`);
 }
 
 for (const fragment of [
+  'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
+  'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
+  'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
+  'const signoffY = 260;',
+  'const paymentY = 203;',
+  'const notesY = 118;',
+  'const termsY = 45;',
+  'pdfRightTextAt("Payment Made"',
+  "pdfRightTextAt(balanceDueValue",
+  "companyProfile.invoice_signoff_name",
+  "companyProfile.phone",
+  'pdfRightTextAt(quantity.toFixed(2), 435, rowY, 8)',
+  "formatInvoiceAmount(Math.round(itemAmountCents / quantity))",
+  'value.replace(/\\r\\n?/g, "\\n").split("\\n")',
+]) {
+  includes(localInvoices, fragment, `status-correct shared PDF fragment ${fragment}`);
+}
+
+for (const hardcodedFragment of [
+  "companyProfilePaymentSummary(defaultCompanyProfile)",
+  "defaultCompanyProfile.invoice_footer_terms",
+]) {
+  assert.equal(
+    selectedReview.includes(hardcodedFragment),
+    false,
+    `selected-job review must not restore hardcoded footer fragment ${hardcodedFragment}`,
+  );
+}
+
+for (const hardcodedFragment of [
+  'pdfTextAt("Finance Team", 50, signoffY - 32, 8)',
+  "pdfTextAt(defaultCompanyProfile.phone, 50, signoffY - 43, 8)",
+]) {
+  assert.equal(
+    localInvoices.includes(hardcodedFragment),
+    false,
+    `shared PDF must not restore hardcoded footer fragment ${hardcodedFragment}`,
+  );
+}
+
+assert.equal(
+  localInvoices.indexOf('pdfTextAt("Thank you for your business", 50, signoffY') <
+      localInvoices.indexOf("pdfTextAt(paymentHeading") &&
+    localInvoices.indexOf("pdfTextAt(paymentHeading") <
+      localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') &&
+    localInvoices.indexOf('pdfTextAt("Notes", 50, notesY') <
+      localInvoices.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
+  true,
+  "shared PDF must preserve the owner-approved sign-off, bank, Notes, then Terms order",
+);
+
+for (const fragment of [
   "if (value.length > 4)",
+  "function safeLineItemDescription(value: unknown)",
+  "function safeLineItemQuantity(value: unknown)",
+  "const quantity = safeLineItemQuantity(record.quantity);",
   "function uniqueInvoiceBookingReferences",
   "function verifyIssuedInvoiceBookingOwnership",
   'bookingReferences.includes("ADM-20260712063110")',

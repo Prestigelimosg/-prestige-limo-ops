@@ -18,5 +18,17 @@ assert.equal(
   true,
   "Customer Copy must render the account-aware helper.",
 );
+for (const fragment of [
+  "const customerDriverDetailsPortalLinkCopyReady =",
+  'clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS")',
+  "if (!customerDriverDetailsPortalLinkCopyReady)",
+  "!customerDriverDetailsPortalLinkCopyReady ||",
+]) {
+  assert.equal(
+    appPage.includes(fragment),
+    true,
+    `Customer app-link readiness must include ${fragment}`,
+  );
+}
 
 console.log("Admin customer app-link readiness helper guard passed");

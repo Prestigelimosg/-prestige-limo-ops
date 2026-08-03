@@ -148,6 +148,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  eq(column, value) {
+    this.filters.push({ column, operator: "eq", value });
+
+    return this;
+  }
+
   limit(count) {
     this.resultLimit = count;
 
@@ -176,6 +182,10 @@ class MockSupabaseClient {
     this.tables = {
       bookings: [],
       completed_booking_closeouts: [],
+      customer_invoice_records: [],
+      driver_job_dsp_actual_time_events: [],
+      driver_job_dsp_actual_time_summaries: [],
+      driver_job_status_events: [],
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -305,6 +315,27 @@ function assertNoSupabaseTouched(mock, label) {
   assert.equal(mock.client.selectHistory.length, 0, `${label}: expected no mocked read`);
 }
 
+function establishedGroupCounts(group) {
+  return {
+    billing_month: group.billing_month,
+    blocked_count: group.blocked_count,
+    customer_account: group.customer_account,
+    customer_id: group.customer_id,
+    ready_count: group.ready_count,
+    safe_readiness_status: group.safe_readiness_status,
+    total_count: group.total_count,
+  };
+}
+
+function establishedSummaryCounts(summary) {
+  return {
+    blocked_count: summary.blocked_count,
+    group_count: summary.group_count,
+    ready_count: summary.ready_count,
+    total_count: summary.total_count,
+  };
+}
+
 const seed = {
   bookings: [
     {
@@ -341,6 +372,21 @@ const seed = {
       customer_display_name: "Zeta Account",
       customer_id: "customer-zeta",
       pickup_at: "2026-06-24T10:00:00.000Z",
+    },
+    {
+      admin_internal_status: "completed",
+      booking_reference: "MONTHLY-MISSING-CLOSEOUT-JUN",
+      customer_display_name: "Acme Corporate",
+      customer_id: "customer-acme",
+      pickup_at: "2026-06-26T10:00:00.000Z",
+    },
+    {
+      admin_internal_status: "completed",
+      booking_reference: "MONTHLY-COVERED-JUN",
+      public_booking_reference: "10077",
+      customer_display_name: "Acme Corporate",
+      customer_id: "customer-acme",
+      pickup_at: "2026-06-28T10:00:00.000Z",
     },
   ],
   completed_booking_closeouts: [
@@ -398,6 +444,24 @@ const seed = {
       extra_charges_readiness: "ready",
       updated_at: "2026-06-22T12:00:00.000Z",
     },
+    {
+      billing_prep_readiness: "ready",
+      booking_reference: "MONTHLY-COVERED-JUN",
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: "ready",
+      extra_charges_readiness: "none",
+      updated_at: "2026-06-28T12:00:00.000Z",
+    },
+  ],
+  customer_invoice_records: [
+    {
+      customer_id: "customer-acme",
+      document_state: "issued",
+      document_type: "invoice",
+      line_items: [{ bookingReference: "10077" }],
+      reference: "MONTHLY-CUSTOMER-BILL",
+    },
   ],
 };
 
@@ -408,7 +472,7 @@ try {
 
   assert.equal(
     grouping.adminMonthlyBillingGroupingReadVersion,
-    "stage-4a-442-admin-monthly-billing-grouping-read-v2",
+    "stage-4a-444-admin-monthly-billing-dsp-time-validation-v4",
   );
 
   assert.deepEqual(grouping.parseAdminMonthlyBillingGroupingReadParams({}), {
@@ -546,7 +610,7 @@ try {
 
   assert.equal(defaultReadResult.status, 200);
   assert.equal(defaultReadResult.body.ok, true);
-  assert.deepEqual(defaultReadResult.body.groups, [
+  assert.deepEqual(defaultReadResult.body.groups.map(establishedGroupCounts), [
     {
       billing_month: "2026-06",
       blocked_count: 2,
@@ -575,7 +639,7 @@ try {
       total_count: 1,
     },
   ]);
-  assert.deepEqual(defaultReadResult.body.summary, {
+  assert.deepEqual(establishedSummaryCounts(defaultReadResult.body.summary), {
     blocked_count: 2,
     group_count: 3,
     ready_count: 3,
@@ -589,8 +653,257 @@ try {
     page_size: 25,
     total_group_count: 3,
   });
+  const acmeJuneGroup = defaultReadResult.body.groups.find(
+    (group) => group.customer_account === "Acme Corporate" && group.billing_month === "2026-06",
+  );
+  assert.equal(acmeJuneGroup.classified_count, 4);
+  assert.equal(acmeJuneGroup.covered_count, 1);
+  assert.deepEqual(
+    acmeJuneGroup.jobs.map((job) => [
+      job.booking_reference,
+      job.safe_billing_status,
+      job.safe_reason,
+    ]),
+    [
+      [
+        "MONTHLY-COVERED-JUN",
+        "covered",
+        "An issued customer bill already covers this booking.",
+      ],
+      [
+        "MONTHLY-BLOCKED-JUN",
+        "blocked",
+        "Extra charges need review.",
+      ],
+      [
+        "MONTHLY-MISSING-CLOSEOUT-JUN",
+        "blocked",
+        "Completed job closeout is missing.",
+      ],
+      [
+        "MONTHLY-READY-JUN",
+        "ready",
+        "Ready and not covered by an issued customer bill.",
+      ],
+    ],
+  );
+  assert.equal(defaultReadResult.body.summary.classified_count, 6);
+  assert.equal(defaultReadResult.body.summary.covered_count, 1);
   assert.equal(defaultReadMock.client.operations.length, 0);
   assertNoLeaks(defaultReadResult, "default monthly billing grouping response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const dspTimingSeed = {
+    bookings: [
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-INVALID-JC",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-25T08:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-MISSING-JC",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-26T08:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-27T15:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-DSP-COVERED",
+        public_booking_reference: "10999",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-28T08:00:00.000Z",
+        service_type: "DSP",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-NON-DSP-READY",
+        customer_display_name: "DSP Timing Account",
+        customer_id: "customer-dsp-timing",
+        pickup_at: "2026-07-29T08:00:00.000Z",
+        service_type: "TRF",
+      },
+    ],
+    completed_booking_closeouts: [
+      "MONTHLY-DSP-INVALID-JC",
+      "MONTHLY-DSP-MISSING-JC",
+      "MONTHLY-DSP-CORRECTED",
+      "MONTHLY-DSP-COVERED",
+      "MONTHLY-NON-DSP-READY",
+    ].map((booking_reference) => ({
+      billing_prep_readiness: "ready",
+      booking_reference,
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: booking_reference === "MONTHLY-NON-DSP-READY"
+        ? "not_applicable"
+        : "ready",
+      extra_charges_readiness: "none",
+      updated_at: "2026-07-30T12:00:00.000Z",
+    })),
+    customer_invoice_records: [
+      {
+        customer_id: "customer-dsp-timing",
+        document_state: "issued",
+        document_type: "invoice",
+        line_items: [{ bookingReference: "10999" }],
+        reference: "DSP-COVERED-INVOICE",
+      },
+    ],
+    driver_job_dsp_actual_time_events: [
+      {
+        actor_role: "admin",
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        created_at: "2026-07-27T12:30:00.000Z",
+        event_type: "dsp_end",
+        occurred_at: "2026-07-27T12:00:00.000Z",
+        safe_event_context: {
+          actual_time_policy: "admin_billing_time_correction",
+          billing_started_at: "2026-07-27T08:00:00.000Z",
+        },
+        safe_event_note: "Verified actual customer service interval",
+        source_surface: "admin_api",
+      },
+    ],
+    driver_job_dsp_actual_time_summaries: [
+      {
+        actual_time_status: "complete",
+        booking_reference: "MONTHLY-DSP-INVALID-JC",
+        dsp_ended_at: "2026-07-22T10:30:00.000Z",
+      },
+      {
+        actual_time_status: "complete",
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        dsp_ended_at: "2026-07-22T10:30:00.000Z",
+      },
+      {
+        actual_time_status: "complete",
+        booking_reference: "MONTHLY-DSP-COVERED",
+        dsp_ended_at: "2026-07-22T10:30:00.000Z",
+      },
+    ],
+    driver_job_status_events: [
+      {
+        booking_reference: "MONTHLY-DSP-INVALID-JC",
+        occurred_at: "2026-07-22T10:30:00.000Z",
+        status_value: "completed",
+      },
+      {
+        booking_reference: "MONTHLY-DSP-CORRECTED",
+        occurred_at: "2026-07-22T10:30:00.000Z",
+        status_value: "completed",
+      },
+      {
+        booking_reference: "MONTHLY-DSP-COVERED",
+        occurred_at: "2026-07-22T10:30:00.000Z",
+        status_value: "completed",
+      },
+    ],
+  };
+  const dspTimingMock = installMockClient(dspTimingSeed);
+  const dspTimingResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-07", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(dspTimingResult.status, 200);
+  assert.equal(dspTimingResult.body.groups.length, 1);
+  assert.deepEqual(
+    dspTimingResult.body.groups[0].jobs.map((job) => [
+      job.booking_reference,
+      job.safe_billing_status,
+      job.safe_reason,
+    ]),
+    [
+      [
+        "MONTHLY-DSP-COVERED",
+        "covered",
+        "An issued customer bill already covers this booking.",
+      ],
+      [
+        "MONTHLY-DSP-CORRECTED",
+        "ready",
+        "Ready and not covered by an issued customer bill.",
+      ],
+      [
+        "MONTHLY-DSP-INVALID-JC",
+        "blocked",
+        "DSP billing time needs review.",
+      ],
+      [
+        "MONTHLY-DSP-MISSING-JC",
+        "blocked",
+        "DSP billing time needs review.",
+      ],
+      [
+        "MONTHLY-NON-DSP-READY",
+        "ready",
+        "Ready and not covered by an issued customer bill.",
+      ],
+    ],
+  );
+  assert.deepEqual(establishedSummaryCounts(dspTimingResult.body.summary), {
+    blocked_count: 2,
+    group_count: 1,
+    ready_count: 2,
+    total_count: 4,
+  });
+  assert.equal(dspTimingMock.client.operations.length, 0);
+  assert.deepEqual(
+    dspTimingMock.client.selectHistory.slice(-3).map(({ table }) => table),
+    [
+      "driver_job_dsp_actual_time_events",
+      "driver_job_dsp_actual_time_summaries",
+      "driver_job_status_events",
+    ],
+  );
+  assertNoLeaks(dspTimingResult, "DSP timing monthly billing grouping response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const dspTimingFailureMock = installMockClient(dspTimingSeed, {
+    failures: {
+      "select:driver_job_dsp_actual_time_summaries": {
+        code: "42501",
+        message: `SQL stack with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const dspTimingFailureResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-07", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(dspTimingFailureResult.status, 500);
+  assert.deepEqual(dspTimingFailureResult.body, {
+    error: "Admin monthly billing grouping read failed safely.",
+    ok: false,
+  });
+  assert.equal(dspTimingFailureMock.client.operations.length, 0);
+  assertNoLeaks(
+    dspTimingFailureResult,
+    "failed DSP timing monthly billing grouping response should stay safe",
+  );
 
   setEnv(enabledEnv());
 
@@ -608,7 +921,7 @@ try {
     billingMonthFilterResult.body.groups.map((group) => group.billing_month),
     ["2026-06", "2026-06"],
   );
-  assert.deepEqual(billingMonthFilterResult.body.summary, {
+  assert.deepEqual(establishedSummaryCounts(billingMonthFilterResult.body.summary), {
     blocked_count: 2,
     group_count: 2,
     ready_count: 2,
@@ -644,7 +957,7 @@ try {
     customerSearchResult.body.groups.map((group) => `${group.customer_account}:${group.billing_month}`),
     ["Acme Corporate:2026-06", "Acme Corporate:2026-07"],
   );
-  assert.deepEqual(customerSearchResult.body.summary, {
+  assert.deepEqual(establishedSummaryCounts(customerSearchResult.body.summary), {
     blocked_count: 2,
     group_count: 2,
     ready_count: 2,
@@ -680,7 +993,7 @@ try {
     readinessFilterResult.body.groups.map((group) => `${group.customer_account}:${group.safe_readiness_status}`),
     ["Acme Corporate:ready", "Zeta Account:ready"],
   );
-  assert.deepEqual(readinessFilterResult.body.summary, {
+  assert.deepEqual(establishedSummaryCounts(readinessFilterResult.body.summary), {
     blocked_count: 0,
     group_count: 2,
     ready_count: 2,
@@ -717,7 +1030,7 @@ try {
   assert.equal(readResult.status, 200);
   assert.equal(readResult.body.ok, true);
   assert.equal(readResult.body.version, grouping.adminMonthlyBillingGroupingReadVersion);
-  assert.deepEqual(readResult.body.groups, [
+  assert.deepEqual(readResult.body.groups.map(establishedGroupCounts), [
     {
       billing_month: "2026-06",
       blocked_count: 2,
@@ -728,7 +1041,7 @@ try {
       total_count: 3,
     },
   ]);
-  assert.deepEqual(readResult.body.summary, {
+  assert.deepEqual(establishedSummaryCounts(readResult.body.summary), {
     blocked_count: 2,
     group_count: 1,
     ready_count: 1,
@@ -751,10 +1064,17 @@ try {
   assert.equal(readMock.createdClients[0].url, supabaseUrlSentinel);
   assert.equal(readMock.createdClients[0].serviceRoleKey, serviceRoleSentinel);
   assert.equal(readMock.client.operations.length, 0);
-  assert.equal(readMock.client.selectHistory.length, 2);
-  assert.equal(readMock.client.selectHistory[0].table, "completed_booking_closeouts");
+  assert.equal(readMock.client.selectHistory.length, 3);
+  assert.equal(readMock.client.selectHistory[0].table, "bookings");
+  assert.deepEqual(readMock.client.selectHistory[0].filters, [
+    {
+      column: "admin_internal_status",
+      operator: "eq",
+      value: "completed",
+    },
+  ]);
   assert.equal(readMock.client.selectHistory[0].limit, 500);
-  assert.equal(readMock.client.selectHistory[1].table, "bookings");
+  assert.equal(readMock.client.selectHistory[1].table, "completed_booking_closeouts");
   assert.deepEqual(readMock.client.selectHistory[1].filters, [
     {
       column: "booking_reference",
@@ -762,11 +1082,19 @@ try {
       values: [
         "MONTHLY-READY-JUN",
         "MONTHLY-BLOCKED-JUN",
-        "MONTHLY-DRAFT-JUN",
         "MONTHLY-READY-JUL",
         "MONTHLY-READY-ZETA-JUN",
-        "MONTHLY-NOBOOK-JUN",
+        "MONTHLY-MISSING-CLOSEOUT-JUN",
+        "MONTHLY-COVERED-JUN",
       ],
+    },
+  ]);
+  assert.equal(readMock.client.selectHistory[2].table, "customer_invoice_records");
+  assert.deepEqual(readMock.client.selectHistory[2].filters, [
+    {
+      column: "customer_id",
+      operator: "in",
+      values: ["customer-acme", "customer-zeta"],
     },
   ]);
   assertNoLeaks(readResult, "monthly billing grouping response should stay safe");
@@ -808,7 +1136,7 @@ try {
   );
 
   assert.equal(secondPageResult.status, 200);
-  assert.deepEqual(secondPageResult.body.groups, [
+  assert.deepEqual(secondPageResult.body.groups.map(establishedGroupCounts), [
     {
       billing_month: "2026-06",
       blocked_count: 0,
@@ -876,7 +1204,7 @@ try {
   );
 
   assert.equal(fallbackResult.status, 200);
-  assert.deepEqual(fallbackResult.body.groups, [
+  assert.deepEqual(fallbackResult.body.groups.map(establishedGroupCounts), [
     {
       billing_month: "2026-08",
       blocked_count: 0,
@@ -887,9 +1215,11 @@ try {
       total_count: 1,
     },
   ]);
-  assert.equal(fallbackMock.client.selectHistory.length, 3);
-  assert.equal(fallbackMock.client.selectHistory[1].selectedColumns.includes("pickup_at"), true);
-  assert.equal(fallbackMock.client.selectHistory[2].selectedColumns.includes("pickup_datetime"), true);
+  assert.equal(fallbackMock.client.selectHistory.length, 4);
+  assert.equal(fallbackMock.client.selectHistory[0].selectedColumns.includes("pickup_at"), true);
+  assert.equal(fallbackMock.client.selectHistory[1].selectedColumns.includes("pickup_datetime"), true);
+  assert.equal(fallbackMock.client.selectHistory[2].table, "completed_booking_closeouts");
+  assert.equal(fallbackMock.client.selectHistory[3].table, "customer_invoice_records");
   assertNoLeaks(fallbackResult, "foundation fallback response should stay safe");
 
   setEnv(enabledEnv());

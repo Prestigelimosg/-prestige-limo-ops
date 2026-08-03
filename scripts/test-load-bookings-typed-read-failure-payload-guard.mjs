@@ -281,7 +281,7 @@ for (const forbiddenBridgeFragment of [
 
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 const typedFetchFragment = "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)";
-const legacyFetchFragment = "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`";
+const legacyFetchFragment = "fetchAdminSavedBookingsList(searchParams)";
 const typedFetchIndex = loadBookingsBlock.indexOf(typedFetchFragment);
 const legacyFetchIndex = loadBookingsBlock.indexOf(legacyFetchFragment);
 assert.notEqual(typedFetchIndex, -1, "Load Bookings typed display fetch exists.");

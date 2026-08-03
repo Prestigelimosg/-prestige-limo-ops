@@ -94,13 +94,21 @@ export async function createMonthlyBillingDraftPrepAppEvent(
 export async function createMonthlyInvoiceDraftAutomationSummaryAppEvent(
   {
     billingMonth,
+    blockedCount,
+    classifiedCount,
+    coveredCount,
     failedCount,
     preparedCount,
+    readyCount,
     skippedExistingCount,
   }: {
     billingMonth: string;
+    blockedCount: number;
+    classifiedCount: number;
+    coveredCount: number;
     failedCount: number;
     preparedCount: number;
+    readyCount: number;
     skippedExistingCount: number;
   },
   actor: AdminBookingPersistenceAdapterActor,
@@ -111,17 +119,21 @@ export async function createMonthlyInvoiceDraftAutomationSummaryAppEvent(
     event_key: eventKey,
     notification_status: "queued",
     notification_type: "monthly_billing",
-    priority: failedCount > 0 ? "high" : "normal",
+    priority: failedCount > 0 || blockedCount > 0 ? "high" : "normal",
     safe_context: {
       billing_month: billingMonth,
+      blocked_count: blockedCount,
+      classified_count: classifiedCount,
+      covered_count: coveredCount,
       failed_count: failedCount,
       prepared_count: preparedCount,
+      ready_count: readyCount,
       skipped_existing_count: skippedExistingCount,
     },
     safe_message:
       failedCount > 0
         ? "Monthly billing draft preparation completed with items needing admin review."
-        : "Monthly billing drafts are ready for admin review.",
+        : `${readyCount} ready, ${coveredCount} already covered, and ${blockedCount} blocked completed job${classifiedCount === 1 ? "" : "s"} classified for admin review.`,
     safe_title: "Monthly billing drafts ready",
     workflow_area: "monthly_billing_draft_prep",
   };

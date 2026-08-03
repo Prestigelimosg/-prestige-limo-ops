@@ -131,7 +131,22 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /\/api\/[^"')\s]*(?:cancel|reassign|replacement|exception|breakdown|missed|late-driver)/i, "Driver pages must not add dispatcher exception APIs.");
   assert.doesNotMatch(source, /aviationstack|flightaware|flightstats|flightradar|opensky|aeroapi/i, "Driver pages must not add real flight API integrations.");
   assert.doesNotMatch(source, /twilio|messagebird|vonage|nexmo|api\.whatsapp\.com|wa\.me|whatsapp\.send|sendWhatsApp|sendWhatsapp|sendSms|sendSMS|sms\.send/i, "Driver pages must not add WhatsApp/SMS integrations.");
-  assert.doesNotMatch(source, /\b(?:Notification|PushManager|serviceWorker|showNotification|sendNotification)\b/, "Driver pages must not add notification APIs.");
+  assert.match(
+    source,
+    /Notification\.requestPermission\(\)/,
+    "Driver Job acknowledgement may request the owner-approved device-alert permission through its one explicit click.",
+  );
+  assert.match(
+    source,
+    /navigator\.serviceWorker\.register\("\/prestige-driver-push-sw\.js",\s*\{\s*scope:\s*"\/driver-job\/"/,
+    "Driver device alerts must use the one driver-scoped service worker registration.",
+  );
+  assert.match(source, /PushManager/, "Driver device alerts must remain feature-detected.");
+  assert.doesNotMatch(
+    source,
+    /showNotification|sendNotification|prestige-admin-push-sw|admin_device_push_subscriptions/i,
+    "Driver page must not display foreground notifications or reuse the locked admin push lane.",
+  );
   assert.doesNotMatch(source, /google\.maps|maps\.google|mapbox|gps api/i, "Driver pages must not add map or GPS APIs.");
   assert.doesNotMatch(source, /customer live location link/i, "Driver pages must not create fake customer live location links.");
   assert.match(
@@ -147,8 +162,8 @@ async function assertNoRealLocationImplementation() {
   assert.doesNotMatch(source, /supabase\.storage|storage\.from|\.upload\s*\(/i, "Driver pages must not preview or write storage directly.");
   assert.equal(
     (source.match(/window\.URL\.createObjectURL\(blob\)/g) || []).length,
-    1,
-    "Driver page may create one object URL only for the acknowledged calendar attachment download.",
+    0,
+    "Driver calendar import must not create a forced-download blob URL.",
   );
 }
 
@@ -209,12 +224,10 @@ async function runChromeTest() {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `
         window.__driverJobFetchCalls = [];
-        window.__driverJobCalendarBlobTexts = [];
-        window.__driverJobCalendarBlobTypes = [];
-        window.__driverJobCalendarDownloads = [];
-        window.__driverJobCalendarRevokedUrls = [];
+        window.__driverOtsPhotoUploadBodies = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
+        const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
         window.addEventListener("unhandledrejection", (event) => window.__prestigeErrors.push(String(event.reason)));
         const originalError = console.error;
@@ -222,34 +235,103 @@ async function runChromeTest() {
           window.__prestigeConsoleErrors.push(args.map(String).join(" "));
           originalError.apply(console, args);
         };
+        window.__driverDeviceAlertTest = {
+          clearPortalSubscription: () => {
+            window.name = "";
+            driverPushSubscriptionState = null;
+          },
+          getRegistrations: [],
+          permissionRequests: 0,
+          registrations: [],
+          rememberedLinks: [],
+          portalSubscriptionBodies: [],
+          subscriptionBodies: [],
+        };
+        const driverPushSubscription = {
+          toJSON: () => ({
+            endpoint: "https://push.browser.test/driver-device",
+            keys: { auth: "browser-auth", p256dh: "browser-p256dh" },
+          }),
+        };
+        let driverPushSubscriptionState = window.name === "prestige-driver-push-subscribed"
+          ? driverPushSubscription
+          : null;
+        const driverPushRegistration = {
+          active: {
+            postMessage: (message) => window.__driverDeviceAlertTest.rememberedLinks.push(message),
+          },
+          pushManager: {
+            getSubscription: async () => driverPushSubscriptionState,
+            subscribe: async () => {
+              driverPushSubscriptionState = driverPushSubscription;
+              window.name = "prestige-driver-push-subscribed";
+              return driverPushSubscription;
+            },
+          },
+        };
+        Object.defineProperty(window, "Notification", {
+          configurable: true,
+          value: {
+            get permission() {
+              return location.pathname === "/driver-portal" &&
+                window.name === "prestige-driver-push-subscribed"
+                ? "granted"
+                : "default";
+            },
+            requestPermission: async () => {
+              window.__driverDeviceAlertTest.permissionRequests += 1;
+              return "granted";
+            },
+          },
+        });
+        Object.defineProperty(window, "PushManager", {
+          configurable: true,
+          value: function PushManager() {},
+        });
+        Object.defineProperty(navigator, "serviceWorker", {
+          configurable: true,
+          value: {
+            getRegistration: async (url) => {
+              window.__driverDeviceAlertTest.getRegistrations.push(url);
+              return driverPushRegistration;
+            },
+            ready: Promise.resolve(driverPushRegistration),
+            register: async (url, options) => {
+              window.__driverDeviceAlertTest.registrations.push({ options, url });
+              return driverPushRegistration;
+            },
+          },
+        });
         const originalFetch = window.fetch.bind(window);
-        const originalCreateObjectURL = window.URL.createObjectURL.bind(window.URL);
-        const originalRevokeObjectURL = window.URL.revokeObjectURL.bind(window.URL);
-        const originalAnchorClick = window.HTMLAnchorElement.prototype.click;
-
-        window.URL.createObjectURL = (blob) => {
-          window.__driverJobCalendarBlobTypes.push(blob.type);
-          blob.text().then((text) => window.__driverJobCalendarBlobTexts.push(text));
-          return originalCreateObjectURL(blob);
-        };
-        window.URL.revokeObjectURL = (url) => {
-          window.__driverJobCalendarRevokedUrls.push(String(url));
-          return originalRevokeObjectURL(url);
-        };
-        window.HTMLAnchorElement.prototype.click = function driverJobCalendarDownloadRecorder() {
-          if (this.download) {
-            window.__driverJobCalendarDownloads.push({
-              download: this.download,
-              href: this.href,
-            });
-          }
-          return originalAnchorClick.call(this);
-        };
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (method === "POST" && url.endsWith("/ots-photo") && args[1]?.body instanceof FormData) {
+            const photo = args[1].body.get("photo");
+            window.__driverOtsPhotoUploadBodies.push({
+              name: photo instanceof File ? photo.name : "",
+              size: photo instanceof Blob ? photo.size : 0,
+              type: photo instanceof Blob ? photo.type : "",
+            });
+          }
+
+          if (url.includes("/api/driver-job/") && url.endsWith("/calendar")) {
+            return Promise.resolve(
+              new Response(JSON.stringify(
+                method === "POST"
+                  ? { action: "saved", ok: true, status: "cal_saved" }
+                  : driverCalendarReturnState === "saved"
+                    ? { action: "status", connected: true, ok: true, status: "cal_saved" }
+                    : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
+              ), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
 
           if (method === "GET" && url.includes("/api/driver-job/") && url.includes("/notifications")) {
             return Promise.resolve(
@@ -282,6 +364,126 @@ async function runChromeTest() {
             );
           }
 
+          if (new URL(url, window.location.origin).pathname === "/api/driver-portal/jobs") {
+            if (method === "POST") {
+              try {
+                window.__driverDeviceAlertTest.portalSubscriptionBodies.push(JSON.parse(args[1]?.body || "{}"));
+              } catch {}
+              return Promise.resolve(
+                new Response(JSON.stringify({
+                  device_alerts: { subscription_registered: true },
+                  ok: true,
+                }), {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                }),
+              );
+            }
+            return Promise.resolve(
+              new Response(JSON.stringify({
+                device_alerts: {
+                  enabled: true,
+                  public_key: "AQIDBA",
+                  ready: true,
+                },
+                jobs: [
+                  {
+                    job_key: "a".repeat(64),
+                    payload: {
+                      assignedDriver: { contact: "", name: "", plate: "", vehicleModel: "" },
+                      bookingType: "MNG",
+                      dropoffLocation: "Mock Arrival Dropoff",
+                      flightNumber: "SQ777",
+                      passengerName: "Mock Arrival Passenger",
+                      pickupDate: "2026-05-29",
+                      pickupDateTime: "2026-05-29T09:15:00.000Z",
+                      pickupLocation: "Mock Arrival Pickup",
+                      pickupTime: "1715hrs",
+                      reference: "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+                      route: "Mock Arrival Pickup > Mock Arrival Dropoff",
+                      status: "ots",
+                      statusHistory: [],
+                      statusLabel: "I've arrived",
+                      waypoints: [],
+                    },
+                    state: "ots",
+                    state_label: "On site",
+                  },
+                  {
+                    job_key: "b".repeat(64),
+                    payload: {
+                      assignedDriver: { contact: "", name: "", plate: "", vehicleModel: "" },
+                      bookingType: "DEP",
+                      dropoffLocation: "Mock Portal Dropoff",
+                      flightNumber: "SQ888",
+                      passengerName: "Mock Portal Passenger",
+                      pickupDate: "2026-05-30",
+                      pickupDateTime: "2026-05-30T02:00:00.000Z",
+                      pickupLocation: "Mock Portal Pickup",
+                      pickupTime: "1000hrs",
+                      reference: "MOCK-DRIVER-PORTAL-B",
+                      route: "Mock Portal Pickup > Mock Portal Dropoff",
+                      status: "assigned",
+                      statusHistory: [],
+                      statusLabel: "Assigned",
+                      waypoints: [],
+                    },
+                    state: "assigned",
+                    state_label: "Assigned · Awaiting OTW",
+                  },
+                ],
+                ok: true,
+                version: "driver-portal-browser-mock",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
+          const driverJobPath = new URL(url, window.location.origin).pathname;
+          const driverJobPathParts = driverJobPath.split("/").filter(Boolean);
+          if (
+            driverJobPathParts.length === 3 &&
+            driverJobPathParts[0] === "api" &&
+            driverJobPathParts[1] === "driver-job"
+          ) {
+            if (method === "PATCH" && typeof args[1]?.body === "string") {
+              try {
+                window.__driverDeviceAlertTest.subscriptionBodies.push(JSON.parse(args[1].body));
+              } catch {}
+            }
+
+            return originalFetch(...args).then(async (response) => {
+              const result = await response.json();
+              if (result.ok) {
+                result.device_alerts = method === "PATCH"
+                  ? {
+                      enabled: true,
+                      link_key: "a".repeat(64),
+                      reason: "subscription_registered",
+                      subscription_registered: true,
+                    }
+                  : {
+                      enabled: true,
+                      public_key: "AQIDBA",
+                      ready: true,
+                      reason: "ready",
+                    };
+                if (method === "PATCH") {
+                  result.driver_portal = {
+                    enrolled: true,
+                    link_key: "a".repeat(64),
+                  };
+                }
+              }
+              return new Response(JSON.stringify(result), {
+                headers: { "content-type": "application/json" },
+                status: response.status,
+              });
+            });
+          }
+
           return originalFetch(...args);
         };
       `,
@@ -307,12 +509,18 @@ async function runChromeTest() {
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
-        calendarDownload: {
-          blobTexts: window.__driverJobCalendarBlobTexts || [],
-          blobTypes: window.__driverJobCalendarBlobTypes || [],
-          downloads: window.__driverJobCalendarDownloads || [],
-          feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent.trim() || "",
-          revokedUrls: window.__driverJobCalendarRevokedUrls || [],
+        otsPhotoUploadBodies: window.__driverOtsPhotoUploadBodies || [],
+        deviceAlerts: {
+          helper: document.querySelector("[data-driver-job-device-alert-helper]")?.textContent?.trim() || "",
+          permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+          registrations: window.__driverDeviceAlertTest?.registrations || [],
+          rememberedLinks: window.__driverDeviceAlertTest?.rememberedLinks || [],
+          portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
+          subscriptionBodies: window.__driverDeviceAlertTest?.subscriptionBodies || [],
+        },
+        calendarImport: {
+          feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent?.trim() || "",
+          saved: Boolean(document.querySelector("[data-driver-job-calendar-saved='true']")),
           visible: Boolean(document.querySelector("[data-driver-job-calendar-action='true']")),
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -541,6 +749,7 @@ async function runChromeTest() {
 
     const saveAndAcknowledgeJob = async () => {
       const beforeSaveState = await pageState();
+      const expectedDriverJobPagePath = await evaluate("location.pathname");
       const expectedDriverJobPatchPath = await evaluate(`(() => {
         const token = location.pathname.split("/").filter(Boolean).at(-1) || "";
 
@@ -646,7 +855,7 @@ async function runChromeTest() {
             const buttonRect = button?.getBoundingClientRect();
             const messageRect = message?.getBoundingClientRect();
 
-            return message?.textContent.trim() === "Driver details saved and job acknowledged." &&
+            return message?.textContent.trim() === "Driver details saved and job acknowledged. Driver Portal is ready on this device. Device alerts are enabled on this device." &&
               acknowledgedState?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Mock Local Driver A") &&
               savedDetails?.innerText.includes("+65 9123 4567") &&
@@ -675,6 +884,40 @@ async function runChromeTest() {
         afterSaveState.fetchCalls.at(-1),
         `PATCH ${expectedDriverJobPatchPath}`,
         "Expected public driver details Save & Acknowledge to persist through the tokenized driver job route.",
+      );
+      assert.equal(
+        afterSaveState.deviceAlerts.helper,
+        "This same action enables Driver Job alerts on this device when supported and allowed.",
+        "Expected the existing acknowledgement action to explain its bounded device-alert permission.",
+      );
+      assert.equal(
+        afterSaveState.deviceAlerts.permissionRequests,
+        1,
+        "Expected one notification permission request from the explicit Save & Acknowledge click.",
+      );
+      assert.deepEqual(
+        afterSaveState.deviceAlerts.registrations,
+        [{ options: { scope: "/driver-job/" }, url: "/prestige-driver-push-sw.js" }],
+        "Expected one driver-scoped service-worker registration without touching admin push.",
+      );
+      assert.deepEqual(
+        afterSaveState.deviceAlerts.subscriptionBodies.at(-1)?.device_push_subscription,
+        {
+          endpoint: "https://push.browser.test/driver-device",
+          keys: { auth: "browser-auth", p256dh: "browser-p256dh" },
+        },
+        "Expected the optional device subscription to travel only with the existing acknowledgement PATCH.",
+      );
+      assert.deepEqual(
+        afterSaveState.deviceAlerts.rememberedLinks,
+        [
+          {
+            jobKey: "a".repeat(64),
+            type: "PRESTIGE_REMEMBER_DRIVER_JOB_LINK",
+            url: expectedDriverJobPagePath,
+          },
+        ],
+        "Expected the private URL to remain device-local under the opaque acknowledged-link key.",
       );
       assert.deepEqual(
         afterSaveState.activityLogLabels,
@@ -724,7 +967,7 @@ async function runChromeTest() {
       return state;
     };
 
-    const downloadDriverJobCalendar = async () => {
+    const saveDriverJobGoogleCalendar = async () => {
       const beforeState = await pageState();
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-calendar-action='true']");
@@ -736,27 +979,15 @@ async function runChromeTest() {
         button.click();
         return true;
       })()`);
-      assert.equal(clicked, true, "Expected acknowledged Driver Job calendar action to be clickable.");
+      assert.equal(clicked, true, "Expected acknowledged Driver Job Google Calendar action to be clickable.");
 
-      const downloadState = await waitForCondition(
+      await waitForCondition(
         () =>
           evaluate(`(() => {
-            const downloads = window.__driverJobCalendarDownloads || [];
-            const blobTexts = window.__driverJobCalendarBlobTexts || [];
-            const blobTypes = window.__driverJobCalendarBlobTypes || [];
-            const revokedUrls = window.__driverJobCalendarRevokedUrls || [];
-            const feedback = document.querySelector("[data-driver-job-calendar-feedback]")?.textContent.trim() || "";
-
-            return downloads.length === 1 &&
-              blobTexts.length === 1 &&
-              blobTypes.length === 1 &&
-              revokedUrls.length === 1 &&
-              feedback === "Calendar file downloaded. Open it to add or update this job."
-              ? { blobText: blobTexts[0], blobType: blobTypes[0], download: downloads[0], feedback, revokedUrls }
-              : false;
+            return Boolean(document.querySelector("[data-driver-job-calendar-saved='true']"));
           })()`),
         10000,
-        "acknowledged Driver Job calendar attachment download",
+        "acknowledged Driver Job Google Calendar saved state",
       );
       const afterState = await pageState();
       const expectedCalendarPath = `/api/driver-job/${mockDriverJobTokens.workflowOrder}/calendar`;
@@ -764,46 +995,98 @@ async function runChromeTest() {
       assert.equal(
         afterState.fetchCalls.length,
         beforeState.fetchCalls.length + 1,
-        "Driver calendar action should make one token-scoped calendar GET only.",
+        "Driver Google Calendar action must use the one existing token-scoped calendar route.",
       );
-      assert.equal(afterState.fetchCalls.at(-1), `GET ${expectedCalendarPath}`);
-      assert.equal(downloadState.blobType, "text/calendar");
-      assert.equal(downloadState.download.download, "prestige-driver-job-mock-driver-job-workflow.ics");
-      assert.match(downloadState.download.href, /^blob:http:\/\/localhost:3000\//);
-      assert.deepEqual(downloadState.revokedUrls, [downloadState.download.href]);
-      assert.match(downloadState.blobText, /UID:driver-job-MOCK-DRIVER-JOB-WORKFLOW@prestige-limo-ops/);
-      assert.match(downloadState.blobText, /DTSTART;TZID=Asia\/Singapore:20260529T164500/);
-      assert.match(downloadState.blobText, /DTEND;TZID=Asia\/Singapore:20260529T181500/);
-      assert.match(downloadState.blobText, /BEGIN:VALARM[\s\S]*TRIGGER:-PT1H[\s\S]*END:VALARM/);
-      assert.equal(downloadState.blobText.includes(mockDriverJobTokens.workflowOrder), false);
+      assert.equal(
+        afterState.fetchCalls.at(-1),
+        `POST ${expectedCalendarPath}`,
+        "Driver Google Calendar save must post only to the existing same-job calendar route.",
+      );
+      assert.equal(afterState.calendarImport.saved, true);
+      assert.match(afterState.calendarImport.feedback, /Calendar saved/);
       assertNoSensitiveText({
         fetchCalls: afterState.fetchCalls,
         resourceCalls: [],
-        visibleText: downloadState.blobText,
+        visibleText: afterState.calendarImport.feedback,
       });
       assertNoSensitiveText(afterState);
       return afterState;
     };
 
+    const verifyDriverCalendarCallbackFeedback = async ({
+      expectedFeedback,
+      expectedSaved,
+      returnState,
+    }) => {
+      await navigateAndWaitForBodyText(
+        client,
+        evaluate,
+        `${driverJobUrl(mockDriverJobTokens.workflowOrder)}?calendar=${returnState}`,
+        expectedFeedback,
+        `driver Google Calendar ${returnState} callback feedback`,
+      );
+      const state = await pageState();
+      const locationState = await evaluate(`({
+        hash: window.location.hash,
+        pathname: window.location.pathname,
+        search: window.location.search,
+      })`);
+
+      assert.equal(state.calendarImport.feedback, expectedFeedback);
+      assert.equal(state.calendarImport.saved, expectedSaved);
+      assert.equal(
+        locationState.search.includes("calendar="),
+        false,
+        "Driver Google Calendar callback state must be consumed once and removed from the URL.",
+      );
+      assert.equal(
+        locationState.pathname,
+        `/driver-job/${mockDriverJobTokens.workflowOrder}`,
+        "Driver Google Calendar callback cleanup must preserve the private Driver Job route.",
+      );
+      assertNoSensitiveText(state);
+    };
+
     const uploadOtsPhotoProof = async () => {
       const beforeState = await pageState();
-      const selected = await evaluate(`(() => {
+      const selected = await evaluate(`(async () => {
         const input = document.querySelector("[data-driver-job-ots-photo-proof-input]");
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "files")?.set;
 
         if (!input || !setter) {
-          return false;
+          return { ok: false, size: 0 };
         }
 
+        const canvas = document.createElement("canvas");
+        canvas.width = 24;
+        canvas.height = 24;
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#2384c6";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        const validJpeg = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+        if (!validJpeg) {
+          return { ok: false, size: 0 };
+        }
+        const oversizedPadding = new Uint8Array(5 * 1024 * 1024);
+        const oversizedPhoto = new File(
+          [validJpeg, oversizedPadding],
+          "oversized-iphone-photo.jpg",
+          { type: "image/jpeg" },
+        );
         const transfer = new DataTransfer();
-        transfer.items.add(new File(["mock-ots-photo"], "ots-photo.jpg", { type: "image/jpeg" }));
+        transfer.items.add(oversizedPhoto);
         setter.call(input, transfer.files);
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
+        return { ok: true, size: oversizedPhoto.size };
       })()`);
 
-      assert.equal(selected, true, "Expected OTS photo proof input to accept a mock image file.");
+      assert.equal(selected.ok, true, "Expected OTS photo proof input to accept a mock image file.");
+      assert.equal(
+        selected.size > 4.5 * 1024 * 1024,
+        true,
+        "Expected the browser fixture to start with a photo above Vercel's request limit.",
+      );
 
       const clicked = await evaluate(`(() => {
         const button = document.querySelector("[data-driver-job-ots-photo-proof-upload]");
@@ -844,6 +1127,14 @@ async function runChromeTest() {
         beforeState.fetchCalls.length + 1,
         "OTS photo proof should make one internal app POST only.",
       );
+      assert.equal(afterState.otsPhotoUploadBodies.length, 1, "Expected one OTS photo upload body.");
+      assert.equal(
+        afterState.otsPhotoUploadBodies[0].size <= 4 * 1024 * 1024,
+        true,
+        "Oversized phone photo must be reduced below the safe Vercel request ceiling.",
+      );
+      assert.equal(afterState.otsPhotoUploadBodies[0].type, "image/jpeg");
+      assert.match(afterState.otsPhotoUploadBodies[0].name, /\.jpg$/);
       assertNoSensitiveText(afterState);
       return afterState;
     };
@@ -911,6 +1202,10 @@ async function runChromeTest() {
     assert.ok(validState.visibleText.includes("Mock Workflow Waypoint"));
     assert.ok(validState.visibleText.includes("SQ889"));
     assert.ok(validState.visibleText.includes("Mock Workflow Passenger"));
+    assert.ok(
+      validState.visibleText.includes("MOCK-DRIVER-JOB-WORKFLOW"),
+      "Expected the established Driver Job card to show its safe public booking reference.",
+    );
     assert.deepEqual(
       validState.driverDetailValues,
       {
@@ -1172,7 +1467,17 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
-    await downloadDriverJobCalendar();
+    await saveDriverJobGoogleCalendar();
+    await verifyDriverCalendarCallbackFeedback({
+      expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+      expectedSaved: true,
+      returnState: "saved",
+    });
+    await verifyDriverCalendarCallbackFeedback({
+      expectedFeedback: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+      expectedSaved: false,
+      returnState: "error",
+    });
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);
@@ -1200,8 +1505,8 @@ async function runChromeTest() {
     );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
     await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
-    await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     await clickReportIssue();
+    await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     const completedState = await pageState();
     assert.deepEqual(
       completedState.statusTiming.rows.map((row) => ({
@@ -1224,6 +1529,12 @@ async function runChromeTest() {
     );
     assert.deepEqual(completedState.statusTiming.controls, [], "Recorded timing evidence must remain read-only.");
     assert.deepEqual(completedState.activityLogLabels, [], "Expected public driver activity log to stay hidden.");
+    const completedReloadState = await navigateToDriverJob(
+      mockDriverJobTokens.valid,
+      "Driver job link unavailable",
+    );
+    assert.equal(completedReloadState.visibleText.includes("Mock Pickup A"), false);
+    assert.equal(completedReloadState.buttonLabels.includes("Job Completed"), false);
     await resetMockDriverJobData();
 
     const arrivalState = await navigateToDriverJob(mockDriverJobTokens.arrivalWorkflow, "Mock Arrival Pickup");
@@ -1290,6 +1601,169 @@ async function runChromeTest() {
     assert.deepEqual(arrivalCompletedState.activityLogLabels, [], "Expected Arrival public driver activity log to stay hidden.");
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
+
+    await evaluate("window.__driverDeviceAlertTest.clearPortalSubscription()");
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal", appUrl).toString(),
+      "Upcoming & active jobs",
+      "Driver Portal job list",
+    );
+    const portalState = await waitForCondition(
+      () => evaluate(`(() => {
+        const jobs = [...document.querySelectorAll("[data-driver-portal-job]")];
+        return jobs.length === 2
+          ? {
+              fetchCalls: window.__driverJobFetchCalls || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              registrations: window.__driverDeviceAlertTest?.registrations || [],
+              portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
+              jobReferences: jobs.map((job) => job.getAttribute("data-driver-portal-job")),
+              jobStates: jobs.map((job) => job.querySelector("[data-driver-portal-job-state]")?.textContent.trim()),
+              text: document.body?.innerText || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal two-job exact-driver list",
+    );
+    assert.deepEqual(portalState.jobReferences, [
+      "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+      "MOCK-DRIVER-PORTAL-B",
+    ]);
+    assert.deepEqual(portalState.jobStates, ["On site", "Assigned · Awaiting OTW"]);
+    assert.equal(
+      portalState.fetchCalls.includes("GET /api/driver-portal/jobs"),
+      true,
+      "Installed Driver Portal must use its existing same-origin jobs route.",
+    );
+    assertNoSensitiveText({
+      fetchCalls: portalState.fetchCalls,
+      resourceCalls: [],
+      visibleText: portalState.text,
+    });
+
+    const alertButtonClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-enable-alerts="true"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(alertButtonClicked, true, "Installed Driver Portal must expose one alert setup action.");
+    const portalAlertState = await waitForCondition(
+      () => evaluate(`(() => {
+        const setup = document.querySelector("[data-driver-portal-alert-setup]");
+        return setup?.getAttribute("data-driver-portal-alert-setup") === "enabled"
+          ? {
+              fetchCalls: window.__driverJobFetchCalls || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              registrations: window.__driverDeviceAlertTest?.registrations || [],
+              portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
+              text: setup.textContent.trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal device alert registration",
+    );
+    assert.equal(portalAlertState.permissionRequests, portalState.permissionRequests + 1);
+    assert.equal(
+      portalAlertState.fetchCalls.includes("POST /api/driver-portal/jobs"),
+      true,
+      "Alert setup must reuse the existing Driver Portal jobs endpoint.",
+    );
+    assert.equal(portalAlertState.portalSubscriptionBodies.length, 1);
+    assert.equal(
+      portalAlertState.portalSubscriptionBodies[0].device_push_subscription.endpoint,
+      "https://push.browser.test/driver-device",
+    );
+    assert.equal(
+      portalAlertState.registrations.at(-1)?.options?.scope,
+      "/driver-job/",
+      "Installed alert setup must reuse the existing driver-scoped service worker.",
+    );
+    assert.equal(portalAlertState.text.includes("This device is ready for Driver Job alerts."), true);
+    assert.equal(portalAlertState.text.includes("Enable once on this device"), true);
+    assert.equal(portalAlertState.text.includes("iPhone"), false);
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal", appUrl).toString(),
+      "Upcoming & active jobs",
+      "Driver Portal restored alert state",
+    );
+    const restoredPortalAlertState = await waitForCondition(
+      () => evaluate(`(() => {
+        const setup = document.querySelector("[data-driver-portal-alert-setup]");
+        const button = document.querySelector('[data-driver-portal-enable-alerts="true"]');
+        return setup?.getAttribute("data-driver-portal-alert-setup") === "enabled"
+          ? {
+              buttonDisabled: button?.disabled === true,
+              buttonText: button?.textContent.trim() || "",
+              fetchCalls: window.__driverJobFetchCalls || [],
+              getRegistrations: window.__driverDeviceAlertTest?.getRegistrations || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
+              text: setup.textContent.trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal existing subscription state restoration",
+    );
+    assert.equal(restoredPortalAlertState.buttonDisabled, true);
+    assert.equal(restoredPortalAlertState.buttonText, "Job Alerts Enabled");
+    assert.deepEqual(restoredPortalAlertState.getRegistrations, ["/driver-job/"]);
+    assert.equal(restoredPortalAlertState.permissionRequests, 0);
+    assert.deepEqual(restoredPortalAlertState.portalSubscriptionBodies, []);
+    assert.equal(
+      restoredPortalAlertState.fetchCalls.includes("POST /api/driver-portal/jobs"),
+      false,
+      "Restoring an existing browser subscription must remain read-only.",
+    );
+    assert.equal(restoredPortalAlertState.text.includes("Enable once on this device"), true);
+    assert.equal(restoredPortalAlertState.text.includes("iPhone"), false);
+
+    const missingShortcutClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-open-job="${"b".repeat(64)}"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(missingShortcutClicked, true);
+    const missingShortcutState = await waitForCondition(
+      () => evaluate(`(() => {
+        const feedback = document.querySelector('[data-driver-portal-open-feedback="${"b".repeat(64)}"]');
+        return feedback?.textContent.includes("Open and acknowledge the latest private link from dispatch once on this device.")
+          ? { href: location.href, text: feedback.textContent.trim() }
+          : false;
+      })()`),
+      10000,
+      "Driver Portal missing local private-link fallback",
+    );
+    assert.equal(new URL(missingShortcutState.href).pathname, "/driver-portal");
+
+    const localShortcut = await evaluate(`(async () => {
+      const database = await new Promise((resolve, reject) => {
+        const request = indexedDB.open("prestige-driver-device-alerts", 1);
+        request.addEventListener("success", () => resolve(request.result));
+        request.addEventListener("error", () => reject(request.error));
+      });
+      const result = await new Promise((resolve, reject) => {
+        const transaction = database.transaction("driver-job-links", "readonly");
+        const request = transaction.objectStore("driver-job-links").get("${"a".repeat(64)}");
+        request.addEventListener("success", () => resolve(request.result || null));
+        request.addEventListener("error", () => reject(request.error));
+      });
+      database.close();
+      return result;
+    })()`);
+    assert.deepEqual(localShortcut, {
+      jobKey: "a".repeat(64),
+      url: `/driver-job/${mockDriverJobTokens.arrivalWorkflow}`,
+    });
 
     for (const [token, label] of [
       ["not-a-real-token", "invalid"],

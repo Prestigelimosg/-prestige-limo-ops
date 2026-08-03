@@ -1,5 +1,6 @@
 import {
   createAdminBooking,
+  loadAdminBookingByReference,
   parseCustomerBookingRequestPayloads,
   type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
@@ -13,10 +14,21 @@ import {
   resolveCustomerSavedBookingsVerifiedIdentity,
 } from "../../../lib/customer-saved-bookings-read";
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
+import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
+import { verifyCustomerBookingInvitationToken } from "../../../lib/customer-booking-invitation";
+import { verifyCustomerBookingPhoneOtpProof } from "../../../lib/customer-booking-phone-otp";
+import {
+  createCustomerPortalAccessLinkToken,
+  safeCustomerPortalPublicBookingReference,
+} from "../../../lib/customer-portal-access-link";
 
 export const dynamic = "force-dynamic";
 
 const customerBookingPurposeHeader = "customer-booking-request";
+const customerBookingInvitationHeader = "x-prestige-customer-booking-invitation";
+const customerBookingPhoneProofHeader =
+  "x-prestige-customer-booking-phone-proof";
+const customerBookingResultHeader = "x-prestige-customer-booking-result";
 
 function isCustomerBookingRequest(request: Request) {
   const requestUrl = new URL(request.url);
@@ -73,6 +85,61 @@ function safeFailureResponse() {
   );
 }
 
+function invitationFailureResponse(
+  reason: "invitation_invalid" | "invitation_required" | "invitation_used",
+  status: 403 | 409,
+) {
+  const message =
+    reason === "invitation_used"
+      ? "This booking invitation was already used."
+      : reason === "invitation_required"
+        ? "A valid customer booking invitation is required."
+        : "This booking invitation is invalid or expired.";
+
+  return Response.json(
+    {
+      ok: false,
+      error: message,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        [customerBookingResultHeader]: reason,
+      },
+      status,
+    },
+  );
+}
+
+function phoneVerificationFailureResponse(
+  reason:
+    | "phone_verification_invalid"
+    | "phone_verification_required"
+    | "phone_verification_used",
+  status: 403 | 409,
+) {
+  const message =
+    reason === "phone_verification_used"
+      ? "This phone verification was already used."
+      : reason === "phone_verification_required"
+        ? "Phone verification is required for this public booking request."
+        : "Phone verification is invalid or expired.";
+
+  return Response.json(
+    {
+      ok: false,
+      error: message,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        [customerBookingResultHeader]: reason,
+      },
+      status,
+    },
+  );
+}
+
 function stalePortalAccessResponse() {
   const expiredCookieHeaders = expiredCustomerSavedBookingsSessionCookieHeaders();
 
@@ -119,6 +186,57 @@ function customerSafeError(rawError: string) {
   }
 
   return "Booking request could not be saved safely.";
+}
+
+function normalizedReceiptEmail(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function buildVerifiedCustomerPortalReceiptUrl({
+  booking,
+  customerAccountReference,
+  linkRevision,
+  request,
+  verifiedBookerEmail,
+}: {
+  booking: AdminBookingPersistenceRecord;
+  customerAccountReference: string;
+  linkRevision: string;
+  request: Request;
+  verifiedBookerEmail: string | null;
+}) {
+  const recipient = normalizedReceiptEmail(booking.contact_email);
+  const verifiedRecipient = normalizedReceiptEmail(verifiedBookerEmail);
+  const publicBookingReference = safeCustomerPortalPublicBookingReference(
+    booking.public_booking_reference,
+  );
+
+  if (
+    !recipient ||
+    recipient !== verifiedRecipient
+  ) {
+    return null;
+  }
+
+  const tokenResult = createCustomerPortalAccessLinkToken(customerAccountReference, {
+    linkRevision,
+    scope: "portal_account",
+  });
+
+  if (!tokenResult.ok) {
+    return null;
+  }
+
+  const url = new URL(
+    `/api/customer-portal-access/${encodeURIComponent(tokenResult.data.token)}`,
+    request.url,
+  );
+  if (publicBookingReference) {
+    url.searchParams.set("booking", publicBookingReference);
+    url.searchParams.set("tracking", "1");
+  }
+
+  return url.toString();
 }
 
 async function notifyAdminNewBookingRequest(booking: AdminBookingPersistenceRecord) {
@@ -196,7 +314,99 @@ export async function POST(request: Request) {
       return blockedResponse();
     }
 
-    const parsed = parseCustomerBookingRequestPayloads(await readJsonBody(request));
+    const body = await readJsonBody(request);
+    const portalBoundary = resolveCustomerSavedBookingsBoundaryForPurpose(
+      request,
+      "customer-booking-request",
+      "/book",
+    );
+    const verifiedIdentity = portalBoundary.ok
+      ? await resolveCustomerSavedBookingsVerifiedIdentity(portalBoundary.data, body.travelerId)
+      : null;
+
+    if (verifiedIdentity && !verifiedIdentity.ok) {
+      return stalePortalAccessResponse();
+    }
+
+    if (!verifiedIdentity?.ok && body.travelerId !== undefined && body.travelerId !== null && body.travelerId !== "") {
+      return blockedResponse();
+    }
+
+    let invitationGroupReference: string | undefined;
+    let phoneOtpGroupReference: string | undefined;
+
+    if (!verifiedIdentity?.ok) {
+      const invitationToken = request.headers.get(customerBookingInvitationHeader)?.trim() || "";
+
+      if (invitationToken) {
+        const invitation = verifyCustomerBookingInvitationToken(invitationToken);
+
+        if (!invitation.ok) {
+          return invitationFailureResponse("invitation_invalid", 403);
+        }
+
+        const existingInvitationBooking = await loadAdminBookingByReference(
+          customerBookingRequestPersistenceAdapterActor,
+          invitation.data.booking_reference,
+        );
+
+        if (existingInvitationBooking.ok) {
+          return invitationFailureResponse("invitation_used", 409);
+        }
+
+        if (existingInvitationBooking.status !== 404) {
+          return safeFailureResponse();
+        }
+
+        invitationGroupReference = invitation.data.booking_reference;
+      } else {
+        const phoneVerificationProof =
+          request.headers.get(customerBookingPhoneProofHeader)?.trim() || "";
+
+        if (!phoneVerificationProof) {
+          return phoneVerificationFailureResponse(
+            "phone_verification_required",
+            403,
+          );
+        }
+
+        const phoneVerification = verifyCustomerBookingPhoneOtpProof(
+          phoneVerificationProof,
+          body.contactNo,
+        );
+
+        if (!phoneVerification.ok) {
+          return phoneVerificationFailureResponse(
+            "phone_verification_invalid",
+            403,
+          );
+        }
+
+        const existingPhoneVerifiedBooking = await loadAdminBookingByReference(
+          customerBookingRequestPersistenceAdapterActor,
+          phoneVerification.data.booking_reference,
+        );
+
+        if (existingPhoneVerifiedBooking.ok) {
+          return phoneVerificationFailureResponse(
+            "phone_verification_used",
+            409,
+          );
+        }
+
+        if (existingPhoneVerifiedBooking.status !== 404) {
+          return safeFailureResponse();
+        }
+
+        phoneOtpGroupReference =
+          phoneVerification.data.booking_reference;
+      }
+    }
+
+    const parsed = parseCustomerBookingRequestPayloads(body, {
+      groupReferenceOverride:
+        invitationGroupReference || phoneOtpGroupReference,
+    });
 
     if (!parsed.ok) {
       return Response.json(
@@ -206,19 +416,6 @@ export async function POST(request: Request) {
         },
         { status: parsed.status },
       );
-    }
-
-    const portalBoundary = resolveCustomerSavedBookingsBoundaryForPurpose(
-      request,
-      "customer-booking-request",
-      "/book",
-    );
-    const verifiedIdentity = portalBoundary.ok
-      ? await resolveCustomerSavedBookingsVerifiedIdentity(portalBoundary.data)
-      : null;
-
-    if (verifiedIdentity && !verifiedIdentity.ok) {
-      return stalePortalAccessResponse();
     }
 
     const savedRequests: AdminBookingPersistenceRecord[] = [];
@@ -232,6 +429,12 @@ export async function POST(request: Request) {
               customer_id: verifiedIdentity.data.customer_account_reference,
               company_id: verifiedIdentity.data.company_id,
               booker_id: verifiedIdentity.data.booker_id,
+              ...(verifiedIdentity.data.traveler_id && verifiedIdentity.data.traveler_name
+                ? {
+                    passenger_name: verifiedIdentity.data.traveler_name,
+                    traveler_id: verifiedIdentity.data.traveler_id,
+                  }
+                : {}),
             },
           }
         : requestPayload;
@@ -243,6 +446,25 @@ export async function POST(request: Request) {
       });
 
       if (!result.ok) {
+        const singleUseGroupReference =
+          invitationGroupReference || phoneOtpGroupReference;
+
+        if (singleUseGroupReference) {
+          const consumedSingleUseBooking = await loadAdminBookingByReference(
+            customerBookingRequestPersistenceAdapterActor,
+            singleUseGroupReference,
+          );
+
+          if (consumedSingleUseBooking.ok) {
+            return invitationGroupReference
+              ? invitationFailureResponse("invitation_used", 409)
+              : phoneVerificationFailureResponse(
+                  "phone_verification_used",
+                  409,
+                );
+          }
+        }
+
         return Response.json(
           {
             ok: false,
@@ -264,14 +486,29 @@ export async function POST(request: Request) {
 
     await prepareSavedCustomerBookingRequestJobCards(savedRequests);
     await notifyAdminNewBookingRequest(primaryRequest);
+    const portalUrl = portalBoundary.ok && verifiedIdentity?.ok && portalBoundary.data.portal_link_revision
+      ? buildVerifiedCustomerPortalReceiptUrl({
+          booking: primaryRequest,
+          customerAccountReference: verifiedIdentity.data.customer_account_reference,
+          linkRevision: portalBoundary.data.portal_link_revision,
+          request,
+          verifiedBookerEmail: verifiedIdentity.data.booker_email,
+        })
+      : null;
+    const receipt = await sendCustomerBookingReceiptEmail(savedRequests, { portalUrl });
 
     return Response.json({
       ok: true,
       request: {
-        booking_reference: primaryRequest.booking_reference,
+        booking_reference:
+          primaryRequest.public_booking_reference || primaryRequest.booking_reference,
         customer_facing_status: primaryRequest.customer_facing_status,
-        return_booking_reference: returnRequest?.booking_reference ?? null,
+        return_booking_reference:
+          returnRequest?.public_booking_reference ||
+          returnRequest?.booking_reference ||
+          null,
         return_trip_requested: parsed.data.returnTripRequested,
+        receipt_status: receipt.status,
         short_notice_review_required:
           savedRequests.some((savedRequest) => savedRequest.short_notice_review_status === "Admin Review Required"),
       },

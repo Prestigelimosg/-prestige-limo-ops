@@ -13,10 +13,13 @@ export type AdminSavedBookingReadParams = {
 
 export type AdminSavedBookingListReadParams = {
   limit: number;
+  offset: number;
+  scope: "all" | "monitorable";
 };
 
 export type AdminSavedBookingRecord = {
   booking_reference: string | null;
+  public_booking_reference: string | null;
   source_channel: string | null;
   source_surface: string | null;
   customer_id: number | null;
@@ -133,23 +136,32 @@ type SavedBookingSelectResult<T> = {
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference", "id"]);
-const allowedListReadQueryParams = new Set(["limit"]);
+const allowedListReadQueryParams = new Set(["limit", "offset", "scope"]);
 const adminSavedBookingLegacyReadSelect =
   "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingCurrentReadSelect =
-  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, created_at, updated_at";
+  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingCurrentMinimalReadSelect =
-  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, admin_internal_status, customer_facing_status, created_at, updated_at";
+  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, pax_count, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingFoundationScalarReadSelect =
   "id, booking_reference, source_channel, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, created_at, updated_at";
+const withPublicBookingReference = (select: string) =>
+  select.replace("booking_reference, ", "booking_reference, public_booking_reference, ");
 const adminSavedBookingReadSelects = [
+  withPublicBookingReference(adminSavedBookingLegacyReadSelect),
   adminSavedBookingLegacyReadSelect,
+  withPublicBookingReference(adminSavedBookingCurrentReadSelect),
   adminSavedBookingCurrentReadSelect,
+  withPublicBookingReference(adminSavedBookingCurrentMinimalReadSelect),
   adminSavedBookingCurrentMinimalReadSelect,
+  withPublicBookingReference(adminSavedBookingFoundationScalarReadSelect),
   adminSavedBookingFoundationScalarReadSelect,
 ] as const;
 const defaultListLimit = 25;
 const maxListLimit = 100;
+const maxListOffset = 10_000;
+const terminalSavedBookingStatuses =
+  "(completed,complete,job_completed,cancelled,canceled,archived,declined_internal)";
 const malformedParamsError =
   "Admin saved booking read parameters are malformed.";
 const safeActorError =
@@ -470,6 +482,16 @@ function positiveInteger(value: unknown, defaultValue: number, maxValue: number)
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= maxValue ? parsed : null;
 }
 
+function nonNegativeInteger(value: unknown, defaultValue: number, maxValue: number) {
+  if (value === undefined || value === null || value === "") {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= maxValue ? parsed : null;
+}
+
 function nestedCompany(value: unknown): AdminSavedBookingRecord["companies"] {
   const record = asRecord(value);
   const companyName = textOrNull(record.company_name, 220);
@@ -522,6 +544,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
 
   return {
     booking_reference: textOrNull(row.booking_reference, 160),
+    public_booking_reference: textOrNull(row.public_booking_reference, 40),
     source_channel: textOrNull(row.source_channel, 120),
     source_surface: textOrNull(row.source_surface, 120),
     booker_id: integerOrNull(row.booker_id),
@@ -653,8 +676,17 @@ export function parseAdminSavedBookingListReadParams(
     defaultListLimit,
     maxListLimit,
   );
+  const offset = nonNegativeInteger(
+    readParamsValue(params, "offset"),
+    0,
+    maxListOffset,
+  );
+  const scopeValue = textOrNull(readParamsValue(params, "scope"), 40)?.toLowerCase() || "all";
+  const scope = ["all", "monitorable"].includes(scopeValue)
+    ? (scopeValue as AdminSavedBookingListReadParams["scope"])
+    : null;
 
-  if (!limit) {
+  if (!limit || offset === null || !scope) {
     return {
       error: malformedParamsError,
       ok: false,
@@ -665,6 +697,8 @@ export function parseAdminSavedBookingListReadParams(
   return {
     data: {
       limit,
+      offset,
+      scope,
     },
     ok: true,
   };
@@ -728,13 +762,26 @@ export async function loadAdminSavedBookingList(
     return clientResult;
   }
 
-  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) =>
-    clientResult.data
+  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) => {
+    const statusColumn = selectedColumns.includes("admin_internal_status")
+      ? "admin_internal_status"
+      : "status";
+    let query = clientResult.data
       .from("bookings")
       .select(selectedColumns)
-      .order("created_at", { ascending: false })
-      .limit(parsed.data.limit),
-  );
+      .order("created_at", { ascending: false });
+
+    if (parsed.data.scope === "monitorable") {
+      query = query.or(
+        `${statusColumn}.is.null,${statusColumn}.not.in.${terminalSavedBookingStatuses}`,
+      );
+    }
+
+    return query.range(
+      parsed.data.offset,
+      parsed.data.offset + parsed.data.limit - 1,
+    );
+  });
 
   if (error) {
     return safeDatabaseFailure(safeReadError, 500, error);

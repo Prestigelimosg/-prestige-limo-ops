@@ -58,6 +58,11 @@ const completedHistoryPanel = sliceBetween(
   "const completedBookingsPanel = (",
   "const jobCardCopyEditState =",
 );
+const completedOperationalBody = sliceBetween(
+  completedHistoryPanel,
+  'data-completed-operational-body={bookingId}',
+  'data-completed-operational-actions={bookingId}',
+);
 const bookingsTabSection = sliceBetween(
   appPage,
   '{activeTab === "bookings" ? (',
@@ -76,6 +81,11 @@ const completedTabSection = sliceBetween(
 const ledgerSection = sectionBetween(
   ledger,
   "### Bookings Earlier Jobs Completed History Compact",
+  "\n### ",
+);
+const upcomingPaginationLedgerSection = sectionBetween(
+  ledger,
+  "### Admin Bookings Upcoming Pickup Order And Pagination (2026-07-19)",
   "\n### ",
 );
 
@@ -112,12 +122,23 @@ for (const fragment of [
 ]) {
   assertIncludes(appPage, fragment, `completed/current local search fragment ${fragment}`);
 }
+for (const fragment of [
+  "const completedExactDateSearchKey = /^\\d{4}-\\d{2}-\\d{2}$/.test(clean(completedSearchTerm))",
+  "getBookingDateKey(bookingRecord) === completedExactDateSearchKey",
+  "function openCompletedHistoryForBookingsDate()",
+  "setCompletedMonthFilter(exactDate.slice(0, 7));",
+  "setCompletedSearchTerm(exactDate);",
+  'selectAppTab("completed");',
+  "void loadBookings(`Completed / History refreshed for ${formatDateWithWeekday(exactDate)}.`);",
+]) {
+  assertIncludes(appPage, fragment, `exact-date Completed / History handoff fragment ${fragment}`);
+}
 
 for (const fragment of [
   "const todayKey = toDateKey(new Date());",
-  "const bookingRecordBelongsInCompletedHistoryWithDriverReport = useCallback",
+  "const bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation = useCallback",
   "const earlierHistoryDashboardBookings = useMemo(",
-  ".filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
+  ".filter((bookingRecord) => bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))",
   ".sort(sortBookingHistoryNewestFirst)",
   "bookingRecord.status,",
   "cancelledCount: number;",
@@ -131,15 +152,56 @@ for (const fragment of [
   'data-bookings-find-toolbar="true"',
   'data-bookings-loaded-filter-summary="true"',
   "Search the loaded admin saved jobs by pickup date, ref, passenger, flight, route, or driver.",
-  'data-bookings-all-dates="true"',
-  "All dates",
+  'data-bookings-upcoming="true"',
+  "Upcoming",
   'className="mt-3 overflow-x-auto rounded-md border border-stone-200 bg-white p-2"',
   'className="flex min-w-[56rem] items-center gap-2"',
   'className="relative min-w-72 flex-1"',
-  "bookingsShowAllDates || getBookingDateKey(bookingRecord) === bookingsSelectedDate",
+  "bookingsShowUpcoming || getBookingDateKey(bookingRecord) === bookingsSelectedDate",
   "Quick search loaded jobs: ref, passenger, flight, route, driver",
 ]) {
   assertIncludes(appPage, fragment, `bookings find toolbar fragment ${fragment}`);
+}
+for (const fragment of [
+  "const adminUpcomingBookingsPageSize = 20;",
+  "function sortBookingPickupEarliestFirst(",
+  "bookingRecordPickupDateTimeMs(firstBooking) ?? Number.POSITIVE_INFINITY",
+  "bookingRecordPickupDateTimeMs(secondBooking) ?? Number.POSITIVE_INFINITY",
+  "const [bookingsUpcomingPage, setBookingsUpcomingPage] = useState(1);",
+  ".sort((firstItem, secondItem) =>",
+  "sortBookingPickupEarliestFirst(firstItem.bookingRecord, secondItem.bookingRecord)",
+  "const bookingsUpcomingPageCount = Math.max(",
+  "Math.ceil(filteredRecentBookingDisplayItems.length / adminUpcomingBookingsPageSize)",
+  "const visibleRecentBookingDisplayItems = filteredRecentBookingDisplayItems.slice(",
+  "bookingsUpcomingPageStartIndex,",
+  "bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,",
+  "visibleRecentBookingDisplayItems.map",
+  'data-bookings-upcoming-pagination="true"',
+  'data-bookings-upcoming-page-summary="true"',
+  'data-bookings-upcoming-previous-page="true"',
+  'data-bookings-upcoming-next-page="true"',
+  "Page {bookingsUpcomingCurrentPage} of {bookingsUpcomingPageCount}",
+  'className="block truncate text-sm font-bold text-slate-900"',
+  '"draft",',
+]) {
+  assertIncludes(appPage, fragment, `bookings upcoming order/pagination fragment ${fragment}`);
+}
+assertIncludes(
+  currentUpcomingPanel,
+  'const showBookingsListStatus = ![',
+  "Bookings must keep one explicit status visibility decision in the established Upcoming card lane",
+);
+assertIncludes(
+  currentUpcomingPanel,
+  '"draft",',
+  "Draft must remain stored but must not render as an Upcoming booking status pill",
+);
+for (const forbidden of [
+  'data-bookings-all-dates="true"',
+  ">\n          All dates\n        </button>",
+  "setBookingsShowAllDates",
+]) {
+  assertExcludes(appPage, forbidden, `retired All dates fragment ${forbidden}`);
 }
 assertExcludes(
   appPage,
@@ -157,12 +219,28 @@ for (const fragment of [
   "No matching jobs found for {bookingsDateScopeLabel}.",
   'data-current-upcoming-bookings-list="true"',
   'data-current-upcoming-bookings-empty="true"',
-  "No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in Completed / History.",
+  "No active bookings found for {bookingsDateScopeLabel}. Earlier jobs are in",
+  'data-bookings-completed-history-date-link="true"',
+  'href="#completed-history"',
+  "event.preventDefault();",
+  "openCompletedHistoryForBookingsDate();",
+  "{bookingsSelectedDate <= todayKey ? (",
+  '"Completed / History"',
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
   'className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1"',
 ]) {
   assertIncludes(currentUpcomingPanel, fragment, `current/upcoming panel fragment ${fragment}`);
 }
+assertExcludes(
+  currentUpcomingPanel,
+  'button data-bookings-completed-history-date-link="true"',
+  "exact-date Completed / History handoff must remain an inline link, not a new button",
+);
+assertExcludes(
+  currentUpcomingPanel,
+  "!bookingsShowUpcoming && bookingsSelectedDate < todayKey",
+  "today and the default Upcoming view must not suppress the existing Completed / History handoff",
+);
 assertExcludes(
   currentUpcomingPanel,
   "!unhandledCustomerBookingRequestKeySet.has(getCustomerBookingRequestQueueKey(bookingRecord))",
@@ -184,11 +262,14 @@ for (const fragment of [
   "data-completed-history-month-jobs={monthGroup.monthKey}",
   "monthGroup.displayItems.map",
   "const isCompletedStatus = bookingRecordIsCompletedStatus(savedBooking);",
-  "const isDriverCompletedHistoryJob =",
   "const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);",
-  "const completedHistoryDisplayStatus = isDriverCompletedHistoryJob",
-  "? \"completed\"",
-  ": isCancelledStatus",
+  "const isDspBooking =",
+  "normalizeBookingType(",
+  "operationalCard.dropoff_datetime || savedBooking.dropoff_datetime",
+  'data-completed-dsp-schedule={isDspBooking ? bookingId : undefined}',
+  "? `DSP start: ${formatBookingPickupDateTimeSgt(savedBooking)} · End: ${",
+  'dspScheduledEndText || "Not set"',
+  "const completedHistoryDisplayStatus = isCancelledStatus",
   "? \"cancelled\"",
   ": isCompletedStatus",
   "const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);",
@@ -196,17 +277,66 @@ for (const fragment of [
   "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",
   "inline-flex items-center rounded-full",
   "data-completed-history-bucket={",
-  "isDriverCompletedHistoryJob",
-  "\"driver-completed\"",
   "Earlier",
   "{isCompletedStatus ? (",
   "data-completed-undo-booking={bookingId}",
   "{canDeleteCompletedHistoryBooking ? (",
   "data-completed-delete-booking={bookingId}",
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
-  'className="grid gap-2 sm:grid-cols-3"',
+  'data-completed-operational-detail-grid={bookingId}',
+  'className="grid gap-2 md:grid-cols-2 xl:grid-cols-4"',
+  '<OperationalCardSection section="booking" title="Booking">',
+  '<OperationalCardSection section="route" title="Route">',
+  '<OperationalCardSection section="driver-contact" title="Driver contact">',
+  '<OperationalCardSection section="operations" title="Operations">',
+  '<OperationalCardSection section="trip-details" title="Trip details">',
+  'Contact: {completedDriverContact.contact || "Not set"}',
+  '{completedDriverContact.plate || "Not set"}',
+  'OTS: {completedOperationalReadiness.otsProof}',
+  'Replacement: {completedOperationalReadiness.exceptionReplacement}',
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed/history panel fragment ${fragment}`);
+}
+
+assertIncludes(
+  completedTabSection,
+  'id="completed-history"',
+  "completed/history tab must expose the inline link target",
+);
+
+for (const fragment of [
+  "The existing Current / Upcoming empty-state text makes only `Completed / History` an inline link when the selected pickup date is today or earlier",
+  "including the default Upcoming view while today remains selected",
+  "refreshes the established booking read once",
+  "No button, panel, route, status mutation, completion action, billing/invoice change",
+]) {
+  assertIncludes(ledgerSection, fragment, `exact-date Completed / History ledger fragment ${fragment}`);
+}
+
+for (const retiredDriverJcFallback of ["isDriverCompletedHistoryJob", '"driver-completed"']) {
+  assertExcludes(
+    completedHistoryPanel,
+    retiredDriverJcFallback,
+    "driver JC evidence must wait for admin completion before Completed / History",
+  );
+}
+
+for (const duplicateFragment of [
+  "<DispatcherStatusSummaryBlock",
+  "<AssignedDriverSummaryBlock",
+  "<OperationalReadinessSummaryBlock",
+  "<p>Company:",
+  "<p>Booker:",
+  "<p>Name:",
+  '<p className="break-words">Route:',
+  "<p>Vehicle:",
+  "<p>Pax:",
+]) {
+  assertExcludes(
+    completedOperationalBody,
+    duplicateFragment,
+    `completed expanded-body duplicate ${duplicateFragment}`,
+  );
 }
 
 for (const forbidden of [
@@ -243,7 +373,7 @@ for (const forbiddenPattern of [
   /fetch\(|\/api\/|createClient|service_role|process\.env/i,
   /sendMail|new\s+Resend|api\.telegram\.org|twilio/i,
   /navigator\.geolocation|watchPosition|getCurrentPosition/i,
-  /driver payout|PayNow payout|payout comparisons|customer price/i,
+  /driver payout|PayNow payout|payout comparisons|customer price|invoice amount/i,
   /internal admin notes|internal finance notes|parser\/debug|mock QA|dev archive/i,
 ]) {
   assertExcludes(currentUpcomingPanel, forbiddenPattern, "current/upcoming panel privacy boundary");
@@ -263,6 +393,20 @@ for (const phrase of [
   "Guard coverage lives in `scripts/test-bookings-earlier-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);
+}
+
+for (const phrase of [
+  "The existing Admin Bookings `All dates` control is renamed `Upcoming` in place.",
+  "Active booking cards are ordered by their scheduled pickup timestamp, earliest first, after the existing safe typed-display merge.",
+  "The existing Bookings list is paginated in browser memory at 20 jobs per page.",
+  "Scheduled pickup date and time are bold on the existing admin booking row.",
+  "No booking read, monitor pagination, API route, database query, booking writer, status writer, card, panel, or table is added or duplicated.",
+]) {
+  assertIncludes(
+    upcomingPaginationLedgerSection,
+    phrase,
+    `upcoming pagination ledger phrase: ${phrase}`,
+  );
 }
 
 assertIncludes(preactivationSuite, guardScript, "preactivation bookings earlier history compact guard registration");

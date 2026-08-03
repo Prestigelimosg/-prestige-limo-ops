@@ -74,6 +74,7 @@ export async function PATCH(request: Request, context: DriverJobStatusRouteConte
               provider_send: false,
               status: result.customer_notification.status,
             },
+        link_expiry: result.link_expiry,
         ok: true,
         mode: "production",
         payload: result.payload,

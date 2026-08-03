@@ -7,6 +7,11 @@ import ts from "typescript";
 const helperPath = "lib/admin-device-push-notification.ts";
 const routePath = "app/api/admin-device-push-subscriptions/route.ts";
 const customerBookingRoutePath = "app/api/customer-booking-requests/route.ts";
+const adminAppNotificationPersistencePath = "lib/admin-app-notification-persistence.ts";
+const driverJobProductionPath = "lib/driver-job-link-production.ts";
+const driverOtsPhotoRoutePath = "app/api/driver-job/[token]/ots-photo/route.ts";
+const customerDriverNotificationPersistencePath =
+  "lib/customer-driver-app-notification-persistence.ts";
 const dashboardPath = "app/page.tsx";
 const serviceWorkerPath = "public/prestige-admin-push-sw.js";
 const manifestPath = "app/manifest.ts";
@@ -50,6 +55,10 @@ const [
   helperSource,
   routeSource,
   customerBookingRouteSource,
+  adminAppNotificationPersistenceSource,
+  driverJobProductionSource,
+  driverOtsPhotoRouteSource,
+  customerDriverNotificationPersistenceSource,
   dashboardSource,
   serviceWorkerSource,
   manifestSource,
@@ -62,6 +71,10 @@ const [
     helperPath,
     routePath,
     customerBookingRoutePath,
+    adminAppNotificationPersistencePath,
+    driverJobProductionPath,
+    driverOtsPhotoRoutePath,
+    customerDriverNotificationPersistencePath,
     dashboardPath,
     serviceWorkerPath,
     manifestPath,
@@ -96,6 +109,22 @@ assertIncludes(
     "telegram_enabled: false",
     "sms_enabled: false",
     "email_provider_enabled: false",
+    "sendAdminDevicePushAlert",
+    "customer_booking_amendment",
+    "customer_booking_cancellation",
+    "email_confirmed_booking",
+    "email_booking_amendment",
+    "email_booking_cancellation",
+    "driver_acknowledged",
+    "driver_otw",
+    "driver_ots",
+    "driver_pob",
+    "driver_completed",
+    "driver_ots_photo",
+    "driver_issue",
+    "customer_to_driver_reply",
+    "driver_to_customer_reply",
+    "customer_driver_details_acknowledged",
   ],
   "admin device push helper",
 );
@@ -146,6 +175,52 @@ assertIncludes(
 );
 
 assertIncludes(
+  adminAppNotificationPersistenceSource,
+  [
+    'sendAdminDevicePushAlert("driver_issue")',
+    'sendAdminDevicePushAlert(`customer_booking_${requestKind}`)',
+  ],
+  "existing admin app notification persistence push fan-out",
+);
+
+assertIncludes(
+  driverJobProductionSource,
+  [
+    'sendAdminDevicePushAlert("driver_acknowledged", {',
+    "vehiclePlate: detailsResult.payload.assignedDriver.plate,",
+    "const adminDevicePushEventForDriverStatus = {",
+    'driver_otw: "driver_otw",',
+    'ots: "driver_ots",',
+    'pob: "driver_pob",',
+    'completed: "driver_completed",',
+    "sendAdminDevicePushAlert(adminDevicePushEventForDriverStatus[result.status], {",
+    "vehiclePlate: result.payload.assignedDriver.plate,",
+  ],
+  "existing driver acknowledgement and status success paths",
+);
+assertExcludes(
+  driverJobProductionSource,
+  ["sendAdminDevicePushAlert(`driver_${result.status}`)"],
+  "driver OTW admin push event must not gain a duplicate driver prefix",
+);
+
+assertIncludes(
+  driverOtsPhotoRouteSource,
+  ['sendAdminDevicePushAlert("driver_ots_photo")'],
+  "existing OTS photo success path",
+);
+
+assertIncludes(
+  customerDriverNotificationPersistenceSource,
+  [
+    'sendAdminDevicePushAlert("customer_driver_details_acknowledged")',
+    'sendAdminDevicePushAlert("customer_to_driver_reply")',
+    'sendAdminDevicePushAlert("driver_to_customer_reply")',
+  ],
+  "existing customer and driver quick-reply success paths",
+);
+
+assertIncludes(
   dashboardSource,
   [
     "adminDevicePushSubscriptionsApiPath",
@@ -153,16 +228,51 @@ assertIncludes(
     "PushManager",
     "Notification.requestPermission",
     "data-admin-device-push-panel",
+    "data-admin-device-push-compact-control",
     "data-admin-device-push-toggle",
     'role="switch"',
-    "Device Push Alerts",
-    "Optional phone/Mac browser alert for new booking requests.",
-    "Push alerts ON",
-    "Push alerts OFF",
+    "Push ON",
+    "Push OFF",
     "handleAdminDevicePushEnable",
     "handleAdminDevicePushDisable",
   ],
   "dashboard device push UI",
+);
+assertExcludes(
+  dashboardSource,
+  [
+    ">Device Push Alerts<",
+    "Optional phone/Mac browser alert for new booking requests.",
+    "Push alerts ON",
+    "Push alerts OFF",
+  ],
+  "removed expanded dashboard device push UI",
+);
+assert.equal(
+  dashboardSource.match(/data-admin-device-push-toggle="true"/g)?.length,
+  1,
+  "dashboard must render exactly one admin device push toggle",
+);
+
+const codexHeaderStart = dashboardSource.indexOf(
+  'aria-label="Codex Review and Admin App Notifications"',
+);
+const codexHeaderEnd = dashboardSource.indexOf(
+  "{dashboardSystemNotices.length > 0 ? (",
+  codexHeaderStart,
+);
+assert.notEqual(codexHeaderStart, -1, "Codex notification header must exist");
+assert.notEqual(codexHeaderEnd, -1, "Codex notification header boundary must exist");
+const codexHeaderSource = dashboardSource.slice(codexHeaderStart, codexHeaderEnd);
+assertIncludes(
+  codexHeaderSource,
+  [
+    'data-admin-app-notification-feed-state="true"',
+    'data-admin-device-push-panel="true"',
+    'data-admin-device-push-compact-control="true"',
+    'data-admin-device-push-toggle="true"',
+  ],
+  "Codex notification header compact device push control",
 );
 
 assertIncludes(
@@ -203,8 +313,12 @@ assertIncludes(
   ledgerSource,
   [
     "Admin Device Push Notification Runtime Gate",
+    "Admin App Operational Lock-Screen Alert Fan-Out",
     "PRESTIGE_ADMIN_DEVICE_PUSH_ENABLED",
     "New booking request received. Open Dashboard to review.",
+    "customer amendment and cancellation requests",
+    "driver acknowledgement, OTW, OTS, POB, Job Completed, OTS-photo, and issue reports",
+    "Monthly billing and the entire owner-locked invoice system remain untouched.",
     "No WhatsApp, Telegram, SMS, provider fallback, billing, payment, payout, PDF, GPS, live location, or customer data is exposed",
   ],
   "implementation ledger",
@@ -307,6 +421,225 @@ try {
     ["Private Passenger", "Private pickup", "CUST-PRIVATE-003", "private-id"],
     "admin push payload",
   );
+
+  const approvedOperationalEvents = {
+    customer_booking_amendment: [
+      "Customer amendment request",
+      "Customer amendment request received. Open Dashboard to review.",
+    ],
+    customer_booking_cancellation: [
+      "Customer cancellation request",
+      "Customer cancellation request received. Open Dashboard to review.",
+    ],
+    email_booking_amendment: [
+      "Email booking amendment",
+      "Booking amendment received by email. Open Dashboard to review.",
+    ],
+    email_booking_cancellation: [
+      "Email booking cancellation",
+      "Booking cancellation received by email. Open Dashboard to review.",
+    ],
+    email_confirmed_booking: [
+      "Confirmed booking email",
+      "Confirmed booking received by email. Open Dashboard to review.",
+    ],
+    customer_driver_details_acknowledged: [
+      "Driver details acknowledged",
+      "Customer acknowledged the assigned driver details. Open Dashboard to review.",
+    ],
+    customer_to_driver_reply: [
+      "Customer app reply",
+      "Customer sent a driver app reply. Open Dashboard to review.",
+    ],
+    driver_acknowledged: [
+      "Driver acknowledged job",
+      "Driver saved details and acknowledged a job. Open Dashboard to review.",
+    ],
+    driver_completed: [
+      "Driver reported Job Completed",
+      "Driver reported Job Completed. Open Dashboard to review.",
+    ],
+    driver_issue: [
+      "Driver issue alert",
+      "Driver reported an issue. Open Dashboard to review.",
+    ],
+    driver_ots: [
+      "Driver reported OTS",
+      "Driver reported OTS. Open Dashboard to review.",
+    ],
+    driver_ots_photo: [
+      "OTS photo received",
+      "Driver sent an OTS photo. Open Dashboard to review.",
+    ],
+    driver_otw: [
+      "Driver reported OTW",
+      "Driver reported OTW. Open Dashboard to review.",
+    ],
+    driver_pob: [
+      "Driver reported POB",
+      "Driver reported POB. Open Dashboard to review.",
+    ],
+    driver_to_customer_reply: [
+      "Driver app reply",
+      "Driver sent a customer app reply. Open Dashboard to review.",
+    ],
+  };
+
+  for (const [eventType, [title, body]] of Object.entries(approvedOperationalEvents)) {
+    let operationalPayload = null;
+    const operationalAlert = await helper.sendAdminDevicePushAlert(eventType, {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/operational-subscription",
+          keys: {
+            auth: "fake-auth-operational",
+            p256dh: "fake-p256dh-operational",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        operationalPayload = payload;
+      },
+    });
+
+    assert.equal(operationalAlert.ok, true, `${eventType} push must send.`);
+    assert.equal(operationalPayload.title, title);
+    assert.equal(operationalPayload.body, body);
+    assert.equal(operationalPayload.url, "/");
+    assert.equal(operationalPayload.tag, `prestige-admin-${eventType.replaceAll("_", "-")}`);
+    assertExcludes(
+      JSON.stringify(operationalPayload),
+      ["payout", "paynow", "billing", "payment", "invoice", "price", "internal note"],
+      `${eventType} admin push payload`,
+    );
+  }
+
+  const plateStatusEvents = {
+    driver_completed: "Job Completed",
+    driver_ots: "OTS",
+    driver_otw: "OTW",
+    driver_pob: "POB",
+  };
+
+  for (const [eventType, statusLabel] of Object.entries(plateStatusEvents)) {
+    let platePayload = null;
+    const plateAlert = await helper.sendAdminDevicePushAlert(eventType, {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/plate-status-subscription",
+          keys: {
+            auth: "fake-auth-plate-status",
+            p256dh: "fake-p256dh-plate-status",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        platePayload = payload;
+      },
+      vehiclePlate: " snp 9124s ",
+    });
+
+    assert.equal(plateAlert.ok, true, `${eventType} plate push must send.`);
+    assert.equal(platePayload.title, `SNP 9124S reported ${statusLabel}`);
+    assert.equal(
+      platePayload.body,
+      `SNP 9124S reported ${statusLabel}. Open Dashboard to review.`,
+    );
+  }
+
+  let acknowledgedPlatePayload = null;
+  const acknowledgedPlateAlert = await helper.sendAdminDevicePushAlert(
+    "driver_acknowledged",
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/plate-acknowledgement-subscription",
+          keys: {
+            auth: "fake-auth-plate-acknowledgement",
+            p256dh: "fake-p256dh-plate-acknowledgement",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        acknowledgedPlatePayload = payload;
+      },
+      vehiclePlate: " snp 9124s ",
+    },
+  );
+  assert.equal(acknowledgedPlateAlert.ok, true);
+  assert.equal(acknowledgedPlatePayload.title, "SNP 9124S acknowledged job");
+  assert.equal(
+    acknowledgedPlatePayload.body,
+    "SNP 9124S saved details and acknowledged a job. Open Dashboard to review.",
+  );
+  assert.equal(
+    acknowledgedPlatePayload.tag,
+    "prestige-admin-driver-acknowledged",
+  );
+  assert.equal(acknowledgedPlatePayload.url, "/");
+
+  let unsafePlatePayload = null;
+  const unsafePlateAlert = await helper.sendAdminDevicePushAlert("driver_otw", {
+    env: configuredEnv,
+    subscriptionLoader: async () => [
+      {
+        endpoint: "https://push.example.test/unsafe-plate-subscription",
+        keys: {
+          auth: "fake-auth-unsafe-plate",
+          p256dh: "fake-p256dh-unsafe-plate",
+        },
+      },
+    ],
+    pushSender: async (_subscription, payload) => {
+      unsafePlatePayload = payload;
+    },
+    vehiclePlate: "9999\nPassenger: Private",
+  });
+  assert.equal(unsafePlateAlert.ok, true);
+  assert.equal(unsafePlatePayload.title, "Driver reported OTW");
+  assert.equal(
+    unsafePlatePayload.body,
+    "Driver reported OTW. Open Dashboard to review.",
+  );
+
+  let unsafeAcknowledgedPlatePayload = null;
+  const unsafeAcknowledgedPlateAlert = await helper.sendAdminDevicePushAlert(
+    "driver_acknowledged",
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/unsafe-acknowledgement-subscription",
+          keys: {
+            auth: "fake-auth-unsafe-acknowledgement",
+            p256dh: "fake-p256dh-unsafe-acknowledgement",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        unsafeAcknowledgedPlatePayload = payload;
+      },
+      vehiclePlate: "9999\nPassenger: Private",
+    },
+  );
+  assert.equal(unsafeAcknowledgedPlateAlert.ok, true);
+  assert.equal(unsafeAcknowledgedPlatePayload.title, "Driver acknowledged job");
+  assert.equal(
+    unsafeAcknowledgedPlatePayload.body,
+    "Driver saved details and acknowledged a job. Open Dashboard to review.",
+  );
+
+  const invalidOperationalAlert = await helper.sendAdminDevicePushAlert("monthly_billing", {
+    env: configuredEnv,
+    subscriptionLoader: async () => {
+      throw new Error("invalid events must be rejected before subscription reads");
+    },
+  });
+  assert.equal(invalidOperationalAlert.ok, false);
+  assert.equal(invalidOperationalAlert.reason, "invalid_event");
 
   let resilientSendCount = 0;
   const resilientAlert = await helper.sendAdminNewBookingDevicePushAlert(

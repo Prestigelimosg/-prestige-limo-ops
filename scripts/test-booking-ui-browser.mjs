@@ -37,39 +37,6 @@ Pax: 2
 Child seat: 2 booster seat
 Quoted price: $160.00
 Driver Name: TEST DRIVER CRM 20260516`;
-const ubsCustomerMatchSample = `Booking type: MNG
-Vehicle: AVF
-Date: 27/05/2026
-Time: 15:45
-Flight: SQ333
-Pickup: Changi Airport Terminal 3
-Drop-off: UBS office Singapore
-Booker: Yasuko Kunisawa
-Booker Email: yasuko.kunisawa@ubs.com
-Name: UBS Match Traveler
-Pax: 1`;
-const publicEmailCustomerMatchSample = `Booking type: MNG
-Vehicle: AVF
-Date: 27/05/2026
-Time: 16:15
-Flight: SQ335
-Pickup: Changi Airport Terminal 3
-Drop-off: Private residence
-Booker: Public Email Booker
-Booker Email: public.email.booker@gmail.com
-Name: Public Email Traveler
-Pax: 1`;
-const unknownOrgCustomerMatchSample = `Booking type: DEP
-Vehicle: AVF
-Date: 28/05/2026
-Time: 09:00
-Flight: SQ999
-Pickup: Newco office
-Drop-off: Changi Airport Terminal 2
-Booker: Newco Booker
-Booker Email: ops@newco-corporate.sg
-Name: Newco Traveler
-Pax: 1`;
 const crmSavedBookingFixture = {
   id: "ui-crm-save-fixture",
   company_id: 601,
@@ -131,6 +98,7 @@ const crmSavedBookingFixture = {
 };
 const loadedSavedBookingFixture = {
   id: "ui-cleanup-load-fixture",
+  public_booking_reference: "10839",
   company_id: 501,
   booker_id: 502,
   traveler_id: 503,
@@ -206,6 +174,73 @@ const codexPreparedCustomerRequestFixture = {
     traveler_name: "CODEX REVIEW TRAVELER",
   },
 };
+const dashboardEmailAiConfirmedBookingFixture = {
+  booking_parse_result: {
+    bookings: [
+      {
+        bookerContact: "",
+        bookerEmail: "",
+        bookerName: "",
+        bookingType: "MNG",
+        companyAccount: "",
+        confidence: 0.98,
+        customerPriceOverride: "",
+        dropoff: "Synthetic Hotel",
+        extraStopLocation: "",
+        extraStops: "",
+        flightNumber: "",
+        needsReviewReasons: ["Flight number missing"],
+        notes: "",
+        passengerName: "EMAIL AI TEST PASSENGER",
+        pax: "1",
+        pickup: "Changi Airport",
+        pickupDate: "2026-07-28",
+        pickupTime: "12:00",
+        vehicle: "AVF",
+      },
+    ],
+    multipleBookingsDetected: false,
+    rawWarnings: [],
+  },
+  canonical_booking_text:
+    "Booking type: MNG\nPassenger: EMAIL AI TEST PASSENGER\nPax: 1\nVehicle: AVF\nPickup date: 2026-07-28\nPickup time: 12:00\nPickup: Changi Airport\nDrop-off: Synthetic Hotel",
+  classification: "confirmed_booking",
+  confidence: 0.98,
+  created_at: "2026-07-27T13:30:00.000Z",
+  id: "00000000-0000-4000-8000-000000000101",
+  mailbox_address: "booking@prestigelimo.sg",
+  normalized_text: "Synthetic confirmed booking for test only.",
+  processing_status: "queued",
+  received_at: "2026-07-27T13:29:00.000Z",
+  review_reasons: ["Flight number missing"],
+  sender_address: "transzend@groundbooker.com",
+  subject: "Synthetic confirmed booking",
+  suggested_reply: "Thank you. We have received the booking for review.",
+  summary: "Confirmed airport booking requires flight-number review.",
+};
+const dashboardEmailAiEnquiryFixture = {
+  booking_parse_result: {
+    bookings: [],
+    multipleBookingsDetected: false,
+    rawWarnings: [],
+  },
+  canonical_booking_text: "",
+  classification: "enquiry",
+  confidence: 0.96,
+  created_at: "2026-07-27T13:31:00.000Z",
+  id: "00000000-0000-4000-8000-000000000102",
+  mailbox_address: "booking@prestigelimo.sg",
+  normalized_text:
+    "Can you provide availability for a synthetic airport pickup tomorrow?",
+  processing_status: "queued",
+  received_at: "2026-07-27T13:31:00.000Z",
+  review_reasons: ["Availability requires admin confirmation"],
+  sender_address: "info@prestigelimo.sg",
+  subject: "Synthetic availability enquiry",
+  suggested_reply:
+    "Thank you for your enquiry. We are checking availability and will confirm shortly.",
+  summary: "Customer asks for airport pickup availability.",
+};
 const codexCalendarConflictExistingBookingFixture = {
   ...loadedSavedBookingFixture,
   id: "ui-codex-calendar-conflict-existing",
@@ -221,6 +256,51 @@ const codexCalendarConflictExistingBookingFixture = {
   driver_name: codexPreparedCustomerRequestFixture.driver_name,
   driver_contact: codexPreparedCustomerRequestFixture.driver_contact,
   driver_plate_number: codexPreparedCustomerRequestFixture.driver_plate_number,
+};
+const dashboardOverdueNowMs = Date.now();
+const singaporeOffsetMs = 8 * 60 * 60 * 1000;
+const dashboardOverdueSingaporeMidnightMs =
+  Math.floor((dashboardOverdueNowMs + singaporeOffsetMs) / (24 * 60 * 60 * 1000)) *
+    (24 * 60 * 60 * 1000) -
+  singaporeOffsetMs;
+const dashboardOverduePickupAt = new Date(
+  Math.max(
+    dashboardOverdueSingaporeMidnightMs,
+    dashboardOverdueNowMs - 15 * 60 * 1000,
+  ),
+).toISOString();
+const dashboardOverdueCompletedFixture = {
+  ...loadedSavedBookingFixture,
+  id: "ui-dashboard-overdue-completed",
+  booking_reference: "OVERDUE-COMPLETED-001",
+  pickup_at: dashboardOverduePickupAt,
+  pickup_datetime: dashboardOverduePickupAt,
+  pickup_address: "Overdue Completed Pickup",
+  dropoff_address: "Overdue Completed Drop-off",
+  route: "Overdue Completed Pickup > Overdue Completed Drop-off",
+  job_card:
+    "AVF DEP\nOverdue test pickup\nOverdue Completed Pickup > Overdue Completed Drop-off\nPassenger: OVERDUE COMPLETED TRAVELER\nPax: 1",
+  status: "confirmed",
+  driver_id: null,
+  driver_name: null,
+  driver_contact: null,
+  driver_plate_number: null,
+  travelers: {
+    traveler_name: "OVERDUE COMPLETED TRAVELER",
+  },
+};
+const dashboardOverdueCancelledFixture = {
+  ...dashboardOverdueCompletedFixture,
+  id: "ui-dashboard-overdue-cancelled",
+  booking_reference: "OVERDUE-CANCELLED-001",
+  pickup_address: "Overdue Cancelled Pickup",
+  dropoff_address: "Overdue Cancelled Drop-off",
+  route: "Overdue Cancelled Pickup > Overdue Cancelled Drop-off",
+  job_card:
+    "AVF DEP\nOverdue test pickup\nOverdue Cancelled Pickup > Overdue Cancelled Drop-off\nPassenger: OVERDUE CANCELLED TRAVELER\nPax: 1",
+  travelers: {
+    traveler_name: "OVERDUE CANCELLED TRAVELER",
+  },
 };
 const persistedTestSaveBookingFixture = {
   ...loadedSavedBookingFixture,
@@ -438,6 +518,7 @@ const persistedRealNicoleRohanHarmlessTestFixture = {
 };
 const dashboardDriverAssignmentFixture = {
   id: "ui-dashboard-driver-assignment-fixture",
+  public_booking_reference: "10841",
   company_id: 701,
   booker_id: 702,
   traveler_id: 703,
@@ -1224,6 +1305,25 @@ EA to Mark Colodny, Co-Head of US Private Equity
 	Warburg Pincus`;
 const airportTransferReturnTransferSample = "Hi, can I arrange for a airport transfer on 20/05/26, 645 pick for SQ108. And the return transfer on 22/05/26, 8pm SQ121. One person. Mr. Peter stay at 276 ocean drive lobby o";
 const customerRoundTripAirportTransferSample = "Hi, can I book an airport transfer and pick up - 5 people + bags. We will need one forward facing booster seat. Pick up date 02 July at 6am SQ938. Return flight on the 10th July SQ939. mr. peter. 276 ocean drive lobb o";
+const explicitSinArrivalDepartureSample = `Dear William
+
+I have a request for an airport transfer please, as below
+
+**SIN Arrival Transfer from Changi to Ferry**
+**August 01**
+SQ 317 at 07:30am
+Lead Pax:  Mr David Kelly
+Five (5) Pax : 2 adults + 3 children (ages 4, 7 and 10)
+Transfer in Alphard to Harbour Front Ferry -   ’Sindo’ Ferry
+
+**SIN Departure Transfer from Ferry to Changi**
+**August 05**
+Alphard Pick up from Harbour Front Ferry **at 13:10pm** ’Sindo’ Ferry
+Flight SQ 928 at 16:55pm
+Lead Pax:  Mr David Kelly
+Five (5) Pax : 2 adults + 3 children (ages 4, 7 and 10)
+
+Screenshot 2026-06-23 at 11.16.35.png`;
 const airportDepartureToAirportForFlightSample = "Please arrange Alphard on 20/05/26, 7am pickup Mr Lee from 10 Scotts Road to airport for SQ306. 2 pax.";
 const exactPastedWaypointAirportArrivalSample = `Transfer type	One Way
 Pickup date and time	17-05-2026 7:05
@@ -1369,7 +1469,6 @@ const forbiddenAdminBookingRequestKeyFragments = [
   "customer_price",
   "customer_rate",
   "customer_rates",
-  "driver_id",
   "driver_notes",
   "driver_dispatch",
   "driver_payout",
@@ -1715,7 +1814,7 @@ function assertBookingUiState(state) {
   assert.doesNotMatch(state.jobCardPreview, /Guest details hidden for privacy/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
-  assert.match(state.visibleText, /Driver Message/);
+  assert.match(state.visibleText, /Manual WhatsApp Copy — Optional/);
   assert.match(state.driverDispatch, /DRIVER DISPATCH/);
   assert.match(state.visibleText, /Pricing/);
   assert.equal(state.dispatchReleaseChecklist.visible, true);
@@ -3380,8 +3479,12 @@ async function runChromeTest() {
       const didSetValue = await evaluate(`(() => {
         const normalizeLabel = (candidate) =>
           (candidate || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+        const expectedLabel = ${JSON.stringify(labelText)};
         const label = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === ${JSON.stringify(labelText)},
+          (candidate) => {
+            const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+            return candidateLabel === expectedLabel || candidateLabel === expectedLabel + " (optional for DSP)";
+          },
         );
         const control = label?.querySelector("input, select, textarea");
 
@@ -3606,7 +3709,7 @@ async function runChromeTest() {
       () =>
         evaluate(`(() => {
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
           const parseButton = [...document.querySelectorAll("button")].find(
             (button) => button.textContent.trim() === "Create Job Card",
@@ -3621,7 +3724,7 @@ async function runChromeTest() {
           const controlButtonLabels = [...(controls?.querySelectorAll("button") || [])].map(
             (button) => button.textContent.trim(),
           );
-          const promptText = "Tick the AI safety checkbox to enable AI Assist";
+          const promptText = "AI is review-only and cannot change or send anything";
           const textNodes = [];
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
           let currentNode = walker.nextNode();
@@ -3659,7 +3762,7 @@ async function runChromeTest() {
     assert.equal(initialAiAssistSafetyState.parseButtonDisabled, false);
     assert.deepEqual(
       initialAiAssistSafetyState.controlButtonLabels.slice(0, 2),
-      ["AI Assist Parse (Mock)", "Create Job Card"],
+      ["AI Parse Booking", "Create Job Card"],
       "Expected AI Assist and Create Job Card button positions to be swapped",
     );
     assert.ok(
@@ -3680,19 +3783,19 @@ async function runChromeTest() {
     );
     assert.equal(
       initialAiAssistSafetyState.checkboxLabelText,
-      "Tick the AI safety checkbox to enable AI Assist",
+      "AI is review-only and cannot change or send anything",
     );
     assert.equal(initialAiAssistSafetyState.helperCount, 0);
     assert.equal(initialAiAssistSafetyState.promptTextCount, 1);
-    assert.match(initialAiAssistSafetyState.gateText, /Tick the AI safety checkbox to enable AI Assist/);
-    assert.match(initialAiAssistSafetyState.gateText, /AI Assist Parse \(Mock\)/);
+    assert.match(initialAiAssistSafetyState.gateText, /AI is review-only and cannot change or send anything/);
+    assert.match(initialAiAssistSafetyState.gateText, /AI Parse Booking/);
 
     const enabledAiAssistSafetyState = await waitForCondition(
       async () => {
         const state = await evaluate(`(() => {
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
 
           if (!checkbox || !aiButton) {
@@ -3719,7 +3822,7 @@ async function runChromeTest() {
 
     const clickedEmptyAiAssist = await evaluate(`(() => {
       const aiButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+        (button) => button.textContent.trim() === "AI Parse Booking",
       );
 
       if (!aiButton || aiButton.disabled) {
@@ -3729,14 +3832,14 @@ async function runChromeTest() {
       aiButton.click();
       return true;
     })()`);
-    assert.equal(clickedEmptyAiAssist, true, "Expected enabled AI Assist Parse (Mock) button to be clickable");
+    assert.equal(clickedEmptyAiAssist, true, "Expected enabled AI Parse Booking button to be clickable");
 
     const emptyAiAssistPlacement = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const messageText = "Paste a booking message before using AI Assist Parse.";
+          const messageText = "Paste a booking message before using AI Parse Booking.";
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
           const controls = document.querySelector("[data-ai-assist-controls='true']");
           const feedback = document.querySelector("[data-ai-assist-feedback='true']");
@@ -3765,7 +3868,7 @@ async function runChromeTest() {
       10000,
       "empty AI Assist friendly message near controls",
     );
-    assert.match(emptyAiAssistPlacement.controlsText, /AI Assist Parse \(Mock\)/);
+    assert.match(emptyAiAssistPlacement.controlsText, /AI Parse Booking/);
     assert.equal(
       emptyAiAssistPlacement.directTextCount,
       1,
@@ -3777,7 +3880,7 @@ async function runChromeTest() {
         const state = await evaluate(`(() => {
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
 
           if (!checkbox || !aiButton) {
@@ -3805,7 +3908,7 @@ async function runChromeTest() {
     );
     assert.equal(
       disabledAgainAiAssistSafetyState.checkboxLabelText,
-      "Tick the AI safety checkbox to enable AI Assist",
+      "AI is review-only and cannot change or send anything",
     );
     assert.equal(disabledAgainAiAssistSafetyState.helperCount, 0);
 
@@ -3814,7 +3917,7 @@ async function runChromeTest() {
         const state = await evaluate(`(() => {
           const checkbox = document.querySelector("[data-ai-assist-safety-checkbox='true']");
           const aiButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+            (button) => button.textContent.trim() === "AI Parse Booking",
           );
 
           if (!checkbox || !aiButton) {
@@ -3898,121 +4001,6 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedClearAfterNeedsReview, true, "Expected Clear button after Needs Review test");
 
-    const clearDispatchDraft = async (description) => {
-      const clickedClear = await evaluate(`(() => {
-        const clearButton = [...document.querySelectorAll("button")].find(
-          (button) => button.textContent.trim() === "Clear",
-        );
-
-        if (!clearButton || clearButton.disabled) {
-          return false;
-        }
-
-        clearButton.click();
-        return true;
-      })()`);
-      assert.equal(clickedClear, true, `Expected Clear button for ${description}`);
-
-      await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const textarea = [...document.querySelectorAll("label")].find(
-              (candidate) => candidate.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Paste Booking Message",
-            )?.querySelector("textarea");
-
-            return Boolean(textarea) &&
-              textarea.value === "" &&
-              !document.querySelector("[data-customer-match-suggestion]");
-          })()`),
-        10000,
-        `${description} clear state`,
-      );
-    };
-
-    const parseCustomerMatchSample = async (sample, description) => {
-      await setBookingMessageValue(sample, `${description} booking message`);
-
-      const clickedCustomerMatchParse = await evaluate(`(() => {
-        const parseButton = [...document.querySelectorAll("button")].find(
-          (button) => button.textContent.trim() === "Create Job Card",
-        );
-
-        if (!parseButton || parseButton.disabled) {
-          return false;
-        }
-
-        parseButton.click();
-        return true;
-      })()`);
-      assert.equal(clickedCustomerMatchParse, true, `Expected Create Job Card button for ${description}`);
-
-      return waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const section = document.querySelector("[data-customer-match-suggestion]");
-
-            if (!section) {
-              return false;
-            }
-
-            return {
-              action: section.querySelector("[data-customer-match-action]")?.textContent.trim() || "",
-              buttons: [...section.querySelectorAll("button")].map((button) => button.textContent.trim()),
-              confidence: section.querySelector("[data-customer-match-confidence]")?.textContent.trim() || "",
-              customer: section.querySelector("[data-customer-match-name]")?.textContent.trim() || "",
-              reason: section.querySelector("[data-customer-match-reason]")?.textContent.trim() || "",
-              text: section.innerText,
-            };
-          })()`),
-        10000,
-        `${description} customer match suggestion`,
-      );
-    };
-
-    const clickCustomerMatchAction = async (action, expectedText) => {
-      const clickedAction = await evaluate(`(() => {
-        const button = document.querySelector("[data-customer-match-action-button='${action}']");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(clickedAction, true, `Expected ${action} customer match action button to be clickable`);
-
-      const feedbackState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const section = document.querySelector("[data-customer-match-suggestion]");
-            const button = document.querySelector("[data-customer-match-action-button='${action}']");
-            const feedback = document.querySelector("[data-customer-match-feedback='${action}']");
-
-            if (!section || !button || !feedback) {
-              return false;
-            }
-
-            const buttonRect = button.getBoundingClientRect();
-            const feedbackRect = feedback.getBoundingClientRect();
-
-            return {
-              distanceFromButton: Math.round(Math.abs(feedbackRect.top - buttonRect.bottom)),
-              inSection: section.contains(feedback),
-              text: feedback.textContent.trim(),
-            };
-          })()`),
-        10000,
-        `${action} customer match feedback`,
-      );
-      assert.match(feedbackState.text, expectedText);
-      assert.equal(feedbackState.inSection, true, `Expected ${action} feedback inside customer match suggestion`);
-      assert.ok(
-        feedbackState.distanceFromButton <= 140,
-        `Expected ${action} feedback near button, got ${feedbackState.distanceFromButton}px`,
-      );
-    };
-
     const waitForTravelerIdentityLookup = async (travelerName, description) => {
       const expectedParam = `traveler_name=${encodeURIComponent(travelerName).replace(/%20/g, "+")}`.toLowerCase();
       await waitForCondition(
@@ -4031,9 +4019,6 @@ async function runChromeTest() {
     };
 
     const expectedBackgroundTravelerLookupNames = [
-      "UBS Match Traveler",
-      "Public Email Traveler",
-      "Newco Traveler",
       "BROWSER UI TEST TRAVELER",
     ];
     const isExpectedBackgroundTravelerLookup = (url) => {
@@ -4080,74 +4065,6 @@ async function runChromeTest() {
       };
     })()`);
 
-    const ubsMatchState = await parseCustomerMatchSample(
-      ubsCustomerMatchSample,
-      "UBS organization domain",
-    );
-    await waitForTravelerIdentityLookup("UBS Match Traveler", "UBS organization domain");
-    assert.equal(ubsMatchState.customer, "UBS", "Expected ubs.com email to suggest UBS");
-    assert.equal(ubsMatchState.confidence, "High", "Expected ubs.com match to be high confidence");
-    assert.equal(
-      ubsMatchState.action,
-      "Link to existing customer",
-      "Expected ubs.com match to suggest linking existing customer",
-    );
-    assert.match(
-      ubsMatchState.reason,
-      /Organization email domain ubs\.com matches an existing mock customer folder\./,
-    );
-    assert.deepEqual(
-      ["Link Mock Customer", "Create Mock Customer", "Leave Unlinked"].filter(
-        (label) => !ubsMatchState.buttons.includes(label),
-      ),
-      [],
-      "Expected mock customer action buttons",
-    );
-    await clickCustomerMatchAction("link", /Mock link selected for UBS\. No customer record was written\./);
-    await clearDispatchDraft("UBS organization domain customer match");
-
-    const publicEmailMatchState = await parseCustomerMatchSample(
-      publicEmailCustomerMatchSample,
-      "public email customer",
-    );
-    await waitForTravelerIdentityLookup("Public Email Traveler", "public email customer");
-    assert.equal(
-      publicEmailMatchState.customer,
-      "New customer suggested",
-      "Expected public email to avoid company-account suggestion",
-    );
-    assert.equal(
-      publicEmailMatchState.action,
-      "Create new customer folder",
-      "Expected public email to require dispatcher-reviewed customer creation",
-    );
-    assert.match(
-      publicEmailMatchState.reason,
-      /Public\/personal email domain gmail\.com is not used to create or suggest a company account\./,
-    );
-    assert.doesNotMatch(publicEmailMatchState.reason, /UBS|Ritz Carlton/);
-    await clickCustomerMatchAction("leave", /Mock booking left unlinked\. No customer record was changed\./);
-    await clearDispatchDraft("public email customer match");
-
-    const unknownOrgMatchState = await parseCustomerMatchSample(
-      unknownOrgCustomerMatchSample,
-      "unknown organization domain",
-    );
-    await waitForTravelerIdentityLookup("Newco Traveler", "unknown organization domain");
-    assert.equal(
-      unknownOrgMatchState.customer,
-      "New customer suggested",
-      "Expected unknown organization domain to suggest a new customer",
-    );
-    assert.equal(unknownOrgMatchState.confidence, "Medium");
-    assert.equal(unknownOrgMatchState.action, "Create new customer folder");
-    assert.match(
-      unknownOrgMatchState.reason,
-      /Organization email domain newco-corporate\.sg does not match a current mock customer\./,
-    );
-    await clickCustomerMatchAction("create", /Mock create selected for New customer suggested\. No customer folder was created\./);
-    await clearDispatchDraft("unknown organization domain customer match");
-
     await setBookingMessageValue(bookingSample, "primary booking message");
 
     const clickedParse = await evaluate(`(() => {
@@ -4163,6 +4080,47 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(clickedParse, true, "Expected Create Job Card button to be clickable");
+
+    const removedMockCustomerMatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const labels = [...document.querySelectorAll("label")];
+          const passengerInput = labels.find(
+            (label) => label.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Passenger name",
+          )?.querySelector("input");
+
+          if (passengerInput?.value !== "BROWSER UI TEST TRAVELER") {
+            return false;
+          }
+
+          const mockLabels = new Set([
+            "Link Mock Customer",
+            "Create Mock Customer",
+            "Leave Unlinked",
+          ]);
+
+          return {
+            bookerSelectorCount: document.querySelectorAll("[data-admin-dispatch-booker-identity-select='true']").length,
+            companySelectorCount: document.querySelectorAll("[data-admin-dispatch-company-identity-select='true']").length,
+            mockButtonLabels: [...document.querySelectorAll("button")]
+              .map((button) => button.textContent.trim())
+              .filter((label) => mockLabels.has(label)),
+            mockPanelCount: document.querySelectorAll("[data-customer-match-suggestion='true']").length,
+            saveCrmButtonCount: [...document.querySelectorAll("button")].filter(
+              (button) => button.textContent.trim() === "Save + CRM",
+            ).length,
+            travelerSelectorCount: document.querySelectorAll("[data-admin-dispatch-traveler-identity-select='true']").length,
+          };
+        })()`),
+      10000,
+      "parsed booking without retired mock customer suggestion",
+    );
+    assert.equal(removedMockCustomerMatchState.mockPanelCount, 0);
+    assert.deepEqual(removedMockCustomerMatchState.mockButtonLabels, []);
+    assert.equal(removedMockCustomerMatchState.companySelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.bookerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.travelerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.saveCrmButtonCount, 1);
 
     await evaluate(`(() => {
       document
@@ -4227,7 +4185,9 @@ async function runChromeTest() {
         extraStopCount: fieldValue("Extra Stops"),
         manualExtraCharges: fieldValue("Extra Charges"),
         manualExtraChargesNote: fieldValue("Extra Charges note / reason"),
-        dropoff: fieldValue("Drop-off"),
+        dropoff:
+          fieldValue("Drop-off (optional for DSP)") ||
+          fieldValue("Drop-off"),
         booker: fieldValue("Booker"),
         bookerContact: fieldValue("Booker WhatsApp / Contact"),
         bookerEmail: fieldValue("Booker email (optional)"),
@@ -5992,7 +5952,7 @@ async function runChromeTest() {
 
         return null;
       };
-      const section = sectionForHeading("Driver Message");
+      const section = sectionForHeading("Manual WhatsApp Copy — Optional");
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
         (button) => button.textContent.trim() === "Copy",
       );
@@ -6025,7 +5985,7 @@ async function runChromeTest() {
 
             return null;
           };
-          const section = sectionForHeading("Driver Message");
+          const section = sectionForHeading("Manual WhatsApp Copy — Optional");
           const copyButton = section?.querySelector("[data-copy-copy-button='driverDispatch']");
 
           if (copyButton?.textContent.trim() !== "Copied") {
@@ -6171,7 +6131,7 @@ async function runChromeTest() {
 
     const clickedMockAiAssist = await evaluate(`(() => {
       const aiButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "AI Assist Parse (Mock)",
+        (button) => button.textContent.trim() === "AI Parse Booking",
       );
 
       if (!aiButton || aiButton.disabled) {
@@ -6181,7 +6141,7 @@ async function runChromeTest() {
       aiButton.click();
       return true;
     })()`);
-    assert.equal(clickedMockAiAssist, true, "Expected AI Assist Parse (Mock) button to be clickable");
+    assert.equal(clickedMockAiAssist, true, "Expected AI Parse Booking button to be clickable");
 
     const aiAssistLoadingText = await waitForCondition(
       () =>
@@ -6189,7 +6149,7 @@ async function runChromeTest() {
       5000,
       "AI Assist loading state",
     );
-    assert.equal(aiAssistLoadingText, "Loading mock AI Assist draft...");
+    assert.equal(aiAssistLoadingText, "Preparing AI review draft...");
 
     const aiDraftState = await waitForCondition(
       async () => {
@@ -6245,7 +6205,7 @@ async function runChromeTest() {
     assert.match(aiDraftState.bodyText, /AI draft is for review only\. It does not save bookings\./);
     assert.match(
       aiDraftState.bodyText,
-      /Mock AI Assist response from local API route\. No OpenAI request was made\./,
+      /AI parser remains in local mock mode\. No OpenAI request was made\./,
     );
     assert.match(aiDraftState.bodyText, /Mock response only — review required/);
     assert.equal(aiDraftState.draftIsNearButtonRow, true, "Expected AI draft panel near AI button row");
@@ -6331,6 +6291,17 @@ async function runChromeTest() {
       window.__prestigeDriverJobStatusRequests = [];
       window.__prestigeDriverJobStatuses = {};
       window.__prestigeAdminAppNotificationRequests = [];
+      window.__prestigeAdminEmailAiIntakeRequests = [];
+      window.__prestigeAdminEmailAiIntake = [];
+      window.__prestigeAdminEmailAiTokenUsage = {
+        available: true,
+        input_tokens: 702,
+        month_key: "2026-07",
+        output_tokens: 274,
+        total_tokens: 976,
+      };
+      window.__prestigeCustomerDriverAppNotificationRequests = [];
+      window.__prestigeCustomerDriverAppNotifications = [];
       window.__prestigeAdminAutomationRuntimeEnabled = false;
       window.__prestigeAdminAutomationRuntimeRequests = [];
       window.__prestigeAdminBookingCalendarEventRequests = [];
@@ -6710,6 +6681,131 @@ async function runChromeTest() {
           });
         }
 
+        if (String(target).includes("/api/admin-customer-driver-app-notifications")) {
+          const url = new URL(String(target), window.location.origin);
+          window.__prestigeCustomerDriverAppNotificationRequests.push({
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const deliverySurface = url.searchParams.get("delivery_surface") || "";
+            const limit = Math.max(1, Number(url.searchParams.get("limit") || 25));
+            const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+            const filteredNotifications = (
+              window.__prestigeCustomerDriverAppNotifications || []
+            ).filter(
+              (notification) =>
+                !deliverySurface || notification.delivery_surface === deliverySurface,
+            );
+            const pageCount = filteredNotifications.length
+              ? Math.ceil(filteredNotifications.length / limit)
+              : 0;
+            const notifications = filteredNotifications.slice(
+              (page - 1) * limit,
+              page * limit,
+            );
+
+            return new Response(
+              JSON.stringify({
+                notifications,
+                ok: true,
+                pagination: {
+                  has_next_page: pageCount > 0 && page < pageCount,
+                  has_previous_page: pageCount > 0 && page > 1,
+                  page,
+                  page_count: pageCount,
+                  page_size: limit,
+                  total_notification_count: filteredNotifications.length,
+                },
+                version: "browser-customer-driver-app-notification-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ ok: false, error: "Customer/driver notification write blocked by browser guard." }),
+            { status: 405, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        if (String(target).includes("/api/admin-email-ai-intake")) {
+          window.__prestigeAdminEmailAiIntakeRequests.push({
+            headers,
+            method,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            return new Response(
+              JSON.stringify({
+                enabled: true,
+                external_send: false,
+                ok: true,
+                records: (window.__prestigeAdminEmailAiIntake || []).filter(
+                  (record) => record.processing_status === "queued",
+                ),
+                token_usage: window.__prestigeAdminEmailAiTokenUsage,
+                version: "browser-private-email-ai-intake-mock",
+                write_action: false,
+              }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              },
+            );
+          }
+
+          if (method === "PATCH") {
+            let body = null;
+
+            try {
+              body = JSON.parse(bodyText);
+            } catch {}
+
+            const intakeId = String(body?.intake_id || "");
+            const intake = (window.__prestigeAdminEmailAiIntake || []).find(
+              (record) => String(record.id) === intakeId,
+            );
+
+            if (
+              intake &&
+              intake.processing_status === "queued" &&
+              body?.processing_status === "reviewed"
+            ) {
+              intake.processing_status = "reviewed";
+              return new Response(
+                JSON.stringify({
+                  external_send: false,
+                  intake_id: intakeId,
+                  ok: true,
+                  processing_status: "reviewed",
+                  version: "browser-private-email-ai-intake-mock",
+                  write_action: true,
+                }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              );
+            }
+          }
+
+          return new Response(
+            JSON.stringify({
+              error: "Private email AI intake write blocked by browser guard.",
+              ok: false,
+            }),
+            {
+              status: 405,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+
         if (String(target).includes("/api/admin-app-notifications")) {
           const url = new URL(String(target), window.location.origin);
           let parsedBody = null;
@@ -6985,7 +7081,10 @@ async function runChromeTest() {
               link_status: "active",
               revoked_at: null,
               safe_summary: {
+                acknowledged: false,
+                acknowledged_at: null,
                 assigned_driver: payload.assigned_driver_name || null,
+                job_card_kind: "new",
                 pickup_datetime: payload.pickup_datetime || null,
                 route: payload.route || null,
                 vehicle: payload.assigned_driver_vehicle_model || null,
@@ -7300,15 +7399,39 @@ async function runChromeTest() {
           String(target).includes("/api/admin-saved-bookings")
         ) {
           const listUrl = new URL(String(target), window.location.href);
+          const listLimit = Number(listUrl.searchParams.get("limit") || "100");
+          const listOffset = Number(listUrl.searchParams.get("offset") || "0");
+          const listScope = listUrl.searchParams.get("scope") || "all";
 
           window.__prestigeAdminSavedBookingListRequests.push({
-            limit: listUrl.searchParams.get("limit") || "",
+            limit: String(listLimit),
             method,
+            offset: String(listOffset),
+            scope: listScope,
             url: String(target),
           });
 
+          const terminalStatuses = new Set([
+            "archived",
+            "canceled",
+            "cancelled",
+            "complete",
+            "completed",
+            "declined_internal",
+            "job_completed",
+          ]);
+          const sourceBookings = window.__prestigeLoadedBookings || [];
+          const scopedBookings = listScope === "monitorable"
+            ? sourceBookings.filter((booking) => {
+                const status = String(
+                  booking.status || booking.admin_internal_status || "",
+                ).trim().toLowerCase();
+                return !terminalStatuses.has(status);
+              })
+            : sourceBookings;
+
           return new Response(JSON.stringify({
-            bookings: window.__prestigeLoadedBookings || [],
+            bookings: scopedBookings.slice(listOffset, listOffset + listLimit),
             ok: true,
             version: "browser-admin-saved-booking-list-read-mock",
           }), {
@@ -7532,6 +7655,141 @@ async function runChromeTest() {
       "Expected the retired manual Load Bookings button to stay absent",
     );
 
+    const clickedBookingsTodayForCompletedHistoryLink = await evaluate(`(() => {
+      const button = document.querySelector("[data-bookings-today='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedBookingsTodayForCompletedHistoryLink,
+      true,
+      "Expected Bookings Today view to be selectable before the Completed / History handoff check",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const link = document.querySelector("[data-bookings-completed-history-date-link='true']");
+          const dateInput = document.querySelector("[data-bookings-date-input='true']");
+          return Boolean(dateInput?.value) &&
+            link?.textContent.trim() === "Completed / History" &&
+            link.getAttribute("href") === "#completed-history";
+        })()`),
+      10000,
+      "Bookings today inline Completed / History link",
+    );
+    const clickedUpcomingWithTodaySelected = await evaluate(`(() => {
+      const button = document.querySelector("[data-bookings-upcoming='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedUpcomingWithTodaySelected,
+      true,
+      "Expected Bookings Upcoming view with today selected to remain available",
+    );
+    await setInputValue(
+      "[data-bookings-search-input='true']",
+      "NO UPCOMING TODAY COMPLETED HISTORY MATCH",
+      "Bookings upcoming-today empty-state search",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`document.querySelector("[data-bookings-completed-history-date-link='true']")?.textContent.trim() === "Completed / History"`),
+      10000,
+      "Bookings upcoming-today inline Completed / History link",
+    );
+    await setInputValue(
+      "[data-bookings-search-input='true']",
+      "",
+      "Bookings upcoming-today empty-state search cleanup",
+    );
+
+    await setInputValue(
+      "[data-bookings-date-input='true']",
+      "2026-05-28",
+      "Bookings earlier pickup date",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const link = document.querySelector("[data-bookings-completed-history-date-link='true']");
+          return link?.textContent.trim() === "Completed / History" &&
+            link.getAttribute("href") === "#completed-history";
+        })()`),
+      10000,
+      "Bookings earlier-date inline Completed / History link",
+    );
+    const clickedBookingsCompletedHistoryDateLink = await evaluate(`(() => {
+      const link = document.querySelector("[data-bookings-completed-history-date-link='true']");
+
+      if (!link) {
+        return false;
+      }
+
+      link.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedBookingsCompletedHistoryDateLink,
+      true,
+      "Expected the Bookings earlier-date Completed / History inline link to be clickable",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedTab = document.querySelector("[data-app-tab='completed']");
+          const completedSection = document.querySelector("#completed-history");
+          const monthFilter = document.querySelector("[data-completed-month-filter='true']");
+          const search = document.querySelector("[data-completed-search-input='true']");
+          const matchingCards = [...document.querySelectorAll("[data-completed-operational-card]")]
+            .filter((card) => card.innerText.includes("LOADED SAVED TRAVELER"));
+
+          return completedTab?.getAttribute("aria-selected") === "true" &&
+            Boolean(completedSection) &&
+            monthFilter?.value === "2026-05" &&
+            search?.value === "2026-05-28" &&
+            matchingCards.length === 1;
+        })()`),
+      10000,
+      "Completed / History exact-date handoff",
+    );
+    await setInputValue(
+      "[data-completed-search-input='true']",
+      "",
+      "Completed / History exact-date handoff search cleanup",
+    );
+    await setInputValue(
+      "[data-completed-month-filter='true']",
+      "all",
+      "Completed / History exact-date handoff month cleanup",
+    );
+    await clickTab("Bookings", "Find saved jobs");
+    const clickedUpcomingAfterCompletedHistoryDateLink = await evaluate(`(() => {
+      const button = document.querySelector("[data-bookings-upcoming='true']");
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedUpcomingAfterCompletedHistoryDateLink,
+      true,
+      "Expected Bookings Upcoming view to remain available after the Completed / History date handoff",
+    );
+
     await setInputValue(
       "[data-bookings-search-input='true']",
       bookingsCancelActionFixture.booking_reference,
@@ -7714,6 +7972,119 @@ async function runChromeTest() {
       [],
       "Expected Load Bookings not to read the booking list through the legacy admin data shim",
     );
+
+    await evaluate(`(() => {
+      window.__prestigeMonitorCoverageOriginalBookings = window.__prestigeLoadedBookings || [];
+      const terminalBookings = Array.from({ length: 100 }, (_, index) => ({
+        id: "ui-monitor-terminal-" + String(index + 1).padStart(3, "0"),
+        booking_reference: "MONITOR-TERMINAL-" + String(index + 1).padStart(3, "0"),
+        created_at: new Date(Date.now() - index * 1000).toISOString(),
+        job_card: "AVF DEP\\nMonitor terminal fixture\\nPassenger: MONITOR TERMINAL " + index,
+        status: "completed",
+      }));
+      const olderActivePickup = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const olderActiveBooking = {
+        id: "ui-monitor-coverage-older-active",
+        booking_reference: "MONITOR-COVERAGE-OLDER-ACTIVE",
+        created_at: "2020-01-01T00:00:00.000Z",
+        driver_contact: null,
+        driver_id: null,
+        driver_name: null,
+        driver_plate_number: null,
+        dropoff_address: "Monitor Coverage Drop-off",
+        job_card:
+          "AVF DEP\\nMonitor coverage active pickup\\nMonitor Coverage Pickup > Monitor Coverage Drop-off\\nPassenger: MONITOR COVERAGE ACTIVE TRAVELER\\nPax: 1",
+        pickup_address: "Monitor Coverage Pickup",
+        pickup_at: olderActivePickup,
+        pickup_datetime: olderActivePickup,
+        route: "Monitor Coverage Pickup > Monitor Coverage Drop-off",
+        status: "confirmed",
+        travelers: { traveler_name: "MONITOR COVERAGE ACTIVE TRAVELER" },
+      };
+
+      window.__prestigeLoadedBookings = [...terminalBookings, olderActiveBooking];
+      window.__prestigeAdminSavedBookingListRequests = [];
+    })()`);
+    await clickTab("Dashboard", "Refresh Dashboard");
+    const clickedMonitorCoverageRefresh = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedMonitorCoverageRefresh, true, "Expected monitor coverage refresh");
+
+    const completeMonitorCoverageState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const reference = "MONITOR-COVERAGE-OLDER-ACTIVE";
+          const row = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="' + reference + '"]',
+          );
+          const requests = window.__prestigeAdminSavedBookingListRequests || [];
+          const generalRequest = requests.find(
+            (request) => request.scope === "all" && request.limit === "100",
+          );
+          const monitorableRequest = requests.find(
+            (request) =>
+              request.scope === "monitorable" &&
+              request.limit === "100" &&
+              request.offset === "0",
+          );
+
+          return row && generalRequest && monitorableRequest
+            ? {
+                monitorableRequest,
+                rowText: row.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "older active booking beyond latest 100 monitor coverage",
+    );
+    assert.match(completeMonitorCoverageState.rowText, /MONITOR COVERAGE ACTIVE TRAVELER/);
+    assert.match(completeMonitorCoverageState.rowText, /Driver TBC under 1h/);
+
+    await evaluate(`(() => {
+      window.__prestigeLoadedBookings = window.__prestigeMonitorCoverageOriginalBookings || [];
+      delete window.__prestigeMonitorCoverageOriginalBookings;
+      window.__prestigeAdminSavedBookingListRequests = [];
+    })()`);
+    const clickedMonitorCoverageRestore = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedMonitorCoverageRestore, true, "Expected monitor coverage fixture restore");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const refreshed = (window.__prestigeAdminSavedBookingListRequests || []).some(
+            (request) => request.scope === "all" && request.limit === "100"
+          );
+          const savedCount = document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || "";
+          const coverageRow = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="MONITOR-COVERAGE-OLDER-ACTIVE"]',
+          );
+          return refreshed && savedCount === "18" && !coverageRow;
+        })()`),
+      10000,
+      "monitor coverage fixture restore refresh",
+    );
+    await clickTab("Completed", "Completed / History");
 
     const hiddenLegacyMrLeeBookingsState = await evaluate(`(() => {
       const articles = [...document.querySelectorAll("article")].map((article) => article.innerText);
@@ -7953,6 +8324,29 @@ async function runChromeTest() {
 
     reporter.step("checking dashboard booking actions");
     await clickTab("Dashboard", "Operations Dashboard");
+    const compactEmailAiTokenUsageState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const tile = document.querySelector("[data-admin-email-ai-monthly-token-usage='true']");
+
+          return tile?.getAttribute("data-admin-email-ai-monthly-token-usage-total") === "976"
+            ? {
+                available: tile.getAttribute("data-admin-email-ai-monthly-token-usage-available"),
+                month: tile.getAttribute("data-admin-email-ai-monthly-token-usage-month"),
+                lines: [...tile.querySelectorAll("p")].map((line) => line.textContent.trim()),
+                title: tile.getAttribute("title"),
+              }
+            : false;
+        })()`),
+      10000,
+      "compact monthly Email AI token usage",
+    );
+    assert.deepEqual(compactEmailAiTokenUsageState, {
+      available: "true",
+      lines: ["Email AI", "976 used"],
+      month: "2026-07",
+      title: "Current Singapore-month Email AI usage. OpenAI API has no fixed token balance.",
+    });
     const dashboardCommandCentreState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -8033,7 +8427,7 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardsInsideNotificationFeed, true);
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardListOverflowY, "auto");
     assert.match(dashboardCommandCentreState.codexPreparedJobCardsText, /Codex Prepared Job Cards/);
-    assert.match(
+    assert.doesNotMatch(
       dashboardCommandCentreState.codexPreparedJobCardsText,
       /No Codex-prepared job cards waiting for admin review\./,
     );
@@ -8044,20 +8438,207 @@ async function runChromeTest() {
     );
     assert.match(dashboardCommandCentreState.visibleText, /Booking Requests/);
     assert.doesNotMatch(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
-    assert.match(dashboardCommandCentreState.visibleText, /Today's Jobs/);
+    assert.match(dashboardCommandCentreState.visibleText, /Active Assigned Jobs/);
     assert.match(dashboardCommandCentreState.visibleText, /Codex Review & Admin App Notifications/);
+
+    await evaluate(`(() => {
+      window.__prestigeFetchCalls = [];
+      window.__prestigeAdminEmailAiIntake = [
+        ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture)},
+        ${JSON.stringify(dashboardEmailAiEnquiryFixture)},
+      ];
+      const refreshButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Refresh Dashboard",
+      );
+      refreshButton?.click();
+    })()`);
+
+    const emailAiDashboardState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const rows = [...document.querySelectorAll("[data-dashboard-email-ai-intake-row]")];
+          const count = document.querySelector("[data-dashboard-email-ai-intake-count]");
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const dashboardBadge = dashboardTab?.querySelector(
+            '[data-bookings-new-request-badge="true"]',
+          );
+
+          return rows.length === 1 && count?.textContent.trim() === "1 email"
+            ? {
+                countAttribute: count.getAttribute("data-dashboard-email-ai-intake-count"),
+                dashboardBadgeText: dashboardBadge?.textContent.trim() || "",
+                dashboardNewRequestCount:
+                  dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "",
+                dashboardTotalAlertCount:
+                  dashboardTab?.getAttribute("data-dashboard-tab-total-alerts") || "",
+                requestMethods: (window.__prestigeAdminEmailAiIntakeRequests || []).map(
+                  (request) => request.method,
+                ),
+                rowTexts: rows.map((row) => row.textContent.replace(/\\s+/g, " ").trim()),
+              }
+            : false;
+        })()`),
+      10000,
+      "private email AI rows inside existing Booking Requests",
+    );
+    assert.equal(emailAiDashboardState.countAttribute, "1");
+    assert.equal(emailAiDashboardState.dashboardBadgeText, "1 new");
+    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "1");
+    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "1");
+    assert.equal(
+      emailAiDashboardState.requestMethods.every((method) => method === "GET"),
+      true,
+      "Expected private email AI dashboard lane to remain read-only",
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /Email · booking@prestigelimo\.sg/,
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /From transzend@groundbooker\.com/,
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /Confirmed booking/,
+    );
+    assert.doesNotMatch(emailAiDashboardState.rowTexts.join(" "), /Enquiry/);
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /AI review only · no reply sent · no booking saved/,
+    );
+
+    const openedEmailBookingReview = await evaluate(`(() => {
+      const row = document.querySelector(
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+      );
+      const button = [...(row?.querySelectorAll("button") || [])].find(
+        (candidate) => candidate.textContent.trim() === "Review in Dispatch",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      openedEmailBookingReview,
+      true,
+      "Expected confirmed email review to reuse Dispatch",
+    );
+
+    const emailBookingDispatchState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const dispatchTab = document.querySelector(
+            '[data-app-tab="dispatch"][aria-selected="true"]',
+          );
+          const textarea = document.querySelector(
+            '[data-dispatch-workflow-step="booking-input-parser"] textarea',
+          );
+          const draft = document.querySelector("[data-ai-assist-draft='true']");
+          const createJobCardButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Create Job Card",
+          );
+
+          return dispatchTab && textarea?.value.includes("EMAIL AI TEST PASSENGER") && draft
+            ? {
+                createJobCardDisabled: createJobCardButton?.disabled,
+                draftText: draft.textContent.replace(/\\s+/g, " ").trim(),
+                textareaValue: textarea.value,
+              }
+            : false;
+        })()`),
+      10000,
+      "confirmed email review in existing Dispatcher Intake",
+    );
+    assert.equal(emailBookingDispatchState.createJobCardDisabled, false);
+    assert.match(
+      emailBookingDispatchState.draftText,
+      /Private email AI review draft/,
+    );
+    assert.match(
+      emailBookingDispatchState.draftText,
+      /Nothing was saved or sent/,
+    );
+    assert.match(
+      emailBookingDispatchState.textareaValue,
+      /Booking type: MNG/,
+    );
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    const ignoredEmailEnquiryState = await evaluate(`(() => ({
+      enquiryRow: Boolean(document.querySelector(
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000102"]',
+      )),
+      reviewEnquiryButton: [...document.querySelectorAll("button")].some(
+        (button) => button.textContent.trim() === "Review enquiry",
+      ),
+    }))()`);
+    assert.deepEqual(
+      ignoredEmailEnquiryState,
+      {
+        enquiryRow: false,
+        reviewEnquiryButton: false,
+      },
+      "Expected enquiry email to remain outside the app review feed",
+    );
+
+    await evaluate(`(() => {
+      window.__prestigeAdminEmailAiIntake = [];
+      const refreshButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Refresh Dashboard",
+      );
+      refreshButton?.click();
+    })()`);
+    await waitForCondition(
+      () =>
+        evaluate(`document.querySelectorAll("[data-dashboard-email-ai-intake-row]").length === 0 &&
+          document.querySelector("[data-dashboard-email-ai-intake-count]")?.textContent.trim() === "0 email"`),
+      10000,
+      "private email AI synthetic rows cleared",
+    );
 
     await evaluate(`(() => {
       const fixture = ${JSON.stringify(codexPreparedCustomerRequestFixture)};
       const conflictFixture = ${JSON.stringify(codexCalendarConflictExistingBookingFixture)};
+      const overdueCompletedFixture = ${JSON.stringify(dashboardOverdueCompletedFixture)};
+      const overdueCancelledFixture = ${JSON.stringify(dashboardOverdueCancelledFixture)};
       window.__prestigeLoadedBookings = [
         fixture,
         conflictFixture,
+        overdueCompletedFixture,
+        overdueCancelledFixture,
         ...(window.__prestigeLoadedBookings || []).filter(
-          (booking) => ![fixture.booking_reference, conflictFixture.booking_reference].includes(
-            String(booking.booking_reference || booking.id),
-          ),
+          (booking) => ![
+            fixture.booking_reference,
+            conflictFixture.booking_reference,
+            overdueCompletedFixture.booking_reference,
+            overdueCancelledFixture.booking_reference,
+          ].includes(String(booking.booking_reference || booking.id)),
         ),
+      ];
+      window.__prestigeCustomerDriverAppNotifications = [
+        {
+          actor_role: "customer",
+          booking_reference: fixture.booking_reference,
+          created_at: "2026-07-17T01:02:00.000Z",
+          delivery_surface: "customer_app",
+          id: "browser-driver-details-acknowledged",
+          safe_message: "Driver details acknowledged.",
+          workflow_area: "customer_driver_details_acknowledgements",
+        },
+        {
+          actor_role: "admin",
+          booking_reference: conflictFixture.booking_reference,
+          created_at: "2026-07-17T01:01:00.000Z",
+          delivery_surface: "customer_app",
+          id: "browser-driver-details-sent",
+          safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+          workflow_area: "customer_app_updates",
+        },
       ];
       window.__prestigeWorkflowStatusRequests = [];
     })()`);
@@ -8079,47 +8660,202 @@ async function runChromeTest() {
       () =>
         evaluate(`(() => {
           const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-          const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
-          const returnButton = document.querySelector(\`[data-codex-job-card-return="\${reference}"]\`);
+          const panel = document.querySelector("[data-codex-prepared-job-cards='true']");
+          const closeButton = document.querySelector(
+            \`[data-admin-prepared-job-card-close="\${reference}"]\`,
+          );
           const row = document.querySelector(\`[data-new-customer-booking-request-row="\${reference}"]\`);
-          const conflictRuntime = document.querySelector("[data-codex-calendar-conflict-runtime]");
-          const workflowRequests = window.__prestigeWorkflowStatusRequests || [];
 
-          return instruction && returnButton && workflowRequests.some(
-            (request) => request.method === "GET" &&
-              request.booking_reference === reference &&
-              request.workflow_area === "admin_booking_review",
-          )
+          return panel && closeButton && row
             ? {
-                instructionDisabled: instruction.disabled,
-                instructionMaxLength: instruction.maxLength,
-                instructionValue: instruction.value,
-                returnButtonDisabled: returnButton.disabled,
+                buttonCount: row.querySelectorAll("button").length,
+                closeButtonDisabled: closeButton.disabled,
+                closeButtonText: closeButton.textContent.trim(),
+                oldControlCount: row.querySelectorAll(
+                  "select, [data-admin-prepared-job-card-action-submit], [data-codex-job-card-instruction], [data-codex-job-card-return]",
+                ).length,
+                panelText: panel.textContent.replace(/\\s+/g, " ").trim(),
                 rowText: row?.textContent.replace(/\\s+/g, " ").trim() || "",
-                conflictRuntime: conflictRuntime?.getAttribute("data-codex-calendar-conflict-runtime") || "",
-                conflictStatusCount: document.querySelectorAll("[data-codex-calendar-conflict-status]").length,
               }
             : false;
         })()`),
       10000,
-      "Codex prepared request instruction controls",
+      "single Close prepared request action",
     );
-    assert.equal(codexPreparedRequestState.instructionDisabled, false);
-    assert.equal(codexPreparedRequestState.instructionMaxLength, 500);
-    assert.equal(codexPreparedRequestState.instructionValue, "");
-    assert.equal(codexPreparedRequestState.returnButtonDisabled, true);
+    assert.equal(codexPreparedRequestState.buttonCount, 1);
+    assert.equal(codexPreparedRequestState.closeButtonDisabled, false);
+    assert.equal(codexPreparedRequestState.closeButtonText, "Close");
+    assert.equal(codexPreparedRequestState.oldControlCount, 0);
+    assert.match(codexPreparedRequestState.panelText, /Codex Prepared Job Cards/);
+    assert.match(
+      codexPreparedRequestState.panelText,
+      /Prepared from exact saved requests\. Admin reviews every card before calendar action\./,
+    );
+    assert.doesNotMatch(
+      codexPreparedRequestState.panelText,
+      /Ready for Admin Review|Urgent >1h|Conflict check|Assignment incomplete|Choose action|Approve|Decline|Edit booking/,
+    );
     assert.match(codexPreparedRequestState.rowText, /01 Jan 2099, 1000hrs SGT/);
     assert.doesNotMatch(codexPreparedRequestState.rowText, /2099-01-01T02:00:00\+00:00/);
-    assert.equal(codexPreparedRequestState.conflictRuntime, "off");
-    assert.equal(codexPreparedRequestState.conflictStatusCount, 0);
+
+    const overdueDashboardActionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const completedReference = "${dashboardOverdueCompletedFixture.booking_reference}";
+          const cancelledReference = "${dashboardOverdueCancelledFixture.booking_reference}";
+          const completedRow = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="' + completedReference + '"]',
+          );
+          const cancelledRow = document.querySelector(
+            '[data-dashboard-urgent-booking-request-row="' + cancelledReference + '"]',
+          );
+          const completedButton = completedRow?.querySelector(
+            '[data-dashboard-overdue-booking-completed="' + completedReference + '"]',
+          );
+          const completedCancelButton = completedRow?.querySelector(
+            '[data-dashboard-overdue-booking-cancel="' + completedReference + '"]',
+          );
+          const cancelledButton = cancelledRow?.querySelector(
+            '[data-dashboard-overdue-booking-cancel="' + cancelledReference + '"]',
+          );
+
+          return completedRow && cancelledRow && completedButton && completedCancelButton && cancelledButton
+            ? {
+                completedButtonText: completedButton.textContent.trim(),
+                completedCancelButtonText: completedCancelButton.textContent.trim(),
+                completedRowText: completedRow.textContent.replace(/\\s+/g, " ").trim(),
+                cancelledButtonText: cancelledButton.textContent.trim(),
+                cancelledRowText: cancelledRow.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "overdue dashboard completed and cancel actions",
+    );
+    assert.equal(overdueDashboardActionState.completedButtonText, "Completed");
+    assert.equal(overdueDashboardActionState.completedCancelButtonText, "Cancel");
+    assert.equal(overdueDashboardActionState.cancelledButtonText, "Cancel");
+    assert.match(overdueDashboardActionState.completedRowText, /Overdue/);
+    assert.match(overdueDashboardActionState.cancelledRowText, /Overdue/);
+    assert.doesNotMatch(overdueDashboardActionState.completedRowText, /Driver TBC under 1h/);
+    assert.doesNotMatch(overdueDashboardActionState.cancelledRowText, /Driver TBC under 1h/);
+
+    const overdueCompletedClicked = await evaluate(`(() => {
+      window.__prestigeOriginalConfirm = window.__prestigeOriginalConfirm || window.confirm;
+      window.confirm = () => true;
+      window.__prestigeBookingCompletionRequests = [];
+      const button = document.querySelector(
+        '[data-dashboard-overdue-booking-completed="${dashboardOverdueCompletedFixture.booking_reference}"]',
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(overdueCompletedClicked, true, "Expected overdue Completed action to be available");
+
+    const overdueCompletedRuntimeState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const card = document.querySelector(
+            '[data-completed-operational-card="${dashboardOverdueCompletedFixture.booking_reference}"]',
+          );
+          const requests = window.__prestigeBookingCompletionRequests || [];
+
+          return card && requests.length === 1
+            ? {
+                cardText: card.textContent.replace(/\\s+/g, " ").trim(),
+                requests,
+              }
+            : false;
+        })()`),
+      10000,
+      "overdue Completed action history handoff",
+    );
+    assert.equal(overdueCompletedRuntimeState.requests[0]?.method, "PATCH");
+    assert.deepEqual(overdueCompletedRuntimeState.requests[0]?.body, {
+      booking_id: dashboardOverdueCompletedFixture.booking_reference,
+      status: "completed",
+    });
+    assert.match(overdueCompletedRuntimeState.cardText, /Completed/);
+
+    await clickTab("Dashboard", "Operations Dashboard");
+    const overdueCancelledClicked = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector(
+            '[data-dashboard-overdue-booking-cancel="${dashboardOverdueCancelledFixture.booking_reference}"]',
+          );
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`),
+      10000,
+      "overdue Cancel action",
+    );
+    assert.equal(overdueCancelledClicked, true, "Expected overdue Cancel action to be available");
+
+    const overdueCancelledRuntimeState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const card = document.querySelector(
+            '[data-completed-operational-card="${dashboardOverdueCancelledFixture.booking_reference}"]',
+          );
+          const requests = window.__prestigeBookingCompletionRequests || [];
+
+          return card && requests.length === 2
+            ? {
+                cardText: card.textContent.replace(/\\s+/g, " ").trim(),
+                requests,
+              }
+            : false;
+        })()`),
+      10000,
+      "overdue Cancel action history handoff",
+    );
+    assert.deepEqual(overdueCancelledRuntimeState.requests[1]?.body, {
+      booking_id: dashboardOverdueCancelledFixture.booking_reference,
+      status: "cancelled",
+    });
+    assert.match(overdueCancelledRuntimeState.cardText, /Cancelled/);
+    await setInputValue(
+      "[data-completed-month-filter='true']",
+      "all",
+      "Completed / History month reset after overdue action checks",
+    );
+    await evaluate(`(() => {
+      window.confirm = window.__prestigeOriginalConfirm;
+      const fixtureReferences = new Set([
+        "${dashboardOverdueCompletedFixture.booking_reference}",
+        "${dashboardOverdueCancelledFixture.booking_reference}",
+      ]);
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).filter(
+        (booking) => !fixtureReferences.has(String(booking.booking_reference || booking.id)),
+      );
+    })()`);
 
     await clickTab("Bookings", "Find saved jobs");
     const bookingsCalendarStatusRuntimeState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const reference = "${codexCalendarConflictExistingBookingFixture.booking_reference}";
+          const acknowledgedReference = "${codexPreparedCustomerRequestFixture.booking_reference}";
           const card = document.querySelector("[data-recent-operational-card='" + reference + "']");
           const calendarStatus = card?.querySelector("[data-bookings-calendar-status-value='cal_saved']");
+          const detailSentStatus = card?.querySelector("[data-bookings-driver-details-status-value='sent']");
+          const acknowledgedCard = document.querySelector(
+            "[data-recent-operational-card='" + acknowledgedReference + "']",
+          );
+          const acknowledgedStatus = acknowledgedCard?.querySelector(
+            "[data-bookings-driver-details-status-value='acknowledged']",
+          );
           const uppercaseValues = [
             ...(card?.querySelectorAll("[data-admin-operational-uppercase-value]") || []),
           ];
@@ -8129,12 +8865,17 @@ async function runChromeTest() {
             ),
           ];
 
-          return card && calendarStatus && uppercaseValues.length > 0 && visibleBookingCards.length >= 2
+          return card && calendarStatus && detailSentStatus && acknowledgedStatus &&
+            uppercaseValues.length > 0 && visibleBookingCards.length >= 2
             ? {
                 calendarStatus: {
                   tagName: calendarStatus.tagName,
                   text: calendarStatus.textContent.trim(),
                 },
+                detailSentStatus: detailSentStatus.textContent.trim(),
+                acknowledgedStatus: acknowledgedStatus.textContent.trim(),
+                customerDriverNotificationRequests:
+                  window.__prestigeCustomerDriverAppNotificationRequests || [],
                 alternatingCards: visibleBookingCards.slice(0, 2).map((bookingCard) => ({
                   colour: bookingCard.getAttribute("data-bookings-alternate-colour") || "",
                   backgroundColor: getComputedStyle(bookingCard).backgroundColor,
@@ -8153,6 +8894,23 @@ async function runChromeTest() {
       bookingsCalendarStatusRuntimeState.calendarStatus,
       { tagName: "SPAN", text: "Cal saved" },
       "Expected the configured Google Calendar status to render as a non-button Bookings pill",
+    );
+    assert.equal(
+      bookingsCalendarStatusRuntimeState.detailSentStatus,
+      "Detail sent 09:01",
+      "Expected the exact sent booking to show its compact SGT driver-details status",
+    );
+    assert.equal(
+      bookingsCalendarStatusRuntimeState.acknowledgedStatus,
+      "Acknowledged 09:02",
+      "Expected the exact acknowledged booking to replace sent status with its compact SGT acknowledgement",
+    );
+    assert.equal(
+      bookingsCalendarStatusRuntimeState.customerDriverNotificationRequests.some(
+        (request) => request.method !== "GET",
+      ),
+      false,
+      "Expected Bookings status verification to perform no customer/driver notification write",
     );
     assert.deepEqual(
       bookingsCalendarStatusRuntimeState.alternatingCards.map(({ colour }) => colour),
@@ -8176,131 +8934,6 @@ async function runChromeTest() {
     );
     await clickTab("Dashboard", "Refresh Dashboard");
 
-    const codexInstruction = "Pickup time: 14:30\nFlight number: SQ318";
-    const enteredCodexInstruction = await evaluate(`(() => {
-      const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-      const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
-
-      if (!instruction) {
-        return false;
-      }
-
-      const descriptor = Object.getOwnPropertyDescriptor(instruction.constructor.prototype, "value");
-      descriptor?.set?.call(instruction, ${JSON.stringify("Pickup time: 14:30\nFlight number: SQ318")});
-      instruction.dispatchEvent(new Event("input", { bubbles: true }));
-      instruction.dispatchEvent(new Event("change", { bubbles: true }));
-      window.__prestigeWorkflowStatusRequests = [];
-      window.__prestigeFetchCalls = [];
-      return true;
-    })()`);
-    assert.equal(enteredCodexInstruction, true, "Expected internal Codex instruction to be editable");
-
-    const clickedReturnToCodex = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const button = document.querySelector(
-            '[data-codex-job-card-return="${codexPreparedCustomerRequestFixture.booking_reference}"]',
-          );
-
-          if (!button || button.disabled) {
-            return false;
-          }
-
-          button.click();
-          return true;
-        })()`),
-      5000,
-      "Return to Codex button enabled",
-    );
-    assert.equal(clickedReturnToCodex, true);
-
-    const returnedToCodexState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-          const feedback = document.querySelector(\`[data-codex-job-card-review-feedback="\${reference}"]\`);
-          const preparation = document.querySelector('[data-codex-job-card-correction-preparation="ready"]');
-          const postRequests = (window.__prestigeWorkflowStatusRequests || []).filter(
-            (request) => request.method === "POST",
-          );
-
-          return feedback?.textContent.includes("Exact pickup-time or flight-number corrections are prepared below for review") &&
-            preparation?.textContent.includes("Corrected Preview Ready") &&
-            preparation?.textContent.includes("1430hrs") &&
-            preparation?.textContent.includes("SQ318") &&
-            postRequests.length === 1
-            ? {
-                feedback: feedback.textContent.replace(/\\s+/g, " ").trim(),
-                fetchCalls: window.__prestigeFetchCalls || [],
-                postBody: postRequests[0].body,
-              }
-            : false;
-        })()`),
-      10000,
-      "Returned to Codex saved state",
-    );
-    assert.deepEqual(returnedToCodexState.postBody, {
-      booking_reference: codexPreparedCustomerRequestFixture.booking_reference,
-      safe_status_context: {
-        next_action: "Prepare corrected job card for admin review",
-        safe_note: codexInstruction,
-      },
-      status_label: "Returned to Codex",
-      status_value: "needs_review",
-      workflow_area: "admin_booking_review",
-    });
-    assert.match(returnedToCodexState.feedback, /saved booking and calendar were not changed/);
-    assert.equal(
-      returnedToCodexState.fetchCalls.some((call) =>
-        /\/api\/(?:admin-bookings|admin-app-notifications|customer-driver-quick-replies|admin-booking-calendar)/.test(call),
-      ),
-      false,
-      `Expected Return to Codex to use only workflow status persistence, got ${returnedToCodexState.fetchCalls.join(", ")}`,
-    );
-    await evaluate(`(() => {
-      const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-      const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
-      const descriptor = instruction
-        ? Object.getOwnPropertyDescriptor(instruction.constructor.prototype, "value")
-        : null;
-      descriptor?.set?.call(instruction, "");
-      instruction?.dispatchEvent(new Event("input", { bubbles: true }));
-      instruction?.dispatchEvent(new Event("change", { bubbles: true }));
-      window.__prestigeWorkflowStatusRequests = [];
-    })()`);
-    await clickTab("Bookings", "Find saved jobs");
-    await clickTab("Dashboard", "Operations Dashboard");
-    const reloadedCodexInstructionState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-          const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
-          const row = document.querySelector(\`[data-new-customer-booking-request-row]\`);
-          const preparation = document.querySelector('[data-codex-job-card-correction-preparation="ready"]');
-          const workflowRequests = window.__prestigeWorkflowStatusRequests || [];
-
-          return instruction?.value === ${JSON.stringify("Pickup time: 14:30\nFlight number: SQ318")} &&
-            row?.textContent.includes("Corrected Preview Ready") &&
-            row?.textContent.includes("Review Corrected Job Card") &&
-            preparation?.textContent.includes("1430hrs") &&
-            preparation?.textContent.includes("SQ318") &&
-            workflowRequests.some(
-              (request) => request.method === "GET" &&
-                request.booking_reference === reference &&
-                request.workflow_area === "admin_booking_review",
-            )
-            ? {
-                instructionValue: instruction.value,
-                rowText: row.textContent.replace(/\\s+/g, " ").trim(),
-              }
-            : false;
-        })()`),
-      10000,
-      "Saved Codex instruction reload",
-    );
-    assert.equal(reloadedCodexInstructionState.instructionValue, codexInstruction);
-    assert.match(reloadedCodexInstructionState.rowText, /Corrected Preview Ready/);
-
     for (const viewport of [
       { height: 844, label: "iPhone 13", scale: 3, width: 390 },
       { height: 915, label: "modern Android", scale: 2.625, width: 412 },
@@ -8314,17 +8947,15 @@ async function runChromeTest() {
       });
       const codexMobileLayoutState = await evaluate(`(() => {
         const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-        const instruction = document.querySelector(\`[data-codex-job-card-instruction="\${reference}"]\`);
-        const returnButton = document.querySelector(\`[data-codex-job-card-return="\${reference}"]\`);
-        const instructionRect = instruction?.getBoundingClientRect();
-        const buttonRect = returnButton?.getBoundingClientRect();
+        const closeButton = document.querySelector(
+          \`[data-admin-prepared-job-card-close="\${reference}"]\`,
+        );
+        const buttonRect = closeButton?.getBoundingClientRect();
 
-        return instructionRect && buttonRect
+        return buttonRect
           ? {
               buttonInsideViewport: buttonRect.left >= 0 && buttonRect.right <= window.innerWidth + 1,
               documentFitsViewport: document.documentElement.scrollWidth <= window.innerWidth + 1,
-              instructionInsideViewport:
-                instructionRect.left >= 0 && instructionRect.right <= window.innerWidth + 1,
             }
           : null;
       })()`);
@@ -8334,124 +8965,50 @@ async function runChromeTest() {
         `Expected ${viewport.label} Codex queue without horizontal page overflow`,
       );
       assert.equal(
-        codexMobileLayoutState?.instructionInsideViewport,
-        true,
-        `Expected ${viewport.label} Codex instruction inside viewport`,
-      );
-      assert.equal(
         codexMobileLayoutState?.buttonInsideViewport,
         true,
-        `Expected ${viewport.label} Return to Codex button inside viewport`,
+        `Expected ${viewport.label} prepared-job Close button inside viewport`,
       );
     }
     await client.send("Emulation.clearDeviceMetricsOverride");
 
-    const clickedConflictAutomationOn = await evaluate(`(() => {
-      const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
+    await evaluate(`window.__prestigeFetchCalls = []`);
+    const closedPreparedJobCard = await evaluate(`(() => {
+      const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
+      const closeButton = document.querySelector(
+        \`[data-admin-prepared-job-card-close="\${reference}"]\`,
+      );
 
-      if (!automationToggle || automationToggle.disabled) {
+      if (!closeButton || closeButton.disabled || closeButton.textContent.trim() !== "Close") {
         return false;
       }
 
-      automationToggle.click();
+      closeButton.click();
       return true;
     })()`);
-    assert.equal(
-      clickedConflictAutomationOn,
-      true,
-      "Expected the in-memory conflict check to turn Automation on",
-    );
-
-    const codexCalendarConflictState = await waitForCondition(
+    assert.equal(closedPreparedJobCard, true, "Expected the single Close action to be clickable");
+    const closedPreparedJobCardState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const reference = "${codexPreparedCustomerRequestFixture.booking_reference}";
-          const status = document.querySelector(
-            \`[data-codex-calendar-conflict-status="\${reference}"]\`,
+          const row = document.querySelector(
+            \`[data-new-customer-booking-request-row="\${reference}"]\`,
           );
-          const runtime = document.querySelector("[data-codex-calendar-conflict-runtime]");
 
-          return status?.getAttribute("data-codex-calendar-conflict-state") === "conflict"
-            ? {
-                runtime: runtime?.getAttribute("data-codex-calendar-conflict-runtime") || "",
-                text: status.textContent.replace(/\\s+/g, " ").trim(),
-              }
-            : false;
-        })()`),
-      10000,
-      "Codex calendar conflict browser state",
-    );
-    assert.equal(codexCalendarConflictState.runtime, "active");
-    assert.match(codexCalendarConflictState.text, /Calendar conflict \(1\)/);
-    assert.match(codexCalendarConflictState.text, /same driver or vehicle/);
-
-    const clickedConflictAutomationOff = await evaluate(`(() => {
-      const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
-
-      if (!automationToggle || automationToggle.disabled) {
-        return false;
-      }
-
-      automationToggle.click();
-      return true;
-    })()`);
-    assert.equal(
-      clickedConflictAutomationOff,
-      true,
-      "Expected the in-memory conflict check to turn Automation off",
-    );
-    await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const runtime = document.querySelector("[data-codex-calendar-conflict-runtime]");
-          const statusCount = document.querySelectorAll("[data-codex-calendar-conflict-status]").length;
-
-          return runtime?.getAttribute("data-codex-calendar-conflict-runtime") === "off" && statusCount === 0;
-        })()`),
-      10000,
-      "Codex calendar conflict disabled state",
-    );
-
-    await evaluate(`window.__prestigeFetchCalls = []`);
-    const openedCorrectedJobCard = await evaluate(`(() => {
-      const button = [...document.querySelectorAll("button")].find(
-        (candidate) => candidate.textContent.trim() === "Review Corrected Job Card",
-      );
-
-      if (!button || button.disabled) {
-        return false;
-      }
-
-      button.click();
-      return true;
-    })()`);
-    assert.equal(openedCorrectedJobCard, true, "Expected corrected preview to reuse the existing review handoff");
-    const correctedDispatchPreviewState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const preview = document.querySelector('[data-copy-preview="jobCard"]');
-          const pageText = document.body.innerText.replace(/\\s+/g, " ").trim();
-
-          return preview?.textContent.includes("1430hrs") &&
-            preview?.textContent.includes("SQ318") &&
-            pageText.includes("loaded with review-only corrections")
+          return !row
             ? {
                 fetchCalls: window.__prestigeFetchCalls || [],
-                preview: preview.textContent,
               }
             : false;
         })()`),
       10000,
-      "corrected Dispatch job-card preview",
+      "prepared job card removed by Close",
     );
     assert.equal(
-      correctedDispatchPreviewState.fetchCalls.some((call) =>
-        /\/api\/(?:admin-bookings|admin-booking-calendar|customer-driver-quick-replies)/.test(call),
-      ),
+      closedPreparedJobCardState.fetchCalls.some((call) => /\b(?:PATCH|POST|PUT|DELETE)\b/.test(call)),
       false,
-      `Expected corrected review handoff to avoid booking/calendar/message writes, got ${correctedDispatchPreviewState.fetchCalls.join(", ")}`,
+      `Expected Close to perform no booking, notification, calendar, or other server write, got ${closedPreparedJobCardState.fetchCalls.join(", ")}`,
     );
-    await clickTab("Dashboard", "Operations Dashboard");
 
     const clickedAutomationOn = await evaluate(`(() => {
       const automationToggle = document.querySelector("[data-admin-automation-runtime-toggle='true']");
@@ -8523,7 +9080,7 @@ async function runChromeTest() {
     assert.equal(
       await evaluate(`document.querySelectorAll("[data-codex-calendar-conflict-status]").length`),
       0,
-      "Expected Automation OFF to remove every per-card conflict result",
+      "Expected simplified Codex cards to render no per-card conflict wording",
     );
 
     await evaluate(`(() => {
@@ -8541,7 +9098,7 @@ async function runChromeTest() {
     })()`);
     await waitForCondition(
       () =>
-        evaluate(`document.querySelector('[data-codex-prepared-job-card-list="true"]')?.textContent.includes("No Codex-prepared job cards waiting for admin review.") || false`),
+        evaluate(`document.querySelectorAll('[data-codex-prepared-job-card-list="true"] [data-new-customer-booking-request-row]').length === 0`),
       10000,
       "Codex prepared request fixture cleanup",
     );
@@ -9650,7 +10207,7 @@ async function runChromeTest() {
 
         return null;
       };
-      const section = sectionForHeading("Driver Message");
+      const section = sectionForHeading("Manual WhatsApp Copy — Optional");
       const copyButton = [...(section?.querySelectorAll("button") || [])].find(
         (button) => button.textContent.trim() === "Copy",
       );
@@ -9690,7 +10247,7 @@ async function runChromeTest() {
 
             return null;
           };
-          const section = sectionForHeading("Driver Message");
+          const section = sectionForHeading("Manual WhatsApp Copy — Optional");
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy",
           );
@@ -9745,6 +10302,139 @@ async function runChromeTest() {
     );
 
     await evaluate(`window.__prestigeCopiedTexts = []; window.__prestigeAdminDriverJobLinkRequests = []`);
+
+    const staleDriverJobLinkAmendmentBlocked = await evaluate(`(() => {
+      const serviceTypeSelect = document.querySelector(
+        "[data-admin-booking-service-type-select='true']",
+      );
+
+      if (!serviceTypeSelect || serviceTypeSelect.value !== "MNG") {
+        return false;
+      }
+
+      serviceTypeSelect.value = "DSP";
+      serviceTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(
+      staleDriverJobLinkAmendmentBlocked,
+      true,
+      "Expected the loaded saved booking service type to be amendable for the stale-link regression",
+    );
+
+    const dspBlankDropoffState = await evaluate(`(() => {
+      const dropoffInput = document.querySelector("input[placeholder^='Drop-off']");
+
+      if (!dropoffInput) {
+        return null;
+      }
+
+      const originalDropoff = dropoffInput.value;
+      const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
+      descriptor?.set?.call(dropoffInput, "");
+      dropoffInput.dispatchEvent(new Event("input", { bubbles: true }));
+      dropoffInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return {
+        label: dropoffInput.closest("label")?.textContent.replace(/\s+/g, " ").trim() || "",
+        originalDropoff,
+      };
+    })()`);
+    assert.ok(dspBlankDropoffState, "Expected the Admin DSP drop-off field to be available for the regression.");
+    assert.match(
+      dspBlankDropoffState.label,
+      /Drop-off \(optional for DSP\)/,
+      "Expected the existing Admin DSP field to identify final drop-off as optional.",
+    );
+
+    const dspBlankDropoffChecklist = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const tripCheck = document.querySelector(
+            "[data-admin-dispatch-release-check='trip-completeness']",
+          );
+          const detail = tripCheck
+            ?.querySelector("[data-admin-dispatch-release-check-detail]")
+            ?.textContent.replace(/\\s+/g, " ")
+            .trim() || "";
+
+          return !detail.includes("Drop-off missing") ? { detail } : false;
+        })()`),
+      10000,
+      "Admin DSP blank drop-off warning suppression",
+    );
+    assert.doesNotMatch(
+      dspBlankDropoffChecklist.detail,
+      /Drop-off missing/,
+      "Expected Admin DSP not to flag a blank final drop-off in red readiness wording.",
+    );
+
+    const clickedStaleDriverJobLinkCreate = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const serviceTypeSelect = document.querySelector(
+            "[data-admin-booking-service-type-select='true']",
+          );
+          const createButton = document.querySelector("[data-create-driver-job-link-button='true']");
+
+          if (serviceTypeSelect?.value !== "DSP" || !createButton || createButton.disabled) {
+            return false;
+          }
+
+          createButton.click();
+          return true;
+        })()`),
+      10000,
+      "stale amended Driver Job Link create attempt",
+    );
+    assert.equal(clickedStaleDriverJobLinkCreate, true);
+
+    const staleDriverJobLinkCreateState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const section = document.querySelector(
+            "[data-dispatch-workflow-step='driver-job-link']",
+          );
+          const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
+          const requests = window.__prestigeAdminDriverJobLinkRequests || [];
+
+          return feedback?.textContent.includes(
+            "Save the booking amendment before creating a Driver Job Link.",
+          )
+            ? { feedbackText: feedback.textContent.trim(), requestCount: requests.length }
+            : false;
+        })()`),
+      10000,
+      "stale amended Driver Job Link blocked before POST",
+    );
+    assert.equal(staleDriverJobLinkCreateState.requestCount, 0);
+    assert.match(
+      staleDriverJobLinkCreateState.feedbackText,
+      /Save the booking amendment before creating a Driver Job Link\./,
+    );
+
+    const restoredSavedDriverJobLinkDraft = await evaluate(`(() => {
+      const serviceTypeSelect = document.querySelector(
+        "[data-admin-booking-service-type-select='true']",
+      );
+
+      if (!serviceTypeSelect) {
+        return false;
+      }
+
+      serviceTypeSelect.value = "MNG";
+      serviceTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const dropoffInput = document.querySelector("input[placeholder^='Drop-off']");
+      if (dropoffInput) {
+        const descriptor = Object.getOwnPropertyDescriptor(dropoffInput.constructor.prototype, "value");
+        descriptor?.set?.call(dropoffInput, ${JSON.stringify(dspBlankDropoffState.originalDropoff)});
+        dropoffInput.dispatchEvent(new Event("input", { bubbles: true }));
+        dropoffInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return true;
+    })()`);
+    assert.equal(restoredSavedDriverJobLinkDraft, true);
 
     const clickedCreateDriverJobLink = await waitForCondition(
       () =>
@@ -9815,16 +10505,28 @@ async function runChromeTest() {
           const feedback = section?.querySelector("[data-driver-job-link-api-feedback='true']");
           const preview = section?.querySelector("[data-copy-preview='driverJobLink']");
           const status = section?.querySelector("[data-driver-job-link-status='true']");
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const acknowledgementQueueItem = acknowledgementQueue?.querySelector(
+            "[data-pending-driver-ack-queue-item='true']",
+          );
           const copyButton = [...(section?.querySelectorAll("button") || [])].find(
             (button) => button.textContent.trim() === "Copy Link",
           );
 
-          return feedback?.textContent.includes("Driver job link created")
+          return feedback?.textContent.includes("Driver job link created") && acknowledgementQueueItem
             ? {
                 copyButtonDisabled: copyButton?.disabled ?? true,
                 feedbackText: feedback.textContent.trim(),
                 previewText: preview?.innerText || "",
                 requests: window.__prestigeAdminDriverJobLinkRequests || [],
+                acknowledgementQueueCount:
+                  acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") || "",
+                acknowledgementQueuePulsing:
+                  acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-pulsing") || "",
+                acknowledgementText:
+                  acknowledgementQueueItem?.textContent.replace(/\s+/g, " ").trim() || "",
                 statusText: status?.textContent.trim() || "",
               }
             : false;
@@ -9834,7 +10536,11 @@ async function runChromeTest() {
     );
     assert.equal(driverJobLinkCreateState.copyButtonDisabled, false);
     assert.match(driverJobLinkCreateState.feedbackText, /Driver job link created/);
-    assert.match(driverJobLinkCreateState.statusText, /Active saved link for ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCreateState.statusText, /Active saved link for 10841/);
+    assert.equal(driverJobLinkCreateState.acknowledgementQueueCount, "1");
+    assert.equal(driverJobLinkCreateState.acknowledgementQueuePulsing, "true");
+    assert.match(driverJobLinkCreateState.acknowledgementText, /10841 · New · Link issued/);
+    assert.match(driverJobLinkCreateState.acknowledgementText, /Waiting \d+ min/);
     assert.match(driverJobLinkCreateState.previewText, /https?:\/\/\S+\/driver-job\/browser-created-driver-token/);
     assert.equal(driverJobLinkCreateState.requests.length, 1);
     assert.deepEqual(
@@ -9882,6 +10588,146 @@ async function runChromeTest() {
       false,
       "Expected Driver Job Link create request not to include finance, payout, parser, token, notification, or internal fields",
     );
+
+    const clickedPendingDriverAckDismiss = await evaluate(`(() => {
+      const dismissButton = document.querySelector(
+        "[data-pending-driver-ack-dismiss='11111111-2222-4333-8444-555555555555']",
+      );
+
+      if (!dismissButton || dismissButton.textContent.trim() !== "Close") {
+        return false;
+      }
+
+      dismissButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedPendingDriverAckDismiss,
+      true,
+      "Expected exact pending acknowledgement alert Close button to be clickable",
+    );
+
+    const dismissedPendingDriverAckState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const driverJobLinkSection = document.querySelector(
+            "[data-dispatch-workflow-step='driver-job-link']",
+          );
+          const copyButton = driverJobLinkSection
+            ? [...driverJobLinkSection.querySelectorAll("button")].find(
+                (button) => button.textContent.trim() === "Copy Link",
+              )
+            : null;
+          let dismissedLinkIds = [];
+
+          try {
+            dismissedLinkIds = JSON.parse(
+              window.localStorage.getItem("prestige-admin-dismissed-pending-driver-ack-links") || "[]",
+            );
+          } catch {}
+
+          return acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") === "0"
+            ? {
+                copyButtonDisabled: copyButton?.disabled ?? true,
+                dismissedLinkIds,
+                linkStatus: window.__prestigeAdminDriverJobLinks?.[0]?.link_status || "",
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                requestCount: window.__prestigeAdminDriverJobLinkRequests?.length || 0,
+                text: acknowledgementQueue.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "exact pending Driver ACK alert dismissed without revoking its link",
+    );
+    assert.equal(dismissedPendingDriverAckState.pulsing, "false");
+    assert.match(dismissedPendingDriverAckState.text, /0 pending/);
+    assert.equal(dismissedPendingDriverAckState.linkStatus, "active");
+    assert.equal(dismissedPendingDriverAckState.copyButtonDisabled, false);
+    assert.equal(dismissedPendingDriverAckState.requestCount, 1);
+    assert.deepEqual(dismissedPendingDriverAckState.dismissedLinkIds, [
+      "11111111-2222-4333-8444-555555555555",
+    ]);
+
+    await evaluate(`(() => {
+      window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
+        link.booking_reference === "ui-dashboard-driver-assignment-fixture"
+          ? {
+              ...link,
+              id: "66666666-7777-4888-8999-000000000000",
+              safe_summary: {
+                ...link.safe_summary,
+                job_card_kind: "amendment",
+              },
+            }
+          : link,
+      );
+    })()`);
+
+    const freshPendingDriverAckState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+          const acknowledgementQueueItem = acknowledgementQueue?.querySelector(
+            "[data-pending-driver-ack-queue-item='true']",
+          );
+
+          return acknowledgementQueueItem?.getAttribute("data-pending-driver-ack-queue-link-id") ===
+            "66666666-7777-4888-8999-000000000000"
+            ? {
+                count: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-count"),
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                text: acknowledgementQueueItem.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      15000,
+      "new exact Driver Job Link appears after an older alert was dismissed",
+    );
+    assert.equal(freshPendingDriverAckState.count, "1");
+    assert.equal(freshPendingDriverAckState.pulsing, "true");
+    assert.match(freshPendingDriverAckState.text, /10841 · Amendment · Link issued/);
+
+    await evaluate(`(() => {
+      window.__prestigeAdminDriverJobLinks = (window.__prestigeAdminDriverJobLinks || []).map((link) =>
+        link.booking_reference === "ui-dashboard-driver-assignment-fixture"
+          ? {
+              ...link,
+              safe_summary: {
+                ...link.safe_summary,
+                acknowledged: true,
+                acknowledged_at: "2026-05-29T03:20:00.000Z",
+              },
+            }
+          : link,
+      );
+    })()`);
+
+    const dispatchDriverJobAcknowledgedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const acknowledgementQueue = document.querySelector(
+            "[data-pending-driver-ack-queue='true']",
+          );
+
+          return acknowledgementQueue?.getAttribute("data-pending-driver-ack-queue-count") === "0"
+            ? {
+                pulsing: acknowledgementQueue.getAttribute("data-pending-driver-ack-queue-pulsing"),
+                text: acknowledgementQueue.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "automatic Dispatch Driver Job Link acknowledgement refresh",
+    );
+    assert.equal(dispatchDriverJobAcknowledgedState.pulsing, "false");
+    assert.match(dispatchDriverJobAcknowledgedState.text, /0 pending/);
+    assert.match(dispatchDriverJobAcknowledgedState.text, /No driver acknowledgements pending/);
 
     const clickedDriverJobLinkCopy = await evaluate(`(() => {
       const section = [...document.querySelectorAll("[data-dispatch-workflow-step='driver-job-link']")][0];
@@ -9956,7 +10802,10 @@ async function runChromeTest() {
     );
     assert.match(driverJobLinkCopyState.previewText, /Driver Job Link/);
     assert.match(driverJobLinkCopyState.previewText, /Saved link status: active/);
+    assert.match(driverJobLinkCopyState.previewText, /Expires: 11 Jun 2026, 0800hrs SGT/);
     assert.match(driverJobLinkCopyState.copiedText, /^Driver Job Link/);
+    assert.match(driverJobLinkCopyState.copiedText, /Expires: 11 Jun 2026, 0800hrs SGT/);
+    assert.doesNotMatch(driverJobLinkCopyState.copiedText, /2026-06-11T00:00:00.000Z/);
     assert.match(
       driverJobLinkCopyState.copiedText,
       /Greeting boss, thank you for taking the job\. Please keep the car interior clean and fresh\./,
@@ -9972,7 +10821,12 @@ async function runChromeTest() {
       /\/driver-job-demo|mock-driver-job-valid-a|Mock\/demo driver job link|Local demo link/,
       "Expected Driver Job Link copy not to point to the demo token or include mock/demo wording",
     );
-    assert.match(driverJobLinkCopyState.copiedText, /Reference: ui-dashboard-driver-assignment-fixture/);
+    assert.match(driverJobLinkCopyState.copiedText, /Reference: 10841/);
+    assert.doesNotMatch(
+      driverJobLinkCopyState.copiedText,
+      /ui-dashboard-driver-assignment-fixture/,
+      "Expected Driver Job Link copy not to expose the internal booking key.",
+    );
     assert.match(driverJobLinkCopyState.copiedText, /Passenger: DASHBOARD DRIVER TEST TRAVELER/);
     assert.match(driverJobLinkCopyState.copiedText, /29 May 2026, 1115hrs/);
     assert.match(driverJobLinkCopyState.copiedText, /Flight: SQ777/);
@@ -9996,6 +10850,42 @@ async function runChromeTest() {
     );
 
     await clickTab("Dashboard", "Operations Dashboard");
+
+    const dashboardDriverJobAcknowledgedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = [...document.querySelectorAll("[data-admin-multi-driver-active-job]")].find(
+            (candidate) => candidate.innerText.includes("DASHBOARD DRIVER TEST TRAVELER"),
+          );
+          const acknowledgement = article?.querySelector(
+            "[data-admin-multi-driver-active-job-acknowledgement='true']",
+          );
+          const waitingCount = document.querySelector(
+            "[data-admin-multi-driver-active-jobs-waiting-count]",
+          );
+
+          return acknowledgement?.getAttribute(
+            "data-admin-multi-driver-active-job-acknowledgement-state",
+          ) === "acknowledged" && waitingCount?.getAttribute(
+            "data-admin-multi-driver-active-jobs-waiting-count",
+          ) !== "unknown"
+            ? {
+                acknowledgementHeight: acknowledgement.getBoundingClientRect().height,
+                acknowledgementText: acknowledgement.textContent.replace(/\s+/g, " ").trim(),
+                articleText: article.innerText,
+                waitingCountText: waitingCount.textContent.replace(/\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "automatic Dashboard exact-job acknowledgement indicator",
+    );
+    assert.match(dashboardDriverJobAcknowledgedState.acknowledgementText, /Acknowledged 11:20/);
+    assert.match(dashboardDriverJobAcknowledgedState.articleText, /DASHBOARD DRIVER TEST TRAVELER/);
+    assert.ok(
+      dashboardDriverJobAcknowledgedState.acknowledgementHeight <= 24,
+      `Expected compact Dashboard acknowledgement pill, got ${dashboardDriverJobAcknowledgedState.acknowledgementHeight}px`,
+    );
 
     const clickedDashboardCopyJobCard = await evaluate(`(() => {
       const article = [...document.querySelectorAll("article")].find(
@@ -10540,6 +11430,88 @@ async function runChromeTest() {
       expectedStatusLabel: "Driver OTW",
       fixture: dashboardPobRevertFixture,
     });
+
+    await evaluate(`(() => {
+      window.__prestigeDriverJobStatuses["${dashboardCompletionActionFixture.id}"] = [
+        {
+          actor_label: "Browser driver status mock",
+          actor_role: "driver",
+          booking_reference: "${dashboardCompletionActionFixture.id}",
+          created_at: "2026-05-30T11:20:00.000Z",
+          occurred_at: "2026-05-30T11:20:00.000Z",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "completed",
+        },
+        {
+          actor_label: "Browser driver status mock",
+          actor_role: "driver",
+          booking_reference: "${dashboardCompletionActionFixture.id}",
+          created_at: "2026-05-30T10:40:00.000Z",
+          occurred_at: "2026-05-30T10:40:00.000Z",
+          source_surface: "driver_job_api",
+          status_source: "driver_job_api",
+          status_value: "pob",
+        },
+      ];
+      window.__prestigeFetchCalls = [];
+      window.__prestigeBookingCompletionRequests = [];
+
+      const article = document.querySelector(
+        '[data-admin-multi-driver-active-job="${dashboardCompletionActionFixture.id}"]',
+      );
+      const refreshButton = article?.querySelector(
+        "[data-admin-multi-driver-active-job-driver-report-refresh='true']",
+      );
+      refreshButton?.click();
+    })()`);
+
+    const driverJcEvidenceRetentionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const article = document.querySelector(
+            '[data-admin-multi-driver-active-job="${dashboardCompletionActionFixture.id}"]',
+          );
+          const report = article?.querySelector(
+            "[data-admin-multi-driver-active-job-driver-report='true']",
+          );
+
+          return article && report?.innerText.includes("Job Completed")
+            ? {
+                articleText: article.innerText,
+                completionRequests: window.__prestigeBookingCompletionRequests || [],
+                fetchCalls: window.__prestigeFetchCalls || [],
+                hasAdminConfirmButton: Boolean(
+                  article.querySelector(
+                    "[data-dashboard-mark-completed='${dashboardCompletionActionFixture.id}']",
+                  ),
+                ),
+                reportText: report.innerText,
+              }
+            : false;
+        })()`),
+      10000,
+      "driver JC evidence retained in Today's Jobs until admin confirmation",
+    );
+    assert.match(driverJcEvidenceRetentionState.reportText, /Latest report:\s*Job Completed/);
+    assert.match(driverJcEvidenceRetentionState.reportText, /POB/);
+    assert.equal(
+      driverJcEvidenceRetentionState.hasAdminConfirmButton,
+      true,
+      "Expected the existing admin completion action to remain available after driver JC evidence arrives",
+    );
+    assert.deepEqual(
+      driverJcEvidenceRetentionState.completionRequests,
+      [],
+      "Expected reading driver JC evidence not to persist admin booking completion",
+    );
+    assert.equal(
+      driverJcEvidenceRetentionState.fetchCalls.some(
+        (call) => call.startsWith("PATCH ") && call.includes("/api/admin-saved-booking-statuses"),
+      ),
+      false,
+      "Expected reading driver JC evidence not to call the admin completion writer",
+    );
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -14365,6 +15337,7 @@ async function runChromeTest() {
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.company_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.booker_id, 906102);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.traveler_id, 906103);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.driver_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.pax_count, 4);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.source_channel, "admin-dashboard");
     assert.equal(
@@ -14465,12 +15438,12 @@ async function runChromeTest() {
     assert.equal(
       dashboardAfterDriverProfileSaveState.activeJobsMonitorCount,
       1,
-      "Expected Dashboard to contain exactly one protected Today's Jobs monitor",
+      "Expected Dashboard to contain exactly one protected Active Assigned Jobs monitor",
     );
     assert.equal(
       dashboardAfterDriverProfileSaveState.liveDispatchMapCount,
       1,
-      "Expected Dashboard Today's Jobs to contain exactly one compact Live Dispatch Map",
+      "Expected Dashboard Active Assigned Jobs to contain exactly one compact Live Dispatch Map",
     );
     assert.equal(
       dashboardAfterDriverProfileSaveState.hasDetailedAssignment,
@@ -14805,6 +15778,7 @@ async function runChromeTest() {
         },
       ];
       window.__prestigeMonthlyInvoiceDraftRequests = [];
+      window.__prestigeMonthlyInvoiceDraftTripCandidateRequests = [];
       window.__prestigeMonthlyInvoiceDrafts = [
         {
           billing_month: "2026-05",
@@ -14980,21 +15954,27 @@ async function runChromeTest() {
 
         if (String(target).includes("/api/admin-email-activation-preflight-setup")) {
           window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          const emailGateOpen =
+            window.__prestigeCustomerDriverDetailsEmailSendGateOpen === true;
 
           return new Response(
             JSON.stringify({
-              activationReady: false,
-              blockers: ["provider", "env", "approval", "live_sending"],
-              driverDetailsEmailSendGateOpen:
-                window.__prestigeCustomerDriverDetailsEmailSendGateOpen === true,
+              activationReady: emailGateOpen,
+              blockers: emailGateOpen
+                ? []
+                : ["provider", "env", "approval", "live_sending"],
+              driverDetailsEmailSendGateOpen: emailGateOpen,
               external_send: false,
-              liveSendingEnabled: false,
+              liveSendingEnabled: emailGateOpen,
+              missing_requirements: emailGateOpen
+                ? []
+                : ["provider", "env", "approval", "live_sending"],
               ok: true,
-              providerConfigured: false,
-              providerSelected: false,
-              selectedProvider: null,
-              sendingEnabled: false,
-              status: "setup_only",
+              providerConfigured: emailGateOpen,
+              providerSelected: emailGateOpen,
+              selectedProvider: emailGateOpen ? "resend" : null,
+              sendingEnabled: emailGateOpen,
+              status: emailGateOpen ? "ready" : "setup_only",
             }),
             { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
           );
@@ -15543,6 +16523,69 @@ async function runChromeTest() {
           }
         }
 
+        if (String(target).includes("/api/admin-monthly-invoice-draft-trip-candidates")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
+          window.__prestigeMonthlyInvoiceDraftTripCandidateRequests.push({
+            headers,
+            method,
+            search: url.search,
+            url: String(target),
+          });
+
+          if (method === "GET") {
+            const tripCandidates = [
+              {
+                billing_month: "2026-05",
+                billing_prep_readiness: "ready",
+                booking_reference: "ui-cleanup-load-fixture",
+                closeout_id: "aaaaaaaa-1111-4111-8111-111111111111",
+                closeout_status: "closed",
+                customer_account: "LOADED SAVED COMPANY",
+                customer_id: "801",
+                safe_trip_context: {
+                  readiness_reason: "Ready closeout is eligible for this exact draft.",
+                  source: "completed_booking_closeout",
+                },
+                trip_readiness_status: "ready",
+              },
+              {
+                billing_month: "2026-05",
+                billing_prep_readiness: "ready",
+                booking_reference: "ui-second-ready-load-fixture",
+                closeout_id: "bbbbbbbb-2222-4222-8222-222222222222",
+                closeout_status: "closed",
+                customer_account: "LOADED SAVED COMPANY",
+                customer_id: "801",
+                safe_trip_context: {
+                  readiness_reason: "Ready closeout is eligible for this exact draft.",
+                  source: "completed_booking_closeout",
+                },
+                trip_readiness_status: "ready",
+              },
+            ];
+
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                pagination: {
+                  has_next_page: false,
+                  has_previous_page: false,
+                  page: 1,
+                  page_count: 1,
+                  page_size: 250,
+                  total_candidate_count: 2,
+                },
+                summary: { blocked_count: 0, ready_count: 2, total_count: 2 },
+                trip_candidates: tripCandidates,
+                version: "focused-browser-monthly-ready-trip-candidate-read-mock",
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+        }
+
         if (String(target).includes("/api/admin-monthly-invoice-drafts")) {
           const url = new URL(String(target), window.location.origin);
           let parsedBody = null;
@@ -15638,18 +16681,46 @@ async function runChromeTest() {
           }
 
           if (method === "POST") {
+            const existingDraftIndex = (window.__prestigeMonthlyInvoiceDrafts || []).findIndex(
+              (draft) =>
+                draft.customer_account === parsedBody?.customer_account &&
+                draft.billing_month === parsedBody?.billing_month,
+            );
+            const existingDraft =
+              existingDraftIndex >= 0 ? window.__prestigeMonthlyInvoiceDrafts[existingDraftIndex] : {};
+            const invoiceDraftId = existingDraft.id || "focused-browser-monthly-invoice-draft-created";
+            const linkedTrips = (parsedBody?.linked_trips || []).map((trip, index) => {
+              const existingLink = (existingDraft.linked_trips || []).find(
+                (link) => link.booking_reference === trip.booking_reference,
+              );
+
+              return {
+                ...trip,
+                draft_id: invoiceDraftId,
+                id:
+                  existingLink?.id ||
+                  (index === 0
+                    ? "77777777-7777-4777-8777-777777777777"
+                    : "88888888-8888-4888-8888-888888888888"),
+              };
+            });
             const invoiceDraft = {
+              ...existingDraft,
               ...parsedBody,
               actor_label: "Focused browser monthly invoice draft mock",
               actor_role: "admin",
               created_at: "2026-06-07T00:00:00.000Z",
-              id: "focused-browser-monthly-invoice-draft-created",
-              linked_trips: parsedBody?.linked_trips || [],
+              id: invoiceDraftId,
+              linked_trips: linkedTrips,
               source_surface: "admin_api",
               updated_at: "2026-06-07T00:00:00.000Z",
             };
 
-            window.__prestigeMonthlyInvoiceDrafts.push(invoiceDraft);
+            if (existingDraftIndex >= 0) {
+              window.__prestigeMonthlyInvoiceDrafts[existingDraftIndex] = invoiceDraft;
+            } else {
+              window.__prestigeMonthlyInvoiceDrafts.push(invoiceDraft);
+            }
 
             return new Response(
               JSON.stringify({
@@ -16226,6 +17297,17 @@ async function runChromeTest() {
       "Expected LOADED SAVED booking Bookings Load this booking button to be clickable",
     );
 
+    const directLoadedBookingTypedReadCalls = await evaluate(`(window.__prestigeFetchCalls || []).filter(
+      (call) => call.includes("/api/admin-load-bookings-typed-read")
+    )`);
+    assert.ok(
+      directLoadedBookingTypedReadCalls.length <= 1 &&
+        directLoadedBookingTypedReadCalls.every(
+          (call) => call === "GET /api/admin-load-bookings-typed-read?limit=25",
+        ),
+      `Expected Load this booking to make at most one direct guarded typed-read refresh before background sync, got ${directLoadedBookingTypedReadCalls.join(", ")}`,
+    );
+
     const loadedBookingState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
@@ -16515,7 +17597,8 @@ async function runChromeTest() {
             ),
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
-            driverDispatch: preTextByHeading("Driver Message"),
+            customerCopy: preTextByHeading("Customer Copy"),
+            driverDispatch: preTextByHeading("Manual WhatsApp Copy — Optional"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
               company: fieldValue("Company / Account"),
@@ -16628,6 +17711,16 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
+    assert.match(
+      loadedBookingState.customerCopy,
+      /Booking reference: 10839/,
+      "Expected Customer Copy to show the persisted five-digit public booking reference",
+    );
+    assert.doesNotMatch(
+      loadedBookingState.customerCopy,
+      /ui-cleanup-load-fixture/,
+      "Expected Customer Copy to keep the internal booking key hidden",
+    );
     const expectedLoadedBookingFetchCalls = [
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
@@ -16646,7 +17739,21 @@ async function runChromeTest() {
       "GET /api/admin-monthly-invoice-issue-reviews?limit=1&page=1&billing_month=2026-05",
       "GET /api/admin-monthly-invoice-issue-records?limit=1&page=1&billing_month=2026-05&issue_review_id=33333333-3333-4333-8333-333333333333&draft_id=11111111-1111-4111-8111-111111111111",
     ];
-    const loadedBookingFetchCallSet = new Set(loadedBookingState.fetchCalls);
+    const loadedBookingTypedReadCalls = loadedBookingState.fetchCalls.filter((call) =>
+      call.includes("/api/admin-load-bookings-typed-read"),
+    );
+    assert.ok(
+      loadedBookingTypedReadCalls.length >= directLoadedBookingTypedReadCalls.length &&
+        loadedBookingTypedReadCalls.every(
+          (call) => call === "GET /api/admin-load-bookings-typed-read?limit=25",
+        ),
+      `Expected any permitted direct and background typed-read refreshes to remain guarded GET limit=25 reads, got ${loadedBookingTypedReadCalls.join(", ")}`,
+    );
+    const loadedBookingFetchCallSet = new Set(
+      loadedBookingState.fetchCalls.filter(
+        (call) => !call.includes("/api/admin-load-bookings-typed-read"),
+      ),
+    );
     assert.deepEqual(
       [...loadedBookingFetchCallSet].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
@@ -16764,6 +17871,28 @@ async function runChromeTest() {
       "mock gate-open Driver Details Email button",
     );
     assert.equal(gateOpenEmailButton, true);
+    const gateOpenPreflightState = await evaluate(`(() => {
+      const item = document.querySelector("[data-admin-customer-driver-details-email-review-item='true']");
+      const status = item?.querySelector("[data-admin-email-activation-preflight-status='true']");
+
+      return {
+        activationReady:
+          item?.getAttribute("data-admin-email-activation-preflight-activation-ready") || "",
+        blockers: item?.getAttribute("data-admin-email-activation-preflight-blockers") || "",
+        liveSendingEnabled:
+          item?.getAttribute("data-admin-email-activation-preflight-live-sending-enabled") || "",
+        statusText: status?.textContent.replace(/\\s+/g, " ").trim() || "",
+        statusTitle: status?.getAttribute("title") || "",
+      };
+    })()`);
+    assert.deepEqual(gateOpenPreflightState, {
+      activationReady: "true",
+      blockers: "",
+      liveSendingEnabled: "true",
+      statusText: "Email gate ready",
+      statusTitle:
+        "Preflight: activationReady true, driverDetailsEmailSendGateOpen true, liveSendingEnabled true, external_send false, no blockers | Driver Details Email send gate is open; explicit admin review is still required.",
+    });
     const clickedGateOpenEmail = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-customer-driver-details-email-disabled-send-action='true']");
 
@@ -16897,7 +18026,7 @@ async function runChromeTest() {
       {
         history: "I've arrived at 2026-06-07 17:25 SGT",
         latest: "I've arrived",
-        message: "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+        message: "Loaded 1 saved driver status event for 10839.",
         refreshButton: {
           disabled: false,
           text: "Refresh status",
@@ -16961,7 +18090,7 @@ async function runChromeTest() {
     assert.equal(refreshedDriverStatusState.latest, "I've arrived");
     assert.equal(
       refreshedDriverStatusState.message,
-      "Loaded 1 saved driver status event for ui-cleanup-load-fixture.",
+      "Loaded 1 saved driver status event for 10839.",
     );
     assert.ok(
       refreshedDriverStatusState.requestCount >= 2,
@@ -17517,7 +18646,7 @@ async function runChromeTest() {
           };
         })()`);
 
-        return candidateState?.requests?.some((request) => request.method === "PATCH") &&
+        return candidateState?.requests?.some((request) => request.method === "POST") &&
           candidateState.feedback.includes("Refreshed monthly invoice draft preparation for LOADED SAVED COMPANY")
           ? candidateState
           : false;
@@ -17525,52 +18654,60 @@ async function runChromeTest() {
       10000,
       "monthly invoice draft prep refresh",
     );
-    const monthlyInvoiceDraftPatchRequest = monthlyInvoiceDraftSaveState.requests.find(
-      (request) => request.method === "PATCH",
+    const monthlyInvoiceDraftPostRequest = monthlyInvoiceDraftSaveState.requests.find(
+      (request) => request.method === "POST",
     );
     assert.deepEqual(
       {
         body: {
-          billing_month: monthlyInvoiceDraftPatchRequest.body.billing_month,
-          blocked_count: monthlyInvoiceDraftPatchRequest.body.blocked_count,
-          customer_account: monthlyInvoiceDraftPatchRequest.body.customer_account,
-          draft_id: monthlyInvoiceDraftPatchRequest.body.draft_id,
-          draft_status: monthlyInvoiceDraftPatchRequest.body.draft_status,
-          ready_count: monthlyInvoiceDraftPatchRequest.body.ready_count,
-          readiness_status: monthlyInvoiceDraftPatchRequest.body.readiness_status,
-          total_count: monthlyInvoiceDraftPatchRequest.body.total_count,
+          billing_month: monthlyInvoiceDraftPostRequest.body.billing_month,
+          blocked_count: monthlyInvoiceDraftPostRequest.body.blocked_count,
+          customer_account: monthlyInvoiceDraftPostRequest.body.customer_account,
+          customer_id: monthlyInvoiceDraftPostRequest.body.customer_id,
+          draft_status: monthlyInvoiceDraftPostRequest.body.draft_status,
+          linked_trip_references: monthlyInvoiceDraftPostRequest.body.linked_trips.map(
+            (trip) => trip.booking_reference,
+          ),
+          ready_count: monthlyInvoiceDraftPostRequest.body.ready_count,
+          readiness_status: monthlyInvoiceDraftPostRequest.body.readiness_status,
+          total_count: monthlyInvoiceDraftPostRequest.body.total_count,
         },
-        hasSessionTokenHeader: Boolean(monthlyInvoiceDraftPatchRequest.headers["x-prestige-admin-session-token"]),
-        method: monthlyInvoiceDraftPatchRequest.method,
-        purpose: monthlyInvoiceDraftPatchRequest.headers["x-prestige-admin-purpose"] || "",
-        search: monthlyInvoiceDraftPatchRequest.search,
+        hasSessionTokenHeader: Boolean(monthlyInvoiceDraftPostRequest.headers["x-prestige-admin-session-token"]),
+        method: monthlyInvoiceDraftPostRequest.method,
+        purpose: monthlyInvoiceDraftPostRequest.headers["x-prestige-admin-purpose"] || "",
+        search: monthlyInvoiceDraftPostRequest.search,
       },
       {
         body: {
           billing_month: "2026-05",
-          blocked_count: 1,
+          blocked_count: 0,
           customer_account: "LOADED SAVED COMPANY",
-          draft_id: "11111111-1111-4111-8111-111111111111",
+          customer_id: null,
           draft_status: "pending_admin_review",
+          linked_trip_references: [
+            "ui-cleanup-load-fixture",
+            "ui-second-ready-load-fixture",
+          ],
           ready_count: 2,
-          readiness_status: "mixed",
-          total_count: 3,
+          readiness_status: "ready",
+          total_count: 2,
         },
         hasSessionTokenHeader: false,
-        method: "PATCH",
+        method: "POST",
         purpose: "admin-booking-persistence",
         search: "",
       },
-      "Expected monthly invoice draft prep refresh to PATCH safe grouped counts through the guarded API path",
+      "Expected monthly invoice draft prep refresh to POST the exact ready-only trip set through the guarded API path",
     );
     assert.deepEqual(
-      Object.keys(monthlyInvoiceDraftPatchRequest.body).sort(),
+      Object.keys(monthlyInvoiceDraftPostRequest.body).sort(),
       [
         "billing_month",
         "blocked_count",
         "customer_account",
-        "draft_id",
+        "customer_id",
         "draft_status",
+        "linked_trips",
         "readiness_status",
         "ready_count",
         "safe_draft_context",
@@ -17578,7 +18715,7 @@ async function runChromeTest() {
         "source_grouping_summary",
         "total_count",
       ],
-      "Expected monthly invoice draft prep refresh to avoid invoice/payment/PDF/payout fields",
+      "Expected monthly invoice draft prep refresh to replace only safe ready trip links and avoid invoice/payment/PDF/payout fields",
     );
     const clickedMonthlyInvoiceDraftItemReviewSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-monthly-invoice-draft-item-review-save-action='true']");
@@ -18103,14 +19240,14 @@ async function runChromeTest() {
       {
         body: {
           billing_month: "2026-05",
-          blocked_count: 1,
+          blocked_count: 0,
           customer_account: "LOADED SAVED COMPANY",
           draft_id: "11111111-1111-4111-8111-111111111111",
           draft_status_snapshot: "pending_admin_review",
           issue_review_status: "issue_review_pending",
           ready_count: 2,
-          readiness_status: "mixed",
-          total_count: 3,
+          readiness_status: "ready",
+          total_count: 2,
         },
         hasSessionTokenHeader: false,
         method: "PATCH",
@@ -18632,7 +19769,7 @@ async function runChromeTest() {
     );
     assert.equal(
       dispatchReleaseReadyForWorkflowSaveState.dispatchReleaseChecklist.context,
-      "Applied snapshot: ui-cleanup-load-fixture",
+      "Applied snapshot: 10839",
     );
     const clickedDispatchReleaseWorkflowSave = await evaluate(`(() => {
       const button = document.querySelector("[data-admin-dispatch-release-mark-ready='true']");
@@ -18659,7 +19796,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
 
-          return feedback.includes("Dispatch release workflow status saved for ui-cleanup-load-fixture")
+          return feedback.includes("Dispatch release workflow status saved for 10839")
             ? {
                 feedback,
                 fetchCalls: window.__prestigeFetchCalls || [],
@@ -18754,7 +19891,7 @@ async function runChromeTest() {
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
 
-          return feedback.includes("Driver acknowledgement workflow status saved for ui-cleanup-load-fixture")
+          return feedback.includes("Driver acknowledgement workflow status saved for 10839")
             ? {
                 feedback,
                 workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
@@ -19296,7 +20433,7 @@ async function runChromeTest() {
             fetchCalls: window.__prestigeFetchCalls || [],
             workflowStatusRequests: window.__prestigeWorkflowStatusRequests || [],
             jobCardPreview: preTextByHeading("Job Card Preview"),
-            driverDispatch: preTextByHeading("Driver Message"),
+            driverDispatch: preTextByHeading("Manual WhatsApp Copy — Optional"),
             pastedMessage: document.querySelector("textarea")?.value || "",
             fields: {
               company: fieldValue("Company / Account"),
@@ -19506,6 +20643,100 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedClearBeforeCrmSave, true, "Expected Clear button before CRM save test");
 
+    await evaluate(`(() => {
+      window.__prestigeAdminEmailAiIntake = [
+        ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture)},
+      ];
+      const previousFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+
+        if (
+          method === "GET" &&
+          String(target).includes("/api/admin-email-ai-intake")
+        ) {
+          return new Response(
+            JSON.stringify({
+              enabled: true,
+              external_send: false,
+              ok: true,
+              records: (window.__prestigeAdminEmailAiIntake || []).filter(
+                (record) => record.processing_status === "queued",
+              ),
+              token_usage: window.__prestigeAdminEmailAiTokenUsage,
+              version: "browser-private-email-ai-before-crm-save-mock",
+              write_action: false,
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+
+        return previousFetch(...args);
+      };
+    })()`);
+    await clickTab("Dashboard", "Operations Dashboard");
+    await evaluate(`(() => {
+      const refreshButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Refresh Dashboard",
+      );
+      refreshButton?.click();
+    })()`);
+    const emailAiBeforeCrmSaveState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const row = document.querySelector(
+            '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+          );
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const emailCount = Number(
+            document.querySelector("[data-dashboard-email-ai-intake-count]")
+              ?.getAttribute("data-dashboard-email-ai-intake-count") || "-1",
+          );
+          const newRequestCount = Number(
+            dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "-1",
+          );
+
+          return row && emailCount === 1 && newRequestCount >= 1
+            ? { emailCount, newRequestCount }
+            : false;
+        })()`),
+      10000,
+      "Email AI row and badge before successful Save + CRM",
+    );
+
+    const openedEmailAiReviewBeforeCrmSave = await evaluate(`(() => {
+      const row = document.querySelector(
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+      );
+      const reviewButton = [...(row?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Review in Dispatch",
+      );
+
+      if (!reviewButton || reviewButton.disabled) {
+        return false;
+      }
+
+      reviewButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      openedEmailAiReviewBeforeCrmSave,
+      true,
+      "Expected the exact Email AI request to open before the successful CRM save scenario",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`Boolean(document.querySelector(
+          '[data-app-tab="dispatch"][aria-selected="true"]',
+        ))`),
+      10000,
+      "Email AI review returned to Dispatch before successful CRM save",
+    );
+
     const focusedCrmSaveTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
       if (!textarea) {
@@ -19551,6 +20782,62 @@ async function runChromeTest() {
       },
       10000,
       "parsed booking UI state before CRM save",
+    );
+
+    const selectedDspForOptionalScheduledEnd = await evaluate(`(() => {
+      const serviceType = document.querySelector("[data-admin-booking-field='bookingType']");
+
+      if (!(serviceType instanceof HTMLSelectElement)) {
+        return false;
+      }
+
+      serviceType.value = "DSP";
+      serviceType.dispatchEvent(new Event("change", { bubbles: true }));
+      return serviceType.value === "DSP";
+    })()`);
+    assert.equal(
+      selectedDspForOptionalScheduledEnd,
+      true,
+      "Expected the existing CRM save browser path to select DSP",
+    );
+
+    const optionalDspScheduledEndState = await waitForCondition(
+      () => evaluate(`(() => {
+      const serviceType = document.querySelector("[data-admin-booking-field='bookingType']");
+      const dspEndDate = document.querySelector("[data-admin-dispatch-dsp-end-date='true']");
+      const dspEndTime = document.querySelector("[data-admin-dispatch-dsp-end-time='true']");
+
+      if (
+        !(serviceType instanceof HTMLSelectElement) ||
+        !(dspEndDate instanceof HTMLInputElement) ||
+        !(dspEndTime instanceof HTMLInputElement)
+      ) {
+        return false;
+      }
+
+      for (const control of [dspEndDate, dspEndTime]) {
+        control.value = "";
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      return {
+        dspEndDate: dspEndDate.value,
+        dspEndTime: dspEndTime.value,
+        serviceType: serviceType.value,
+      };
+    })()`),
+      10000,
+      "blank optional DSP scheduled-end controls",
+    );
+    assert.deepEqual(
+      optionalDspScheduledEndState,
+      {
+        dspEndDate: "",
+        dspEndTime: "",
+        serviceType: "DSP",
+      },
+      "Expected the existing CRM save browser path to exercise a DSP booking with both optional scheduled-end fields blank",
     );
 
     await evaluate(`(() => {
@@ -19607,6 +20894,18 @@ async function runChromeTest() {
       window.__prestigeCrmSaveGoogleCalendarSyncRequests = [];
       window.__prestigeCrmSaveCalendarDownloads = [];
       window.__prestigeCrmSaveCalendarBlobTypes = [];
+      window.__prestigeCrmSaveEmailAiRequests = [];
+      window.__prestigeCrmCompanyIdentityRequests = [];
+      window.__prestigeCrmCompanyWriteRequests = [];
+      window.__prestigeCrmProfileConfirmMessages = [];
+      window.__prestigeCrmSaveBookingResponseLossCount = 0;
+      window.__prestigeCrmSaveBookingRecoveryReads = [];
+      window.__prestigeCrmSavePersistedBooking = null;
+      window.__prestigeOriginalConfirm = window.__prestigeOriginalConfirm || window.confirm.bind(window);
+      window.confirm = (message) => {
+        window.__prestigeCrmProfileConfirmMessages.push(String(message));
+        return true;
+      };
       window.URL.createObjectURL = (blob) => {
         window.__prestigeCrmSaveCalendarBlobTypes.push(blob?.type || "");
         return "blob:prestige-crm-save-calendar-test";
@@ -19646,6 +20945,48 @@ async function runChromeTest() {
           } catch {
             window.__prestigeSaveRequestBodies.push({ method, url, body: bodyText });
           }
+        }
+
+        if (url.includes("/api/admin-email-ai-intake")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmSaveEmailAiRequests.push({
+            body: parsedBody,
+            headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
+            method,
+            url,
+          });
+
+          const intakeId = String(parsedBody?.intake_id || "");
+          const intake = (window.__prestigeAdminEmailAiIntake || []).find(
+            (record) => String(record.id) === intakeId,
+          );
+
+          if (
+            method === "PATCH" &&
+            intake &&
+            intake.processing_status === "queued" &&
+            parsedBody?.processing_status === "reviewed"
+          ) {
+            intake.processing_status = "reviewed";
+            return jsonResponse({
+              external_send: false,
+              intake_id: intakeId,
+              ok: true,
+              processing_status: "reviewed",
+              version: "browser-private-email-ai-intake-review-mock",
+              write_action: true,
+            });
+          }
+
+          return jsonResponse(
+            { error: "Email AI intake review mock rejected the request.", ok: false },
+            409,
+          );
         }
 
         if (url.includes("/api/admin-booking-calendar-google-sync")) {
@@ -19767,6 +21108,49 @@ async function runChromeTest() {
           });
         }
 
+        if (url.includes("/api/admin-companies-crm-identity")) {
+          window.__prestigeCrmCompanyIdentityRequests.push({ method, url });
+
+          if (method === "GET") {
+            return jsonResponse({
+              company: null,
+              ok: true,
+              version: "browser-admin-companies-crm-identity-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Company identity mock is read-only." }, 405);
+        }
+
+        if (url.includes("/api/admin-company-traveler-crm-runtime-write-action")) {
+          let parsedBody = null;
+
+          try {
+            parsedBody = bodyText ? JSON.parse(bodyText) : null;
+          } catch {}
+
+          window.__prestigeCrmCompanyWriteRequests.push({ body: parsedBody, method, url });
+
+          if (method === "POST" && parsedBody?.action_type === "company_create") {
+            return jsonResponse({
+              no_op: false,
+              ok: true,
+              reason: "saved",
+              record: {
+                company_name: parsedBody.company_name,
+                id: companyRecord.id,
+                mobile_phone: parsedBody.mobile_phone || null,
+                operations_email: parsedBody.operations_email || null,
+                primary_contact_name: parsedBody.primary_contact_name || null,
+              },
+              status: "saved",
+              version: "browser-company-profile-save-mock",
+            });
+          }
+
+          return jsonResponse({ ok: false, error: "Company profile save mock rejected the request." }, 400);
+        }
+
         if (url.includes("/api/admin-bookings")) {
           let parsedBody = null;
 
@@ -19775,16 +21159,39 @@ async function runChromeTest() {
           } catch {}
 
           if (method === "POST") {
-            return jsonResponse({
-              booking: {
-                ...parsedBody?.booking,
-                booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
-                route_points: parsedBody?.route_points || [],
-                service_items: parsedBody?.service_items || [],
-              },
-              ok: true,
-              version: "browser-admin-bookings-safe-create-mock",
+            window.__prestigeCrmSavePersistedBooking = {
+              ...parsedBody?.booking,
+              booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
+              route_points: parsedBody?.route_points || [],
+              service_items: parsedBody?.service_items || [],
+            };
+            window.__prestigeCrmSaveBookingResponseLossCount += 1;
+            throw new TypeError("Failed to fetch");
+          }
+
+          if (method === "GET") {
+            const recoveryUrl = new URL(url, window.location.href);
+            const bookingReference = recoveryUrl.searchParams.get("booking_reference") || "";
+
+            window.__prestigeCrmSaveBookingRecoveryReads.push({
+              bookingReference,
+              headers: Object.fromEntries(new Headers(args[1]?.headers || {}).entries()),
+              method,
+              url,
             });
+
+            if (
+              bookingReference &&
+              bookingReference === window.__prestigeCrmSavePersistedBooking?.booking_reference
+            ) {
+              return jsonResponse({
+                booking: window.__prestigeCrmSavePersistedBooking,
+                ok: true,
+                version: "browser-admin-bookings-response-loss-recovery-mock",
+              });
+            }
+
+            return jsonResponse({ error: "Recovery booking not found.", ok: false }, 404);
           }
         }
 
@@ -19947,8 +21354,14 @@ async function runChromeTest() {
                 calendarBlobTypes: window.__prestigeCrmSaveCalendarBlobTypes || [],
                 calendarRequests: window.__prestigeCrmSaveCalendarRequests || [],
                 calendarSyncStatusRequests: window.__prestigeCrmSaveCalendarSyncStatusRequests || [],
+                companyIdentityRequests: window.__prestigeCrmCompanyIdentityRequests || [],
+                companyProfileConfirmMessages: window.__prestigeCrmProfileConfirmMessages || [],
+                companyWriteRequests: window.__prestigeCrmCompanyWriteRequests || [],
+                emailAiRequests: window.__prestigeCrmSaveEmailAiRequests || [],
                 googleCalendarSyncRequests,
                 fetchCalls: window.__prestigeFetchCalls || [],
+                bookingRecoveryReads: window.__prestigeCrmSaveBookingRecoveryReads || [],
+                bookingResponseLossCount: window.__prestigeCrmSaveBookingResponseLossCount || 0,
                 requestBodies: window.__prestigeSaveRequestBodies || [],
                 savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
                 unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -19969,10 +21382,66 @@ async function runChromeTest() {
       `Expected all Supabase calls to be mocked, got ${crmSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
     assert.equal(
+      crmSaveState.bookingResponseLossCount,
+      1,
+      "Expected the browser fixture to reproduce one lost successful booking POST response",
+    );
+    const exactBookingResponseLossRecoveryReads = crmSaveState.bookingRecoveryReads.filter(
+      (request) =>
+        request.bookingReference === crmSaveState.bookingInsert?.booking?.booking_reference,
+    );
+    assert.equal(
+      exactBookingResponseLossRecoveryReads.length,
+      1,
+      "Expected Save + CRM to reconcile the exact submitted booking after the response was lost",
+    );
+    assert.equal(exactBookingResponseLossRecoveryReads[0]?.method, "GET");
+    assert.equal(
+      exactBookingResponseLossRecoveryReads[0]?.bookingReference,
+      crmSaveState.bookingInsert?.booking?.booking_reference,
+    );
+    assert.equal(
+      exactBookingResponseLossRecoveryReads[0]?.headers?.["x-prestige-admin-purpose"],
+      "admin-booking-persistence",
+    );
+    assert.equal(
+      crmSaveState.fetchCalls.filter(
+        (call) => call === "POST /api/admin-bookings",
+      ).length,
+      1,
+      "Expected response-loss recovery not to retry the booking POST or create a duplicate",
+    );
+    assert.doesNotMatch(crmSaveState.bodyText, /Booking save failed: Failed to fetch/i);
+    assert.equal(
       crmSaveState.savedBookingReadRequests.every(({ method }) => method === "GET"),
       true,
       "Expected safe Save Booking + CRM to use only guarded saved-bookings GET reloads",
     );
+    assert.equal(crmSaveState.companyIdentityRequests.length, 1);
+    assert.equal(crmSaveState.companyIdentityRequests[0]?.method, "GET");
+    assert.match(
+      crmSaveState.companyIdentityRequests[0]?.url || "",
+      /\/api\/admin-companies-crm-identity\?company_name=BROWSER\+UI\+TEST\+COMPANY\+%5BBROWSER\+UI\+TEST\+TRAVELER%5D/,
+      "Expected Save + CRM to exact-read the confirmed customer company profile before writing",
+    );
+    assert.deepEqual(
+      crmSaveState.companyWriteRequests.map(({ body, method }) => ({ body, method })),
+      [
+        {
+          body: {
+            action_type: "company_create",
+            company_name: "BROWSER UI TEST COMPANY [BROWSER UI TEST TRAVELER]",
+            mobile_phone: "+65 9000 0333",
+            operations_email: "browserui@example.com",
+            primary_contact_name: "BROWSER UI TEST BOOKER",
+          },
+          method: "POST",
+        },
+      ],
+      "Expected Save + CRM to write only the approved company name and Booker contact fields",
+    );
+    assert.equal(crmSaveState.companyProfileConfirmMessages.length, 1);
+    assert.match(crmSaveState.companyProfileConfirmMessages[0], /Create and link the new CRM company profile/);
     assert.deepEqual(
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
@@ -20016,6 +21485,24 @@ async function runChromeTest() {
       "Expected Save Booking + CRM not to download a calendar file",
     );
     assert.deepEqual(crmSaveState.calendarBlobTypes, []);
+    assert.deepEqual(
+      crmSaveState.emailAiRequests.map((request) => ({
+        body: request.body,
+        method: request.method,
+        purpose: request.headers?.["x-prestige-admin-purpose"] || "",
+      })),
+      [
+        {
+          body: {
+            intake_id: "00000000-0000-4000-8000-000000000101",
+            processing_status: "reviewed",
+          },
+          method: "PATCH",
+          purpose: "admin-email-ai-intake",
+        },
+      ],
+      "Expected successful Save + CRM to close the exact Email AI intake",
+    );
     assert.equal(
       crmSaveState.googleCalendarSyncRequests.length,
       1,
@@ -20033,7 +21520,7 @@ async function runChromeTest() {
       crmSaveGoogleCalendarBooking?.booking_reference,
       crmSaveState.bookingInsert?.booking?.booking_reference,
     );
-    assert.equal(crmSaveGoogleCalendarBooking?.booking_type, "MNG");
+    assert.equal(crmSaveGoogleCalendarBooking?.booking_type, "DSP");
     assert.equal(crmSaveGoogleCalendarBooking?.pickup_address, "Changi Airport T3");
     assert.equal(crmSaveGoogleCalendarBooking?.dropoff_address, "Raffles Hotel Singapore");
     assert.equal(
@@ -20053,8 +21540,18 @@ async function runChromeTest() {
     );
     assertNoForbiddenAdminBookingRequestFields(crmSaveState.bookingInsert, "safe Save Booking + CRM request");
     assert.equal(crmSaveState.bookingInsert?.booking?.source_channel, "admin-dashboard");
-    assert.equal(crmSaveState.bookingInsert?.booking?.route_type, "MNG");
-    assert.equal(crmSaveState.bookingInsert?.booking?.service_type, "MNG");
+    assert.equal(crmSaveState.bookingInsert?.booking?.route_type, "DSP");
+    assert.equal(crmSaveState.bookingInsert?.booking?.service_type, "DSP");
+    assert.equal(
+      crmSaveState.bookingInsert?.booking?.dropoff_datetime,
+      null,
+      "Expected Save + CRM to preserve a blank DSP scheduled end as null",
+    );
+    assert.doesNotMatch(
+      crmSaveState.bodyText,
+      /needs DSP end date|needs DSP end time/,
+      "Expected blank optional DSP scheduled-end fields not to block Save + CRM",
+    );
     assert.equal(
       crmSaveState.bookingInsert?.booking?.route_summary,
       "Changi Airport T3 > Marina Bay Sands > Raffles Hotel Singapore",
@@ -20066,6 +21563,11 @@ async function runChromeTest() {
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_display_name, "BROWSER UI TEST BOOKER");
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_phone, "+65 9000 0333");
     assert.equal(crmSaveState.bookingInsert?.booking?.contact_email, "browserui@example.com");
+    assert.equal(crmSaveState.bookingInsert?.booking?.company_id, 601);
+    assert.equal(
+      crmSaveState.bookingInsert?.booking?.customer_display_name,
+      "BROWSER UI TEST COMPANY [BROWSER UI TEST TRAVELER]",
+    );
     assert.equal(crmSaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
     assert.equal(crmSaveState.bookingInsert?.booking?.flight_no, "SQ333");
     assert.equal(crmSaveState.bookingInsert?.booking?.driver_name, "TEST DRIVER CRM 20260516");
@@ -20111,6 +21613,45 @@ async function runChromeTest() {
       "Expected duplicate manual Calendar / ICS controls to be removed after Save + CRM; Google auto-sync is the only calendar write lane",
     );
 
+    await clickTab("Dashboard", "Operations Dashboard");
+    const emailAiAfterCrmSaveState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const dashboardBadge = dashboardTab?.querySelector(
+            '[data-bookings-new-request-badge="true"]',
+          );
+          const emailCount = Number(
+            document.querySelector("[data-dashboard-email-ai-intake-count]")
+              ?.getAttribute("data-dashboard-email-ai-intake-count") || "-1",
+          );
+          const newRequestCount = Number(
+            dashboardTab?.getAttribute("data-dashboard-tab-new-booking-requests") || "-1",
+          );
+          const rowCount = document.querySelectorAll(
+            '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
+          ).length;
+
+          return emailCount === 0 && rowCount === 0
+            ? {
+                badgeText: dashboardBadge?.textContent.trim() || "",
+                emailCount,
+                newRequestCount,
+                rowCount,
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI row and badge after successful Save + CRM",
+    );
+    assert.equal(emailAiAfterCrmSaveState.emailCount, 0);
+    assert.equal(emailAiAfterCrmSaveState.rowCount, 0);
+    assert.equal(
+      emailAiAfterCrmSaveState.newRequestCount,
+      emailAiBeforeCrmSaveState.newRequestCount - 1,
+      "Expected Email AI badge to update after successful Save + CRM",
+    );
+
     await clickTab("Bookings", "Find saved jobs");
     const safeSaveRecentBookingState = await waitForCondition(
       () =>
@@ -20136,6 +21677,7 @@ async function runChromeTest() {
       "Expected safe Save Booking + CRM not to create a legacy Recent Bookings row",
     );
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
+    await evaluate(`window.confirm = window.__prestigeOriginalConfirm || window.confirm`);
     await clickTab("Dispatch", "Dispatcher Intake");
 
     const focusedMultiBookingTextarea = await evaluate(`(() => {
@@ -20247,6 +21789,113 @@ async function runChromeTest() {
     assert.equal(selectedPreviewState.fields.name, "Mr Deep");
     assert.doesNotMatch(selectedPreviewState.fieldText, /Mr Stanley|Ms Chloe|SQ221|Capella/);
     assert.doesNotMatch(selectedPreviewState.visibleText, /extractedBookingsPreview\.length|Please review warnings before saving\./);
+
+    const parseExplicitSinTransferPreview = async (
+      previewIndex,
+      expectedFlight,
+      expectedBookingType,
+      expectedDate,
+      expectedTime,
+      expectedPickup,
+      expectedDropoff,
+    ) => {
+      await setBookingMessageValue(explicitSinArrivalDepartureSample, "explicit SIN arrival/departure message");
+
+      const clickedParse = await evaluate(`(() => {
+        const parseButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Create Job Card",
+        );
+
+        if (!parseButton || parseButton.disabled) {
+          return false;
+        }
+
+        parseButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedParse, true, "Expected Create Job Card for explicit SIN transfer message");
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const bodyText = document.body.innerText;
+            const previewButtons = [...document.querySelectorAll("button")].filter(
+              (button) => button.textContent.trim() === "Use this booking",
+            );
+
+            return bodyText.includes("Multiple bookings detected. Please select one extracted booking.") &&
+              bodyText.includes("extractedBookingsPreview.length: 2") &&
+              bodyText.includes("SQ317") &&
+              bodyText.includes("SQ928") &&
+              previewButtons.length === 2;
+          })()`),
+        10000,
+        "explicit SIN two-booking preview choices",
+      );
+
+      const clickedPreview = await evaluate(`(() => {
+        const previewButtons = [...document.querySelectorAll("button")].filter(
+          (button) => button.textContent.trim() === "Use this booking",
+        );
+        const previewButton = previewButtons[${previewIndex}];
+
+        if (!previewButton || previewButton.disabled) {
+          return false;
+        }
+
+        previewButton.click();
+        return true;
+      })()`);
+      assert.equal(clickedPreview, true, `Expected explicit SIN preview ${previewIndex + 1} to be selectable`);
+
+      return waitForCondition(
+        async () => {
+          const candidateState = await evaluate(extractStateScript);
+
+          if (
+            candidateState?.fields?.flight === expectedFlight &&
+            candidateState?.fields?.bookingType === expectedBookingType &&
+            candidateState?.fields?.pickupDate === expectedDate &&
+            candidateState?.fields?.pickupTime === expectedTime &&
+            candidateState?.fields?.pickup === expectedPickup &&
+            candidateState?.fields?.dropoff === expectedDropoff &&
+            candidateState?.fields?.name === "Mr David Kelly" &&
+            candidateState?.fields?.pax === "5" &&
+            candidateState?.fields?.vehicle === "AVF"
+          ) {
+            return candidateState;
+          }
+
+          return false;
+        },
+        10000,
+        `selected explicit SIN preview ${previewIndex + 1} UI state`,
+      );
+    };
+
+    const selectedExplicitSinArrivalState = await parseExplicitSinTransferPreview(
+      0,
+      "SQ317",
+      "MNG",
+      "2026-08-01",
+      "0730hrs",
+      "Changi Airport",
+      "Harbour Front Ferry - Sindo Ferry",
+    );
+    assert.equal(selectedExplicitSinArrivalState.fields.childSeatCount, "");
+    assert.doesNotMatch(selectedExplicitSinArrivalState.fieldText, /2026-06-23|Screenshot/);
+
+    const selectedExplicitSinDepartureState = await parseExplicitSinTransferPreview(
+      1,
+      "SQ928",
+      "DEP",
+      "2026-08-05",
+      "1310hrs",
+      "Harbour Front Ferry - Sindo Ferry",
+      "Changi Airport",
+    );
+    assert.equal(selectedExplicitSinDepartureState.fields.childSeatCount, "");
+    assert.doesNotMatch(selectedExplicitSinDepartureState.fieldText, /2026-06-23|Screenshot|1655hrs/);
 
     const parseWarburgPreview = async (previewIndex, expectedFlight) => {
       const focusedTextarea = await evaluate(`(() => {
@@ -21672,6 +23321,7 @@ async function runChromeTest() {
         if (
           candidateState?.fields?.bookingType === "DSP" &&
           candidateState?.fields?.pickup === "Grand Hyatt" &&
+          candidateState?.fields?.dropoff === "Ritz-Carlton" &&
           candidateState?.fields?.extraStopCount === "5"
         ) {
           return candidateState;

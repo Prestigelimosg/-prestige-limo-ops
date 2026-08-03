@@ -9,6 +9,8 @@ const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const disabledDriverJobLinkError =
   "Admin driver job link persistence is not enabled on this server.";
+const staleBookingAmendmentError =
+  "Save the booking amendment before creating a Driver Job Link.";
 const serverSessionToken = "mock-admin-driver-job-link-session-token";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_DRIVER_JOB_LINK_SENTINEL";
 const supabaseUrlSentinel = "https://driver-job-link-contract.supabase.co";
@@ -22,6 +24,7 @@ const sourceFiles = [
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
+  "lib/driver-device-push-notification.ts",
   "lib/driver-job-link.ts",
   "lib/driver-job-status-workflow.ts",
   "app/api/admin-driver-job-links/route.ts",
@@ -90,9 +93,11 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(webPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -107,6 +112,10 @@ async function writeMockModules(tempDir) {
       "}",
       "module.exports = { createClient };",
     ].join("\n"),
+  );
+  await writeFile(
+    webPushPath,
+    "module.exports = { sendNotification: async () => undefined, setVapidDetails: () => undefined };",
   );
 }
 
@@ -244,7 +253,57 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookings: [
+        {
+          booking_reference: "JOB-LINK-CONTRACT-001",
+          driver_contact: "+65 8777 0000",
+          driver_id: 27,
+          driver_name: "Contract Driver",
+          driver_plate_number: "SLA1234A",
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+        {
+          booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
+          driver_id: null,
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+        {
+          booking_reference: "JOB-LINK-CONTRACT-BROWSER-DASHBOARD",
+          driver_id: 28,
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+        {
+          booking_reference: "May 2026 / JOB-UBS-042",
+          driver_id: 29,
+          dropoff_location: "Changi Airport Terminal 3",
+          flight_no: "SQ321",
+          passenger_name: "Guest Tan",
+          pickup_at: "2026-06-12T10:30:00+08:00",
+          pickup_location: "Raffles Hotel Singapore",
+          route_summary: "Raffles Hotel Singapore > Changi Airport Terminal 3",
+          service_type: "DEP",
+        },
+      ],
       driver_live_location_runtime_settings: [],
+      driver_device_push_subscriptions: [],
       driver_job_links: [],
     };
 
@@ -474,7 +533,7 @@ function safeCreatePayload(overrides = {}) {
       route: "Raffles Hotel Singapore > Changi Airport Terminal 3",
       status: "assigned",
     },
-    ttl_hours: 24,
+    ttl_hours: 96,
     ...overrides,
   };
 }
@@ -591,6 +650,39 @@ try {
   const parsed = harness.persistence.parseAdminDriverJobLinkCreatePayload(safeCreatePayload());
 
   assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.ttl_hours, 96);
+  assert.equal(
+    harness.persistence.parseAdminDriverJobLinkCreatePayload(
+      safeCreatePayload({ ttl_hours: 97 }),
+    ).ok,
+    false,
+    "Admin link creation must reject a private-link lifetime beyond 96 hours.",
+  );
+
+  const staleDspAmendment = await readResponse(
+    await harness.route.POST(
+      requestWithJson(
+        "POST",
+        "http://localhost/api/admin-driver-job-links",
+        safeCreatePayload({
+          driver_job_payload: {
+            ...safeCreatePayload().driver_job_payload,
+            booking_type: "DSP",
+            pickup_datetime: "2026-06-12T16:00:00.000+08:00",
+            pickup_location: "8 Cross Street Singapore",
+            route: "8 Cross Street Singapore > Changi Airport Terminal 3",
+          },
+        }),
+      ),
+    ),
+  );
+
+  assert.equal(staleDspAmendment.status, 409);
+  assert.equal(staleDspAmendment.body.ok, false);
+  assert.equal(staleDspAmendment.body.error, staleBookingAmendmentError);
+  assert.equal(client.tables.driver_job_links.length, 0);
+  assert.equal(client.tables.driver_live_location_runtime_settings.length, 0);
+  assertNoApiLeak(staleDspAmendment, "stale DEP to DSP amendment rejection");
 
   const created = await readResponse(
     await harness.route.POST(
@@ -605,6 +697,7 @@ try {
   assert.equal(created.body.link.booking_reference, "JOB-LINK-CONTRACT-001");
   assert.equal(created.body.link.link_status, "active");
   assert.equal(created.body.link.safe_summary.assigned_driver, "Contract Driver");
+  assert.equal(created.body.link.safe_summary.job_card_kind, "new");
   assert.equal(created.body.link.safe_summary.vehicle, "Toyota Alphard");
   assert.equal(created.body.live_location.authorized, true);
   assert.equal(created.body.live_location.customerVisible, false);
@@ -617,12 +710,17 @@ try {
   assertNoUnsafeDriverJobLinkLeak(created.body.link, "create link payload");
   assert.doesNotMatch(JSON.stringify(created.body), /token_hash|raw_token|driver_job_token/i);
 
-  assert.equal(createdClients.length, 2);
+  assert.equal(createdClients.length, 3);
   assert.equal(createdClients[0].url, supabaseUrlSentinel);
   assert.equal(createdClients[0].serviceRoleKey, serviceRoleSentinel);
   assert.equal(createdClients[1].url, supabaseUrlSentinel);
   assert.equal(createdClients[1].serviceRoleKey, serviceRoleSentinel);
   assert.equal(client.tables.driver_job_links.length, 1);
+  assert.equal(
+    client.tables.driver_job_links[0].driver_id,
+    27,
+    "Driver Job link must bind the exact saved booking's verified driver ID server-side.",
+  );
   assert.equal(client.tables.driver_live_location_runtime_settings.length, 1);
   assert.equal(
     client.tables.driver_live_location_runtime_settings[0].setting_name,
@@ -646,7 +744,39 @@ try {
   assert.match(client.tables.driver_job_links[0].token_hash, /^[a-f0-9]{64}$/);
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.assigned_driver_name, "Contract Driver");
   assert.equal(client.tables.driver_job_links[0].safe_link_context.driver_job_payload.pickup_location, "Raffles Hotel Singapore");
+  assert.equal(client.tables.driver_job_links[0].safe_link_context.job_card_kind, "new");
+  assert.match(client.tables.driver_job_links[0].safe_link_context.job_card_revision, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(JSON.stringify(client.tables.driver_job_links[0].safe_link_context), /paynow|payout|invoice|payment|pdf|token/i);
+
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(null, safeCreatePayload().driver_job_payload),
+    "new",
+  );
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(
+      { driver_job_payload: safeCreatePayload().driver_job_payload },
+      safeCreatePayload().driver_job_payload,
+    ),
+    "reissued",
+  );
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(
+      { driver_job_payload: safeCreatePayload().driver_job_payload },
+      {
+        ...safeCreatePayload().driver_job_payload,
+        pickup_datetime: "2026-06-12T11:00:00.000+08:00",
+      },
+    ),
+    "amendment",
+  );
+  assert.equal(
+    harness.persistence.classifyAdminDriverJobCardKind(
+      { driver_job_payload: { pickup_location: "Incomplete historic snapshot" } },
+      safeCreatePayload().driver_job_payload,
+    ),
+    null,
+    "Historic unsafe/incomplete snapshots must not be guessed as New or Amendment.",
+  );
 
   const optionalDriverDetailsPayload = safeCreatePayload({
     booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
@@ -771,9 +901,36 @@ try {
   assert.equal(listed.body.ok, true);
   assert.equal(listed.body.links.length, 1);
   assert.equal(listed.body.links[0].booking_reference, "JOB-LINK-CONTRACT-001");
+  assert.equal(listed.body.links[0].safe_summary.acknowledged, false);
+  assert.equal(listed.body.links[0].safe_summary.acknowledged_at, null);
   assertNoApiLeak(listed, "listed response");
   assertNoUnsafeDriverJobLinkLeak(listed, "listed response");
   assert.doesNotMatch(JSON.stringify(listed.body), /driver_job_url/i);
+
+  client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at =
+    "2026-07-16T12:45:00.000Z";
+  const acknowledgedListed = await readResponse(
+    await harness.route.GET(
+      new Request("http://localhost/api/admin-driver-job-links?booking_reference=JOB-LINK-CONTRACT-001&link_status=active&limit=10&page=1", {
+        headers: adminHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(acknowledgedListed.status, 200);
+  assert.equal(acknowledgedListed.body.ok, true);
+  assert.equal(acknowledgedListed.body.links.length, 1);
+  assert.equal(acknowledgedListed.body.links[0].booking_reference, "JOB-LINK-CONTRACT-001");
+  assert.equal(acknowledgedListed.body.links[0].safe_summary.acknowledged, true);
+  assert.equal(
+    acknowledgedListed.body.links[0].safe_summary.acknowledged_at,
+    "2026-07-16T12:45:00.000Z",
+  );
+  assertNoApiLeak(acknowledgedListed, "acknowledged listed response");
+  assertNoUnsafeDriverJobLinkLeak(
+    acknowledgedListed,
+    "acknowledged listed response",
+  );
 
   client.tables.driver_job_links.push({
     actor_label: "Dashboard test admin",

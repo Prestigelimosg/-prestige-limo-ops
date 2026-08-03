@@ -21,33 +21,54 @@
     "test:driver-job-link-mode": "node --experimental-strip-types scripts/test-driver-job-link-mode.mjs",
     "test:driver-job-link-production-guard": "node --experimental-strip-types scripts/test-driver-job-link-production-guard.mjs",
     "test:driver-job-link-production-adapter": "node --experimental-strip-types scripts/test-driver-job-link-production-adapter.mjs",
+    "test:driver-portal": "node scripts/test-driver-portal-session-jobs-guard.mjs",
     "test:driver-job-page-browser": "node --experimental-strip-types scripts/test-driver-job-page-browser.mjs",
     "test:driver-job-page-production-disabled-browser": "node --experimental-strip-types scripts/test-driver-job-page-production-disabled-browser.mjs",
     "test:mobile-usability-browser": "node --experimental-strip-types scripts/test-mobile-usability-browser.mjs",
     "test:ai-parser-schema": "node --experimental-strip-types scripts/test-ai-parser-schema.mjs",
     "test:ai-parse-api-route": "node scripts/test-ai-parse-api-route.mjs",
+    "test:admin-ai-assistant": "node scripts/test-admin-ai-assistant-guard.mjs",
+    "test:admin-email-ai-intake": "node --experimental-strip-types scripts/test-admin-email-ai-intake-guard.mjs && node scripts/test-admin-email-ai-intake-runtime.mjs",
     "test:browser": "node scripts/test-booking-browser.mjs",
     "test:app-smoke-browser": "node scripts/test-app-smoke-browser.mjs",
     "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",
+    "test:pending-driver-ack-queue-browser": "node scripts/test-pending-driver-ack-queue-browser.mjs",
     "test:rates-browser": "node scripts/test-rates-browser.mjs",
-    "test:safe": "npm run test:parser && npm run test:pricing && npm run test:driver-job-link && npm run test:driver-job-link-contract && npm run test:driver-job-link-api-routes && npm run test:driver-job-link-mode && npm run test:driver-job-link-production-guard && npm run test:driver-job-link-production-adapter && npm run test:ai-parser-schema && npm run test:ai-parse-api-route && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:driver-job-page-browser && npm run test:driver-job-page-production-disabled-browser && npm run test:mobile-usability-browser && npm run test:app-smoke-browser"
+    "test:safe": "npm run test:parser && npm run test:pricing && npm run test:driver-job-link && npm run test:driver-job-link-contract && npm run test:driver-job-link-api-routes && npm run test:driver-job-link-mode && npm run test:driver-job-link-production-guard && npm run test:driver-job-link-production-adapter && npm run test:ai-parser-schema && npm run test:ai-parse-api-route && npm run test:admin-ai-assistant && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:driver-job-page-browser && npm run test:driver-job-page-production-disabled-browser && npm run test:mobile-usability-browser && npm run test:app-smoke-browser"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
     "@types/web-push": "^3.6.4",
-    "next": "16.2.6",
+    "imapflow": "1.5.0",
+    "mailparser": "3.9.14",
+    "next": "16.2.11",
+    "openai": "^6.48.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "3.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "brace-expansion": "file:vendor/brace-expansion-minimatch3-compat",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "minimatch@3.1.5": {
+      "brace-expansion": "$brace-expansion"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.8"
+    },
+    "next": {
+      "postcss": "8.5.22",
+      "sharp": "0.35.3"
+    }
   }
 }

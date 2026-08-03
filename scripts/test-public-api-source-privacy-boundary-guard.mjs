@@ -19,6 +19,7 @@ const publicApiRoutePaths = [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",
   "app/api/driver-job/[token]/flight-eta-acknowledgement-setup/route.ts",
   "app/api/driver-job-bids/route.ts",
+  "app/api/driver-portal/jobs/route.ts",
 ];
 
 const helperDenyListChecks = [

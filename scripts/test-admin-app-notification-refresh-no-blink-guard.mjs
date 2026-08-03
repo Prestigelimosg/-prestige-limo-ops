@@ -44,6 +44,11 @@ const intervalEffect = sectionBetween(
   'if (activeTab !== "dashboard" || adminAppNotificationReadState.status === "unavailable") {',
   "  useEffect(() => {\n    let cancelled = false;",
 );
+const monthlyBillingClassificationEffect = sectionBetween(
+  dashboardSource,
+  "const billingMonth = adminAppNotificationReadState.notifications",
+  "  }, [activeTab, adminAppNotificationReadState.notifications]);",
+);
 
 for (const fragment of [
   'if (current.status === "loaded") {',
@@ -59,6 +64,25 @@ assertBefore(
   'if (current.status === "loaded") {',
   "Loading saved admin app notifications through the guarded API...",
   "loaded notification feed stays visually stable before background refresh",
+);
+
+for (const fragment of [
+  'if (current.billingMonth === billingMonth && current.status === "loaded") {',
+  "return current;",
+  "Loading completed-job billing classifications...",
+]) {
+  assertIncludes(
+    monthlyBillingClassificationEffect,
+    fragment,
+    `monthly billing classification no-blink fragment ${fragment}`,
+  );
+}
+
+assertBefore(
+  monthlyBillingClassificationEffect,
+  'if (current.billingMonth === billingMonth && current.status === "loaded") {',
+  "Loading completed-job billing classifications...",
+  "loaded monthly billing classifications stay visible during background refresh",
 );
 
 for (const fragment of [
@@ -94,20 +118,43 @@ const activeMobileViewportPath = sectionBetween(
   'await clickTab("Dashboard");',
   "      return;",
 );
+const mobileTerminalPollingScenario = sectionBetween(
+  mobileBrowserSource,
+  "const checkAdminAppNotificationTerminalPolling = async (viewport) => {",
+  "const checkAdminAutomationRuntimeToggle = async (viewport) => {",
+);
 
 for (const fragment of ["await checkAdminAppNotificationTerminalPolling(viewport);"]) {
   assertIncludes(activeMobileViewportPath, fragment, `active mobile notification runtime fragment ${fragment}`);
 }
 
 for (const fragment of [
+  "initial ready admin app notification state",
+  'state !== "1 other"',
+  'title !== "Mobile billing draft prep saved"',
+  'message !== "Mobile monthly billing draft prep was saved from grouped completed trip data."',
   'window.__mobileAdminAppNotificationMode = "unavailable";',
   "await new Promise((resolve) => setTimeout(resolve, 11000));",
   "expected terminal notification configuration failure to stop 10-second polling",
   'window.__mobileAdminAppNotificationMode = "ready";',
   "expected manual notification retry to remain available",
+  "expected routine successful notification reads to stay hidden after recovery",
+  "expected recovered admin app notification row",
 ]) {
-  assertIncludes(mobileBrowserSource, fragment, `mobile terminal notification runtime fragment ${fragment}`);
+  assertIncludes(
+    mobileTerminalPollingScenario,
+    fragment,
+    `mobile terminal notification runtime fragment ${fragment}`,
+  );
 }
+
+assert.equal(
+  mobileTerminalPollingScenario.includes(
+    '.textContent.includes("Loaded 1 saved admin app notification")',
+  ),
+  false,
+  "active mobile terminal notification recovery must not require intentionally hidden routine success text",
+);
 
 assertIncludes(preactivationSuite, guardScript, "preactivation admin notification no-blink guard registration");
 

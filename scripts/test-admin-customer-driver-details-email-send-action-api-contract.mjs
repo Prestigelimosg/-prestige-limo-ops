@@ -9,6 +9,7 @@ const routePath = "app/api/admin-customer-driver-details-email-send-action/route
 const helperPath = "lib/admin-customer-driver-details-email-send-action.ts";
 const boundaryPath = "lib/admin-dispatcher-auth-boundary.ts";
 const adapterStubPath = "lib/admin-booking-supabase-adapter.ts";
+const savedBookingReadStubPath = "lib/admin-saved-booking-read.ts";
 const globalGuardPath = "scripts/test-global-preactivation-no-live-guard.mjs";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const ledgerPath = "docs/current-implementation-ledger.md";
@@ -16,7 +17,7 @@ const routePathFragment = "/api/admin-customer-driver-details-email-send-action"
 const guardScript = "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs";
 const gateEnvName = "PRESTIGE_DRIVER_DETAILS_EMAIL_SEND_ENABLED";
 const providerName = "resend";
-const selectedFrom = "Prestige Limo Dispatch <info@prestigelimo.sg>";
+const selectedFrom = "Prestige Limo SG <info@prestigelimo.sg>";
 const selectedReplyTo = "info@prestigelimo.sg";
 
 const originalEnv = {
@@ -118,6 +119,7 @@ function validPayload(overrides = {}) {
   return {
     customer_booking_details: {
       booking_reference: "PLO-EMAIL-001",
+      customer_visible_booking_reference: "ABC-00123",
       customer_passenger_traveler_name: "Ms Lim Traveler",
       customer_facing_flight_number: "SQ318",
       drop_off_location: "Changi Airport Terminal 3",
@@ -228,9 +230,14 @@ async function loadHarness() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-resend-driver-details-"));
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const adapterPath = path.join(tempDir, adapterStubPath.replace(/\.ts$/, ".js"));
+  const savedBookingReadPath = path.join(
+    tempDir,
+    savedBookingReadStubPath.replace(/\.ts$/, ".js"),
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(adapterPath), { recursive: true });
+  await mkdir(path.dirname(savedBookingReadPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     adapterPath,
@@ -246,6 +253,36 @@ async function loadHarness() {
       "module.exports = { adminDispatcherBoundaryToPersistenceAdapterActor };",
     ].join("\n"),
   );
+  await writeFile(
+    savedBookingReadPath,
+    [
+      "let readCalls = [];",
+      "let nextResult = {",
+      "  data: {",
+      "    booking: {",
+      "      booking_reference: 'PLO-EMAIL-001',",
+      "      bookers: null,",
+      "      contact_email: 'allowlisted@example.com',",
+      "    },",
+      "    version: 'admin-saved-booking-read-v1',",
+      "  },",
+      "  ok: true,",
+      "};",
+      "async function loadAdminSavedBookingById(input, actor) {",
+      "  readCalls.push({ actor, input });",
+      "  return nextResult;",
+      "}",
+      "function __getReadCalls() { return readCalls; }",
+      "function __resetReadCalls() { readCalls = []; }",
+      "function __setNextResult(value) { nextResult = value; }",
+      "module.exports = {",
+      "  __getReadCalls,",
+      "  __resetReadCalls,",
+      "  __setNextResult,",
+      "  loadAdminSavedBookingById,",
+      "};",
+    ].join("\n"),
+  );
 
   for (const relativePath of [boundaryPath, helperPath, routePath]) {
     await writeTranspiled(tempDir, relativePath);
@@ -257,6 +294,7 @@ async function loadHarness() {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
     helper: require(path.join(tempDir, helperPath.replace(/\.ts$/, ".js"))),
     route: require(path.join(tempDir, routePath.replace(/\.ts$/, ".js"))),
+    savedBookingRead: require(savedBookingReadPath),
   };
 }
 
@@ -289,6 +327,11 @@ assertIncludes(routeSource, "adminDispatcherBoundaryToPersistenceAdapterActor", 
 assertIncludes(routeSource, "adminCustomerDriverDetailsEmailClosedGateResult", "Driver Details Email send route");
 assertIncludes(routeSource, "adminCustomerDriverDetailsEmailSendGateOpen", "Driver Details Email send route");
 assertIncludes(routeSource, "executeAdminCustomerDriverDetailsEmailSendAction", "Driver Details Email send route");
+assertIncludes(routeSource, "loadAdminSavedBookingById", "Driver Details Email exact saved-booking read");
+assertIncludes(routeSource, "adminCustomerDriverDetailsEmailRecipientIdentity", "Driver Details Email normalized recipient identity");
+assertIncludes(routeSource, "contact_email", "Driver Details Email saved booking contact email");
+assertIncludes(routeSource, "bookers?.email", "Driver Details Email saved booker fallback email");
+assertIncludes(routeSource, "verifiedRecipientEmail", "Driver Details Email verified recipient handoff");
 assertExcludes(routeSource, "export async function GET", "Driver Details Email send route");
 assertExcludes(routeSource, "export async function PATCH", "Driver Details Email send route");
 assertExcludes(routeSource, "export async function DELETE", "Driver Details Email send route");
@@ -304,6 +347,8 @@ for (const fragment of [
   "email_send_gate_closed",
   "provider_not_configured",
   "recipient_not_allowlisted",
+  "recipient_not_saved_for_booking",
+  "recipient_verification_unavailable",
   "provider_timeout",
   "provider_failure",
   "send_succeeded",
@@ -392,6 +437,16 @@ assertIncludes(globalGuard, routePath, "Global no-live guard exact route excepti
 assertIncludes(globalGuard, guardScript, "Global no-live guard exact route contract script");
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite Driver Details Email send guard");
 assertIncludes(ledger, "Resend Driver Details Email Gated Send Contract Lock", "Ledger Resend send contract lock");
+assertIncludes(
+  ledger,
+  "Exact Saved-Booking Driver Details Email Recipient Authorization",
+  "Ledger exact saved-booking recipient authorization",
+);
+assertIncludes(
+  ledger,
+  "Prestige Limo SG Driver Details Email Sender Name",
+  "Ledger customer-facing Driver Details Email sender name",
+);
 for (const evidenceFragment of [
   "dpl_Aa5QVgCmTdgbvU9rmh6PjdFMz6JJ",
   "9hwg5-1784091169050-9fdcc451cddf",
@@ -421,7 +476,7 @@ const harness = await loadHarness();
 const originalFetch = globalThis.fetch;
 
 try {
-  const { helper, route } = harness;
+  const { helper, route, savedBookingRead } = harness;
   let providerRequests = 0;
 
   globalThis.fetch = async () => {
@@ -448,6 +503,11 @@ try {
   assert.equal(closedResponse.status, 503, "Closed Driver Details Email route must return 503.");
   assertClosed(closed, "closed Driver Details Email route");
   assert.equal(providerRequests, 0, "Closed gate must not make provider requests.");
+  assert.equal(
+    savedBookingRead.__getReadCalls().length,
+    0,
+    "Closed gate must not read a saved booking.",
+  );
 
   setEnv({
     PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Harness dispatcher",
@@ -478,6 +538,11 @@ try {
     0,
     "Server-session closed gate must not make provider requests.",
   );
+  assert.equal(
+    savedBookingRead.__getReadCalls().length,
+    0,
+    "Server-session closed gate must not read a saved booking.",
+  );
 
   const publicResponse = await route.POST(
     new Request(routeUrl(), {
@@ -493,6 +558,11 @@ try {
   assert.equal(publicBody.external_send, false);
   assertSafeResponse(publicBody, "public Driver Details Email route");
   assert.equal(providerRequests, 0, "Public route must not make provider requests.");
+  assert.equal(
+    savedBookingRead.__getReadCalls().length,
+    0,
+    "Public route must not read a saved booking.",
+  );
 
   setEnv({
     PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Harness dispatcher",
@@ -514,6 +584,11 @@ try {
   assert.equal(missingConfigResponse.status, 503, "Missing Resend config must return 503.");
   assertMissingProvider(missingConfig, "missing config Driver Details Email route");
   assert.equal(providerRequests, 0, "Missing config must not make provider requests.");
+  assert.equal(
+    savedBookingRead.__getReadCalls().at(-1)?.input?.booking_reference,
+    "PLO-EMAIL-001",
+    "Authorized route must verify the exact internal booking reference.",
+  );
 
   setEnv({
     PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Harness dispatcher",
@@ -546,19 +621,176 @@ try {
   assert.equal(invalidPayloadResponse.status, 400, "Forbidden payload fields must return 400.");
   assertRejected(invalidPayload, "invalid_input", "forbidden payload Driver Details Email route");
   assert.equal(providerRequests, 0, "Forbidden payload must not make provider requests.");
+  const readsAfterInvalidPayload = savedBookingRead.__getReadCalls().length;
+  assert.equal(
+    readsAfterInvalidPayload,
+    1,
+    "Malformed payload must fail before another saved-booking read.",
+  );
 
-  const allowlistResponse = await route.POST(
+  const mismatchResponse = await route.POST(
     new Request(routeUrl(), {
       body: JSON.stringify(validPayload({ recipient_email: "outside@example.com" })),
       headers: serverSessionHeaders(),
       method: "POST",
     }),
   );
-  const allowlistBody = await responseJson(allowlistResponse);
+  const mismatchBody = await responseJson(mismatchResponse);
 
-  assert.equal(allowlistResponse.status, 403, "Non-allowlisted recipient must return 403.");
-  assertRejected(allowlistBody, "recipient_not_allowlisted", "non-allowlisted Driver Details Email route");
-  assert.equal(providerRequests, 0, "Non-allowlisted recipient must not make provider requests.");
+  assert.equal(mismatchResponse.status, 403, "Saved-booking recipient mismatch must return 403.");
+  assertRejected(
+    mismatchBody,
+    "recipient_not_saved_for_booking",
+    "saved-booking recipient mismatch Driver Details Email route",
+  );
+  assert.equal(providerRequests, 0, "Saved-booking recipient mismatch must not make provider requests.");
+  assert.equal(
+    JSON.stringify(mismatchBody).includes("allowlisted@example.com"),
+    false,
+    "Recipient mismatch response must not expose the saved booking email.",
+  );
+
+  setEnv({
+    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Harness dispatcher",
+    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: "resend-test-admin-token",
+    PRESTIGE_DRIVER_DETAILS_EMAIL_FROM: selectedFrom,
+    PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO: selectedReplyTo,
+    PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST: "staging-only@example.com",
+    PRESTIGE_EMAIL_PROVIDER: providerName,
+    RESEND_API_KEY: "test-resend-secret-key",
+    [gateEnvName]: "true",
+  });
+  const verifiedRouteRecipients = [];
+  globalThis.fetch = async (_url, init) => {
+    providerRequests += 1;
+    verifiedRouteRecipients.push(JSON.parse(init.body).to);
+
+    return {
+      json: async () => ({ id: "email_test_123" }),
+      ok: true,
+      status: 200,
+    };
+  };
+
+  savedBookingRead.__setNextResult({
+    data: {
+      booking: {
+        booking_reference: "PLO-EMAIL-001",
+        bookers: { email: "ignored-booker@example.com" },
+        contact_email: "Customer@Example.com",
+      },
+      version: "admin-saved-booking-read-v1",
+    },
+    ok: true,
+  });
+  const verifiedContactResponse = await route.POST(
+    new Request(routeUrl(), {
+      body: JSON.stringify(validPayload({ recipient_email: "customer@example.com" })),
+      headers: serverSessionHeaders(),
+      method: "POST",
+    }),
+  );
+  const verifiedContactBody = await responseJson(verifiedContactResponse);
+
+  assert.equal(verifiedContactResponse.status, 200, "Exact saved contact email must be eligible.");
+  assertSuccess(verifiedContactBody, "exact saved contact email Driver Details Email route");
+  assert.deepEqual(
+    verifiedRouteRecipients,
+    [["customer@example.com"]],
+    "Saved contact email must take precedence over the nested booker fallback.",
+  );
+
+  savedBookingRead.__setNextResult({
+    data: {
+      booking: {
+        booking_reference: "PLO-EMAIL-001",
+        bookers: { email: "Booker@Example.com" },
+        contact_email: null,
+      },
+      version: "admin-saved-booking-read-v1",
+    },
+    ok: true,
+  });
+
+  const verifiedBookerResponse = await route.POST(
+    new Request(routeUrl(), {
+      body: JSON.stringify(validPayload({ recipient_email: "booker@example.com" })),
+      headers: serverSessionHeaders(),
+      method: "POST",
+    }),
+  );
+  const verifiedBookerBody = await responseJson(verifiedBookerResponse);
+
+  assert.equal(verifiedBookerResponse.status, 200, "Exact saved booker email must be eligible.");
+  assertSuccess(verifiedBookerBody, "exact saved booker email Driver Details Email route");
+  assert.equal(
+    providerRequests,
+    2,
+    "Exact saved contact and booker emails must each make exactly one provider request.",
+  );
+  assert.deepEqual(
+    verifiedRouteRecipients,
+    [["customer@example.com"], ["booker@example.com"]],
+    "Saved booker email must be used only when the saved contact email is absent.",
+  );
+
+  savedBookingRead.__setNextResult({
+    data: { booking: null, version: "admin-saved-booking-read-v1" },
+    ok: true,
+  });
+  const missingBookingResponse = await route.POST(
+    new Request(routeUrl(), {
+      body: JSON.stringify(validPayload()),
+      headers: serverSessionHeaders(),
+      method: "POST",
+    }),
+  );
+  const missingBookingBody = await responseJson(missingBookingResponse);
+
+  assert.equal(missingBookingResponse.status, 403, "Missing saved booking recipient must return 403.");
+  assertRejected(
+    missingBookingBody,
+    "recipient_not_saved_for_booking",
+    "missing saved booking Driver Details Email route",
+  );
+  assert.equal(providerRequests, 2, "Missing saved booking must not make another provider request.");
+
+  savedBookingRead.__setNextResult({ error: "raw database detail", ok: false, status: 500 });
+  const failedReadResponse = await route.POST(
+    new Request(routeUrl(), {
+      body: JSON.stringify(validPayload()),
+      headers: serverSessionHeaders(),
+      method: "POST",
+    }),
+  );
+  const failedReadBody = await responseJson(failedReadResponse);
+
+  assert.equal(failedReadResponse.status, 503, "Unavailable recipient verification must return 503.");
+  assert.equal(failedReadBody.status, "blocked");
+  assert.equal(failedReadBody.reason, "recipient_verification_unavailable");
+  assert.equal(failedReadBody.provider_request_count, 0);
+  assert.equal(providerRequests, 2, "Failed booking read must not make another provider request.");
+  assert.equal(
+    JSON.stringify(failedReadBody).includes("raw database detail"),
+    false,
+    "Recipient verification failure must not expose database details.",
+  );
+
+  providerRequests = 0;
+  setEnv({
+    PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL: "Harness dispatcher",
+    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: "resend-test-admin-token",
+    PRESTIGE_DRIVER_DETAILS_EMAIL_FROM: selectedFrom,
+    PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO: selectedReplyTo,
+    PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST: "allowlisted@example.com",
+    PRESTIGE_EMAIL_PROVIDER: providerName,
+    RESEND_API_KEY: "test-resend-secret-key",
+    [gateEnvName]: "true",
+  });
 
   const actor = {
     actor_label: "Harness dispatcher",
@@ -590,6 +822,9 @@ try {
         assert.equal(providerBody.reply_to, selectedReplyTo);
         assert.match(providerBody.text, /Hi Ms Lim Traveler,/);
         assert.match(providerBody.text, /CUSTOMER BOOKING DETAILS/);
+        assert.match(providerBody.text, /Booking reference: ABC-00123/);
+        assert.doesNotMatch(providerBody.text, /Booking reference: PLO-EMAIL-001/);
+        assert.equal(providerBody.subject, "Driver details for ABC-00123");
         assert.match(providerBody.text, /Passenger name: Ms Lim Traveler/);
         assert.doesNotMatch(providerBody.text, /Customer\/passenger\/traveler name:/);
         assert.match(providerBody.text, /DRIVER DETAILS/);
@@ -611,6 +846,22 @@ try {
   assert.equal(providerRequests, 1, "Success helper must make one provider request.");
   assert.ok(providerBody, "Success helper must build a provider body.");
   assert.ok(providerIdempotencyKey, "Success helper must send an idempotency key.");
+
+  const directHelperRejected = await helper.executeAdminCustomerDriverDetailsEmailSendAction(
+    validPayload({ recipient_email: "not-approved@example.com" }),
+    actor,
+    {
+      providerFetch: async () => {
+        throw new Error("Direct helper staging safeguard must block provider access.");
+      },
+    },
+  );
+
+  assertRejected(
+    directHelperRejected,
+    "recipient_not_allowlisted",
+    "direct helper staging recipient safeguard",
+  );
 
   const repeatedIdempotencyKeys = [];
   for (const payload of [

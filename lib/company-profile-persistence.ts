@@ -56,6 +56,7 @@ const companyProfileSelect = [
   "stripe_card_fee_required",
   "stripe_card_fee_percent",
   "invoice_footer_terms",
+  "invoice_signoff_name",
   "source_surface",
   "actor_role",
   "actor_label",
@@ -110,7 +111,7 @@ function verifiedAdminActor(actor: AdminBookingPersistenceAdapterActor | null | 
 }
 
 export async function loadPublicCompanyProfile(
-  client: CompanyProfileClient = createServerClient(),
+  client?: CompanyProfileClient,
 ): Promise<CompanyProfileReadResult> {
   const readiness = checkCustomerBookingRequestPersistenceConfigReadiness();
 
@@ -119,7 +120,8 @@ export async function loadPublicCompanyProfile(
   }
 
   try {
-    const { data, error } = await client
+    const profileClient = client ?? createServerClient();
+    const { data, error } = await profileClient
       .from(companyProfileTableName)
       .select(companyProfileSelect)
       .eq("profile_key", "default")
@@ -143,7 +145,7 @@ export async function loadPublicCompanyProfile(
 
 export async function loadAdminCompanyProfile(
   actor: AdminBookingPersistenceAdapterActor,
-  client: CompanyProfileClient = createServerClient(),
+  client?: CompanyProfileClient,
 ): Promise<CompanyProfileReadResult> {
   if (!verifiedAdminActor(actor)) {
     return fallbackReadResult();
@@ -155,7 +157,7 @@ export async function loadAdminCompanyProfile(
 export async function saveAdminCompanyProfile(
   input: unknown,
   actor: AdminBookingPersistenceAdapterActor,
-  client: CompanyProfileClient = createServerClient(),
+  client?: CompanyProfileClient,
 ): Promise<CompanyProfileWriteResult> {
   if (!verifiedAdminActor(actor)) {
     return {
@@ -199,7 +201,8 @@ export async function saveAdminCompanyProfile(
   };
 
   try {
-    const { data, error } = await client
+    const profileClient = client ?? createServerClient();
+    const { data, error } = await profileClient
       .from(companyProfileTableName)
       .upsert(payload, { onConflict: "profile_key" })
       .select(companyProfileSelect)

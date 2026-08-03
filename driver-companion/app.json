@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Prestige Driver Companion",
+    "slug": "prestige-driver-companion",
+    "owner": "prestige-limo-ops",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "sg.prestigelimo.drivercompanion"
+    },
+    "android": {
+      "package": "sg.prestigelimo.drivercompanion",
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Prestige uses your location only after you start tracking for an assigned job.",
+          "locationAlwaysAndWhenInUsePermission": "Prestige uses your location while trip tracking is active, including when this app is in the background or the screen is locked.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2a797181-d09d-4384-8d01-583456e83c3e"
+      }
+    }
+  }
+}

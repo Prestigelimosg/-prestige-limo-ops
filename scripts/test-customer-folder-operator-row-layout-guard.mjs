@@ -97,6 +97,16 @@ assertIncludes(
   'formatSingaporePickupDisplay(booking.pickup_at, "Not available")',
   "main Customers saved-job detail Singapore pickup display",
 );
+assertIncludes(
+  customersPage,
+  'formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")',
+  "main Customers saved-job row Singapore pickup display",
+);
+assertIncludes(
+  customersPage,
+  "const publicBookingReference = customerFolderPublicBookingReference(booking);",
+  "main Customers saved-job public reference display",
+);
 assert.equal(
   savedBookingsPanel.includes("{displayText(booking.pickup_at"),
   false,

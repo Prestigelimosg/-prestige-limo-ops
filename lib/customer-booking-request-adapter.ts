@@ -5,6 +5,7 @@ export type CustomerBookingRequestSubmitInput = {
   contactNo: string;
   emailAddress?: string;
   passengerName: string;
+  travelerId?: string;
   pickupDate: string;
   pickupTime: string;
   flightNumber?: string;
@@ -27,12 +28,22 @@ export type CustomerBookingRequestSubmitInput = {
 export type CustomerBookingRequestSubmitResult =
   | {
       ok: true;
+      bookingReference: string;
+      receiptStatus: "blocked" | "failed" | "sent";
+      returnBookingReference: string | null;
       returnTripRequested: boolean;
       shortNoticeReviewRequired: boolean;
     }
   | {
       ok: false;
-      reason?: "portal_access_cleared";
+      reason?:
+        | "invitation_invalid"
+        | "invitation_required"
+        | "invitation_used"
+        | "phone_verification_invalid"
+        | "phone_verification_required"
+        | "phone_verification_used"
+        | "portal_access_cleared";
     };
 
 type CustomerBookingRequestFetch = typeof fetch;
@@ -44,6 +55,7 @@ const allowedApiRequestFields = new Set([
   "customer_facing_status",
   "return_booking_reference",
   "return_trip_requested",
+  "receipt_status",
   "short_notice_review_required",
 ]);
 const forbiddenCustomerBookingRequestFragments = [
@@ -136,6 +148,7 @@ function toCustomerBookingRequestApiBody(input: CustomerBookingRequestSubmitInpu
     contactNo: input.contactNo,
     emailAddress: input.emailAddress,
     passengerName: input.passengerName,
+    travelerId: input.travelerId,
     pickupDate: input.pickupDate,
     pickupTime: input.pickupTime,
     flightNumber: input.flightNumber,
@@ -176,8 +189,34 @@ export function mapCustomerBookingRequestSubmitPayload(
     return { ok: false };
   }
 
+  const bookingReference =
+    typeof request.booking_reference === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(request.booking_reference)
+      ? request.booking_reference
+      : "";
+  const returnBookingReference =
+    request.return_booking_reference === null
+      ? null
+      : typeof request.return_booking_reference === "string" &&
+          /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(request.return_booking_reference)
+        ? request.return_booking_reference
+        : "";
+  const receiptStatus =
+    request.receipt_status === "sent" ||
+    request.receipt_status === "failed" ||
+    request.receipt_status === "blocked"
+      ? request.receipt_status
+      : null;
+
+  if (!bookingReference || returnBookingReference === "" || !receiptStatus) {
+    return { ok: false };
+  }
+
   return {
+    bookingReference,
     ok: true,
+    receiptStatus,
+    returnBookingReference,
     returnTripRequested: request.return_trip_requested === true,
     shortNoticeReviewRequired: request.short_notice_review_required === true,
   };
@@ -187,19 +226,34 @@ export async function submitCustomerBookingRequest(
   input: CustomerBookingRequestSubmitInput,
   {
     fetcher = fetch,
+    invitationToken,
+    phoneVerificationProof,
     signal,
   }: {
     fetcher?: CustomerBookingRequestFetch;
+    invitationToken?: string;
+    phoneVerificationProof?: string;
     signal?: AbortSignal;
   } = {},
 ): Promise<CustomerBookingRequestSubmitResult> {
   try {
+    const safeInvitationToken = invitationToken?.trim() || "";
+    const safePhoneVerificationProof = phoneVerificationProof?.trim() || "";
     const response = await fetcher(customerBookingRequestApiPath, {
       body: JSON.stringify(toCustomerBookingRequestApiBody(input)),
       cache: "no-store",
       credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
+        ...(safeInvitationToken
+          ? { "x-prestige-customer-booking-invitation": safeInvitationToken }
+          : {}),
+        ...(!safeInvitationToken && safePhoneVerificationProof
+          ? {
+              "x-prestige-customer-booking-phone-proof":
+                safePhoneVerificationProof,
+            }
+          : {}),
         "x-prestige-customer-purpose": "customer-booking-request",
       },
       method: "POST",
@@ -207,6 +261,19 @@ export async function submitCustomerBookingRequest(
     });
 
     if (!response.ok) {
+      const resultReason = response.headers?.get("x-prestige-customer-booking-result");
+
+      if (
+        resultReason === "invitation_required" ||
+        resultReason === "invitation_invalid" ||
+        resultReason === "invitation_used" ||
+        resultReason === "phone_verification_required" ||
+        resultReason === "phone_verification_invalid" ||
+        resultReason === "phone_verification_used"
+      ) {
+        return { ok: false, reason: resultReason };
+      }
+
       return response.status === 409
         ? { ok: false, reason: "portal_access_cleared" }
         : { ok: false };

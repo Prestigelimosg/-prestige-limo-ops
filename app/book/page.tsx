@@ -4,8 +4,10 @@ import Link from "next/link";
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
+  loadCustomerBookingMemoryProfile,
   loadCustomerBookingMemorySuggestions,
   type CustomerBookingMemorySuggestion,
+  type CustomerBookingMemoryTraveler,
 } from "../../lib/customer-booking-memory-adapter";
 import {
   applyCustomerBookingMemoryToRequestForm,
@@ -18,6 +20,11 @@ import {
   type CustomerBookingLocalVoiceDraftSupportedField,
   type CustomerBookingSpeechRecognition,
 } from "../../lib/customer-booking-local-voice-draft";
+import {
+  checkCustomerBookingPhoneOtpVerification,
+  startCustomerBookingPhoneOtpVerification,
+  type CustomerBookingPhoneOtpClientReason,
+} from "../../lib/customer-booking-phone-otp-adapter";
 import { submitCustomerBookingRequest } from "../../lib/customer-booking-request-adapter";
 import {
   customerTermsAndConditionsSummary,
@@ -54,6 +61,7 @@ type BookingRequestForm = {
   contactNo: string;
   emailAddress: string;
   passengerName: string;
+  travelerId: string;
   pickupDate: string;
   pickupTime: string;
   flightNumber: string;
@@ -89,6 +97,7 @@ const initialForm: BookingRequestForm = {
   contactNo: "",
   emailAddress: "",
   passengerName: "",
+  travelerId: "",
   pickupDate: "",
   pickupTime: "",
   flightNumber: "",
@@ -114,6 +123,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   contactNo: "Contact no.",
   emailAddress: "Email address",
   passengerName: "Passenger name",
+  travelerId: "Registered traveller",
   pickupDate: "Pickup date",
   pickupTime: "Pickup time",
   flightNumber: "Flight number if any",
@@ -136,6 +146,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
 
 const requiredFields: Array<keyof BookingRequestForm> = [
   "contactNo",
+  "emailAddress",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -148,6 +159,10 @@ const returnTripRequiredFields: Array<keyof BookingRequestForm> = [
   "returnPickupLocation",
   "returnDropoffLocation",
 ];
+
+function customerBookingDropoffIsOptional(serviceType: string) {
+  return serviceType === "Hourly / Disposal";
+}
 
 const pickupHourOptions = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
 const pickupMinuteOptions = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, "0"));
@@ -211,8 +226,22 @@ export default function CustomerBookingPage() {
   );
   const [missingFields, setMissingFields] = useState<Array<keyof BookingRequestForm>>([]);
   const [bookingMemorySuggestions, setBookingMemorySuggestions] = useState<CustomerBookingMemorySuggestion[]>([]);
+  const [registeredTravelers, setRegisteredTravelers] = useState<CustomerBookingMemoryTraveler[]>([]);
+  const [registeredTravelerMenuOpen, setRegisteredTravelerMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [bookingInvitationResolved, setBookingInvitationResolved] = useState(false);
+  const [hasBookingInvitation, setHasBookingInvitation] = useState(false);
+  const [portalProfileResolved, setPortalProfileResolved] = useState(false);
+  const [hasPortalBookingAccess, setHasPortalBookingAccess] = useState(false);
+  const [phoneOtpChallengeId, setPhoneOtpChallengeId] = useState("");
+  const [phoneOtpCode, setPhoneOtpCode] = useState("");
+  const [phoneOtpProof, setPhoneOtpProof] = useState("");
+  const [phoneOtpVerifiedPhone, setPhoneOtpVerifiedPhone] = useState("");
+  const [phoneOtpSending, setPhoneOtpSending] = useState(false);
+  const [phoneOtpChecking, setPhoneOtpChecking] = useState(false);
+  const [phoneOtpCooldown, setPhoneOtpCooldown] = useState(0);
+  const [phoneOtpFeedback, setPhoneOtpFeedback] = useState<Feedback | null>(null);
   const bookingMemoryLoadStarted = useRef(false);
   const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
   const voiceRecognitionErroredRef = useRef(false);
@@ -235,6 +264,16 @@ export default function CustomerBookingPage() {
   const hotlineContact = companyContactLines[0] || fallbackContactLines[0];
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const searchParams = new URLSearchParams(window.location.search);
+      setHasBookingInvitation(Boolean(searchParams.get("invite")?.trim()));
+      setBookingInvitationResolved(true);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
 
     async function loadCompanyProfile() {
@@ -253,6 +292,48 @@ export default function CustomerBookingPage() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadReturningCustomerProfile() {
+      try {
+        const profile = await loadCustomerBookingMemoryProfile({ signal: controller.signal });
+
+        if (!profile) {
+          return;
+        }
+
+        setHasPortalBookingAccess(true);
+        bookingMemoryLoadStarted.current = true;
+        setBookingMemorySuggestions(profile.memories);
+        setRegisteredTravelers(profile.travelers);
+        updateForm((current) => ({
+          ...current,
+          contactNo: current.contactNo || profile.bookerProfile?.phone || "",
+          emailAddress: current.emailAddress || profile.bookerProfile?.email || "",
+        }));
+      } finally {
+        setPortalProfileResolved(true);
+      }
+    }
+
+    void loadReturningCustomerProfile();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (phoneOtpCooldown <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setPhoneOtpCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [phoneOtpCooldown]);
+
   function updateForm(updater: (currentForm: BookingRequestForm) => BookingRequestForm) {
     setForm((currentForm) => {
       const nextForm = updater(currentForm);
@@ -261,10 +342,139 @@ export default function CustomerBookingPage() {
     });
   }
 
+  function resetCustomerBookingPhoneOtpState() {
+    setPhoneOtpChallengeId("");
+    setPhoneOtpCode("");
+    setPhoneOtpProof("");
+    setPhoneOtpVerifiedPhone("");
+    setPhoneOtpCooldown(0);
+    setPhoneOtpFeedback(null);
+  }
+
   function updateField(field: keyof BookingRequestForm, value: string) {
+    if (field === "contactNo" && value !== formRef.current.contactNo) {
+      resetCustomerBookingPhoneOtpState();
+    }
+
     updateForm((current) => ({ ...current, [field]: value }));
-    setMissingFields((current) => current.filter((item) => item !== field));
+    setMissingFields((current) =>
+      current.filter(
+        (item) =>
+          item !== field &&
+          !(
+            field === "serviceType" &&
+            customerBookingDropoffIsOptional(value) &&
+            (item === "dropoffLocation" || item === "returnDropoffLocation")
+          ),
+      ),
+    );
     setConfirmationStatus(null);
+  }
+
+  function phoneOtpFailureText(
+    reason: CustomerBookingPhoneOtpClientReason | "unknown",
+    retryAfterSeconds: number | null,
+  ) {
+    if (reason === "phone_invalid") {
+      return "Enter a valid supported mobile number. Singapore numbers may be entered as +65 or eight digits.";
+    }
+
+    if (reason === "code_invalid") {
+      return "That six-digit code is incorrect. Check the SMS and try again.";
+    }
+
+    if (reason === "challenge_expired" || reason === "challenge_invalid") {
+      return "That verification expired. Request a new code.";
+    }
+
+    if (reason === "rate_limited") {
+      return retryAfterSeconds
+        ? `Too many requests. Try again in about ${retryAfterSeconds} seconds.`
+        : "Too many requests. Please wait before trying again.";
+    }
+
+    return "Phone verification is unavailable right now. Ask Prestige Limo for a private booking invitation.";
+  }
+
+  async function handleSendPhoneOtp() {
+    if (!form.contactNo.trim()) {
+      setPhoneOtpFeedback({
+        tone: "error",
+        text: "Enter your mobile number before requesting a verification code.",
+      });
+      return;
+    }
+
+    setPhoneOtpSending(true);
+    setPhoneOtpProof("");
+    setPhoneOtpVerifiedPhone("");
+    setPhoneOtpFeedback({
+      tone: "info",
+      text: "Requesting one verification code...",
+    });
+
+    try {
+      const result = await startCustomerBookingPhoneOtpVerification(form.contactNo);
+
+      if (!result.ok) {
+        setPhoneOtpFeedback({
+          tone: "error",
+          text: phoneOtpFailureText(result.reason, result.retryAfterSeconds),
+        });
+        return;
+      }
+
+      setPhoneOtpChallengeId(result.challengeId);
+      setPhoneOtpCode("");
+      setPhoneOtpCooldown(result.retryAfterSeconds);
+      setPhoneOtpFeedback({
+        tone: "info",
+        text: "A six-digit code was sent. Enter it below within 10 minutes.",
+      });
+    } finally {
+      setPhoneOtpSending(false);
+    }
+  }
+
+  async function handleCheckPhoneOtp() {
+    if (!phoneOtpChallengeId || !/^\d{6}$/.test(phoneOtpCode.trim())) {
+      setPhoneOtpFeedback({
+        tone: "error",
+        text: "Enter the complete six-digit code from the SMS.",
+      });
+      return;
+    }
+
+    setPhoneOtpChecking(true);
+    setPhoneOtpFeedback({
+      tone: "info",
+      text: "Checking the verification code...",
+    });
+
+    try {
+      const result = await checkCustomerBookingPhoneOtpVerification({
+        challengeId: phoneOtpChallengeId,
+        code: phoneOtpCode.trim(),
+        phone: form.contactNo,
+      });
+
+      if (!result.ok) {
+        setPhoneOtpFeedback({
+          tone: "error",
+          text: phoneOtpFailureText(result.reason, result.retryAfterSeconds),
+        });
+        return;
+      }
+
+      setPhoneOtpProof(result.proof);
+      setPhoneOtpVerifiedPhone(form.contactNo);
+      setPhoneOtpFeedback({
+        tone: "success",
+        text: "Phone verified. You can submit this booking request.",
+      });
+    } finally {
+      setPhoneOtpChecking(false);
+    }
   }
 
   function updatePickupTimeSelect(part: "hour" | "minute", value: string) {
@@ -330,6 +540,7 @@ export default function CustomerBookingPage() {
       const nextForm = {
         ...current,
         passengerName: value,
+        travelerId: "",
       };
 
       return suggestion ? applyBookingMemoryToForm(nextForm, suggestion) : nextForm;
@@ -344,6 +555,27 @@ export default function CustomerBookingPage() {
           ),
       ),
     );
+    setConfirmationStatus(null);
+  }
+
+  function selectRegisteredTraveler(value: string) {
+    const traveler = registeredTravelers.find((item) => String(item.id) === value) || null;
+
+    updateForm((current) => ({
+      ...current,
+      dropoffLocation: traveler?.defaultDropoffAddress || current.dropoffLocation,
+      passengerName: traveler?.travelerName || "",
+      pickupLocation: traveler?.defaultPickupAddress || current.pickupLocation,
+      travelerId: traveler ? String(traveler.id) : "",
+      vehicleType:
+        traveler?.preferredVehicle && vehicleOptions.includes(traveler.preferredVehicle)
+          ? traveler.preferredVehicle
+          : current.vehicleType,
+    }));
+    setMissingFields((current) =>
+      traveler ? current.filter((item) => item !== "passengerName") : current,
+    );
+    setRegisteredTravelerMenuOpen(false);
     setConfirmationStatus(null);
   }
 
@@ -435,10 +667,40 @@ export default function CustomerBookingPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!bookingInvitationResolved || !portalProfileResolved) {
+      setMissingFields([]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Please wait while we check your booking access.",
+      });
+      return;
+    }
+
+    const publicPhoneVerified =
+      Boolean(phoneOtpProof) && phoneOtpVerifiedPhone === form.contactNo;
+
+    if (!hasBookingInvitation && !hasPortalBookingAccess && !publicPhoneVerified) {
+      setMissingFields([]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Verify the contact mobile number below, or ask Prestige Limo for a private booking invitation.",
+      });
+      return;
+    }
+
+    const dropoffIsOptional = customerBookingDropoffIsOptional(form.serviceType);
+    const outboundRequiredFields = dropoffIsOptional
+      ? requiredFields.filter((field) => field !== "dropoffLocation")
+      : requiredFields;
+    const activeReturnRequiredFields = dropoffIsOptional
+      ? returnTripRequiredFields.filter((field) => field !== "returnDropoffLocation")
+      : returnTripRequiredFields;
     const requiredForSubmit =
       form.returnTripRequested === "yes"
-        ? [...requiredFields, ...returnTripRequiredFields]
-        : requiredFields;
+        ? [...outboundRequiredFields, ...activeReturnRequiredFields]
+        : outboundRequiredFields;
     const missing = requiredForSubmit.filter((field) => !form[field].trim());
     if (missing.length > 0) {
       setMissingFields(missing);
@@ -447,8 +709,12 @@ export default function CustomerBookingPage() {
         tone: "error",
         text:
           form.returnTripRequested === "yes"
-            ? "Please complete the outbound and return trip date, time, pickup, and drop-off details before submitting your request."
-            : "Please complete contact no., passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
+            ? dropoffIsOptional
+              ? "Please complete the outbound and return trip date, time, and pickup details before submitting your request."
+              : "Please complete the outbound and return trip date, time, pickup, and drop-off details before submitting your request."
+            : dropoffIsOptional
+              ? "Please complete contact no., email address, passenger name, pickup date, pickup time, and pickup location before submitting your request."
+              : "Please complete contact no., email address, passenger name, pickup date, pickup time, pickup location, and drop-off location before submitting your request.",
       });
       return;
     }
@@ -472,13 +738,50 @@ export default function CustomerBookingPage() {
     });
 
     try {
-      const result = await submitCustomerBookingRequest(form);
+      const searchParams = new URLSearchParams(window.location.search);
+      const invitationToken = searchParams.get("invite")?.trim() || undefined;
+      const result = await submitCustomerBookingRequest(form, {
+        invitationToken,
+        phoneVerificationProof:
+          phoneOtpVerifiedPhone === form.contactNo ? phoneOtpProof : undefined,
+      });
 
       if (!result.ok) {
+        if (
+          result.reason === "invitation_required" ||
+          result.reason === "invitation_invalid" ||
+          result.reason === "invitation_used"
+        ) {
+          setFeedback({
+            tone: "error",
+            text: "This booking invitation is missing, expired, or already used. Ask Prestige Limo for a new booking invitation.",
+          });
+          return;
+        }
+
+        if (
+          result.reason === "phone_verification_required" ||
+          result.reason === "phone_verification_invalid" ||
+          result.reason === "phone_verification_used"
+        ) {
+          if (result.reason === "phone_verification_used") {
+            resetCustomerBookingPhoneOtpState();
+          }
+
+          setFeedback({
+            tone: "error",
+            text:
+              result.reason === "phone_verification_used"
+                ? "This phone verification was already used. Request a new code before submitting another booking."
+                : "Verify the contact mobile number below, or ask Prestige Limo for a private booking invitation.",
+          });
+          return;
+        }
+
         if (result.reason === "portal_access_cleared") {
           setFeedback({
             tone: "error",
-            text: "Your old saved portal access was cleared. Review the details, then press Submit Booking Request again.",
+            text: "This portal link is no longer active. Use your current portal link or ask Prestige Limo for a new one.",
           });
           return;
         }
@@ -486,19 +789,25 @@ export default function CustomerBookingPage() {
         throw new Error("Booking request could not be submitted.");
       }
 
+      if (!hasBookingInvitation && !hasPortalBookingAccess) {
+        resetCustomerBookingPhoneOtpState();
+      }
+
       const shortNoticeReviewRequired = result.shortNoticeReviewRequired;
       setFeedback({
-        tone: "success",
+        tone: result.receiptStatus === "sent" ? "success" : "error",
         text:
-          shortNoticeReviewRequired
-            ? "This booking is within 24 hours, so our team will review and confirm availability."
-            : "Booking request received. Our team will review and confirm availability.",
+          result.receiptStatus === "sent"
+            ? `Booking request ${result.bookingReference} received. Receipt email sent to ${form.emailAddress}.`
+            : `Booking request ${result.bookingReference} was saved, but the receipt email was not sent. Please contact ${companyName}.`,
       });
       setConfirmationStatus({
         title: "Request received - pending review",
-        detail: shortNoticeReviewRequired
-          ? "This booking is within 24 hours, so our team will review and confirm availability."
-          : "This is not confirmed yet. We will contact you after review.",
+        detail: `${result.bookingReference}${result.returnBookingReference ? ` / ${result.returnBookingReference}` : ""}. ${
+          shortNoticeReviewRequired
+            ? "This booking is within 24 hours and needs availability review."
+            : "This is not confirmed yet. We will contact you after review."
+        }`,
       });
     } catch {
       setConfirmationStatus(null);
@@ -531,6 +840,17 @@ export default function CustomerBookingPage() {
       minute: returnPickupTimeDraft.minute || formParts.minute,
     };
   })();
+  const bookingSubmissionAccessResolved =
+    bookingInvitationResolved &&
+    portalProfileResolved;
+  const showPublicPhoneVerification =
+    bookingSubmissionAccessResolved &&
+    !hasBookingInvitation &&
+    !hasPortalBookingAccess;
+  const phoneOtpVerified =
+    Boolean(phoneOtpProof) && phoneOtpVerifiedPhone === form.contactNo;
+  const hasBookingSubmissionAccess =
+    hasBookingInvitation || hasPortalBookingAccess || phoneOtpVerified;
 
   return (
     <main
@@ -662,16 +982,100 @@ export default function CustomerBookingPage() {
                 <label className="text-xs font-semibold text-slate-800 md:col-span-2">
                   Email address
                   <input
-                    className={fieldClass()}
+                    aria-invalid={isMissing("emailAddress")}
+                    className={fieldClass(isMissing("emailAddress"))}
                     data-customer-booking-field="emailAddress"
                     name="emailAddress"
                     onChange={(event) => updateField("emailAddress", event.target.value)}
                     placeholder="name@example.com"
+                    required
                     type="email"
                     value={form.emailAddress}
                   />
                 </label>
               </div>
+              {showPublicPhoneVerification ? (
+                <div
+                  className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
+                  data-customer-booking-phone-verification="true"
+                >
+                  <p className="text-sm font-semibold text-sky-950">
+                    Verify your mobile for a first public booking
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-sky-900">
+                    We send one six-digit SMS code. Prestige Limo customers using a private invitation or Customer Portal do not need this step.
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <button
+                      className="min-h-10 rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                      data-customer-booking-phone-otp-send="true"
+                      disabled={
+                        phoneOtpSending ||
+                        phoneOtpChecking ||
+                        phoneOtpVerified ||
+                        phoneOtpCooldown > 0
+                      }
+                      onClick={handleSendPhoneOtp}
+                      type="button"
+                    >
+                      {phoneOtpSending
+                        ? "Sending code..."
+                        : phoneOtpCooldown > 0
+                          ? `Resend in ${phoneOtpCooldown}s`
+                          : phoneOtpChallengeId
+                            ? "Send new code"
+                            : "Send verification code"}
+                    </button>
+                    {phoneOtpChallengeId && !phoneOtpVerified ? (
+                      <>
+                        <label className="text-xs font-semibold text-slate-800">
+                          Six-digit code
+                          <input
+                            autoComplete="one-time-code"
+                            className={fieldClass()}
+                            data-customer-booking-phone-otp-code="true"
+                            inputMode="numeric"
+                            maxLength={6}
+                            onChange={(event) =>
+                              setPhoneOtpCode(
+                                event.target.value.replace(/\D/g, "").slice(0, 6),
+                              )
+                            }
+                            placeholder="000000"
+                            type="text"
+                            value={phoneOtpCode}
+                          />
+                        </label>
+                        <button
+                          className="min-h-10 rounded-md bg-sky-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-900 disabled:cursor-not-allowed disabled:bg-slate-400"
+                          data-customer-booking-phone-otp-check="true"
+                          disabled={phoneOtpChecking || phoneOtpCode.length !== 6}
+                          onClick={handleCheckPhoneOtp}
+                          type="button"
+                        >
+                          {phoneOtpChecking ? "Checking..." : "Verify code"}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                  {phoneOtpFeedback ? (
+                    <div
+                      className={`mt-3 rounded-md border px-3 py-2 text-xs leading-5 ${feedbackClass(phoneOtpFeedback.tone)}`}
+                      data-customer-booking-phone-otp-feedback="true"
+                      role="status"
+                    >
+                      {phoneOtpFeedback.text}
+                    </div>
+                  ) : null}
+                </div>
+              ) : hasBookingInvitation ? (
+                <div
+                  className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900"
+                  data-customer-booking-private-invitation-no-otp="true"
+                >
+                  Private booking invitation detected. We will check it when you submit; no SMS code is required here.
+                </div>
+              ) : null}
             </section>
 
             <section aria-labelledby="trip-section-title">
@@ -679,24 +1083,110 @@ export default function CustomerBookingPage() {
                 Trip Details
               </h2>
               <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
-                <label className="text-xs font-semibold text-slate-800">
-                  Passenger name
-                  <input
-                    aria-invalid={isMissing("passengerName")}
-                    autoComplete="off"
-                    className={fieldClass(isMissing("passengerName"))}
-                    data-customer-booking-field="passengerName"
-                    data-customer-booking-memory-passenger-input="true"
-                    list={bookingMemorySuggestions.length > 0 ? bookingMemoryPassengerListId : undefined}
-                    name="passengerName"
-                    onChange={(event) => updatePassengerName(event.target.value)}
-                    onFocus={ensureBookingMemorySuggestions}
-                    onPointerDown={ensureBookingMemorySuggestions}
-                    placeholder="Passenger name"
-                    required
-                    type="text"
-                    value={form.passengerName}
-                  />
+                <div
+                  className="text-xs font-semibold text-slate-800"
+                  data-customer-booking-passenger-control="true"
+                >
+                  <span className="block">Passenger name</span>
+                  <div
+                    className="relative"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) {
+                        setRegisteredTravelerMenuOpen(false);
+                      }
+                    }}
+                  >
+                    <input
+                      aria-controls={
+                        registeredTravelers.length > 0
+                          ? "customer-booking-registered-traveler-menu"
+                          : undefined
+                      }
+                      aria-expanded={
+                        registeredTravelers.length > 0 ? registeredTravelerMenuOpen : undefined
+                      }
+                      aria-haspopup={registeredTravelers.length > 0 ? "listbox" : undefined}
+                      aria-label="Passenger name"
+                      aria-invalid={isMissing("passengerName")}
+                      autoComplete="off"
+                      className={`${fieldClass(isMissing("passengerName"))} ${
+                        registeredTravelers.length > 0 ? "pr-11" : ""
+                      }`}
+                      data-customer-booking-field="passengerName"
+                      data-customer-booking-memory-passenger-input="true"
+                      data-customer-booking-new-passenger-input="true"
+                      list={
+                        registeredTravelers.length === 0 && bookingMemorySuggestions.length > 0
+                          ? bookingMemoryPassengerListId
+                          : undefined
+                      }
+                      name="passengerName"
+                      onChange={(event) => updatePassengerName(event.target.value)}
+                      onFocus={ensureBookingMemorySuggestions}
+                      onPointerDown={ensureBookingMemorySuggestions}
+                      placeholder="Passenger name"
+                      required
+                      role={registeredTravelers.length > 0 ? "combobox" : undefined}
+                      type="text"
+                      value={form.passengerName}
+                    />
+                    <input
+                      data-customer-booking-field="travelerId"
+                      name="travelerId"
+                      readOnly
+                      type="hidden"
+                      value={form.travelerId}
+                    />
+                    {registeredTravelers.length > 0 ? (
+                      <button
+                        aria-controls="customer-booking-registered-traveler-menu"
+                        aria-expanded={registeredTravelerMenuOpen}
+                        aria-label="Choose registered traveller"
+                        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md bg-white text-base font-normal text-slate-600 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sky-200"
+                        data-customer-booking-traveler-menu-trigger="true"
+                        onClick={() => {
+                          void ensureBookingMemorySuggestions();
+                          setRegisteredTravelerMenuOpen((current) => !current);
+                        }}
+                        type="button"
+                      >
+                        <span aria-hidden="true">⌄</span>
+                      </button>
+                    ) : null}
+                    {registeredTravelers.length > 0 && registeredTravelerMenuOpen ? (
+                      <div
+                        aria-label="Registered travellers"
+                        className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg"
+                        data-customer-booking-traveler-menu="true"
+                        id="customer-booking-registered-traveler-menu"
+                        role="listbox"
+                      >
+                        <button
+                          aria-selected={!form.travelerId}
+                          className="block min-h-10 w-full rounded px-3 py-2 text-left text-sm font-normal text-slate-800 hover:bg-sky-50 focus:bg-sky-50 focus:outline-none"
+                          data-customer-booking-new-passenger-option="true"
+                          onClick={() => selectRegisteredTraveler("")}
+                          role="option"
+                          type="button"
+                        >
+                          Enter a new passenger name
+                        </button>
+                        {registeredTravelers.map((traveler) => (
+                          <button
+                            aria-selected={form.travelerId === String(traveler.id)}
+                            className="block min-h-10 w-full rounded px-3 py-2 text-left text-sm font-normal text-slate-800 hover:bg-sky-50 focus:bg-sky-50 focus:outline-none"
+                            data-customer-booking-traveler-option={traveler.id}
+                            key={traveler.id}
+                            onClick={() => selectRegisteredTraveler(String(traveler.id))}
+                            role="option"
+                            type="button"
+                          >
+                            {traveler.travelerName}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   {bookingMemorySuggestions.length > 0 ? (
                     <datalist
                       data-customer-booking-memory-passenger-list="true"
@@ -711,7 +1201,7 @@ export default function CustomerBookingPage() {
                       ))}
                     </datalist>
                   ) : null}
-                </label>
+                </div>
 
                 <label className="text-xs font-semibold text-slate-800">
                   Flight number if any
@@ -806,7 +1296,7 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-xs font-semibold text-slate-800 md:col-span-1 xl:col-span-2">
-                  Drop-off location
+                  Drop-off location{customerBookingDropoffIsOptional(form.serviceType) ? " (optional)" : ""}
                   <input
                     aria-invalid={isMissing("dropoffLocation")}
                     className={fieldClass(isMissing("dropoffLocation"))}
@@ -814,7 +1304,7 @@ export default function CustomerBookingPage() {
                     name="dropoffLocation"
                     onChange={(event) => updateField("dropoffLocation", event.target.value)}
                     placeholder="Destination hotel, airport terminal, home, or office"
-                    required
+                    required={!customerBookingDropoffIsOptional(form.serviceType)}
                     type="text"
                     value={form.dropoffLocation}
                   />
@@ -1001,7 +1491,7 @@ export default function CustomerBookingPage() {
                     </label>
 
                     <label className="text-xs font-semibold text-slate-800 xl:col-span-2">
-                      Return drop-off location
+                      Return drop-off location{customerBookingDropoffIsOptional(form.serviceType) ? " (optional)" : ""}
                       <input
                         aria-invalid={isMissing("returnDropoffLocation")}
                         className={fieldClass(isMissing("returnDropoffLocation"))}
@@ -1009,7 +1499,7 @@ export default function CustomerBookingPage() {
                         name="returnDropoffLocation"
                         onChange={(event) => updateField("returnDropoffLocation", event.target.value)}
                         placeholder="Return destination"
-                        required
+                        required={!customerBookingDropoffIsOptional(form.serviceType)}
                         type="text"
                         value={form.returnDropoffLocation}
                       />
@@ -1146,10 +1636,23 @@ export default function CustomerBookingPage() {
               <button
                 className="min-h-12 rounded-md bg-slate-950 px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
                 data-customer-booking-submit="true"
-                disabled={submitting || Boolean(confirmationStatus)}
+                disabled={
+                  submitting ||
+                  Boolean(confirmationStatus) ||
+                  !bookingSubmissionAccessResolved ||
+                  !hasBookingSubmissionAccess
+                }
                 type="submit"
               >
-                {confirmationStatus ? "Submitted" : submitting ? "Submitting..." : "Submit Booking Request"}
+                {confirmationStatus
+                  ? "Submitted"
+                  : submitting
+                    ? "Submitting..."
+                    : !bookingSubmissionAccessResolved
+                      ? "Checking booking access..."
+                      : !hasBookingSubmissionAccess
+                        ? "Phone verification required"
+                        : "Submit Booking Request"}
               </button>
               <div
                 className={`rounded-md border px-3 py-3 text-sm leading-6 ${feedbackClass(feedback.tone)}`}

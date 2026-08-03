@@ -205,6 +205,11 @@ for (const method of ["GET", "PUT", "PATCH", "DELETE"]) {
   assertExcludes(routeSource, `export async function ${method}`, `Full driver profile route ${method}`);
 }
 assertIncludes(routeSource, "resolveAdminDispatcherBoundary", "Full driver profile route admin boundary");
+assertIncludes(
+  routeSource,
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
+  "Full driver profile route same-origin server-session POST allowance",
+);
 assertIncludes(routeSource, "adminDispatcherBoundaryToPersistenceAdapterActor", "Full driver profile route actor adapter");
 assertIncludes(routeSource, "executeAdminFullDriverProfileRuntimeWriteAction", "Full driver profile route helper");
 const routePostBlock = sliceFrom(routeSource, "export async function POST");

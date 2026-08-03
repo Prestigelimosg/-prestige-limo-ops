@@ -9,6 +9,8 @@ const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
 const disabledPersistenceError =
   "Admin booking persistence is not enabled on this server.";
+const customerPhoneProof = "gate-customer-phone-proof";
+const customerPhoneBookingReference = "CUST-20300708103000-GATE01";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_GATE_SENTINEL_DO_NOT_LEAK";
 const supabaseUrlSentinel = "https://gate-sentinel.supabase.co";
 const serverSessionToken = "mock-admin-dispatcher-session-token";
@@ -144,6 +146,36 @@ async function writeMockModules(tempDir) {
     ].join("\n"),
   );
   await writeFile(
+    path.join(tempDir, "lib/customer-booking-receipt-email.js"),
+    [
+      "async function sendCustomerBookingReceiptEmail() {",
+      "  return { ok: false, reason: 'gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendCustomerBookingReceiptEmail };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-invitation.js"),
+    [
+      "function verifyCustomerBookingInvitationToken() {",
+      "  return { error: 'Customer booking invitation is invalid.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-phone-otp.js"),
+    [
+      "function verifyCustomerBookingPhoneOtpProof(proof, phone) {",
+      `  if (proof !== ${JSON.stringify(customerPhoneProof)} || phone !== '+65 9000 0202') {`,
+      "    return { error: 'Customer phone verification is invalid.', ok: false, status: 403 };",
+      "  }",
+      `  return { data: { booking_reference: ${JSON.stringify(customerPhoneBookingReference)} }, ok: true };`,
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
     [
       "async function prepareCodexJobCardForAdminReview() {}",
@@ -159,7 +191,23 @@ async function writeMockModules(tempDir) {
       "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
       "  return { error: 'Customer portal authentication is required.', ok: false, status: 401 };",
       "}",
-      "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+      "function expiredCustomerSavedBookingsSessionCookieHeaders() {",
+      "  return [];",
+      "}",
+      "module.exports = { expiredCustomerSavedBookingsSessionCookieHeaders, resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-portal-access-link.js"),
+    [
+      "function createCustomerPortalAccessLinkToken() {",
+      "  return { error: 'Customer portal access is unavailable.', ok: false, status: 403 };",
+      "}",
+      "function safeCustomerPortalPublicBookingReference(value) {",
+      "  const cleaned = typeof value === 'string' || typeof value === 'number' ? String(value).trim().toUpperCase() : '';",
+      "  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned) ? cleaned : null;",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken, safeCustomerPortalPublicBookingReference };",
     ].join("\n"),
   );
 }
@@ -462,13 +510,29 @@ class MockSupabaseClient {
   }
 
   projectRow(row, selectedColumns) {
-    if (!row || selectedColumns !== "id") {
-      return row ? clone(row) : row;
+    if (!row) {
+      return row;
     }
 
-    return {
-      id: row.id,
-    };
+    if (selectedColumns === "id") {
+      return {
+        id: row.id,
+      };
+    }
+
+    const projectedRow = clone(row);
+
+    if (
+      typeof selectedColumns === "string" &&
+      !selectedColumns
+        .split(",")
+        .map((field) => field.trim())
+        .includes("pax_count")
+    ) {
+      delete projectedRow.pax_count;
+    }
+
+    return projectedRow;
   }
 }
 
@@ -494,6 +558,8 @@ function adminPayload(overrides = {}) {
       customer_display_name: "Gate Safe Account",
       customer_facing_status: "pending_review",
       dropoff_location: "Gate Safe Dropoff",
+      driver_id: 8,
+      pax_count: 2,
       passenger_name: "Gate Passenger",
       passenger_phone: "+65 9000 0102",
       pickup_at: "2026-06-08T10:30:00+08:00",
@@ -593,6 +659,7 @@ function customerHeaders(overrides = {}) {
     "content-type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-phone-proof": customerPhoneProof,
     "x-prestige-customer-purpose": "customer-booking-request",
     ...overrides,
   };
@@ -603,6 +670,14 @@ function postJson(url, body, headers) {
     body: JSON.stringify(body),
     headers,
     method: "POST",
+  });
+}
+
+function patchJson(url, body, headers) {
+  return new Request(url, {
+    body: JSON.stringify(body),
+    headers,
+    method: "PATCH",
   });
 }
 
@@ -651,6 +726,8 @@ function assertSafeCreateOperations(mock, expectedActorRole) {
   assert.equal(insertedOperation(mock, "bookings").payload.pickup_at, "2026-06-08T10:30:00+08:00");
   assert.equal(insertedOperation(mock, "bookings").payload.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
   assert.equal(insertedOperation(mock, "bookings").payload.service_type, "MNG");
+  assert.equal(insertedOperation(mock, "bookings").payload.driver_id, 8);
+  assert.equal(insertedOperation(mock, "bookings").payload.pax_count, 2);
   assert.equal(insertedOperation(mock, "bookings").payload.admin_internal_status, "admin_review_required");
   assert.equal(insertedOperation(mock, "audit_logs").payload.actor_role, expectedActorRole);
   assert.equal(insertedOperation(mock, "audit_logs").payload.action_type, "booking_created");
@@ -676,7 +753,7 @@ function assertSafeCustomerBookingRequestOperations(mock) {
 
   const bookingRow = insertedOperation(mock, "bookings").payload;
 
-  assert.match(bookingRow.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
+  assert.equal(bookingRow.booking_reference, customerPhoneBookingReference);
   assert.equal(bookingRow.customer_display_name, "Gate Customer Company");
   assert.equal(bookingRow.contact_phone, "+65 9000 0202");
   assert.equal(bookingRow.contact_email, "gate-customer@example.com");
@@ -721,8 +798,14 @@ function enabledWriteEnv(overrides = {}) {
 }
 
 const harness = await loadHarness();
+const appPageSource = await readFile("app/page.tsx", "utf8");
 
 try {
+  assert.equal(
+    appPageSource.includes("driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId)"),
+    true,
+    "Admin booking persistence UI payload must carry the explicitly selected verified driver ID.",
+  );
   const { adapter, adminRoute, customerRoute, persistence } = harness;
 
   assert.equal(
@@ -733,6 +816,53 @@ try {
     persistence.adminBookingPersistenceContractVersion,
     "stage-4a-376-admin-only-safe-operational-adapter-v1",
   );
+
+  const hourlyWithoutDropoff = persistence.parseCustomerBookingRequestPayload(
+    customerPayload({
+      dropoffLocation: "",
+      serviceType: "Hourly / Disposal",
+    }),
+  );
+
+  assert.equal(
+    hourlyWithoutDropoff.ok,
+    true,
+    "Hourly / Disposal customer requests should accept a blank final drop-off.",
+  );
+  assert.equal(hourlyWithoutDropoff.data.booking.dropoff_location, "Drop-off To Confirm");
+  assert.equal(hourlyWithoutDropoff.data.booking.route_summary, "Gate Customer Pickup > Drop-off To Confirm");
+  assert.equal(hourlyWithoutDropoff.data.route_points.at(-1)?.location, "Drop-off To Confirm");
+
+  const returnHourlyWithoutDropoff = persistence.parseCustomerBookingRequestPayloads(
+    customerPayload({
+      dropoffLocation: "",
+      returnDropoffLocation: "",
+      returnPickupDate: "2030-07-09",
+      returnPickupLocation: "Gate Customer Return Pickup",
+      returnPickupTime: "18:30",
+      returnTripRequested: "yes",
+      serviceType: "Hourly / Disposal",
+    }),
+  );
+
+  assert.equal(
+    returnHourlyWithoutDropoff.ok,
+    true,
+    "Hourly / Disposal return requests should accept blank final drop-offs on both legs.",
+  );
+  assert.equal(returnHourlyWithoutDropoff.data.requests.length, 2);
+  assert.equal(returnHourlyWithoutDropoff.data.requests[1].booking.dropoff_location, "Drop-off To Confirm");
+
+  const transferWithoutDropoff = persistence.parseCustomerBookingRequestPayload(
+    customerPayload({
+      dropoffLocation: "",
+      serviceType: "Point-to-Point Transfer",
+    }),
+  );
+
+  assert.equal(transferWithoutDropoff.ok, false);
+  assert.equal(transferWithoutDropoff.status, 400);
+  assert.match(transferWithoutDropoff.error, /dropoffLocation/);
 
   for (const [label, flagValue] of [
     ["missing feature flag", undefined],
@@ -874,6 +1004,7 @@ try {
     assert.equal(result.body.booking.pickup_at, "2026-06-08T10:30:00+08:00");
     assert.equal(result.body.booking.route_summary, "Gate Safe Pickup > Gate Safe Dropoff");
     assert.equal(result.body.booking.admin_internal_status, "Admin Review Required");
+    assert.equal(result.body.booking.pax_count, 2);
     assert.equal(mock.createdClients.length, 1);
     assert.equal(mock.createdClients[0].url, supabaseUrlSentinel);
     assert.equal(mock.createdClients[0].serviceRoleKey, serviceRoleSentinel);
@@ -884,6 +1015,27 @@ try {
     });
     assertSafeCreateOperations(mock, role);
     assertNoLeaks(result, `${role} response should expose only safe DTO fields`);
+
+    const updateResult = await readResponse(
+      await adminRoute.PATCH(
+        patchJson(
+          "http://localhost/api/admin-bookings",
+          {
+            ...adminPayload({ booking: { pax_count: 5 } }),
+            target_booking_reference: "GATE-ADM-001",
+          },
+          sessionHeaders(),
+        ),
+      ),
+    );
+    const bookingUpdate = mock.client.operations.find(
+      (operation) => operation.action === "update" && operation.table === "bookings",
+    );
+
+    assert.equal(updateResult.status, 200, `${role} Pax update should use the existing booking PATCH lane`);
+    assert.equal(updateResult.body.booking.pax_count, 5);
+    assert.equal(bookingUpdate?.payload.pax_count, 5);
+    assertNoLeaks(updateResult.body.booking, `${role} Pax update booking should expose only safe DTO fields`);
   }
 
   for (const actor of [
@@ -941,19 +1093,21 @@ try {
 
   assert.equal(customerResult.status, 200);
   assert.equal(customerResult.body.ok, true);
-  assert.match(customerResult.body.request.booking_reference, /^CUST-\d{14}-[A-Z0-9]+$/);
+  assert.equal(customerResult.body.request.booking_reference, customerPhoneBookingReference);
   assert.equal(customerResult.body.request.customer_facing_status, "Request Received");
   assert.equal(customerResult.body.request.return_booking_reference, null);
   assert.equal(customerResult.body.request.return_trip_requested, false);
+  assert.equal(customerResult.body.request.receipt_status, "blocked");
   assert.equal(customerResult.body.request.short_notice_review_required, false);
   assert.deepEqual(Object.keys(customerResult.body.request).sort(), [
     "booking_reference",
     "customer_facing_status",
+    "receipt_status",
     "return_booking_reference",
     "return_trip_requested",
     "short_notice_review_required",
   ]);
-  assert.equal(customerMock.createdClients.length, 1);
+  assert.equal(customerMock.createdClients.length, 2);
   assertSafeCustomerBookingRequestOperations(customerMock);
   assertNoLeaks(customerResult, "customer request enabled-write response should stay safe");
 

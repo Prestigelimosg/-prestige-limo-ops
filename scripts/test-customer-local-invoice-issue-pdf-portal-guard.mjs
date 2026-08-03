@@ -104,23 +104,59 @@ for (const fragment of [
   "const billToNameLines = wrapText(invoice.customerName, 62).slice(0, 2);",
   "billToNameLines.map((line, index) => pdfTextAt(line, 50, billToY - 17 - index * 12, 9))",
   "const billToExtraLineOffset = (billToNameLines.length - 1) * 12;",
+  "const totalsY = Math.min(360, rowY - 8);",
   "const documentTitle =",
   '"INVOICE"',
   '"QUOTATION"',
   '"CREDIT NOTE"',
   "Item & Description",
   "Balance Due",
+  "Payment Made",
   "Sub Total",
-  "Bank information",
+  'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
+  "const signoffY = 260;",
+  "const paymentY = 203;",
+  "const notesY = 118;",
+  "const termsY = 45;",
+  'pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g")',
   "Terms & Conditions:",
   "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
   "Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.",
+  "const logoDisplayWidth = 150;",
+  "Math.round((logoDisplayWidth * logoImage.height) / logoImage.width)",
+  '"/Im1 Do"',
   "/XObject << /Im1 6 0 R >>",
   "/Subtype /Image",
   "/Filter /DCTDecode",
   "%PDF-1.4",
 ]) {
   assertIncludes(localPdfHelper, fragment, `PDF helper fragment ${fragment}`);
+}
+
+assertExcludes(
+  localPdfHelper,
+  "const totalsY = Math.max(360, rowY - 8);",
+  "four-line invoice totals must not be forced upward into item rows",
+);
+
+assert.ok(
+  localPdfHelper.indexOf('pdfTextAt("Thank you for your business"') <
+      localPdfHelper.indexOf("pdfTextAt(paymentHeading") &&
+    localPdfHelper.indexOf("pdfTextAt(paymentHeading") <
+      localPdfHelper.indexOf('pdfTextAt("Notes", 50, notesY') &&
+    localPdfHelper.indexOf('pdfTextAt("Notes", 50, notesY') <
+      localPdfHelper.indexOf('pdfTextAt("Terms & Conditions:", 50, termsY'),
+  "Stored invoice PDF must preserve the owner-approved sign-off, bank, Notes, then Terms layout.",
+);
+
+for (const fragment of [
+  'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
+  'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
+  'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'pdfRightTextAt("Payment Made"',
+  "pdfRightTextAt(balanceDueValue",
+]) {
+  assertIncludes(localPdfHelper, fragment, `status-correct PDF fragment ${fragment}`);
 }
 
 for (const fragment of [

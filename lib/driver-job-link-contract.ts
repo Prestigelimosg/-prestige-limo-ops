@@ -147,6 +147,18 @@ export function applyDriverJobStatusUpdateContract(
 
   input.bookingsById[bookingKey] = updatedBooking;
 
+  if (nextStatus === "completed") {
+    for (const link of input.links) {
+      if (
+        String(link.bookingId) === bookingKey &&
+        !isRevoked(link) &&
+        !isDriverJobLinkExpired(link.expiresAt, occurredAt)
+      ) {
+        link.expiresAt = occurredAt;
+      }
+    }
+  }
+
   return {
     ok: true,
     reason: "updated",

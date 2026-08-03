@@ -40,8 +40,11 @@ const sourceFiles = [
   "lib/admin-app-notification-persistence.ts",
   "lib/admin-device-push-notification.ts",
   "lib/admin-new-booking-email-alert.ts",
+  "lib/singapore-pickup-display.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/driver-device-push-notification.ts",
+  "lib/customer-booking-receipt-email.ts",
   "lib/customer-portal-access-account.ts",
   "lib/customer-portal-access-link.ts",
   "lib/customer-saved-bookings-read.ts",
@@ -566,8 +569,20 @@ class MockSupabaseClient {
   }
 
   projectRow(row, selectedColumns) {
-    if (!row || selectedColumns !== "id") {
-      return row ? clone(row) : row;
+    if (!row) {
+      return row;
+    }
+
+    if (selectedColumns !== "id") {
+      const projectedRow = clone(row);
+
+      for (const driverField of ["driver_contact", "driver_name", "driver_plate_number"]) {
+        if (!String(selectedColumns || "").includes(driverField)) {
+          delete projectedRow[driverField];
+        }
+      }
+
+      return projectedRow;
     }
 
     return {
@@ -787,8 +802,10 @@ function assertSixTableCreateMapping(mock) {
     customer_id: 1,
     company_id: null,
     driver_contact: null,
+    driver_id: null,
     driver_name: null,
     driver_plate_number: null,
+    dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     flight_no: null,
     passenger_name: "Safe Passenger",
@@ -1012,6 +1029,75 @@ try {
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
   assertNoUnsafeKeys(updateOperation, "mocked update operation");
 
+  const driverReloadFallbackPayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
+      driver_contact: "+65 9000 0104",
+      driver_name: "Safe Calendar Driver",
+      driver_plate_number: "SCD104A",
+    },
+  });
+  const parsedDriverReloadFallbackUpdate = persistence.parseAdminBookingUpdatePayload({
+    ...driverReloadFallbackPayload,
+    target_booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
+  });
+
+  assert.equal(parsedDriverReloadFallbackUpdate.ok, true);
+
+  const driverReloadFallbackMock = installMockClient(
+    {
+      bookings: [
+        {
+          ...canonicalAdminPayload().booking,
+          booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
+          customer_id: 104,
+          id: 104,
+          source_surface: "admin_dashboard",
+        },
+      ],
+    },
+    {
+      selectFailures: [
+        {
+          column: "driver_name",
+          error: {
+            code: "PGRST204",
+            message: "Sanitized mock driver reload schema-cache source.",
+          },
+          table: "bookings",
+        },
+      ],
+    },
+  );
+  const driverReloadFallbackResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedDriverReloadFallbackUpdate.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+
+  assert.equal(driverReloadFallbackResult.ok, true);
+  assert.equal(driverReloadFallbackResult.data.driver_contact, "+65 9000 0104");
+  assert.equal(driverReloadFallbackResult.data.driver_name, "Safe Calendar Driver");
+  assert.equal(driverReloadFallbackResult.data.driver_plate_number, "SCD104A");
+  const driverReloadFallbackAudit = insertedOperations(
+    driverReloadFallbackMock.client,
+    "audit_logs",
+  ).at(-1);
+  assert.equal(driverReloadFallbackAudit.payload.safe_before.driver_name, null);
+  assert.equal(driverReloadFallbackAudit.payload.safe_after.driver_name, "Safe Calendar Driver");
+  assert.equal(driverReloadFallbackAudit.payload.safe_after.driver_plate_number, "SCD104A");
+  assert.ok(
+    driverReloadFallbackMock.client.selectFailures[0].calls >= 2,
+    "Expected both the current and foundation driver-bearing reloads to fail before the safe driverless fallback.",
+  );
+  assert.doesNotMatch(
+    driverReloadFallbackMock.client.selectHistory.at(-1).selectedColumns,
+    /driver_name|driver_contact|driver_plate_number/,
+    "Expected the successful compatibility reload to omit driver fields before the update result restores the values that were just written.",
+  );
+  assertNoUnsafeKeys(driverReloadFallbackResult, "driver reload fallback update result");
+  globalThis.__prestigeSupabaseAdapterMock = createMock;
+
   const customerRequestDecisionPayload = canonicalAdminPayload({
     booking: {
       admin_internal_status: "Ready for Confirmation",
@@ -1110,6 +1196,36 @@ try {
     JSON.stringify(customerNotificationInsert.payload),
     /contact_phone|contact_email|customer_price|driver_payout|paynow|invoice|payment|pdf|billing|finance|telegram|whatsapp|sms|email|raw_token|token_hash|internal_note|admin_note|mock_qa|archive/i,
     "Expected customer request decision notification insert to stay customer-safe.",
+  );
+  const notificationCountBeforeNoChangeEdit = insertedOperations(
+    createMock.client,
+    "customer_driver_app_notification_outbox",
+  ).length;
+  const noChangeCustomerRequestEditRoute = await readRouteResponse(
+    await adminRoute.PATCH(
+      jsonRequest(
+        "http://localhost/api/admin-bookings",
+        {
+          ...customerRequestDecisionPayload,
+          target_booking_reference: "SAFE-ADM-001",
+        },
+        {
+          headers: adminHeaders({
+            "x-prestige-admin-session-token": serverSessionToken,
+          }),
+          method: "PATCH",
+        },
+      ),
+    ),
+  );
+
+  assert.equal(noChangeCustomerRequestEditRoute.status, 200);
+  assert.equal(noChangeCustomerRequestEditRoute.body.ok, true);
+  assert.equal(noChangeCustomerRequestEditRoute.body.customer_notification, null);
+  assert.equal(
+    insertedOperations(createMock.client, "customer_driver_app_notification_outbox").length,
+    notificationCountBeforeNoChangeEdit,
+    "Editing an unchanged approved request must not queue a duplicate customer notification.",
   );
 
   const splitCustomerMock = installMockClient();
@@ -1247,8 +1363,10 @@ try {
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
     customer_id: 1,
+    dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     driver_contact: "+65 9000 0100",
+    driver_id: null,
     driver_name: "Foundation Safe Driver",
     driver_plate_number: "SFD100A",
     flight_no: null,
@@ -1331,7 +1449,6 @@ try {
             code: "PGRST204",
             message: "Sanitized mock schema cache column source.",
           },
-          once: true,
           table: "bookings",
         },
       ],
@@ -1373,12 +1490,12 @@ try {
   ]);
   assert.equal(foundationReadMock.createdClients.length, 1);
   assert.equal(foundationReadMock.client.operations.length, 0);
-  assert.equal(foundationReadMock.client.selectFailures[0].calls, 1);
-  assert.equal(foundationReadMock.client.selectHistory.length, 2);
+  assert.equal(foundationReadMock.client.selectFailures[0].calls, 2);
+  assert.equal(foundationReadMock.client.selectHistory.length, 3);
   assert.match(foundationReadMock.client.selectHistory[0].selectedColumns, /pickup_at/);
-  assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /driver_name/);
-  assert.match(foundationReadMock.client.selectHistory[1].selectedColumns, /pickup_datetime/);
-  assert.doesNotMatch(foundationReadMock.client.selectHistory[1].selectedColumns, /internal_note/);
+  assert.match(foundationReadMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assert.match(foundationReadMock.client.selectHistory[2].selectedColumns, /pickup_datetime/);
+  assert.doesNotMatch(foundationReadMock.client.selectHistory[2].selectedColumns, /internal_note/);
   assertNoUnsafeKeys(foundationFallbackRoute, "foundation fallback GET response");
 
   const foundationReadLegacyDriverMock = installMockClient(
@@ -1416,7 +1533,6 @@ try {
             code: "PGRST204",
             message: "Sanitized mock schema cache column source.",
           },
-          once: true,
           table: "bookings",
         },
         {
@@ -1425,7 +1541,6 @@ try {
             code: "PGRST204",
             message: "Sanitized mock legacy driver column source.",
           },
-          once: true,
           table: "bookings",
         },
       ],
@@ -1449,11 +1564,11 @@ try {
     "SAFE-FOUNDATION-LEGACY-DRIVER-GET-001",
   );
   assert.equal(foundationLegacyDriverFallbackRoute.body.bookings[0].driver_name, null);
-  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[0].calls, 1);
-  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[1].calls, 1);
-  assert.equal(foundationReadLegacyDriverMock.client.selectHistory.length, 3);
-  assert.match(foundationReadLegacyDriverMock.client.selectHistory[1].selectedColumns, /driver_name/);
-  assert.doesNotMatch(foundationReadLegacyDriverMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[0].calls, 2);
+  assert.equal(foundationReadLegacyDriverMock.client.selectFailures[1].calls, 2);
+  assert.equal(foundationReadLegacyDriverMock.client.selectHistory.length, 5);
+  assert.match(foundationReadLegacyDriverMock.client.selectHistory[2].selectedColumns, /driver_name/);
+  assert.doesNotMatch(foundationReadLegacyDriverMock.client.selectHistory[4].selectedColumns, /driver_name/);
   assertNoUnsafeKeys(
     foundationLegacyDriverFallbackRoute,
     "foundation legacy driver fallback GET response",

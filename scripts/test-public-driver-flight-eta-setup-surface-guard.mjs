@@ -84,7 +84,7 @@ const contractChecks = [
     script: "scripts/test-public-api-session-cookie-cache-boundary-guard.mjs",
     requiredFragments: [
       "driver flight ETA setup",
-      "Driver public APIs must remain cookie-free",
+      "Driver public APIs remain cookie-free except the exact acknowledgement PATCH",
       "Public API session cookie/cache boundary guard passed",
     ],
   },
@@ -299,8 +299,8 @@ for (const fragment of [
 }
 assertIncludes(
   driverPage,
-  "window.URL.createObjectURL(blob)",
-  "public driver page approved calendar attachment blob URL",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "public driver page approved same-origin Google Calendar action",
 );
 
 console.log("Public driver Flight ETA setup surface guard passed");

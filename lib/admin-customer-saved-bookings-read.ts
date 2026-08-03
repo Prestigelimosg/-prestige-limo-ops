@@ -28,11 +28,16 @@ export type AdminCustomerSavedBookingSafeRecord = {
   customer_account: string | null;
   customer_id: string | null;
   company_id: number | null;
+  traveler_id: number | null;
+  vehicle_type_or_category: string | null;
+  child_seat_count: number;
+  extra_stop_count: number;
   customer_status: string | null;
   dropoff_location: string | null;
   passenger_name: string | null;
   pickup_at: string | null;
   pickup_location: string | null;
+  public_booking_reference: string | null;
   route_summary: string | null;
   service_type: string | null;
   source: "admin_booking_persistence";
@@ -176,6 +181,22 @@ function safeStatus(value: unknown) {
   return safeText(value, 80);
 }
 
+function safeServiceItemCount(
+  booking: AdminBookingPersistenceRecord,
+  expectedType: "child_seat" | "extra_stop",
+) {
+  return (booking.service_items || []).reduce((total, item) => {
+    const itemType = normalizeToken(
+      textOrNull(item.service_item_type || item.item_type) || "",
+    );
+    const quantity = Number(item.quantity ?? item.blocks_count);
+
+    return itemType === expectedType && Number.isSafeInteger(quantity) && quantity > 0
+      ? total + quantity
+      : total;
+  }, 0);
+}
+
 function normalizeForMatch(value: unknown) {
   return safeText(value)?.replace(/[^a-z0-9]+/gi, "").toLowerCase() || "";
 }
@@ -249,11 +270,16 @@ function toSafeSavedBooking(
     customer_account: safeText(booking.customer_display_name),
     customer_id: safeText(booking.customer_id, 120),
     company_id: safeIdentityId(booking.company_id),
+    traveler_id: safeIdentityId(booking.traveler_id),
+    vehicle_type_or_category: safeText(booking.vehicle_type_or_category, 80),
+    child_seat_count: safeServiceItemCount(booking, "child_seat"),
+    extra_stop_count: safeServiceItemCount(booking, "extra_stop"),
     customer_status: safeStatus(booking.customer_facing_status),
     dropoff_location: safeText(booking.dropoff_location, 220),
     passenger_name: safeText(booking.passenger_name || booking.contact_display_name, 140),
     pickup_at: safeText(booking.pickup_at || booking.pickup_datetime, 80),
     pickup_location: safeText(booking.pickup_location, 220),
+    public_booking_reference: safeText(booking.public_booking_reference, 80),
     route_summary: safeText(booking.route_summary, 320),
     service_type: safeText(booking.service_type || booking.route_type, 80),
     source: "admin_booking_persistence",

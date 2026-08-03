@@ -162,7 +162,7 @@ assertExcludes(saveBookingBlock, "/api/admin-saved-bookings", "Save Booking + CR
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy read path",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings legacy read method");

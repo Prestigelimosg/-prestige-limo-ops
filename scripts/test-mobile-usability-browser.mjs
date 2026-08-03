@@ -49,7 +49,7 @@ const internalQaMockArchiveGroupLabels = [
   "Legacy close-cycle / DSP / receivables / accounting QA",
 ];
 const dispatcherIntakeControlLabels = [
-  "AI Assist Parse (Mock)",
+  "AI Parse Booking",
   "Create Job Card",
   "Clear Message",
 ];
@@ -603,7 +603,7 @@ async function runChromeTest() {
         );
         const row = document.querySelector("[data-dispatcher-intake-action-row='true']");
         const safety = document.querySelector("[data-ai-assist-gate='true'] label");
-        const aiButton = findButton("AI Assist Parse (Mock)");
+        const aiButton = findButton("AI Parse Booking");
         const safetyRect = safety?.getBoundingClientRect();
         const aiRect = aiButton?.getBoundingClientRect();
         const rowRect = row?.getBoundingClientRect();
@@ -687,7 +687,7 @@ async function runChromeTest() {
         `${viewport.label}: expected AI safety checkbox/help to stay near AI Assist`,
       );
       assert.equal(
-        state.safetyText.includes("Tick the AI safety checkbox to enable AI Assist"),
+        state.safetyText.includes("AI is review-only and cannot change or send anything"),
         true,
         `${viewport.label}: expected AI safety help text near AI Assist`,
       );
@@ -1305,6 +1305,69 @@ async function runChromeTest() {
     };
 
     const checkAdminAppNotificationTerminalPolling = async (viewport) => {
+      const readReadyNotificationState = () =>
+        evaluate(`(() => {
+            const section = document.querySelector("[data-admin-app-notification-feed='true']");
+            const refreshButton = document.querySelector(
+              "[data-admin-app-notification-feed-refresh='true']",
+            );
+            const row = section?.querySelector("[data-admin-app-notification-feed-row='true']");
+            const feedback =
+              section
+                ?.querySelector("[data-admin-app-notification-feed-feedback='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "";
+            const state =
+              section
+                ?.querySelector("[data-admin-app-notification-feed-state='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "";
+            const title =
+              row
+                ?.querySelector("[data-admin-app-notification-feed-title='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "";
+            const message =
+              row
+                ?.querySelector("[data-admin-app-notification-feed-message='true']")
+                ?.textContent.replace(/\\s+/g, " ")
+                .trim() || "";
+
+            if (
+              !section ||
+              !refreshButton ||
+              refreshButton.disabled ||
+              section.getAttribute("data-admin-app-notification-auto-refresh") !== "active" ||
+              feedback ||
+              state !== "1 other" ||
+              title !== "Mobile billing draft prep saved" ||
+              message !== "Mobile monthly billing draft prep was saved from grouped completed trip data."
+            ) {
+              return false;
+            }
+
+            return {
+              feedback,
+              message,
+              requestCount: (window.__mobileUsabilityFetchCalls || []).filter(
+                (entry) => entry.includes("GET /api/admin-app-notifications"),
+              ).length,
+              state,
+              title,
+            };
+          })()`);
+
+      const initialReadyState = await waitForCondition(
+        readReadyNotificationState,
+        10000,
+        `${viewport.label} initial ready admin app notification state`,
+      );
+      assert.equal(
+        initialReadyState.requestCount >= 1,
+        true,
+        `${viewport.label}: expected the initial saved admin app notification read before terminal polling test`,
+      );
+
       const terminalFailureStarted = await evaluate(`(() => {
           window.__mobileAdminAppNotificationMode = "unavailable";
           const refreshButton = document.querySelector("[data-admin-app-notification-feed-refresh='true']");
@@ -1379,18 +1442,33 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected manual notification retry to remain available`,
       );
-      await waitForCondition(
-        () =>
-          evaluate(`(() => {
-              const section = document.querySelector("[data-admin-app-notification-feed='true']");
-
-              return section?.getAttribute("data-admin-app-notification-auto-refresh") === "active" &&
-                section
-                  .querySelector("[data-admin-app-notification-feed-feedback='true']")
-                  ?.textContent.includes("Loaded 1 saved admin app notification");
-            })()`),
+      const recoveredNotificationState = await waitForCondition(
+        readReadyNotificationState,
         10000,
         `${viewport.label} manual admin app notification recovery`,
+      );
+      assert.equal(
+        recoveredNotificationState.requestCount > terminalFailureState.requestCount,
+        true,
+        `${viewport.label}: expected manual recovery to complete a new saved admin app notification read`,
+      );
+      assert.equal(
+        recoveredNotificationState.feedback,
+        "",
+        `${viewport.label}: expected routine successful notification reads to stay hidden after recovery`,
+      );
+      assert.deepEqual(
+        {
+          message: recoveredNotificationState.message,
+          state: recoveredNotificationState.state,
+          title: recoveredNotificationState.title,
+        },
+        {
+          message: "Mobile monthly billing draft prep was saved from grouped completed trip data.",
+          state: "1 other",
+          title: "Mobile billing draft prep saved",
+        },
+        `${viewport.label}: expected recovered admin app notification row`,
       );
     };
 

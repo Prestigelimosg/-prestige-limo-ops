@@ -68,10 +68,15 @@ for (const currentSurface of [
   "Assigned Driver",
   "Driver Dispatch",
   "Driver Job Link",
-  "data-new-customer-booking-request-decision-button",
+  "data-admin-prepared-job-card-close",
 ]) {
   assertIncludes(adminPage, currentSurface);
 }
+assertNotMatches(
+  adminPage,
+  /data-new-customer-booking-request-decision-button/,
+  "Retired prepared-card decision buttons must not be restored.",
+);
 
 for (const customerRouteText of [
   "customer-booking-request",

@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 const adminPagePath = "app/page.tsx";
 const customerRoutePath = "app/api/customer-booking-change-requests/route.ts";
 const adminNotificationPath = "lib/admin-app-notification-persistence.ts";
+const customerNotificationPath = "lib/customer-driver-app-notification-persistence.ts";
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
@@ -22,10 +23,11 @@ function sliceBetween(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
-const [adminPage, customerRoute, adminNotification] = await Promise.all([
+const [adminPage, customerRoute, adminNotification, customerNotification] = await Promise.all([
   readFile(adminPagePath, "utf8"),
   readFile(customerRoutePath, "utf8"),
   readFile(adminNotificationPath, "utf8"),
+  readFile(customerNotificationPath, "utf8"),
 ]);
 
 for (const fragment of [
@@ -115,6 +117,7 @@ for (const fragment of [
   'method: "PATCH"',
   "buildAdminBookingPersistencePayload",
   "autoSyncSavedBookingGoogleCalendar(updatedBooking)",
+  "queueCustomerBookingAmendmentConfirmedNotification",
   'updateAdminAppNotificationStatus(notificationId, "archived")',
   "Google Calendar auto-synced on the same booking reference",
   "upsertLoadedBookingFromAdminRecord(updatedBooking)",
@@ -213,6 +216,30 @@ assertIncludes(
   changeRequestApplyBlock,
   "openDispatch: false",
   "Customer amendment/cancellation apply must not open Dispatch by default.",
+);
+assert.ok(
+  changeRequestApplyBlock.indexOf("autoSyncSavedBookingGoogleCalendar(updatedBooking)") <
+    changeRequestApplyBlock.indexOf("queueCustomerBookingAmendmentConfirmedNotification"),
+  "Customer amendment confirmation must queue only after Google Calendar sync succeeds.",
+);
+assert.ok(
+  changeRequestApplyBlock.indexOf("queueCustomerBookingAmendmentConfirmedNotification") <
+    changeRequestApplyBlock.indexOf('updateAdminAppNotificationStatus(notificationId, "archived")'),
+  "Customer amendment confirmation must queue before the admin request row is archived.",
+);
+
+for (const fragment of [
+  'input.safe_title === "Booking amendment confirmed"',
+  "Your booking amendment has been confirmed by Prestige Limo. Open My Bookings to review.",
+  'input.workflow_area === "customer_amendment_review"',
+  "customerAppNotificationUsesAmendmentConfirmedTemplate",
+]) {
+  assertIncludes(customerNotification, fragment, `customer amendment notification template ${fragment}`);
+}
+assertIncludes(
+  adminPage,
+  'safeTitle: "Booking amendment confirmed"',
+  "customer amendment queue exact safe title",
 );
 
 const customerRoutePostBlock = customerRoute.slice(customerRoute.indexOf("export async function POST"));

@@ -46,7 +46,7 @@ const statusPatchHelper = extractBetween(
 const todayJobsActiveFilter = extractBetween(
   appPage,
   "const dayOfTripActiveJobBookings = operationalBookings",
-  "function getActiveJobBookingReference(",
+  "const liveDispatchMapEligibleBookings = operationalBookings",
   "Today's Jobs active-job filter",
 );
 const todayJobsCard = extractBetween(
@@ -107,10 +107,21 @@ for (const fragment of [
 for (const fragment of [
   "!bookingRecordIsCompletedStatus(bookingRecord)",
   "!bookingRecordIsCancelledStatus(bookingRecord)",
-  "!bookingRecordHasCompletedDriverReport(bookingRecord)",
 ]) {
   assertIncludes(todayJobsActiveFilter, fragment, `Today's Jobs active filter fragment ${fragment}`);
 }
+
+assertExcludes(
+  todayJobsActiveFilter,
+  "!bookingRecordHasCompletedDriverReport(bookingRecord)",
+  "Today's Jobs must retain the existing Driver Reports card after driver JC evidence",
+);
+
+assertExcludes(
+  appPage,
+  "syncBookingCompletedStatusFromDriverReport",
+  "driver JC evidence must not auto-write the booking completed status",
+);
 
 assertExcludes(
   todayJobsActiveFilter,
@@ -143,7 +154,6 @@ for (const fragment of [
 for (const fragment of [
   "patchBookingStatusReference(\n        bookingStatusReference,\n        nextStatus,\n        bookingRecord,",
   'await loadBookings("Bookings synced.", { silent: true });',
-  "patchBookingStatusReference(\n      bookingStatusReference,\n      \"completed\",\n      matchingBooking,",
 ]) {
   assertIncludes(appPage, fragment, `status update source-record fragment ${fragment}`);
 }

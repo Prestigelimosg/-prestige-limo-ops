@@ -1694,6 +1694,19 @@ assert.equal(parsedTonightAirportArrivalShorthand.name, 'Dr Poh So Kok');
 
 const dispatcherRouteAddressShorthandRegressionCases = [
   {
+    label: 'dated numbered-address airport departure with trailing passenger',
+    input: '3 Aug 1500hrs. 22 Berrima Road to Airport Mrs. Lee',
+    expected: {
+      company: '',
+      bookingType: 'DEP',
+      date: '2026-08-03',
+      time: '1500hrs',
+      pickup: '22 Berrima Road',
+      dropoff: 'Changi Airport',
+      name: 'Mrs Lee',
+    },
+  },
+  {
     label: 'frm/to route shorthand',
     input: `Date: today
 Time: 0615
@@ -4334,6 +4347,29 @@ assert.equal(plainBookerNoCompany.company, '');
 assert.equal(plainBookerNoCompany.booker, 'Nicole');
 assert.equal(plainBookerNoCompany.name, 'Mr Tan');
 
+const emailAiTripOrganizerNotesMessage = `Booking type: DEP
+Booker: Pui Yu Chan
+Booker email: hyunsoostar@hotmail.com
+Contact: +6596389322
+Passenger: Pui Yu Chan
+Pax: 4
+Vehicle: Toyota Alphard 2.5
+Pickup date: 2026-08-05
+Pickup time: 05:50
+Flight: SQ600
+Pickup: 26 Newton Rd, Singapore 307957
+Notes: Completed booking. Trip organizer: Mr. Kim, Hyun Soo, +65 98156017. Client details list 1 passenger; vehicle booking lists 4. Order total S$110.00, including S$15.00 midnight surcharge.`;
+const emailAiTripOrganizerNotes = parseBookingMessage(
+  emailAiTripOrganizerNotesMessage,
+  {
+    referenceDate: new Date('2026-07-28T12:00:00+08:00'),
+  },
+);
+assert.equal(emailAiTripOrganizerNotes.booker, 'Mr Kim, Hyun Soo');
+assert.equal(emailAiTripOrganizerNotes.bookerContact, '+65 98156017');
+assert.equal(emailAiTripOrganizerNotes.name, 'Pui Yu Chan');
+assert.equal(emailAiTripOrganizerNotes.pax, '4');
+
 const looseStayAddressTransferMessage = `Roland
 Pickup 0630 and he stay 82 Grange Road
 22 Bedok North Drive
@@ -4370,6 +4406,36 @@ assert.equal(narratedPassengerDeparture.dropoff, 'Changi Airport');
 assert.equal(narratedPassengerDeparture.name, 'Jwalant');
 assert.equal(narratedPassengerDeparture.extraStopCount ?? '', '');
 assert.equal(narratedPassengerDeparture.extraStopLocation ?? '', '');
+
+const compactOriginArrivalMessage = `Tue 4 Aug
+Arrive from Bangalore
+SQ 509, ETA 19:00 Mr. Jwalant. 82 Grange Road`;
+const compactOriginArrival = parseBookingMessage(compactOriginArrivalMessage, {
+  referenceDate: new Date('2026-08-03T12:00:00+08:00'),
+});
+assert.deepEqual(compactOriginArrival, {
+  success: true,
+  company: '',
+  bookingType: 'MNG',
+  vehicle: '',
+  date: '2026-08-04',
+  time: '1900hrs',
+  flight: 'SQ509',
+  pickup: 'Changi Airport',
+  dropoff: '82 Grange Road',
+  booker: '',
+  bookerEmail: '',
+  name: 'Mr Jwalant',
+  pax: '1',
+  driverName: '',
+  driverContact: '',
+  bookerContact: '',
+  cleanedLines: [
+    'Tue 4 Aug',
+    'Arrive from Bangalore',
+    'SQ 509, ETA 19:00 Mr. Jwalant. 82 Grange Road',
+  ],
+});
 
 const jobCard = [
   `${finalBooking.vehicle} ${finalBooking.bookingType}`,

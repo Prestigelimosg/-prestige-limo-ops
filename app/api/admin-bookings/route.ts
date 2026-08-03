@@ -1,5 +1,6 @@
 import {
   createAdminBooking,
+  type AdminBookingPersistenceRecord,
   type AdminBookingPersistenceUpdateInput,
   loadAdminBookingByReference,
   listAdminBookings,
@@ -96,6 +97,22 @@ function safeFailureResponse(operation: string) {
   });
 }
 
+function isConfirmedChatGptRequest(request: Request) {
+  return request.headers.get("x-prestige-booking-request-source") === "chatgpt-confirmed-preview";
+}
+
+function confirmedChatGptResponse(result: {
+  body: unknown;
+  status: number;
+}) {
+  return Response.json(result.body, {
+    headers: {
+      "cache-control": "no-store",
+    },
+    status: result.status,
+  });
+}
+
 type CustomerRequestDecisionNotificationResult =
   | {
       notification: CustomerDriverAppNotificationSafeRecord;
@@ -165,18 +182,42 @@ function customerRequestDecisionNotificationCopy(requestReviewStatus: string) {
   };
 }
 
+function preserveCustomerBookingRequestOrigin(
+  input: AdminBookingPersistenceUpdateInput,
+  previousBooking: AdminBookingPersistenceRecord,
+) {
+  const previousSource = normalizedToken(
+    previousBooking.source_surface || previousBooking.source_channel,
+  );
+
+  if (previousSource !== "customer_booking_request") {
+    return;
+  }
+
+  input.booking.source_channel = "customer-booking-request";
+  input.booking.source_surface = "customer_booking_request";
+}
+
 async function maybeQueueCustomerRequestDecisionNotification(
   input: AdminBookingPersistenceUpdateInput,
   actor: ReturnType<typeof adminDispatcherBoundaryToPersistenceAdapterActor>,
+  previousBooking: AdminBookingPersistenceRecord,
 ): Promise<CustomerRequestDecisionNotificationResult | null> {
   const bookingReference = clean(input.booking.booking_reference);
-  const sourceChannel = normalizedToken(input.booking.source_channel);
+  const sourceChannels = [
+    previousBooking.source_surface,
+    previousBooking.source_channel,
+    input.booking.source_surface,
+    input.booking.source_channel,
+  ].map(normalizedToken);
   const requestReviewStatus = normalizedToken(input.booking.request_review_status);
+  const previousRequestReviewStatus = normalizedToken(previousBooking.request_review_status);
   const customerFacingStatus = normalizedToken(input.booking.customer_facing_status);
 
   if (
-    sourceChannel !== "customer_booking_request" ||
+    !sourceChannels.includes("customer_booking_request") ||
     !bookingReference ||
+    requestReviewStatus === previousRequestReviewStatus ||
     !["approved", "declined", "needs_review"].includes(requestReviewStatus)
   ) {
     return null;
@@ -259,13 +300,35 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const confirmedChatGptRequest = isConfirmedChatGptRequest(request);
     const boundary = requireAdminDispatcherBoundary(request);
 
     if (!boundary.ok) {
+      if (confirmedChatGptRequest) {
+        const { confirmedChatGptBookingAccessDeniedResponse } = await import(
+          "../../../lib/admin-booking-confirmed-create"
+        );
+
+        return confirmedChatGptResponse(confirmedChatGptBookingAccessDeniedResponse());
+      }
+
       return boundary.response;
     }
 
-    const parsed = parseAdminBookingPersistencePayload(await readJsonBody(request));
+    const body = await readJsonBody(request);
+
+    if (confirmedChatGptRequest) {
+      const { createConfirmedAdminBooking } = await import(
+        "../../../lib/admin-booking-confirmed-create"
+      );
+      const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+
+      return confirmedChatGptResponse(
+        await createConfirmedAdminBooking(body, actor),
+      );
+    }
+
+    const parsed = parseAdminBookingPersistencePayload(body);
 
     if (!parsed.ok) {
       return Response.json(
@@ -319,6 +382,17 @@ export async function PATCH(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const previousBooking = await loadAdminBookingByReference(
+      actor,
+      parsed.data.target_booking_reference,
+    );
+
+    if (!previousBooking.ok) {
+      return adminBookingFailureResponse(previousBooking);
+    }
+
+    preserveCustomerBookingRequestOrigin(parsed.data, previousBooking.data);
+
     const result = await updateAdminBooking(parsed.data, actor, {
       action: "admin_booking_update",
       source_route: "/api/admin-bookings",
@@ -330,7 +404,11 @@ export async function PATCH(request: Request) {
       return adminBookingFailureResponse(result);
     }
 
-    const customerNotification = await maybeQueueCustomerRequestDecisionNotification(parsed.data, actor);
+    const customerNotification = await maybeQueueCustomerRequestDecisionNotification(
+      parsed.data,
+      actor,
+      previousBooking.data,
+    );
 
     return Response.json({
       ok: true,

@@ -116,6 +116,7 @@ type AdminNewBookingDevicePushAlertResult = {
     | "push_gate_closed"
     | "provider_not_configured"
     | "invalid_booking"
+    | "invalid_event"
     | "no_active_subscriptions"
     | "subscription_load_failed"
     | "provider_failure"
@@ -131,22 +132,41 @@ type AdminNewBookingDevicePushAlertResult = {
 };
 
 type AdminDevicePushPayload = {
-  title: "New booking request";
-  body: "New booking request received. Open Dashboard to review.";
+  title: string;
+  body: string;
   url: "/";
-  tag: "prestige-new-booking-request";
+  tag: string;
   version: string;
 };
+
+export type AdminDevicePushEventType =
+  | "new_booking_request"
+  | "customer_booking_amendment"
+  | "customer_booking_cancellation"
+  | "customer_driver_details_acknowledged"
+  | "customer_to_driver_reply"
+  | "driver_acknowledged"
+  | "driver_completed"
+  | "driver_issue"
+  | "driver_ots"
+  | "driver_ots_photo"
+  | "driver_otw"
+  | "driver_pob"
+  | "driver_to_customer_reply"
+  | "email_booking_amendment"
+  | "email_booking_cancellation"
+  | "email_confirmed_booking";
 
 export type AdminDevicePushSender = (
   subscription: PushSubscription,
   payload: AdminDevicePushPayload,
 ) => Promise<void>;
 
-type AdminNewBookingDevicePushAlertOptions = {
+type AdminDevicePushAlertOptions = {
   env?: EnvInput;
   subscriptionLoader?: () => Promise<PushSubscription[]>;
   pushSender?: AdminDevicePushSender;
+  vehiclePlate?: unknown;
 };
 
 function cleanEnvValue(env: EnvInput, key: string): string | null {
@@ -474,12 +494,132 @@ export async function revokeAdminDevicePushSubscription(
   };
 }
 
-function safeAlertPayload(): AdminDevicePushPayload {
-  return {
-    title: "New booking request",
+const adminDevicePushEventCopy: Record<
+  AdminDevicePushEventType,
+  Pick<AdminDevicePushPayload, "body" | "title">
+> = {
+  customer_booking_amendment: {
+    body: "Customer amendment request received. Open Dashboard to review.",
+    title: "Customer amendment request",
+  },
+  customer_booking_cancellation: {
+    body: "Customer cancellation request received. Open Dashboard to review.",
+    title: "Customer cancellation request",
+  },
+  customer_driver_details_acknowledged: {
+    body: "Customer acknowledged the assigned driver details. Open Dashboard to review.",
+    title: "Driver details acknowledged",
+  },
+  customer_to_driver_reply: {
+    body: "Customer sent a driver app reply. Open Dashboard to review.",
+    title: "Customer app reply",
+  },
+  driver_acknowledged: {
+    body: "Driver saved details and acknowledged a job. Open Dashboard to review.",
+    title: "Driver acknowledged job",
+  },
+  driver_completed: {
+    body: "Driver reported Job Completed. Open Dashboard to review.",
+    title: "Driver reported Job Completed",
+  },
+  driver_issue: {
+    body: "Driver reported an issue. Open Dashboard to review.",
+    title: "Driver issue alert",
+  },
+  driver_ots: {
+    body: "Driver reported OTS. Open Dashboard to review.",
+    title: "Driver reported OTS",
+  },
+  driver_ots_photo: {
+    body: "Driver sent an OTS photo. Open Dashboard to review.",
+    title: "OTS photo received",
+  },
+  driver_otw: {
+    body: "Driver reported OTW. Open Dashboard to review.",
+    title: "Driver reported OTW",
+  },
+  driver_pob: {
+    body: "Driver reported POB. Open Dashboard to review.",
+    title: "Driver reported POB",
+  },
+  driver_to_customer_reply: {
+    body: "Driver sent a customer app reply. Open Dashboard to review.",
+    title: "Driver app reply",
+  },
+  email_booking_amendment: {
+    body: "Booking amendment received by email. Open Dashboard to review.",
+    title: "Email booking amendment",
+  },
+  email_booking_cancellation: {
+    body: "Booking cancellation received by email. Open Dashboard to review.",
+    title: "Email booking cancellation",
+  },
+  email_confirmed_booking: {
+    body: "Confirmed booking received by email. Open Dashboard to review.",
+    title: "Confirmed booking email",
+  },
+  new_booking_request: {
     body: "New booking request received. Open Dashboard to review.",
+    title: "New booking request",
+  },
+};
+
+const adminDevicePushVehicleStatusLabels: Partial<
+  Record<AdminDevicePushEventType, string>
+> = {
+  driver_completed: "Job Completed",
+  driver_ots: "OTS",
+  driver_otw: "OTW",
+  driver_pob: "POB",
+};
+
+function validAdminDevicePushEventType(value: unknown): value is AdminDevicePushEventType {
+  return typeof value === "string" && value in adminDevicePushEventCopy;
+}
+
+function safeVehiclePlate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const plate = value.trim().replace(/\s+/g, " ").toUpperCase();
+
+  if (!plate || plate.length > 20 || !/^[A-Z0-9 -]+$/.test(plate)) {
+    return null;
+  }
+
+  return plate;
+}
+
+function safeAlertPayload(
+  eventType: AdminDevicePushEventType,
+  vehiclePlate?: unknown,
+): AdminDevicePushPayload {
+  const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
+  const plate =
+    statusLabel || eventType === "driver_acknowledged"
+      ? safeVehiclePlate(vehiclePlate)
+      : null;
+  const copy =
+    plate && statusLabel
+      ? {
+          body: `${plate} reported ${statusLabel}. Open Dashboard to review.`,
+          title: `${plate} reported ${statusLabel}`,
+        }
+      : plate && eventType === "driver_acknowledged"
+        ? {
+            body: `${plate} saved details and acknowledged a job. Open Dashboard to review.`,
+            title: `${plate} acknowledged job`,
+          }
+      : adminDevicePushEventCopy[eventType];
+
+  return {
+    ...copy,
     url: "/",
-    tag: "prestige-new-booking-request",
+    tag:
+      eventType === "new_booking_request"
+        ? "prestige-new-booking-request"
+        : `prestige-admin-${eventType.replaceAll("_", "-")}`,
     version: adminDevicePushNotificationVersion,
   };
 }
@@ -638,10 +778,21 @@ function blockedAlertResult(
 
 export async function sendAdminNewBookingDevicePushAlert(
   booking: AdminBookingPersistenceRecord,
-  options: AdminNewBookingDevicePushAlertOptions = {},
+  options: AdminDevicePushAlertOptions = {},
 ): Promise<AdminNewBookingDevicePushAlertResult> {
   if (!isUsableBooking(booking)) {
     return blockedAlertResult("invalid_booking");
+  }
+
+  return sendAdminDevicePushAlert("new_booking_request", options);
+}
+
+export async function sendAdminDevicePushAlert(
+  eventType: unknown,
+  options: AdminDevicePushAlertOptions = {},
+): Promise<AdminNewBookingDevicePushAlertResult> {
+  if (!validAdminDevicePushEventType(eventType)) {
+    return blockedAlertResult("invalid_event");
   }
 
   const env = options.env ?? process.env;
@@ -656,7 +807,7 @@ export async function sendAdminNewBookingDevicePushAlert(
     );
   }
 
-  const payload = safeAlertPayload();
+  const payload = safeAlertPayload(eventType, options.vehiclePlate);
   if (payloadHasForbiddenFragments(payload)) {
     return blockedAlertResult("provider_failure", true);
   }

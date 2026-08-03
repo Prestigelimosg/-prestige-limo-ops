@@ -153,6 +153,26 @@ assertIncludes(
 );
 assertIncludes(
   customerFolderPage,
+  'data-customer-numbering-settings="true"',
+  "single compact customer numbering disclosure",
+);
+assertIncludes(
+  customerFolderPage,
+  "Customer numbering",
+  "combined invoice and trip numbering label",
+);
+assert.equal(
+  customerFolderPage.split("<CustomerInvoicePrefixSettingsPanel").length - 1,
+  1,
+  "customer folder must mount exactly one invoice prefix writer",
+);
+assert.equal(
+  customerFolderPage.split("<CustomerBookingReferenceSettingsPanel").length - 1,
+  1,
+  "customer folder must mount exactly one trip reference prefix writer",
+);
+assertIncludes(
+  customerFolderPage,
   "customerAccount={customer.companyName}",
   "customer profile account binding",
 );

@@ -28,6 +28,8 @@ type SendReason =
   | "provider_not_configured"
   | "provider_timeout"
   | "recipient_not_allowlisted"
+  | "recipient_not_saved_for_booking"
+  | "recipient_verification_unavailable"
   | "send_succeeded";
 
 export type CustomerDriverDetailsEmailSendInput = {
@@ -39,6 +41,7 @@ export type CustomerDriverDetailsEmailSendInput = {
 export type CustomerDriverDetailsEmailPayload = {
   customer_booking_details: {
     booking_reference: string;
+    customer_visible_booking_reference: string;
     customer_passenger_traveler_name: string | null;
     customer_facing_flight_number: string | null;
     drop_off_location: string;
@@ -102,11 +105,24 @@ export type AdminCustomerDriverDetailsEmailSendOptions = {
     },
   ) => Promise<ResendEmailProviderResponse>;
   timeoutMs?: number;
+  verifiedRecipientEmail?: string | null;
+};
+
+export type AdminCustomerDriverDetailsEmailConfigReadiness = {
+  configurationReady: boolean;
+  driverDetailsEmailSendGateOpen: boolean;
+  providerConfigured: boolean;
+  providerCredentialConfigured: boolean;
+  providerSelected: boolean;
+  recipientAllowlistConfigured: boolean;
+  replyToMatched: boolean;
+  selectedProvider: "resend" | null;
+  senderMatched: boolean;
 };
 
 const resendEmailApiUrl = "https://api.resend.com/emails";
 const selectedProvider = "resend";
-const selectedSender = "Prestige Limo Dispatch <info@prestigelimo.sg>";
+const selectedSender = "Prestige Limo SG <info@prestigelimo.sg>";
 const selectedReplyTo = "info@prestigelimo.sg";
 const allowedActorRoles = new Set(["admin", "dispatcher"]);
 const placeholderConfigPattern =
@@ -119,6 +135,10 @@ const safeProviderConfigError =
   "Driver Details Email provider configuration is not ready on this server.";
 const safeRecipientAllowlistError =
   "Driver Details Email recipient is not approved for staging send evidence.";
+const safeRecipientNotSavedError =
+  "Driver Details Email recipient does not match the exact saved booking.";
+const safeRecipientVerificationUnavailableError =
+  "Driver Details Email recipient verification is temporarily unavailable.";
 const safeProviderFailureError = "Driver Details Email provider send failed safely.";
 const safeProviderTimeoutError = "Driver Details Email provider send timed out safely.";
 
@@ -129,6 +149,7 @@ const allowedTopLevelKeys = new Set([
 ]);
 const allowedCustomerBookingKeys = new Set([
   "booking_reference",
+  "customer_visible_booking_reference",
   "customer_passenger_traveler_name",
   "customer_facing_flight_number",
   "drop_off_location",
@@ -301,6 +322,10 @@ function normalizePayload(input: CustomerDriverDetailsEmailSendInput) {
   const payload: CustomerDriverDetailsEmailPayload = {
     customer_booking_details: {
       booking_reference: safeText(customerBooking.booking_reference, 120) || "",
+      customer_visible_booking_reference:
+        safeText(customerBooking.customer_visible_booking_reference, 120) ||
+        safeText(customerBooking.booking_reference, 120) ||
+        "",
       customer_passenger_traveler_name: safeText(
         customerBooking.customer_passenger_traveler_name,
         120,
@@ -341,6 +366,26 @@ function normalizePayload(input: CustomerDriverDetailsEmailSendInput) {
   ];
 
   return requiredValues.every(Boolean) ? payload : null;
+}
+
+export function adminCustomerDriverDetailsEmailRecipientIdentity(
+  input: CustomerDriverDetailsEmailSendInput,
+) {
+  const payload = normalizePayload(input);
+
+  return payload
+    ? {
+        bookingReference: payload.customer_booking_details.booking_reference,
+        recipientEmail: payload.recipient_email,
+      }
+    : null;
+}
+
+export function adminCustomerDriverDetailsEmailSavedRecipientEmail(
+  contactEmail: unknown,
+  bookerEmail: unknown,
+) {
+  return safeEmail(contactEmail) || safeEmail(bookerEmail);
 }
 
 function providerIdempotencyKey(payload: CustomerDriverDetailsEmailPayload) {
@@ -416,6 +461,19 @@ export function adminCustomerDriverDetailsEmailClosedGateResult() {
   });
 }
 
+export function adminCustomerDriverDetailsEmailRecipientVerificationResult(
+  reason: "recipient_not_saved_for_booking" | "recipient_verification_unavailable",
+) {
+  return safeResult({
+    error:
+      reason === "recipient_not_saved_for_booking"
+        ? safeRecipientNotSavedError
+        : safeRecipientVerificationUnavailableError,
+    reason,
+    status: reason === "recipient_not_saved_for_booking" ? "rejected" : "blocked",
+  });
+}
+
 function safeTimeoutMs(value: number | undefined) {
   return Number.isFinite(value) && value && value >= 1000 && value <= 10000 ? value : 5000;
 }
@@ -434,7 +492,7 @@ function buildEmailText(payload: CustomerDriverDetailsEmailPayload) {
     ...greetingLines,
     "CUSTOMER BOOKING DETAILS",
     ...customerNameLine,
-    `Booking reference: ${payload.customer_booking_details.booking_reference}`,
+    `Booking reference: ${payload.customer_booking_details.customer_visible_booking_reference}`,
     `Service type: ${payload.customer_booking_details.service_type}`,
     `Pickup date: ${payload.customer_booking_details.pickup_date}`,
     `Pickup time: ${payload.customer_booking_details.pickup_time}`,
@@ -455,7 +513,7 @@ function buildProviderBody(payload: CustomerDriverDetailsEmailPayload, from: str
   return JSON.stringify({
     from,
     reply_to: replyTo,
-    subject: `Driver details for ${payload.customer_booking_details.booking_reference}`,
+    subject: `Driver details for ${payload.customer_booking_details.customer_visible_booking_reference}`,
     text: buildEmailText(payload),
     to: [payload.recipient_email],
   });
@@ -511,13 +569,9 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
     });
   }
 
-  const provider = cleanConfigValue(process.env.PRESTIGE_EMAIL_PROVIDER)?.toLowerCase() || null;
-  const from = cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM);
-  const replyTo = cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO);
-  const allowlist = parseAllowlist(
-    cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST),
-  );
   const apiKey = cleanConfigValue(process.env.RESEND_API_KEY);
+  const { allowlist, from, provider, replyTo } =
+    readAdminCustomerDriverDetailsEmailProviderConfig(apiKey);
 
   if (
     provider !== selectedProvider ||
@@ -535,7 +589,18 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
     });
   }
 
-  if (!allowlist.includes(payload.recipient_email)) {
+  const hasVerifiedRecipient = Boolean(
+    options && Object.prototype.hasOwnProperty.call(options, "verifiedRecipientEmail"),
+  );
+  const verifiedRecipientEmail = safeEmail(options?.verifiedRecipientEmail);
+
+  if (hasVerifiedRecipient && verifiedRecipientEmail !== payload.recipient_email) {
+    return adminCustomerDriverDetailsEmailRecipientVerificationResult(
+      "recipient_not_saved_for_booking",
+    );
+  }
+
+  if (!hasVerifiedRecipient && !allowlist.includes(payload.recipient_email)) {
     return safeResult({
       error: safeRecipientAllowlistError,
       reason: "recipient_not_allowlisted",
@@ -587,4 +652,48 @@ export async function executeAdminCustomerDriverDetailsEmailSendAction(
       status: "failed",
     });
   }
+}
+
+function readAdminCustomerDriverDetailsEmailProviderConfig(
+  apiKey = cleanConfigValue(process.env.RESEND_API_KEY),
+) {
+  return {
+    provider: cleanConfigValue(process.env.PRESTIGE_EMAIL_PROVIDER)?.toLowerCase() || null,
+    from: cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_FROM),
+    replyTo: cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_REPLY_TO),
+    allowlist: parseAllowlist(
+      cleanConfigValue(process.env.PRESTIGE_DRIVER_DETAILS_EMAIL_STAGING_RECIPIENT_ALLOWLIST),
+    ),
+    apiKey,
+  };
+}
+
+export function adminCustomerDriverDetailsEmailConfigReadiness(): AdminCustomerDriverDetailsEmailConfigReadiness {
+  const { allowlist, apiKey, from, provider, replyTo } =
+    readAdminCustomerDriverDetailsEmailProviderConfig();
+  const providerSelected = provider === selectedProvider;
+  const senderMatched = from === selectedSender && validConfigValue(from);
+  const replyToMatched =
+    replyTo?.toLowerCase() === selectedReplyTo && validConfigValue(replyTo);
+  const recipientAllowlistConfigured = allowlist.length > 0;
+  const providerCredentialConfigured = validProviderToken(apiKey);
+  const providerConfigured = Boolean(
+    providerSelected &&
+      senderMatched &&
+      replyToMatched &&
+      recipientAllowlistConfigured &&
+      providerCredentialConfigured,
+  );
+
+  return {
+    configurationReady: providerConfigured,
+    driverDetailsEmailSendGateOpen: adminCustomerDriverDetailsEmailSendGateOpen(),
+    providerConfigured,
+    providerCredentialConfigured,
+    providerSelected,
+    recipientAllowlistConfigured,
+    replyToMatched,
+    selectedProvider: providerSelected ? selectedProvider : null,
+    senderMatched,
+  };
 }

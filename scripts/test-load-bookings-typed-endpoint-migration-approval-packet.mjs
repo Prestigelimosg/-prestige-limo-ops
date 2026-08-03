@@ -141,7 +141,7 @@ for (const forbiddenApprovalPhrase of [
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Current Load Bookings legacy endpoint",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");

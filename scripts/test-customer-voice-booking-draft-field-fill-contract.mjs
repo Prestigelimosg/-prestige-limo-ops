@@ -49,6 +49,11 @@ const safeSubmittedFieldFillTargets = [
   "extraStops",
 ];
 
+const safeAcceptedCustomerRequestFields = [
+  ...safeSubmittedFieldFillTargets,
+  "travelerId",
+];
+
 const excludedFieldFillFragments = [
   "pricing",
   "payout",
@@ -300,8 +305,13 @@ assertSameList(
 );
 assertSameList(
   extractNewSetItems(adminBookingPersistence, "customerBookingRequestFields"),
-  safeSubmittedFieldFillTargets,
+  safeAcceptedCustomerRequestFields,
   "customer booking request accepted persistence fields",
+);
+assertExcludes(
+  customerBookingLocalVoiceDraft,
+  '"travelerId"',
+  "local voice field fill must not select or overwrite verified traveller identity",
 );
 
 for (const fragment of [
@@ -312,7 +322,7 @@ for (const fragment of [
   'data-customer-voice-booking-draft-fill="local-only"',
   "voiceTranscriptRef",
   "applyCustomerBookingLocalVoiceDraftFieldFillToForm",
-  "submitCustomerBookingRequest(form)",
+  "submitCustomerBookingRequest(form, {",
 ]) {
   assertIncludes(bookPage, fragment, `/book field-fill evidence ${fragment}`);
 }
@@ -353,8 +363,8 @@ for (const forbidden of ["specialRequest", "voiceTranscript", "voice_transcript"
 }
 
 for (const fragment of [
-  "AI parser API route is ready but not connected to OpenAI yet.",
-  "Live AI parsing is not enabled yet. Use AI_PARSE_MODE=mock.",
+  "AI parser remains in local mock mode. No OpenAI request was made.",
+  "requestAdminAiBookingParse",
 ]) {
   assertIncludes(aiParseRoute, fragment, `ai-parse route guard evidence ${fragment}`);
 }

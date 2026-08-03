@@ -10,6 +10,7 @@ export type CustomerPortalBookingChangeRequestInput = {
   requestedDropoffLocation: string;
   requestedPickupDate: string;
   requestedPickupLocation: string;
+  requestedServiceType: string;
   requestedPickupTime: string;
 };
 
@@ -186,6 +187,7 @@ export async function submitCustomerPortalBookingChangeRequest({
       requested_dropoff_location: input.requestedDropoffLocation,
       requested_pickup_date: input.requestedPickupDate,
       requested_pickup_location: input.requestedPickupLocation,
+      requested_service_type: input.requestedServiceType,
       requested_pickup_time: input.requestedPickupTime,
     }),
     cache: "no-store",

@@ -78,6 +78,35 @@ assert.equal(
   "/my-bookings should start empty, clear rows after blocked reads, and use only guarded customer saved-bookings API rows.",
 );
 assert.equal(
+  pageSource.includes("refreshCustomerPortalSavedBookings") &&
+    pageSource.includes('window.addEventListener("focus", refreshOnForeground)') &&
+    pageSource.includes('document.addEventListener("visibilitychange", refreshOnForeground)') &&
+    pageSource.includes('window.removeEventListener("focus", refreshOnForeground)') &&
+    pageSource.includes('document.removeEventListener("visibilitychange", refreshOnForeground)'),
+  true,
+  "/my-bookings should reuse its guarded saved-bookings loader when the installed customer app returns to the foreground.",
+);
+const foregroundRefreshStart = pageSource.indexOf("let activeController: AbortController | null = null;");
+const foregroundRefreshEnd = pageSource.indexOf(
+  "}, [refreshCustomerPortalSavedBookings]);",
+  foregroundRefreshStart,
+);
+assert.notEqual(
+  foregroundRefreshStart,
+  -1,
+  "/my-bookings should keep one bounded foreground saved-bookings refresh effect.",
+);
+assert.notEqual(
+  foregroundRefreshEnd,
+  -1,
+  "/my-bookings should close the bounded foreground saved-bookings refresh effect.",
+);
+assert.equal(
+  /setInterval\s*\(/.test(pageSource.slice(foregroundRefreshStart, foregroundRefreshEnd)),
+  false,
+  "/my-bookings foreground synchronization must not add a polling lane.",
+);
+assert.equal(
   pageSource.includes('"Sign in to view bookings."') &&
     pageSource.includes("portalBookingsLoadState === \"blocked\""),
   true,
@@ -133,6 +162,7 @@ try {
         passenger_name: "Safe Passenger",
         pickup_at: "2026-06-08T09:00:00.000Z",
         pickup_location: "Changi Airport",
+        public_booking_reference: "SAFE-00001",
         service_type: "Airport Arrival",
         updated_at: "2026-06-08T01:30:00.000Z",
       },
@@ -157,6 +187,7 @@ try {
       passengerName: "Safe Passenger",
       pickupDateTime: "8 June 2026, 17:00",
       pickupLocation: "Changi Airport",
+      publicBookingReference: "SAFE-00001",
       serviceType: "Airport Arrival",
       status: "Confirmed",
       vehicleType: "To confirm",
@@ -218,6 +249,7 @@ try {
       passengerName: "Passenger to confirm",
       pickupDateTime: "10 June 2026, 17:00",
       pickupLocation: "Pickup to confirm",
+      publicBookingReference: "SAFE-PORTAL-003",
       serviceType: "Service to confirm",
       status: "Confirmed",
       vehicleType: "To confirm",
@@ -247,6 +279,7 @@ try {
         passengerName: "Safe Passenger",
         pickupDateTime: "6 July 2026, 02:45",
         pickupLocation: "Raffles Hotel Singapore Lobby",
+        publicBookingReference: "SAFE-PORTAL-004",
         serviceType: "Departure",
         status: "Confirmed",
         vehicleType: "To confirm",

@@ -32,6 +32,7 @@ const allowedPortalBookingFields = [
   "passengerName",
   "pickupDateTime",
   "pickupLocation",
+  "publicBookingReference",
   "serviceType",
   "specialRequest",
   "status",
@@ -48,6 +49,7 @@ const allowedCurrentApiRecordFields = [
   "passenger_name",
   "pickup_at",
   "pickup_location",
+  "public_booking_reference",
   "service_type",
   "updated_at",
 ];

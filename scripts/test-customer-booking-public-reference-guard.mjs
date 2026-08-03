@@ -1,0 +1,210 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const paths = {
+  adminAdapter: "lib/admin-booking-supabase-adapter.ts",
+  adminRead: "lib/admin-saved-booking-read.ts",
+  adminCustomerRead: "lib/admin-customer-accounts-read.ts",
+  adminCustomerUi: "app/customers/page.tsx",
+  adminUi: "app/page.tsx",
+  adminAlertEmail: "lib/admin-new-booking-email-alert.ts",
+  customerAdapter: "lib/customer-portal-saved-bookings-adapter.ts",
+  customerRead: "lib/customer-saved-bookings-read.ts",
+  customerUi: "app/my-bookings/page.tsx",
+  receiptEmail: "lib/customer-booking-receipt-email.ts",
+  requestRoute: "app/api/customer-booking-requests/route.ts",
+  driverRead: "lib/driver-job-status-persistence.ts",
+  driverUi: "app/driver-job/[token]/page.tsx",
+  driverDetailsEmail: "lib/admin-customer-driver-details-email-send-action.ts",
+  ledger: "docs/current-implementation-ledger.md",
+  migration: "supabase/migrations/202607180001_customer_booking_public_reference_foundation.sql",
+  permissionMigration: "supabase/migrations/202607180002_customer_booking_public_reference_service_role_least_privilege.sql",
+  panel: "app/customers/[customerId]/booking-reference-settings-panel.tsx",
+  route: "app/api/admin-customer-booking-reference-settings/route.ts",
+  settings: "lib/admin-customer-booking-reference-settings.ts",
+};
+
+const source = Object.fromEntries(
+  await Promise.all(
+    Object.entries(paths).map(async ([key, path]) => [key, await readFile(path, "utf8")]),
+  ),
+);
+
+function includes(key, fragment, label) {
+  assert.ok(source[key].includes(fragment), `Missing ${label}: ${fragment}`);
+}
+
+function excludes(key, pattern, label) {
+  assert.doesNotMatch(source[key], pattern, `Unsafe ${label}`);
+}
+
+for (const fragment of [
+  "add column if not exists public_booking_reference text",
+  "customer_booking_reference_sequences",
+  "global_booking_reference_sequence",
+  "bookings_public_booking_reference_key",
+  "assign_booking_public_reference",
+  "^[0-9]{5}$",
+  "[A-Z0-9]{2,12}-[0-9]{5}",
+  "enable row level security",
+  "revoke all",
+  "grant select, insert, update on table public.customer_booking_reference_sequences to service_role",
+  "grant select, update on table public.global_booking_reference_sequence to service_role",
+  "grant execute on function public.assign_booking_public_reference() to service_role",
+]) {
+  includes("migration", fragment, "public booking reference schema contract");
+}
+
+includes("migration", "new.public_booking_reference", "insert-time persisted public reference");
+includes("migration", "values (true, 10826)", "approved unprefixed public reference starting number");
+includes("migration", "new.customer_id", "customer-scoped prefix lookup");
+includes("migration", "booking_public_reference_exhausted", "five-digit exhaustion fail-closed path");
+includes("migration", "booking_public_reference_prefix_unavailable", "locked prefix unavailable fail-closed path");
+excludes("migration", /customer_invoice_sequences|monthly_invoice_issue_records|invoice_prefix/i, "invoice schema coupling");
+excludes("migration", /grant[^;]*(?:anon|authenticated)/i, "public role grant");
+
+for (const fragment of [
+  "revoke all on table public.customer_booking_reference_sequences from service_role",
+  "revoke all on table public.global_booking_reference_sequence from service_role",
+  "grant select, insert, update on table public.customer_booking_reference_sequences to service_role",
+  "grant select, update on table public.global_booking_reference_sequence to service_role",
+]) {
+  includes("permissionMigration", fragment, "service-role least-privilege correction");
+}
+excludes("permissionMigration", /^\s*grant[^;]*(?:delete|anon|authenticated)/im, "broad sequence-table grant");
+
+for (const key of ["adminAdapter", "adminRead", "customerRead", "driverRead"]) {
+  includes(key, "public_booking_reference", `${key} public reference read`);
+}
+includes("adminCustomerRead", "latest_public_booking_reference", "admin customer latest public reference projection");
+includes("adminCustomerUi", "latestPublicBookingReference", "admin customer public reference display");
+
+includes("customerRead", "booking_reference: bookingReference", "customer internal reference retention");
+includes("customerRead", "public_booking_reference: publicBookingReference", "customer public reference projection");
+includes("customerAdapter", "internalBookingReference", "customer internal operation key");
+includes("customerAdapter", "publicBookingReference", "customer public display reference");
+includes("customerUi", "booking.publicBookingReference", "customer visible public reference");
+includes("receiptEmail", "booking.public_booking_reference", "customer receipt public reference");
+includes("adminAlertEmail", "bookingRecord.public_booking_reference", "admin alert public reference");
+includes("adminAlertEmail", "formatSingaporePickupDisplay", "admin alert SGT pickup display");
+includes("requestRoute", "primaryRequest.public_booking_reference", "customer request response public reference");
+includes("driverRead", "public_reference: publicBookingReference", "driver public reference display mapping");
+includes("driverUi", '{ label: "Reference", value: job.reference }', "driver visible public reference row");
+includes("adminUi", "bookingPublicReference", "admin shared public reference selector");
+includes("adminUi", "bookingRecord.public_booking_reference", "admin public reference search/display");
+excludes(
+  "adminUi",
+  /cleanReferenceText\(bookingRecord\.public_booking_reference\)\s*\|\|\s*compactBookingReference/,
+  "admin internal-reference display fallback",
+);
+includes("adminUi", '"Reference unavailable"', "missing public reference fail-closed display");
+includes(
+  "adminUi",
+  "public_booking_reference: clean(record.public_booking_reference) || null",
+  "operational-record public reference retention",
+);
+assert.ok(
+  (source.adminUi.match(/public_booking_reference: clean\([^\n]+public_booking_reference\) \|\| null/g) || []).length >= 2,
+  "Both admin compatibility mappers must retain the public booking reference.",
+);
+includes(
+  "adminUi",
+  "clean(record.public_booking_reference)",
+  "operational-record public reference search",
+);
+includes(
+  "adminUi",
+  "const displayReference = displayRecord",
+  "new-booking notification public reference display",
+);
+includes("adminUi", "{displayReference}", "new-booking notification public reference label");
+includes(
+  "adminUi",
+  "`Booking reference: ${dispatchPublicBookingReference}`",
+  "customer copy public reference display",
+);
+includes(
+  "adminUi",
+  "driverJobLinkPublicBookingReference",
+  "driver-link copy public reference display",
+);
+includes(
+  "adminUi",
+  'Booking {dispatchPublicBookingReference || "Reference unavailable"}',
+  "Driver Job Link handoff public reference display",
+);
+excludes(
+  "adminUi",
+  /Booking \{dispatchReleaseWorkflowBookingReference\}/,
+  "Driver Job Link handoff internal reference display",
+);
+for (const fragment of [
+  "adminVisibleBookingReference",
+  "bookingPublicReference(activeJobBooking)",
+  '{dispatchPublicBookingReference || "Booking"}',
+  "displayBookingReference = dispatchPublicBookingReference",
+  "displayBookingReference = adminVisibleBookingReference(bookingReference)",
+  "Operational snapshot applied: ${displayBookingReference}",
+  "Dispatch release workflow status saved for ${displayBookingReference}",
+  "Driver acknowledgement workflow status saved for ${displayBookingReference}",
+]) {
+  includes("adminUi", fragment, `admin public reference consumer ${fragment}`);
+}
+for (const pattern of [
+  /Operational snapshot applied: \$\{bookingReference\}/,
+  /Loaded dispatch release workflow status for \$\{bookingReference\}/,
+  /Loaded driver acknowledgement workflow status for \$\{bookingReference\}/,
+  /Loading saved driver status for \$\{bookingReference\}/,
+  /Checking OTS photo proof for \$\{bookingReference\}/,
+  /Dispatch release workflow status saved for \$\{bookingReference\}/,
+  /Driver acknowledgement workflow status saved for \$\{bookingReference\}/,
+]) {
+  excludes("adminUi", pattern, `active admin internal-reference message ${pattern}`);
+}
+excludes(
+  "adminUi",
+  /\{bookingReference \|\| clean\(notification\.safe_title\) \|\| \"New booking request\"\}/,
+  "internal new-booking notification reference display",
+);
+includes(
+  "adminUi",
+  "Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}",
+  "admin operational details public reference label",
+);
+excludes(
+  "adminUi",
+  /operationalCard\.booking_reference\s*\?\s*\(\s*<p>\s*Ref:/,
+  "admin public reference label gated by an unrelated operational fallback field",
+);
+const completedDetailsStart = source.adminUi.indexOf(
+  'data-completed-operational-body={bookingId}',
+);
+const completedDetailsEnd = source.adminUi.indexOf(
+  'data-completed-operational-actions={bookingId}',
+  completedDetailsStart,
+);
+assert.ok(completedDetailsStart >= 0, "Missing completed operational details block");
+assert.ok(completedDetailsEnd > completedDetailsStart, "Missing completed operational details boundary");
+assert.ok(
+  source.adminUi
+    .slice(completedDetailsStart, completedDetailsEnd)
+    .includes("Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}"),
+  "Completed operational details must visibly show the persisted public booking reference",
+);
+includes("adminUi", "public_job_reference", "admin live-map public reference display projection");
+includes("adminUi", "customer_visible_booking_reference", "customer driver-details email public reference payload");
+includes("adminUi", "dispatchPublicBookingReference", "customer and driver dispatch-copy public reference display");
+includes("driverDetailsEmail", "customer_visible_booking_reference", "customer driver-details email public reference rendering");
+includes("driverDetailsEmail", "payload.customer_booking_details.booking_reference.replace", "driver-details email internal idempotency key retention");
+
+for (const key of ["route", "settings", "panel"]) {
+  excludes(key, /customer_invoice_sequences|monthly_invoice_issue_records|reserve_monthly_invoice|invoice_sequence_number/i, `${key} invoice workflow coupling`);
+}
+
+includes("settings", "prefix_locked", "immutable customer booking prefix");
+includes("settings", "next_sequence_number", "customer booking sequence visibility");
+includes("route", "requireCustomerFolderAdminBoundary", "customer-folder admin boundary");
+includes("panel", "Booking reference prefix", "customer-folder booking prefix control");
+includes("ledger", "Customer Booking Public Reference Lane", "implementation ledger record");
+
+console.log("Customer booking public reference guard passed.");

@@ -8,6 +8,7 @@ import {
 
 export type AdminBookingRecordInput = {
   booking_reference?: string | null;
+  public_booking_reference?: string | null;
   source_channel?: string | null;
   source_surface?: string | null;
   customer_id?: number | string | null;
@@ -16,6 +17,7 @@ export type AdminBookingRecordInput = {
   traveler_id?: number | null;
   pickup_datetime?: string | null;
   pickup_at?: string | null;
+  dropoff_datetime?: string | null;
   pickup_location?: string | null;
   dropoff_location?: string | null;
   route_type?: string | null;
@@ -28,6 +30,7 @@ export type AdminBookingRecordInput = {
   passenger_name?: string | null;
   passenger_phone?: string | null;
   flight_no?: string | null;
+  driver_id?: number | null;
   driver_contact?: string | null;
   driver_name?: string | null;
   driver_plate_number?: string | null;
@@ -170,6 +173,7 @@ const customerBookingRequestFields = new Set([
   "companyName",
   "contactNo",
   "emailAddress",
+  "travelerId",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -200,6 +204,7 @@ const bookingFields = new Set([
   "traveler_id",
   "pickup_datetime",
   "pickup_at",
+  "dropoff_datetime",
   "pickup_location",
   "dropoff_location",
   "route_type",
@@ -212,6 +217,7 @@ const bookingFields = new Set([
   "passenger_name",
   "passenger_phone",
   "flight_no",
+  "driver_id",
   "driver_contact",
   "driver_name",
   "driver_plate_number",
@@ -481,6 +487,7 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     traveler_id: integerOrNull(record.traveler_id),
     pickup_datetime: pickupDateTime,
     pickup_at: pickupDateTime,
+    dropoff_datetime: textOrNull(record.dropoff_datetime),
     pickup_location: pickupLocation,
     dropoff_location: dropoffLocation,
     route_type: routeType,
@@ -496,6 +503,7 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     passenger_name: textOrNull(record.passenger_name),
     passenger_phone: textOrNull(record.passenger_phone),
     flight_no: textOrNull(record.flight_no),
+    driver_id: integerOrNull(record.driver_id),
     driver_contact: textOrNull(record.driver_contact),
     driver_name: textOrNull(record.driver_name),
     driver_plate_number: textOrNull(record.driver_plate_number),
@@ -663,10 +671,52 @@ function validateRequiredBookingFields(booking: AdminBookingRecordInput): AdminB
     };
   }
 
+  const dspScheduledEndResult = validateDspScheduledEnd(booking);
+
+  if (!dspScheduledEndResult.ok) {
+    return dspScheduledEndResult;
+  }
+
   return {
     ok: true,
     data: null,
   };
+}
+
+function validateDspScheduledEnd(
+  booking: AdminBookingRecordInput,
+): AdminBookingResult<null> {
+  const scheduledEndDateTime = textOrNull(booking.dropoff_datetime);
+
+  if (scheduledEndDateTime && !validDateTime(scheduledEndDateTime)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed operational booking dropoff_datetime rejected.",
+    };
+  }
+
+  const isAdminDashboardDsp =
+    (textOrNull(booking.source_channel) === "admin-dashboard" ||
+      textOrNull(booking.source_surface) === "admin_api") &&
+    textOrNull(booking.service_type || booking.route_type)?.toUpperCase() === "DSP";
+
+  if (!isAdminDashboardDsp || !scheduledEndDateTime) {
+    return { data: null, ok: true };
+  }
+
+  const pickupMs = Date.parse(textOrNull(booking.pickup_datetime) || "");
+  const dropoffMs = Date.parse(scheduledEndDateTime);
+
+  if (!Number.isFinite(pickupMs) || !Number.isFinite(dropoffMs) || dropoffMs <= pickupMs) {
+    return {
+      ok: false,
+      status: 400,
+      error: "DSP scheduled end must be after its scheduled pickup.",
+    };
+  }
+
+  return { data: null, ok: true };
 }
 
 function validateRequiredRoutePoints(
@@ -845,6 +895,10 @@ export type CustomerBookingRequestParsedPayloads = {
   returnTripRequested: boolean;
 };
 
+export type CustomerBookingRequestParseOptions = {
+  groupReferenceOverride?: string;
+};
+
 function isCustomerReturnTripRequested(value: unknown) {
   if (value === true) {
     return true;
@@ -859,6 +913,12 @@ function isCustomerReturnTripRequested(value: unknown) {
   }
 
   return false;
+}
+
+const customerBookingDropoffFallback = "Drop-off To Confirm";
+
+function customerBookingDropoffIsOptional(serviceType: string | null) {
+  return serviceType === "Hourly / Disposal";
 }
 
 function buildCustomerBookingRequestPayloadForLeg({
@@ -962,8 +1022,22 @@ function buildCustomerBookingRequestPayloadForLeg({
 
 export function parseCustomerBookingRequestPayloads(
   value: unknown,
+  options: CustomerBookingRequestParseOptions = {},
 ): AdminBookingResult<CustomerBookingRequestParsedPayloads> {
   const body = asRecord(value);
+  const groupReferenceOverride =
+    options.groupReferenceOverride === undefined
+      ? null
+      : validTargetBookingReference(options.groupReferenceOverride);
+
+  if (options.groupReferenceOverride !== undefined && !groupReferenceOverride) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request reference override rejected.",
+    };
+  }
+
   const forbiddenFields = findForbiddenFieldNames(body);
 
   if (forbiddenFields.length > 0) {
@@ -981,19 +1055,24 @@ export function parseCustomerBookingRequestPayloads(
   }
 
   const contactNo = textOrNull(body.contactNo);
+  const emailAddress = textOrNull(body.emailAddress)?.toLowerCase() || null;
   const passengerName = textOrNull(body.passengerName);
   const pickupDate = textOrNull(body.pickupDate);
   const pickupTime = textOrNull(body.pickupTime);
   const pickupLocation = textOrNull(body.pickupLocation);
   const dropoffLocation = textOrNull(body.dropoffLocation);
+  const serviceType = textOrNull(body.serviceType);
+  const dropoffIsOptional = customerBookingDropoffIsOptional(serviceType);
+  const effectiveDropoffLocation = dropoffLocation || (dropoffIsOptional ? customerBookingDropoffFallback : null);
   const pickupDateTime = validCustomerPickupDateTime(pickupDate, pickupTime);
   const missingFields = [
     !contactNo ? "contactNo" : "",
+    !emailAddress ? "emailAddress" : "",
     !passengerName ? "passengerName" : "",
     !pickupDate ? "pickupDate" : "",
     !pickupTime ? "pickupTime" : "",
     !pickupLocation ? "pickupLocation" : "",
-    !dropoffLocation ? "dropoffLocation" : "",
+    !effectiveDropoffLocation ? "dropoffLocation" : "",
   ].filter(Boolean);
 
   if (missingFields.length > 0) {
@@ -1001,6 +1080,14 @@ export function parseCustomerBookingRequestPayloads(
       ok: false,
       status: 400,
       error: `Missing required customer booking request fields: ${missingFields.join(", ")}`,
+    };
+  }
+
+  if (!/^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\\]+$/.test(emailAddress || "")) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request email address rejected.",
     };
   }
 
@@ -1014,11 +1101,12 @@ export function parseCustomerBookingRequestPayloads(
 
   const returnTripRequested = isCustomerReturnTripRequested(body.returnTripRequested);
   const flightNumber = textOrNull(body.flightNumber);
-  const groupReference = createCustomerBookingRequestReference();
+  const groupReference =
+    groupReferenceOverride || createCustomerBookingRequestReference();
   const outbound = buildCustomerBookingRequestPayloadForLeg({
     body,
     bookingReference: returnTripRequested ? `${groupReference}-OUT` : groupReference,
-    dropoffLocation: dropoffLocation || "",
+    dropoffLocation: effectiveDropoffLocation || "",
     flightNumber,
     groupReference,
     legLabel: "OUTBOUND",
@@ -1039,12 +1127,14 @@ export function parseCustomerBookingRequestPayloads(
     const returnPickupTime = textOrNull(body.returnPickupTime);
     const returnPickupLocation = textOrNull(body.returnPickupLocation);
     const returnDropoffLocation = textOrNull(body.returnDropoffLocation);
+    const effectiveReturnDropoffLocation =
+      returnDropoffLocation || (dropoffIsOptional ? customerBookingDropoffFallback : null);
     const returnPickupDateTime = validCustomerPickupDateTime(returnPickupDate, returnPickupTime);
     const returnMissingFields = [
       !returnPickupDate ? "returnPickupDate" : "",
       !returnPickupTime ? "returnPickupTime" : "",
       !returnPickupLocation ? "returnPickupLocation" : "",
-      !returnDropoffLocation ? "returnDropoffLocation" : "",
+      !effectiveReturnDropoffLocation ? "returnDropoffLocation" : "",
     ].filter(Boolean);
 
     if (returnMissingFields.length > 0) {
@@ -1066,7 +1156,7 @@ export function parseCustomerBookingRequestPayloads(
     const returnPayload = buildCustomerBookingRequestPayloadForLeg({
       body,
       bookingReference: `${groupReference}-RET`,
-      dropoffLocation: returnDropoffLocation || "",
+      dropoffLocation: effectiveReturnDropoffLocation || "",
       flightNumber: textOrNull(body.returnFlightNumber),
       groupReference,
       legLabel: "RETURN",

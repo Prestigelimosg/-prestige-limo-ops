@@ -133,7 +133,7 @@ assertExcludes(saveBookingBlock, helperExportName, "Save Booking + CRM path");
 const loadBookingsBlock = sectionBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy read path",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings legacy read path");

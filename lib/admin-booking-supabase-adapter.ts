@@ -126,11 +126,17 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+const adminBookingCurrentLoadSelectWithoutPublicReference =
+  adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+const adminBookingFoundationLoadSelectWithoutPublicReference =
+  adminBookingFoundationLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelectWithoutDriver =
-  "id, booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+const adminBookingFoundationLoadSelectWithoutDriverOrPublicReference =
+  adminBookingFoundationLoadSelectWithoutDriver.replace("public_booking_reference, ", "");
 
 const allowedAdapterRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_request", "system"]);
@@ -185,27 +191,6 @@ function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
   return `${accountName} / ${scopeParts.length ? scopeParts.join(" / ") : "Unassigned customer contact"}`.slice(
     0,
     maxTextLength,
-  );
-}
-
-function customerIdentityToken(value: unknown) {
-  return textOrNull(value)?.replace(/\s+/g, " ").trim().toLowerCase() || "";
-}
-
-function bookingCustomerIdentityChanged(
-  existing: AdminBookingRecordInput,
-  next: AdminBookingRecordInput,
-) {
-  const identityFields: Array<keyof AdminBookingRecordInput> = [
-    "customer_display_name",
-    "contact_display_name",
-    "contact_email",
-    "contact_phone",
-    "passenger_name",
-  ];
-
-  return identityFields.some(
-    (field) => customerIdentityToken(existing[field]) !== customerIdentityToken(next[field]),
   );
 }
 
@@ -917,6 +902,7 @@ function bookingToDbRow(
   const companyId = dbIdentifierOrNull(booking.company_id);
   const bookerId = dbIdentifierOrNull(booking.booker_id);
   const travelerId = dbIdentifierOrNull(booking.traveler_id);
+  const driverId = integerOrNull(booking.driver_id);
   const pickupAt = textOrNull(booking.pickup_at) || textOrNull(booking.pickup_datetime) || new Date().toISOString();
   const pickupLocation = textOrNull(booking.pickup_location) || "Pickup To Confirm";
   const dropoffLocation = textOrNull(booking.dropoff_location) || "Drop-off To Confirm";
@@ -933,6 +919,7 @@ function bookingToDbRow(
     contact_email: textOrNull(booking.contact_email),
     service_type: normalizeServiceType(textOrNull(booking.service_type) || textOrNull(booking.route_type)),
     pickup_at: pickupAt,
+    dropoff_datetime: textOrNull(booking.dropoff_datetime),
     pickup_location: pickupLocation,
     dropoff_location: dropoffLocation,
     route_summary:
@@ -941,9 +928,11 @@ function bookingToDbRow(
     passenger_name: textOrNull(booking.passenger_name),
     passenger_phone: textOrNull(booking.passenger_phone),
     flight_no: textOrNull(booking.flight_no),
+    driver_id: driverId,
     driver_contact: textOrNull(booking.driver_contact),
     driver_name: textOrNull(booking.driver_name),
     driver_plate_number: textOrNull(booking.driver_plate_number),
+    pax_count: integerOrNull(booking.pax_count),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     admin_internal_status: normalizeAdminInternalStatus(booking.admin_internal_status),
     customer_facing_status: normalizeCustomerFacingStatus(booking.customer_facing_status),
@@ -955,6 +944,19 @@ function bookingToDbRow(
       textOrNull(booking.source_surface) || textOrNull(booking.source_channel),
       actor.source_surface,
     ),
+  };
+}
+
+function mergeSuccessfullyUpdatedDriverFields(
+  record: AdminBookingPersistenceRecord,
+  bookingRow: ReturnType<typeof bookingToDbRow>,
+): AdminBookingPersistenceRecord {
+  return {
+    ...record,
+    driver_id: record.driver_id ?? bookingRow.driver_id,
+    driver_contact: record.driver_contact ?? bookingRow.driver_contact,
+    driver_name: record.driver_name ?? bookingRow.driver_name,
+    driver_plate_number: record.driver_plate_number ?? bookingRow.driver_plate_number,
   };
 }
 
@@ -976,6 +978,7 @@ function bookingToFoundationDbRow(
       sourceSurfaceToUi(currentRow.source_surface) ||
       actor.source_surface,
     pickup_datetime: currentRow.pickup_at,
+    dropoff_datetime: currentRow.dropoff_datetime,
     pickup_location: currentRow.pickup_location,
     dropoff_location: currentRow.dropoff_location,
     route_type: currentRow.service_type,
@@ -983,6 +986,7 @@ function bookingToFoundationDbRow(
     contact_phone: currentRow.contact_phone,
     contact_email: currentRow.contact_email,
     flight_no: textOrNull(booking.flight_no),
+    driver_id: currentRow.driver_id,
     driver_contact: currentRow.driver_contact,
     driver_name: currentRow.driver_name,
     driver_plate_number: currentRow.driver_plate_number,
@@ -1002,12 +1006,14 @@ function bookingToFoundationDbRowWithoutDriver(
   actor: AdminBookingPersistenceAdapterActor,
 ) {
   const {
+    driver_id: _driverId,
     driver_contact: _driverContact,
     driver_name: _driverName,
     driver_plate_number: _driverPlateNumber,
     ...row
   } = bookingToFoundationDbRow(booking, customerId, actor);
 
+  void _driverId;
   void _driverContact;
   void _driverName;
   void _driverPlateNumber;
@@ -1029,13 +1035,46 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return currentResult;
   }
 
+  const currentWithoutPublicReferenceResult = await buildQuery(
+    adminBookingCurrentLoadSelectWithoutPublicReference,
+  );
+
+  if (
+    !currentWithoutPublicReferenceResult.error ||
+    !isColumnMissingFailure(currentWithoutPublicReferenceResult.error)
+  ) {
+    return currentWithoutPublicReferenceResult;
+  }
+
   const foundationResult = await buildQuery(adminBookingFoundationLoadSelect);
 
   if (!foundationResult.error || !isColumnMissingFailure(foundationResult.error)) {
     return foundationResult;
   }
 
-  return buildQuery(adminBookingFoundationLoadSelectWithoutDriver);
+  const foundationWithoutPublicReferenceResult = await buildQuery(
+    adminBookingFoundationLoadSelectWithoutPublicReference,
+  );
+
+  if (
+    !foundationWithoutPublicReferenceResult.error ||
+    !isColumnMissingFailure(foundationWithoutPublicReferenceResult.error)
+  ) {
+    return foundationWithoutPublicReferenceResult;
+  }
+
+  const foundationWithoutDriverResult = await buildQuery(
+    adminBookingFoundationLoadSelectWithoutDriver,
+  );
+
+  if (
+    !foundationWithoutDriverResult.error ||
+    !isColumnMissingFailure(foundationWithoutDriverResult.error)
+  ) {
+    return foundationWithoutDriverResult;
+  }
+
+  return buildQuery(adminBookingFoundationLoadSelectWithoutDriverOrPublicReference);
 }
 
 function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
@@ -1074,6 +1113,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
 
   return {
     booking_reference: textOrNull(row.booking_reference) || "",
+    public_booking_reference: textOrNull(row.public_booking_reference),
     source_channel: sourceSurfaceToUi(sourceSurface),
     source_surface: sourceSurface,
     customer_id: dbIdentifierTextOrNull(row.customer_id),
@@ -1082,6 +1122,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     traveler_id: integerOrNull(row.traveler_id),
     pickup_datetime: pickupAt,
     pickup_at: pickupAt,
+    dropoff_datetime: textOrNull(row.dropoff_datetime),
     pickup_location: textOrNull(row.pickup_location),
     dropoff_location: textOrNull(row.dropoff_location),
     route_type: serviceType,
@@ -1094,6 +1135,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     passenger_name: textOrNull(row.passenger_name),
     passenger_phone: textOrNull(row.passenger_phone),
     flight_no: textOrNull(row.flight_no),
+    driver_id: integerOrNull(row.driver_id),
     driver_contact: textOrNull(row.driver_contact),
     driver_name: textOrNull(row.driver_name),
     driver_plate_number: textOrNull(row.driver_plate_number),
@@ -1171,7 +1213,7 @@ function validateActor(actor: AdminBookingPersistenceAdapterActor): AdminBooking
   };
 }
 
-function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<SupabaseClient> {
+export function getServerOnlySupabaseClient(actor: AdminBookingPersistenceAdapterActor): AdminBookingResult<SupabaseClient> {
   const actorResult = validateActor(actor);
 
   if (!actorResult.ok) {
@@ -1692,9 +1734,10 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
   const existing = existingResult.data;
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
-  let customerId = existingCustomerId;
+  const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
+  let customerId = requestedCustomerId || existingCustomerId;
 
-  if (!customerId || bookingCustomerIdentityChanged(existing, input.booking)) {
+  if (!customerId) {
     const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
 
     if (!customerIdResult.ok) {
@@ -1773,6 +1816,11 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     return reloadedResult;
   }
 
+  const updatedBooking = mergeSuccessfullyUpdatedDriverFields(
+    reloadedResult.data,
+    bookingRow,
+  );
+
   const auditResult = await createAuditLog(
     client,
     existing.id,
@@ -1781,14 +1829,17 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     auditInput,
     actor,
     existing,
-    reloadedResult.data,
+    updatedBooking,
   );
 
   if (!auditResult.ok) {
     return auditResult;
   }
 
-  return reloadedResult;
+  return {
+    ...reloadedResult,
+    data: updatedBooking,
+  };
 }
 
 export async function listAdminBookingsThroughSupabaseAdapter(

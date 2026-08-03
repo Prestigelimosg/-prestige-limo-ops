@@ -5,7 +5,7 @@ import { buildAdminEmailProviderSelectionSetup } from "../../../lib/admin-email-
 import { buildAdminEmailRecipientSafetySetup } from "../../../lib/admin-email-recipient-safety-setup-foundation";
 import { buildAdminEmailSenderSelectionSetup } from "../../../lib/admin-email-sender-selection-setup-foundation";
 import { buildAdminEmailSendPolicySetup } from "../../../lib/admin-email-send-policy-setup-foundation";
-import { adminCustomerDriverDetailsEmailSendGateOpen } from "../../../lib/admin-customer-driver-details-email-send-action";
+import { adminCustomerDriverDetailsEmailConfigReadiness } from "../../../lib/admin-customer-driver-details-email-send-action";
 import {
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
@@ -31,13 +31,18 @@ function blockedPayload(error?: string) {
     activationReady: false,
     activationStatus: "blocked",
     blockers: blockerList(),
+    configurationReady: false,
     driverDetailsEmailSendGateOpen: false,
     external_send: false,
     liveSendingEnabled: false,
     missing_requirements: blockerList(),
     providerConfigured: false,
+    providerCredentialConfigured: false,
     providerSelected: false,
+    recipientAllowlistConfigured: false,
+    replyToMatched: false,
     selectedProvider: null,
+    senderMatched: false,
     sendingEnabled: false,
     status: "blocked",
     version: activationPreflightVersion,
@@ -98,9 +103,24 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
   return { ok: false, response: blockedResponse(boundary.error) };
 }
 
-function buildActivationPreflight(selectedProvider: string | null) {
-  const driverDetailsEmailSendGateOpen = adminCustomerDriverDetailsEmailSendGateOpen();
-  const selection = buildAdminEmailProviderSelectionSetup({ selectedProvider });
+function buildActivationPreflight() {
+  const configuration = adminCustomerDriverDetailsEmailConfigReadiness();
+  const activationReady =
+    configuration.configurationReady && configuration.driverDetailsEmailSendGateOpen;
+  const blockers = [
+    ...(!configuration.providerSelected ? (["provider"] as const) : []),
+    ...(!configuration.configurationReady ? (["env"] as const) : []),
+    ...(!configuration.driverDetailsEmailSendGateOpen ? (["approval"] as const) : []),
+    ...(!activationReady ? (["live_sending"] as const) : []),
+  ];
+  const activationStatus = activationReady
+    ? "ready"
+    : configuration.configurationReady
+      ? "ready_for_gate"
+      : "blocked";
+  const selectionSetup = buildAdminEmailProviderSelectionSetup({
+    selectedProvider: configuration.selectedProvider,
+  });
   const notification = buildAdminEmailNotificationSetupPayload({
     body_lines: ["Email activation preflight setup only.", "Live email sending remains disabled."],
     booking_reference: "EMAIL-ACTIVATION-PREFLIGHT",
@@ -144,30 +164,53 @@ function buildActivationPreflight(selectedProvider: string | null) {
     disabledSend,
     policy,
   });
+  const selection = {
+    ...selectionSetup,
+    external_send: false,
+    liveSendingEnabled: activationReady,
+    missing_requirements: blockers,
+    providerConfigured: configuration.providerConfigured,
+    providerSelected: configuration.providerSelected,
+    selectedProvider: configuration.selectedProvider,
+    selectedProviderStatus: configuration.providerSelected ? "configured" : "not_selected",
+  };
+  const truthfulReadiness = {
+    ...readiness,
+    external_send: false,
+    liveSendingEnabled: activationReady,
+    missing_requirements: blockers,
+    providerConfigured: configuration.providerConfigured,
+    status: activationStatus,
+  };
 
   return {
-    activationReady: false,
-    activationStatus: "blocked",
-    blockers: blockerList(),
+    activationReady,
+    activationStatus,
+    blockers,
     componentStatuses: {
       disabledSend: disabledSend.status,
       emailPolicy: policy.decision,
-      providerReadiness: readiness.status,
+      providerReadiness: truthfulReadiness.status,
       providerSelection: selection.selectedProviderStatus,
     },
-    disabled_send_status: readiness.disabled_send_status,
-    driverDetailsEmailSendGateOpen,
+    configurationReady: configuration.configurationReady,
+    disabled_send_status: truthfulReadiness.disabled_send_status,
+    driverDetailsEmailSendGateOpen: configuration.driverDetailsEmailSendGateOpen,
     external_send: false,
-    liveSendingEnabled: false,
-    missing_requirements: blockerList(),
-    policy_decision: readiness.policy_decision,
-    providerConfigured: false,
-    providerSelected: selection.providerSelected,
-    readiness,
-    selectedProvider: selection.selectedProvider,
+    liveSendingEnabled: activationReady,
+    missing_requirements: blockers,
+    policy_decision: truthfulReadiness.policy_decision,
+    providerConfigured: configuration.providerConfigured,
+    providerCredentialConfigured: configuration.providerCredentialConfigured,
+    providerSelected: configuration.providerSelected,
+    readiness: truthfulReadiness,
+    recipientAllowlistConfigured: configuration.recipientAllowlistConfigured,
+    replyToMatched: configuration.replyToMatched,
+    selectedProvider: configuration.selectedProvider,
     selection,
-    sendingEnabled: false,
-    status: "setup_only",
+    senderMatched: configuration.senderMatched,
+    sendingEnabled: activationReady,
+    status: activationStatus,
     version: activationPreflightVersion,
   };
 }
@@ -190,10 +233,7 @@ export async function GET(request: Request) {
       return boundary.response;
     }
 
-    const searchParams = new URL(request.url).searchParams;
-    const preflight = buildActivationPreflight(
-      searchParams.get("selected_provider") || searchParams.get("selectedProvider"),
-    );
+    const preflight = buildActivationPreflight();
 
     return Response.json({
       ok: true,

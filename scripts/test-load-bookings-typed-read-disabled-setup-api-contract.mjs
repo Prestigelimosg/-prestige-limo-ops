@@ -113,7 +113,7 @@ assertExcludes(helperSource, livePathPattern, "Typed Load Bookings adapter found
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Current Load Bookings endpoint",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");

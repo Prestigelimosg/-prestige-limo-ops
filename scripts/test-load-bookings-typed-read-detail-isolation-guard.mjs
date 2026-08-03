@@ -225,7 +225,7 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "legacy saved-bookings read",
 );
 assertIncludes(loadBookingsBlock, "setBookings(loadedBookings);", "legacy BookingRecord source");

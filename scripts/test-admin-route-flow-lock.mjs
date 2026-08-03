@@ -148,7 +148,7 @@ const loadBookingsBlock = sliceBetween(
 
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Load Bookings legacy read path",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings legacy read method");

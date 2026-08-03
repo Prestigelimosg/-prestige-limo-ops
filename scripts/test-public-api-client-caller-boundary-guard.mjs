@@ -10,6 +10,7 @@ const customerPagePaths = ["app/book/page.tsx", "app/my-bookings/page.tsx"];
 const customerAdapterPaths = [
   "lib/customer-booking-request-adapter.ts",
   "lib/customer-booking-memory-adapter.ts",
+  "lib/customer-device-push-adapter.ts",
   "lib/customer-portal-driver-tracking-adapter.ts",
   "lib/customer-portal-saved-bookings-adapter.ts",
   "lib/customer-portal-trip-updates-adapter.ts",
@@ -134,7 +135,7 @@ for (const phrase of [
   "This guard approves the existing customer-safe adapter reads plus exactly one `/my-bookings` direct POST to the established customer-to-driver fixed quick-reply route; it does not approve any other raw customer fetch, endpoint migration, env change, deployment by CLI, provider send, migration, parser change, Save Booking change, `/api/admin-saved-bookings` change, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sector, or new shim.",
   "`/book` must delegate public API calls to customer-safe adapters; `/my-bookings` reads remain adapter-owned and its sole direct fetch is the exact fixed-template customer quick-reply POST without raw session plumbing.",
   "Customer client adapters must use `cache: \"no-store\"`, `credentials: \"same-origin\"`, and purpose headers while never manually attaching Cookie, Authorization, customer session-token, admin purpose, or server env-token plumbing.",
-  "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, acknowledged calendar attachment GET, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+  "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
   "Driver client code must not expose customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, token secrets, or mock QA/dev archive fields.",
   "Public client caller contracts must continue coordinating the existing customer booking page API audit, customer booking memory UI contract, customer portal saved-bookings adapter contract, and customer portal trip-updates adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
@@ -234,6 +235,17 @@ for (const fragment of [
   assertIncludes(portalAdapter, fragment, `customer portal saved bookings adapter caller ${fragment}`);
 }
 
+const customerDevicePushAdapter = files["lib/customer-device-push-adapter.ts"];
+for (const fragment of [
+  '"/api/customer-device-push-subscriptions"',
+  "body: JSON.stringify({ subscription: subscription.toJSON() })",
+  'cache: "no-store"',
+  'credentials: "same-origin"',
+  '"x-prestige-customer-purpose": customerDevicePushPurpose',
+]) {
+  assertIncludes(customerDevicePushAdapter, fragment, `customer device push adapter caller ${fragment}`);
+}
+
 const portalDriverTrackingAdapter = files["lib/customer-portal-driver-tracking-adapter.ts"];
 for (const fragment of [
   "fetcher(\n      `${customerPortalDriverTrackingApiPath}?booking_reference=${encodeURIComponent(safeBookingReference)}`",
@@ -249,7 +261,7 @@ for (const fragment of [
 
 const portalTripUpdatesAdapter = files["lib/customer-portal-trip-updates-adapter.ts"];
 for (const fragment of [
-  "fetcher(\n      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=5&page=1`",
+  "fetcher(\n      `${customerPortalTripUpdatesApiPath}?booking_reference=${encodeURIComponent(safeReference)}&limit=10&page=1`",
   'cache: "no-store"',
   'credentials: "same-origin"',
   '"x-prestige-customer-purpose": "customer-in-app-notification-read"',
@@ -284,6 +296,7 @@ for (const [label, source] of [
   ["/my-bookings page", portalPage],
   ["customer booking request adapter", requestAdapter],
   ["customer booking memory adapter", memoryAdapter],
+  ["customer device push adapter", customerDevicePushAdapter],
   ["customer portal saved bookings adapter", portalAdapter],
   ["customer portal driver tracking adapter", portalDriverTrackingAdapter],
   ["customer portal trip updates adapter", portalTripUpdatesAdapter],
@@ -296,8 +309,8 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 11, "driver page fetch call count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 8, "driver page no-store fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 12, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 10, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
@@ -306,9 +319,10 @@ for (const fragment of [
   "fetch(driverLiveLocationRoute()",
   "fetch(driverOtsPhotoProofRoute()",
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/status`",
-  'fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
-  'headers: { accept: "text/calendar" }',
-  "downloadDriverCalendarBlob(await response.blob(), filename)",
+  "const calendarResponse = await fetch(",
+  'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
+  "safeGoogleConsentUrl",
+  "window.location.assign(googleConsentUrl)",
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",
@@ -319,7 +333,7 @@ for (const fragment of [
   "result.proof?.customerVisible !== false",
   "result.proof?.external_send !== false",
   "const formData = new FormData();",
-  'formData.append("photo", photoFile);',
+  'formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName);',
   'type="file"',
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",
@@ -333,7 +347,7 @@ for (const fragment of [
 ]) {
   assertIncludes(driverPage, fragment, `driver page caller ${fragment}`);
 }
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 4, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 5, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");
@@ -355,8 +369,9 @@ assertExcludes(
 );
 assert.equal(
   countOccurrences(driverPage, "window.URL.createObjectURL(blob)"),
-  1,
-  "driver page calendar attachment object URL count",
+  0,
+  "driver page forced calendar-download object URL count",
 );
+assertExcludes(driverPage, /downloadDriverCalendarBlob|downloadDriverJobCalendar|\.download\s*=/, "driver page forced calendar download path");
 
 console.log("Public API client caller boundary guard passed");

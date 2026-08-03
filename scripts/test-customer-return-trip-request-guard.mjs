@@ -110,7 +110,9 @@ for (const fragment of [
   "parseCustomerBookingRequestPayloads",
   "for (const requestPayload of parsed.data.requests)",
   "const returnRequest = savedRequests[1] ?? null;",
-  "return_booking_reference: returnRequest?.booking_reference ?? null",
+  "return_booking_reference:",
+  "returnRequest?.public_booking_reference ||",
+  "returnRequest?.booking_reference ||",
   "return_trip_requested: parsed.data.returnTripRequested",
   "await notifyAdminNewBookingRequest(primaryRequest);",
 ]) {
@@ -161,6 +163,7 @@ try {
   const { parseCustomerBookingRequestPayloads } = createRequire(import.meta.url)(outputPath);
   const parsed = parseCustomerBookingRequestPayloads({
     contactNo: "+65 9000 1111",
+    emailAddress: "return-test@example.com",
     passengerName: "Return Stop Test Passenger",
     pickupDate: "2026-08-20",
     pickupTime: "09:00",

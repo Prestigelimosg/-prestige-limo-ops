@@ -116,10 +116,8 @@ async function main() {
       return result.result?.value;
     };
 
-    await navigateWithLoadEvent(client, appUrl);
-    await waitForTabLabels(evaluate, ["Dispatch", "Dashboard", "Bookings"], "admin tabs");
-
-    await evaluate(`(() => {
+    await client.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `(() => {
       const originalFetch = window.fetch.bind(window);
       window.__canonicalLoadBookingCalls = [];
       const canonicalBooking = {
@@ -138,10 +136,11 @@ async function main() {
         vehicle_type: null,
         vehicle_type_or_category: "No preference",
         pickup_time: null,
-        pickup_at: "2026-06-25T11:15:00+08:00",
+        pickup_at: "2030-06-25T11:15:00+08:00",
         pickup_datetime: null,
         pickup_address: null,
         pickup_location: "Canonical Pickup",
+        public_booking_reference: "19001",
         dropoff_address: null,
         dropoff_location: "Canonical Dropoff",
         flight_no: "SQ999",
@@ -190,7 +189,11 @@ async function main() {
 
         return originalFetch(...args);
       };
-    })()`);
+    })()`,
+    });
+
+    await navigateWithLoadEvent(client, appUrl);
+    await waitForTabLabels(evaluate, ["Dispatch", "Dashboard", "Bookings"], "admin tabs");
 
     await evaluate(`(() => {
       const bookingsTab = document.querySelector("button[data-app-tab='bookings']")
@@ -199,18 +202,29 @@ async function main() {
       bookingsTab?.click();
       return Boolean(bookingsTab);
     })()`);
-    const loadVisible = await evaluate(`(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((candidate) => candidate.textContent.trim() === "Load Bookings");
+    const bookingsSurfaceState = await evaluate(`(() => {
       const autoLoadTab = document.querySelector("[data-bookings-tab-autoload='true']");
-      return Boolean(button && autoLoadTab);
+      const findToolbar = document.querySelector("[data-bookings-find-toolbar='true']");
+      const legacyLoadButton = [...document.querySelectorAll("button")]
+        .find((candidate) => candidate.textContent.trim() === "Load Bookings");
+      return {
+        autoLoadTab: Boolean(autoLoadTab),
+        findToolbar: Boolean(findToolbar),
+        legacyLoadButton: Boolean(legacyLoadButton),
+      };
     })()`);
-    assert.equal(loadVisible, true, "Expected visible Load Bookings control and auto-load tab marker");
+    assert.equal(bookingsSurfaceState.autoLoadTab, true, "Expected Bookings auto-load tab marker");
+    assert.equal(bookingsSurfaceState.findToolbar, true, "Expected visible saved-jobs search surface");
+    assert.equal(
+      bookingsSurfaceState.legacyLoadButton,
+      false,
+      "Expected the retired manual Load Bookings button to stay absent",
+    );
 
     const cardState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const record = document.querySelector("[data-recent-operational-card='canonical-row-37']");
+          const record = document.querySelector("[data-recent-operational-card='CANONICAL-REQ-001']");
           if (!record) return false;
           const text = record.textContent.replace(/\\s+/g, " ").trim();
           return {
@@ -223,9 +237,18 @@ async function main() {
       "canonical visible recent booking card",
     );
 
-    assert.equal(cardState.typedCalls, 1, "Expected one typed display read attempt");
-    assert.equal(cardState.savedCalls, 1, "Expected one saved booking list load call");
-    assert.equal(cardState.text.includes("CANONICAL-REQ-001"), true);
+    assert.equal(
+      cardState.typedCalls >= 1 && cardState.typedCalls <= 2,
+      true,
+      "Expected one production read or the bounded React development replay for typed display",
+    );
+    assert.equal(
+      cardState.savedCalls >= 1 && cardState.savedCalls <= 2,
+      true,
+      "Expected one production read or the bounded React development replay for saved bookings",
+    );
+    assert.equal(cardState.text.includes("19001"), true);
+    assert.equal(cardState.text.includes("CANONICAL-REQ-001"), false);
     assert.equal(cardState.text.includes("Canonical Customer"), true);
     assert.equal(cardState.text.includes("Canonical Booker"), true);
     assert.equal(cardState.text.includes("Canonical Passenger"), true);
@@ -235,37 +258,40 @@ async function main() {
     assert.equal(/price|billing|invoice|payment|payout|finance/i.test(cardState.text), false);
 
     const applyClicked = await evaluate(`(() => {
-      const record = document.querySelector("[data-recent-operational-card='canonical-row-37']");
+      const record = document.querySelector("[data-recent-operational-card='CANONICAL-REQ-001']");
       const button = [...(record?.querySelectorAll("button") || [])]
-        .find((candidate) => candidate.textContent.trim() === "Load this booking");
+        .find((candidate) => candidate.textContent.trim() === "Open / Edit");
       button?.click();
       return Boolean(button);
     })()`);
-    assert.equal(applyClicked, true, "Expected Load this booking control");
+    assert.equal(applyClicked, true, "Expected current Open / Edit booking control");
 
     const appliedState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const statusFeedback = [...document.querySelectorAll("p, div")]
             .map((node) => node.textContent || "")
-            .find((text) => text.includes("Booking CANONICAL-REQ-001 loaded.")) || "";
+            .find((text) => text.includes("Booking 19001 loaded.")) || "";
           const getField = (labelText) => {
+            const normalizedLabel = (value) =>
+              String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
             const label = [...document.querySelectorAll("label")].find(
-              (candidate) => candidate.querySelector("span")?.textContent.trim() === labelText,
+              (candidate) =>
+                normalizedLabel(candidate.querySelector("span")?.textContent) === labelText,
             );
             const field = label?.querySelector("input, textarea, select");
-            return field ? field.value : "";
+            return field && "value" in field ? field.value : "";
           };
           if (!statusFeedback) return false;
           return {
-            booker: getField("Booker *"),
+            booker: getField("Booker"),
             bookingType: getField("Booking type"),
             company: getField("Company / Account"),
-            dropoff: getField("Drop-off *"),
+            dropoff: getField("Drop-off"),
             name: getField("Passenger name"),
             pax: getField("Pax"),
-            pickup: getField("Pickup *"),
-            time: getField("Pickup time *"),
+            pickup: getField("Pickup"),
+            time: getField("Pickup time"),
             vehicle: getField("Vehicle"),
           };
         })()`),
@@ -280,7 +306,7 @@ async function main() {
     assert.equal(appliedState.pickup, "Canonical Pickup");
     assert.equal(appliedState.dropoff, "Canonical Dropoff");
     assert.equal(appliedState.pax, "3");
-    assert.equal(appliedState.vehicle, "No preference");
+    assert.equal(appliedState.vehicle, "AVF");
     assert.match(appliedState.time, /^1115/);
 
     console.log("Admin booking persistence canonical UI browser test passed.");

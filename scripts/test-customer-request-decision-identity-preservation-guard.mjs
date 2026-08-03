@@ -15,12 +15,25 @@ const visibleRequestPanel = between(
   "const bookingsFindToolbar",
 );
 for (const fragment of [
-  "bookingRecordToAdminBookingPersistenceRecord(requestBooking)",
-  "adminCustomerRequestReviewDecisions.map",
-  "updateAdminCustomerRequestReviewDecision(requestRecord, decision.key)",
-  "data-new-customer-booking-request-decision-button",
+  "data-admin-prepared-job-card-close",
+  "rememberHandledCustomerBookingRequest(requestBooking)",
+  "Close",
 ]) {
-  assert.ok(visibleRequestPanel.includes(fragment), `Visible request decision must include ${fragment}`);
+  assert.ok(visibleRequestPanel.includes(fragment), `Visible request Close action must include ${fragment}`);
+}
+
+for (const removedDecisionFragment of [
+  "bookingRecordToAdminBookingPersistenceRecord(requestBooking)",
+  "data-admin-prepared-job-card-action-select",
+  "data-admin-prepared-job-card-action-submit",
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally")',
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally")',
+]) {
+  assert.equal(
+    visibleRequestPanel.includes(removedDecisionFragment),
+    false,
+    `Close-only prepared card must remove ${removedDecisionFragment}`,
+  );
 }
 
 const hiddenOptionalTools = between(
@@ -33,10 +46,7 @@ assert.equal(
   "Hidden Optional Workflow Tools must not keep a duplicate request decision control.",
 );
 
-for (const block of [
-  between("function buildAdminCustomerRequestDecisionPayload", "function buildAdminBookingCancellationRequestApplyPayload"),
-  between("function buildAdminBookingCancellationRequestApplyPayload", "function parsedSourceReference"),
-]) {
+for (const block of [between("function buildAdminBookingCancellationRequestApplyPayload", "function parsedSourceReference")]) {
   for (const field of ["company_id", "booker_id", "traveler_id"]) {
     assert.ok(
       block.includes(`${field}: adminDispatchVerifiedIdentityId(record.${field})`),

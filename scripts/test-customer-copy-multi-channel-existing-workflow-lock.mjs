@@ -129,7 +129,6 @@ for (const fragment of [
   "async function copyCustomerDriverDetailsWithCustomerAppLink()",
   "async function copyManualTelegramMessage(",
   "async function sendAdminCustomerDriverDetailsCustomerInAppNotification()",
-  "async function sendAdminCustomerDriverDetailsDriverInAppNotification()",
   "const adminCustomerDriverDetailsMultiChannelDisabledStatusText =",
   "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.",
   "driverDetailsEmailSendGateOpen",
@@ -159,6 +158,9 @@ for (const fragment of [
   'data-driver-job-link-telegram-manual-copy-button="true"',
   'onClick={() => copyManualTelegramMessage("driverJobLink")}',
   "WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.",
+  'data-admin-customer-driver-details-email-recipient="true"',
+  "Email recipient:",
+  'adminCustomerDriverDetailsEmailReviewCustomerEmail || "Not set"',
   "SMS/WA off",
   "Email gate off",
   "Send In-App",
@@ -176,6 +178,7 @@ for (const [fragment, expectedCount] of [
   ['data-copy-preview="customerCopy"', 1],
   ['data-customer-live-location-helper="true"', 1],
   ['data-admin-customer-driver-details-email-review-item="true"', 1],
+  ['data-admin-customer-driver-details-email-recipient="true"', 1],
   ['data-admin-customer-driver-details-email-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-email-send-gate-open=', 1],
   ['data-admin-customer-driver-details-whatsapp-disabled-send-action="true"', 1],
@@ -192,6 +195,7 @@ for (const [fragment, expectedCount] of [
 
 for (const fragment of [
   'data-admin-customer-driver-details-email-review-item="true"',
+  'data-admin-customer-driver-details-email-recipient="true"',
   'data-admin-customer-driver-details-copy-with-portal-link="true"',
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
@@ -227,7 +231,7 @@ for (const [label, routeSource] of [
 
 for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
-  "if (!dispatchReleaseCustomerCopyReady)",
+  "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
   "customerAccountReference,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",

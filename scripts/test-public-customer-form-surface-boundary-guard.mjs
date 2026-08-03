@@ -33,6 +33,7 @@ const publicCustomerFormFields = [
   "luggage",
   "extraStops",
   "specialRequest",
+  "travelerId",
 ];
 
 const submittedCustomerRequestFields = [
@@ -57,10 +58,12 @@ const submittedCustomerRequestFields = [
   "passengerCount",
   "luggage",
   "extraStops",
+  "travelerId",
 ];
 
 const bookRequiredFields = [
   "contactNo",
+  "emailAddress",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -347,12 +350,12 @@ for (const removedPortalFragment of [
 }
 
 for (const fragment of [
-  "submitCustomerBookingRequest(form)",
+  "submitCustomerBookingRequest(form, {",
   "data-customer-booking-form=\"true\"",
   "Our team will review and confirm your booking shortly. Thank you",
   "This is a booking request only, not a confirmed booking yet.",
   "No price, payment, invoice, PDF, or billing file is created here.",
-  "Booking request received. Our team will review and confirm availability.",
+  "Our team will review and confirm availability before your booking is confirmed.",
   "Type of service",
   "Please select service type",
   "Vehicle type",

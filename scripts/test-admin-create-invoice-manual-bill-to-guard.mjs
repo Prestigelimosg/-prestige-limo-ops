@@ -147,7 +147,8 @@ for (const fragment of [
   '"x-prestige-admin-purpose": "admin-booking-persistence"',
   "method: \"POST\"",
   "downloadStoredCustomerInvoicePdf(issuedInvoice)",
-  "plainInvoiceForm.isPaid ? \"Paid\" : \"Unpaid\"",
+  "folder: form.isPaid ? \"Paid\" : \"Unpaid\"",
+  "plainInvoicePreviewFromForm(plainInvoiceForm)",
 ]) {
   assertIncludes(customersPage, fragment, `create invoice implementation fragment ${fragment}`);
 }

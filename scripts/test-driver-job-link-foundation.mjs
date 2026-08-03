@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  defaultDriverJobLinkTtlHours,
   generateDriverJobLinkToken,
   getDriverJobLinkExpiresAt,
   guardDriverJobStatusTransition,
@@ -23,17 +24,23 @@ assert.notEqual(tokenHash, hashDriverJobLinkToken(secondToken), "Different token
 assert.match(tokenHash, /^[a-f0-9]{64}$/, "Token hash should be SHA-256 hex.");
 
 const createdAt = new Date("2026-05-22T08:00:00.000Z");
+assert.equal(defaultDriverJobLinkTtlHours, 96);
+assert.equal(
+  getDriverJobLinkExpiresAt(createdAt).toISOString(),
+  "2026-05-26T08:00:00.000Z",
+  "The normal private Driver Job link must remain valid for exactly 96 hours.",
+);
 const expiresAt = getDriverJobLinkExpiresAt(createdAt, 2);
 assert.equal(expiresAt.toISOString(), "2026-05-22T10:00:00.000Z");
 assert.equal(isDriverJobLinkExpired(expiresAt, "2026-05-22T09:59:59.000Z"), false);
 assert.equal(isDriverJobLinkExpired(expiresAt, "2026-05-22T10:00:00.000Z"), true);
 assert.equal(
-  isDriverJobLinkExpiryOutsideAllowedWindow("2026-05-24T08:00:00.000Z", createdAt),
+  isDriverJobLinkExpiryOutsideAllowedWindow("2026-05-26T08:00:00.000Z", createdAt),
   false,
   "Driver job links can use the approved default future window.",
 );
 assert.equal(
-  isDriverJobLinkExpiryOutsideAllowedWindow("2026-05-24T08:00:01.000Z", createdAt),
+  isDriverJobLinkExpiryOutsideAllowedWindow("2026-05-26T08:00:01.000Z", createdAt),
   true,
   "Driver job links must not stay valid beyond the approved future window.",
 );

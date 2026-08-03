@@ -36,7 +36,14 @@ async function loadRouteHarness() {
   const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
   const emailAlertPath = path.join(tempDir, "lib/admin-new-booking-email-alert.js");
   const devicePushAlertPath = path.join(tempDir, "lib/admin-device-push-notification.js");
+  const receiptEmailPath = path.join(tempDir, "lib/customer-booking-receipt-email.js");
   const customerSavedBookingsReadPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
+  const customerPortalAccessLinkPath = path.join(tempDir, "lib/customer-portal-access-link.js");
+  const customerBookingInvitationPath = path.join(tempDir, "lib/customer-booking-invitation.js");
+  const customerBookingPhoneOtpPath = path.join(
+    tempDir,
+    "lib/customer-booking-phone-otp.js",
+  );
   const codexJobCardAutoPreparationPath = path.join(
     tempDir,
     "lib/codex-job-card-auto-preparation.js",
@@ -54,17 +61,23 @@ async function loadRouteHarness() {
       "  state.createCalls.push({ actor, audit, data });",
       "  return Array.isArray(state.createResults) && state.createResults.length > 0 ? state.createResults.shift() : state.createResult;",
       "}",
+      "async function loadAdminBookingByReference(actor, bookingReference) {",
+      "  const state = mock();",
+      "  state.lookupCalls.push({ actor, bookingReference });",
+      "  return state.lookupResult;",
+      "}",
       "function parseCustomerBookingRequestPayload(payload) {",
       "  const state = mock();",
       "  state.parseCalls.push(payload);",
       "  return state.parseResult;",
       "}",
-      "function parseCustomerBookingRequestPayloads(payload) {",
+      "function parseCustomerBookingRequestPayloads(payload, options) {",
       "  const state = mock();",
       "  state.parseCalls.push(payload);",
+      "  state.parseOptionsCalls.push(options);",
       "  return state.parsePayloadsResult || state.parseResult;",
       "}",
-      "module.exports = { createAdminBooking, parseCustomerBookingRequestPayload, parseCustomerBookingRequestPayloads };",
+      "module.exports = { createAdminBooking, loadAdminBookingByReference, parseCustomerBookingRequestPayload, parseCustomerBookingRequestPayloads };",
     ].join("\n"),
   );
   await writeFile(
@@ -126,6 +139,18 @@ async function loadRouteHarness() {
     ].join("\n"),
   );
   await writeFile(
+    receiptEmailPath,
+    [
+      "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
+      "async function sendCustomerBookingReceiptEmail(bookings, options) {",
+      "  const state = mock();",
+      "  state.receiptCalls = [...(state.receiptCalls || []), { bookings, options }];",
+      "  return state.receiptResult || { ok: false, reason: 'gate_closed', status: 'blocked' };",
+      "}",
+      "module.exports = { sendCustomerBookingReceiptEmail };",
+    ].join("\n"),
+  );
+  await writeFile(
     customerSavedBookingsReadPath,
     [
       "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
@@ -133,8 +158,9 @@ async function loadRouteHarness() {
       "  const state = mock();",
       "  return state.portalBoundary || { ok: false, error: 'no portal session', status: 403 };",
       "}",
-      "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
+      "async function resolveCustomerSavedBookingsVerifiedIdentity(context, travelerId) {",
       "  const state = mock();",
+      "  state.identityCalls.push({ context, travelerId });",
       "  return state.verifiedIdentity || { ok: false, error: 'identity unavailable', status: 403 };",
       "}",
       "function expiredCustomerSavedBookingsSessionCookieHeaders() {",
@@ -144,6 +170,42 @@ async function loadRouteHarness() {
       "  ];",
       "}",
       "module.exports = { expiredCustomerSavedBookingsSessionCookieHeaders, resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerPortalAccessLinkPath,
+    [
+      "function createCustomerPortalAccessLinkToken() {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  return state.portalLinkResult || { ok: false, error: 'portal link unavailable', status: 403 };",
+      "}",
+      "function safeCustomerPortalPublicBookingReference(value) {",
+      "  const cleaned = typeof value === 'string' || typeof value === 'number' ? String(value).trim().toUpperCase() : '';",
+      "  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned) ? cleaned : null;",
+      "}",
+      "module.exports = { createCustomerPortalAccessLinkToken, safeCustomerPortalPublicBookingReference };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerBookingInvitationPath,
+    [
+      "function verifyCustomerBookingInvitationToken(token) {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  state.invitationCalls.push(token);",
+      "  return state.invitationResult;",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerBookingPhoneOtpPath,
+    [
+      "function verifyCustomerBookingPhoneOtpProof(proof, phone) {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  state.phoneProofCalls.push({ phone, proof });",
+      "  return state.phoneProofResult;",
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
     ].join("\n"),
   );
   await writeFile(
@@ -188,7 +250,31 @@ function installMock(overrides = {}) {
     },
     devicePushAlertCalls: [],
     devicePushAlertThrows: false,
+    identityCalls: [],
+    invitationCalls: [],
+    invitationResult: {
+      data: {
+        booking_reference: "CUST-SAFE-001",
+        invitation_id: "0123456789abcdef0123456789abcdef",
+      },
+      ok: true,
+    },
+    phoneProofCalls: [],
+    phoneProofResult: {
+      data: {
+        booking_reference: "CBOTP-SAFE-001",
+        challenge_id: "fedcba9876543210fedcba9876543210",
+      },
+      ok: true,
+    },
+    lookupCalls: [],
+    lookupResult: {
+      error: "Booking not found.",
+      ok: false,
+      status: 404,
+    },
     parseCalls: [],
+    parseOptionsCalls: [],
     parseResult: {
       data: {
         groupReference: "CUST-SAFE-001",
@@ -216,9 +302,25 @@ function validHeaders(extra = {}) {
     "Content-Type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-invitation": "valid-customer-booking-invitation",
     "x-prestige-customer-purpose": "customer-booking-request",
     ...extra,
   };
+}
+
+function validHeadersWithoutInvitation(extra = {}) {
+  const headers = validHeaders(extra);
+
+  delete headers["x-prestige-customer-booking-invitation"];
+
+  return headers;
+}
+
+function validHeadersWithPhoneProof() {
+  return validHeadersWithoutInvitation({
+    "x-prestige-customer-booking-phone-proof":
+      "customer_booking_phone_otp_proof_v1.test.signature",
+  });
 }
 
 function postRequest(body, headers = validHeaders()) {
@@ -319,7 +421,7 @@ assert.equal(
   "Customer booking request persistence must map flightNumber into the safe flight_no booking field.",
 );
 assert.equal(
-  supabaseAdapterSource.includes("passenger_phone, flight_no, driver_name") &&
+  supabaseAdapterSource.includes("passenger_phone, flight_no, driver_id, driver_name") &&
     supabaseAdapterSource.includes("contact_email, flight_no, pax_count") &&
     supabaseAdapterSource.includes("flight_no: textOrNull(booking.flight_no)") &&
     supabaseAdapterSource.includes("flight_no: textOrNull(row.flight_no)"),
@@ -339,6 +441,149 @@ for (const phrase of [
 const harness = await loadRouteHarness();
 
 try {
+  const missingPhoneProofMock = installMock();
+  const missingPhoneProofResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Passenger" }, validHeadersWithoutInvitation()),
+  );
+  const missingPhoneProof = await readJson(missingPhoneProofResponse);
+
+  assert.equal(missingPhoneProof.status, 403);
+  assert.equal(
+    missingPhoneProofResponse.headers.get("x-prestige-customer-booking-result"),
+    "phone_verification_required",
+  );
+  assert.equal(missingPhoneProofMock.invitationCalls.length, 0);
+  assert.equal(missingPhoneProofMock.phoneProofCalls.length, 0);
+  assert.equal(missingPhoneProofMock.lookupCalls.length, 0);
+  assert.equal(missingPhoneProofMock.parseCalls.length, 0);
+  assert.equal(missingPhoneProofMock.createCalls.length, 0);
+  assert.equal(missingPhoneProofMock.adminAppNotificationCalls.length, 0);
+  assert.equal(missingPhoneProofMock.alertCalls.length, 0);
+  assert.equal(missingPhoneProofMock.devicePushAlertCalls.length, 0);
+  assertSafeCustomerBody(missingPhoneProof.body, "missing phone proof body");
+
+  const invalidPhoneProofMock = installMock({
+    phoneProofResult: {
+      error: "challenge_invalid",
+      ok: false,
+      status: 403,
+    },
+  });
+  const invalidPhoneProofResponse = await harness.route.POST(
+    postRequest(
+      { contactNo: "+65 9000 0000", passengerName: "Safe Passenger" },
+      validHeadersWithPhoneProof(),
+    ),
+  );
+  const invalidPhoneProof = await readJson(invalidPhoneProofResponse);
+
+  assert.equal(invalidPhoneProof.status, 403);
+  assert.equal(
+    invalidPhoneProofResponse.headers.get("x-prestige-customer-booking-result"),
+    "phone_verification_invalid",
+  );
+  assert.equal(invalidPhoneProofMock.phoneProofCalls.length, 1);
+  assert.equal(invalidPhoneProofMock.lookupCalls.length, 0);
+  assert.equal(invalidPhoneProofMock.parseCalls.length, 0);
+  assertSafeCustomerBody(invalidPhoneProof.body, "invalid phone proof body");
+
+  const usedPhoneProofMock = installMock({
+    lookupResult: {
+      data: {
+        booking_reference: "CBOTP-SAFE-001",
+      },
+      ok: true,
+    },
+  });
+  const usedPhoneProofResponse = await harness.route.POST(
+    postRequest(
+      { contactNo: "+65 9000 0000", passengerName: "Safe Passenger" },
+      validHeadersWithPhoneProof(),
+    ),
+  );
+  const usedPhoneProof = await readJson(usedPhoneProofResponse);
+
+  assert.equal(usedPhoneProof.status, 409);
+  assert.equal(
+    usedPhoneProofResponse.headers.get("x-prestige-customer-booking-result"),
+    "phone_verification_used",
+  );
+  assert.equal(usedPhoneProofMock.phoneProofCalls.length, 1);
+  assert.equal(usedPhoneProofMock.lookupCalls.length, 1);
+  assert.equal(usedPhoneProofMock.parseCalls.length, 0);
+  assertSafeCustomerBody(usedPhoneProof.body, "used phone proof body");
+
+  const verifiedPhoneProofMock = installMock();
+  const verifiedPhoneProofSuccess = await readJson(
+    await harness.route.POST(
+      postRequest(
+        { contactNo: "+65 9000 0000", passengerName: "Safe Passenger" },
+        validHeadersWithPhoneProof(),
+      ),
+    ),
+  );
+
+  assert.equal(verifiedPhoneProofSuccess.status, 200);
+  assert.deepEqual(verifiedPhoneProofMock.parseOptionsCalls, [
+    { groupReferenceOverride: "CBOTP-SAFE-001" },
+  ]);
+  assert.equal(verifiedPhoneProofMock.phoneProofCalls.length, 1);
+  assert.equal(verifiedPhoneProofMock.invitationCalls.length, 0);
+  assert.equal(verifiedPhoneProofMock.lookupCalls.length, 1);
+  assertSafeCustomerBody(
+    verifiedPhoneProofSuccess.body,
+    "verified phone proof success body",
+  );
+
+  const invalidInvitationMock = installMock({
+    invitationResult: {
+      error: "invalid invitation",
+      ok: false,
+      status: 403,
+    },
+  });
+  const invalidInvitationResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Passenger" }),
+  );
+  const invalidInvitation = await readJson(invalidInvitationResponse);
+
+  assert.equal(invalidInvitation.status, 403);
+  assert.equal(
+    invalidInvitationResponse.headers.get("x-prestige-customer-booking-result"),
+    "invitation_invalid",
+  );
+  assert.equal(invalidInvitationMock.invitationCalls.length, 1);
+  assert.equal(invalidInvitationMock.lookupCalls.length, 0);
+  assert.equal(invalidInvitationMock.parseCalls.length, 0);
+  assert.equal(invalidInvitationMock.createCalls.length, 0);
+  assertSafeCustomerBody(invalidInvitation.body, "invalid invitation body");
+
+  const usedInvitationMock = installMock({
+    lookupResult: {
+      data: {
+        booking_reference: "CUST-SAFE-001",
+      },
+      ok: true,
+    },
+  });
+  const usedInvitationResponse = await harness.route.POST(
+    postRequest({ passengerName: "Safe Passenger" }),
+  );
+  const usedInvitation = await readJson(usedInvitationResponse);
+
+  assert.equal(usedInvitation.status, 409);
+  assert.equal(
+    usedInvitationResponse.headers.get("x-prestige-customer-booking-result"),
+    "invitation_used",
+  );
+  assert.equal(usedInvitationMock.lookupCalls.length, 1);
+  assert.equal(usedInvitationMock.parseCalls.length, 0);
+  assert.equal(usedInvitationMock.createCalls.length, 0);
+  assert.equal(usedInvitationMock.adminAppNotificationCalls.length, 0);
+  assert.equal(usedInvitationMock.alertCalls.length, 0);
+  assert.equal(usedInvitationMock.devicePushAlertCalls.length, 0);
+  assertSafeCustomerBody(usedInvitation.body, "used invitation body");
+
   installMock();
   const success = await readJson(
     await harness.route.POST(
@@ -349,11 +594,18 @@ try {
   );
 
   assert.equal(success.status, 200);
+  assert.deepEqual(
+    globalThis.__prestigeCustomerBookingRequestApiMock.parseOptionsCalls,
+    [{ groupReferenceOverride: "CUST-SAFE-001" }],
+    "A verified invitation must supply its deterministic reference only through the server parser option.",
+  );
+  assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.lookupCalls.length, 1);
   assert.deepEqual(success.body, {
     ok: true,
     request: {
       booking_reference: "CUST-SAFE-001",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,
@@ -371,6 +623,11 @@ try {
   );
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
   assert.equal(
+    globalThis.__prestigeCustomerBookingRequestApiMock.receiptCalls[0].options.portalUrl,
+    null,
+    "A first-time request must not receive portal access inferred from contact fields.",
+  );
+  assert.equal(
     globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls[0].booking_reference,
     "CUST-SAFE-001",
   );
@@ -383,18 +640,47 @@ try {
   assertSafeCustomerBody(success.body, "short-notice success body");
 
   const verifiedPaMock = installMock({
-    portalBoundary: { data: { auth_user_id: "verified-pa" }, ok: true },
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-001",
+        contact_email: "william@prestigelimo.sg",
+        customer_facing_status: "Request Received",
+        public_booking_reference: "10841",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+    portalBoundary: {
+      data: {
+        auth_user_id: "verified-pa",
+        portal_link_revision: "verified-link-revision",
+      },
+      ok: true,
+    },
+    portalLinkResult: {
+      data: { token: "customer-portal-access-link-v1.test.signature" },
+      ok: true,
+    },
     verifiedIdentity: {
       data: {
+        booker_email: "william@prestigelimo.sg",
         booker_id: 5,
         company_id: 1,
         customer_account_reference: "120",
+        traveler_id: 901,
+        traveler_name: "Verified Traveller",
       },
       ok: true,
     },
   });
   const verifiedPaSuccess = await readJson(
-    await harness.route.POST(postRequest({ passengerName: "Safe PA Passenger" })),
+    await harness.route.POST(
+      postRequest(
+        { passengerName: "Tampered Passenger", travelerId: "901" },
+        validHeadersWithoutInvitation(),
+      ),
+    ),
   );
 
   assert.equal(verifiedPaSuccess.status, 200);
@@ -403,8 +689,66 @@ try {
     booker_id: 5,
     company_id: 1,
     customer_id: "120",
+    passenger_name: "Verified Traveller",
+    traveler_id: 901,
   });
+  assert.equal(verifiedPaMock.identityCalls[0].travelerId, "901");
+  assert.equal(verifiedPaMock.invitationCalls.length, 0);
+  assert.equal(verifiedPaMock.lookupCalls.length, 0);
+  assert.match(
+    verifiedPaMock.receiptCalls[0].options.portalUrl,
+    /^http:\/\/localhost\/api\/customer-portal-access\/customer-portal-access-link-v1\.test\.signature\?booking=10841&tracking=1$/,
+  );
   assertSafeCustomerBody(verifiedPaSuccess.body, "verified PA success body");
+
+  const mismatchedEmailMock = installMock({
+    createResult: {
+      data: {
+        admin_internal_status: "Admin Review Required",
+        booking_reference: "CUST-SAFE-001",
+        contact_email: "other@example.com",
+        customer_facing_status: "Request Received",
+        short_notice_review_status: "Admin Review Required",
+      },
+      ok: true,
+    },
+    portalBoundary: {
+      data: {
+        auth_user_id: "verified-pa",
+        portal_link_revision: "verified-link-revision",
+      },
+      ok: true,
+    },
+    portalLinkResult: {
+      data: { token: "customer-portal-access-link-v1.test.signature" },
+      ok: true,
+    },
+    verifiedIdentity: {
+      data: {
+        booker_email: "william@prestigelimo.sg",
+        booker_id: 5,
+        company_id: 1,
+        customer_account_reference: "120",
+        traveler_id: 901,
+        traveler_name: "Verified Traveller",
+      },
+      ok: true,
+    },
+  });
+  const mismatchedEmailSuccess = await readJson(
+    await harness.route.POST(
+      postRequest(
+        { passengerName: "Tampered Passenger", travelerId: "901" },
+        validHeadersWithoutInvitation(),
+      ),
+    ),
+  );
+  assert.equal(mismatchedEmailSuccess.status, 200);
+  assert.equal(
+    mismatchedEmailMock.receiptCalls[0].options.portalUrl,
+    null,
+    "A receipt sent to an address other than the verified booker email must not include portal access.",
+  );
 
   const stalePortalMock = installMock({
     portalBoundary: { data: { auth_user_id: "removed-portal-account" }, ok: true },
@@ -489,13 +833,34 @@ try {
       },
       ok: true,
     },
+    portalBoundary: {
+      data: {
+        auth_user_id: "verified-return-pa",
+        portal_link_revision: "verified-return-link-revision",
+      },
+      ok: true,
+    },
+    verifiedIdentity: {
+      data: {
+        booker_email: "william@prestigelimo.sg",
+        booker_id: 12,
+        company_id: 27,
+        customer_account_reference: "142",
+        traveler_id: 24,
+        traveler_name: "Verified Return Traveller",
+      },
+      ok: true,
+    },
   });
   const returnTripSuccess = await readJson(
     await harness.route.POST(
-      postRequest({
-        passengerName: "Safe Passenger",
-        returnTripRequested: "yes",
-      }),
+      postRequest(
+        {
+          passengerName: "Safe Passenger",
+          returnTripRequested: "yes",
+        },
+        validHeadersWithoutInvitation(),
+      ),
     ),
   );
 
@@ -505,12 +870,39 @@ try {
     request: {
       booking_reference: "CUST-RETURN-001-OUT",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: "CUST-RETURN-001-RET",
       return_trip_requested: true,
       short_notice_review_required: true,
     },
   });
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.createCalls.length, 2);
+  assert.deepEqual(
+    globalThis.__prestigeCustomerBookingRequestApiMock.createCalls.map((call) => ({
+      booker_id: call.data.booking.booker_id,
+      company_id: call.data.booking.company_id,
+      customer_id: call.data.booking.customer_id,
+      passenger_name: call.data.booking.passenger_name,
+      traveler_id: call.data.booking.traveler_id,
+    })),
+    [
+      {
+        booker_id: 12,
+        company_id: 27,
+        customer_id: "142",
+        passenger_name: "Verified Return Traveller",
+        traveler_id: 24,
+      },
+      {
+        booker_id: 12,
+        company_id: 27,
+        customer_id: "142",
+        passenger_name: "Verified Return Traveller",
+        traveler_id: 24,
+      },
+    ],
+    "A verified linked OUT/RET request must persist one exact identity tuple on both legs.",
+  );
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.alertCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.adminAppNotificationCalls.length, 1);
   assert.equal(globalThis.__prestigeCustomerBookingRequestApiMock.devicePushAlertCalls.length, 1);
@@ -572,6 +964,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-INAPP-FAIL",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,
@@ -604,6 +997,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-ALERT-FAIL",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,
@@ -636,6 +1030,7 @@ try {
     request: {
       booking_reference: "CUST-SAFE-PUSH-FAIL",
       customer_facing_status: "Request Received",
+      receipt_status: "blocked",
       return_booking_reference: null,
       return_trip_requested: false,
       short_notice_review_required: true,

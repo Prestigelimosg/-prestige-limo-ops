@@ -317,13 +317,19 @@ function installMockClient() {
             order(field, options) {
               mock.order = { field, options };
 
-              return {
-                limit(limit) {
-                  mock.listLimit = limit;
-
+              const listQuery = {
+                or(filter) {
+                  mock.or = filter;
+                  return listQuery;
+                },
+                range(from, to) {
+                  mock.range = { from, to };
+                  mock.listLimit = to - from + 1;
                   return Promise.resolve({ data: mock.listData, error: null });
                 },
               };
+
+              return listQuery;
             },
           };
         },
@@ -340,6 +346,7 @@ const [
   routeSource,
   gatedHelperSource,
   recordMapperSource,
+  savedBookingReadSource,
   appPage,
   aiParseRoute,
   adminBookingsRoute,
@@ -349,6 +356,7 @@ const [
   readFile(routePath, "utf8"),
   readFile(gatedHelperPath, "utf8"),
   readFile(recordMapperPath, "utf8"),
+  readFile(savedBookingReadPath, "utf8"),
   readFile(appPagePath, "utf8"),
   readFile(aiParseRoutePath, "utf8"),
   readFile(adminBookingsRoutePath, "utf8"),
@@ -378,7 +386,7 @@ assertExcludes(`${routeSource}\n${gatedHelperSource}`, forbiddenRuntimeWiringPat
 const loadBookingsBlock = sliceBetween(appPage, "async function loadBookings", "function loadSelectedBooking");
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Current Load Bookings endpoint",
 );
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Current Load Bookings method");
@@ -396,7 +404,7 @@ const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
 );
 const legacySavedBookingsFetchIndex = loadBookingsBlock.indexOf(
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
 );
 assert.equal(
   typedOperationalFetchIndex > -1 && legacySavedBookingsFetchIndex > -1,
@@ -468,6 +476,26 @@ assertIncludes(adminSavedBookingsRoute, "export async function GET", "Admin save
 assertIncludes(adminSavedBookingsRoute, "loadAdminSavedBookingList", "Admin saved bookings list remains");
 assertIncludes(adminSavedBookingsRoute, "loadAdminSavedBookingById", "Admin saved bookings detail remains");
 assertIncludes(recordMapperSource, "safe_card", "Operational mapper remains safe-card based");
+const currentReadSelectBlock = sliceBetween(
+  savedBookingReadSource,
+  "const adminSavedBookingCurrentReadSelect =",
+  "const adminSavedBookingCurrentMinimalReadSelect =",
+);
+const currentMinimalReadSelectBlock = sliceBetween(
+  savedBookingReadSource,
+  "const adminSavedBookingCurrentMinimalReadSelect =",
+  "const adminSavedBookingFoundationScalarReadSelect =",
+);
+assertIncludes(
+  currentReadSelectBlock,
+  "pax_count",
+  "Current-schema typed Load Bookings select",
+);
+assertIncludes(
+  currentMinimalReadSelectBlock,
+  "pax_count",
+  "Current-schema minimal typed Load Bookings select",
+);
 assertIncludes(preactivationSuite, guardScript, "Preactivation suite typed gated route guard registration");
 
 const harness = await loadHarness();
@@ -511,6 +539,7 @@ try {
   assert.equal(listBody.bookings[0].quarantined_field_count > 0, true, "Mocked list must quarantine risky source field names.");
   assert.equal(mock.tableNames.includes("bookings"), true, "Mocked open typed read list may touch bookings table only in harness.");
   assert.equal(mock.listLimit, 2, "Mocked open typed read list must pass safe limit.");
+  assert.deepEqual(mock.range, { from: 0, to: 1 }, "Mocked open typed read list must use the bounded first range.");
   assertExcludes(
     JSON.stringify(listBody),
     /812\.35|64\.20|driver payout should stay parked|internal admin note should never expose|manual override|pay\.example/i,

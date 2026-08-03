@@ -24,6 +24,7 @@ const allowedSavedBookingFields = [
   "passenger_name",
   "pickup_at",
   "pickup_location",
+  "public_booking_reference",
   "service_type",
   "updated_at",
 ];
@@ -791,6 +792,7 @@ try {
     passenger_name: "Safe Passenger",
     pickup_at: "2026-06-08T09:00:00.000Z",
     pickup_location: "Changi Airport",
+    public_booking_reference: "CUST-SAVED-001",
     service_type: "arrival",
     updated_at: "2026-06-08T01:30:00.000Z",
   });
@@ -859,6 +861,7 @@ try {
     passenger_name: "UBS Passenger",
     pickup_at: "2026-06-11T08:00:00.000Z",
     pickup_location: "UBS office",
+    public_booking_reference: "CUST-UBS-001",
     service_type: "departure",
     updated_at: "2026-06-11T01:30:00.000Z",
   });
@@ -868,6 +871,7 @@ try {
   const foundationFallbackMock = installMockClient(seedFoundationSavedBookingRows(), {
     failures: {
       "select:bookings": [
+        { code: "42703", message: "column pickup_at does not exist" },
         { code: "42703", message: "column pickup_at does not exist" },
         null,
       ],
@@ -899,6 +903,7 @@ try {
     passenger_name: "Foundation Passenger",
     pickup_at: "2026-06-10T11:30:00.000Z",
     pickup_location: "UBS office",
+    public_booking_reference: "CUST-FOUNDATION-001",
     service_type: "transfer",
     updated_at: "2026-06-10T01:30:00.000Z",
   });
@@ -906,12 +911,12 @@ try {
     column: "pickup_at",
     options: { ascending: false },
   });
-  assert.deepEqual(foundationFallbackMock.client.selectHistory[2].orderBy, {
+  assert.deepEqual(foundationFallbackMock.client.selectHistory[3].orderBy, {
     column: "pickup_datetime",
     options: { ascending: false },
   });
   assert.equal(
-    foundationFallbackMock.client.selectHistory[2].selectedColumns.includes("pickup_datetime"),
+    foundationFallbackMock.client.selectHistory[3].selectedColumns.includes("pickup_datetime"),
     true,
     "Foundation fallback must select the foundation pickup column.",
   );

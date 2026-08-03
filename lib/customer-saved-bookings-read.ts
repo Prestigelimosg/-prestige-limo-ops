@@ -22,6 +22,8 @@ export type CustomerSavedBookingsBoundaryContext = {
   booker_id?: number | null;
   customer_account_reference?: string | null;
   mode: "server-session-cookie" | "server-session-token";
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
   source_surface: "customer_api";
 };
@@ -42,6 +44,7 @@ export type CustomerSavedBookingsReadParams = {
 export type CustomerSavedBookingRecord = {
   booking_month: string | null;
   booking_reference: string;
+  public_booking_reference: string;
   created_at: string | null;
   customer_driver_details: {
     car_plate: string | null;
@@ -70,9 +73,12 @@ export type CustomerSavedBookingsReadResult = {
 };
 
 export type CustomerSavedBookingsVerifiedIdentity = {
+  booker_email: string | null;
   booker_id: number;
   company_id: number;
   customer_account_reference: string;
+  traveler_id: number | null;
+  traveler_name: string | null;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -97,9 +103,13 @@ const maxSafeTextLength = 500;
 const customerAccountSelect =
   "customer_account_reference, account_status, company_id, booker_id";
 const customerSavedBookingsCurrentSelect =
-  "booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+  "booking_reference, public_booking_reference, service_type, pickup_at, pickup_location, dropoff_location, passenger_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+const customerSavedBookingsCurrentSelectWithoutPublicReference =
+  customerSavedBookingsCurrentSelect.replace("public_booking_reference, ", "");
 const customerSavedBookingsFoundationSelect =
-  "booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+  "booking_reference, public_booking_reference, route_type, pickup_datetime, pickup_location, dropoff_location, customer_display_name, customer_facing_status, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, created_at, updated_at";
+const customerSavedBookingsFoundationSelectWithoutPublicReference =
+  customerSavedBookingsFoundationSelect.replace("public_booking_reference, ", "");
 const customerSavedBookingsAuthRequiredError =
   "Customer saved bookings read requires secure customer account access before saved bookings can be read.";
 const customerSavedBookingsDisabledError =
@@ -226,6 +236,14 @@ function safeTextFromDb(value: unknown, maxLength = maxSafeTextLength) {
   }
 
   return cleaned;
+}
+
+function safeEmailFromDb(value: unknown) {
+  const email = safeTextFromDb(value, 254)?.toLowerCase() || null;
+
+  return email && /^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\\]+$/.test(email)
+    ? email
+    : null;
 }
 
 function safeDateTextFromDb(value: unknown) {
@@ -729,6 +747,7 @@ function getServerOnlyCustomerSavedBookingsSupabaseClient(
 
 function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingRecord | null {
   const bookingReference = validBookingReference(row.booking_reference);
+  const publicBookingReference = validBookingReference(row.public_booking_reference) || bookingReference;
   const pickupAt = safeDateTextFromDb(row.pickup_at) || safeDateTextFromDb(row.pickup_datetime);
   const serviceType = safeTextFromDb(row.service_type) || safeTextFromDb(row.route_type);
   const passengerName = safeTextFromDb(row.passenger_name) || safeTextFromDb(row.customer_display_name);
@@ -746,13 +765,14 @@ function toCustomerSavedBookingRecord(row: UnknownRecord): CustomerSavedBookingR
         }
       : null;
 
-  if (!bookingReference) {
+  if (!bookingReference || !publicBookingReference) {
     return null;
   }
 
   return {
     booking_month: validBookingMonth(pickupAt),
     booking_reference: bookingReference,
+    public_booking_reference: publicBookingReference,
     created_at: safeDateTextFromDb(row.created_at),
     customer_driver_details: customerDriverDetails,
     customer_facing_status: publicSafeStatus(row.customer_facing_status),
@@ -827,12 +847,40 @@ async function readCustomerSavedBookingRows(
     return currentResult;
   }
 
-  return readCustomerSavedBookingRowsForSchema({
+  const currentWithoutPublicReferenceResult =
+    await readCustomerSavedBookingRowsForSchema({
+      client,
+      bookingFilters,
+      parsed,
+      pickupColumn: "pickup_at",
+      selectedColumns: customerSavedBookingsCurrentSelectWithoutPublicReference,
+    });
+
+  if (
+    currentWithoutPublicReferenceResult.ok ||
+    currentWithoutPublicReferenceResult.category !== "column_missing"
+  ) {
+    return currentWithoutPublicReferenceResult;
+  }
+
+  const foundationResult = await readCustomerSavedBookingRowsForSchema({
     client,
     bookingFilters,
     parsed,
     pickupColumn: "pickup_datetime",
     selectedColumns: customerSavedBookingsFoundationSelect,
+  });
+
+  if (foundationResult.ok || foundationResult.category !== "column_missing") {
+    return foundationResult;
+  }
+
+  return readCustomerSavedBookingRowsForSchema({
+    client,
+    bookingFilters,
+    parsed,
+    pickupColumn: "pickup_datetime",
+    selectedColumns: customerSavedBookingsFoundationSelectWithoutPublicReference,
   });
 }
 
@@ -977,6 +1025,8 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
         auth_user_id: portalAccessSession.data.auth_user_id,
         customer_account_reference: portalAccessSession.data.customer_account_reference,
         mode: "server-session-cookie",
+        portal_link_issued_at: portalAccessSession.data.issued_at,
+        portal_link_revision: portalAccessSession.data.link_revision,
         runtime_gate: effectiveRuntimeGate,
         source_surface: "customer_api",
       },
@@ -1052,6 +1102,7 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
 
 export async function resolveCustomerSavedBookingsVerifiedIdentity(
   context: CustomerSavedBookingsBoundaryContext,
+  travelerIdInput?: unknown,
 ): Promise<AdminBookingResult<CustomerSavedBookingsVerifiedIdentity>> {
   const clientResult = getServerOnlyCustomerSavedBookingsSupabaseClient(context);
 
@@ -1083,6 +1134,12 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
     const account = await assertActiveCustomerPortalAccessAccount(
       customerAccountReference,
       clientResult.data,
+      context.portal_link_revision || context.portal_link_issued_at
+        ? {
+            issuedAt: context.portal_link_issued_at,
+            linkRevision: context.portal_link_revision,
+          }
+        : undefined,
     );
 
     if (!account.ok) {
@@ -1106,11 +1163,72 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
     return customerSavedBookingsAuthRequiredResult();
   }
 
+  const { data: bookerRows, error: bookerError } = await clientResult.data
+    .from("bookers")
+    .select("id, company_id, email")
+    .eq("id", bookerId)
+    .eq("company_id", companyId)
+    .limit(1);
+
+  if (bookerError) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const bookerRow = asRecord(asArray(bookerRows)[0]);
+
+  if (
+    verifiedIdentityId(bookerRow.id) !== bookerId ||
+    verifiedIdentityId(bookerRow.company_id) !== companyId
+  ) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  const bookerEmail = safeEmailFromDb(bookerRow.email);
+
+  const travelerId =
+    travelerIdInput === undefined || travelerIdInput === null || travelerIdInput === ""
+      ? null
+      : verifiedIdentityId(travelerIdInput);
+  let travelerName: string | null = null;
+
+  if (travelerIdInput !== undefined && travelerIdInput !== null && travelerIdInput !== "" && !travelerId) {
+    return customerSavedBookingsAuthRequiredResult();
+  }
+
+  if (travelerId) {
+    const { data: travelerRows, error: travelerError } = await clientResult.data
+      .from("travelers")
+      .select("id, company_id, booker_id, traveler_name")
+      .eq("id", travelerId)
+      .eq("company_id", companyId)
+      .eq("booker_id", bookerId)
+      .limit(1);
+
+    if (travelerError) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
+
+    const travelerRow = asRecord(asArray(travelerRows)[0]);
+    travelerName = safeTextFromDb(travelerRow.traveler_name, 160);
+
+    if (
+      verifiedIdentityId(travelerRow.id) !== travelerId ||
+      verifiedIdentityId(travelerRow.company_id) !== companyId ||
+      verifiedIdentityId(travelerRow.booker_id) !== bookerId ||
+      !travelerName
+    ) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
+  }
+
   return {
     data: {
+      booker_email: bookerEmail,
       booker_id: bookerId,
       company_id: companyId,
       customer_account_reference: customerAccountReference,
+      traveler_id: travelerId,
+      traveler_name: travelerName,
     },
     ok: true,
   };
@@ -1186,6 +1304,12 @@ export async function loadCustomerSavedBookings(
     const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
       customerAccountReference,
       clientResult.data,
+      context.portal_link_revision || context.portal_link_issued_at
+        ? {
+            issuedAt: context.portal_link_issued_at,
+            linkRevision: context.portal_link_revision,
+          }
+        : undefined,
     );
 
     if (!activeAccessAccount.ok) {

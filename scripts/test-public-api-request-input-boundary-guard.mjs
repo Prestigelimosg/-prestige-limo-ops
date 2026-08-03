@@ -20,6 +20,7 @@ const publicApiRoutePaths = [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",
   "app/api/driver-job/[token]/flight-eta-acknowledgement-setup/route.ts",
   "app/api/driver-job-bids/route.ts",
+  "app/api/driver-portal/jobs/route.ts",
 ];
 
 const helperPaths = [
@@ -156,6 +157,7 @@ const customerBookingRequestFields = [
   "companyName",
   "contactNo",
   "emailAddress",
+  "travelerId",
   "passengerName",
   "pickupDate",
   "pickupTime",
@@ -288,7 +290,13 @@ const customerBookingRequestRoute = files["app/api/customer-booking-requests/rou
 for (const fragment of [
   "const customerBookingPurposeHeader = \"customer-booking-request\";",
   "refererUrl.pathname === \"/book\"",
-  "const parsed = parseCustomerBookingRequestPayloads(await readJsonBody(request));",
+  "const body = await readJsonBody(request);",
+  "request.headers.get(customerBookingInvitationHeader)",
+  "verifyCustomerBookingInvitationToken(invitationToken)",
+  "request.headers.get(customerBookingPhoneProofHeader)",
+  "verifyCustomerBookingPhoneOtpProof(",
+  "const parsed = parseCustomerBookingRequestPayloads(body, {",
+  "invitationGroupReference || phoneOtpGroupReference",
   "customerSafeError(parsed.error)",
   "customerSafeError(result.error)",
 ]) {
@@ -297,7 +305,7 @@ for (const fragment of [
 assertBefore(
   customerBookingRequestRoute,
   "if (!isCustomerBookingRequest(request))",
-  "parseCustomerBookingRequestPayloads(await readJsonBody(request))",
+  "const parsed = parseCustomerBookingRequestPayloads(body, {",
   "customer booking request route",
 );
 
@@ -476,6 +484,27 @@ assertExcludes(driverIssueHelper, /payout|payment|invoice|billing|customer_price
 const driverBidsRoute = files["app/api/driver-job-bids/route.ts"];
 assertExcludes(driverBidsRoute, "request.json", "blocked driver bids route body parsing");
 assertIncludes(driverBidsRoute, "blockedDriverBidResponse", "blocked driver bids input boundary");
+
+const driverPortalJobsRoute = files["app/api/driver-portal/jobs/route.ts"];
+assertExcludes(driverPortalJobsRoute, "searchParams", "driver portal jobs route query parsing");
+assertExcludes(driverPortalJobsRoute, /\.\.\.body/, "driver portal jobs route body spreading");
+assertExcludes(
+  driverPortalJobsRoute,
+  /customer_price|driver_payout|paynow|billing|invoice|payment|pdf|internal_note/i,
+  "driver portal jobs route unsafe subscription inputs",
+);
+for (const fragment of [
+  "async function readJsonBody(request: Request)",
+  'request.headers.get("x-prestige-driver-purpose") !== purpose',
+  'refererUrl.pathname === "/driver-portal"',
+  'resolveDriverPortalSession(request.headers.get("cookie"))',
+  'sameOriginDriverPortalRequest(request, "driver-portal-jobs-read")',
+  'sameOriginDriverPortalRequest(request, "driver-portal-device-alert-registration")',
+  "const body = await readJsonBody(request);",
+  "subscription: body.device_push_subscription",
+]) {
+  assertIncludes(driverPortalJobsRoute, fragment, `driver portal jobs input fragment ${fragment}`);
+}
 
 for (const setupRoutePath of [
   "app/api/driver-job/[token]/flight-eta-setup/route.ts",

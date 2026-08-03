@@ -17,6 +17,7 @@ export type CustomerPortalBooking = {
   passengerName: string;
   pickupDateTime: string;
   pickupLocation: string;
+  publicBookingReference: string;
   serviceType: string;
   specialRequest?: string;
   status: BookingStatus;
@@ -51,6 +52,7 @@ const allowedApiRecordFields = new Set([
   "passenger_name",
   "pickup_at",
   "pickup_location",
+  "public_booking_reference",
   "service_type",
   "updated_at",
 ]);
@@ -300,9 +302,11 @@ function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
     return null;
   }
 
-  const bookingReference = safeBookingReference(record.booking_reference);
+  const internalBookingReference = safeBookingReference(record.booking_reference);
+  const publicBookingReference =
+    safeBookingReference(record.public_booking_reference) || internalBookingReference;
 
-  if (!bookingReference) {
+  if (!internalBookingReference || !publicBookingReference) {
     return null;
   }
 
@@ -311,10 +315,11 @@ function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
   return {
     ...(driverDetails ? { driverDetails } : {}),
     dropoffLocation: safeText(record.dropoff_location) || "Drop-off to confirm",
-    id: `saved-${bookingReference}`,
+    id: `saved-${internalBookingReference}`,
     passengerName: safeText(record.passenger_name) || "Passenger to confirm",
     pickupDateTime: formatPickupDateTime(record.pickup_at),
     pickupLocation: safeText(record.pickup_location) || "Pickup to confirm",
+    publicBookingReference,
     serviceType: safeText(record.service_type, 120) || "Service to confirm",
     status: safeStatus(record.customer_facing_status),
     vehicleType: "To confirm",

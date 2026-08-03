@@ -24,8 +24,8 @@ const activeBookingsList = sliceBetween(
 
 assert.match(
   activeBookingsList,
-  /filteredRecentBookingDisplayItems\.map\(\(\{ bookingRecord: savedBooking, operationalCard \}, bookingIndex\)/,
-  "Active Bookings must stripe the established visible display order.",
+  /visibleRecentBookingDisplayItems\.map\(\(\{ bookingRecord: savedBooking, operationalCard \}, bookingIndex\)/,
+  "Active Bookings must stripe the established visible paginated order.",
 );
 assert.match(activeBookingsList, /bookingIndex % 2 === 0 \? "sky" : "violet"/);
 assert.match(activeBookingsList, /data-bookings-alternate-colour=\{bookingAlternateColour\}/);

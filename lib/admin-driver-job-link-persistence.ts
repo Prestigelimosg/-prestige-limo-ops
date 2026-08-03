@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -16,11 +17,13 @@ import {
   getDriverJobLinkExpiresAt,
   hashDriverJobLinkToken,
 } from "./driver-job-link";
+import { sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
 
 export const adminDriverJobLinkPersistenceVersion =
   "admin-driver-job-link-api-v1";
 
 export type AdminDriverJobLinkStatus = "active" | "expired" | "revoked";
+export type AdminDriverJobCardKind = "amendment" | "new" | "reissued";
 
 export type AdminDriverJobLinkSafePayload = {
   assigned_driver_contact?: string;
@@ -51,9 +54,12 @@ export type AdminDriverJobLinkRecord = {
   link_status: AdminDriverJobLinkStatus;
   revoked_at: string | null;
   safe_summary: {
+    acknowledged: boolean;
+    acknowledged_at: string | null;
     assigned_driver: string | null;
     assigned_driver_contact: string | null;
     assigned_driver_plate: string | null;
+    job_card_kind: AdminDriverJobCardKind | null;
     pickup_datetime: string | null;
     route: string | null;
     vehicle: string | null;
@@ -109,7 +115,7 @@ const maxReadLimit = 100;
 const maxReadPage = 1000;
 const maxTtlHours = defaultDriverJobLinkTtlHours;
 const driverJobLinkSelect =
-  "id, booking_reference, link_status, issued_at, expires_at, revoked_at, source_surface, actor_role, actor_label, safe_link_context, created_at, updated_at";
+  "id, booking_reference, driver_id, link_status, issued_at, expires_at, revoked_at, source_surface, actor_role, actor_label, safe_link_context, created_at, updated_at";
 const disabledDriverJobLinkError =
   "Admin driver job link persistence is not enabled on this server.";
 const safeDriverJobLinkConfigError =
@@ -120,8 +126,11 @@ const safeDriverJobLinkServerSessionActorError =
   "Admin driver job link persistence requires a verified admin or dispatcher server session.";
 const safeDriverJobLinkLoadError = "Admin driver job link load failed safely.";
 const safeDriverJobLinkCreateError = "Admin driver job link create failed safely.";
+const staleBookingAmendmentError =
+  "Save the booking amendment before creating a Driver Job Link.";
 const safeDriverJobLinkRevokeError = "Admin driver job link revoke failed safely.";
 const allowedLinkStatuses = new Set(["active", "expired", "revoked"]);
+const allowedJobCardKinds = new Set(["amendment", "new", "reissued"]);
 const allowedReadParams = new Set(["booking_reference", "limit", "link_status", "page"]);
 const allowedCreateFields = new Set(["booking_reference", "driver_job_payload", "ttl_hours"]);
 const allowedSafePayloadFields = new Set([
@@ -446,6 +455,110 @@ function safeDriverJobPayload(value: unknown): AdminDriverJobLinkSafePayload | n
   return payload;
 }
 
+function safeDriverJobPayloadRevision(payload: AdminDriverJobLinkSafePayload) {
+  const canonicalPayload = Object.fromEntries(
+    Object.entries(payload).sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey)),
+  );
+
+  return createHash("sha256").update(JSON.stringify(canonicalPayload)).digest("hex");
+}
+
+function canonicalOperationalText(value: unknown) {
+  return optionalSafeText(value)?.replace(/\s+/g, " ").toLocaleLowerCase("en-SG") || "";
+}
+
+function canonicalOperationalRoute(value: unknown) {
+  return canonicalOperationalText(value)
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" > ");
+}
+
+function singaporeDateTimeKey(value: unknown) {
+  const timestamp = Date.parse(optionalSafeText(value) || "");
+
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(new Date(timestamp));
+  const partValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  const date = `${partValue("year")}-${partValue("month")}-${partValue("day")}`;
+  const time = `${partValue("hour")}${partValue("minute")}`;
+
+  return /^\d{4}-\d{2}-\d{2} \d{4}$/.test(`${date} ${time}`) ? `${date} ${time}` : "";
+}
+
+function driverJobPayloadPickupDateTimeKey(payload: AdminDriverJobLinkSafePayload) {
+  const pickupDate = optionalSafeText(payload.pickup_date);
+  const pickupTime = optionalSafeText(payload.pickup_time)?.replace(/[^0-9]/g, "").slice(0, 4);
+
+  if (pickupDate && /^\d{4}$/.test(pickupTime || "")) {
+    return `${pickupDate} ${pickupTime}`;
+  }
+
+  return singaporeDateTimeKey(payload.pickup_datetime);
+}
+
+function savedBookingMatchesDriverJobPayload(
+  bookingRecord: UnknownRecord,
+  payload: AdminDriverJobLinkSafePayload,
+) {
+  const comparisons = [
+    [bookingRecord.service_type, payload.booking_type],
+    [bookingRecord.pickup_location, payload.pickup_location],
+    [bookingRecord.dropoff_location, payload.dropoff_location],
+    [bookingRecord.passenger_name, payload.passenger_name],
+    [bookingRecord.flight_no, payload.flight_no],
+    [bookingRecord.driver_name, payload.assigned_driver_name],
+    [bookingRecord.driver_contact, payload.assigned_driver_contact],
+    [bookingRecord.driver_plate_number, payload.assigned_driver_plate],
+  ];
+
+  return (
+    Object.keys(bookingRecord).length > 0 &&
+    comparisons.every(
+      ([savedValue, linkValue]) =>
+        canonicalOperationalText(savedValue) === canonicalOperationalText(linkValue),
+    ) &&
+    canonicalOperationalRoute(bookingRecord.route_summary) ===
+      canonicalOperationalRoute(payload.route) &&
+    singaporeDateTimeKey(bookingRecord.pickup_at) ===
+      driverJobPayloadPickupDateTimeKey(payload)
+  );
+}
+
+export function classifyAdminDriverJobCardKind(
+  previousSafeLinkContext: unknown,
+  nextPayload: AdminDriverJobLinkSafePayload,
+): AdminDriverJobCardKind | null {
+  const previousContext = asRecord(previousSafeLinkContext);
+
+  if (Object.keys(previousContext).length === 0) {
+    return "new";
+  }
+
+  const previousPayload = safeDriverJobPayload(previousContext.driver_job_payload);
+
+  if (!previousPayload) {
+    return null;
+  }
+
+  return safeDriverJobPayloadRevision(previousPayload) === safeDriverJobPayloadRevision(nextPayload)
+    ? "reissued"
+    : "amendment";
+}
+
 export function parseAdminDriverJobLinkCreatePayload(
   value: unknown,
 ): AdminBookingResult<AdminDriverJobLinkCreateInput> {
@@ -753,11 +866,19 @@ function getServerOnlyAdminDriverJobLinkSupabaseClient(
 
 function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecord["safe_summary"] {
   const payload = asRecord(context.driver_job_payload);
+  const acknowledgedAt = validDateText(context.driver_acknowledged_at);
+  const jobCardKind = textOrNull(context.job_card_kind);
 
   return {
+    acknowledged: Boolean(acknowledgedAt),
+    acknowledged_at: acknowledgedAt,
     assigned_driver: safeText(payload.assigned_driver_name) || null,
     assigned_driver_contact: safeText(payload.assigned_driver_contact) || null,
     assigned_driver_plate: safeText(payload.assigned_driver_plate) || null,
+    job_card_kind:
+      jobCardKind && allowedJobCardKinds.has(jobCardKind)
+        ? (jobCardKind as AdminDriverJobCardKind)
+        : null,
     pickup_datetime: safeText(payload.pickup_datetime) || null,
     route: safeText(payload.route, maxSafeRouteLength) || null,
     vehicle: safeText(payload.assigned_driver_vehicle_model) || null,
@@ -880,20 +1001,82 @@ export async function createAdminDriverJobLink(
     return clientResult;
   }
 
+  const { data: bookingData, error: bookingError } = await clientResult.data
+    .from("bookings")
+    .select("driver_id")
+    .eq("booking_reference", input.booking_reference)
+    .maybeSingle();
+  const bookingRecord = asRecord(bookingData);
+  const verifiedDriverId = Number(bookingRecord.driver_id);
+
+  if (bookingError) {
+    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, bookingError);
+  }
+
+  const { data: operationalBookingData, error: operationalBookingError } = await clientResult.data
+    .from("bookings")
+    .select(
+      "service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number",
+    )
+    .eq("booking_reference", input.booking_reference)
+    .maybeSingle();
+
+  if (operationalBookingError) {
+    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, operationalBookingError);
+  }
+
+  if (
+    !savedBookingMatchesDriverJobPayload(
+      asRecord(operationalBookingData),
+      input.driver_job_payload,
+    )
+  ) {
+    return {
+      error: staleBookingAmendmentError,
+      ok: false,
+      status: 409,
+    };
+  }
+
   const token = generateDriverJobLinkToken();
   const tokenHash = hashDriverJobLinkToken(token);
   const now = new Date();
   const expiresAt = getDriverJobLinkExpiresAt(now, input.ttl_hours);
+
+  const { data: previousLinkData, error: previousLinkError } = await clientResult.data
+    .from("driver_job_links")
+    .select("safe_link_context")
+    .eq("booking_reference", input.booking_reference)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (previousLinkError) {
+    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, previousLinkError);
+  }
+
+  const previousLinkRecord = asRecord(previousLinkData);
+  const jobCardKind = classifyAdminDriverJobCardKind(
+    Object.keys(previousLinkRecord).length > 0 ? previousLinkRecord.safe_link_context : null,
+    input.driver_job_payload,
+  );
+
   const payload = {
     actor_label: actor.actor_label,
     actor_role: actor.actor_role,
     booking_reference: input.booking_reference,
+    driver_id:
+      Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0
+        ? verifiedDriverId
+        : null,
     expires_at: expiresAt.toISOString(),
     issued_at: now.toISOString(),
     link_status: "active",
     revoked_at: null,
     safe_link_context: {
       driver_job_payload: input.driver_job_payload,
+      job_card_kind: jobCardKind,
+      job_card_revision: safeDriverJobPayloadRevision(input.driver_job_payload),
       link_purpose: "manual_driver_assignment_job_card",
     },
     source_surface: actor.source_surface,
@@ -910,6 +1093,14 @@ export async function createAdminDriverJobLink(
   if (error || !link) {
     return safeAdapterFailure(safeDriverJobLinkCreateError, 500, error);
   }
+
+  await sendDriverDevicePushAlertForNewJobLink(
+    clientResult.data,
+    {
+      driver_job_link_id: link.id,
+      driver_job_token: token,
+    },
+  ).catch(() => null);
 
   return {
     data: {

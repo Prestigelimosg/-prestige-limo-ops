@@ -128,11 +128,24 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "compactCustomerBookingReference(booking.booking_reference, \"Reference unavailable\")",
-  "title={savedBookingDisplayText(booking.booking_reference, \"Reference unavailable\")}",
-  "{savedBookingDisplayText(booking.booking_reference)}",
+  "const publicBookingReference = customerFolderPublicBookingReference(booking);",
+  'title={publicBookingReference || "Reference unavailable"}',
+  '{publicBookingReference || "Reference unavailable"}',
+  'formatSingaporePickupDisplay(booking.pickup_at, "Pickup not available")',
 ]) {
-  assertIncludes(customerFolderJobsSection, fragment, `customer folder compact reference ${fragment}`);
+  assertIncludes(customerFolderJobsSection, fragment, `customer folder public reference and SGT pickup ${fragment}`);
+}
+for (const forbidden of [
+  'compactCustomerBookingReference(booking.booking_reference, "Reference unavailable")',
+  'title={savedBookingDisplayText(booking.booking_reference, "Reference unavailable")}',
+  "{savedBookingDisplayText(booking.booking_reference)}",
+  "{savedBookingDateLabel(booking)}",
+]) {
+  assertExcludes(
+    customerFolderJobsSection,
+    forbidden,
+    `customer folder job list internal-reference/date-only display ${forbidden}`,
+  );
 }
 
 for (const fragment of [

@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
-import { GET } from "../app/api/driver-job/[token]/route.ts";
-import { POST as POST_ISSUE_ALERT } from "../app/api/driver-job/[token]/issue-alert/route.ts";
-import { PATCH } from "../app/api/driver-job/[token]/status/route.ts";
-import {
-  mockDriverJobTokens,
-  resetMockDriverJobLinkDataForTests,
-} from "../lib/driver-job-link-mock-store.ts";
+import { spawnSync } from "node:child_process";
+
+if (!process.execArgv.includes("--conditions=react-server")) {
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--experimental-strip-types", import.meta.filename],
+    { encoding: "utf8", stdio: "pipe" },
+  );
+
+  process.stdout.write(result.stdout);
+  process.stderr.write(result.stderr);
+  process.exit(result.status ?? 1);
+}
+
+const [driverJobRoute, issueAlertRoute, statusRoute, mockStore] = await Promise.all([
+  import("../app/api/driver-job/[token]/route.ts"),
+  import("../app/api/driver-job/[token]/issue-alert/route.ts"),
+  import("../app/api/driver-job/[token]/status/route.ts"),
+  import("../lib/driver-job-link-mock-store.ts"),
+]);
+const { GET } = driverJobRoute;
+const { POST: POST_ISSUE_ALERT } = issueAlertRoute;
+const { PATCH } = statusRoute;
+const { mockDriverJobTokens, resetMockDriverJobLinkDataForTests } = mockStore;
 
 process.env.DRIVER_JOB_LINK_MODE = "mock";
 
@@ -143,7 +160,14 @@ for (const [requestedStatus, expectedStatus] of [
   assert.equal(patchResult.body.status, expectedStatus);
   assert.equal(patchResult.body.payload.reference, "MOCK-DRIVER-JOB-A");
   assert.equal(patchResult.body.payload.status, expectedStatus);
-  assert.equal(linkedResult.body.payload.status, expectedStatus);
+  if (expectedStatus === "completed") {
+    assert.equal(linkedResult.status, 410);
+    assert.equal(linkedResult.body.ok, false);
+    assert.equal(linkedResult.body.reason, "expired");
+    assert.equal(linkedResult.body.payload, null);
+  } else {
+    assert.equal(linkedResult.body.payload.status, expectedStatus);
+  }
   assert.equal(unrelatedResult.body.payload.reference, "MOCK-DRIVER-JOB-B");
   assert.equal(unrelatedResult.body.payload.status, "assigned");
   assertNoSensitiveData(patchResult);

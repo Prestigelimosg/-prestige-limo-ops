@@ -1,7 +1,8 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SafeDriverJobPayload,
   SafeDriverJobStatusHistoryItem,
@@ -27,8 +28,13 @@ type DriverJobApiBlockedReason =
 
 type DriverJobApiResponse =
   | {
+      device_alerts?: DriverDeviceAlertApiState;
+      driver_portal?: {
+        enrolled: boolean;
+        link_key: string | null;
+      };
       ok: true;
-      mode: "mock";
+      mode: "mock" | "production";
       payload: SafeDriverJobPayload;
       status?: string;
     }
@@ -60,6 +66,45 @@ type StatusFeedback = {
 type ControlFeedback = {
   tone: "success" | "error";
   text: string;
+};
+
+type DriverCalendarApiResponse =
+  | {
+      action?: "authorize" | "saved" | "status";
+      google_consent_url?: string;
+      connected?: boolean;
+      ok: true;
+      status: "cal_saved" | "save_to_calendar" | "update_calendar";
+    }
+  | {
+      ok: false;
+      reason?:
+        | "expired"
+        | "invalid_oauth"
+        | "not_acknowledged"
+        | "not_configured"
+        | "provider_failed"
+        | "revoked"
+        | "unauthorized"
+        | "unverified_driver";
+    };
+
+type DriverCalendarBlockedReason =
+  | "expired"
+  | "invalid_oauth"
+  | "not_acknowledged"
+  | "not_configured"
+  | "provider_failed"
+  | "revoked"
+  | "unauthorized"
+  | "unverified_driver"
+  | undefined;
+
+type DriverCalendarState = {
+  action: "idle" | "saving";
+  connected: boolean;
+  feedback: ControlFeedback | null;
+  status: "cal_saved" | "loading" | "save_to_calendar" | "unavailable" | "update_calendar";
 };
 
 type DriverQuickReplyState = {
@@ -139,6 +184,28 @@ type DriverAppUpdateState = {
   feedback: ControlFeedback | null;
   kind: "idle" | "loading" | "loaded" | "empty" | "unavailable" | "error";
   updates: DriverAppUpdateRecord[];
+};
+
+type DriverDeviceAlertApiState = {
+  enabled?: boolean;
+  link_key?: string | null;
+  public_key?: string | null;
+  ready?: boolean;
+  reason?: string;
+  subscription_registered?: boolean;
+  version?: string;
+};
+
+type DriverDeviceAlertReadiness = {
+  enabled: boolean;
+  publicKey: string;
+  ready: boolean;
+};
+
+type DriverDeviceAlertPreparation = {
+  permission: "denied" | "granted" | "not_requested" | "unavailable";
+  registration: ServiceWorkerRegistration | null;
+  subscription: PushSubscriptionJSON | null;
 };
 
 type DriverLiveLocationBrowserPosition = {
@@ -234,6 +301,15 @@ const emptyDriverAppUpdateState: DriverAppUpdateState = {
   kind: "idle",
   updates: [],
 };
+const emptyDriverDeviceAlertReadiness: DriverDeviceAlertReadiness = {
+  enabled: false,
+  publicKey: "",
+  ready: false,
+};
+const defaultAcknowledgedDetailsFeedback = {
+  tone: "success" as const,
+  text: "Driver details saved and job acknowledged.",
+};
 
 const emptyDriverLiveLocationState: DriverLiveLocationState = {
   action: "idle",
@@ -248,6 +324,12 @@ const emptyDriverOtsPhotoProofState: DriverOtsPhotoProofState = {
   feedback: null,
   selectedFileName: "",
   uploadedAt: "",
+};
+const emptyDriverCalendarState: DriverCalendarState = {
+  action: "idle",
+  connected: false,
+  feedback: null,
+  status: "loading",
 };
 const driverLiveLocationContinuousShareMinMs = 5000;
 const driverLiveLocationPositionOptions: PositionOptions = {
@@ -274,6 +356,14 @@ const statusLabels: Record<string, string> = {
   ...driverJobStatusDisplayLabels,
 };
 const driverWorkflowStatusOrder = ["driver_otw", "ots", "pob", "completed"];
+const driverOtsPhotoMaxRequestBytes = 4 * 1024 * 1024;
+const driverOtsPhotoMaxDimension = 1600;
+const driverOtsPhotoJpegQualities = [0.82, 0.68, 0.54];
+
+type PreparedDriverOtsPhoto = {
+  blob: Blob;
+  fileName: string;
+};
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
   return value === "already_completed" ||
@@ -289,6 +379,71 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
 
 function driverWorkflowHasReachedOts(status: string) {
   return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("ots");
+}
+
+function driverOtsPhotoReducedFileName(fileName: string) {
+  const stem = fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return `${stem || "ots-photo"}-reduced.jpg`;
+}
+
+function driverOtsPhotoCanvasBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", quality);
+  });
+}
+
+async function prepareDriverOtsPhotoForUpload(file: File): Promise<PreparedDriverOtsPhoto | null> {
+  if (file.size <= driverOtsPhotoMaxRequestBytes) {
+    return {
+      blob: file,
+      fileName: file.name || "ots-photo.jpg",
+    };
+  }
+
+  try {
+    const imageBitmap = await createImageBitmap(file);
+
+    try {
+      const largestDimension = Math.max(imageBitmap.width, imageBitmap.height);
+      const scale = Math.min(1, driverOtsPhotoMaxDimension / largestDimension);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(imageBitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(imageBitmap.height * scale));
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        return null;
+      }
+
+      context.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+
+      for (const quality of driverOtsPhotoJpegQualities) {
+        const reducedPhoto = await driverOtsPhotoCanvasBlob(canvas, quality);
+
+        if (
+          reducedPhoto &&
+          reducedPhoto.size > 0 &&
+          reducedPhoto.size <= driverOtsPhotoMaxRequestBytes
+        ) {
+          return {
+            blob: reducedPhoto,
+            fileName: driverOtsPhotoReducedFileName(file.name),
+          };
+        }
+      }
+
+      return null;
+    } finally {
+      imageBitmap.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 function otsPhotoProofBlockedMessage(reason: unknown) {
@@ -572,6 +727,7 @@ function statusTimingRows(statusHistory: SafeDriverJobStatusHistoryItem[]): Driv
 
 function detailRows(job: SafeDriverJobPayload) {
   return [
+    { label: "Reference", value: job.reference },
     { label: "Date/time", value: job.pickupDateTime || [job.pickupDate, job.pickupTime].filter(Boolean).join(", ") },
     { label: "Service", value: job.bookingTypeLabel || job.bookingType },
     { label: "Pickup", value: job.pickupLocation },
@@ -590,16 +746,150 @@ function activityTime() {
   });
 }
 
-function downloadDriverCalendarBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
+function driverCalendarBlockedMessage(reason: DriverCalendarBlockedReason) {
+  if (reason === "unverified_driver") {
+    return "Ask dispatch to confirm your assigned driver profile before connecting Google Calendar.";
+  }
 
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.requestAnimationFrame(() => window.URL.revokeObjectURL(url));
+  if (reason === "not_acknowledged") {
+    return "Save & Acknowledge Job before connecting Google Calendar.";
+  }
+
+  if (reason === "provider_failed" || reason === "invalid_oauth") {
+    return "Google Calendar could not be updated. Try again or contact dispatch.";
+  }
+
+  return "Google Calendar is not ready for this job. Contact dispatch.";
+}
+
+function safeGoogleConsentUrl(value: string | undefined) {
+  try {
+    const url = new URL(value || "");
+
+    return url.protocol === "https:" &&
+      url.hostname === "accounts.google.com" &&
+      url.pathname === "/o/oauth2/v2/auth"
+      ? url.toString()
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+function driverDeviceAlertReadinessFromApi(
+  value: DriverDeviceAlertApiState | undefined,
+): DriverDeviceAlertReadiness {
+  return {
+    enabled: value?.enabled === true,
+    publicKey: typeof value?.public_key === "string" ? value.public_key : "",
+    ready: value?.ready === true && typeof value.public_key === "string" && Boolean(value.public_key),
+  };
+}
+
+function driverDeviceAlertApplicationServerKey(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
+
+async function prepareDriverDeviceAlert(
+  readiness: DriverDeviceAlertReadiness,
+): Promise<DriverDeviceAlertPreparation> {
+  if (!readiness.ready || !readiness.publicKey) {
+    return { permission: "not_requested", registration: null, subscription: null };
+  }
+
+  if (
+    !("Notification" in window) ||
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window)
+  ) {
+    return { permission: "unavailable", registration: null, subscription: null };
+  }
+
+  try {
+    const permission = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      return {
+        permission: permission === "denied" ? "denied" : "not_requested",
+        registration: null,
+        subscription: null,
+      };
+    }
+
+    await navigator.serviceWorker.register("/prestige-driver-push-sw.js", {
+      scope: "/driver-job/",
+    });
+    const registration = await navigator.serviceWorker.ready;
+    const existingSubscription = await registration.pushManager.getSubscription();
+    const subscription = existingSubscription ?? await registration.pushManager.subscribe({
+      applicationServerKey: driverDeviceAlertApplicationServerKey(readiness.publicKey),
+      userVisibleOnly: true,
+    });
+
+    return {
+      permission: "granted",
+      registration,
+      subscription: subscription.toJSON(),
+    };
+  } catch {
+    return { permission: "unavailable", registration: null, subscription: null };
+  }
+}
+
+function rememberAcknowledgedDriverJobLink(
+  registration: ServiceWorkerRegistration,
+  jobKey: string,
+) {
+  if (!/^[0-9a-f]{64}$/.test(jobKey)) {
+    return;
+  }
+  const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (!url.startsWith("/driver-job/")) {
+    return;
+  }
+  registration.active?.postMessage({
+    jobKey,
+    type: "PRESTIGE_REMEMBER_DRIVER_JOB_LINK",
+    url,
+  });
+}
+
+async function rememberAcknowledgedDriverPortalLink(jobKey: string) {
+  if (!/^[0-9a-f]{64}$/.test(jobKey) || !("indexedDB" in window)) {
+    return;
+  }
+
+  const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (!url.startsWith("/driver-job/")) {
+    return;
+  }
+
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("prestige-driver-device-alerts", 1);
+    request.addEventListener("upgradeneeded", () => {
+      if (!request.result.objectStoreNames.contains("driver-job-links")) {
+        request.result.createObjectStore("driver-job-links", { keyPath: "jobKey" });
+      }
+    });
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction("driver-job-links", "readwrite");
+      transaction.objectStore("driver-job-links").put({ jobKey, url });
+      transaction.addEventListener("complete", () => resolve());
+      transaction.addEventListener("error", () => reject(transaction.error));
+    });
+  } finally {
+    database.close();
+  }
 }
 
 export default function DriverJobPage() {
@@ -613,6 +903,7 @@ export default function DriverJobPage() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
+  const [driverPortalEnrolled, setDriverPortalEnrolled] = useState(false);
   const [detailsFeedback, setDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [parseDetailsFeedback, setParseDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savingDriverDetails, setSavingDriverDetails] = useState(false);
@@ -623,6 +914,8 @@ export default function DriverJobPage() {
   const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
+  const [driverDeviceAlertReadiness, setDriverDeviceAlertReadiness] =
+    useState<DriverDeviceAlertReadiness>(emptyDriverDeviceAlertReadiness);
   const [driverQuickReply, setDriverQuickReply] = useState<DriverQuickReplyState>({
     feedback: null,
     sendingKey: "",
@@ -631,9 +924,9 @@ export default function DriverJobPage() {
     useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
+  const [driverCalendar, setDriverCalendar] =
+    useState<DriverCalendarState>(emptyDriverCalendarState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
-  const [calendarDownloadFeedback, setCalendarDownloadFeedback] = useState<ControlFeedback | null>(null);
-  const [downloadingCalendar, setDownloadingCalendar] = useState(false);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
@@ -733,6 +1026,19 @@ export default function DriverJobPage() {
         return;
       }
 
+      const searchParams = new URLSearchParams(window.location.search);
+      const calendarReturnState = searchParams.get("calendar");
+
+      if (calendarReturnState) {
+        searchParams.delete("calendar");
+        const nextSearch = searchParams.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
+        );
+      }
+
       setPageState({ kind: "loading" });
       setAcknowledged(false);
       setDetailsFeedback(null);
@@ -744,9 +1050,11 @@ export default function DriverJobPage() {
       setReportingDriverIssue(false);
       setSelectedDriverIssue("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
+      setDriverDeviceAlertReadiness(emptyDriverDeviceAlertReadiness);
       stopDriverLiveLocationBrowserWatch();
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
+      setDriverCalendar(emptyDriverCalendarState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -782,8 +1090,71 @@ export default function DriverJobPage() {
         setDriverDetails(loadedDriverDetails);
         setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
         setAcknowledged(result.payload.acknowledged);
+        setDriverDeviceAlertReadiness(
+          driverDeviceAlertReadinessFromApi(result.device_alerts),
+        );
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
+
+        if (result.payload.acknowledged) {
+          try {
+            const calendarResponse = await fetch(
+              `/api/driver-job/${encodeURIComponent(token)}/calendar`,
+              { cache: "no-store" },
+            );
+            const calendarResult = await calendarResponse.json() as DriverCalendarApiResponse;
+
+            if (active) {
+              setDriverCalendar(
+                calendarResponse.ok && calendarResult.ok
+                  ? {
+                      action: "idle",
+                      connected: calendarResult.connected === true,
+                      feedback:
+                        calendarReturnState === "saved" && calendarResult.status === "cal_saved"
+                          ? {
+                              tone: "success",
+                              text: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
+                            }
+                          : calendarReturnState === "error"
+                            ? {
+                                tone: "error",
+                                text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                              }
+                            : null,
+                      status: calendarResult.status,
+                    }
+                  : {
+                      action: "idle",
+                      connected: false,
+                      feedback:
+                        calendarReturnState === "error"
+                          ? {
+                              tone: "error",
+                              text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                            }
+                          : null,
+                      status: "unavailable",
+                    },
+              );
+            }
+          } catch {
+            if (active) {
+              setDriverCalendar({
+                action: "idle",
+                connected: false,
+                feedback:
+                  calendarReturnState === "error"
+                    ? {
+                        tone: "error",
+                        text: "Google Calendar connection was not completed. Try Add / Update Calendar again.",
+                      }
+                    : null,
+                status: "unavailable",
+              });
+            }
+          }
+        }
 
         try {
           const updateResponse = await fetch(
@@ -930,6 +1301,10 @@ export default function DriverJobPage() {
       text: "Saving driver details...",
     });
 
+    const deviceAlertPreparation = await prepareDriverDeviceAlert(
+      driverDeviceAlertReadiness,
+    );
+
     try {
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
         body: JSON.stringify({
@@ -937,6 +1312,7 @@ export default function DriverJobPage() {
           driver_name: nextDetails.name,
           driver_plate_number: nextDetails.plate,
           driver_vehicle_model: nextDetails.vehicleModel,
+          device_push_subscription: deviceAlertPreparation.subscription,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -966,13 +1342,52 @@ export default function DriverJobPage() {
       setDriverDetails(confirmedDetails);
       setSavedDriverDetails(confirmedDetails);
       setAcknowledged(true);
+      setDriverCalendar(emptyDriverCalendarState);
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
-      setDetailsFeedback({
-        tone: "success",
-        text: "Driver details saved and job acknowledged.",
-      });
+      const driverPortalReady =
+        result.driver_portal?.enrolled === true &&
+        typeof result.driver_portal.link_key === "string" &&
+        /^[0-9a-f]{64}$/.test(result.driver_portal.link_key);
+      setDriverPortalEnrolled(driverPortalReady);
+      if (driverPortalReady && result.driver_portal?.link_key) {
+        await rememberAcknowledgedDriverPortalLink(result.driver_portal.link_key).catch(() => undefined);
+      }
+      const deviceAlertsRegistered =
+        result.device_alerts?.subscription_registered === true &&
+        typeof result.device_alerts.link_key === "string" &&
+        Boolean(deviceAlertPreparation.registration);
+
+      if (
+        deviceAlertsRegistered &&
+        deviceAlertPreparation.registration &&
+        result.device_alerts?.link_key
+      ) {
+        rememberAcknowledgedDriverJobLink(
+          deviceAlertPreparation.registration,
+          result.device_alerts.link_key,
+        );
+      }
+
+      const deviceAlertFeedback = deviceAlertsRegistered
+        ? " Device alerts are enabled on this device."
+        : driverDeviceAlertReadiness.ready
+          ? deviceAlertPreparation.permission === "denied"
+            ? " Device alerts were not allowed; reopen this page to check App Updates."
+            : " Device alerts could not be enabled; reopen this page to check App Updates."
+          : "";
+      const driverPortalFeedback = driverPortalReady
+        ? " Driver Portal is ready on this device."
+        : "";
+      setDetailsFeedback(
+        deviceAlertFeedback || driverPortalFeedback
+          ? {
+              tone: "success",
+              text: `Driver details saved and job acknowledged.${driverPortalFeedback}${deviceAlertFeedback}`,
+            }
+          : defaultAcknowledgedDetailsFeedback,
+      );
       addActivity("Job acknowledged", "Driver and vehicle details were confirmed for this assigned job.");
     } catch {
       setSavedDriverDetails(null);
@@ -985,39 +1400,76 @@ export default function DriverJobPage() {
     }
   }
 
-  async function downloadDriverJobCalendar() {
-    if (!acknowledged || !token || downloadingCalendar) {
+  async function openDriverJobCalendar() {
+    if (!acknowledged || !token) {
       return;
     }
 
-    setDownloadingCalendar(true);
-    setCalendarDownloadFeedback(null);
+    setDriverCalendar((current) => ({
+      ...current,
+      action: "saving",
+      feedback: null,
+    }));
 
     try {
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`, {
-        headers: { accept: "text/calendar" },
+        cache: "no-store",
+        method: "POST",
       });
+      const result = await response.json() as DriverCalendarApiResponse;
 
-      if (!response.ok) {
-        throw new Error("calendar_download_failed");
+      if (!response.ok || !result.ok) {
+        setDriverCalendar((current) => ({
+          ...current,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: driverCalendarBlockedMessage(result.ok ? undefined : result.reason),
+          },
+          status: "unavailable",
+        }));
+        return;
       }
 
-      const contentDisposition = response.headers.get("content-disposition") || "";
-      const responseFilename = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] || "";
-      const filename = responseFilename.trim() || "prestige-driver-job-calendar.ics";
+      if (result.action === "authorize") {
+        const googleConsentUrl = safeGoogleConsentUrl(result.google_consent_url);
 
-      downloadDriverCalendarBlob(await response.blob(), filename);
-      setCalendarDownloadFeedback({
-        tone: "success",
-        text: "Calendar file downloaded. Open it to add or update this job.",
+        if (!googleConsentUrl) {
+          setDriverCalendar((current) => ({
+            ...current,
+            action: "idle",
+            feedback: {
+              tone: "error",
+              text: "Google Calendar connection could not start. Contact dispatch.",
+            },
+          }));
+          return;
+        }
+
+        window.location.assign(googleConsentUrl);
+        return;
+      }
+
+      setDriverCalendar({
+        action: "idle",
+        connected: true,
+        feedback: {
+          tone: "success",
+          text: "Calendar saved. Open the event and tap Open Driver Job for reporting.",
+        },
+        status: "cal_saved",
       });
+      addActivity("Calendar saved", "Google Calendar now has the latest pickup schedule and Driver Job shortcut.");
     } catch {
-      setCalendarDownloadFeedback({
-        tone: "error",
-        text: "Calendar download failed. Keep this Driver Job page open and try again.",
-      });
-    } finally {
-      setDownloadingCalendar(false);
+      setDriverCalendar((current) => ({
+        ...current,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "Google Calendar could not be updated. Try again or contact dispatch.",
+        },
+        status: "unavailable",
+      }));
     }
   }
 
@@ -1454,9 +1906,6 @@ export default function DriverJobPage() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("photo", photoFile);
-
     setDriverOtsPhotoProof((currentState) => ({
       ...currentState,
       action: "uploading",
@@ -1464,25 +1913,45 @@ export default function DriverJobPage() {
     }));
 
     try {
-      const response = await fetch(driverOtsPhotoProofRoute(), {
-        body: formData,
-        cache: "no-store",
-        method: "POST",
-      });
-      const result = await response.json() as DriverOtsPhotoProofApiResponse;
+      const preparedPhoto = await prepareDriverOtsPhotoForUpload(photoFile);
 
-      if (
-        !response.ok ||
-        !result.ok ||
-        result.proof?.customerVisible !== false ||
-        result.proof?.external_send !== false
-      ) {
+      if (!preparedPhoto) {
         setDriverOtsPhotoProof((currentState) => ({
           ...currentState,
           action: "idle",
           feedback: {
             tone: "error",
-            text: otsPhotoProofBlockedMessage(result.ok ? "unavailable" : result.reason),
+            text: "Photo is too large to prepare. Take a screenshot or choose a smaller photo.",
+          },
+        }));
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName);
+      const response = await fetch(driverOtsPhotoProofRoute(), {
+        body: formData,
+        cache: "no-store",
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null) as DriverOtsPhotoProofApiResponse | null;
+
+      if (
+        !response.ok ||
+        !result?.ok ||
+        result.proof?.customerVisible !== false ||
+        result.proof?.external_send !== false
+      ) {
+        const blockedReason = response.status === 413 ? "too_large" : result?.ok === false
+          ? result.reason
+          : "unavailable";
+
+        setDriverOtsPhotoProof((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: otsPhotoProofBlockedMessage(blockedReason),
           },
         }));
         return;
@@ -1959,6 +2428,15 @@ export default function DriverJobPage() {
                       {detailsFeedback.text}
                     </p>
                   ) : null}
+                  <p
+                    className="text-xs font-medium leading-5 text-slate-500"
+                    data-driver-job-device-alert-helper="true"
+                  >
+                    This same action enables Driver Job alerts on this device when supported and allowed.
+                  </p>
+                  <p className="text-xs font-medium leading-5 text-slate-500" data-driver-portal-enrolment-helper="true">
+                    When securely configured, acknowledgement also enrols this device in Driver Portal.
+                  </p>
                 </div>
                 {savedDriverDetails ? (
                   <div
@@ -1988,31 +2466,79 @@ export default function DriverJobPage() {
                 ) : null}
                 {acknowledged ? (
                   <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-sky-950">Google Calendar</p>
+                      {driverCalendar.status === "cal_saved" ? (
+                        <span
+                          className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900"
+                          data-driver-job-calendar-saved="true"
+                        >
+                          Calendar saved
+                        </span>
+                      ) : driverCalendar.status === "update_calendar" ? (
+                        <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                          Update needed
+                        </span>
+                      ) : null}
+                    </div>
                     <button
                       className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
                       data-driver-job-calendar-action="true"
                       data-driver-job-calendar-source="current-driver-job-schedule"
-                      disabled={downloadingCalendar}
-                      onClick={downloadDriverJobCalendar}
+                      disabled={driverCalendar.action === "saving"}
+                      onClick={openDriverJobCalendar}
                       type="button"
                     >
-                      {downloadingCalendar ? "Downloading Calendar..." : "Add / Update Calendar"}
+                      {driverCalendar.action === "saving" ? "Saving Calendar..." : "Add / Update Calendar"}
                     </button>
                     <p className="text-xs font-medium leading-5 text-sky-900">
-                      Saves the current Driver Job schedule with a one-hour reminder. After an amendment,
-                      open this page again and use this same action. The Driver Job page remains the source of truth.
+                      First use connects your Google account. The same action updates this one event after an
+                      amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
+                      Job Completed reporting. Do not share the calendar event.
                     </p>
-                    {calendarDownloadFeedback ? (
+                    <div
+                      className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
+                      data-driver-job-calendar-policy-links="true"
+                    >
+                      <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
+                        Calendar data use
+                      </Link>
+                      <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
+                        Privacy Policy
+                      </Link>
+                      <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
+                        Terms of Service
+                      </Link>
+                    </div>
+                    {driverCalendar.feedback ? (
                       <p
-                        className={[
-                          "text-xs font-semibold leading-5",
-                          calendarDownloadFeedback.tone === "success" ? "text-emerald-800" : "text-red-700",
-                        ].join(" ")}
-                        data-driver-job-calendar-feedback={calendarDownloadFeedback.tone}
+                        className={`text-xs font-semibold leading-5 ${
+                          driverCalendar.feedback.tone === "success" ? "text-emerald-800" : "text-red-700"
+                        }`}
+                        data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
                       >
-                        {calendarDownloadFeedback.text}
+                        {driverCalendar.feedback.text}
                       </p>
                     ) : null}
+                  </div>
+                ) : null}
+                {driverPortalEnrolled ? (
+                  <div
+                    className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
+                    data-driver-portal-entry="enrolled"
+                  >
+                    <p className="text-sm font-semibold text-violet-950">Driver Portal</p>
+                    <p className="text-xs font-medium leading-5 text-violet-900">
+                      Open all acknowledged upcoming and active jobs assigned to this verified driver. On
+                      iPhone, use Add to Home Screen from this page to install the reusable Driver Portal.
+                    </p>
+                    <Link
+                      className="flex h-11 w-full items-center justify-center rounded-md border border-violet-700 bg-white px-3 text-sm font-semibold text-violet-950 transition hover:bg-violet-100"
+                      data-driver-portal-open="true"
+                      href="/driver-portal"
+                    >
+                      Open Driver Portal
+                    </Link>
                   </div>
                 ) : null}
               </div>
@@ -2148,6 +2674,7 @@ export default function DriverJobPage() {
                       <h3 className="text-sm font-semibold text-sky-950">OTS Photo to Admin</h3>
                       <p className="text-xs font-semibold leading-5 text-sky-900">
                         Send one arrival photo after OTS. Admin sees it inside Dispatch.
+                        Large phone photos are reduced automatically before sending.
                       </p>
                     </div>
                     <span

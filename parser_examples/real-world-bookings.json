@@ -1217,5 +1217,53 @@
         "pax": "2"
       }
     ]
+  },
+  {
+    "id": "explicit-sin-arrival-departure-sections-sindo-ferry",
+    "categories": [
+      "mixed multi-booking dispatcher list",
+      "structured airport arrival form",
+      "structured airport departure form",
+      "vehicle mapping AVF / VVV / Combi / E class / S class"
+    ],
+    "referenceDate": "2026-08-01T12:00:00+08:00",
+    "input": "Dear William\n\nI have a request for an airport transfer please, as below\n\n**SIN Arrival Transfer from Changi to Ferry**\n**August 01**\nSQ 317 at 07:30am\nLead Pax:  Mr David Kelly\nFive (5) Pax : 2 adults + 3 children (ages 4, 7 and 10)\nTransfer in Alphard to Harbour Front Ferry -   ’Sindo’ Ferry\n\n**SIN Departure Transfer from Ferry to Changi**\n**August 05**\nAlphard Pick up from Harbour Front Ferry **at 13:10pm** ’Sindo’ Ferry\nFlight SQ 928 at 16:55pm \nLead Pax:  Mr David Kelly\nFive (5) Pax : 2 adults + 3 children (ages 4, 7 and 10)\n\nScreenshot 2026-06-23 at 11.16.35.png",
+    "expected": {
+      "success": false,
+      "multipleBookingsDetected": true,
+      "parserWarning": "Multiple bookings detected. Please select one extracted booking.",
+      "vehicle": "AVF",
+      "name": "Mr David Kelly"
+    },
+    "expectedPreviewMatch": "ordered",
+    "expectedPreviewLength": 2,
+    "expectedPreview": [
+      {
+        "passenger": "Mr David Kelly",
+        "company": "",
+        "booker": "",
+        "vehicle": "AVF",
+        "date": "2026-08-01",
+        "time": "0730hrs",
+        "type": "MNG",
+        "flight": "SQ317",
+        "pickup": "Changi Airport",
+        "dropoff": "Harbour Front Ferry - Sindo Ferry",
+        "pax": "5"
+      },
+      {
+        "passenger": "Mr David Kelly",
+        "company": "",
+        "booker": "",
+        "vehicle": "AVF",
+        "date": "2026-08-05",
+        "time": "1310hrs",
+        "type": "DEP",
+        "flight": "SQ928",
+        "pickup": "Harbour Front Ferry - Sindo Ferry",
+        "dropoff": "Changi Airport",
+        "pax": "5"
+      }
+    ]
   }
 ]

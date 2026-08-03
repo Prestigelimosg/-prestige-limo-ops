@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 
+import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
+
 const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCompanyProfileWriteApiPath = "/api/admin-company-traveler-crm-runtime-write-action";
+const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 
 type CustomerCompanyProfileEditorProps = {
   customerId: string;
@@ -16,6 +19,7 @@ type CompanyProfile = {
   billing_email: string;
   company_name: string;
   domain: string;
+  guest_account_billing_enabled: boolean;
   id: number | null;
   main_phone: string;
   mobile_phone: string;
@@ -62,13 +66,14 @@ function profileValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function blankCreateProfile(customerName: string): CompanyProfile {
+function blankCreateProfile(customerName: string, guestAccountBillingEnabled: boolean): CompanyProfile {
   return {
     accounts_email: "",
     billing_address: "",
     billing_email: "",
     company_name: customerName,
     domain: "",
+    guest_account_billing_enabled: guestAccountBillingEnabled,
     id: null,
     main_phone: "",
     mobile_phone: "",
@@ -113,6 +118,7 @@ export function CustomerCompanyProfileEditor({
   const [message, setMessage] = useState("");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
+  const [loadedGuestAccountBillingEnabled, setLoadedGuestAccountBillingEnabled] = useState(false);
 
   async function openProfileEditor() {
     setStatus("loading");
@@ -120,18 +126,37 @@ export function CustomerCompanyProfileEditor({
 
     try {
       const params = new URLSearchParams({ company_name: customerName });
-      const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "GET",
-      });
+      const accountParams = new URLSearchParams({ customer_id: customerId, limit: "1" });
+      const [response, accountResponse] = await Promise.all([
+        fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "GET",
+        }),
+        fetch(`${adminCustomerAccountsApiPath}?${accountParams.toString()}`, {
+          cache: "no-store",
+          headers: {
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "GET",
+        }),
+      ]);
       const result = await response.json().catch(() => null);
+      const accountResult = await accountResponse.json().catch(() => null);
       const company = result?.company;
+      const account = Array.isArray(accountResult?.accounts) ? accountResult.accounts[0] : null;
+
+      if (!accountResponse.ok || !accountResult?.ok || String(account?.customer_id || "") !== customerId) {
+        throw new Error("Exact customer account classification could not be loaded safely.");
+      }
+
+      const guestAccountBillingEnabled = account.guest_account_billing_enabled === true;
+      setLoadedGuestAccountBillingEnabled(guestAccountBillingEnabled);
 
       if (!response.ok || !result?.ok) {
         if (isMissingCompanyProfileResult(response, result)) {
-          setProfile(blankCreateProfile(customerName));
+          setProfile(blankCreateProfile(customerName, guestAccountBillingEnabled));
           setProfileMode("create");
           setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
           setStatus("ready");
@@ -142,7 +167,7 @@ export function CustomerCompanyProfileEditor({
       }
 
       if (!company) {
-        setProfile(blankCreateProfile(customerName));
+        setProfile(blankCreateProfile(customerName, guestAccountBillingEnabled));
         setProfileMode("create");
         setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
         setStatus("ready");
@@ -159,6 +184,7 @@ export function CustomerCompanyProfileEditor({
         billing_email: profileValue(company.billing_email),
         company_name: profileValue(company.company_name),
         domain: profileValue(company.domain),
+        guest_account_billing_enabled: guestAccountBillingEnabled,
         id: Number(company.id),
         main_phone: profileValue(company.main_phone),
         mobile_phone: profileValue(company.mobile_phone),
@@ -183,6 +209,8 @@ export function CustomerCompanyProfileEditor({
     const companyName = profile.company_name.trim();
     const domain = profile.domain.trim().toLowerCase();
     const isCreate = profileMode === "create";
+    const guestAccountBillingChanged =
+      profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled;
 
     if (!companyName) {
       setMessage("Company name is required before saving.");
@@ -192,7 +220,7 @@ export function CustomerCompanyProfileEditor({
 
     if (
       !window.confirm(
-        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} only this customer company's contact profile. It does not change jobs, invoices, payments, or send any message.`,
+        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${guestAccountBillingChanged ? ` and ${profile.guest_account_billing_enabled ? "enables" : "disables"} Hotel / Tour Agency guest-account billing for this exact customer` : ""}. It does not change jobs, invoice records, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -219,20 +247,56 @@ export function CustomerCompanyProfileEditor({
         throw new Error(result?.error || "Customer company profile save failed safely.");
       }
 
-      setProfile({
+      const nextProfile = {
         accounts_email: profileValue(savedProfile.accounts_email),
         billing_address: profileValue(savedProfile.billing_address),
         billing_email: profileValue(savedProfile.billing_email),
         company_name: profileValue(savedProfile.company_name) || companyName,
         domain: profileValue(savedProfile.domain) || domain,
+        guest_account_billing_enabled: profile.guest_account_billing_enabled,
         id: Number(savedProfile.id),
         main_phone: profileValue(savedProfile.main_phone),
         mobile_phone: profileValue(savedProfile.mobile_phone),
         operations_email: profileValue(savedProfile.operations_email),
         primary_contact_name: profileValue(savedProfile.primary_contact_name),
         website: profileValue(savedProfile.website) || profileValue(savedProfile.domain) || domain,
-      });
+      };
+      setProfile(nextProfile);
       setProfileMode("edit");
+
+      if (profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled) {
+        const accountResponse = await fetch(adminCustomerAccountsApiPath, {
+          body: JSON.stringify({
+            customer_id: customerId,
+            guest_account_billing_enabled: profile.guest_account_billing_enabled,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "PATCH",
+        });
+        const accountResult = await accountResponse.json().catch(() => null);
+
+        if (!accountResponse.ok || !accountResult?.ok) {
+          setMessage(
+            `Saved the company contact profile for ${String(savedProfile.company_name || companyName).trim()}, but the Hotel / Tour Agency setting was not saved. Reload before trying again.`,
+          );
+          setStatus("error");
+          return;
+        }
+
+        setLoadedGuestAccountBillingEnabled(profile.guest_account_billing_enabled);
+        window.dispatchEvent(
+          new CustomEvent("prestige:customer-guest-account-billing-updated", {
+            detail: {
+              customerId,
+              enabled: profile.guest_account_billing_enabled,
+            },
+          }),
+        );
+      }
+
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
       setStatus("saved");
     } catch (error) {
@@ -277,7 +341,26 @@ export function CustomerCompanyProfileEditor({
             invoices, payments, and messages are not affected.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 text-xs font-bold text-amber-950"
+            data-customer-guest-account-billing={customerId}
+          >
+            <input
+              checked={profile.guest_account_billing_enabled}
+              disabled={status === "saving"}
+              onChange={(event) =>
+                setProfile((current) =>
+                  current
+                    ? { ...current, guest_account_billing_enabled: event.target.checked }
+                    : current,
+                )
+              }
+              type="checkbox"
+            />
+            Hotel / Tour Agency
+          </label>
+          <CustomerAccountDangerZone compact customerId={customerId} customerName={customerName} />
           <button
             className="min-h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
             disabled={status === "saving"}
@@ -326,7 +409,7 @@ export function CustomerCompanyProfileEditor({
         <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
           Billing address
           <textarea
-            className="min-h-20 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold text-slate-950"
+            className="min-h-16 rounded-md border border-slate-300 bg-white px-2 py-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-billing-address={customerId}
             onChange={(event) => setProfile((current) => (current ? { ...current, billing_address: event.target.value } : current))}
             value={profile.billing_address}
@@ -351,7 +434,7 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
-          Primary contact person
+          Contact name
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-primary-contact={customerId}
@@ -360,7 +443,7 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
-          Billing email
+          Secondary email
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-billing-email={customerId}
@@ -379,7 +462,7 @@ export function CustomerCompanyProfileEditor({
             value={profile.accounts_email}
           />
         </label>
-        <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+        <label className="grid gap-1 text-xs font-bold text-slate-700">
           Operations email
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"

@@ -18,6 +18,26 @@ export type CustomerBookingMemorySuggestion = {
   vehicleType: string;
 };
 
+export type CustomerBookingMemoryBookerProfile = {
+  bookerName: string;
+  email: string;
+  phone: string;
+};
+
+export type CustomerBookingMemoryTraveler = {
+  defaultDropoffAddress: string;
+  defaultPickupAddress: string;
+  id: number;
+  preferredVehicle: string;
+  travelerName: string;
+};
+
+export type CustomerBookingMemoryProfile = {
+  bookerProfile: CustomerBookingMemoryBookerProfile | null;
+  memories: CustomerBookingMemorySuggestion[];
+  travelers: CustomerBookingMemoryTraveler[];
+};
+
 type UnknownRecord = Record<string, unknown>;
 type CustomerBookingMemoryFetch = typeof fetch;
 
@@ -30,7 +50,21 @@ const allowedApiRecordFields = new Set([
   "service_type",
   "vehicle_type",
 ]);
-const allowedApiPayloadFields = new Set(["memories", "ok", "version"]);
+const allowedApiPayloadFields = new Set([
+  "booker_profile",
+  "memories",
+  "ok",
+  "travelers",
+  "version",
+]);
+const allowedBookerProfileFields = new Set(["booker_name", "email", "phone"]);
+const allowedTravelerFields = new Set([
+  "default_dropoff_address",
+  "default_pickup_address",
+  "id",
+  "preferred_vehicle",
+  "traveler_name",
+]);
 const forbiddenCustomerBookingMemoryFragments = [
   "admin_finance",
   "admin_internal_status",
@@ -147,6 +181,96 @@ function toCustomerBookingMemorySuggestion(value: unknown): CustomerBookingMemor
   };
 }
 
+function safeEmail(value: unknown) {
+  const cleaned = safeText(value, 254)?.toLowerCase() || null;
+
+  return cleaned && /^[^\s@<>()[\],;:"\\]+@[^\s@<>()[\],;:"\\]+\.[^\s@<>()[\],;:"\\]+$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
+function toCustomerBookingMemoryBookerProfile(
+  value: unknown,
+): CustomerBookingMemoryBookerProfile | null {
+  const record = asRecord(value);
+
+  if (!record || hasUnsafeKeys(record, allowedBookerProfileFields)) {
+    return null;
+  }
+
+  const email = safeEmail(record.email);
+
+  return email
+    ? {
+        bookerName: safeText(record.booker_name, 160) || "",
+        email,
+        phone: safeText(record.phone, 80) || "",
+      }
+    : null;
+}
+
+function toCustomerBookingMemoryTraveler(value: unknown): CustomerBookingMemoryTraveler | null {
+  const record = asRecord(value);
+  const id = Number(record?.id);
+  const travelerName = record ? safeText(record.traveler_name, 160) : null;
+
+  if (
+    !record ||
+    hasUnsafeKeys(record, allowedTravelerFields) ||
+    !Number.isSafeInteger(id) ||
+    id <= 0 ||
+    !travelerName
+  ) {
+    return null;
+  }
+
+  return {
+    defaultDropoffAddress: safeText(record.default_dropoff_address) || "",
+    defaultPickupAddress: safeText(record.default_pickup_address) || "",
+    id,
+    preferredVehicle: safeText(record.preferred_vehicle, 120) || "",
+    travelerName,
+  };
+}
+
+function hasUnsafeKeys(record: UnknownRecord, allowedFields: Set<string>) {
+  return Object.keys(record).some(
+    (key) => !allowedFields.has(key) || includesForbiddenFragment(key),
+  );
+}
+
+export function mapCustomerBookingMemoryProfilePayload(
+  payload: unknown,
+): CustomerBookingMemoryProfile | null {
+  const record = asRecord(payload);
+
+  if (
+    !record ||
+    hasUnsafeApiPayloadKeys(record) ||
+    record.ok !== true ||
+    !Array.isArray(record.memories) ||
+    !Array.isArray(record.travelers)
+  ) {
+    return null;
+  }
+
+  const memories = record.memories.map(toCustomerBookingMemorySuggestion);
+  const travelers = record.travelers.map(toCustomerBookingMemoryTraveler);
+
+  if (memories.some((memory) => !memory) || travelers.some((traveler) => !traveler)) {
+    return null;
+  }
+
+  return {
+    bookerProfile:
+      record.booker_profile === null
+        ? null
+        : toCustomerBookingMemoryBookerProfile(record.booker_profile),
+    memories: memories as CustomerBookingMemorySuggestion[],
+    travelers: travelers as CustomerBookingMemoryTraveler[],
+  };
+}
+
 export function mapCustomerBookingMemoryPayload(payload: unknown): CustomerBookingMemorySuggestion[] | null {
   const record = asRecord(payload);
 
@@ -154,22 +278,14 @@ export function mapCustomerBookingMemoryPayload(payload: unknown): CustomerBooki
     return null;
   }
 
-  const suggestions: CustomerBookingMemorySuggestion[] = [];
+  const suggestions = record.memories.map(toCustomerBookingMemorySuggestion);
 
-  for (const memory of record.memories) {
-    const suggestion = toCustomerBookingMemorySuggestion(memory);
-
-    if (!suggestion) {
-      return null;
-    }
-
-    suggestions.push(suggestion);
-  }
-
-  return suggestions;
+  return suggestions.some((suggestion) => !suggestion)
+    ? null
+    : (suggestions as CustomerBookingMemorySuggestion[]);
 }
 
-export async function loadCustomerBookingMemorySuggestions({
+async function fetchCustomerBookingMemoryPayload({
   fetcher = fetch,
   limit = 10,
   q,
@@ -179,7 +295,7 @@ export async function loadCustomerBookingMemorySuggestions({
   limit?: number;
   q?: string;
   signal?: AbortSignal;
-} = {}): Promise<CustomerBookingMemorySuggestion[] | null> {
+} = {}): Promise<unknown | null> {
   const params = new URLSearchParams({
     limit: String(limit),
   });
@@ -207,10 +323,38 @@ export async function loadCustomerBookingMemorySuggestions({
       return null;
     }
 
-    return mapCustomerBookingMemoryPayload(await response.json());
+    return await response.json();
   } catch {
     return null;
   }
+}
+
+export async function loadCustomerBookingMemoryProfile(
+  options: {
+    fetcher?: CustomerBookingMemoryFetch;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<CustomerBookingMemoryProfile | null> {
+  const payload = await fetchCustomerBookingMemoryPayload(options);
+
+  return payload ? mapCustomerBookingMemoryProfilePayload(payload) : null;
+}
+
+export async function loadCustomerBookingMemorySuggestions({
+  fetcher = fetch,
+  limit = 10,
+  q,
+  signal,
+}: {
+  fetcher?: CustomerBookingMemoryFetch;
+  limit?: number;
+  q?: string;
+  signal?: AbortSignal;
+} = {}): Promise<CustomerBookingMemorySuggestion[] | null> {
+  const payload = await fetchCustomerBookingMemoryPayload({ fetcher, limit, q, signal });
+
+  return payload ? mapCustomerBookingMemoryPayload(payload) : null;
 }
 
 export function applyCustomerBookingMemorySuggestion<T extends CustomerBookingRequestMemoryForm>(

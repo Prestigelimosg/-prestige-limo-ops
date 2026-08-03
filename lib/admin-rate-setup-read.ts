@@ -29,6 +29,7 @@ export type AdminRateSetupSettings = {
 };
 
 export type AdminRateSetupCompany = {
+  card_option_default_enabled: boolean;
   company_name: string | null;
   customer_rates: RateRules;
   domain: string | null;
@@ -40,6 +41,7 @@ export type AdminRateSetupCompany = {
 export type AdminRateSetupTraveler = {
   booker_id: number | null;
   booker_name: string | null;
+  card_option_default_enabled: boolean | null;
   company_id: number;
   customer_rates: RateRules;
   driver_payout_rules: DriverPayoutRules;
@@ -66,9 +68,9 @@ const safeRateSetupReadError = "Admin rate setup read failed safely.";
 const rateSettingsSelect =
   "customer_rates, driver_payout_rules, midnight_surcharge, extra_stop_surcharge, midnight_payout, extra_stop_payout, child_seat_customer_surcharge, child_seat_driver_payout";
 const companySelect =
-  "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy";
+  "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled";
 const travelerSelect =
-  "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules";
+  "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const bookingTypes = ["MNG", "DEP", "TRF", "DSP"] as const;
 const maxSafeTextLength = 220;
@@ -441,6 +443,8 @@ function toRateSetupCompany(row: unknown): AdminRateSetupCompany | null {
   }
 
   return {
+    card_option_default_enabled:
+      booleanOrNull(record.card_option_default_enabled) ?? false,
     company_name: textOrNull(record.company_name),
     customer_rates: rateRulesFromDb(record.customer_rates),
     domain: textOrNull(record.domain, 120),
@@ -462,6 +466,7 @@ function toRateSetupTraveler(row: unknown): AdminRateSetupTraveler | null {
   return {
     booker_id: positiveIntegerOrNull(record.booker_id),
     booker_name: textOrNull(record.booker_name),
+    card_option_default_enabled: booleanOrNull(record.card_option_default_enabled),
     company_id: companyId,
     customer_rates: rateRulesFromDb(record.customer_rates),
     driver_payout_rules: payoutRulesFromDb(record.driver_payout_rules),

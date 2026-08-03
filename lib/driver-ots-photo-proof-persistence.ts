@@ -95,7 +95,7 @@ type DriverOtsPhotoProofRow = {
 type UnknownRecord = Record<string, unknown>;
 
 const maxBookingReferenceLength = 120;
-const maxUploadBytes = 8 * 1024 * 1024;
+const maxUploadBytes = 4 * 1024 * 1024;
 const signedUrlTtlSeconds = 5 * 60;
 const driverJobLinkSelect =
   "id, booking_reference, link_status, expires_at, revoked_at";

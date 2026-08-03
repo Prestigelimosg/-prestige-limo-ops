@@ -132,15 +132,24 @@ assertIncludes(
 );
 assertIncludes(
   loadBookingsBlock,
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
   "Saved bookings first read",
+);
+assertIncludes(
+  loadBookingsBlock,
+  "`${adminSavedBookingsApiPath}?${listSearchParams.toString()}`",
+  "Saved bookings shared GET helper",
 );
 assertExcludes(loadBookingsBlock, "adminBookingsApiPath", "Admin bookings fallback read");
 assertIncludes(loadBookingsBlock, '"x-prestige-admin-purpose": adminLegacyDataPurpose', "Admin purpose header");
 assertIncludes(loadBookingsBlock, 'method: "GET"', "Load Bookings GET-only method");
 assertExcludes(loadBookingsBlock, 'source: "admin-bookings"', "Admin bookings fallback source marker");
 assertExcludes(loadBookingsBlock, "CRM list fallback used.", "Operator fallback success note");
-assertIncludes(loadBookingsBlock, "sortBookingsNewestFirst(bookingsListResult.bookings)", "Fallback list feeds CRM list");
+assertIncludes(
+  loadBookingsBlock,
+  "mergeSavedBookingMonitorCoverage(\n          bookingsListResult.bookings,\n          monitorableBookings,\n        )",
+  "Recent and monitorable saved bookings feed the CRM list",
+);
 assertIncludes(
   loadBookingsBlock,
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
@@ -196,8 +205,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'export default function Home({ initialTab = "dispatch" }: HomeProps = {})',
-  "Dispatch default tab prop",
+  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";',
+  "Dispatch default and invoice-settings Company route selection",
 );
 assertIncludes(appPage, "useState<AppTab>(initialTab)", "Dashboard default tab state");
 assertIncludes(
@@ -249,7 +258,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(dashboardNewBookingRequestAttentionCount) : undefined}',
+  'data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}',
   "Dashboard tab customer booking request count marker",
 );
 assertIncludes(
@@ -296,7 +305,12 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "dashboardNewBookingRequestAttentionCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
+  "dashboardNewBookingRequestAttentionCount + adminEmailAiIntakeCount;",
+  "Dashboard action badge includes actionable Email AI requests",
+);
+assertIncludes(
+  appPage,
+  "bookingsTabNewBookingRequestCount + customerBookingChangeRequestCount + bookingsTabUrgentUnderOneHourCount;",
   "Dashboard action badge combined attention count",
 );
 assertIncludes(appPage, "adminBookingsTabAlertBadgeLabel", "Dashboard action badge meaningful alert label helper");
@@ -426,41 +440,17 @@ for (const customerRequestFragment of [
   "data-dashboard-new-booking-request-row",
   "data-new-customer-booking-requests-panel",
   "data-new-customer-booking-request-row",
-  "data-new-customer-booking-request-load",
-  "Review Job Card",
+  'data-admin-prepared-job-card-close=',
+  "rememberHandledCustomerBookingRequest(requestBooking)",
   "Codex Review &amp; Admin App Notifications",
   "Codex Prepared Job Cards",
-  "Ready for Admin Review",
+  "Prepared from exact saved requests. Admin reviews every card before calendar action.",
   "formatBookingPickupDateTimeSgt(requestBooking)",
   "formatBookingPickupDateTimeSgt(savedBooking)",
   "formatBookingPickupDateTimeSgt(bookingRecord)",
-  "No Codex-prepared job cards waiting for admin review.",
   'data-codex-prepared-job-cards="true"',
   'data-codex-prepared-job-card-list="true"',
   "max-h-[28rem] space-y-2 overflow-y-auto",
-  "Calendar changes still require admin action in Dispatch.",
-  'const adminCodexJobCardReviewWorkflowArea = "admin_booking_review";',
-  "Instruction to Codex (internal only)",
-  'data-codex-job-card-instruction=',
-  'data-codex-job-card-return=',
-  'data-codex-job-card-review-feedback=',
-  "maxLength={500}",
-  "Return to Codex",
-  'workflow_area: adminCodexJobCardReviewWorkflowArea',
-  'status_value: "needs_review"',
-  'status_label: "Returned to Codex"',
-  'next_action: "Prepare corrected job card for admin review"',
-  "Exact pickup-time or flight-number corrections are prepared below for review",
-  "prepareCodexJobCardCorrection",
-  "Corrected Preview Ready",
-  "Exact Value Needed",
-  'data-codex-job-card-correction-preparation=',
-  "Review Corrected Job Card",
-  "bookingFormOverride",
-  "The saved booking, calendar, and external messages were not changed.",
-  "dispatchLoadFocusTarget",
-  "scrollIntoView({ behavior: \"smooth\", block: \"start\" })",
-  "Driver Job Link is ready for admin action.",
   "{codexPreparedJobCardsPanel}",
 ]) {
   assertIncludes(appPage, customerRequestFragment, `Customer request auto-load fragment ${customerRequestFragment}`);
@@ -475,26 +465,56 @@ assert.equal(
   1,
   "Expected one established Codex prepared-job-card queue",
 );
-const codexReturnHandler = sliceBetween(
+const preparedJobCardPanel = sliceBetween(
   appPage,
-  "async function returnPreparedJobCardToCodex",
-  "function getDispatchCopyText",
+  "const codexPreparedJobCardsPanel = (",
+  "const bookingsFindToolbar = (",
 );
-assertIncludes(codexReturnHandler, "fetch(adminWorkflowStatusApiPath", "Existing workflow status route reuse");
-assertIncludes(codexReturnHandler, 'method: "POST"', "Internal workflow status POST");
-for (const forbiddenCodexReturnPath of [
-  "/api/admin-bookings",
-  "/api/admin-app-notifications",
-  "/api/customer-driver-quick-replies",
-  "/api/admin-booking-calendar-google-sync",
-  "/api/admin-booking-calendar-events",
+for (const removedPreparedJobCardControl of [
+  "Choose action",
+  "Edit booking",
+  "Approve booking",
+  "Decline booking",
+  "notify customer",
+  "Calendar changes still require admin action in Dispatch.",
+  "Loaded Prestige saved jobs only for conflict checks; no calendar write.",
+  "Ready for Admin Review",
+  "Corrected Preview Ready",
+  "Exact Value Needed",
+  "Urgent >1h",
+  "Conflict check",
+  "Assignment incomplete",
+  "No Codex-prepared job cards waiting for admin review.",
+  "loadSelectedBooking(requestBooking",
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "approve-internally")',
+  'updateAdminCustomerRequestReviewDecision(requestRecord, "decline-internally")',
+  'data-admin-prepared-job-card-action-select=',
+  'data-admin-prepared-job-card-action-submit=',
+  'data-admin-prepared-job-card-action-help=',
+  'data-new-customer-booking-requests-urgent-count=',
+  'data-codex-calendar-conflict-runtime=',
+  'data-codex-calendar-conflict-status=',
+  'data-codex-job-card-correction-preparation=',
+  "Instruction to Codex (internal only)",
+  'data-codex-job-card-instruction=',
+  'data-codex-job-card-return=',
+  'data-codex-job-card-review-feedback=',
+  "Return to Codex",
+  "Approve Internally",
+  "Decline Internally",
 ]) {
   assertExcludes(
-    codexReturnHandler,
-    forbiddenCodexReturnPath,
-    `Return to Codex must not call ${forbiddenCodexReturnPath}`,
+    preparedJobCardPanel,
+    removedPreparedJobCardControl,
+    `Prepared job card removes confusing control ${removedPreparedJobCardControl}`,
   );
 }
+assert.equal(
+  preparedJobCardPanel.match(/data-admin-prepared-job-card-close=/g)?.length,
+  1,
+  "Prepared job card must expose one Close control only",
+);
+assertExcludes(preparedJobCardPanel, "fetch(", "Prepared job card must not add a direct write lane");
 assert.equal(
   appPage.indexOf("{codexPreparedJobCardsPanel}") > appPage.indexOf('aria-label="Admin App Notifications"'),
   true,
@@ -750,7 +770,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryWithDriverReport(bookingRecord))",
+  "operationalBookings\n        .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))",
   "Dashboard urgent saved-job queue uses loaded operational bookings independent of dashboard search",
 );
 assertIncludes(
@@ -790,8 +810,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "aria-label=\"Today's Jobs\"",
-  "Dispatch active jobs monitor named Today's Jobs",
+  "aria-label=\"Active Assigned Jobs\"",
+  "Dashboard active jobs monitor named Active Assigned Jobs",
 );
 assertIncludes(
   appPage,
@@ -840,8 +860,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "markerCount: activeJobs.length,",
-  "Dispatch live map marker count follows guarded runtime markers",
+  "markerCount: currentDriverCount,",
+  "Dispatch live map marker count follows current guarded runtime movement only",
 );
 assertIncludes(
   appPage,
@@ -941,6 +961,11 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
+  "const intervalId = window.setInterval(() => {\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",
+  "Pending Driver ACK Queue read-only auto-refresh interval",
+);
+assertIncludes(
+  appPage,
   'data-admin-multi-driver-active-job-driver-report="true"',
   "Dispatch active job driver report readout",
 );
@@ -983,7 +1008,7 @@ const typedOperationalFetchIndex = loadBookingsBlock.indexOf(
   "fetchLoadBookingsTypedOperationalDisplayResult(searchParams)",
 );
 const savedBookingsFetchIndex = loadBookingsBlock.indexOf(
-  "fetch(`${adminSavedBookingsApiPath}?${searchParams.toString()}`",
+  "fetchAdminSavedBookingsList(searchParams)",
 );
 const adminBookingsFetchIndex = loadBookingsBlock.indexOf(
   "const adminBookingsResponse = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);",

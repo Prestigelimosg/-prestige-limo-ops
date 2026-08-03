@@ -56,7 +56,7 @@ for (const fragment of [
   'className={`mt-2 text-xs font-semibold leading-5 ${',
   "function customerFolderLatestPickupDisplay",
   "function customerFolderLatestSummary",
-  "compactCustomerBookingReference(customer.latestBookingReference, \"\")",
+  "customer.latestPublicBookingReference || customer.latestBookingReference",
   "customerFolderLatestSummary(customer)",
   "All customers",
   "10 per page",

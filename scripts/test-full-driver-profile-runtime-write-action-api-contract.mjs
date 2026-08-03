@@ -365,6 +365,11 @@ assertExcludes(routeSource, "export async function GET", "Full driver profile ru
 assertExcludes(routeSource, "export async function DELETE", "Full driver profile runtime DELETE route");
 assertIncludes(routeSource, "resolveAdminDispatcherBoundary", "Admin dispatcher boundary");
 assertIncludes(routeSource, "adminBookingPersistencePurpose", "Admin purpose boundary");
+assertIncludes(
+  routeSource,
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
+  "Full driver profile same-origin server-session POST allowance",
+);
 assertIncludes(routeSource, "executeAdminFullDriverProfileRuntimeWriteAction", "Runtime helper call");
 assertExcludes(routeSource, forbiddenRuntimeWiringPattern, "Full driver profile runtime route");
 assertExcludes(helperSource, forbiddenRuntimeWiringPattern, "Full driver profile runtime helper");

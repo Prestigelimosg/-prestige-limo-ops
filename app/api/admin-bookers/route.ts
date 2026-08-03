@@ -49,6 +49,8 @@ function safeFailureResponse() {
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathPrefixes: ["/customers/"],
+    additionalSameOriginRefererPathnames: ["/customers"],
     allowServerSessionRoleMethodsWithoutRequestToken: ["POST"],
   });
 

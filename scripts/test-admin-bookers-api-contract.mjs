@@ -318,6 +318,12 @@ assert.equal(
   true,
   "Typed booker create must reuse the verified same-origin server-session POST boundary.",
 );
+assert.equal(
+  routeSource.includes('additionalSameOriginRefererPathPrefixes: ["/customers/"]') &&
+    routeSource.includes('additionalSameOriginRefererPathnames: ["/customers"]'),
+  true,
+  "Typed booker create must allow only the established same-origin exact-customer profile surface in addition to the admin dashboard.",
+);
 assert.equal(appPageSource.includes("adminLegacyTables.bookers"), false, "App must not use legacy bookers table.");
 assert.equal(
   appPageSource.includes("traveler.booker_id") && appPageSource.includes("traveler.booker_name"),
@@ -388,12 +394,12 @@ try {
           email: "same-origin@example.invalid",
           phone: "90000001",
         },
-        sameOriginAdminHeaders(),
+        sameOriginAdminHeaders({ referer: "http://localhost/customers/173" }),
       ),
     ),
   );
 
-  assert.equal(response.status, 200, "Verified same-origin server-session booker create should pass without a browser token.");
+  assert.equal(response.status, 200, "Verified same-origin customer-profile booker create should pass without a browser token.");
   assert.equal(response.body.booker.id, 102);
   assert.equal(mock.client.operations[0].operation, "insert");
   assert.equal(mock.client.operations[0].table, "bookers");

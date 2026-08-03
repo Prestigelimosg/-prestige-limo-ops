@@ -32,7 +32,12 @@ for (const fragment of [
   "Ticking a job confirms its displayed customer price for this invoice.",
   "Review required · tick to confirm",
   "Load {group.passengerName} invoice",
+  'const customerFolderPaidBookingReferenceParam = "paid_booking_reference";',
   "selected_booking_references",
+  "references.length === 1 && safePaidBookingReference === references[0]",
+  'const [paidReferences, setPaidReferences] = useState<Record<string, boolean>>({});',
+  'data-customer-folder-saved-bookings-paid={booking.booking_reference || ""}',
+  'paidForInvoice ? bookingReference : ""',
   "selectedUnbilledBookings.map((booking)",
   'limit: "200"',
   'data-customer-folder-sector="unbilled-jobs"',
@@ -78,9 +83,13 @@ assert.equal(
 
 for (const fragment of [
   "function selectedInvoiceBookingReferences(value: string)",
+  "function selectedInvoicePaidBookingReference(value: string, selectedReferences: string[])",
+  "selectedReferences.length === 1",
+  "paidBookingReference === selectedReferences[0]",
   ".slice(0, plainInvoiceMaxLineItems)",
   "selectedBookingReferences = \"\"",
   "selectedInvoiceBookingReferences(selectedBookingReferences)",
+  "selectedInvoicePaidBookingReference(",
   "targetBookings.map((booking) =>",
   "readCustomerFolderExactBooking(safeCustomerFolderDispatchHandoffReference(booking))",
   "mismatchedCustomer",
@@ -90,6 +99,7 @@ for (const fragment of [
   "traveler_id: booking.traveler_id ?? null",
   "setPlainInvoiceSavedBookings(targetBookings)",
   "bookingReference: firstInvoiceRow.bookingReference",
+  "isPaid: requestedPaidBookingReference === firstInvoiceRow.bookingReference",
   "bookingReference: row.bookingReference",
   "All ${invoiceRows.length} selected job",
   "setPlainInvoiceSelectedJobReviewActive(true)",
@@ -110,6 +120,7 @@ for (const fragment of [
   'data-selected-job-invoice-pdf-download="true"',
   'data-selected-job-invoice-paper="true"',
   'data-selected-job-invoice-status="true"',
+  'data-selected-job-invoice-paid-label="true"',
   'data-selected-job-invoice-balance="true"',
   'data-selected-job-invoice-notes="true"',
   'data-selected-job-invoice-signoff="true"',
@@ -129,6 +140,7 @@ for (const fragment of [
   "plainInvoiceCompanyPaymentHeading",
   "plainInvoiceCompanyPaymentDetailLines",
   "Allow card payment for this invoice",
+  "Issuing creates a Paid invoice status. No payment transaction is created.",
   'data-plain-invoice-quantity="true"',
   "plainInvoiceLineItemRateLabel(item)",
   "plainInvoiceQuantityLabel(item.quantity)",
@@ -169,6 +181,15 @@ for (const fragment of [
 ]) {
   includes(selectionToggle, fragment, `selected displayed price confirmation ${fragment}`);
 }
+
+const rowEditIndex = folderPage.indexOf('data-customer-folder-saved-bookings-edit=');
+const rowPaidIndex = folderPage.indexOf('data-customer-folder-saved-bookings-paid=');
+const rowInvoiceIndex = folderPage.indexOf('data-customer-folder-saved-bookings-create-invoice=');
+assert.equal(
+  rowEditIndex !== -1 && rowEditIndex < rowPaidIndex && rowPaidIndex < rowInvoiceIndex,
+  true,
+  "Section 3 must keep the compact Paid checkbox beside Edit before the existing exact-row Invoice action",
+);
 
 const saveJobStart = folderPage.indexOf("async function saveInlineBookingDetails(");
 const saveJobEnd = folderPage.indexOf("function openPriceReview(", saveJobStart);
@@ -348,6 +369,9 @@ for (const fragment of [
   'const paidInvoice = documentType === "invoice" && invoice.status === "Paid";',
   'const paymentMadeValue = paidInvoice ? `(-) ${sgdAmount}` : "SGD0.00";',
   'const balanceDueValue = paidInvoice ? "SGD0.00" : sgdAmount;',
+  'pdfRect(50, 743, 66, 26, "0.02 0.45 0.25 rg")',
+  'pdfTextAt("PAID", 62, 751, 14, "1 g")',
+  "...paidLabelStreamLines",
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
   'const signoffY = 260;',
   'const paymentY = 203;',

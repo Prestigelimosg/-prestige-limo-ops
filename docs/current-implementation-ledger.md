@@ -12,6 +12,15 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Section 3 Prepaid Exact-Booking Invoice Handoff (2026-08-03)
+
+- The owner approved one compact `Paid` checkbox immediately beside the existing exact-job `Edit` action in `3 · Pending jobs for payment`. The checkbox is local review state only: ticking it does not write a booking, create an invoice, record a payment, send email, charge a card, or contact a customer. The existing exact-row `Invoice` action remains the only handoff into the established selected-job invoice review.
+- Paid intent is accepted only when the handoff contains one valid selected booking reference and the separate paid reference matches it exactly. Missing, malformed, mismatched, or multi-job paid intent fails closed to the established Unpaid default. No new API, invoice writer, table, schema, migration, payment provider, or parallel invoice path is added.
+- The exact validated handoff initializes the already-established `PlainInvoiceForm.isPaid` state. The existing calculator therefore displays the full invoice amount as `Payment Made` and `SGD0.00` as `Balance Due`; the existing Create Invoice request, stored record, PDF download, email attachment, and customer portal continue consuming the same Paid status.
+- Paid selected-job review adds one green `PAID` label at the top-left of the existing web invoice paper. The shared stored PDF renderer prints the same conditional green label above the existing top-left header without moving or reordering the approved logo, company details, item table, totals, sign-off, Bank Details, Notes, or Terms & Conditions. Unpaid invoice presentation remains unchanged.
+- This is an Admin classification of the exact invoice as Paid, matching the existing manual invoice Paid semantics; it does not create payment-method, bank-reconciliation, card-transaction, or provider evidence. Existing later Paid/Unpaid status correction remains the reversal path and regenerates the same stored PDF.
+- Focused protection remains in `scripts/test-customer-folder-multi-job-invoice-handoff-guard.mjs` and `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs`, alongside the locked invoice lifecycle and staged-application guards. No invoice was issued, downloaded, or emailed during implementation verification.
+
 ### Preview Admin 403 Diagnosis And Readiness Guard Harness Repair (2026-08-03)
 
 - Read-only inspection corrected the earlier broad Preview `403` report. The exact PR #184 Preview `/api/ai-parse` same-origin Admin request returns HTTP 200 in the established review-only mock mode with `write_action: false` and `external_send: false`. The exact Preview `/api/admin-bookings` read returns the expected HTTP 503 `Admin booking persistence is not enabled on this server.` because that Preview has none of the Production admin-session, Supabase, or booking-persistence environment variables. No auth route is broadened and no Production secret is copied into Preview.

@@ -28,6 +28,7 @@ const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
+const customerFolderPaidBookingReferenceParam = "paid_booking_reference";
 const customerFolderSelectedPriceReviewsParam = "selected_booking_price_reviews";
 const customerFolderInvoiceSelectionLimit = 4;
 const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpaid_invoice";
@@ -531,6 +532,7 @@ function customerFolderInvoiceHref(
   selectedBookings: CustomerFolderSavedBookingRecord[],
   reviews: CustomerFolderBillingReviews,
   guestAccountBillingEnabled = false,
+  paidBookingReference = "",
 ) {
   const baseHref = customerWorkspaceHref(booking, customerId, customerName, "open");
   const references = selectedBookings
@@ -569,6 +571,11 @@ function customerFolderInvoiceHref(
     params.set("guest_account_billing", "1");
   }
   params.set("selected_booking_references", references.join(","));
+  const safePaidBookingReference = safeBookingReferenceValue(paidBookingReference);
+
+  if (references.length === 1 && safePaidBookingReference === references[0]) {
+    params.set(customerFolderPaidBookingReferenceParam, safePaidBookingReference);
+  }
   params.set(
     customerFolderSelectedPriceReviewsParam,
     customerFolderReviewedPricePayload(selectedBookings, reviews),
@@ -817,6 +824,7 @@ export function CustomerFolderSavedBookingsPanel({
     );
   const [priceDraft, setPriceDraft] = useState("");
   const [expandedSavedBookingReference, setExpandedSavedBookingReference] = useState("");
+  const [paidReferences, setPaidReferences] = useState<Record<string, boolean>>({});
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
   const [guestAccountBillingEnabled, setGuestAccountBillingEnabled] = useState(false);
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
@@ -2323,12 +2331,17 @@ export function CustomerFolderSavedBookingsPanel({
                 const billingReview = bookingReference ? billingReviews[bookingReference] : null;
                 const priceReviewed =
                   billingReview?.status === "reviewed" && Boolean(billingReview.amountCents);
+                const paidForInvoice = Boolean(
+                  bookingReference && paidReferences[bookingReference],
+                );
                 const createSingleInvoiceHref = customerFolderInvoiceHref(
                   booking,
                   customerId,
                   customerName,
                   [booking],
                   billingReviews,
+                  false,
+                  paidForInvoice ? bookingReference : "",
                 );
                 const rowKey = booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`;
                 const isExpanded = Boolean(
@@ -2404,6 +2417,26 @@ export function CustomerFolderSavedBookingsPanel({
                           >
                             Edit
                           </button>
+                          <label className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2 text-xs font-bold text-emerald-900">
+                            <input
+                              aria-label={`Mark ${publicBookingReferenceDisplay(booking)} paid`}
+                              checked={paidForInvoice}
+                              className="h-3.5 w-3.5 rounded border-emerald-500 text-emerald-700"
+                              data-customer-folder-saved-bookings-paid={booking.booking_reference || ""}
+                              onChange={(event) => {
+                                if (!bookingReference) {
+                                  return;
+                                }
+
+                                setPaidReferences((current) => ({
+                                  ...current,
+                                  [bookingReference]: event.target.checked,
+                                }));
+                              }}
+                              type="checkbox"
+                            />
+                            <span>Paid</span>
+                          </label>
                           <Link
                             className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
                             data-customer-folder-saved-bookings-delete={booking.booking_reference || ""}

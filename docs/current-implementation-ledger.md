@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Mobile Active Bookings Direct-Route Deduplication (2026-08-03)
+
+- The owner's phone screenshot reproduced one active Bookings card displaying the same direct Pickup to Drop-off path three times: once in the collapsed summary, once as separate Pickup and Drop-off rows, and once more as the combined `Route:` row in the expanded details.
+- The established active Bookings card now compares its existing combined route with its existing direct Pickup-to-Drop-off text. When they are the same, only the repeated combined `Route:` row is hidden below the existing `md` breakpoint. Desktop retains the complete row. Multi-stop or otherwise additional route detail remains visible on phone, so intermediate routing information is not removed.
+- This is presentation-only inside the existing `data-current-upcoming-bookings-list` card. No booking data, parser, Save + CRM, Calendar, driver assignment, Driver Job Link, messaging, billing, invoice, payment, payout, PayNow, API, schema, environment, or provider behavior changes. `scripts/test-bookings-earlier-history-compact-guard.mjs`, `scripts/test-admin-bookings-alternating-card-colours-guard.mjs`, TypeScript, lint, and the Production build pass locally. The broader local booking browser suite stopped before reaching Bookings because its admin/mock-AI request returned `403`; visible phone runtime verification therefore remains required before Production acceptance.
+
 ### Prestige Transport Email AI Booker-Passenger Consistency Lock (2026-08-03)
 
 - Signed-in Production read-only inspection reproduced one exact semantic conflict in queued Email AI record `Prestige Transport 15782`: the normalized source explicitly labelled `Passenger: Mr. Zenji Nakamura`, while `Client details` paired `First name Zenji Last name Nakamura` with `yasuko.kunisawa@ubs.com`. The AI returned Zenji Nakamura as both Passenger and Booker with 99% classification confidence. The same record correctly left the missing arrival pickup empty and remained review-only; no booking, CRM record, Calendar event, message, invoice, payment, payout, PayNow, provider send, or Production write occurred.

@@ -88,6 +88,11 @@ const upcomingPaginationLedgerSection = sectionBetween(
   "### Admin Bookings Upcoming Pickup Order And Pagination (2026-07-19)",
   "\n### ",
 );
+const mobileRouteDedupLedgerSection = sectionBetween(
+  ledger,
+  "### Mobile Active Bookings Direct-Route Deduplication (2026-08-03)",
+  "\n### ",
+);
 
 for (const fragment of [
   "function bookingRecordStatusValues",
@@ -230,6 +235,33 @@ for (const fragment of [
   'className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1"',
 ]) {
   assertIncludes(currentUpcomingPanel, fragment, `current/upcoming panel fragment ${fragment}`);
+}
+for (const fragment of [
+  "const routeRepeatsPickupAndDropoff =",
+  'clean(`${pickup} > ${dropoff}`).toLocaleLowerCase()',
+  'routeRepeatsPickupAndDropoff ? "hidden md:block" : ""',
+  'data-bookings-route-detail={',
+  '"duplicate-direct-route"',
+  '"additional-route-detail"',
+]) {
+  assertIncludes(
+    currentUpcomingPanel,
+    fragment,
+    `mobile direct-route deduplication fragment ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "same direct Pickup to Drop-off path three times",
+  "only the repeated combined `Route:` row is hidden below the existing `md` breakpoint",
+  "Multi-stop or otherwise additional route detail remains visible",
+  "No booking data, parser, Save + CRM, Calendar, driver assignment, Driver Job Link, messaging, billing, invoice, payment, payout, PayNow, API, schema, environment, or provider behavior changes",
+]) {
+  assertIncludes(
+    mobileRouteDedupLedgerSection,
+    fragment,
+    `mobile direct-route deduplication ledger fragment ${fragment}`,
+  );
 }
 assertExcludes(
   currentUpcomingPanel,

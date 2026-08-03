@@ -306,6 +306,33 @@ const syntheticGroundBookerSource = Buffer.from(
     "Confirmed booking. Passenger: Test Guest. Pickup: Changi Airport. Drop-off: Marina Bay.",
   ].join("\r\n"),
 );
+const syntheticPrestigeTransportIdentityConflictSource = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-prestige-transport-15782@example.test>",
+    "Date: Mon, 3 Aug 2026 01:45:00 +0000",
+    'Subject: New booking "Prestige Transport 15782" has been received',
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "General",
+    "Title Prestige Transport 15782 Service type Airport transfer Transfer type One Way Pickup date and time 16-08-2026 17:45",
+    "Comment Passenger: Mr. Zenji Nakamura (Japan Country Head, UBS Group)",
+    "Route",
+    "Route name Airport arrival",
+    "Route locations",
+    "Drop off Location 1. 5 Raffles Ave., Singapore 039797",
+    "Vehicle",
+    "Vehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4",
+    "Client details",
+    "First name Zenji Last name Nakamura E-mail address yasuko.kunisawa@ubs.com Phone number +81352933407 Passangers 1 Flight No. JL37",
+    "Payment",
+    "Payment Stripe",
+  ].join("\r\n"),
+);
 
 const fakeMailbox = {
   messages: [],
@@ -390,7 +417,49 @@ class FakeOpenAI {
       const isEnquiry = body.input.includes(
         "Synthetic availability enquiry",
       );
-      const analysis = isEnquiry
+      const isPrestigeTransportIdentityConflict = body.input.includes(
+        'New booking "Prestige Transport 15782" has been received',
+      );
+      const analysis = isPrestigeTransportIdentityConflict
+        ? {
+            bookingResult: {
+              bookings: [
+                {
+                  bookerContact: "+81352933407",
+                  bookerEmail: "yasuko.kunisawa@ubs.com",
+                  bookerName: "Zenji Nakamura",
+                  bookingType: "MNG",
+                  companyAccount: "",
+                  confidence: 0.98,
+                  customerPriceOverride: "105.00 SGD",
+                  dropoff: "5 Raffles Ave., Singapore 039797",
+                  extraStopLocation: "",
+                  extraStops: "",
+                  flightNumber: "JL37",
+                  needsReviewReasons: [
+                    "Pickup airport/seaport is not specified.",
+                  ],
+                  notes: "Bag count: 3.",
+                  passengerName: "Mr. Zenji Nakamura",
+                  pax: "1",
+                  pickup: "",
+                  pickupDate: "2026-08-16",
+                  pickupTime: "17:45",
+                  vehicle: "Toyota Alphard 2.5",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.99,
+            reviewReasons: [
+              "Pickup airport is not provided; verify before dispatch.",
+            ],
+            suggestedReply: "",
+            summary: "Confirmed airport arrival booking for Zenji Nakamura.",
+          }
+        : isEnquiry
         ? {
             bookingResult: {
               bookings: [],
@@ -633,13 +702,64 @@ try {
     "email_confirmed_booking",
   ]);
 
+  fakeMailbox.uidNext = 105;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticPrestigeTransportIdentityConflictSource.length,
+    source: syntheticPrestigeTransportIdentityConflictSource,
+    uid: 104,
+  });
+
+  const prestigeTransportParsed = await runtime.runAdminEmailAiIntake();
+  assert.equal(prestigeTransportParsed.ok, true);
+  assert.equal(prestigeTransportParsed.parsed, 1);
+  assert.equal(prestigeTransportParsed.skipped, 0);
+  assert.equal(providerRequestBodies.length, 4);
+  assert.equal(downloadCalls, 4);
+  assert.equal(intakeRows.length, 4);
+  assert.equal(intakeRows[3].classification, "confirmed_booking");
+  assert.equal(intakeRows[3].processing_status, "queued");
+  assert.equal(
+    intakeRows[3].booking_parse_result.bookings[0].bookerName,
+    "",
+    "Prestige Transport client details must not silently reuse the passenger as Booker when the labelled email belongs to a different person",
+  );
+  assert.equal(
+    intakeRows[3].booking_parse_result.bookings[0].passengerName,
+    "Mr. Zenji Nakamura",
+  );
+  assert.match(
+    intakeRows[3].review_reasons.join("\n"),
+    /Booker name conflicts with the labelled client email; confirm the Booker before Save \+ CRM\./,
+  );
+  assert.match(
+    intakeRows[3].booking_parse_result.bookings[0].needsReviewReasons.join("\n"),
+    /Booker name conflicts with the labelled client email; confirm the Booker before Save \+ CRM\./,
+  );
+  assert.doesNotMatch(
+    intakeRows[3].canonical_booking_text,
+    /^Booker: Zenji Nakamura$/m,
+  );
+  assert.match(
+    intakeRows[3].canonical_booking_text,
+    /^Passenger: Mr\. Zenji Nakamura$/m,
+  );
+  assert.deepEqual(adminDevicePushEvents, [
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+  ]);
+
   const blockedSource = Buffer.from(
     syntheticAllowedSource
       .toString()
       .replaceAll("info@prestigelimo.sg", "other@example.test")
       .replace("synthetic-booking-1", "synthetic-booking-2"),
   );
-  fakeMailbox.uidNext = 105;
+  fakeMailbox.uidNext = 106;
   fakeMailbox.messages.push({
     envelope: {
       from: [{ address: "other@example.test" }],
@@ -647,20 +767,20 @@ try {
     },
     size: blockedSource.length,
     source: blockedSource,
-    uid: 104,
+    uid: 105,
   });
 
   const skipped = await runtime.runAdminEmailAiIntake();
   assert.equal(skipped.ok, true);
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
-  assert.equal(providerRequestBodies.length, 3);
-  assert.equal(downloadCalls, 3, "blocked sender body must not be fetched");
-  assert.equal(intakeRows.length, 3);
+  assert.equal(providerRequestBodies.length, 4);
+  assert.equal(downloadCalls, 4, "blocked sender body must not be fetched");
+  assert.equal(intakeRows.length, 4);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 2);
+  assert.equal(loaded.data.records.length, 3);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
   assert.equal(
     loaded.data.records[1].sender_address,
@@ -668,10 +788,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 300,
+    input_tokens: 400,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 240,
-    total_tokens: 540,
+    output_tokens: 320,
+    total_tokens: 720,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -702,8 +822,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 2);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 540);
+  assert.equal(allowedReadBody.records.length, 3);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 720);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -797,7 +917,7 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 1);
+  assert.equal(afterReviewRecords.length, 2);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",
@@ -841,7 +961,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 3);
+  assert.equal(providerRequestBodies.length, 4);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

@@ -421,12 +421,19 @@ function mergeCustomerDirectoryRows(
       return customerId ? [[customerId, record] as const] : [];
     }),
   );
-  const enrichedBookingAccounts = bookingAccounts.map((account) => ({
-    ...account,
-    guest_account_billing_enabled:
-      directoryRowsByCustomerId.get(exactCustomerId(account.customer_id) || "")?.customer_type ===
-      "hotel",
-  }));
+  const enrichedBookingAccounts = bookingAccounts.map((account) => {
+    const directoryRow = directoryRowsByCustomerId.get(exactCustomerId(account.customer_id) || "");
+    const guestAccountBillingEnabled = directoryRow?.customer_type === "hotel";
+    const directoryCustomerAccount = guestAccountBillingEnabled
+      ? safeText(directoryRow.display_name, 120)
+      : null;
+
+    return {
+      ...account,
+      customer_account: directoryCustomerAccount || account.customer_account,
+      guest_account_billing_enabled: guestAccountBillingEnabled,
+    };
+  });
   const linkedCustomerIds = new Set(
     enrichedBookingAccounts.map((account) => exactCustomerId(account.customer_id)).filter(Boolean),
   );

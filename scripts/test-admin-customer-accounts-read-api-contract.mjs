@@ -633,6 +633,32 @@ try {
 
   setEnv(enabledEnv());
 
+  const agencyDirectorySeed = clone(seed);
+  agencyDirectorySeed.customers = agencyDirectorySeed.customers.map((customer) =>
+    customer.id === 102
+      ? { ...customer, display_name: "Ritz Carlton Agency" }
+      : customer,
+  );
+  const agencyDirectoryMock = installMockClient(agencyDirectorySeed);
+  const agencyDirectoryResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=102&limit=1", {
+        headers: sessionHeaders({
+          referer: "http://localhost/customers/102",
+          "x-prestige-admin-session-token": undefined,
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(agencyDirectoryResult.status, 200);
+  assert.equal(agencyDirectoryResult.body.accounts.length, 1);
+  assert.equal(agencyDirectoryResult.body.accounts[0].customer_account, "Ritz Carlton Agency");
+  assert.equal(agencyDirectoryResult.body.accounts[0].guest_account_billing_enabled, true);
+  assert.equal(agencyDirectoryMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
   const updateMock = installMockClient(seed);
   const updateResult = await readRouteResponse(
     await route.PATCH(

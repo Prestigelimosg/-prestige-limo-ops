@@ -3989,7 +3989,7 @@ async function runChromeTest() {
 
     const clickedClearAfterNeedsReview = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Clear",
+        (button) => button.textContent.trim() === "New booking",
       );
 
       if (!clearButton || clearButton.disabled) {
@@ -3999,7 +3999,7 @@ async function runChromeTest() {
       clearButton.click();
       return true;
     })()`);
-    assert.equal(clickedClearAfterNeedsReview, true, "Expected Clear button after Needs Review test");
+    assert.equal(clickedClearAfterNeedsReview, true, "Expected New booking button after Needs Review test");
 
     const waitForTravelerIdentityLookup = async (travelerName, description) => {
       const expectedParam = `traveler_name=${encodeURIComponent(travelerName).replace(/%20/g, "+")}`.toLowerCase();
@@ -12603,6 +12603,27 @@ async function runChromeTest() {
         if (url.includes("/api/admin-bookings")) {
           const parsed = bodyText ? JSON.parse(bodyText) : {};
 
+          if (method === "GET") {
+            const bookingReference = new URL(url, window.location.href).searchParams.get("booking_reference") || "";
+            const savedBooking = (window.__prestigeLoadedBookings || []).find(
+              (booking) => String(booking.booking_reference || booking.id || "") === bookingReference,
+            );
+
+            return jsonResponse({
+              booking: savedBooking
+                ? {
+                    ...savedBooking,
+                    booking_reference: bookingReference,
+                    pickup_location: savedBooking.pickup_location || savedBooking.pickup_address || null,
+                    dropoff_location: savedBooking.dropoff_location || savedBooking.dropoff_address || null,
+                    route_type: savedBooking.route_type || savedBooking.booking_type || null,
+                    service_type: savedBooking.service_type || savedBooking.booking_type || null,
+                  }
+                : null,
+              ok: Boolean(savedBooking),
+            }, savedBooking ? 200 : 404);
+          }
+
           if (method === "POST") {
             return jsonResponse({
               booking: {
@@ -14384,7 +14405,7 @@ async function runChromeTest() {
 
     const clickedRestoreDispatchClear = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Clear",
+        (button) => button.textContent.trim() === "New booking",
       );
 
       if (!clearButton || clearButton.disabled) {
@@ -14394,7 +14415,7 @@ async function runChromeTest() {
       clearButton.click();
       return true;
     })()`);
-    assert.equal(clickedRestoreDispatchClear, true, "Expected Clear button to restore Dispatch draft after profile payout check");
+    assert.equal(clickedRestoreDispatchClear, true, "Expected New booking button to restore Dispatch draft after profile payout check");
 
     await setBookingMessageValue(bookingSample, "restored Dispatch booking message");
 
@@ -15235,6 +15256,58 @@ async function runChromeTest() {
     assert.equal(dispatchDeletedDriverState.driverContact, "+65 9000 0000");
     assert.equal(dispatchDeletedDriverState.driverPlate, "PD 0000");
 
+    const clickedClearMessageWhileEditing = await evaluate(`(() => {
+      const clearMessageButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Clear Message",
+      );
+
+      if (!clearMessageButton || clearMessageButton.disabled) {
+        return false;
+      }
+
+      clearMessageButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedClearMessageWhileEditing,
+      true,
+      "Expected Clear Message to remain available while editing a saved booking",
+    );
+
+    const clearMessageEditIdentityState = await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+          const labels = [...document.querySelectorAll("label")];
+          const fieldValue = (labelText) => {
+            const label = labels.find(
+              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+            );
+            return label?.querySelector("input, select, textarea")?.value || "";
+          };
+          const primaryButton = document.querySelector("[data-job-card-save-toolbar='primary'] button");
+
+          return {
+            editIdentity: document.querySelector("[data-admin-booking-edit-identity='true']")?.textContent.trim() || "",
+            flight: fieldValue("Flight number"),
+            primaryLabel: primaryButton?.textContent.trim() || "",
+          };
+        })()`);
+
+        return candidateState?.primaryLabel === "Update + Cal" &&
+          candidateState?.flight === "DL9905" &&
+          candidateState?.editIdentity.includes("10839")
+          ? candidateState
+          : false;
+      },
+      10000,
+      "Clear Message preserved loaded booking edit identity",
+    );
+
+    assert.equal(clearMessageEditIdentityState.flight, "DL9905");
+    assert.equal(clearMessageEditIdentityState.primaryLabel, "Update + Cal");
+    assert.match(clearMessageEditIdentityState.editIdentity, /Editing booking 10839/);
+
     await setFieldValueByLabel(
       "Pax",
       "4",
@@ -15283,7 +15356,15 @@ async function runChromeTest() {
             bookingInsert: bookingInsert?.body || null,
             bookingUpdate: bookingUpdate?.body || null,
             bookingDeleteOrPatchCount: bookingDeleteOrPatchRequests.length,
+            editIdentityCount: document.querySelectorAll("[data-admin-booking-edit-identity='true']").length,
             fetchCalls: window.__prestigeFetchCalls || [],
+            flightValue: [...document.querySelectorAll("label")].find(
+              (label) => label.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Flight number",
+            )?.querySelector("input")?.value || "",
+            paxValue: [...document.querySelectorAll("label")].find(
+              (label) => label.querySelector("span")?.textContent.replace(/\\s+/g, " ").trim() === "Pax",
+            )?.querySelector("input")?.value || "",
+            primarySaveLabel: document.querySelector("[data-job-card-save-toolbar='primary'] button")?.textContent.trim() || "",
             savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
             statusText: document.querySelector("[data-status-panel='global']")?.textContent.trim() || "",
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
@@ -15334,6 +15415,10 @@ async function runChromeTest() {
       "safe booking update after driver delete request",
     );
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.target_booking_reference, "990509");
+    assert.equal(
+      updateAfterDriverDeleteState.bookingUpdate?.expected_updated_at,
+      driverDeleteAssignedBookingFixture.updated_at,
+    );
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.company_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.booker_id, 906102);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.traveler_id, 906103);
@@ -15345,6 +15430,10 @@ async function runChromeTest() {
       0,
       "Expected booking update after driver profile delete not to patch/delete legacy booking shim rows",
     );
+    assert.equal(updateAfterDriverDeleteState.flightValue, "");
+    assert.equal(updateAfterDriverDeleteState.paxValue, "1");
+    assert.equal(updateAfterDriverDeleteState.editIdentityCount, 0);
+    assert.equal(updateAfterDriverDeleteState.primarySaveLabel, "Save + CRM");
 
     const clickedRestoreAfterDriverDeleteClear = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
@@ -20631,7 +20720,7 @@ async function runChromeTest() {
 
     const clickedClearBeforeCrmSave = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Clear",
+        (button) => button.textContent.trim() === "New booking",
       );
 
       if (!clearButton || clearButton.disabled) {
@@ -20641,7 +20730,7 @@ async function runChromeTest() {
       clearButton.click();
       return true;
     })()`);
-    assert.equal(clickedClearBeforeCrmSave, true, "Expected Clear button before CRM save test");
+    assert.equal(clickedClearBeforeCrmSave, true, "Expected New booking button before CRM save test");
 
     await evaluate(`(() => {
       window.__prestigeAdminEmailAiIntake = [
@@ -22781,7 +22870,7 @@ async function runChromeTest() {
 
     const clickedClearBeforeExactPaste = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Clear",
+        (button) => button.textContent.trim() === "New booking",
       );
 
       if (!clearButton || clearButton.disabled) {
@@ -22791,7 +22880,7 @@ async function runChromeTest() {
       clearButton.click();
       return true;
     })()`);
-    assert.equal(clickedClearBeforeExactPaste, true, "Expected Clear button before exact pasted waypoint sample");
+    assert.equal(clickedClearBeforeExactPaste, true, "Expected New booking button before exact pasted waypoint sample");
 
     const focusedExactPasteTextarea = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");

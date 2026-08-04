@@ -330,6 +330,10 @@ const guardChecks = [
     script: "scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs",
   },
   {
+    label: "admin booking cross-device sync guard",
+    script: "scripts/test-admin-booking-cross-device-sync-guard.mjs",
+  },
+  {
     label: "Codex job-card correction preparer guard",
     script: "scripts/test-codex-job-card-correction-preparer.mjs",
   },

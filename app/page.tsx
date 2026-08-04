@@ -2954,6 +2954,33 @@ function createInitialBooking(): BookingForm {
   };
 }
 
+function adminBookingFormSyncSignature(booking: BookingForm) {
+  return JSON.stringify(
+    Object.entries(booking)
+      .sort(([leftField], [rightField]) => leftField.localeCompare(rightField))
+      .map(([field, value]) => [field, clean(value)]),
+  );
+}
+
+function adminBookingVersionsMatch(
+  leftValue: string | null | undefined,
+  rightValue: string | null | undefined,
+) {
+  const left = clean(leftValue);
+  const right = clean(rightValue);
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftTimestamp = Date.parse(left);
+  const rightTimestamp = Date.parse(right);
+
+  return Number.isFinite(leftTimestamp) && Number.isFinite(rightTimestamp)
+    ? leftTimestamp === rightTimestamp
+    : left === right;
+}
+
 function adminDispatchSafeServiceTypeValue(
   value: string | null | undefined,
 ): AdminDispatchServiceTypeValue {
@@ -13677,6 +13704,7 @@ export default function Home() {
   const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
+  const bookingFormRef = useRef(booking);
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
   const activeTabRef = useRef<AppTab>(initialTab);
@@ -13836,6 +13864,17 @@ export default function Home() {
   const [appliedAdminBookingSnapshotReference, setAppliedAdminBookingSnapshotReference] =
     useState("");
   const appliedAdminBookingSnapshotReferenceRef = useRef("");
+  const adminBookingCreateIntentRef = useRef(true);
+  const loadedAdminBookingBaselineRef = useRef<{
+    bookingReference: string;
+    formSignature: string;
+    updatedAt: string;
+  } | null>(null);
+  const [adminBookingCrossDeviceConflict, setAdminBookingCrossDeviceConflict] = useState<{
+    bookingReference: string;
+    displayReference: string;
+    updatedAt: string;
+  } | null>(null);
   const [adminBookingPersistenceSearch, setAdminBookingPersistenceSearch] =
     useState("");
   const [adminBookingPersistenceStatusFilter, setAdminBookingPersistenceStatusFilter] =
@@ -14295,6 +14334,10 @@ export default function Home() {
 
     return () => window.clearTimeout(timeoutId);
   }, [adminDriverJobLinkState.message]);
+
+  useEffect(() => {
+    bookingFormRef.current = booking;
+  }, [booking]);
 
   useEffect(() => {
     loadedBookingIdRef.current = loadedBookingId;
@@ -17149,6 +17192,7 @@ export default function Home() {
   function markAdminBookingAsActiveForUpdates(
     bookingReference: string,
     savedRecord?: AdminBookingPersistenceRecord | null,
+    bookingFormOverride?: BookingForm,
   ) {
     const safeBookingReference = clean(bookingReference);
 
@@ -17158,10 +17202,19 @@ export default function Home() {
 
     appliedAdminBookingSnapshotReferenceRef.current = safeBookingReference;
     loadedBookingIdRef.current = safeBookingReference;
+    adminBookingCreateIntentRef.current = false;
     setAppliedAdminBookingSnapshotReference(safeBookingReference);
     setLoadedBookingId(safeBookingReference);
+    setAdminBookingCrossDeviceConflict(null);
 
     if (savedRecord) {
+      loadedAdminBookingBaselineRef.current = {
+        bookingReference: safeBookingReference,
+        formSignature: adminBookingFormSyncSignature(
+          bookingFormOverride ?? bookingFormRef.current,
+        ),
+        updatedAt: clean(savedRecord.updated_at),
+      };
       setAdminBookingPersistenceRecords((current) => [
         savedRecord,
         ...current.filter(
@@ -18496,13 +18549,19 @@ export default function Home() {
   }
 
   function clearLoadedBookingSelectionContext(
-    options: { preserveAdminEmailAiReview?: boolean } = {},
+    options: {
+      explicitNewBooking?: boolean;
+      preserveAdminEmailAiReview?: boolean;
+    } = {},
   ) {
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
+    adminBookingCreateIntentRef.current = options.explicitNewBooking === true;
+    loadedAdminBookingBaselineRef.current = null;
     driverJobLinkHandoffFocusAppliedRef.current = "";
     setLoadedBookingId("");
     setAppliedAdminBookingSnapshotReference("");
+    setAdminBookingCrossDeviceConflict(null);
     setDriverJobLinkHandoffReference("");
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
@@ -18510,6 +18569,16 @@ export default function Home() {
     if (!options.preserveAdminEmailAiReview) {
       setActiveAdminEmailAiIntakeId("");
     }
+  }
+
+  function resetAdminBookingFormAfterSuccessfulPersistence() {
+    const emptyBooking = createInitialBooking();
+
+    bookingFormRef.current = emptyBooking;
+    setBooking(() => emptyBooking);
+    clearLoadedBookingSelectionContext({ explicitNewBooking: true });
+    clearBookingMessageInput();
+    setMobileDispatchBookingStep("message");
   }
 
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
@@ -19009,8 +19078,21 @@ export default function Home() {
   }
 
   async function applyParsedBookingMessage(messageText: string) {
+    const loadedBookingReference =
+      cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+      cleanReferenceText(loadedBookingIdRef.current);
+
+    if (loadedBookingReference || !adminBookingCreateIntentRef.current) {
+      setMessage({
+        tone: "error",
+        text: "A saved booking is already loaded for editing. Update its existing fields, or choose New booking before creating another Job Card.",
+      });
+      return false;
+    }
+
     clearParseArtifacts();
     clearLoadedBookingSelectionContext({
+      explicitNewBooking: true,
       preserveAdminEmailAiReview: true,
     });
 
@@ -19287,7 +19369,7 @@ export default function Home() {
     const canonicalBookingText = clean(record.canonical_booking_text);
 
     clearParseArtifacts();
-    clearLoadedBookingSelectionContext();
+    clearLoadedBookingSelectionContext({ explicitNewBooking: true });
     setActiveAdminEmailAiIntakeId(clean(record.id));
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
@@ -20851,6 +20933,9 @@ export default function Home() {
             )}. Google Calendar auto-synced; reminders included; no guest email sent.`,
       } satisfies Message;
 
+      if (!calendarSyncFailed) {
+        resetAdminBookingFormAfterSuccessfulPersistence();
+      }
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
       setAdminBookingPersistenceMessage(saveMessage);
@@ -20897,6 +20982,84 @@ export default function Home() {
         bookingRecordReferenceCandidates(record).includes(targetReference),
       ) ?? null
     );
+  }
+
+  function syncLoadedBookingFromRemoteRecord(
+    record: BookingRecord | null | undefined,
+  ): "conflict" | "refreshed" | "unchanged" {
+    const baseline = loadedAdminBookingBaselineRef.current;
+
+    if (!record || !baseline) {
+      return "unchanged";
+    }
+
+    const remoteReference = bookingRecordPersistedReference(record);
+    const remoteUpdatedAt = clean(record.updated_at);
+
+    if (
+      !remoteReference ||
+      remoteReference !== baseline.bookingReference ||
+      !remoteUpdatedAt ||
+      adminBookingVersionsMatch(remoteUpdatedAt, baseline.updatedAt)
+    ) {
+      return "unchanged";
+    }
+
+    const baselineTimestamp = Date.parse(baseline.updatedAt);
+    const remoteTimestamp = Date.parse(remoteUpdatedAt);
+
+    if (
+      Number.isFinite(baselineTimestamp) &&
+      Number.isFinite(remoteTimestamp) &&
+      remoteTimestamp < baselineTimestamp
+    ) {
+      return "unchanged";
+    }
+
+    const currentFormSignature = adminBookingFormSyncSignature(bookingFormRef.current);
+    const displayReference = bookingPublicReference(record) || remoteReference;
+
+    if (currentFormSignature !== baseline.formSignature) {
+      setAdminBookingCrossDeviceConflict({
+        bookingReference: remoteReference,
+        displayReference,
+        updatedAt: remoteUpdatedAt,
+      });
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: `Booking ${displayReference} changed on another device while this form has unsaved edits. Reopen the saved booking before updating; nothing was overwritten.`,
+      });
+      return "conflict";
+    }
+
+    const remoteForm = bookingRecordToForm(record);
+    const remoteAdminRecord = bookingRecordToAdminBookingPersistenceRecord(record);
+
+    bookingFormRef.current = remoteForm;
+    setBooking(() => remoteForm);
+    adminBookingCreateIntentRef.current = false;
+    loadedAdminBookingBaselineRef.current = {
+      bookingReference: remoteReference,
+      formSignature: adminBookingFormSyncSignature(remoteForm),
+      updatedAt: remoteUpdatedAt,
+    };
+    setAdminBookingCrossDeviceConflict(null);
+
+    if (remoteAdminRecord) {
+      setAdminBookingPersistenceRecords((current) => [
+        remoteAdminRecord,
+        ...current.filter(
+          (currentRecord) =>
+            clean(currentRecord.booking_reference) !== remoteReference,
+        ),
+      ]);
+    }
+
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: `Booking ${displayReference} refreshed from another device.`,
+    });
+    return "refreshed";
   }
 
   function requestDriverJobLinkVehicleFallbackRefresh(bookingReference: string) {
@@ -21113,11 +21276,18 @@ export default function Home() {
         const selectedBookingReference =
           cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
           cleanReferenceText(loadedBookingIdRef.current);
+        const selectedBookingRecord = findLoadedBookingRecordByReference(
+          loadedBookings,
+          selectedBookingReference,
+        );
+        const selectedBookingSyncResult = syncLoadedBookingFromRemoteRecord(
+          selectedBookingRecord,
+        );
 
         setBookings(loadedBookings);
-        mergeCurrentBookingDriverDetailsFromRecord(
-          findLoadedBookingRecordByReference(loadedBookings, selectedBookingReference),
-        );
+        if (selectedBookingSyncResult === "unchanged") {
+          mergeCurrentBookingDriverDetailsFromRecord(selectedBookingRecord);
+        }
         if (activeTabRef.current === "dispatch") {
           requestDriverJobLinkVehicleFallbackRefresh(selectedBookingReference);
         }
@@ -21249,17 +21419,25 @@ export default function Home() {
       proofs: [],
       status: "loading",
     });
+    bookingFormRef.current = loadedBookingForm;
     setBooking(() => loadedBookingForm);
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
     }
     if (bookingReference && loadedAdminBookingRecord) {
-      markAdminBookingAsActiveForUpdates(bookingReference, loadedAdminBookingRecord);
+      markAdminBookingAsActiveForUpdates(
+        bookingReference,
+        loadedAdminBookingRecord,
+        loadedBookingForm,
+      );
     } else {
       appliedAdminBookingSnapshotReferenceRef.current = "";
       loadedBookingIdRef.current = bookingReference;
+      adminBookingCreateIntentRef.current = false;
+      loadedAdminBookingBaselineRef.current = null;
       setAppliedAdminBookingSnapshotReference("");
       setLoadedBookingId(bookingReference);
+      setAdminBookingCrossDeviceConflict(null);
     }
     if (bookingReference) {
       bookingAutoSyncPausedUntilRef.current = Date.now() + 5_000;
@@ -23277,8 +23455,111 @@ export default function Home() {
     };
   }
 
+  async function verifyLoadedAdminBookingVersionBeforeUpdate(
+    targetBookingReference: string,
+  ): Promise<string | null> {
+    const baseline = loadedAdminBookingBaselineRef.current;
+
+    if (
+      !baseline ||
+      baseline.bookingReference !== targetBookingReference ||
+      !clean(baseline.updatedAt)
+    ) {
+      const message = {
+        tone: "error",
+        text: `Booking ${targetBookingReference} cannot be updated because its saved version is not loaded. Reopen the exact booking; no new booking was created.`,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(message);
+      setMessage(message);
+      setBookingSaveMessage(message);
+      return null;
+    }
+
+    try {
+      const searchParams = new URLSearchParams({
+        booking_reference: targetBookingReference,
+      });
+      const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { booking?: AdminBookingPersistenceRecord | null; error?: string; ok?: boolean }
+        | null;
+      const latestBooking = result?.booking ?? null;
+      const latestReference = clean(latestBooking?.booking_reference);
+      const latestUpdatedAt = clean(latestBooking?.updated_at);
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        !latestBooking ||
+        latestReference !== targetBookingReference ||
+        !latestUpdatedAt
+      ) {
+        throw new Error(
+          adminBookingPersistenceFailureDetail(
+            result,
+            `Booking ${targetBookingReference} version check failed.`,
+          ),
+        );
+      }
+
+      if (!adminBookingVersionsMatch(latestUpdatedAt, baseline.updatedAt)) {
+        const latestBookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(
+          latestBooking,
+        );
+        const syncResult = syncLoadedBookingFromRemoteRecord(latestBookingRecord);
+        const displayReference = bookingPublicReference(latestBookingRecord) || targetBookingReference;
+
+        if (syncResult === "unchanged") {
+          setAdminBookingCrossDeviceConflict({
+            bookingReference: targetBookingReference,
+            displayReference,
+            updatedAt: latestUpdatedAt,
+          });
+        }
+
+        const message = {
+          tone: "error",
+          text:
+            syncResult === "refreshed"
+              ? `Booking ${displayReference} was refreshed from another device. Review the latest details before updating.`
+              : `Booking ${displayReference} changed on another device while this form was open. Reopen the saved booking before updating; nothing was overwritten.`,
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(message);
+        setMessage(message);
+        setBookingSaveMessage(message);
+        return null;
+      }
+
+      return baseline.updatedAt;
+    } catch (error) {
+      const message = {
+        tone: "error",
+        text: `Booking version check failed: ${
+          error instanceof Error ? error.message : "Reload the exact saved booking before updating."
+        } No booking or Calendar event was changed.`,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(message);
+      setMessage(message);
+      setBookingSaveMessage(message);
+      return null;
+    }
+  }
+
   async function updateAppliedAdminBookingOperationalSnapshot() {
-    const targetBookingReference = clean(appliedAdminBookingSnapshotReference);
+    const targetBookingReference =
+      cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+      cleanReferenceText(appliedAdminBookingSnapshotReference) ||
+      cleanReferenceText(loadedBookingIdRef.current) ||
+      cleanReferenceText(loadedBookingId);
     const customerReturnUrl = dispatchHandoffCustomerReturnUrlRef.current;
 
     if (!targetBookingReference) {
@@ -23308,6 +23589,14 @@ export default function Home() {
       setAdminBookingPersistenceMessage(missingPickupMessage);
       setMessage(missingPickupMessage);
       setBookingSaveMessage(missingPickupMessage);
+      return;
+    }
+
+    const expectedUpdatedAt = await verifyLoadedAdminBookingVersionBeforeUpdate(
+      targetBookingReference,
+    );
+
+    if (!expectedUpdatedAt) {
       return;
     }
 
@@ -23369,6 +23658,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/admin-bookings", {
         body: JSON.stringify({
+          expected_updated_at: expectedUpdatedAt,
           target_booking_reference: targetBookingReference,
           ...payload,
         }),
@@ -23425,22 +23715,30 @@ export default function Home() {
           : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} ${calendarSyncResult.message}`,
       } satisfies Message;
 
-      setAdminBookingPersistenceMessage(updateMessage);
-      setMessage(updateMessage);
-      setBookingSaveMessage(updateMessage);
       if (calendarSyncResult.ok) {
         lastSuccessfulBookingSaveRef.current = {
           bookingId: updatedBookingReference,
           key: getBookingSaveGuardKey(updatedBookingReference),
           record: updatedBooking,
         };
+        resetAdminBookingFormAfterSuccessfulPersistence();
         returnToCustomerFolderAfterUpdate();
       }
+      setAdminBookingPersistenceMessage(updateMessage);
+      setMessage(updateMessage);
+      setBookingSaveMessage(updateMessage);
     } catch (error) {
-      setAdminBookingPersistenceMessage({
+      const failureText = adminBookingPersistenceFailureMessage("update", error);
+      const updateMessage = {
         tone: "error",
-        text: adminBookingPersistenceFailureMessage("update", error),
-      });
+        text: /another device|saved version|conflict/i.test(failureText)
+          ? `${failureText} Reopen the exact saved booking; nothing was overwritten.`
+          : failureText,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(updateMessage);
+      setMessage(updateMessage);
+      setBookingSaveMessage(updateMessage);
     } finally {
       setAdminBookingPersistenceAction(null);
     }
@@ -32344,7 +32642,22 @@ export default function Home() {
     ? "Midnight Charge shown under Extra Charges - Mock Only"
     : "No Midnight Charge shown - Mock Only";
   const showLegacyExtraChargeQaSections = false;
-  const activeAppliedBookingReference = clean(appliedAdminBookingSnapshotReference);
+  const activeAppliedBookingReference = cleanReferenceText(
+    appliedAdminBookingSnapshotReference,
+  );
+  const bookingUpdateIdentityNeedsReload = Boolean(
+    !activeAppliedBookingReference && cleanReferenceText(loadedBookingId),
+  );
+  const activeAppliedBookingRecord = findLoadedBookingRecordByReference(
+    bookings,
+    activeAppliedBookingReference,
+  );
+  const activeAppliedBookingDisplayReference = activeAppliedBookingRecord
+    ? bookingPublicReference(activeAppliedBookingRecord)
+    : activeAppliedBookingReference;
+  const activeAppliedBookingEditLabel = activeAppliedBookingReference
+    ? `Editing booking ${activeAppliedBookingDisplayReference}`
+    : "";
   const currentBookingSaveGuardKey = getBookingSaveGuardKey();
   const bookingSaveSucceededForCurrentDraft =
     bookingSaveMessage?.tone === "success" &&
@@ -32380,6 +32693,8 @@ export default function Home() {
       ? "Updating..."
     : bookingSaveSucceededForCurrentDraft
       ? "Saved"
+      : bookingUpdateIdentityNeedsReload
+        ? "Reload booking"
       : activeAppliedBookingReference
         ? appliedAdminBookingSnapshotIsPendingCustomerRequest
           ? "Accept + Cal"
@@ -32388,6 +32703,18 @@ export default function Home() {
   function handleJobCardPrimaryBookingAction() {
     if (activeAppliedBookingReference) {
       void updateAppliedAdminBookingOperationalSnapshot();
+      return;
+    }
+
+    if (bookingUpdateIdentityNeedsReload || !adminBookingCreateIntentRef.current) {
+      const identityLostMessage = {
+        tone: "error",
+        text: "Booking update identity was lost. Reopen the exact saved booking before saving; no new booking was created.",
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(identityLostMessage);
+      setMessage(identityLostMessage);
+      setBookingSaveMessage(identityLostMessage);
       return;
     }
 
@@ -39324,12 +39651,12 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setBooking(() => createInitialBooking());
-                  clearLoadedBookingSelectionContext();
+                  clearLoadedBookingSelectionContext({ explicitNewBooking: true });
                   clearBookingMessageInput();
                   setMobileDispatchBookingStep("message");
                 }}
               >
-                Clear
+                New booking
               </button>
             </div>
 
@@ -39458,7 +39785,6 @@ export default function Home() {
                     className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-h-9 md:min-w-32"
                     data-dispatcher-clear-message-button="true"
                     onClick={() => {
-                      clearLoadedBookingSelectionContext();
                       clearBookingMessageInput();
                       setMobileDispatchBookingStep("message");
                     }}
@@ -43501,6 +43827,22 @@ export default function Home() {
                       className="flex items-center rounded-md border border-red-100 bg-red-50/70 p-1"
                       data-job-card-save-toolbar="primary"
                     >
+                      {activeAppliedBookingReference ? (
+                        <span
+                          className="rounded bg-white px-2 py-1 text-[10px] font-semibold text-slate-700"
+                          data-admin-booking-edit-identity="true"
+                        >
+                          {activeAppliedBookingEditLabel}
+                        </span>
+                      ) : null}
+                      {adminBookingCrossDeviceConflict ? (
+                        <span
+                          className="rounded bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800"
+                          data-admin-booking-cross-device-conflict="true"
+                        >
+                          Changed on another device — reopen booking {adminBookingCrossDeviceConflict.displayReference}.
+                        </span>
+                      ) : null}
                       <button
                         className={`h-8 whitespace-nowrap rounded px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
                           actionFeedbackButtonClass(

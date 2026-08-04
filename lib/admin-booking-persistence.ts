@@ -73,6 +73,7 @@ export type AdminBookingPersistenceInput = {
 };
 
 export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
+  expected_updated_at?: string | null;
   target_booking_reference: string;
 };
 
@@ -164,6 +165,7 @@ export const adminBookingPersistenceContractVersion =
 
 const createPayloadTopLevelFields = new Set(["booking", "route_points", "service_items"]);
 const updatePayloadTopLevelFields = new Set([
+  "expected_updated_at",
   "target_booking_reference",
   "booking",
   "route_points",
@@ -863,6 +865,18 @@ export function parseAdminBookingUpdatePayload(
   }
 
   const targetBookingReference = validTargetBookingReference(body.target_booking_reference as string | null);
+  const expectedUpdatedAt = textOrNull(body.expected_updated_at);
+
+  if (
+    Object.prototype.hasOwnProperty.call(body, "expected_updated_at") &&
+    (!expectedUpdatedAt || !validDateTime(expectedUpdatedAt))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Missing or malformed expected booking update timestamp.",
+    };
+  }
 
   if (!targetBookingReference) {
     return {
@@ -884,6 +898,7 @@ export function parseAdminBookingUpdatePayload(
     ok: true,
     data: {
       ...parsed.data,
+      expected_updated_at: expectedUpdatedAt,
       target_booking_reference: targetBookingReference,
     },
   };

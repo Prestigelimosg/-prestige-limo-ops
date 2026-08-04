@@ -419,6 +419,7 @@ class MockSupabaseClient {
     const failure = this.failureFor("update", table);
 
     this.recordOperation("update", table, payload);
+    this.operations[this.operations.length - 1].filters = clone(filters);
 
     if (failure) {
       return {
@@ -1022,6 +1023,7 @@ try {
           "http://localhost/api/admin-bookings",
           {
             ...adminPayload({ booking: { pax_count: 5 } }),
+            expected_updated_at: result.body.booking.updated_at,
             target_booking_reference: "GATE-ADM-001",
           },
           sessionHeaders(),
@@ -1035,7 +1037,47 @@ try {
     assert.equal(updateResult.status, 200, `${role} Pax update should use the existing booking PATCH lane`);
     assert.equal(updateResult.body.booking.pax_count, 5);
     assert.equal(bookingUpdate?.payload.pax_count, 5);
+    assert.equal(
+      bookingUpdate?.filters.some(
+        (filter) =>
+          filter.column === "updated_at" &&
+          filter.value === result.body.booking.updated_at,
+      ),
+      true,
+      `${role} update should compare-and-set the exact loaded updated_at`,
+    );
     assertNoLeaks(updateResult.body.booking, `${role} Pax update booking should expose only safe DTO fields`);
+
+    const operationCountAfterUpdate = mock.client.operations.length;
+    const staleUpdateResult = await readResponse(
+      await adminRoute.PATCH(
+        patchJson(
+          "http://localhost/api/admin-bookings",
+          {
+            ...adminPayload({ booking: { pax_count: 9 } }),
+            expected_updated_at: result.body.booking.updated_at,
+            target_booking_reference: "GATE-ADM-001",
+          },
+          sessionHeaders(),
+        ),
+      ),
+    );
+
+    assert.equal(staleUpdateResult.status, 409, `${role} stale update should fail closed`);
+    assert.deepEqual(staleUpdateResult.body, {
+      error: "Booking changed on another device. Reload the exact saved booking before updating.",
+      ok: false,
+    });
+    assert.equal(
+      mock.client.operations.length,
+      operationCountAfterUpdate,
+      `${role} stale update must not mutate booking children, contacts, or audit`,
+    );
+    assert.equal(
+      mock.client.tables.bookings.find((booking) => booking.booking_reference === "GATE-ADM-001")?.pax_count,
+      5,
+      `${role} stale update must preserve the newer saved booking`,
+    );
   }
 
   for (const actor of [

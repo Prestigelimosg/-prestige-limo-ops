@@ -117,6 +117,8 @@ const safeSaveError = "Admin booking persistence save failed safely.";
 const safeLoadError = "Admin booking persistence load failed safely.";
 const safeReloadError = "Saved booking could not be safely reloaded.";
 const safeUpdateError = "Admin booking persistence update failed safely.";
+const safeUpdateConflictError =
+  "Booking changed on another device. Reload the exact saved booking before updating.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
 const safeStagingReadinessError =
@@ -162,6 +164,22 @@ function textOrNull(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
+}
+
+function bookingUpdatedAtMatches(leftValue: unknown, rightValue: unknown) {
+  const left = textOrNull(leftValue);
+  const right = textOrNull(rightValue);
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftTimestamp = Date.parse(left);
+  const rightTimestamp = Date.parse(right);
+
+  return Number.isFinite(leftTimestamp) && Number.isFinite(rightTimestamp)
+    ? leftTimestamp === rightTimestamp
+    : left === right;
 }
 
 function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
@@ -1733,6 +1751,19 @@ export async function updateAdminBookingThroughSupabaseAdapter(
   }
 
   const existing = existingResult.data;
+  const expectedUpdatedAt = textOrNull(input.expected_updated_at);
+
+  if (
+    expectedUpdatedAt &&
+    !bookingUpdatedAtMatches(expectedUpdatedAt, existing.updated_at)
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error: safeUpdateConflictError,
+    };
+  }
+
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
   const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
   let customerId = requestedCustomerId || existingCustomerId;
@@ -1746,24 +1777,49 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
     customerId = customerIdResult.data;
   }
-  const contactResult = await ensureCustomerContact(client, customerId, input.booking);
-
-  if (!contactResult.ok) {
-    return contactResult;
-  }
 
   const bookingRow = bookingToDbRow(input.booking, customerId, actor);
-  const { error: bookingError } = await client
+  const nextUpdatedAt = new Date().toISOString();
+  let bookingUpdateQuery = client
     .from("bookings")
     .update({
       ...bookingRow,
       booking_reference: input.target_booking_reference,
-      updated_at: new Date().toISOString(),
+      updated_at: nextUpdatedAt,
     })
     .eq("id", existing.id);
 
+  if (expectedUpdatedAt) {
+    bookingUpdateQuery = bookingUpdateQuery.eq("updated_at", existing.updated_at);
+  }
+
+  const { error: bookingError } = await bookingUpdateQuery;
+
   if (bookingError) {
     return safeAdapterFailure(safeUpdateError, 500, bookingError, "booking_row");
+  }
+
+  const versionReloadResult = await fetchAdminBookingById(client, existing.id);
+
+  if (!versionReloadResult.ok) {
+    return versionReloadResult;
+  }
+
+  if (
+    expectedUpdatedAt &&
+    !bookingUpdatedAtMatches(versionReloadResult.data.updated_at, nextUpdatedAt)
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error: safeUpdateConflictError,
+    };
+  }
+
+  const contactResult = await ensureCustomerContact(client, customerId, input.booking);
+
+  if (!contactResult.ok) {
+    return contactResult;
   }
 
   const { error: routeDeleteError } = await client

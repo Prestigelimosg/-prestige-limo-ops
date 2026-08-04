@@ -1080,6 +1080,95 @@ try {
     );
   }
 
+  setEnv(enabledWriteEnv());
+
+  const verifiedIdentityReuseMock = installMockClient();
+  verifiedIdentityReuseMock.client.tables.customers.push({
+    account_status: "active",
+    display_name: "Nomura Singapore Limited / Booker: Mavis Lam / Passenger: Mr Jwalant Nanavati",
+    id: 171,
+    status: "active",
+  });
+  verifiedIdentityReuseMock.client.tables.bookings.push({
+    booker_id: 77,
+    booking_reference: "GATE-VERIFIED-EXISTING",
+    company_id: 38,
+    customer_id: 171,
+    id: 188,
+    traveler_id: 88,
+  });
+  const verifiedIdentityReuseResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booker_id: 77,
+            booking_reference: "GATE-VERIFIED-REUSE",
+            company_id: 38,
+            customer_display_name: "Nomura Singapore Limited",
+            passenger_name: "Mr Jwalant",
+            traveler_id: 88,
+          },
+        }),
+        sessionHeaders(),
+      ),
+    ),
+  );
+  const verifiedIdentityCustomerInserts = verifiedIdentityReuseMock.client.operations.filter(
+    (operation) => operation.action === "insert" && operation.table === "customers",
+  );
+
+  assert.equal(verifiedIdentityReuseResult.status, 200);
+  assert.equal(verifiedIdentityReuseResult.body.booking.customer_id, "171");
+  assert.equal(
+    verifiedIdentityCustomerInserts.length,
+    0,
+    "An exact verified Company, Booker, and Traveller tuple must reuse its one existing customer account even when passenger display text varies.",
+  );
+  assert.equal(
+    insertedOperation(verifiedIdentityReuseMock, "bookings").payload.customer_id,
+    171,
+    "The new booking must retain the exact verified tuple's existing customer account.",
+  );
+
+  const ambiguousVerifiedIdentityMock = installMockClient();
+  ambiguousVerifiedIdentityMock.client.tables.customers.push(
+    { display_name: "First verified account", id: 171, status: "active" },
+    { display_name: "Second verified account", id: 172, status: "active" },
+  );
+  ambiguousVerifiedIdentityMock.client.tables.bookings.push(
+    { booker_id: 77, company_id: 38, customer_id: 171, id: 188, traveler_id: 88 },
+    { booker_id: 77, company_id: 38, customer_id: 172, id: 189, traveler_id: 88 },
+  );
+  const ambiguousVerifiedIdentityResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booker_id: 77,
+            booking_reference: "GATE-VERIFIED-AMBIGUOUS",
+            company_id: 38,
+            traveler_id: 88,
+          },
+        }),
+        sessionHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(ambiguousVerifiedIdentityResult.status, 409);
+  assert.deepEqual(ambiguousVerifiedIdentityResult.body, {
+    error: "Verified customer identity matches multiple customer accounts. Review the existing customer profiles before saving.",
+    ok: false,
+  });
+  assert.equal(
+    ambiguousVerifiedIdentityMock.client.operations.some((operation) => operation.action === "insert"),
+    false,
+    "An ambiguous verified identity must fail closed before creating a customer, contact, booking, child row, or audit row.",
+  );
+
   for (const actor of [
     {
       actor_label: "Customer request actor",

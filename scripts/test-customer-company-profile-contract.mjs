@@ -69,8 +69,33 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /setProfile\(blankCreateProfile\(customerName, guestAccountBillingEnabled\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{customerName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
+  /setProfile\(blankCreateProfile\(companyLookupName, guestAccountBillingEnabled\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{companyLookupName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
   "not-found lookup results must visibly open the create customer company profile form",
+);
+assert.match(
+  editorSource,
+  /function agencyCompanyProfileName\(customerName: string, guestAccountBillingEnabled: boolean\)/,
+  "the established profile editor must derive an agency company lookup name only after exact guest-account classification",
+);
+assert.match(
+  editorSource,
+  /if \(!guestAccountBillingEnabled\) \{\s+return normalized;\s+\}\s+return normalized\.replace\(\/\\s\+\\\[[^\n]+\\\]\\s\*\$\/, ""\)\.trim\(\) \|\| normalized;/,
+  "normal companies must retain their exact name while agency folders may remove one trailing passenger scope",
+);
+assert.match(
+  editorSource,
+  /const accountResponse = await fetch\(`\$\{adminCustomerAccountsApiPath\}\?\$\{accountParams\.toString\(\)\}`,[\s\S]+?const guestAccountBillingEnabled = account\.guest_account_billing_enabled === true;[\s\S]+?const companyLookupName = agencyCompanyProfileName\(customerName, guestAccountBillingEnabled\);[\s\S]+?await loadCompanyProfile\(companyLookupName\)/,
+  "the exact customer account classification must be loaded before choosing the company profile lookup name",
+);
+assert.match(
+  editorSource,
+  /if \(companyLookupName !== customerName\.trim\(\) && isMissingCompanyProfileResult\(response, result\)\) \{[\s\S]+?loadCompanyProfile\(customerName\)/,
+  "an agency base-name miss must safely fall back to the original folder name instead of creating a duplicate company",
+);
+assert.match(
+  editorSource,
+  /\{profile\.guest_account_billing_enabled \? \([\s\S]+?Agency guests stay on each booking\. No permanent Booker \/ PA or Traveller CRM profile is required\.[\s\S]+?\) : profile\.id \? \([\s\S]+?<CustomerVerifiedIdentitiesEditor/,
+  "hotel and tour agency profiles must keep guests on bookings and must not require permanent CRM traveller identities",
 );
 
 console.log("Customer company profile contact contract guard passed.");

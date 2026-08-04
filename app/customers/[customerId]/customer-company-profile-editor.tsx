@@ -67,6 +67,16 @@ function profileValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function agencyCompanyProfileName(customerName: string, guestAccountBillingEnabled: boolean) {
+  const normalized = customerName.trim();
+
+  if (!guestAccountBillingEnabled) {
+    return normalized;
+  }
+
+  return normalized.replace(/\s+\[[^\[\]]+\]\s*$/, "").trim() || normalized;
+}
+
 function blankCreateProfile(customerName: string, guestAccountBillingEnabled: boolean): CompanyProfile {
   return {
     accounts_email: "",
@@ -89,6 +99,19 @@ function isMissingCompanyProfileResult(response: Response, result: unknown) {
   const message = typeof record.error === "string" ? record.error.toLowerCase() : "";
 
   return response.status === 404 || /not found|no company/.test(message);
+}
+
+async function loadCompanyProfile(companyName: string) {
+  const params = new URLSearchParams({ company_name: companyName });
+  const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": "admin-booking-persistence",
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  return { response, result };
 }
 
 function profilePayload(profile: CompanyProfile, isCreate: boolean) {
@@ -126,26 +149,15 @@ export function CustomerCompanyProfileEditor({
     setMessage("Loading customer company profile...");
 
     try {
-      const params = new URLSearchParams({ company_name: customerName });
       const accountParams = new URLSearchParams({ customer_id: customerId, limit: "1" });
-      const [response, accountResponse] = await Promise.all([
-        fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
-          headers: {
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "GET",
-        }),
-        fetch(`${adminCustomerAccountsApiPath}?${accountParams.toString()}`, {
-          cache: "no-store",
-          headers: {
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "GET",
-        }),
-      ]);
-      const result = await response.json().catch(() => null);
+      const accountResponse = await fetch(`${adminCustomerAccountsApiPath}?${accountParams.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
       const accountResult = await accountResponse.json().catch(() => null);
-      const company = result?.company;
       const account = Array.isArray(accountResult?.accounts) ? accountResult.accounts[0] : null;
 
       if (!accountResponse.ok || !accountResult?.ok || String(account?.customer_id || "") !== customerId) {
@@ -154,12 +166,20 @@ export function CustomerCompanyProfileEditor({
 
       const guestAccountBillingEnabled = account.guest_account_billing_enabled === true;
       setLoadedGuestAccountBillingEnabled(guestAccountBillingEnabled);
+      const companyLookupName = agencyCompanyProfileName(customerName, guestAccountBillingEnabled);
+      let { response, result } = await loadCompanyProfile(companyLookupName);
+
+      if (companyLookupName !== customerName.trim() && isMissingCompanyProfileResult(response, result)) {
+        ({ response, result } = await loadCompanyProfile(customerName));
+      }
+
+      const company = result?.company;
 
       if (!response.ok || !result?.ok) {
         if (isMissingCompanyProfileResult(response, result)) {
-          setProfile(blankCreateProfile(customerName, guestAccountBillingEnabled));
+          setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
           setProfileMode("create");
-          setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
+          setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
           setStatus("ready");
           return;
         }
@@ -168,9 +188,9 @@ export function CustomerCompanyProfileEditor({
       }
 
       if (!company) {
-        setProfile(blankCreateProfile(customerName, guestAccountBillingEnabled));
+        setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
         setProfileMode("create");
-        setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
+        setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
         setStatus("ready");
         return;
       }
@@ -475,7 +495,14 @@ export function CustomerCompanyProfileEditor({
         </label>
       </div>
 
-      {profile.id ? (
+      {profile.guest_account_billing_enabled ? (
+        <p
+          className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
+          data-customer-agency-guest-guidance={customerId}
+        >
+          Agency guests stay on each booking. No permanent Booker / PA or Traveller CRM profile is required.
+        </p>
+      ) : profile.id ? (
         <CustomerVerifiedIdentitiesEditor
           companyId={profile.id}
           companyName={profile.company_name}

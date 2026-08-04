@@ -8,11 +8,31 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "sg.prestigelimo.drivercompanion"
+      "bundleIdentifier": "sg.prestigelimo.drivercompanion",
+      "associatedDomains": [
+        "applinks:app.prestigelimo.sg"
+      ]
     },
     "android": {
       "package": "sg.prestigelimo.drivercompanion",
       "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "host": "app.prestigelimo.sg",
+              "pathPrefix": "/driver-job/",
+              "scheme": "https"
+            }
+          ]
+        }
+      ],
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",

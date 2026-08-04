@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
@@ -38,7 +37,7 @@ type ScreenState = {
 const initialScreenState: ScreenState = {
   active: false,
   jobUrl: null,
-  message: "Paste the private Driver Job URL for the exact assigned job.",
+  message: "Open the private Driver Job Link sent by Prestige.",
   summary: null,
 };
 
@@ -58,17 +57,19 @@ function readableFailure(error: unknown) {
 }
 
 export default function App() {
-  const [privateJobUrl, setPrivateJobUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
 
   useEffect(() => {
     let mounted = true;
+    let latestRequest = 0;
+    let warmLinkReceived = false;
 
-    async function restoreTrackingState() {
+    async function showTrackedJob() {
+      const request = ++latestRequest;
       const state = await readTrackingState();
 
-      if (!mounted || !state.job) {
+      if (!mounted || request !== latestRequest || !state.job) {
         return;
       }
 
@@ -78,7 +79,7 @@ export default function App() {
         if (summary.status === "completed") {
           const result = await stopDriverTracking();
 
-          if (mounted) {
+          if (mounted && request === latestRequest) {
             setScreen({
               active: false,
               jobUrl: state.job.jobUrl,
@@ -89,7 +90,7 @@ export default function App() {
           return;
         }
 
-        if (mounted) {
+        if (mounted && request === latestRequest) {
           setScreen({
             active: state.active,
             jobUrl: state.job.jobUrl,
@@ -106,7 +107,7 @@ export default function App() {
         if (terminalFailure) {
           await stopTrackingAfterTerminalResponse();
         }
-        if (mounted) {
+        if (mounted && request === latestRequest) {
           setScreen({
             active: terminalFailure ? false : state.active,
             jobUrl: state.job.jobUrl,
@@ -117,35 +118,105 @@ export default function App() {
       }
     }
 
-    void restoreTrackingState();
+    async function receiveDriverJobUrl(incomingUrl: string) {
+      const request = ++latestRequest;
+      setBusy(true);
+
+      try {
+        const incomingJob = parseDriverJobUrl(incomingUrl);
+        const trackingState = await readTrackingState();
+
+        if (
+          trackingState.active &&
+          trackingState.job &&
+          trackingState.job.token !== incomingJob.token
+        ) {
+          const activeSummary = await loadDriverJobSummary(trackingState.job);
+
+          if (mounted && request === latestRequest) {
+            setScreen({
+              active: true,
+              jobUrl: trackingState.job.jobUrl,
+              message: "Stop the current trip before opening another job.",
+              summary: activeSummary,
+            });
+          }
+          return;
+        }
+
+        const summary = await loadDriverJobSummary(incomingJob);
+        const sameJobIsActive =
+          trackingState.active && trackingState.job?.token === incomingJob.token;
+
+        if (summary.status === "completed" && sameJobIsActive) {
+          await stopDriverTracking();
+        }
+
+        if (mounted && request === latestRequest) {
+          setScreen({
+            active: summary.status === "completed" ? false : sameJobIsActive,
+            jobUrl: incomingJob.jobUrl,
+            message:
+              summary.status === "completed"
+                ? "This job is already completed and cannot start tracking."
+                : sameJobIsActive
+                  ? "Trip tracking is active."
+                  : "Job link opened. Check the booking below before starting tracking.",
+            summary,
+          });
+        }
+      } catch (error) {
+        if (mounted && request === latestRequest) {
+          setScreen((current) => ({
+            ...current,
+            message: readableFailure(error),
+          }));
+        }
+      } finally {
+        if (mounted && request === latestRequest) {
+          setBusy(false);
+        }
+      }
+    }
+
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      warmLinkReceived = true;
+      void receiveDriverJobUrl(url);
+    });
+
+    async function openInitialJob() {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+
+        if (!mounted || warmLinkReceived) {
+          return;
+        }
+
+        if (initialUrl) {
+          await receiveDriverJobUrl(initialUrl);
+          return;
+        }
+      } catch {
+        if (!mounted || warmLinkReceived) {
+          return;
+        }
+      }
+
+      await showTrackedJob();
+    }
+
+    void openInitialJob();
 
     return () => {
       mounted = false;
+      subscription.remove();
     };
   }, []);
-
-  async function checkJob() {
-    setBusy(true);
-    try {
-      const job = parseDriverJobUrl(privateJobUrl);
-      const summary = await loadDriverJobSummary(job);
-      setScreen({
-        active: false,
-        jobUrl: job.jobUrl,
-        message: "Check the booking below before starting tracking.",
-        summary,
-      });
-    } catch (error) {
-      setScreen({ ...initialScreenState, message: readableFailure(error) });
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function startTripTracking() {
     setBusy(true);
     try {
-      const job = parseDriverJobUrl(privateJobUrl || screen.jobUrl || "");
+      const job = parseDriverJobUrl(screen.jobUrl || "");
       const summary = await loadDriverJobSummary(job);
 
       if (summary.status === "completed") {
@@ -161,9 +232,6 @@ export default function App() {
         message: result.message,
         summary,
       });
-      if (result.active) {
-        setPrivateJobUrl("");
-      }
     } catch (error) {
       setScreen((current) => ({
         ...current,
@@ -242,37 +310,20 @@ export default function App() {
             </View>
           ) : null}
 
-          {!screen.active ? (
+          {!screen.active && screen.jobUrl ? (
             <View style={styles.formCard}>
-              <Text style={styles.formLabel}>Private Driver Job URL</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!busy}
-                onChangeText={setPrivateJobUrl}
-                placeholder="https://app.prestigelimo.sg/driver-job/..."
-                style={styles.input}
-                value={privateJobUrl}
-              />
-              <View style={styles.buttonGap}>
-                <Button
-                  disabled={busy || !privateJobUrl.trim()}
-                  title="Check job"
-                  onPress={checkJob}
-                />
-              </View>
               <Text style={styles.permissionText}>
                 Tracking does not start automatically. After checking the exact
                 booking, tap Start and allow precise location plus Always /
                 Allow all the time.
               </Text>
               <Button
-                disabled={busy || (!privateJobUrl.trim() && !screen.jobUrl)}
+                disabled={busy}
                 title="Start trip tracking"
                 onPress={startTripTracking}
               />
             </View>
-          ) : (
+          ) : screen.active ? (
             <View style={styles.formCard}>
               <Text style={styles.permissionText}>
                 iPhone shows its location indicator. Android keeps a visible
@@ -285,7 +336,7 @@ export default function App() {
                 onPress={stopTripTracking}
               />
             </View>
-          )}
+          ) : null}
 
           {screen.jobUrl ? (
             <View style={styles.secondaryButton}>
@@ -349,18 +400,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   formCard: { backgroundColor: "#fff", borderRadius: 14, gap: 12, padding: 16 },
-  formLabel: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
-  input: {
-    borderColor: "#94a3b8",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#0f172a",
-    fontSize: 14,
-    minHeight: 48,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  buttonGap: { marginBottom: 2 },
   permissionText: { color: "#475569", fontSize: 14, lineHeight: 20 },
   secondaryButton: { marginTop: -2 },
   warning: { color: "#7c2d12", fontSize: 13, lineHeight: 19, marginTop: 2 },

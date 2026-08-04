@@ -119,6 +119,8 @@ const safeReloadError = "Saved booking could not be safely reloaded.";
 const safeUpdateError = "Admin booking persistence update failed safely.";
 const safeUpdateConflictError =
   "Booking changed on another device. Reload the exact saved booking before updating.";
+const safeCustomerIdentityConflictError =
+  "Verified customer identity matches multiple customer accounts. Review the existing customer profiles before saving.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
 const safeStagingReadinessError =
@@ -1340,6 +1342,7 @@ async function findOrCreateCustomerId(
   const verifiedCustomerId = dbIdentifierOrNull(booking.customer_id);
   const verifiedCompanyId = dbIdentifierOrNull(booking.company_id);
   const verifiedBookerId = dbIdentifierOrNull(booking.booker_id);
+  const verifiedTravelerId = dbIdentifierOrNull(booking.traveler_id);
 
   if (
     actor.boundary_mode === "customer-booking-request-surface" &&
@@ -1353,6 +1356,44 @@ async function findOrCreateCustomerId(
       data: verifiedCustomerId,
       ok: true,
     };
+  }
+
+  if (verifiedCompanyId && verifiedBookerId && verifiedTravelerId) {
+    const { data: verifiedIdentityRows, error: verifiedIdentityError } = await client
+      .from("bookings")
+      .select("customer_id")
+      .eq("company_id", verifiedCompanyId)
+      .eq("booker_id", verifiedBookerId)
+      .eq("traveler_id", verifiedTravelerId);
+
+    if (verifiedIdentityError) {
+      return safeAdapterFailure(safeSaveError, 500, verifiedIdentityError, "customer_lookup");
+    }
+
+    const verifiedCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const row of asArray(verifiedIdentityRows)) {
+      const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
+
+      if (customerId) {
+        verifiedCustomerIds.set(String(customerId), customerId);
+      }
+    }
+
+    if (verifiedCustomerIds.size === 1) {
+      return {
+        data: Array.from(verifiedCustomerIds.values())[0],
+        ok: true,
+      };
+    }
+
+    if (verifiedCustomerIds.size > 1) {
+      return {
+        error: safeCustomerIdentityConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
   }
 
   const displayName = customerPortalScopedDisplayName(booking);

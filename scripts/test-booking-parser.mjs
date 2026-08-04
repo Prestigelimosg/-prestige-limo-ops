@@ -3935,6 +3935,45 @@ assert.deepEqual(parseJobCardBookingMessage(
   ],
 });
 
+const departureWithSecondaryFamilyFlightContextSample = `Wed, 5 Aug 26*
+Pickup at 6:15am from 3 Nassim Road > *T3 or T2*  Taking SQ882, ETD: 8:40am (total pax is 3.  His son David is taking SQ910, which departs from T2 at 6:50am.  So, please ask driver to check with SYH that morning on which terminal to drop off`;
+assert.deepEqual(parseJobCardBookingMessage(
+  departureWithSecondaryFamilyFlightContextSample,
+  { referenceDate: new Date(2026, 7, 4, 12, 0, 0) },
+), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-08-05',
+  time: '0615hrs',
+  flight: 'SQ882',
+  pickup: '3 Nassim Road',
+  dropoff: 'Changi Airport T3 or T2',
+  booker: '',
+  bookerEmail: '',
+  name: '',
+  pax: '3',
+  driverName: '',
+  driverContact: '',
+  driverNotes: 'His son David is taking SQ910, which departs from T2 at 6:50am. Please ask driver to check with SYH that morning on which terminal to drop off.',
+  bookerContact: '',
+  cleanedLines: [
+    'Wed, 5 Aug 26*',
+    'Pickup at 6:15am from 3 Nassim Road > *T3 or T2*  Taking SQ882, ETD: 8:40am (total pax is 3.  His son David is taking SQ910, which departs from T2 at 6:50am.  So, please ask driver to check with SYH that morning on which terminal to drop off',
+  ],
+});
+
+const separateFamilyFlightsWithoutSharedTerminalInstructionSample = `Wed, 5 Aug 26
+Pickup at 6:15am from 3 Nassim Road > T3 Taking SQ882, ETD: 8:40am. His son David is taking SQ910, which departs from T2 at 6:50am.`;
+const parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction = parseJobCardBookingMessage(
+  separateFamilyFlightsWithoutSharedTerminalInstructionSample,
+  { referenceDate: new Date(2026, 7, 4, 12, 0, 0) },
+) ?? {};
+assert.equal(parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction.success, false);
+assert.equal(parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction.multipleBookingsDetected, true);
+assert.equal(parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction.extractedBookingsPreview?.length, 2);
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)

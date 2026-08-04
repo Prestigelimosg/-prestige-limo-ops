@@ -3204,6 +3204,16 @@ export default function MockCustomerDashboardPage() {
     };
 
     for (const customer of customerFolderIndexRows) {
+      const normalizedOverviewCustomerId = normalizeCustomerFolderMatch(customer.customerId);
+      const existingOverviewCustomerKey = normalizedOverviewCustomerId
+        ? accountKeyAliases.get(normalizedOverviewCustomerId)
+        : null;
+
+      if (existingOverviewCustomerKey) {
+        addAlias(customer.customerFolderKey, existingOverviewCustomerKey);
+        continue;
+      }
+
       folderRowsByKey.set(customer.customerFolderKey, {
         customerFolderKey: customer.customerFolderKey,
         customerId: customer.customerId,

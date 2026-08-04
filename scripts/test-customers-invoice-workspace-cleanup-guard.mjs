@@ -113,6 +113,18 @@ assertIncludes(
   "Selected-customer monthly invoice action must require an exact billing account/month group.",
 );
 
+for (const fragment of [
+  "const normalizedOverviewCustomerId = normalizeCustomerFolderMatch(customer.customerId);",
+  "const existingOverviewCustomerKey = normalizedOverviewCustomerId",
+  "addAlias(customer.customerFolderKey, existingOverviewCustomerKey);",
+]) {
+  assertIncludes(
+    customersPage,
+    fragment,
+    "Customer Billing Overview must collapse traveller-scoped rows by exact customer ID",
+  );
+}
+
 assert.equal(
   customersPage.includes('data-customer-folder-support-drawer="true"'),
   false,

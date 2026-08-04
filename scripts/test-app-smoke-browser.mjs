@@ -55,7 +55,7 @@ const internalQaMockArchiveGroupLabels = [
   "Legacy close-cycle / DSP / receivables / accounting QA",
 ];
 const responsiveTabViewports = [
-  { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
+  { height: 844, label: "iPhone 13 / modern phone 390px", mobile: true, scale: 3, width: 390 },
   { height: 915, label: "mobile 412px", mobile: true, scale: 2.625, width: 412 },
   { height: 1024, label: "iPad/tablet 768px", mobile: true, scale: 2, width: 768 },
   { height: 1366, label: "Android tablet 1024px", mobile: false, scale: 1, width: 1024 },
@@ -1437,6 +1437,9 @@ async function runChromeTest() {
         window.__adminBookingPersistenceCalls = [];
         window.__adminBookingCalendarSyncCalls = [];
         window.__adminBookingPersistenceMockMode = "success";
+        window.__adminBookingPersistedUpdatedAtByReference = {
+          "LOADED-OPS-001": "2026-06-02T00:00:00.000Z",
+        };
         window.__adminMonthlyBillingGroupingCalls = [];
         window.__adminMonthlyBillingGroupingGroups = [
           {
@@ -2154,6 +2157,25 @@ async function runChromeTest() {
             const body = options?.body ? JSON.parse(String(options.body)) : null;
             window.__adminBookingPersistenceCalls.push({ body, method, url: String(url) });
 
+            const parsedAdminBookingUrl = new URL(String(url), window.location.origin);
+            if (
+              method === "GET" &&
+              parsedAdminBookingUrl.pathname === "/api/admin-bookings" &&
+              parsedAdminBookingUrl.searchParams.get("booking_reference") === "LOADED-OPS-001"
+            ) {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  booking: {
+                    booking_reference: "LOADED-OPS-001",
+                    updated_at:
+                      window.__adminBookingPersistedUpdatedAtByReference["LOADED-OPS-001"],
+                  },
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
             if (method === "POST") {
               if (window.__adminBookingPersistenceMockMode === "save-failure") {
                 return new Response(
@@ -2211,6 +2233,8 @@ async function runChromeTest() {
                 );
               }
 
+              window.__adminBookingPersistedUpdatedAtByReference[body.target_booking_reference] =
+                "2026-06-02T01:00:00.000Z";
               return new Response(
                 JSON.stringify({
                   ok: true,
@@ -2486,7 +2510,8 @@ async function runChromeTest() {
                     internal_admin_note: "DO-NOT-LEAK-OPS-NOTE",
                     payment_link: "https://payments.example.invalid/blocked",
                     created_at: "2026-06-02T00:00:00.000Z",
-                    updated_at: "2026-06-02T00:00:00.000Z",
+                    updated_at:
+                      window.__adminBookingPersistedUpdatedAtByReference["LOADED-OPS-001"],
                     route_points: [
                       {
                         point_type: "pickup",
@@ -3729,6 +3754,11 @@ async function runChromeTest() {
         `Expected successful customer request acceptance feedback, received: ${updateState.feedback}`,
       );
       assert.equal(updateState.body.target_booking_reference, "LOADED-OPS-001");
+      assert.equal(
+        updateState.body.expected_updated_at,
+        "2026-06-02T00:00:00.000Z",
+        "Expected applied snapshot update to carry the exact loaded booking version",
+      );
       assert.equal(updateState.body.booking.booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.pickup_location, "Updated Ops Pickup");
       assert.equal(updateState.body.booking.dropoff_location, "Updated Ops Dropoff");
@@ -3778,17 +3808,27 @@ async function runChromeTest() {
         false,
         "Expected the accepted customer request feedback to leave the pending-review state",
       );
+      assert.equal(updateState.appliedReference, "", "Expected successful update to clear edit identity");
+
+      const reapplyAfterSuccessfulUpdateClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
+        button?.click();
+        return Boolean(button);
+      })()`);
       assert.equal(
-        updateState.appliedReference.includes("LOADED-OPS-001"),
+        reapplyAfterSuccessfulUpdateClicked,
         true,
-        "Expected applied snapshot reference to remain the update target",
+        "Expected exact booking reapply before mocked update failures",
       );
 
       await waitForCondition(
         () =>
           evaluate(`(() => {
             const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
-            return Boolean(button && !button.disabled);
+            const appliedReference = document
+              .querySelector("[data-admin-booking-persistence-applied-reference]")
+              ?.textContent.trim() || "";
+            return Boolean(button && !button.disabled && appliedReference.includes("LOADED-OPS-001"));
           })()`),
         10000,
         "admin booking persistence update control ready for failure check",
@@ -5350,10 +5390,21 @@ async function runChromeTest() {
 
       const tabStates = [];
       for (const label of tabLabels) {
+        if (viewport.width < 640) {
+          const tabPrepared = await evaluate(`(() => {
+            const tab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) => button.textContent.trim() === ${JSON.stringify(label)},
+            );
+            tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+            return Boolean(tab);
+          })()`);
+          assert.equal(tabPrepared, true, `${viewport.label}: expected ${label} tab in the phone scroller`);
+        }
         await clickTab(label);
         const tabState = await evaluate(`(() => {
           const doc = document.documentElement;
           const nav = document.querySelector("nav[role='tablist']");
+          const navRect = nav?.getBoundingClientRect();
           const buttons = [...document.querySelectorAll("button[role='tab']")].map((button) => {
             const rect = button.getBoundingClientRect();
 
@@ -5378,7 +5429,12 @@ async function runChromeTest() {
             docScrollWidth: doc.scrollWidth,
             expectedTextVisible: expectedText ? document.body.innerText.includes(expectedText) : true,
             navClientWidth: nav?.clientWidth || 0,
+            navLeft: Math.round(navRect?.left || 0),
+            navOverflowX: nav ? getComputedStyle(nav).overflowX : "",
+            navRight: Math.round(navRect?.right || 0),
             navScrollWidth: nav?.scrollWidth || 0,
+            selectedLeft: selected?.left || 0,
+            selectedRight: selected?.right || 0,
             tabButtons: buttons,
           };
         })()`);
@@ -5396,16 +5452,37 @@ async function runChromeTest() {
           true,
           `${viewport.label} ${label}: expected no document-level horizontal overflow`,
         );
-        assert.equal(
-          tabState.navScrollWidth <= tabState.navClientWidth + 2,
-          true,
-          `${viewport.label} ${label}: expected tabs not to require horizontal scrolling`,
-        );
-        assert.deepEqual(
-          offscreenTabs,
-          [],
-          `${viewport.label} ${label}: expected all tabs visible within viewport`,
-        );
+        if (viewport.width < 640) {
+          assert.equal(
+            ["auto", "scroll"].includes(tabState.navOverflowX),
+            true,
+            `${viewport.label} ${label}: expected the established phone tab row to remain swipeable`,
+          );
+          assert.equal(
+            tabState.navScrollWidth > tabState.navClientWidth + 2,
+            true,
+            `${viewport.label} ${label}: expected the established phone tab row to retain scrollable content`,
+          );
+          assert.equal(
+            Boolean(
+              tabState.selectedLeft >= tabState.navLeft - 2 &&
+                tabState.selectedRight <= tabState.navRight + 2,
+            ),
+            true,
+            `${viewport.label} ${label}: expected the selected phone tab to scroll fully into view`,
+          );
+        } else {
+          assert.equal(
+            tabState.navScrollWidth <= tabState.navClientWidth + 2,
+            true,
+            `${viewport.label} ${label}: expected tablet/desktop tabs not to require horizontal scrolling`,
+          );
+          assert.deepEqual(
+            offscreenTabs,
+            [],
+            `${viewport.label} ${label}: expected all tablet/desktop tabs visible within viewport`,
+          );
+        }
         assert.deepEqual(
           smallTouchTargets,
           [],

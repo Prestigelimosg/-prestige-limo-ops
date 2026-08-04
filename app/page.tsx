@@ -22293,6 +22293,13 @@ export default function Home() {
         ? " Admin Review Required."
         : "";
 
+    bookingFormRef.current = appliedSnapshot.booking;
+    adminBookingCreateIntentRef.current = false;
+    loadedAdminBookingBaselineRef.current = {
+      bookingReference,
+      formSignature: adminBookingFormSyncSignature(appliedSnapshot.booking),
+      updatedAt: clean(record.updated_at),
+    };
     setBooking(() => appliedSnapshot.booking);
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = bookingReference;

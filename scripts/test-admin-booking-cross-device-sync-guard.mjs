@@ -69,6 +69,11 @@ const verifyBookingVersionBlock = sectionBetween(
   "async function verifyLoadedAdminBookingVersionBeforeUpdate",
   "async function updateAppliedAdminBookingOperationalSnapshot",
 );
+const applyOperationalSnapshotBlock = sectionBetween(
+  appPage,
+  "function applyAdminBookingOperationalSnapshot",
+  "function applyLatestAdminBookingOperationalSnapshot",
+);
 const primaryActionBlock = sectionBetween(
   appPage,
   "const activeAppliedBookingReference =",
@@ -109,6 +114,18 @@ includes(
   "setAdminBookingCrossDeviceConflict",
   "version preflight records an exact-booking conflict",
 );
+for (const fragment of [
+  "adminBookingCreateIntentRef.current = false",
+  "loadedAdminBookingBaselineRef.current",
+  "adminBookingFormSyncSignature(appliedSnapshot.booking)",
+  "updatedAt: clean(record.updated_at)",
+]) {
+  includes(
+    applyOperationalSnapshotBlock,
+    fragment,
+    `applied operational snapshot version baseline ${fragment}`,
+  );
+}
 
 for (const fragment of [
   "adminBookingCreateIntentRef.current",

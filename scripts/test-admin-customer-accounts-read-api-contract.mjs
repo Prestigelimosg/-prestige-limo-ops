@@ -667,6 +667,89 @@ try {
 
   setEnv(enabledEnv());
 
+  const renameMock = installMockClient(seed);
+  const renameResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({
+          customer_id: "101",
+          display_name: "Transzend Groundbooker",
+        }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(renameResult.status, 200);
+  assert.equal(renameResult.body.account.customer_id, "101");
+  assert.equal(renameResult.body.account.customer_account, "Transzend Groundbooker");
+  assert.equal(renameResult.body.account.guest_account_billing_enabled, false);
+  assert.deepEqual(renameMock.client.operations, [{
+    filters: [{ column: "id", type: "eq", value: "101" }],
+    payload: { display_name: "Transzend Groundbooker" },
+    selectedColumns: "id, display_name, customer_type",
+    singleResult: true,
+    table: "customers",
+    type: "update",
+  }]);
+
+  setEnv(enabledEnv());
+
+  const blankRenameMock = installMockClient(seed);
+  const blankRenameResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({ customer_id: "101", display_name: "   " }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(blankRenameResult.status, 400);
+  assertNoSupabaseTouched(blankRenameMock, "blank customer folder rename");
+
+  setEnv(enabledEnv());
+
+  const travellerWriteMock = installMockClient(seed);
+  const travellerWriteResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({
+          customer_id: "101",
+          display_name: "Transzend Groundbooker",
+          traveller_name: "Mr David Kelly",
+        }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(travellerWriteResult.status, 400);
+  assertNoSupabaseTouched(travellerWriteMock, "customer folder rename with traveller profile field");
+
+  setEnv(enabledEnv());
+
   const blockedUpdateMock = installMockClient(seed);
   const blockedUpdateResult = await readRouteResponse(
     await route.PATCH(

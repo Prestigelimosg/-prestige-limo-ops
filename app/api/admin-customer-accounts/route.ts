@@ -6,7 +6,7 @@ import {
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import {
   loadAdminCustomerAccounts,
-  updateAdminCustomerGuestAccountBilling,
+  updateAdminCustomerAccountProfile,
 } from "../../../lib/admin-customer-accounts-read";
 
 export const dynamic = "force-dynamic";
@@ -215,7 +215,7 @@ export async function PATCH(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await updateAdminCustomerGuestAccountBilling(
+    const result = await updateAdminCustomerAccountProfile(
       await readJsonBody(request),
       actor,
     );

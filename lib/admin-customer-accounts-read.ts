@@ -134,6 +134,20 @@ function safeText(value: unknown, maxLength = 160) {
   return cleaned;
 }
 
+function safeCustomerFolderName(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const cleaned = value.replace(/\s+/g, " ").trim();
+
+  if (!cleaned || cleaned.length > 120 || includesForbiddenSafeTextFragment(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
+}
+
 function readParamsValue(params: URLSearchParams | UnknownRecord, key: string) {
   return params instanceof URLSearchParams ? params.get(key) : params[key];
 }
@@ -549,20 +563,29 @@ export async function loadAdminCustomerAccounts(
   };
 }
 
-export async function updateAdminCustomerGuestAccountBilling(
+export async function updateAdminCustomerAccountProfile(
   input: UnknownRecord,
   actor: AdminBookingPersistenceAdapterActor,
 ): Promise<AdminBookingResult<AdminCustomerAccountSafeRecord>> {
-  const allowedWriteFields = new Set(["customer_id", "guest_account_billing_enabled"]);
+  const allowedWriteFields = new Set(["customer_id", "display_name", "guest_account_billing_enabled"]);
 
   if (Object.keys(input).some((key) => !allowedWriteFields.has(key))) {
     return { error: forbiddenParamsError, ok: false, status: 400 };
   }
 
   const customerId = exactCustomerId(input.customer_id);
+  const displayNameProvided = Object.hasOwn(input, "display_name");
+  const guestAccountBillingProvided = Object.hasOwn(input, "guest_account_billing_enabled");
+  const displayName = displayNameProvided ? safeCustomerFolderName(input.display_name) : null;
   const enabled = input.guest_account_billing_enabled;
 
-  if (!customerId || typeof enabled !== "boolean" || !actor?.actor_role) {
+  if (
+    !customerId ||
+    !actor?.actor_role ||
+    (!displayNameProvided && !guestAccountBillingProvided) ||
+    (displayNameProvided && !displayName) ||
+    (guestAccountBillingProvided && typeof enabled !== "boolean")
+  ) {
     return { error: malformedParamsError, ok: false, status: 400 };
   }
 
@@ -572,9 +595,19 @@ export async function updateAdminCustomerGuestAccountBilling(
     return { error: "Admin customer directory configuration is not ready.", ok: false, status: 503 };
   }
 
+  const updatePayload: { customer_type?: "corporate" | "hotel"; display_name?: string } = {};
+
+  if (displayName) {
+    updatePayload.display_name = displayName;
+  }
+
+  if (guestAccountBillingProvided) {
+    Object.assign(updatePayload, { customer_type: enabled ? "hotel" : "corporate" });
+  }
+
   const { data, error } = await client
     .from("customers")
-    .update({ customer_type: enabled ? "hotel" : "corporate" })
+    .update(updatePayload)
     .eq("id", customerId)
     .select("id, display_name, customer_type")
     .single();
@@ -583,7 +616,7 @@ export async function updateAdminCustomerGuestAccountBilling(
   const customerAccount = safeText(record.display_name, 120);
 
   if (error || savedCustomerId !== customerId || !customerAccount) {
-    return { error: "Admin customer guest-account billing update failed safely.", ok: false, status: 500 };
+    return { error: "Admin customer account profile update failed safely.", ok: false, status: 500 };
   }
 
   return {

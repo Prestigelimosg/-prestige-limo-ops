@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
 import { CustomerVerifiedIdentitiesEditor } from "./customer-verified-identities-editor";
@@ -138,11 +139,14 @@ export function CustomerCompanyProfileEditor({
   customerId,
   customerName,
 }: CustomerCompanyProfileEditorProps) {
+  const router = useRouter();
   const [status, setStatus] = useState<EditorStatus>("idle");
   const [message, setMessage] = useState("");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
   const [loadedGuestAccountBillingEnabled, setLoadedGuestAccountBillingEnabled] = useState(false);
+  const [customerFolderName, setCustomerFolderName] = useState(customerName.trim());
+  const [loadedCustomerFolderName, setLoadedCustomerFolderName] = useState(customerName.trim());
 
   async function openProfileEditor() {
     setStatus("loading");
@@ -165,12 +169,20 @@ export function CustomerCompanyProfileEditor({
       }
 
       const guestAccountBillingEnabled = account.guest_account_billing_enabled === true;
+      const exactCustomerFolderName = profileValue(account.customer_account);
+
+      if (!exactCustomerFolderName) {
+        throw new Error("Exact customer folder name could not be loaded safely.");
+      }
+
       setLoadedGuestAccountBillingEnabled(guestAccountBillingEnabled);
-      const companyLookupName = agencyCompanyProfileName(customerName, guestAccountBillingEnabled);
+      setCustomerFolderName(exactCustomerFolderName);
+      setLoadedCustomerFolderName(exactCustomerFolderName);
+      const companyLookupName = agencyCompanyProfileName(exactCustomerFolderName, guestAccountBillingEnabled);
       let { response, result } = await loadCompanyProfile(companyLookupName);
 
-      if (companyLookupName !== customerName.trim() && isMissingCompanyProfileResult(response, result)) {
-        ({ response, result } = await loadCompanyProfile(customerName));
+      if (companyLookupName !== exactCustomerFolderName && isMissingCompanyProfileResult(response, result)) {
+        ({ response, result } = await loadCompanyProfile(exactCustomerFolderName));
       }
 
       const company = result?.company;
@@ -229,7 +241,9 @@ export function CustomerCompanyProfileEditor({
 
     const companyName = profile.company_name.trim();
     const domain = profile.domain.trim().toLowerCase();
+    const normalizedCustomerFolderName = customerFolderName.replace(/\s+/g, " ").trim();
     const isCreate = profileMode === "create";
+    const customerFolderNameChanged = normalizedCustomerFolderName !== loadedCustomerFolderName;
     const guestAccountBillingChanged =
       profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled;
 
@@ -239,9 +253,15 @@ export function CustomerCompanyProfileEditor({
       return;
     }
 
+    if (!normalizedCustomerFolderName || normalizedCustomerFolderName.length > 120) {
+      setMessage("Customer folder name is required and must be 120 characters or fewer.");
+      setStatus("error");
+      return;
+    }
+
     if (
       !window.confirm(
-        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${guestAccountBillingChanged ? ` and ${profile.guest_account_billing_enabled ? "enables" : "disables"} Hotel / Tour Agency guest-account billing for this exact customer` : ""}. It does not change jobs, invoice records, payments, or send any message.`,
+        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${customerFolderNameChanged ? `, renames the customer folder to ${normalizedCustomerFolderName}` : ""}${guestAccountBillingChanged ? ` and ${profile.guest_account_billing_enabled ? "enables" : "disables"} Hotel / Tour Agency guest-account billing for this exact customer` : ""}. It does not change jobs, passenger names, invoice records, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -285,11 +305,14 @@ export function CustomerCompanyProfileEditor({
       setProfile(nextProfile);
       setProfileMode("edit");
 
-      if (profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled) {
+      if (customerFolderNameChanged || guestAccountBillingChanged) {
         const accountResponse = await fetch(adminCustomerAccountsApiPath, {
           body: JSON.stringify({
             customer_id: customerId,
-            guest_account_billing_enabled: profile.guest_account_billing_enabled,
+            ...(customerFolderNameChanged ? { display_name: normalizedCustomerFolderName } : {}),
+            ...(guestAccountBillingChanged
+              ? { guest_account_billing_enabled: profile.guest_account_billing_enabled }
+              : {}),
           }),
           headers: {
             "Content-Type": "application/json",
@@ -298,24 +321,39 @@ export function CustomerCompanyProfileEditor({
           method: "PATCH",
         });
         const accountResult = await accountResponse.json().catch(() => null);
+        const savedCustomerFolderName = profileValue(accountResult?.account?.customer_account);
 
-        if (!accountResponse.ok || !accountResult?.ok) {
+        if (
+          !accountResponse.ok ||
+          !accountResult?.ok ||
+          (customerFolderNameChanged && savedCustomerFolderName !== normalizedCustomerFolderName)
+        ) {
           setMessage(
-            `Saved the company contact profile for ${String(savedProfile.company_name || companyName).trim()}, but the Hotel / Tour Agency setting was not saved. Reload before trying again.`,
+            `Saved the company contact profile for ${String(savedProfile.company_name || companyName).trim()}, but the customer folder settings were not saved. Reload before trying again.`,
           );
           setStatus("error");
           return;
         }
 
-        setLoadedGuestAccountBillingEnabled(profile.guest_account_billing_enabled);
-        window.dispatchEvent(
-          new CustomEvent("prestige:customer-guest-account-billing-updated", {
-            detail: {
-              customerId,
-              enabled: profile.guest_account_billing_enabled,
-            },
-          }),
-        );
+        if (guestAccountBillingChanged) {
+          setLoadedGuestAccountBillingEnabled(profile.guest_account_billing_enabled);
+          window.dispatchEvent(
+            new CustomEvent("prestige:customer-guest-account-billing-updated", {
+              detail: {
+                customerId,
+                enabled: profile.guest_account_billing_enabled,
+              },
+            }),
+          );
+        }
+
+        if (customerFolderNameChanged) {
+          setCustomerFolderName(savedCustomerFolderName);
+          setLoadedCustomerFolderName(savedCustomerFolderName);
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("name", savedCustomerFolderName);
+          router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
+        }
       }
 
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
@@ -408,6 +446,19 @@ export function CustomerCompanyProfileEditor({
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+          Customer folder name
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-folder-name={customerId}
+            maxLength={120}
+            onChange={(event) => setCustomerFolderName(event.target.value)}
+            value={customerFolderName}
+          />
+          <span className="font-semibold text-slate-500">
+            Controls only this customer folder label and top banner. Passenger names stay on their bookings.
+          </span>
+        </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
           Company name
           <input

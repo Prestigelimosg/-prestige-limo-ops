@@ -12,6 +12,7 @@
     "test:parser": "node --experimental-strip-types scripts/test-booking-parser.mjs",
     "test:pricing": "node --experimental-strip-types scripts/test-child-seat-pricing.mjs",
     "test:customer-company-profile": "node --experimental-strip-types scripts/test-customer-company-profile-contract.mjs",
+    "test:customer-company-profile-browser": "node scripts/test-customer-company-profile-browser.mjs",
     "test:customer-account-delete": "node scripts/test-admin-customer-account-delete-api-contract.mjs && node scripts/test-admin-customer-account-delete-runtime.mjs",
     "test:retired-ritz-mock-customer": "node scripts/test-retired-ritz-mock-customer-guard.mjs",
     "test:customer-folder-dispatch-update-cal": "node scripts/test-customer-folder-dispatch-update-cal-guard.mjs",
@@ -34,7 +35,7 @@
     "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",
     "test:pending-driver-ack-queue-browser": "node scripts/test-pending-driver-ack-queue-browser.mjs",
     "test:rates-browser": "node scripts/test-rates-browser.mjs",
-    "test:safe": "npm run test:parser && npm run test:pricing && npm run test:driver-job-link && npm run test:driver-job-link-contract && npm run test:driver-job-link-api-routes && npm run test:driver-job-link-mode && npm run test:driver-job-link-production-guard && npm run test:driver-job-link-production-adapter && npm run test:ai-parser-schema && npm run test:ai-parse-api-route && npm run test:admin-ai-assistant && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:driver-job-page-browser && npm run test:driver-job-page-production-disabled-browser && npm run test:mobile-usability-browser && npm run test:app-smoke-browser"
+    "test:safe": "npm run test:parser && npm run test:pricing && npm run test:driver-job-link && npm run test:driver-job-link-contract && npm run test:driver-job-link-api-routes && npm run test:driver-job-link-mode && npm run test:driver-job-link-production-guard && npm run test:driver-job-link-production-adapter && npm run test:ai-parser-schema && npm run test:ai-parse-api-route && npm run test:admin-ai-assistant && npm run lint && npm run build && npm run test:rates-browser && npm run test:booking-ui-browser && npm run test:driver-job-page-browser && npm run test:driver-job-page-production-disabled-browser && npm run test:mobile-usability-browser && npm run test:customer-company-profile-browser && npm run test:app-smoke-browser"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",

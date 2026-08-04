@@ -22,6 +22,7 @@ export type ParsedBooking = {
   customerPriceOverrideReason?: string;
   driverName?: string;
   driverContact?: string;
+  driverNotes?: string;
   standbyUntil?: string;
   returnDestination?: string;
   cleanedLines?: string[];
@@ -397,6 +398,47 @@ function detectAllFlights(text: string) {
   return Array.from(flights);
 }
 
+function sentenceCase(value: string) {
+  const sentence = clean(value).replace(/[.,;]+$/g, "");
+
+  return sentence ? `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}` : "";
+}
+
+function detectSecondaryFamilyFlightContext(text: string, primaryFlight = detectFlight(text)) {
+  const familyFlightMatch = text.match(
+    /\b((?:his|her|their)\s+(?:son|daughter)\s+[A-Za-z][A-Za-z.'-]*\s+is\s+taking\s+(?:flight\s+)?([A-Z]{2}\s?\d{1,4})\s*,?\s*which\s+departs?\s+from\s+(?:t|terminal\s*)([1-4])\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/i,
+  );
+  const secondaryFlight = normalizeFlightCode(familyFlightMatch?.[2]);
+  const driverInstruction = firstMatch(text, [
+    /\b((?:please\s+)?ask\s+(?:the\s+)?driver\s+to\s+check\s+with\s+[A-Za-z0-9.' -]{1,40}?\s+(?:that\s+morning\s+)?on\s+which\s+terminal\s+to\s+drop\s+off)\b/i,
+  ]);
+  const boundedSingleBookingContext =
+    /\bpick\s*up\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\s+from\b/i.test(text) &&
+    /\btotal\s+pax\s+is\s+\d{1,2}\b/i.test(text) &&
+    Boolean(detectAlternativeTerminal(text)) &&
+    Boolean(driverInstruction);
+
+  if (
+    !familyFlightMatch?.[1] ||
+    !secondaryFlight ||
+    secondaryFlight === primaryFlight ||
+    !boundedSingleBookingContext
+  ) {
+    return null;
+  }
+
+  const familyFlightContext = sentenceCase(familyFlightMatch[1]);
+  const normalizedInstruction = sentenceCase(driverInstruction);
+
+  return {
+    driverNotes: [familyFlightContext, normalizedInstruction]
+      .filter(Boolean)
+      .map((sentence) => `${sentence}.`)
+      .join(" "),
+    flight: secondaryFlight,
+  };
+}
+
 function extractNamedPassengerLine(line: string) {
   const cleanedLine = clean(line.replace(/^[-*•]\s*/, ""));
   const labeledPassenger = firstMatch(cleanedLine, [
@@ -444,6 +486,14 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
     ? cleanedLines.filter(isAddOnTripSectionLine)
     : [];
   const flights = detectAllFlights(text);
+  const primaryFlight = detectFlight(text);
+  const secondaryFamilyFlightContext = detectSecondaryFamilyFlightContext(text, primaryFlight);
+  const hasMultipleOperationalFlights = flights.length > 1 && !(
+    flights.length === 2 &&
+    secondaryFamilyFlightContext &&
+    flights.includes(primaryFlight) &&
+    flights.includes(secondaryFamilyFlightContext.flight)
+  );
   const namedPassengers = Array.from(new Set(
     cleanedLines
       .map((line) => extractNamedPassengerLine(line))
@@ -462,7 +512,7 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
     addOnTripSections.length > 1 ||
     pickupAddressSections.length > 1 ||
     listItems.length > 1 ||
-    flights.length > 1 ||
+    hasMultipleOperationalFlights ||
     namedPassengers.length > 1 ||
     multiLegAirportStandby;
 }
@@ -2414,7 +2464,7 @@ function detectAdultChildPax(text: string) {
 
 function detectExplicitPax(text: string) {
   return detectAdultChildPax(text) || firstMatch(text, [
-    /\b(?:pax|passengers?|passangers|persons?|people)\s*(?:[:=-]|\t)?\s*(\d{1,2})\b/i,
+    /\b(?:pax|passengers?|passangers|persons?|people)\s*(?:[:=-]|\t)?\s*(?:is\s+)?(\d{1,2})\b/i,
     /\b(\d{1,2})\s*(?:pax|passengers?|passangers|persons?|people)\b/i,
   ]) ||
     (detectCoupleCompanion(text) ? "2" : "");
@@ -2772,7 +2822,25 @@ function normalizeLocationName(value: string) {
   return cleanedValue;
 }
 
+function detectAlternativeTerminal(text: string) {
+  const alternativeTerminalMatch = text.match(
+    /(?:>|->|=>)\s*\**\s*(?:t|terminal\s*)([1-4])\**\s*(?:or|\/)\s*\**\s*(?:t|terminal\s*)([1-4])\b/i,
+  );
+
+  if (alternativeTerminalMatch?.[1] && alternativeTerminalMatch[2]) {
+    return `Changi Airport T${alternativeTerminalMatch[1]} or T${alternativeTerminalMatch[2]}`;
+  }
+
+  return "";
+}
+
 function detectTerminal(text: string) {
+  const alternativeTerminal = detectAlternativeTerminal(text);
+
+  if (alternativeTerminal) {
+    return alternativeTerminal;
+  }
+
   const terminalMatch = text.match(/\b(?:terminal|term|t)\s*[:=-]?\s*([1-4])\b/i);
 
   return terminalMatch?.[1] ? `Changi Airport T${terminalMatch[1]}` : "";
@@ -3365,8 +3433,16 @@ function detectRoute(text: string, flight = "") {
   if (routeMatch?.[1] && routeMatch?.[2]) {
     const routePickup = clean(routeMatch[1].split("\n").pop() || "").replace(/^.*?\b\d{3,4}\s*(?:hrs?)?\s+/, "");
     const routeDropoff = clean(routeMatch[2].split("\n")[0] || "");
+    const alternativeTerminal = detectAlternativeTerminal(text);
     const leftFlight = normalizeFlightCode(routePickup);
     const rightFlight = normalizeFlightCode(routeDropoff);
+
+    if (flight && alternativeTerminal) {
+      return {
+        pickup: cleanLocation(routePickup),
+        dropoff: alternativeTerminal,
+      };
+    }
 
     if (flight && leftFlight === flight) {
       return {
@@ -3597,6 +3673,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const dateText = lineValue(operationalText, ["date", "pickup date", "p/u date", "pu date"]);
   const multiStopItinerary = detectMultiStopItinerary(operationalText);
   const flight = multiStopItinerary ? "" : detectFlight(operationalText);
+  const secondaryFamilyFlightContext = detectSecondaryFamilyFlightContext(operationalText, flight);
   const terminalFlightDetails = detectTerminalFlightLineDetails(operationalText, flight);
   const sharedArrivalDropoff = terminalFlightDetails ? detectSharedArrivalDropoff(operationalText) : "";
   const detectedRouteValues = multiStopItinerary
@@ -3672,6 +3749,9 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
       "driver phone",
       "chauffeur contact",
     ]),
+    ...(secondaryFamilyFlightContext?.driverNotes
+      ? { driverNotes: secondaryFamilyFlightContext.driverNotes }
+      : {}),
     ...(quotedCustomerPrice.customerPriceOverride
       ? {
           customerPriceOverride: quotedCustomerPrice.customerPriceOverride,

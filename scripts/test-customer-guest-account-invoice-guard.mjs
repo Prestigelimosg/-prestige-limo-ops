@@ -40,10 +40,24 @@ assert.equal(
 for (const fragment of [
   "customerFolderTravelerInvoiceGroups(",
   'params.set("guest_account_billing", "1")',
-  'data-customer-folder-blocked-proceed="true"',
-  "Proceed for this booking",
+  "if (guestAccountBillingEnabled && bookings.length > 0)",
+  "bookerId: null",
+  "travelerId: null",
+  'data-customer-folder-selected-identity-resolver="true"',
+  "!guestAccountBillingEnabled &&",
   'surface: "invoice-review"',
 ]) includes(source.savedBookings, fragment, "existing blocker lane");
+
+for (const retiredFragment of [
+  'data-customer-folder-blocked-proceed="true"',
+  "Proceed for this booking",
+]) {
+  assert.equal(
+    source.savedBookings.includes(retiredFragment),
+    false,
+    `selected-job identity repair must not restore ${retiredFragment}`,
+  );
+}
 
 for (const fragment of [
   'searchParams.get("guest_account_billing") === "1"',

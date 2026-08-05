@@ -4100,8 +4100,10 @@ async function runChromeTest() {
           ]);
 
           return {
-            bookerSelectorCount: document.querySelectorAll("[data-admin-dispatch-booker-identity-select='true']").length,
-            companySelectorCount: document.querySelectorAll("[data-admin-dispatch-company-identity-select='true']").length,
+            corporateCustomerSelectorCount: document.querySelectorAll("[data-admin-dispatch-corporate-customer-select='true']").length,
+            corporatePairSelectorCount: document.querySelectorAll("[data-admin-dispatch-corporate-pair-select='true']").length,
+            retiredBookerSelectorCount: document.querySelectorAll("[data-admin-dispatch-booker-identity-select='true']").length,
+            retiredCompanySelectorCount: document.querySelectorAll("[data-admin-dispatch-company-identity-select='true']").length,
             mockButtonLabels: [...document.querySelectorAll("button")]
               .map((button) => button.textContent.trim())
               .filter((label) => mockLabels.has(label)),
@@ -4109,7 +4111,7 @@ async function runChromeTest() {
             saveCrmButtonCount: [...document.querySelectorAll("button")].filter(
               (button) => button.textContent.trim() === "Save + CRM",
             ).length,
-            travelerSelectorCount: document.querySelectorAll("[data-admin-dispatch-traveler-identity-select='true']").length,
+            retiredTravelerSelectorCount: document.querySelectorAll("[data-admin-dispatch-traveler-identity-select='true']").length,
           };
         })()`),
       10000,
@@ -4117,9 +4119,11 @@ async function runChromeTest() {
     );
     assert.equal(removedMockCustomerMatchState.mockPanelCount, 0);
     assert.deepEqual(removedMockCustomerMatchState.mockButtonLabels, []);
-    assert.equal(removedMockCustomerMatchState.companySelectorCount, 1);
-    assert.equal(removedMockCustomerMatchState.bookerSelectorCount, 1);
-    assert.equal(removedMockCustomerMatchState.travelerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.corporateCustomerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.corporatePairSelectorCount, 0);
+    assert.equal(removedMockCustomerMatchState.retiredCompanySelectorCount, 0);
+    assert.equal(removedMockCustomerMatchState.retiredBookerSelectorCount, 0);
+    assert.equal(removedMockCustomerMatchState.retiredTravelerSelectorCount, 0);
     assert.equal(removedMockCustomerMatchState.saveCrmButtonCount, 1);
 
     await evaluate(`(() => {
@@ -21875,19 +21879,23 @@ async function runChromeTest() {
       "parsed agency-folder booking",
     );
 
-    const loadedAgencyFolders = await evaluate(`(() => {
-      const loadButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load CRM identities",
+    const retriedAgencyCustomerList = await evaluate(`(() => {
+      const retryButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Retry customer list",
       );
 
-      if (!loadButton || loadButton.disabled) {
+      if (!retryButton || retryButton.disabled) {
         return false;
       }
 
-      loadButton.click();
+      retryButton.click();
       return true;
     })()`);
-    assert.equal(loadedAgencyFolders, true, "Expected the existing CRM identity load to include agency folders");
+    assert.equal(
+      retriedAgencyCustomerList,
+      true,
+      "Expected the failed automatic customer-list load to expose one retry for agency folders",
+    );
 
     await waitForCondition(
       () => evaluate(`(() => {
@@ -21925,9 +21933,8 @@ async function runChromeTest() {
 
         return selector instanceof HTMLSelectElement && selector.value === "161" && selectedNotice
           ? {
-              companySelectors: document.querySelectorAll('[data-admin-dispatch-company-identity-select="true"]').length,
-              bookerSelectors: document.querySelectorAll('[data-admin-dispatch-booker-identity-select="true"]').length,
-              travelerSelectors: document.querySelectorAll('[data-admin-dispatch-traveler-identity-select="true"]').length,
+              corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
+              corporatePairSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-pair-select="true"]').length,
               text: selectedNotice.textContent || "",
             }
           : false;
@@ -21937,11 +21944,10 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       {
-        bookerSelectors: simplifiedAgencyUi.bookerSelectors,
-        companySelectors: simplifiedAgencyUi.companySelectors,
-        travelerSelectors: simplifiedAgencyUi.travelerSelectors,
+        corporateCustomerSelectors: simplifiedAgencyUi.corporateCustomerSelectors,
+        corporatePairSelectors: simplifiedAgencyUi.corporatePairSelectors,
       },
-      { bookerSelectors: 0, companySelectors: 0, travelerSelectors: 0 },
+      { corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
       "Expected an agency booking to show only the one agency-folder choice",
     );
     assert.match(simplifiedAgencyUi.text, /Guest name stays on this booking only/);
@@ -22023,7 +22029,7 @@ async function runChromeTest() {
 
         return selector instanceof HTMLSelectElement && selector.value === ""
           ? {
-              companySelectors: document.querySelectorAll('[data-admin-dispatch-company-identity-select="true"]').length,
+              corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
               selectedNotices: document.querySelectorAll('[data-admin-dispatch-agency-folder-selected="true"]').length,
             }
           : false;
@@ -22031,7 +22037,7 @@ async function runChromeTest() {
       10000,
       "New booking agency reset",
     );
-    assert.deepEqual(resetAgencyUi, { companySelectors: 1, selectedNotices: 0 });
+    assert.deepEqual(resetAgencyUi, { corporateCustomerSelectors: 1, selectedNotices: 0 });
 
     await setBookingMessageValue(bookingSample, "first agency booking message");
     const parsedFirstAgencyBooking = await evaluate(`(() => {
@@ -22087,12 +22093,11 @@ async function runChromeTest() {
           companyInput instanceof HTMLInputElement &&
           passengerInput instanceof HTMLInputElement
           ? {
-              bookerSelectors: document.querySelectorAll('[data-admin-dispatch-booker-identity-select="true"]').length,
               company: companyInput.value,
-              companySelectors: document.querySelectorAll('[data-admin-dispatch-company-identity-select="true"]').length,
+              corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
+              corporatePairSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-pair-select="true"]').length,
               notice: notice.textContent || "",
               passenger: passengerInput.value,
-              travelerSelectors: document.querySelectorAll('[data-admin-dispatch-traveler-identity-select="true"]').length,
             }
           : false;
       })()`),
@@ -22101,12 +22106,11 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       {
-        bookerSelectors: firstAgencyUi.bookerSelectors,
-        companySelectors: firstAgencyUi.companySelectors,
-        travelerSelectors: firstAgencyUi.travelerSelectors,
+        corporateCustomerSelectors: firstAgencyUi.corporateCustomerSelectors,
+        corporatePairSelectors: firstAgencyUi.corporatePairSelectors,
       },
-      { bookerSelectors: 0, companySelectors: 0, travelerSelectors: 0 },
-      "Expected first agency mode to keep all verified identity selectors blank",
+      { corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
+      "Expected first agency mode to keep the corporate customer choices hidden",
     );
     assert.equal(firstAgencyUi.company, "BROWSER UI TEST COMPANY");
     assert.equal(firstAgencyUi.passenger, "BROWSER UI TEST TRAVELER");

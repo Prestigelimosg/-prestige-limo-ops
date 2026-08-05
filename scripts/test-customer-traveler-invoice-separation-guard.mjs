@@ -103,7 +103,11 @@ includes(sources.folderPage, "customerId={customer.id}", "existing prefix panel 
 for (const fragment of [
   "booker_id?: number | null",
   "customerFolderTravelerInvoiceGroups",
+  "customerFolderLegacyIdentityResolution",
   "Missing verified traveller identity",
+  "Jobs for the same passenger are saved together. Different passengers stay separate.",
+  'data-customer-folder-selected-identity-group=',
+  'data-customer-folder-selected-identity-pair="true"',
   'data-customer-folder-traveler-invoice-group="true"',
   "Load {group.passengerName} invoice",
 ]) {

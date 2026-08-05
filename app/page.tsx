@@ -14031,6 +14031,7 @@ export default function Home() {
   const [adminDispatchAgencyFoldersError, setAdminDispatchAgencyFoldersError] = useState("");
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+  const adminDispatchCustomerListAutoLoadAttemptedRef = useRef(false);
   const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | "remove-override" | null>(null);
   const [rateMessageTarget, setRateMessageTarget] = useState<"header" | "override">("header");
   const [rateOverrideListMessages, setRateOverrideListMessages] =
@@ -14425,6 +14426,25 @@ export default function Home() {
   useEffect(() => {
     activeTabRef.current = activeTab;
   }, [activeTab]);
+
+  useEffect(() => {
+    if (
+      activeTab !== "dispatch" ||
+      adminDispatchCustomerListAutoLoadAttemptedRef.current ||
+      savingRates ||
+      (ratesLoaded && adminDispatchAgencyFoldersLoaded)
+    ) {
+      return;
+    }
+
+    adminDispatchCustomerListAutoLoadAttemptedRef.current = true;
+    void loadRates("Customers ready.", {
+      includeAgencyFolders: true,
+      preserveAction: true,
+      silent: true,
+    });
+    // Reuse the existing guarded customer/rate read once when Dispatch opens.
+  }, [activeTab, adminDispatchAgencyFoldersLoaded, ratesLoaded, savingRates]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -19578,7 +19598,7 @@ export default function Home() {
 
   async function loadRates(
     successText = "Rates loaded.",
-    options?: { includeAgencyFolders?: boolean; preserveAction?: boolean },
+    options?: { includeAgencyFolders?: boolean; preserveAction?: boolean; silent?: boolean },
   ) {
     if (typeof fetch !== "function") {
       if (!options?.preserveAction) {
@@ -19587,10 +19607,12 @@ export default function Home() {
       const errorMessage =
         "Admin rate setup API is not available.";
 
-      setMessage({
-        tone: "error",
-        text: `Load failed: ${errorMessage}`,
-      });
+      if (!options?.silent) {
+        setMessage({
+          tone: "error",
+          text: `Load failed: ${errorMessage}`,
+        });
+      }
       return { ok: false, errorMessage };
     }
 
@@ -19599,7 +19621,9 @@ export default function Home() {
       setRateAction("load");
       setRateMessageTarget("header");
     }
-    setMessage({ tone: "info", text: "Loading rates..." });
+    if (!options?.silent) {
+      setMessage({ tone: "info", text: "Loading rates..." });
+    }
 
     try {
       const response = await fetch(adminRateSetupApiPath, {
@@ -19721,15 +19745,19 @@ export default function Home() {
       }
 
       setRatesLoaded(true);
-      setMessage({ tone: "success", text: successText });
+      if (!options?.silent) {
+        setMessage({ tone: "success", text: successText });
+      }
       return { ok: true, errorMessage: "" };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown rate load error.";
 
-      setMessage({
-        tone: "error",
-        text: formatRatesSetupError(errorMessage, "Load failed: "),
-      });
+      if (!options?.silent) {
+        setMessage({
+          tone: "error",
+          text: formatRatesSetupError(errorMessage, "Load failed: "),
+        });
+      }
       return { ok: false, errorMessage };
     } finally {
       if (!options?.preserveAction) {
@@ -25651,47 +25679,6 @@ export default function Home() {
     });
   }
 
-  const adminDispatchVerifiedBookerOptions = Array.from(
-    new Map(
-      rateTravelers
-        .filter((traveler) => !booking.companyId || traveler.company_id === Number(booking.companyId))
-        .filter((traveler) => traveler.booker_id)
-        .map((traveler) => [
-          String(traveler.booker_id),
-          {
-            id: String(traveler.booker_id),
-            name: clean(traveler.booker_name) || `Booker ${traveler.booker_id}`,
-          },
-        ]),
-    ).values(),
-  );
-  if (
-    booking.bookerId &&
-    !adminDispatchVerifiedBookerOptions.some((booker) => booker.id === booking.bookerId)
-  ) {
-    adminDispatchVerifiedBookerOptions.push({
-      id: booking.bookerId,
-      name: clean(booking.booker) || `Booker ${booking.bookerId}`,
-    });
-  }
-  const adminDispatchVerifiedTravelerOptions = rateTravelers.filter(
-    (traveler) =>
-      (!booking.companyId || traveler.company_id === Number(booking.companyId)) &&
-      (!booking.bookerId || traveler.booker_id === Number(booking.bookerId)),
-  );
-  if (
-    booking.travelerId &&
-    !adminDispatchVerifiedTravelerOptions.some(
-      (traveler) => String(traveler.id) === booking.travelerId,
-    )
-  ) {
-    adminDispatchVerifiedTravelerOptions.push({
-      booker_id: booking.bookerId ? Number(booking.bookerId) : null,
-      company_id: booking.companyId ? Number(booking.companyId) : 0,
-      id: Number(booking.travelerId),
-      traveler_name: clean(booking.name) || `Traveler ${booking.travelerId}`,
-    });
-  }
   const adminDispatchVerifiedCompanyOptions = rateCompanies.map((company) => ({
     id: String(company.id),
     name: clean(company.company_name) || `Company ${company.id}`,
@@ -25704,6 +25691,114 @@ export default function Home() {
       id: booking.companyId,
       name: clean(booking.company) || `Company ${booking.companyId}`,
     });
+  }
+  const adminDispatchCorporatePairOptions = rateTravelers
+    .filter(
+      (traveler) =>
+        adminDispatchVerifiedIdentityId(traveler.id) &&
+        adminDispatchVerifiedIdentityId(traveler.company_id) &&
+        adminDispatchVerifiedIdentityId(traveler.booker_id) &&
+        (!booking.companyId || traveler.company_id === Number(booking.companyId)),
+    )
+    .map((traveler) => ({
+      bookerId: String(traveler.booker_id),
+      bookerName: clean(traveler.booker_name) || "Saved booker",
+      companyId: String(traveler.company_id),
+      id: String(traveler.id),
+      label: `${clean(traveler.booker_name) || "Saved booker"} / ${clean(traveler.traveler_name) || "Saved traveller"}`,
+      travelerName: clean(traveler.traveler_name) || "Saved traveller",
+    }));
+  const adminDispatchSelectedCorporatePair = adminDispatchCorporatePairOptions.find(
+    (pair) => pair.id === booking.travelerId && pair.bookerId === booking.bookerId,
+  ) ?? null;
+  const adminDispatchSingleCorporatePair =
+    adminDispatchCorporatePairOptions.length === 1
+      ? adminDispatchCorporatePairOptions[0]
+      : null;
+  const adminDispatchSingleCorporatePairBookerId =
+    adminDispatchSingleCorporatePair?.bookerId || "";
+  const adminDispatchSingleCorporatePairBookerName =
+    adminDispatchSingleCorporatePair?.bookerName || "";
+  const adminDispatchSingleCorporatePairCompanyId =
+    adminDispatchSingleCorporatePair?.companyId || "";
+  const adminDispatchSingleCorporatePairTravelerId =
+    adminDispatchSingleCorporatePair?.id || "";
+
+  useEffect(() => {
+    if (
+      activeTab !== "dispatch" ||
+      clean(booking.customerId) ||
+      !booking.companyId ||
+      booking.bookerId ||
+      booking.travelerId ||
+      !adminDispatchSingleCorporatePairBookerId ||
+      adminDispatchSingleCorporatePairCompanyId !== booking.companyId ||
+      !adminDispatchSingleCorporatePairTravelerId
+    ) {
+      return;
+    }
+
+    setBooking((current) => {
+      if (
+        clean(current.customerId) ||
+        current.companyId !== adminDispatchSingleCorporatePairCompanyId ||
+        current.bookerId ||
+        current.travelerId
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        booker: adminDispatchSingleCorporatePairBookerName || current.booker,
+        bookerId: adminDispatchSingleCorporatePairBookerId,
+        travelerId: adminDispatchSingleCorporatePairTravelerId,
+      };
+    });
+  }, [
+    activeTab,
+    adminDispatchSingleCorporatePairBookerId,
+    adminDispatchSingleCorporatePairBookerName,
+    adminDispatchSingleCorporatePairCompanyId,
+    adminDispatchSingleCorporatePairTravelerId,
+    booking.bookerId,
+    booking.companyId,
+    booking.customerId,
+    booking.travelerId,
+  ]);
+
+  function updateAdminDispatchCorporateCustomer(companyId: string) {
+    const exactPairs = rateTravelers.filter(
+      (traveler) =>
+        String(traveler.company_id) === companyId &&
+        adminDispatchVerifiedIdentityId(traveler.id) &&
+        adminDispatchVerifiedIdentityId(traveler.booker_id),
+    );
+    const onlyPair = exactPairs.length === 1 ? exactPairs[0] : null;
+
+    setBooking((current) => ({
+      ...current,
+      booker: onlyPair ? clean(onlyPair.booker_name) || current.booker : current.booker,
+      bookerId: onlyPair ? String(onlyPair.booker_id) : "",
+      companyId,
+      customerId: "",
+      travelerId: onlyPair ? String(onlyPair.id) : "",
+    }));
+  }
+
+  function updateAdminDispatchCorporatePair(travelerId: string) {
+    const pair = adminDispatchCorporatePairOptions.find(
+      (candidate) => candidate.id === travelerId,
+    );
+
+    setBooking((current) => ({
+      ...current,
+      booker: pair?.bookerName || current.booker,
+      bookerId: pair?.bookerId || "",
+      companyId: pair?.companyId || current.companyId,
+      customerId: "",
+      travelerId: pair?.id || "",
+    }));
   }
   const adminDispatchAgencyFolderOptions = adminDispatchAgencyFolders.map((account) => ({
     companyId: clean(account.verified_company_id),
@@ -40355,8 +40450,8 @@ export default function Home() {
                     {clean(appliedAdminBookingSnapshotReference)
                       ? "Existing booking: the saved agency relationship is preserved."
                       : adminDispatchCreatingAgencyFolder
-                        ? "Enter the agency name once under Company / Account. Verified Booker and Traveller stay blank; the passenger stays on this booking only."
-                      : "Agency booking: choose this one folder only. Booker and Traveller stay blank."}
+                        ? "Enter the agency name once under Company / Account. Booker and Traveller stay blank; the passenger stays on this booking only."
+                        : "Agency booking: choose this one folder only. Booker and Traveller stay blank."}
                   </span>
                 </label>
                 {adminDispatchAgencyFoldersError ? (
@@ -40364,7 +40459,7 @@ export default function Home() {
                     className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-800 md:col-span-3"
                     data-admin-dispatch-agency-folders-error="true"
                   >
-                    {adminDispatchAgencyFoldersError} Reload CRM identities before saving an agency booking.
+                    {adminDispatchAgencyFoldersError} Retry the customer list before saving an agency booking.
                   </p>
                 ) : null}
                 {adminDispatchSelectedAgencyFolder ? (
@@ -40379,48 +40474,69 @@ export default function Home() {
                     className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-3"
                     data-admin-dispatch-agency-folder-create="true"
                   >
-                    First agency booking: enter the exact agency name in Company / Account below. Do not select a verified Booker or Traveller. The passenger stays on this booking only.
+                    First agency booking: enter the exact agency name in Company / Account below. Booker and Traveller stay blank. The passenger stays on this booking only.
                   </p>
                 ) : (
                   <>
                 <label className="text-xs font-semibold text-slate-700">
-                  Verified company
+                  Customer
                   <select
                     className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-company-identity-select="true"
-                    onChange={(event) => setBooking((current) => ({ ...current, companyId: event.target.value, customerId: "", bookerId: "", travelerId: "" }))}
+                    data-admin-dispatch-corporate-customer-select="true"
+                    onChange={(event) => updateAdminDispatchCorporateCustomer(event.target.value)}
                     value={booking.companyId}
                   >
-                    <option value="">Not selected</option>
+                    <option value="">Choose customer</option>
                     {adminDispatchVerifiedCompanyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                   </select>
                 </label>
-                <label className="text-xs font-semibold text-slate-700">
-                  Verified PA / booker
-                  <select
-                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-booker-identity-select="true"
-                    disabled={!booking.companyId}
-                    onChange={(event) => setBooking((current) => ({ ...current, bookerId: event.target.value, customerId: "", travelerId: "" }))}
-                    value={booking.bookerId}
+                {booking.companyId && adminDispatchCorporatePairOptions.length > 1 ? (
+                  <label className="text-xs font-semibold text-slate-700 md:col-span-2">
+                    Booker / Traveller
+                    <select
+                      className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                      data-admin-dispatch-corporate-pair-select="true"
+                      onChange={(event) => updateAdminDispatchCorporatePair(event.target.value)}
+                      value={adminDispatchSelectedCorporatePair?.id || ""}
+                    >
+                      <option value="">Choose the actual Booker / Traveller</option>
+                      {adminDispatchCorporatePairOptions.map((pair) => (
+                        <option key={pair.id} value={pair.id}>{pair.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : booking.companyId && adminDispatchSelectedCorporatePair ? (
+                  <p
+                    className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-carried="true"
                   >
-                    <option value="">Not selected</option>
-                    {adminDispatchVerifiedBookerOptions.map((booker) => <option key={booker.id} value={booker.id}>{booker.name}</option>)}
-                  </select>
-                </label>
-                <label className="text-xs font-semibold text-slate-700">
-                  Verified traveler / boss
-                  <select
-                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-traveler-identity-select="true"
-                    disabled={!booking.bookerId}
-                    onChange={(event) => setBooking((current) => ({ ...current, customerId: "", travelerId: event.target.value }))}
-                    value={booking.travelerId}
+                    Booker / Traveller: {adminDispatchCorporatePairOptions[0].label}
+                  </p>
+                ) : booking.companyId &&
+                  adminDispatchCorporatePairOptions.length === 1 &&
+                  !booking.bookerId &&
+                  !booking.travelerId ? (
+                  <p
+                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-applying="true"
                   >
-                    <option value="">Not selected</option>
-                    {adminDispatchVerifiedTravelerOptions.map((traveler) => <option key={traveler.id} value={traveler.id}>{clean(traveler.traveler_name) || `Traveler ${traveler.id}`}</option>)}
-                  </select>
-                </label>
+                    Applying saved Booker / Traveller...
+                  </p>
+                ) : booking.companyId && adminDispatchCorporatePairOptions.length === 1 ? (
+                  <p
+                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-conflict="true"
+                  >
+                    Saved Booker / Traveller does not match this booking. Review the booking before saving.
+                  </p>
+                ) : booking.companyId ? (
+                  <p
+                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-missing="true"
+                  >
+                    Add the Booker / Traveller once in this customer profile before preparing an invoice.
+                  </p>
+                ) : null}
                   </>
                 )}
                 {adminEmailAiCustomerStatus ? (
@@ -40486,7 +40602,18 @@ export default function Home() {
                     )}
                   </div>
                 ) : null}
-                {!ratesLoaded || !adminDispatchAgencyFoldersLoaded || adminDispatchAgencyFoldersError ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.", { includeAgencyFolders: true })} type="button">Load CRM identities</button> : null}
+                {adminDispatchCustomerListAutoLoadAttemptedRef.current &&
+                !savingRates &&
+                (!ratesLoaded || !adminDispatchAgencyFoldersLoaded || adminDispatchAgencyFoldersError) ? (
+                  <button
+                    className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold"
+                    data-admin-dispatch-customer-list-retry="true"
+                    onClick={() => loadRates("Customers ready.", { includeAgencyFolders: true })}
+                    type="button"
+                  >
+                    Retry customer list
+                  </button>
+                ) : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}

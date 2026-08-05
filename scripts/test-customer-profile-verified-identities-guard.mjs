@@ -101,8 +101,10 @@ for (const fragment of [
 
 assert.ok(
   dispatch.includes('data-admin-dispatch-crm-identity-selectors="true"') &&
-    dispatch.includes("adminDispatchVerifiedBookerOptions"),
-  "Dispatch must retain its established verified identity selectors.",
+    dispatch.includes("adminDispatchCorporatePairOptions") &&
+    dispatch.includes('data-admin-dispatch-corporate-customer-select="true"') &&
+    dispatch.includes('data-admin-dispatch-corporate-pair-select="true"'),
+  "Dispatch must reuse exact saved Booker and Traveller pairs through the simplified customer selection lane.",
 );
 assert.ok(
   bookPage.includes("registeredTravelers") && bookPage.includes("travelerId"),

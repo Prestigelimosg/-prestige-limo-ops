@@ -420,9 +420,18 @@ assert.equal(
   true,
   "Customer booking request persistence must map flightNumber into the safe flight_no booking field.",
 );
+const adapterSelectHasFlightNumber = (constantName) => {
+  const selectMatch = supabaseAdapterSource.match(
+    new RegExp(`const ${constantName}\\s*=\\s*"([^"]+)"`),
+  );
+
+  return selectMatch?.[1].split(",").map((field) => field.trim()).includes("flight_no") === true;
+};
+
 assert.equal(
-  supabaseAdapterSource.includes("passenger_phone, flight_no, driver_id, driver_name") &&
-    supabaseAdapterSource.includes("contact_email, flight_no, pax_count") &&
+  adapterSelectHasFlightNumber("adminBookingCurrentLoadSelect") &&
+    adapterSelectHasFlightNumber("adminBookingFoundationLoadSelect") &&
+    adapterSelectHasFlightNumber("adminBookingFoundationLoadSelectWithoutDriver") &&
     supabaseAdapterSource.includes("flight_no: textOrNull(booking.flight_no)") &&
     supabaseAdapterSource.includes("flight_no: textOrNull(row.flight_no)"),
   true,

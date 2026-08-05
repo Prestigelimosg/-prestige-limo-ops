@@ -368,12 +368,14 @@ async function main() {
       "combined Booker and Traveller choice",
     );
     const resolverState = await evaluate(`(() => ({
+      disabledInvoiceBlockerCount: document.querySelectorAll('[data-customer-folder-create-invoice-selected-disabled="true"]').length,
       groupCount: document.querySelectorAll('[data-customer-folder-selected-identity-group]').length,
       pairOptionCount: document.querySelector('[data-customer-folder-selected-identity-pair="true"]')?.options?.length || 0,
       saveDisabled: document.querySelector('[data-customer-folder-selected-identity-save="true"]')?.disabled === true,
       selectedCount: document.querySelectorAll('[data-customer-folder-saved-bookings-select]:checked').length,
     }))()`);
     assert.deepEqual(resolverState, {
+      disabledInvoiceBlockerCount: 0,
       groupCount: 1,
       pairOptionCount: 3,
       saveDisabled: true,

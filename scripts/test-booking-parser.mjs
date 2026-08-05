@@ -32,6 +32,28 @@ const requiredConfidenceCategories = [
 const referenceDate = new Date(2026, 4, 13, 12, 0, 0);
 const parseBookingForTest = (input) => parseBookingMessage(input, { referenceDate });
 
+const groundBookerCanonicalIntake = `Company/account: Transzend Groundbooker
+Booker: Pat
+Booker email: transzend@groundbooker.com
+Passenger: Simran Shah
+Type: MNG
+Pickup date: 2026-08-05
+Pickup time: 16:05
+Flight: BA11
+Pickup: Changi Airport T1
+Drop-off: Marina Bay`;
+const parsedGroundBookerCanonicalIntake = parseBookingForTest(groundBookerCanonicalIntake) ?? {};
+
+assert.equal(
+  parsedGroundBookerCanonicalIntake.company,
+  'Transzend Groundbooker',
+  'The canonical Email AI Company/account label must win over the lowercase email-domain fallback.',
+);
+assert.notEqual(parsedGroundBookerCanonicalIntake.company, 'GROUNDBOOKER');
+assert.equal(parsedGroundBookerCanonicalIntake.booker, 'Pat');
+assert.equal(parsedGroundBookerCanonicalIntake.bookerEmail, 'transzend@groundbooker.com');
+assert.equal(parsedGroundBookerCanonicalIntake.name, 'Simran Shah');
+
 const expected = {
   success: true,
   company: 'UOB',

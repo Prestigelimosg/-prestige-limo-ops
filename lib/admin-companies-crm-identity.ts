@@ -43,8 +43,10 @@ const safeBlockedError =
 const safeConfigError =
   "Admin companies CRM identity read is not configured on this server.";
 const safeReadError = "Admin companies CRM identity read failed safely.";
+const safeAmbiguousReadError =
+  "Multiple CRM company profiles match this lookup. Select the exact verified company before saving.";
 const allowedRoles = new Set(["admin", "dispatcher", "system"]);
-const allowedParams = new Set(["domain", "company_name", "id"]);
+const allowedParams = new Set(["domain", "company_name", "id", "operations_email"]);
 const maxCompanyNameLength = 220;
 const maxDomainLength = 160;
 const placeholderConfigPattern =
@@ -378,10 +380,11 @@ export async function findAdminCompanyCrmIdentity(
   const id = positiveInteger(params.id);
   const companyName = safeCompanyName(params.company_name);
   const domain = safeDomain(params.domain);
+  const operationsEmail = safeCustomerProfileEmail(params.operations_email);
 
-  if (!id && !companyName && !domain) {
+  if (!id && !companyName && !domain && !operationsEmail) {
     return {
-      error: "Admin companies CRM identity lookup requires a safe id, company_name, or domain.",
+      error: "Admin companies CRM identity lookup requires a safe id, company_name, domain, or operations_email.",
       ok: false,
       status: 400,
     };
@@ -401,14 +404,28 @@ export async function findAdminCompanyCrmIdentity(
     query = query.eq("domain", domain);
   }
 
-  const { data, error } = await query.limit(1).maybeSingle();
+  if (operationsEmail) {
+    query = query.ilike("operations_email", operationsEmail);
+  }
+
+  const { data, error } = await query.limit(2);
 
   if (error) {
     return safeAdapterFailure(safeReadError, 500, error);
   }
 
+  const rows = Array.isArray(data) ? data : [];
+
+  if (rows.length > 1) {
+    return {
+      error: safeAmbiguousReadError,
+      ok: false,
+      status: 409,
+    };
+  }
+
   return {
-    data: toAdminCompanyCrmIdentityRecord(data),
+    data: toAdminCompanyCrmIdentityRecord(rows[0]),
     ok: true,
   };
 }

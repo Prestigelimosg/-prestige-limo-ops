@@ -420,6 +420,9 @@ class FakeOpenAI {
       const isPrestigeTransportIdentityConflict = body.input.includes(
         'New booking "Prestige Transport 15782" has been received',
       );
+      const isGroundBooker = body.input.includes(
+        "Synthetic GroundBooker confirmed booking",
+      );
       const analysis = isPrestigeTransportIdentityConflict
         ? {
             bookingResult: {
@@ -458,6 +461,41 @@ class FakeOpenAI {
             ],
             suggestedReply: "",
             summary: "Confirmed airport arrival booking for Zenji Nakamura.",
+          }
+        : isGroundBooker
+        ? {
+            bookingResult: {
+              bookings: [
+                {
+                  bookerContact: "",
+                  bookerEmail: "transzend@groundbooker.com",
+                  bookerName: "Pat",
+                  bookingType: "MNG",
+                  companyAccount: "Transzend",
+                  confidence: 0.99,
+                  customerPriceOverride: "",
+                  dropoff: "Marina Bay",
+                  extraStopLocation: "",
+                  extraStops: "",
+                  flightNumber: "BA11",
+                  needsReviewReasons: [],
+                  notes: "",
+                  passengerName: "Simran Shah",
+                  pax: "1",
+                  pickup: "Changi Airport T1",
+                  pickupDate: "2026-08-05",
+                  pickupTime: "16:05",
+                  vehicle: "AVF",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.99,
+            reviewReasons: [],
+            suggestedReply: "",
+            summary: "GroundBooker booking for Simran Shah.",
           }
         : isEnquiry
         ? {
@@ -697,6 +735,18 @@ try {
   );
   assert.equal(intakeRows[2].classification, "confirmed_booking");
   assert.equal(intakeRows[2].processing_status, "queued");
+  assert.equal(
+    intakeRows[2].booking_parse_result.bookings[0].companyAccount,
+    "Transzend Groundbooker",
+    "The exact verified GroundBooker sender must retain one canonical display-only company account even when AI shortens it.",
+  );
+  assert.equal(intakeRows[2].booking_parse_result.bookings[0].bookerName, "Pat");
+  assert.equal(intakeRows[2].booking_parse_result.bookings[0].passengerName, "Simran Shah");
+  assert.equal(
+    intakeRows[2].booking_parse_result.bookings[0].companyId,
+    undefined,
+    "Email AI sender canonicalization must never infer a verified company ID.",
+  );
   assert.deepEqual(adminDevicePushEvents, [
     "email_confirmed_booking",
     "email_confirmed_booking",

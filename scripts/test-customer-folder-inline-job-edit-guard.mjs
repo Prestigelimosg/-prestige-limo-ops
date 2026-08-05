@@ -81,9 +81,9 @@ for (const fragment of [
   '"x-prestige-admin-purpose": "admin-booking-persistence"',
   "route_points: inlineEditRoutePoints",
   "service_items: inlineEditServiceItems",
-  "company_id: exactBooking.company_id",
-  "booker_id: exactBooking.booker_id",
-  "traveler_id: exactBooking.traveler_id",
+  "company_id: inlineEditIdentityId(form.companyId)",
+  "booker_id: inlineEditIdentityId(form.bookerId)",
+  "traveler_id: inlineEditIdentityId(form.travelerId)",
 ]) {
   includes(exactSave, fragment, `existing exact booking PATCH ${fragment}`);
 }

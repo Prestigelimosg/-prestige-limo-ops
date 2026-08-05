@@ -89,6 +89,19 @@ for (const fragment of [
   );
 }
 
+assert.ok(
+  savedBookingsPanel.includes('cache: "no-store"') &&
+    savedBookingsPanel.includes("await loadCustomerFolderRateSetup({ force: true })"),
+  "Opening the existing Section 4 editor must bypass a stale same-page CRM identity snapshot.",
+);
+assert.ok(
+  !savedBookingsPanel.slice(
+    savedBookingsPanel.indexOf("function updateSectionFourTravelerIdentity"),
+    savedBookingsPanel.indexOf("function sectionFourVerifiedIdentityIsValid"),
+  ).includes("passengerName:"),
+  "Selecting a verified Traveller must not overwrite the booking's separately reviewed passenger text.",
+);
+
 for (const fragment of [
   "company_id: inlineEditIdentityId(form.companyId)",
   "booker_id: inlineEditIdentityId(form.bookerId)",

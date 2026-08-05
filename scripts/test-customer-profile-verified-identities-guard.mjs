@@ -24,7 +24,11 @@ for (const fragment of [
   'data-customer-booker-email="true"',
   'data-customer-booker-contact="true"',
   'data-customer-save-booker-traveler="true"',
+  'data-customer-edit-booker-traveler=',
+  'data-customer-add-booker-traveler="true"',
   "Save Booker + Traveller",
+  "Edit this pair",
+  "Save changes",
   "window.confirm",
   "findOrCreateBooker",
   'method: "GET"',
@@ -33,6 +37,9 @@ for (const fragment of [
   'action_type: "traveler_create"',
   "booker_id: bookerId",
   "await loadIdentities({ afterSave: true })",
+  "await loadExactBooker(bookerId)",
+  "setEditingBookerId(bookerId)",
+  "setEditingTravelerId(travelerId)",
 ]) {
   assert.ok(identityEditor.includes(fragment), `Verified customer identity lane is missing ${fragment}`);
 }
@@ -55,8 +62,16 @@ assert.ok(
   "A Traveller linked to a differently named Booker must fail before any Booker create attempt.",
 );
 assert.ok(
-  identityEditor.includes("if (!travelerId)") && identityEditor.includes("if (!positiveId(booker?.id))"),
+  identityEditor.includes("if (!travelerId)") && identityEditor.includes("if (!booker || !positiveId(booker.id))"),
   "Existing exact Booker and Traveller records must be reused before creation.",
+);
+assert.ok(
+  identityEditor.includes('method: "PATCH"') &&
+    identityEditor.includes("traveler_name: safeTravelerName") &&
+    identityEditor.includes("booker_id: `eq.${bookerId}`") &&
+    identityEditor.includes("company_id: `eq.${companyId}`") &&
+    identityEditor.includes("Saved, reloaded, and verified this exact Booker and Traveller pair."),
+  "Existing exact Booker and Traveller details must save through the established writers, keep one Booker's linked rows consistent, and remain loaded in the form.",
 );
 assert.ok(
   !identityEditor.includes('method: "DELETE"') && !identityEditor.includes('method: "PUT"'),
@@ -79,7 +94,7 @@ assert.ok(
 for (const fragment of [
   'additionalSameOriginRefererPathPrefixes: ["/customers/"]',
   'additionalSameOriginRefererPathnames: ["/customers"]',
-  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST", "PATCH"]',
 ]) {
   assert.ok(bookerRoute.includes(fragment), `Booker route must retain the narrow customer-folder boundary: ${fragment}`);
 }

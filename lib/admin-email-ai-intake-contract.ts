@@ -4,6 +4,8 @@ export const adminEmailAiGroundBookerSenderAddress =
   "transzend@groundbooker.com";
 export const adminEmailAiGroundBookerRecipientAddress =
   "info@prestigelimo.sg";
+export const adminEmailAiGroundBookerCanonicalCompanyAccount =
+  "Transzend Groundbooker";
 export const adminEmailAiAllowedSenderAddresses = [
   adminEmailAiPrestigeSenderAddress,
   adminEmailAiGroundBookerSenderAddress,
@@ -93,6 +95,13 @@ export function adminEmailAiSenderAddressIsAllowed(
   return adminEmailAiAllowedSenderAddresses.some(
     (allowedAddress) => allowedAddress === normalized,
   );
+}
+
+export function adminEmailAiCanonicalCompanyAccountForSender(value: unknown) {
+  return normalizeAdminEmailAiAddress(value) ===
+    adminEmailAiGroundBookerSenderAddress
+    ? adminEmailAiGroundBookerCanonicalCompanyAccount
+    : null;
 }
 
 export function adminEmailAiRecipientIsAllowedForSender(

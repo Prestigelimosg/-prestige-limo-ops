@@ -11,6 +11,7 @@ for (const fragment of [
   "type AdminCompanyCrmIdentityRecord",
   "function buildSaveCrmCompanyProfileContactPayload",
   "async function loadSaveCrmCompanyProfileForSave",
+  "async function loadSaveCrmCompanyProfileCandidateByOperationsEmail",
   "async function saveCrmCompanyProfileForBooking",
   "async function resolveSaveCrmCompanyProfileForSave",
   "saveCrmDefaultCustomerAccount(booking)",
@@ -20,6 +21,11 @@ for (const fragment of [
   "mobile_phone: clean(bookingValue.bookerContact)",
   "operations_email: clean(bookingValue.bookerEmail).toLowerCase()",
   "company_id: adminDispatchVerifiedIdentityId(bookingValue.companyId)",
+  "customer_id: adminDispatchVerifiedIdentityId(bookingValue.customerId)",
+  'data-admin-dispatch-agency-folder-select="true"',
+  "Agency booking: choose this one folder only. Booker and Traveller stay blank.",
+  "customer_folder_active",
+  "verified_company_id",
   "companyId: String(companyProfileResolution.companyId)",
   "companyProfileResolution?.companyName || saveCrmCustomerAccountLabel",
 ]) {
@@ -71,6 +77,24 @@ assert.ok(
   "Save + CRM must resolve the exact company profile before booking persistence",
 );
 assert.ok(
+  saveBookingSection.includes(
+    "resolveSaveCrmCompanyProfileForSave(\n            booking,\n            saveCrmExplicitCompanyAccount(booking),",
+  ),
+  "Save + CRM company profile lookup must use the base company field, never the passenger-scoped billing label.",
+);
+assert.ok(
+  saveCrmSyncSection.includes(
+    "Select it under Verified company, then Save + CRM again. No booking was saved.",
+  ),
+  "A matching operations email must block duplicate company creation and require explicit verified CRM selection.",
+);
+assert.ok(
+  saveCrmSyncSection.includes(
+    "matches this Company / Account. Select it under Verified company",
+  ),
+  "An unselected exact-name company match must also block and require explicit verified CRM selection.",
+);
+assert.ok(
   saveBookingSection.indexOf("resolveSaveCrmCompanyProfileForSave(") <
     saveBookingSection.indexOf('fetch("/api/admin-bookings"'),
   "company profile resolution must finish before a booking write begins",
@@ -79,6 +103,10 @@ assert.equal(
   saveBookingSection.includes("adminCompanyProfileApiPath"),
   false,
   "Save + CRM must not modify Prestige's own Company Settings lane",
+);
+assert.ok(
+  ledger.includes("### GroundBooker Canonical Company And Agency Account Reuse Repair (2026-08-05)"),
+  "the implementation ledger must record the exact GroundBooker duplicate-prevention repair",
 );
 assert.ok(
   ledger.includes("### Save + CRM Company Contact And Invoice Email Meaning Repair (2026-08-02)"),
@@ -93,7 +121,12 @@ for (const fragment of [
   "__prestigeCrmCompanyWriteRequests",
   "Create and link the new CRM company profile",
   'operations_email: "browserui@example.com"',
-  "Expected Save + CRM to write only the approved company name and Booker contact fields",
+  "Expected Save + CRM to write only the approved base company name and Booker contact fields",
+  "one-selector agency UI",
+  "Expected an agency booking to show only the one agency-folder choice",
+  "agencySaveState.bookingInsert?.booking?.customer_id, 161",
+  "agencySaveState.bookingInsert?.booking?.company_id, 601",
+  "Expected New booking to clear the agency-folder selection",
 ]) {
   assert.ok(
     bookingUiBrowserSource.includes(fragment),

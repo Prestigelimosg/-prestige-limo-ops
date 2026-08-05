@@ -53,6 +53,9 @@ for (const fragment of [
   "buildAdminDispatchReturnTripPersistencePayloads",
   "for (const bookingPayload of bookingPayloads)",
   "savedBookings.push",
+  'bookingPayload.legLabel === "return"',
+  "createdAgencyCustomerId",
+  "bookingPayload.payload.booking.customer_id = createdAgencyCustomerId",
   "Booking save failed on linked",
   "for (const savedBooking of savedBookings)",
   "autoSyncSavedBookingGoogleCalendar(savedBooking.record)",
@@ -63,13 +66,25 @@ for (const fragment of [
 const updateBlock = blockBetween(
   appPage,
   "async function updateAppliedAdminBookingOperationalSnapshot()",
-  "  async function updateAdminCustomerRequestReviewDecision",
+  "  function getDispatchCopyText",
 );
 
 assert.equal(
   updateBlock.includes("buildAdminDispatchReturnTripPersistencePayloads"),
   false,
   "Update + Cal must remain a single-record update and must not create a return trip pair.",
+);
+
+const returnPayloadBuilderBlock = blockBetween(
+  appPage,
+  "function buildAdminDispatchReturnTripPersistencePayloads",
+  "function safeAdminBookingPersistenceCount",
+);
+
+assertIncludes(
+  returnPayloadBuilderBlock,
+  "hotelAgencyFolderCreateOverride: false",
+  "return trip must never carry first-agency-folder creation intent",
 );
 
 console.log("Admin dispatch return trip save guard passed");

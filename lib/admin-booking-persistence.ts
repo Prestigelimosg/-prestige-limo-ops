@@ -48,6 +48,10 @@ export type AdminBookingRecordInput = {
   updated_at?: string | null;
 };
 
+export type AdminHotelAgencyFolderCreateIntent = {
+  company_name: string;
+};
+
 export type AdminBookingRoutePointInput = {
   point_type?: "pickup" | "dropoff" | "stop" | "waypoint" | "extra_stop";
   sequence_number?: number | null;
@@ -68,6 +72,7 @@ export type AdminBookingServiceItemInput = {
 
 export type AdminBookingPersistenceInput = {
   booking: AdminBookingRecordInput;
+  hotel_agency_folder_create?: AdminHotelAgencyFolderCreateIntent | null;
   route_points: AdminBookingRoutePointInput[];
   service_items: AdminBookingServiceItemInput[];
 };
@@ -163,7 +168,12 @@ const maxServiceItems = 12;
 export const adminBookingPersistenceContractVersion =
   "stage-4a-376-admin-only-safe-operational-adapter-v1";
 
-const createPayloadTopLevelFields = new Set(["booking", "route_points", "service_items"]);
+const createPayloadTopLevelFields = new Set([
+  "booking",
+  "hotel_agency_folder_create",
+  "route_points",
+  "service_items",
+]);
 const updatePayloadTopLevelFields = new Set([
   "expected_updated_at",
   "target_booking_reference",
@@ -236,6 +246,7 @@ const bookingFields = new Set([
   "created_at",
   "updated_at",
 ]);
+const hotelAgencyFolderCreateFields = new Set(["company_name"]);
 
 const routePointFields = new Set([
   "point_type",
@@ -754,10 +765,19 @@ function parseAdminBookingOperationalPayload(
 
   const unknownTopLevelKeys = Object.keys(body).filter((key) => !allowedTopLevelFields.has(key));
   const bookingRecord = asRecord(body.booking);
+  const hasHotelAgencyFolderCreate = hasOwn(body, "hotel_agency_folder_create");
+  const hotelAgencyFolderCreateRecord = asRecord(body.hotel_agency_folder_create);
   const routePointRecords = asArray(body.route_points).map(asRecord);
   const serviceItemRecords = asArray(body.service_items).map(asRecord);
   const unknownNestedKeys = [
     ...findUnknownKeys(bookingRecord, bookingFields, "booking"),
+    ...(hasHotelAgencyFolderCreate
+      ? findUnknownKeys(
+          hotelAgencyFolderCreateRecord,
+          hotelAgencyFolderCreateFields,
+          "hotel_agency_folder_create",
+        )
+      : []),
     ...routePointRecords.flatMap((record, index) =>
       findUnknownKeys(record, routePointFields, `route_points[${index}]`),
     ),
@@ -791,6 +811,31 @@ function parseAdminBookingOperationalPayload(
     };
   }
 
+  if (
+    hasHotelAgencyFolderCreate &&
+    (body.hotel_agency_folder_create === null ||
+      typeof body.hotel_agency_folder_create !== "object" ||
+      Array.isArray(body.hotel_agency_folder_create))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed Hotel / Tour Agency folder creation request rejected.",
+    };
+  }
+
+  const hotelAgencyFolderCreateCompanyName = hasHotelAgencyFolderCreate
+    ? textOrNull(hotelAgencyFolderCreateRecord.company_name)
+    : null;
+
+  if (hasHotelAgencyFolderCreate && !hotelAgencyFolderCreateCompanyName) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Hotel / Tour Agency name is required before creating its first folder.",
+    };
+  }
+
   const booking = sanitizeBooking(bookingRecord);
   const requiredBookingResult = validateRequiredBookingFields(booking);
 
@@ -820,6 +865,13 @@ function parseAdminBookingOperationalPayload(
     ok: true,
     data: {
       booking,
+      ...(hotelAgencyFolderCreateCompanyName
+        ? {
+            hotel_agency_folder_create: {
+              company_name: hotelAgencyFolderCreateCompanyName,
+            },
+          }
+        : {}),
       route_points: routePointsResult.data,
       service_items: serviceItemsResult.data,
     },

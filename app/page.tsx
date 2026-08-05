@@ -2403,6 +2403,9 @@ type AdminBookingPersistenceRequestBody = {
     cancellation_review_status?: string | null;
     parser_source_reference: string | null;
   };
+  hotel_agency_folder_create?: {
+    company_name: string;
+  };
   route_points: NonNullable<AdminBookingPersistenceRecord["route_points"]>;
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
 };
@@ -2420,6 +2423,8 @@ type AdminDispatchAgencyFoldersReadResponse = {
   error?: string;
   ok?: boolean;
 };
+
+const adminDispatchCreateAgencyFolderValue = "create-new-hotel-tour-agency";
 
 type SaveCrmBillingIdentityReview = {
   accountLabel: string;
@@ -6565,17 +6570,20 @@ async function resolveSaveCrmCompanyProfileForSave(
 ): Promise<SaveCrmCompanyProfileResolution> {
   const requestedCompanyId = adminDispatchVerifiedIdentityId(bookingValue.companyId);
   const requestedCompanyName = clean(confirmedAccountLabel);
+  const creatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(bookingValue);
 
-  if (bookingValue.customerId && !requestedCompanyId) {
+  if (bookingValue.customerId && !creatingAgencyFolder && !requestedCompanyId) {
     return {
       message: "The selected agency folder has no verified company relationship. Reload CRM identities and select the folder again. No company or booking was saved.",
       ok: false,
     };
   }
 
-  if (!requestedCompanyName && !bookingValue.customerId) {
+  if (!requestedCompanyName && (!bookingValue.customerId || creatingAgencyFolder)) {
     return {
-      message: "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
+      message: creatingAgencyFolder
+        ? "Enter the new Hotel / Tour Agency name under Company / Account before saving. No company or booking was saved."
+        : "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
       ok: false,
     };
   }
@@ -6585,7 +6593,7 @@ async function resolveSaveCrmCompanyProfileForSave(
     requestedCompanyName,
   );
 
-  if (bookingValue.customerId) {
+  if (bookingValue.customerId && !creatingAgencyFolder) {
     if (!existingCompany) {
       existingCompany = await loadSaveCrmCompanyProfileCandidateByOperationsEmail(
         bookingValue.bookerEmail,
@@ -6605,6 +6613,33 @@ async function resolveSaveCrmCompanyProfileForSave(
     return {
       companyId: agencyCompanyId,
       companyName: agencyCompanyName,
+      ok: true,
+      profileWritePerformed: false,
+    };
+  }
+
+  if (creatingAgencyFolder && existingCompany) {
+    const existingAgencyCompanyId = adminDispatchVerifiedIdentityId(existingCompany.id);
+    const existingAgencyCompanyName = clean(existingCompany.company_name);
+
+    if (!existingAgencyCompanyId || !existingAgencyCompanyName) {
+      throw new Error("The exact CRM company profile is incomplete. No booking was saved.");
+    }
+
+    if (
+      !window.confirm(
+        `Use the existing CRM company profile "${existingAgencyCompanyName}" and create its first Hotel / Tour Agency folder with this booking? Booker and Traveller identities stay blank; the passenger stays on this booking only.`,
+      )
+    ) {
+      return {
+        message: "Save + CRM cancelled before creating the first Hotel / Tour Agency folder. No booking was saved.",
+        ok: false,
+      };
+    }
+
+    return {
+      companyId: existingAgencyCompanyId,
+      companyName: existingAgencyCompanyName,
       ok: true,
       profileWritePerformed: false,
     };
@@ -6641,7 +6676,9 @@ async function resolveSaveCrmCompanyProfileForSave(
     if (!existingCompany) {
       if (
         !window.confirm(
-          `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
+          creatingAgencyFolder
+            ? `Create the new CRM company profile "${requestedCompanyName}" and its first Hotel / Tour Agency folder with this booking? Booker and Traveller identities stay blank; the passenger stays on this booking only. This does not create an invoice, change rates or Calendar, or send a message.`
+            : `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
         )
       ) {
         return {
@@ -9124,6 +9161,10 @@ function adminDispatchVerifiedIdentityId(value: string | number | null | undefin
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function adminDispatchIsCreatingAgencyFolder(bookingValue: Pick<BookingForm, "customerId">) {
+  return clean(bookingValue.customerId) === adminDispatchCreateAgencyFolderValue;
+}
+
 function getAdminExtraStopLocations(value: string) {
   const cleanedValue = clean(value);
 
@@ -9149,6 +9190,7 @@ function buildAdminBookingPersistencePayload(
   bookingReference = createAdminBookingReference(),
   options: {
     customerDisplayNameOverride?: string | null;
+    hotelAgencyFolderCreateOverride?: boolean;
     parserSourceReferenceOverride?: string | null;
   } = {},
 ): AdminBookingPersistenceRequestBody {
@@ -9216,6 +9258,8 @@ function buildAdminBookingPersistencePayload(
     clean(options.customerDisplayNameOverride) ||
     saveCrmDefaultCustomerAccount(bookingValue) ||
     adminDraftCustomerFallback;
+  const createHotelAgencyFolder =
+    options.hotelAgencyFolderCreateOverride ?? adminDispatchIsCreatingAgencyFolder(bookingValue);
   const contactDisplayName =
     clean(bookingValue.booker) ||
     clean(bookingValue.name) ||
@@ -9269,6 +9313,13 @@ function buildAdminBookingPersistencePayload(
       request_review_status: "pending_review",
       parser_source_reference: clean(options.parserSourceReferenceOverride) || parsedSourceReference(bookingValue),
     },
+    ...(createHotelAgencyFolder
+      ? {
+          hotel_agency_folder_create: {
+            company_name: customerDisplayName,
+          },
+        }
+      : {}),
     route_points: routePoints,
     service_items: serviceItems,
   };
@@ -9463,6 +9514,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
   currentTimeMs: number,
   options: {
     customerDisplayNameOverride?: string | null;
+    hotelAgencyFolderCreateOverride?: boolean;
     parserSourceReferenceOverride?: string | null;
   } = {},
 ): AdminDispatchReturnTripPersistencePayload[] {
@@ -9513,6 +9565,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
         `${groupReference}-RET`,
         {
           ...options,
+          hotelAgencyFolderCreateOverride: false,
           parserSourceReferenceOverride: adminDispatchLinkedReturnParserSource(
             returnBookingValue,
             groupReference,
@@ -20922,7 +20975,8 @@ export default function Home() {
         saveCrmDefaultCustomerAccount(booking);
       const companyProfileSyncRequired = Boolean(
         adminDispatchVerifiedIdentityId(booking.companyId) ||
-        saveCrmExplicitCompanyAccount(booking),
+        saveCrmExplicitCompanyAccount(booking) ||
+        adminDispatchIsCreatingAgencyFolder(booking),
       );
       const companyProfileResolution = companyProfileSyncRequired
         ? await resolveSaveCrmCompanyProfileForSave(
@@ -20975,6 +21029,23 @@ export default function Home() {
       }> = [];
 
       for (const bookingPayload of bookingPayloads) {
+        if (
+          bookingPayload.legLabel === "return" &&
+          adminDispatchIsCreatingAgencyFolder(bookingForSave)
+        ) {
+          const createdAgencyCustomerId = adminDispatchVerifiedIdentityId(
+            savedBookings[0]?.record.customer_id,
+          );
+
+          if (!createdAgencyCustomerId) {
+            throw new Error(
+              "The outbound booking returned no verified Hotel / Tour Agency folder. The return booking was not saved.",
+            );
+          }
+
+          bookingPayload.payload.booking.customer_id = createdAgencyCustomerId;
+        }
+
         let responseOk = false;
         let responseBody: {
           booking?: AdminBookingPersistenceRecord | null;
@@ -25642,6 +25713,7 @@ export default function Home() {
   const adminDispatchSelectedAgencyFolder = adminDispatchAgencyFolderOptions.find(
     (account) => account.id === booking.customerId,
   ) ?? null;
+  const adminDispatchCreatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(booking);
 
   const codexPreparedJobCardsPanel = (
     <div
@@ -40242,11 +40314,18 @@ export default function Home() {
                     disabled={!adminDispatchAgencyFoldersLoaded || Boolean(clean(appliedAdminBookingSnapshotReference))}
                     onChange={(event) => {
                       const customerId = event.target.value;
+                      const creatingAgencyFolder = customerId === adminDispatchCreateAgencyFolderValue;
 
                       setBooking((current) => ({
                         ...current,
                         customerId,
-                        ...(customerId
+                        ...(creatingAgencyFolder
+                          ? {
+                              bookerId: "",
+                              companyId: "",
+                              travelerId: "",
+                            }
+                          : customerId
                           ? {
                               bookerId: "",
                               companyId:
@@ -40258,9 +40337,16 @@ export default function Home() {
                           : {}),
                       }));
                     }}
-                    value={adminDispatchSelectedAgencyFolder?.id || ""}
+                    value={
+                      adminDispatchCreatingAgencyFolder
+                        ? adminDispatchCreateAgencyFolderValue
+                        : adminDispatchSelectedAgencyFolder?.id || ""
+                    }
                   >
                     <option value="">Not an agency booking</option>
+                    <option value={adminDispatchCreateAgencyFolderValue}>
+                      Create new Hotel / Tour Agency
+                    </option>
                     {adminDispatchAgencyFolderOptions.map((account) => (
                       <option key={account.id} value={account.id}>{account.name}</option>
                     ))}
@@ -40268,6 +40354,8 @@ export default function Home() {
                   <span className="mt-1 block font-medium text-slate-500">
                     {clean(appliedAdminBookingSnapshotReference)
                       ? "Existing booking: the saved agency relationship is preserved."
+                      : adminDispatchCreatingAgencyFolder
+                        ? "Enter the agency name once under Company / Account. Verified Booker and Traveller stay blank; the passenger stays on this booking only."
                       : "Agency booking: choose this one folder only. Booker and Traveller stay blank."}
                   </span>
                 </label>
@@ -40285,6 +40373,13 @@ export default function Home() {
                     data-admin-dispatch-agency-folder-selected="true"
                   >
                     Agency folder selected: {adminDispatchSelectedAgencyFolder.name}. Guest name stays on this booking only.
+                  </p>
+                ) : adminDispatchCreatingAgencyFolder ? (
+                  <p
+                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-3"
+                    data-admin-dispatch-agency-folder-create="true"
+                  >
+                    First agency booking: enter the exact agency name in Company / Account below. Do not select a verified Booker or Traveller. The passenger stays on this booking only.
                   </p>
                 ) : (
                   <>

@@ -16,6 +16,7 @@ const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_SAVED_BOOKINGS_SENTINEL|mock-admin-customer-saved-bookings-session-token|customer-saved-bookings-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
   "lib/admin-customer-saved-bookings-read.ts",
+  "lib/admin-saved-booking-read.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -146,6 +147,12 @@ class MockSupabaseQuery {
 
   order(column, options) {
     this.orderBy = { column, options };
+
+    return this;
+  }
+
+  range(from, to) {
+    this.resultLimit = to - from + 1;
 
     return this;
   }
@@ -282,8 +289,10 @@ const seed = {
       contact_phone: "+65 9999 0000",
       customer_display_name: "UBS",
       customer_facing_status: "completed",
-      customer_id: "customer-ubs",
+      customer_id: 77,
+      customer_price_amount: 225,
       dropoff_location: "Private dropoff",
+      id: 201,
       passenger_name: "Private Passenger",
       passenger_phone: "+65 8888 0000",
       pickup_at: "2026-06-20T10:00:00.000Z",
@@ -299,7 +308,9 @@ const seed = {
       contact_phone: "+65 7777 0000",
       customer_display_name: "UBS",
       customer_facing_status: "confirmed",
-      customer_id: "customer-ubs",
+      customer_id: 77,
+      customer_price_amount: null,
+      id: 202,
       passenger_name: "Another Private Passenger",
       pickup_at: "2026-06-15T10:00:00.000Z",
       public_booking_reference: "42001",
@@ -311,6 +322,7 @@ const seed = {
       customer_display_name: "hourly-test-customer",
       customer_facing_status: "confirmed",
       customer_id: "52",
+      id: 203,
       pickup_at: "2026-06-18T10:00:00.000Z",
       service_type: "Point-to-Point Transfer",
     },
@@ -433,7 +445,8 @@ try {
       child_seat_count: 0,
       company_id: null,
       customer_account: "UBS",
-      customer_id: "customer-ubs",
+      customer_id: "77",
+      customer_price_label: "225.00",
       customer_status: "completed",
       dropoff_location: "Private dropoff",
       extra_stop_count: 0,
@@ -457,7 +470,8 @@ try {
       child_seat_count: 0,
       company_id: null,
       customer_account: "UBS",
-      customer_id: "customer-ubs",
+      customer_id: "77",
+      customer_price_label: null,
       customer_status: "confirmed",
       dropoff_location: null,
       extra_stop_count: 0,
@@ -475,6 +489,11 @@ try {
   assert.equal(readMock.client.operations.length, 0);
   assert.equal(readMock.client.selectHistory.length, 1);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
+  assert.match(
+    readMock.client.selectHistory[0].selectedColumns,
+    /customer_price_amount/,
+    "customer-folder read must load the persisted reviewed customer amount",
+  );
   assertNoLeaks(readResult, "saved bookings read response should stay safe");
 
   setEnv(enabledEnv());
@@ -483,7 +502,7 @@ try {
   const scopedReadResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&account_scope_key=private_passenger&limit=10",
+        "http://localhost/api/admin-customer-saved-bookings?customer_id=77&account_scope_key=private_passenger&limit=10",
         {
           headers: sessionHeaders(),
         },
@@ -518,6 +537,7 @@ try {
         customer_display_name: "Codex Return Test Account 20260703 [Codex Return. Passenger20260703]",
         customer_facing_status: "request_received",
         customer_id: "69",
+        id: 204,
         passenger_name: "Codex Return. Passenger20260703",
         pickup_at: "2026-07-15T07:00:00+00:00",
         service_type: "MNG",
@@ -529,6 +549,7 @@ try {
         customer_display_name: "Codex Return Test Account 20260703 [Codex Return. Passenger20260703]",
         customer_facing_status: "request_received",
         customer_id: "69",
+        id: 205,
         passenger_name: "Codex Return. Passenger20260703",
         pickup_at: "2026-07-16T07:00:00+00:00",
         service_type: "MNG",
@@ -577,7 +598,7 @@ try {
   const customerDashboardMock = installMockClient(seed);
   const customerDashboardReadResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&limit=10", {
+      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=77&limit=10", {
         headers: customerSurfaceHeaders(),
       }),
     ),
@@ -604,7 +625,7 @@ try {
   const customerFolderMock = installMockClient(seed);
   const customerFolderReadResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&limit=10", {
+      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=77&limit=10", {
         headers: customerSurfaceHeaders({ referer: "http://localhost/customers/ubs" }),
       }),
     ),
@@ -632,7 +653,7 @@ try {
   const exactCustomerFolderReadResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-customer-saved-bookings?customer_id=customer-ubs&booking_reference=UBS-SAFE-001&limit=10",
+        "http://localhost/api/admin-customer-saved-bookings?customer_id=77&booking_reference=UBS-SAFE-001&limit=10",
         {
           headers: customerSurfaceHeaders({ referer: "http://localhost/customers/ubs" }),
         },

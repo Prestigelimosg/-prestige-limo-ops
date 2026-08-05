@@ -174,12 +174,22 @@ for (const forbidden of ["driverPayout", "payout", "payNow", "internal", "financ
 
 for (const fragment of [
   "company_id: number | null;",
+  "customer_price_label: string | null;",
   "traveler_id: number | null;",
   "vehicle_type_or_category: string | null;",
   "child_seat_count: number;",
   "extra_stop_count: number;",
 ]) {
   includes(savedBookingsRead, fragment, `existing safe booking calculation input ${fragment}`);
+}
+
+for (const fragment of [
+  'import { loadAdminSavedBookingList } from "./admin-saved-booking-read";',
+  "const bookingsResult = await loadAdminSavedBookingList({",
+  "customer_price_label: safeCustomerPriceLabel(booking.customer_price_amount)",
+  "function safeCustomerPriceLabel(value: unknown)",
+]) {
+  includes(savedBookingsRead, fragment, `persisted customer price reload projection ${fragment}`);
 }
 
 for (const fragment of [

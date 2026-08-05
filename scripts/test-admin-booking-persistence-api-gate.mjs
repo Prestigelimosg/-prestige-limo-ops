@@ -1439,6 +1439,42 @@ try {
   assert.equal(updateAgencyCreateIntentResult.ok, false);
   assert.match(updateAgencyCreateIntentResult.error, /Unknown admin booking fields rejected/);
 
+  const omittedVersionUpdatePayload = {
+    ...adminPayload(),
+    target_booking_reference: "GATE-ADM-001",
+  };
+  const firstOmittedVersionParse = persistence.parseAdminBookingUpdatePayload(
+    omittedVersionUpdatePayload,
+  );
+
+  assert.equal(firstOmittedVersionParse.ok, true);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      firstOmittedVersionParse.data,
+      "expected_updated_at",
+    ),
+    false,
+    "An omitted optional booking version must remain omitted after the first parse.",
+  );
+
+  const secondOmittedVersionParse = persistence.parseAdminBookingUpdatePayload(
+    firstOmittedVersionParse.data,
+  );
+
+  assert.equal(
+    secondOmittedVersionParse.ok,
+    true,
+    "The parsed no-version PATCH payload must remain valid when the guarded update lane parses it again.",
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      secondOmittedVersionParse.data,
+      "expected_updated_at",
+    ),
+    false,
+    "A second parse must not manufacture a null expected booking version.",
+  );
+
   const firstAgencyLinkMock = installMockClient();
   firstAgencyLinkMock.client.tables.customers.push({
     customer_type: "hotel",

@@ -234,6 +234,7 @@ class MockQuery {
   execute(mode) {
     this.client.operations.push({
       filters: JSON.parse(JSON.stringify(this.filters)),
+      limitCount: this.limitCount || null,
       operation: this.operation,
       payload: JSON.parse(JSON.stringify(this.payload)),
       selectedColumns: this.selectedColumns,
@@ -261,6 +262,16 @@ class MockQuery {
           ...this.payload,
         },
         error: null,
+      };
+    }
+
+    if (mode === "maybe" && (this.limitCount || 0) > 1 && this.client.rows.bookers.length > 1) {
+      return {
+        data: null,
+        error: {
+          code: "PGRST116",
+          message: "JSON object requested, multiple rows returned",
+        },
       };
     }
 
@@ -381,6 +392,26 @@ try {
     ],
   );
   assertSafeBody(response.body, "safe lookup");
+
+  setEnv();
+  mock = installMock();
+  mock.client.rows.bookers.push({
+    ...mock.client.rows.bookers[0],
+    id: 103,
+  });
+  response = await readResponse(
+    await harness.route.GET(
+      new Request("http://localhost/api/admin-bookers?company_id=7&booker_name=Safe%20Booker", {
+        headers: adminHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(response.status, 500, "Duplicate exact Booker matches must fail closed.");
+  assert.equal(response.body.ok, false);
+  assert.equal(mock.client.operations.length, 1);
+  assert.equal(mock.client.operations[0].limitCount, 2);
+  assertSafeBody(response.body, "duplicate Booker lookup");
 
   setEnv();
   mock = installMock();

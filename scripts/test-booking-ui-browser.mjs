@@ -20990,6 +20990,8 @@ async function runChromeTest() {
       window.__prestigeCrmSaveEmailAiRequests = [];
       window.__prestigeCrmCompanyIdentityRequests = [];
       window.__prestigeCrmCompanyWriteRequests = [];
+      window.__prestigeCrmVerifiedBooker = null;
+      window.__prestigeCrmVerifiedTravelers = [];
       window.__prestigeCrmProfileConfirmMessages = [];
       window.__prestigeCrmSaveBookingResponseLossCount = 0;
       window.__prestigeCrmSaveBookingRecoveryReads = [];
@@ -21206,7 +21208,7 @@ async function runChromeTest() {
             companies: [companyRecord],
             ok: true,
             settings: null,
-            travelers: [],
+            travelers: window.__prestigeCrmVerifiedTravelers || [],
             version: "browser-admin-rate-setup-agency-folder-mock",
           });
         }
@@ -21299,6 +21301,27 @@ async function runChromeTest() {
             });
           }
 
+          if (method === "POST" && parsedBody?.action_type === "traveler_create") {
+            const createdTraveler = {
+              ...travelerRecord,
+              booker_contact: parsedBody.booker_contact || null,
+              booker_email: parsedBody.booker_email || null,
+              booker_id: null,
+              booker_name: parsedBody.booker_name,
+              company_id: parsedBody.company_id,
+              traveler_name: parsedBody.traveler_name,
+            };
+            window.__prestigeCrmVerifiedTravelers = [createdTraveler];
+            return jsonResponse({
+              no_op: false,
+              ok: true,
+              reason: "saved",
+              record: createdTraveler,
+              status: "saved",
+              version: "browser-traveler-profile-save-mock",
+            });
+          }
+
           return jsonResponse({ ok: false, error: "Company profile save mock rejected the request." }, 400);
         }
 
@@ -21376,10 +21399,15 @@ async function runChromeTest() {
 
         if (url.includes("/api/admin-bookers")) {
           if (method === "GET") {
-            return jsonResponse({ booker: null, ok: true, version: "browser-admin-bookers-mock" });
+            return jsonResponse({
+              booker: window.__prestigeCrmVerifiedBooker,
+              ok: true,
+              version: "browser-admin-bookers-mock",
+            });
           }
 
           if (method === "POST") {
+            window.__prestigeCrmVerifiedBooker = bookerRecord;
             return jsonResponse({ booker: bookerRecord, ok: true, version: "browser-admin-bookers-mock" });
           }
 
@@ -21455,7 +21483,13 @@ async function runChromeTest() {
           }
 
           if (method === "PATCH") {
-            return jsonResponse({});
+            const parsedBody = bodyText ? JSON.parse(bodyText) : {};
+            const linkedTraveler = {
+              ...(window.__prestigeCrmVerifiedTravelers || [travelerRecord])[0],
+              ...parsedBody,
+            };
+            window.__prestigeCrmVerifiedTravelers = [linkedTraveler];
+            return jsonResponse(linkedTraveler);
           }
 
           window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
@@ -21584,7 +21618,9 @@ async function runChromeTest() {
       "Expected Save + CRM to complete the safe operations-email duplicate preflight before creating a company",
     );
     assert.deepEqual(
-      crmSaveState.companyWriteRequests.map(({ body, method }) => ({ body, method })),
+      crmSaveState.companyWriteRequests
+        .filter(({ body }) => body?.action_type === "company_create")
+        .map(({ body, method }) => ({ body, method })),
       [
         {
           body: {
@@ -21599,8 +21635,52 @@ async function runChromeTest() {
       ],
       "Expected Save + CRM to write only the approved base company name and Booker contact fields",
     );
-    assert.equal(crmSaveState.companyProfileConfirmMessages.length, 1);
+    // first corporate Save + CRM identity creation
+    assert.equal(
+      crmSaveState.companyProfileConfirmMessages.length,
+      2,
+      "Expected first corporate save to ask once before creating verified identities",
+    );
     assert.match(crmSaveState.companyProfileConfirmMessages[0], /Create and link the new CRM company profile/);
+    assert.match(
+      crmSaveState.companyProfileConfirmMessages[1],
+      /Create or reuse this verified Booker \+ Traveller under BROWSER UI TEST COMPANY/,
+    );
+    assert.equal(
+      crmSaveState.fetchCalls.filter(
+        (call) => call === "POST /api/admin-bookers",
+      ).length,
+      1,
+      "Expected first corporate save to create one verified Booker",
+    );
+    assert.equal(
+      crmSaveState.companyWriteRequests.filter(
+        ({ body, method }) =>
+          method === "POST" && body?.action_type === "traveler_create",
+      ).length,
+      1,
+      "Expected first corporate save to create and link one verified Traveller",
+    );
+    assert.equal(
+      crmSaveState.bookingInsert?.booking?.company_id,
+      601,
+      "Expected first corporate booking POST to carry the verified identity tuple",
+    );
+    assert.equal(crmSaveState.bookingInsert?.booking?.booker_id, 602);
+    assert.equal(crmSaveState.bookingInsert?.booking?.traveler_id, 603);
+    const firstCorporateBookingPostIndex = crmSaveState.fetchCalls.indexOf(
+      "POST /api/admin-bookings",
+    );
+    const firstCorporateRateReadIndexes = crmSaveState.fetchCalls
+      .map((call, index) => ({ call, index }))
+      .filter(({ call }) => call === "GET /api/admin-rate-setup")
+      .map(({ index }) => index);
+    assert.equal(
+      firstCorporateRateReadIndexes.length >= 2 &&
+        firstCorporateRateReadIndexes.at(-1) < firstCorporateBookingPostIndex,
+      true,
+      "Expected the saved corporate pair to reload before the booking POST",
+    );
     assert.deepEqual(
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
       [],
@@ -21621,12 +21701,11 @@ async function runChromeTest() {
         (call) =>
           call.startsWith("POST ") &&
           (call.includes("/rest/v1/companies") ||
-            call.includes("/api/admin-bookers") ||
             call.includes("/rest/v1/travelers") ||
             call.includes("/api/admin-saved-addresses")),
       ),
       [],
-      "Expected safe Save Booking + CRM not to perform legacy CRM writes",
+      "Expected first corporate save to use only the established typed Booker/Traveller writers",
     );
     assert.deepEqual(
       crmSaveState.calendarRequests,
@@ -21985,6 +22064,7 @@ async function runChromeTest() {
               bookingInsert: bookingInsert.body,
               companyIdentityRequests: window.__prestigeCrmCompanyIdentityRequests || [],
               companyWriteRequests: window.__prestigeCrmCompanyWriteRequests || [],
+              fetchCalls: window.__prestigeFetchCalls || [],
               recoveryReads: window.__prestigeCrmSaveBookingRecoveryReads || [],
             }
           : false;
@@ -21998,6 +22078,13 @@ async function runChromeTest() {
     assert.equal(agencySaveState.bookingInsert?.booking?.traveler_id, null);
     assert.equal(agencySaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
     assert.deepEqual(agencySaveState.companyWriteRequests, []);
+    assert.equal(
+      agencySaveState.fetchCalls.some(
+        (call) => call === "GET /api/admin-customer-accounts?limit=1000",
+      ),
+      true,
+      "Expected existing agency Save + CRM to freshly verify the exact agency folder before any corporate identity writer",
+    );
     assert.equal(agencySaveState.companyIdentityRequests.length, 1);
     assert.match(agencySaveState.companyIdentityRequests[0]?.url || "", /[?&]id=601/);
     assert.equal(

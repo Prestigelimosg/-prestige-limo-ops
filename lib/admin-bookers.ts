@@ -342,7 +342,9 @@ export async function findAdminBooker(
     query = query.ilike("booker_name", bookerName);
   }
 
-  const { data, error } = await query.limit(1).maybeSingle();
+  // Ask PostgREST to inspect up to two rows so duplicate exact matches fail
+  // closed instead of silently choosing the first Booker.
+  const { data, error } = await query.limit(2).maybeSingle();
 
   if (error) {
     return safeAdapterFailure(safeReadError, 500, error);

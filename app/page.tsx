@@ -100,6 +100,8 @@ const adminCustomerBookingInvitationsApiPath = "/api/admin-customer-booking-invi
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
+const adminBookersApiPath = "/api/admin-bookers";
+const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
   "/api/admin-company-traveler-crm-runtime-write-action";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
@@ -6155,11 +6157,16 @@ type CompanyTravelerCrmRuntimeWriteResponse = {
   ok?: boolean;
   reason?: string;
   record?: {
+    booker_contact?: string | null;
+    booker_email?: string | null;
+    booker_name?: string | null;
+    company_id?: number | string | null;
     company_name?: string | null;
     id?: number | string | null;
     mobile_phone?: string | null;
     operations_email?: string | null;
     primary_contact_name?: string | null;
+    traveler_name?: string | null;
   } | null;
   rejected_fields?: unknown;
   status?: string;
@@ -6755,6 +6762,529 @@ async function resolveSaveCrmCompanyProfileForSave(
     companyName: clean(savedCompany.company_name) || existingCompanyName,
     ok: true,
     profileWritePerformed: true,
+  };
+}
+
+type SaveCrmBookerRecord = {
+  booker_name?: string | null;
+  company_id?: number | string | null;
+  email?: string | null;
+  id?: number | string | null;
+  phone?: string | null;
+};
+
+type SaveCrmBookerResponse = {
+  booker?: SaveCrmBookerRecord | null;
+  error?: string;
+  ok?: boolean;
+};
+
+type SaveCrmCorporateIdentityResolution =
+  | {
+      bookerId: number;
+      bookerName: string;
+      companyId: number;
+      ok: true;
+      travelerId: number;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+function saveCrmComparableIdentityValue(value: string | null | undefined) {
+  return clean(value).replace(/\s+/g, " ").toLowerCase();
+}
+
+function saveCrmValidatedBookerRecord(
+  value: SaveCrmBookerRecord | null | undefined,
+  companyId: number,
+  bookerName: string,
+) {
+  const recordId = adminDispatchVerifiedIdentityId(value?.id);
+
+  if (
+    !recordId ||
+    adminDispatchVerifiedIdentityId(value?.company_id) !== companyId ||
+    saveCrmComparableIdentityValue(value?.booker_name) !==
+      saveCrmComparableIdentityValue(bookerName)
+  ) {
+    throw new Error(
+      "The verified Booker response did not match the exact company and name. No booking was saved.",
+    );
+  }
+
+  return {
+    ...value,
+    id: recordId,
+  };
+}
+
+async function loadSaveCrmCorporateIdentityRows(companyId: number) {
+  const response = await fetch(adminRateSetupApiPath, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminRateSetupReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "Verified CRM identities could not be reloaded. No booking was saved.",
+    );
+  }
+
+  if (
+    !(responseBody.companies ?? []).some(
+      (company) => adminDispatchVerifiedIdentityId(company.id) === companyId,
+    )
+  ) {
+    throw new Error(
+      "The selected verified company no longer exists. Reload CRM identities before saving.",
+    );
+  }
+
+  return (responseBody.travelers ?? []).filter(
+    (traveler) => adminDispatchVerifiedIdentityId(traveler.company_id) === companyId,
+  );
+}
+
+async function loadSaveCrmAgencyCustomerClassification(
+  customerId: number,
+  companyId: number,
+) {
+  const response = await fetch(`${adminCustomerAccountsApiPath}?limit=1000`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminDispatchAgencyFoldersReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "Hotel / Tour Agency folders could not be verified before saving.",
+    );
+  }
+
+  return (responseBody.accounts ?? []).some(
+    (account) =>
+      account.guest_account_billing_enabled === true &&
+      account.customer_folder_active === true &&
+      adminDispatchVerifiedIdentityId(account.customer_id) === customerId &&
+      adminDispatchVerifiedIdentityId(account.verified_company_id) === companyId,
+  );
+}
+
+async function loadSaveCrmBookerById(companyId: number, bookerId: number) {
+  const params = new URLSearchParams({ id: String(bookerId) });
+  const response = await fetch(`${adminBookersApiPath}?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | SaveCrmBookerResponse
+    | null;
+  const returnedBookerId = adminDispatchVerifiedIdentityId(responseBody?.booker?.id);
+  const returnedCompanyId = adminDispatchVerifiedIdentityId(
+    responseBody?.booker?.company_id,
+  );
+  const returnedBookerName = clean(responseBody?.booker?.booker_name);
+
+  if (
+    !response.ok ||
+    responseBody?.ok !== true ||
+    returnedBookerId !== bookerId ||
+    returnedCompanyId !== companyId ||
+    !returnedBookerName
+  ) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "The booking's verified Booker could not be reloaded under the exact company. No booking was saved.",
+    );
+  }
+
+  return {
+    ...responseBody.booker,
+    booker_name: returnedBookerName,
+    id: returnedBookerId,
+  };
+}
+
+async function findOrCreateSaveCrmBooker(
+  companyId: number,
+  bookingValue: BookingForm,
+) {
+  const bookerName = clean(bookingValue.booker);
+  const bookerEmail = clean(bookingValue.bookerEmail).toLowerCase();
+  const bookerContact = clean(bookingValue.bookerContact);
+  const params = new URLSearchParams({
+    booker_name: bookerName,
+    company_id: String(companyId),
+  });
+  const lookupResponse = await fetch(`${adminBookersApiPath}?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const lookupBody = (await lookupResponse.json().catch(() => null)) as
+    | SaveCrmBookerResponse
+    | null;
+
+  if (!lookupResponse.ok || lookupBody?.ok !== true) {
+    throw new Error(
+      clean(lookupBody?.error) ||
+        "The verified Booker could not be checked safely. No booking was saved.",
+    );
+  }
+
+  if (lookupBody.booker) {
+    let booker = saveCrmValidatedBookerRecord(
+      lookupBody.booker,
+      companyId,
+      bookerName,
+    );
+    const savedEmail = clean(booker.email).toLowerCase();
+    const savedContact = clean(booker.phone);
+
+    if (
+      (savedEmail && bookerEmail && savedEmail !== bookerEmail) ||
+      (savedContact && bookerContact && savedContact !== bookerContact)
+    ) {
+      throw new Error(
+        "That verified Booker already has different contact details. Review the exact Booker in the customer profile before retrying; no booking was saved.",
+      );
+    }
+
+    if ((!savedEmail && bookerEmail) || (!savedContact && bookerContact)) {
+      const updateResponse = await fetch(adminBookersApiPath, {
+        body: JSON.stringify({
+          booker_name: clean(booker.booker_name) || bookerName,
+          email: savedEmail || bookerEmail || null,
+          id: booker.id,
+          phone: savedContact || bookerContact || null,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const updateBody = (await updateResponse.json().catch(() => null)) as
+        | SaveCrmBookerResponse
+        | null;
+
+      if (!updateResponse.ok || updateBody?.ok !== true || !updateBody.booker) {
+        throw new Error(
+          clean(updateBody?.error) ||
+            "The verified Booker contact could not be completed safely. No booking was saved.",
+        );
+      }
+
+      booker = saveCrmValidatedBookerRecord(
+        updateBody.booker,
+        companyId,
+        bookerName,
+      );
+    }
+
+    return booker;
+  }
+
+  const createResponse = await fetch(adminBookersApiPath, {
+    body: JSON.stringify({
+      booker_name: bookerName,
+      company_id: companyId,
+      email: bookerEmail || null,
+      phone: bookerContact || null,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const createBody = (await createResponse.json().catch(() => null)) as
+    | SaveCrmBookerResponse
+    | null;
+
+  if (!createResponse.ok || createBody?.ok !== true || !createBody.booker) {
+    throw new Error(
+      clean(createBody?.error) ||
+        "The verified Booker could not be created safely. No booking was saved.",
+    );
+  }
+
+  return saveCrmValidatedBookerRecord(createBody.booker, companyId, bookerName);
+}
+
+async function createSaveCrmTraveler(
+  companyId: number,
+  bookingValue: BookingForm,
+) {
+  const travelerName = clean(bookingValue.name);
+  const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
+    body: JSON.stringify({
+      action_type: "traveler_create",
+      booker_name: clean(bookingValue.booker),
+      company_id: companyId,
+      traveler_name: travelerName,
+      ...(clean(bookingValue.bookerContact)
+        ? { booker_contact: clean(bookingValue.bookerContact) }
+        : {}),
+      ...(clean(bookingValue.bookerEmail)
+        ? { booker_email: clean(bookingValue.bookerEmail).toLowerCase() }
+        : {}),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | CompanyTravelerCrmRuntimeWriteResponse
+    | null;
+  const travelerId = crmRuntimeRecordId(responseBody);
+
+  if (
+    !response.ok ||
+    responseBody?.ok !== true ||
+    responseBody.status !== "saved" ||
+    !travelerId ||
+    adminDispatchVerifiedIdentityId(responseBody.record?.company_id) !== companyId ||
+    saveCrmComparableIdentityValue(responseBody.record?.traveler_name) !==
+      saveCrmComparableIdentityValue(travelerName)
+  ) {
+    throw new Error(
+      crmRuntimeWriteError(
+        responseBody,
+        "The verified Traveller could not be created safely. No booking was saved.",
+      ),
+    );
+  }
+
+  return travelerId;
+}
+
+async function linkSaveCrmTravelerToBooker(
+  companyId: number,
+  bookerId: number,
+  travelerId: number,
+  bookingValue: BookingForm,
+) {
+  const bookerName = clean(bookingValue.booker);
+  const travelerName = clean(bookingValue.name);
+  const bookerSnapshotPayload = {
+    ...(clean(bookingValue.bookerContact)
+      ? { booker_contact: clean(bookingValue.bookerContact) }
+      : {}),
+    ...(clean(bookingValue.bookerEmail)
+      ? { booker_email: clean(bookingValue.bookerEmail).toLowerCase() }
+      : {}),
+  };
+  const linkParams = new URLSearchParams({
+    id: `eq.${travelerId}`,
+    select: "id,company_id,booker_id,traveler_name,booker_name,booker_contact,booker_email",
+    single: "single",
+  });
+  const linkResponse = await fetch(`${adminLegacyTravelersApiPath}?${linkParams.toString()}`, {
+    body: JSON.stringify({
+      booker_id: bookerId,
+      booker_name: bookerName,
+      traveler_name: travelerName,
+      ...bookerSnapshotPayload,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "PATCH",
+  });
+  const linkedTraveler = (await linkResponse.json().catch(() => null)) as
+    | TravelerRecord
+    | null;
+
+  if (
+    !linkResponse.ok ||
+    adminDispatchVerifiedIdentityId(linkedTraveler?.id) !== travelerId ||
+    adminDispatchVerifiedIdentityId(linkedTraveler?.company_id) !== companyId ||
+    adminDispatchVerifiedIdentityId(linkedTraveler?.booker_id) !== bookerId ||
+    saveCrmComparableIdentityValue(linkedTraveler?.traveler_name) !==
+      saveCrmComparableIdentityValue(travelerName) ||
+    saveCrmComparableIdentityValue(linkedTraveler?.booker_name) !==
+      saveCrmComparableIdentityValue(bookerName)
+  ) {
+    throw new Error(
+      "The verified Traveller could not be linked to the exact Booker. No booking was saved.",
+    );
+  }
+}
+
+async function resolveSaveCrmCorporateIdentityForSave(
+  bookingValue: BookingForm,
+  companyId: number,
+  companyName: string,
+): Promise<SaveCrmCorporateIdentityResolution> {
+  const currentBookerId = adminDispatchVerifiedIdentityId(bookingValue.bookerId);
+  const currentTravelerId = adminDispatchVerifiedIdentityId(bookingValue.travelerId);
+
+  if (currentBookerId && currentTravelerId) {
+    const currentRows = await loadSaveCrmCorporateIdentityRows(companyId);
+    const verifiedPair = currentRows.find(
+      (traveler) =>
+        adminDispatchVerifiedIdentityId(traveler.id) === currentTravelerId &&
+        adminDispatchVerifiedIdentityId(traveler.company_id) === companyId &&
+        adminDispatchVerifiedIdentityId(traveler.booker_id) === currentBookerId &&
+        saveCrmComparableIdentityValue(traveler.traveler_name) ===
+          saveCrmComparableIdentityValue(bookingValue.name) &&
+        saveCrmComparableIdentityValue(traveler.booker_name) ===
+          saveCrmComparableIdentityValue(bookingValue.booker),
+    );
+
+    if (!verifiedPair) {
+      throw new Error(
+        "The selected Booker + Traveller pair no longer matches this exact company and booking. Reload CRM identities before saving; no booking was changed.",
+      );
+    }
+
+    return {
+      bookerId: currentBookerId,
+      bookerName: clean(bookingValue.booker),
+      companyId,
+      ok: true,
+      travelerId: currentTravelerId,
+    };
+  }
+
+  if (!currentBookerId && currentTravelerId) {
+    return {
+      message: "The booking has a verified Traveller without its verified Booker. Reload CRM identities and select the exact pair before saving.",
+      ok: false,
+    };
+  }
+
+  const existingBooker = currentBookerId
+    ? await loadSaveCrmBookerById(companyId, currentBookerId)
+    : null;
+  const identityBookingValue = existingBooker
+    ? {
+        ...bookingValue,
+        booker: clean(existingBooker.booker_name),
+      }
+    : bookingValue;
+  const bookerName = clean(identityBookingValue.booker);
+  const travelerName = clean(bookingValue.name);
+
+  if (!bookerName || !travelerName) {
+    return {
+      message: "Enter both Booker / PA name and Passenger name before saving this corporate booking.",
+      ok: false,
+    };
+  }
+
+  if (
+    !window.confirm(
+      `Create or reuse this verified Booker + Traveller under ${companyName}? Booker: ${bookerName}. Traveller: ${travelerName}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change Calendar, driver, payment, or agency guests.`,
+    )
+  ) {
+    return {
+      message: "Save cancelled before creating or reusing the verified Booker + Traveller. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  const currentRows = await loadSaveCrmCorporateIdentityRows(companyId);
+  const matchingTravelers = currentRows.filter(
+    (traveler) =>
+      saveCrmComparableIdentityValue(traveler.traveler_name) ===
+      saveCrmComparableIdentityValue(travelerName),
+  );
+
+  if (matchingTravelers.length > 1) {
+    throw new Error(
+      "More than one verified Traveller matches this company and name. Review the customer profile before retrying; no booking was saved.",
+    );
+  }
+
+  const matchingTraveler = matchingTravelers[0] ?? null;
+  const existingLinkedBookerId = adminDispatchVerifiedIdentityId(matchingTraveler?.booker_id);
+  const existingLinkedBookerName = clean(matchingTraveler?.booker_name);
+
+  if (
+    existingLinkedBookerId &&
+    saveCrmComparableIdentityValue(existingLinkedBookerName) !==
+      saveCrmComparableIdentityValue(bookerName)
+  ) {
+    throw new Error(
+      "That Traveller is already linked to another verified Booker. Review the customer profile before retrying; no booking was saved.",
+    );
+  }
+
+  const booker =
+    existingBooker ||
+    (await findOrCreateSaveCrmBooker(companyId, identityBookingValue));
+  const bookerId = adminDispatchVerifiedIdentityId(booker.id);
+
+  if (!bookerId) {
+    throw new Error("The verified Booker returned no safe ID. No booking was saved.");
+  }
+
+  if (existingLinkedBookerId && existingLinkedBookerId !== bookerId) {
+    throw new Error(
+      "That Traveller is already linked to another verified Booker. Review the customer profile before retrying; no booking was saved.",
+    );
+  }
+
+  const travelerId =
+    adminDispatchVerifiedIdentityId(matchingTraveler?.id) ||
+    (await createSaveCrmTraveler(companyId, identityBookingValue));
+
+  await linkSaveCrmTravelerToBooker(
+    companyId,
+    bookerId,
+    travelerId,
+    identityBookingValue,
+  );
+
+  const verifiedRows = await loadSaveCrmCorporateIdentityRows(companyId);
+  const verifiedPair = verifiedRows.find(
+    (traveler) =>
+      adminDispatchVerifiedIdentityId(traveler.id) === travelerId &&
+      adminDispatchVerifiedIdentityId(traveler.company_id) === companyId &&
+      adminDispatchVerifiedIdentityId(traveler.booker_id) === bookerId &&
+      saveCrmComparableIdentityValue(traveler.traveler_name) ===
+        saveCrmComparableIdentityValue(travelerName) &&
+      saveCrmComparableIdentityValue(traveler.booker_name) ===
+        saveCrmComparableIdentityValue(bookerName),
+  );
+
+  if (!verifiedPair) {
+    throw new Error(
+      "The saved Booker + Traveller pair could not be verified before the booking write. No booking was saved; review the customer profile before retrying.",
+    );
+  }
+
+  return {
+    bookerId,
+    bookerName,
+    companyId,
+    ok: true,
+    travelerId,
   };
 }
 
@@ -13756,12 +14286,21 @@ function adminOperationalSnapshotToBookingForm(
     booking: adminDispatchSelectableBookingForm({
       ...createInitialBooking(),
       booker: clean(record.contact_display_name) || customerDisplayName,
+      bookerId: adminDispatchVerifiedIdentityId(record.booker_id)
+        ? String(record.booker_id)
+        : "",
       bookerContact: contactPhone,
       bookerEmail: clean(record.contact_email),
       bookingType: routeType,
       childSeatCount: childSeatCount > 0 ? String(childSeatCount) : "",
       childSeatRequired: childSeatCount > 0 ? "yes" : "",
       company: customerDisplayName,
+      companyId: adminDispatchVerifiedIdentityId(record.company_id)
+        ? String(record.company_id)
+        : "",
+      customerId: adminDispatchVerifiedIdentityId(record.customer_id)
+        ? String(record.customer_id)
+        : "",
       date: dateTimeParts.date,
       dropoff: dropoffLocation,
       driverContact: clean(record.driver_contact),
@@ -13774,6 +14313,9 @@ function adminOperationalSnapshotToBookingForm(
       pax: Number.isInteger(paxCount) && paxCount > 0 ? String(paxCount) : "1",
       pickup: pickupLocation,
       time: dateTimeParts.time,
+      travelerId: adminDispatchVerifiedIdentityId(record.traveler_id)
+        ? String(record.traveler_id)
+        : "",
       vehicle: clean(record.vehicle_type_or_category) || "AVF",
     }),
     ok: true,
@@ -21025,17 +21567,67 @@ export default function Home() {
         return null;
       }
 
+      const existingCustomerId = adminDispatchVerifiedIdentityId(booking.customerId);
+      const hotelAgencyBooking =
+        adminDispatchIsCreatingAgencyFolder(booking) ||
+        Boolean(
+          existingCustomerId &&
+            companyProfileResolution &&
+            (await loadSaveCrmAgencyCustomerClassification(
+              existingCustomerId,
+              companyProfileResolution.companyId,
+            )),
+        );
+      const corporateIdentityResolution =
+        companyProfileResolution && !hotelAgencyBooking
+          ? await resolveSaveCrmCorporateIdentityForSave(
+              booking,
+              companyProfileResolution.companyId,
+              companyProfileResolution.companyName,
+            )
+          : null;
+
+      if (corporateIdentityResolution && !corporateIdentityResolution.ok) {
+        const cancelledMessage = {
+          tone: "info",
+          text: corporateIdentityResolution.message,
+        } satisfies Message;
+
+        setMessage(cancelledMessage);
+        setBookingSaveMessage(cancelledMessage);
+        setAdminBookingPersistenceMessage(cancelledMessage);
+        return null;
+      }
+
       const bookingForSave = {
         ...booking,
         ...(companyProfileResolution
           ? { companyId: String(companyProfileResolution.companyId) }
           : {}),
+        ...(corporateIdentityResolution
+          ? {
+              booker: corporateIdentityResolution.bookerName,
+              bookerId: String(corporateIdentityResolution.bookerId),
+              companyId: String(corporateIdentityResolution.companyId),
+              travelerId: String(corporateIdentityResolution.travelerId),
+            }
+          : {}),
       };
 
-      if (companyProfileResolution) {
+      if (companyProfileResolution || corporateIdentityResolution) {
         setBooking((currentBooking) => ({
           ...currentBooking,
-          companyId: String(companyProfileResolution.companyId),
+          ...(companyProfileResolution
+            ? { companyId: String(companyProfileResolution.companyId) }
+            : {}),
+          ...(corporateIdentityResolution
+            ? {
+                booker: corporateIdentityResolution.bookerName,
+                bookerId: String(corporateIdentityResolution.bookerId),
+                companyId: String(corporateIdentityResolution.companyId),
+                travelerId: String(corporateIdentityResolution.travelerId),
+              }
+            : {}),
         }));
       }
 
@@ -23907,16 +24499,151 @@ export default function Home() {
       return;
     }
 
+    const appliedSnapshot = appliedAdminBookingSnapshot;
+    const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
+    const updateCompanyId = adminDispatchVerifiedIdentityId(booking.companyId);
+    const updateCustomerId = adminDispatchVerifiedIdentityId(booking.customerId);
+    const updateBookerId = adminDispatchVerifiedIdentityId(booking.bookerId);
+    const updateTravelerId = adminDispatchVerifiedIdentityId(booking.travelerId);
+    let updateIsHotelAgencyBooking = false;
+
+    if (acceptingCustomerRequest) {
+      if (!updateCustomerId || !updateCompanyId) {
+        const malformedRequestMessage = {
+          tone: "error",
+          text: "This customer request is missing its exact verified customer or company. Reload and review the request before Accept + Cal; no booking or identity was changed.",
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(malformedRequestMessage);
+        setMessage(malformedRequestMessage);
+        setBookingSaveMessage(malformedRequestMessage);
+        return;
+      }
+
+      try {
+        updateIsHotelAgencyBooking = await loadSaveCrmAgencyCustomerClassification(
+          updateCustomerId,
+          updateCompanyId,
+        );
+      } catch (error) {
+        const classificationMessage = {
+          tone: "error",
+          text: `${
+            error instanceof Error
+              ? error.message
+              : "Hotel / Tour Agency classification could not be verified."
+          } No booking or identity was changed.`,
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(classificationMessage);
+        setMessage(classificationMessage);
+        setBookingSaveMessage(classificationMessage);
+        return;
+      }
+
+      if (!updateIsHotelAgencyBooking && !updateBookerId) {
+        const missingBookerMessage = {
+          tone: "error",
+          text: "This non-agency customer request has no verified Booker. Reload and review the exact request before Accept + Cal; no booking or identity was changed.",
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(missingBookerMessage);
+        setMessage(missingBookerMessage);
+        setBookingSaveMessage(missingBookerMessage);
+        return;
+      }
+    }
+
+    if (
+      acceptingCustomerRequest &&
+      updateIsHotelAgencyBooking &&
+      (updateBookerId || updateTravelerId)
+    ) {
+      const agencyIdentityMessage = {
+        tone: "error",
+        text: "This Hotel / Tour Agency request unexpectedly carries a verified Booker or Traveller. Reload and review the exact request; no booking or identity was changed.",
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(agencyIdentityMessage);
+      setMessage(agencyIdentityMessage);
+      setBookingSaveMessage(agencyIdentityMessage);
+      return;
+    }
+
+    const updateCompanyName =
+      clean(
+        rateCompanies.find(
+          (company) => adminDispatchVerifiedIdentityId(company.id) === updateCompanyId,
+        )?.company_name,
+      ) ||
+      clean(billingIdentityResolution.accountLabel) ||
+      clean(booking.company) ||
+      (appliedSnapshot ? adminBookingPersistenceCustomerDisplayName(appliedSnapshot) : "") ||
+      `verified company ${updateCompanyId}`;
+    let corporateIdentityResolution: SaveCrmCorporateIdentityResolution | null = null;
+
+    if (acceptingCustomerRequest && updateCompanyId && !updateIsHotelAgencyBooking) {
+      try {
+        corporateIdentityResolution = await resolveSaveCrmCorporateIdentityForSave(
+          booking,
+          updateCompanyId,
+          updateCompanyName,
+        );
+      } catch (error) {
+        const identityMessage = {
+          tone: "error",
+          text: error instanceof Error
+            ? error.message
+            : "The exact Booker + Traveller pair could not be verified. No booking or identity was changed.",
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(identityMessage);
+        setMessage(identityMessage);
+        setBookingSaveMessage(identityMessage);
+        return;
+      }
+    }
+
+    if (corporateIdentityResolution && !corporateIdentityResolution.ok) {
+      const cancelledMessage = {
+        tone: "info",
+        text: corporateIdentityResolution.message,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(cancelledMessage);
+      setMessage(cancelledMessage);
+      setBookingSaveMessage(cancelledMessage);
+      return;
+    }
+
+    const bookingForUpdate = corporateIdentityResolution
+      ? {
+          ...booking,
+          booker: corporateIdentityResolution.bookerName,
+          bookerId: String(corporateIdentityResolution.bookerId),
+          companyId: String(corporateIdentityResolution.companyId),
+          travelerId: String(corporateIdentityResolution.travelerId),
+        }
+      : booking;
+
+    if (corporateIdentityResolution) {
+      setBooking((currentBooking) => ({
+        ...currentBooking,
+        booker: corporateIdentityResolution.bookerName,
+        bookerId: String(corporateIdentityResolution.bookerId),
+        companyId: String(corporateIdentityResolution.companyId),
+        travelerId: String(corporateIdentityResolution.travelerId),
+      }));
+    }
+
     const payload = buildAdminBookingPersistencePayload(
-      booking,
+      bookingForUpdate,
       currentTimeMs,
       targetBookingReference,
       {
         customerDisplayNameOverride: billingIdentityResolution.accountLabel,
       },
     );
-    const appliedSnapshot = appliedAdminBookingSnapshot;
-    const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
 
     if (appliedSnapshot) {
       payload.booking.source_channel = clean(appliedSnapshot.source_channel) || payload.booking.source_channel;

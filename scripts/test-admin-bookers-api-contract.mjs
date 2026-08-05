@@ -314,15 +314,15 @@ const [helperSource, routeSource, appPageSource, legacyRouteSource] = await Prom
 assert.equal(helperSource.includes('from("bookers")'), true, "Typed helper must own bookers access.");
 assert.equal(routeSource.includes("/api/admin-legacy-data/rest/v1"), false, "Typed route must not use legacy shim.");
 assert.equal(
-  routeSource.includes('allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]'),
+  routeSource.includes('allowServerSessionRoleMethodsWithoutRequestToken: ["POST", "PATCH"]'),
   true,
-  "Typed booker create must reuse the verified same-origin server-session POST boundary.",
+  "Typed booker create and exact-customer edit must reuse the verified same-origin server-session boundary.",
 );
 assert.equal(
   routeSource.includes('additionalSameOriginRefererPathPrefixes: ["/customers/"]') &&
     routeSource.includes('additionalSameOriginRefererPathnames: ["/customers"]'),
   true,
-  "Typed booker create must allow only the established same-origin exact-customer profile surface in addition to the admin dashboard.",
+  "Typed booker create and edit must allow only the established same-origin exact-customer profile surface in addition to the admin dashboard.",
 );
 assert.equal(appPageSource.includes("adminLegacyTables.bookers"), false, "App must not use legacy bookers table.");
 assert.equal(
@@ -466,6 +466,51 @@ try {
   assert.equal(mock.client.operations[0].operation, "update");
   assert.equal(mock.client.operations[0].table, "bookers");
   assertSafeBody(response.body, "safe update");
+
+  setEnv();
+  mock = installMock();
+  response = await readResponse(
+    await harness.route.PATCH(
+      patchRequest(
+        "http://localhost/api/admin-bookers",
+        {
+          booker_name: "Same-Origin Updated Booker",
+          email: "updated@example.invalid",
+          id: 101,
+          phone: "90000003",
+        },
+        sameOriginAdminHeaders({ referer: "http://localhost/customers/173" }),
+      ),
+    ),
+  );
+
+  assert.equal(response.status, 200, "Verified same-origin customer-profile booker update should pass without a browser token.");
+  assert.equal(response.body.booker.id, 101);
+  assert.equal(mock.client.operations[0].operation, "update");
+  assert.equal(mock.client.operations[0].table, "bookers");
+  assertSafeBody(response.body, "same-origin safe update");
+
+  setEnv();
+  mock = installMock();
+  response = await readResponse(
+    await harness.route.PATCH(
+      patchRequest(
+        "http://localhost/api/admin-bookers",
+        {
+          booker_name: "Cross-Origin Updated Booker",
+          id: 101,
+        },
+        sameOriginAdminHeaders({
+          origin: "https://outside.invalid",
+          referer: "https://outside.invalid/",
+        }),
+      ),
+    ),
+  );
+
+  assert.equal(response.status, 403, "Cross-origin tokenless booker update must stay blocked.");
+  assert.equal(mock.client.operations.length, 0);
+  assertSafeBody(response.body, "cross-origin update");
 
   setEnv();
   mock = installMock();

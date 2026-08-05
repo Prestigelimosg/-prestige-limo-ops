@@ -845,6 +845,7 @@ export function CustomerFolderSavedBookingsPanel({
 
     setCustomerFolderRateSetupMessage("Loading verified CRM identities...");
     const rateResponse = await fetch(adminRateSetupApiPath, {
+      cache: "no-store",
       headers: {
         "x-prestige-admin-purpose": "admin-booking-persistence",
       },
@@ -1351,7 +1352,7 @@ export function CustomerFolderSavedBookingsPanel({
     if (options.surface === "invoice-review") {
       setSectionFourEditingReference(reference);
       try {
-        await loadCustomerFolderRateSetup();
+        await loadCustomerFolderRateSetup({ force: true });
       } catch {
         // The visible Section 4 identity editor remains fail closed.
       }
@@ -1499,17 +1500,10 @@ export function CustomerFolderSavedBookingsPanel({
   }
 
   function updateSectionFourTravelerIdentity(value: string) {
-    const selectedTraveler = sectionFourCrmTravelers.find(
-      (traveler) => String(traveler.id) === value,
-    );
-
     setInlineEditState((current) => ({
       ...current,
       form: {
         ...current.form,
-        passengerName:
-          inlineEditText(selectedTraveler?.traveler_name, 160) ||
-          current.form.passengerName,
         travelerId: value,
       },
       message: "Unsaved verified customer identity changes.",

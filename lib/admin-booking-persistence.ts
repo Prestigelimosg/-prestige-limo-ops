@@ -950,7 +950,7 @@ export function parseAdminBookingUpdatePayload(
     ok: true,
     data: {
       ...parsed.data,
-      expected_updated_at: expectedUpdatedAt,
+      ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
       target_booking_reference: targetBookingReference,
     },
   };

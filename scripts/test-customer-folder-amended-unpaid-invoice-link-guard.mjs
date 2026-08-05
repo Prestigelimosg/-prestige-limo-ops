@@ -27,11 +27,20 @@ function mustExclude(source, fragment, label) {
   assert.equal(source.includes(fragment), false, `${label} must exclude ${fragment}.`);
 }
 
+function sectionBetween(source, startFragment, endFragment) {
+  const start = source.indexOf(startFragment);
+  assert.notEqual(start, -1, `Missing section start: ${startFragment}`);
+  const end = source.indexOf(endFragment, start + startFragment.length);
+  assert.notEqual(end, -1, `Missing section end: ${endFragment}`);
+
+  return source.slice(start, end);
+}
+
 for (const fragment of [
   'export const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpaid_invoice";',
   "refreshAdminCustomerAmendedUnpaidInvoice",
   '.from("bookings")',
-  '"booking_reference, customer_id, public_booking_reference, service_type, route_type, route_summary, pickup_at, pickup_datetime, pickup_location, dropoff_location, flight_no, passenger_name, vehicle_type_or_category"',
+  '"booking_reference, customer_id, public_booking_reference, service_type, route_type, route_summary, pickup_at, pickup_datetime, pickup_location, dropoff_location, flight_no, passenger_name, vehicle_type_or_category, customer_price_amount, updated_at"',
   "loadAdminDriverJobDspActualTimeSummaries",
   "latestSummary.billing_time_source === \"admin_correction\"",
   "formatCustomerInvoiceLineDescription",
@@ -48,6 +57,30 @@ for (const fragment of [
 ]) {
   mustInclude(invoicePersistence, fragment, "exact unpaid amended-invoice persistence");
 }
+
+const amendedBookingRefresh = sectionBetween(
+  invoicePersistence,
+  "export async function refreshAdminCustomerAmendedUnpaidInvoice(",
+  "export async function recordCustomerInvoiceActionEmailDelivery(",
+);
+
+for (const fragment of [
+  'customer_price_amount: amountCents / 100',
+  'customer_price_override_reason: "Admin reviewed customer-folder price."',
+  '.eq("booking_reference", bookingReference)',
+  '.eq("customer_id", customerId)',
+  '.eq("updated_at", verifiedUpdatedAt)',
+  'select("booking_reference, customer_id, customer_price_amount, updated_at")',
+  "The booking changed before its reviewed customer price could be saved.",
+]) {
+  mustInclude(amendedBookingRefresh, fragment, "shared exact-booking price persistence");
+}
+
+mustExclude(
+  amendedBookingRefresh,
+  '.insert(',
+  "reviewed-price save must update the exact booking without creating another record",
+);
 
 mustExclude(
   invoicePersistence,

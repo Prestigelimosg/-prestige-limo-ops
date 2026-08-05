@@ -14,6 +14,7 @@ const [
   savedBookingsRead,
   rateSetupRoute,
   dspActualTimeRoute,
+  invoicePersistence,
   ledger,
   suite,
 ] = await Promise.all([
@@ -24,6 +25,7 @@ const [
   readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
   readFile("app/api/admin-rate-setup/route.ts", "utf8"),
   readFile("app/api/admin-driver-job-dsp-actual-time-summaries/route.ts", "utf8"),
+  readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
   readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
 ]);
@@ -197,12 +199,37 @@ for (const phrase of [
   "Every existing `Jobs not billed yet` row now has one compact `Customer price` tag.",
   "DEP, TRF, and MNG rows without a saved amount receive a temporary Codex proposal from the existing Prestige rate setup",
   "The proposal remains in browser memory only until admin clicks `Save price review`",
+  "persists the exact reviewed amount on that exact unbilled booking",
+  "phone or desktop reload",
   "Multi-job `Review invoice & email` remains disabled until every selected row has a positive reviewed customer price.",
   "no driver payout or payout comparison is returned or rendered.",
   guardScript,
 ]) {
   includes(ledgerSection, phrase, `price-review ledger phrase ${phrase}`);
 }
+
+const sharedPricePersistence = sectionBetween(
+  invoicePersistence,
+  "export async function refreshAdminCustomerAmendedUnpaidInvoice(",
+  "export async function recordCustomerInvoiceActionEmailDelivery(",
+);
+
+for (const fragment of [
+  "if (matchingInvoices.length === 0)",
+  'customer_price_amount: amountCents / 100',
+  '.eq("booking_reference", bookingReference)',
+  '.eq("customer_id", customerId)',
+  '.eq("updated_at", verifiedUpdatedAt)',
+  'select("booking_reference, customer_id, customer_price_amount, updated_at")',
+]) {
+  includes(sharedPricePersistence, fragment, `shared price persistence ${fragment}`);
+}
+
+assert.equal(
+  sharedPricePersistence.includes('.insert('),
+  false,
+  "reviewed-price persistence must never create a replacement booking or invoice",
+);
 
 const bookingToJcLedgerSection = sectionBetween(
   ledger,

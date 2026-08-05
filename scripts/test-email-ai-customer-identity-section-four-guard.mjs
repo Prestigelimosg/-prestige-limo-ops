@@ -35,20 +35,21 @@ assert.ok(
 );
 
 for (const fragment of [
-  'const adminCompanyTravelerCrmRuntimeWriteActionApiPath =',
-  'const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers"',
   'data-customer-folder-section-four-edit="true"',
-  'data-customer-folder-section-four-identity-editor="true"',
-  'data-customer-folder-section-four-company-identity="true"',
-  'data-customer-folder-section-four-booker-identity="true"',
-  'data-customer-folder-section-four-traveler-identity="true"',
+  'data-customer-folder-selected-identity-resolver="true"',
+  'data-customer-folder-selected-identity-group=',
+  'data-customer-folder-selected-identity-pair="true"',
+  'data-customer-folder-selected-identity-carried="true"',
+  'data-customer-folder-selected-identity-save="true"',
+  'data-customer-folder-selected-identity-message="true"',
+  'data-customer-folder-section-four-job-editor="true"',
   'data-customer-folder-section-four-customer-name="true"',
   'data-customer-folder-section-four-booker-name="true"',
   'data-customer-folder-section-four-booker-contact="true"',
   'data-customer-folder-section-four-booker-email="true"',
   'data-customer-folder-section-four-passenger-name="true"',
-  'data-customer-folder-section-four-save="true"',
-  'data-customer-folder-section-four-exact-booking-proceed="true"',
+  'data-customer-folder-section-four-job-save="true"',
+  'data-customer-folder-section-four-exact-job-save="true"',
 ]) {
   assert.ok(
     savedBookingsPanel.includes(fragment),
@@ -57,19 +58,18 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "sectionFourProceedCause",
-  "sectionFourProceedConfirmation",
-  "proceedWithSectionFourBookingCorrection",
-  "event.isTrusted",
-  "window.confirm",
-  "Proceed for this booking",
-  "Cause:",
-  "saves only the reviewed customer identity and job fields for this booking",
-  "The customer price returns to Review required.",
-  "Email AI and Ask AI cannot approve this action.",
-  "inlineEditText(inlineEditState.booking?.booking_reference, 120)",
-  "Proceed cancelled for",
-  "No job was changed.",
+  "customerFolderLegacyIdentityResolution",
+  "sectionFourIdentityPairOptions",
+  "sectionFourIdentityAssignmentsReady",
+  "return options.some((option) => String(option.id) === selectedPairId)",
+  "saveSelectedLegacyBookingIdentities",
+  "sectionFourIdentitySaveInFlightRef",
+  "Choose Booker / Traveller once for the selected jobs",
+  "Jobs for the same passenger are saved together. Different passengers stay separate.",
+  "Saving Booker / Traveller for the selected jobs...",
+  "Save selected jobs",
+  "!sectionFourIdentityAssignmentsReady",
+  "savedCount > 0",
 ]) {
   assert.ok(
     savedBookingsPanel.includes(fragment),
@@ -78,10 +78,19 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "ensureSectionFourVerifiedIdentity",
-  'action_type: "traveler_create"',
-  "booker_id: bookerId",
+  "sectionFourLegacyIdentityResolution.groups.map",
   "await loadCustomerFolderRateSetup({ force: true })",
+  'method: "GET"',
+  'method: "PATCH"',
+  "customerFolderBookingPatchPayload(exactBooking, form, reference)",
+  "String(exactBooking.customer_id ?? \"\") !== customerId",
+  "Boolean(exactBookerId) !== Boolean(exactTravelerId)",
+  "exactCompanyId && exactCompanyId !== pair.companyId",
+  "exactBookerId && exactBookerId !== pair.bookerId",
+  "exactTravelerId && exactTravelerId !== pair.id",
+  'status: "proposed"',
+  "setSectionFourEditingReference(\"\")",
+  "setSectionFourIdentitySelections({})",
 ]) {
   assert.ok(
     savedBookingsPanel.includes(fragment),
@@ -92,14 +101,13 @@ for (const fragment of [
 assert.ok(
   savedBookingsPanel.includes('cache: "no-store"') &&
     savedBookingsPanel.includes("await loadCustomerFolderRateSetup({ force: true })"),
-  "Opening the existing Section 4 editor must bypass a stale same-page CRM identity snapshot.",
+  "The selected-job resolver must bypass a stale same-page Booker / Traveller snapshot.",
 );
 assert.ok(
-  !savedBookingsPanel.slice(
-    savedBookingsPanel.indexOf("function updateSectionFourTravelerIdentity"),
-    savedBookingsPanel.indexOf("function sectionFourVerifiedIdentityIsValid"),
-  ).includes("passengerName:"),
-  "Selecting a verified Traveller must not overwrite the booking's separately reviewed passenger text.",
+  !savedBookingsPanel.includes("proceedWithSectionFourBookingCorrection") &&
+    !savedBookingsPanel.includes("Proceed for this booking") &&
+    !savedBookingsPanel.includes('data-customer-folder-blocked-proceed="true"'),
+  "Section 4 must not retain the repeated per-booking Proceed checkpoint.",
 );
 
 for (const fragment of [
@@ -118,23 +126,16 @@ for (const fragment of [
 
 assert.ok(
   savedBookingsPanel.includes("method: \"PATCH\""),
-  "Section 4 corrections must reuse the established exact-booking PATCH",
-);
-assert.ok(
-  savedBookingsPanel.indexOf(
-    "await ensureSectionFourVerifiedIdentity",
-    savedBookingsPanel.indexOf("async function saveInlineBookingDetails"),
-  ) <
-    savedBookingsPanel.indexOf("const payload = {", savedBookingsPanel.indexOf("async function saveInlineBookingDetails")),
-  "Section 4 must establish the verified identity before the exact booking PATCH payload is built",
+  "Section 4 selected-job corrections must reuse the established exact-booking PATCH",
 );
 assert.ok(
   !savedBookingsPanel.includes("/api/admin-email-ai-customer"),
   "The repair must not add a second Email AI customer route",
 );
 assert.ok(
-  !savedBookingsPanel.includes("/api/admin-section-four-proceed"),
-  "The exact-booking proceed confirmation must reuse the established booking and CRM routes",
+  !savedBookingsPanel.includes("/api/admin-section-four") &&
+    !savedBookingsPanel.includes("/api/admin-batch-booking"),
+  "The resolver must not add a second Section 4 or batch-booking route",
 );
 assert.ok(
   !savedBookingsPanel.includes("Missing verified traveller identity. Invoice preparation is skipped."),

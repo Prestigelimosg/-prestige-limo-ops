@@ -23,7 +23,7 @@ const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9233);
 const reporter = createBrowserTestReporter("customer-corporate-identity-browser");
 const customerId = "165";
 const customerName = "Apollo [Ms Tanya Sanwal]";
-const bookingReference = "ADM-BROWSER-CORPORATE-001";
+const bookingReferences = ["ADM-BROWSER-CORPORATE-001", "ADM-BROWSER-CORPORATE-002"];
 
 function responseHeaders() {
   return [
@@ -69,8 +69,10 @@ async function main() {
   const chromeProcess = spawn(chromeBinary, chromeArgs, { stdio: "ignore" });
   let client = null;
   let rateSetupReadCount = 0;
+  let alternateTravelerAvailable = false;
   let bookerPatchPayload = null;
   const travelerPatchPayloads = [];
+  const bookingPatchPayloads = [];
   let bookerRecord = {
     booker_name: "Georgina",
     company_id: 33,
@@ -137,6 +139,7 @@ async function main() {
             customer_account: customerName,
             customer_id: customerId,
             guest_account_billing_enabled: false,
+            verified_company_id: 33,
           }],
           ok: true,
         };
@@ -157,7 +160,18 @@ async function main() {
           companies: [{ company_name: customerName, id: 33 }],
           ok: true,
           settings: null,
-          travelers: [travelerRecord],
+          travelers: [
+            travelerRecord,
+            ...(alternateTravelerAvailable
+              ? [{
+                  booker_id: 17,
+                  booker_name: "Georgina Cheung",
+                  company_id: 33,
+                  id: 31,
+                  traveler_name: "Alternate Traveller",
+                }]
+              : []),
+          ],
           version: "browser-corporate-identity-rate-setup",
         };
       } else if (requestUrl.pathname === "/api/admin-bookers" && method === "GET") {
@@ -202,28 +216,32 @@ async function main() {
       } else if (requestUrl.pathname === "/api/admin-customer-saved-bookings" && method === "GET") {
         responseBody = {
           ok: true,
-          saved_bookings: [{
-            booking_reference: bookingReference,
+          saved_bookings: bookingReferences.map((reference, index) => ({
+            booking_reference: reference,
             company_id: 33,
             customer_account: customerName,
             customer_id: customerId,
             customer_price_label: "$70.00",
             dropoff_location: "61 Grange Road",
             passenger_name: "Ms Tanya Sanwal",
-            pickup_at: "2026-08-03T19:50:00+08:00",
+            pickup_at: index === 0
+              ? "2026-08-03T19:50:00+08:00"
+              : "2026-08-03T07:00:00+08:00",
             pickup_location: "Airport",
-            public_booking_reference: "10860",
+            public_booking_reference: index === 0 ? "10860" : "10859",
             route_summary: "Airport > 61 Grange Road",
             service_type: "DEP",
-          }],
-          summary: { returned_count: 1 },
+          })),
+          summary: { returned_count: 2 },
         };
       } else if (requestUrl.pathname === "/api/admin-customer-invoices" && method === "GET") {
         responseBody = { invoices: [], ok: true };
       } else if (requestUrl.pathname === "/api/admin-bookings" && method === "GET") {
+        const requestedReference = requestUrl.searchParams.get("booking_reference");
+        const bookingIndex = bookingReferences.indexOf(requestedReference);
         responseBody = {
           booking: {
-            booking_reference: bookingReference,
+            booking_reference: requestedReference,
             company_id: 33,
             contact_display_name: "Georgina Cheung",
             contact_email: "gcheung@apollo.com",
@@ -232,11 +250,25 @@ async function main() {
             customer_id: customerId,
             dropoff_location: "61 Grange Road",
             passenger_name: "Ms Tanya Sanwal",
-            pickup_datetime: "2026-08-03T19:50:00+08:00",
+            pickup_datetime: bookingIndex === 0
+              ? "2026-08-03T19:50:00+08:00"
+              : "2026-08-03T07:00:00+08:00",
             pickup_location: "Airport",
-            public_booking_reference: "10860",
+            public_booking_reference: bookingIndex === 0 ? "10860" : "10859",
             route_summary: "Airport > 61 Grange Road",
             service_type: "DEP",
+          },
+          ok: true,
+        };
+      } else if (requestUrl.pathname === "/api/admin-bookings" && method === "PATCH") {
+        const payload = JSON.parse(request.postData || "{}");
+        bookingPatchPayloads.push(payload);
+        responseBody = {
+          booking: {
+            ...payload.booking,
+            pickup_at: payload.booking.pickup_datetime,
+            public_booking_reference:
+              payload.target_booking_reference === bookingReferences[0] ? "10860" : "10859",
           },
           ok: true,
         };
@@ -315,70 +347,95 @@ async function main() {
       booker_name: "Georgina Cheung",
     });
 
-    reporter.step("opening Section 4 without reloading the page");
+    alternateTravelerAvailable = true;
+    reporter.step("resolving two same-passenger legacy jobs once in Section 4");
+    for (const reference of bookingReferences) {
+      await waitForSelector(
+        evaluate,
+        `[data-customer-folder-saved-bookings-select="${reference}"]`,
+        `saved booking selection ${reference}`,
+      );
+      await evaluate(`document.querySelector('[data-customer-folder-saved-bookings-select="${reference}"]').click()`);
+    }
     await waitForSelector(
       evaluate,
-      `[data-customer-folder-saved-bookings-select="${bookingReference}"]`,
-      "saved booking selection",
+      '[data-customer-folder-selected-identity-resolver="true"]',
+      "selected-job Booker and Traveller resolver",
     );
-    await evaluate(`document.querySelector('[data-customer-folder-saved-bookings-select="${bookingReference}"]').click()`);
     await waitForSelector(
       evaluate,
-      '[data-customer-folder-section-four-edit="true"]',
-      "Section 4 exact booking edit button",
+      '[data-customer-folder-selected-identity-pair="true"]',
+      "combined Booker and Traveller choice",
     );
-    await evaluate(`document.querySelector('[data-customer-folder-section-four-edit="true"]').click()`);
-    await waitForSelector(
-      evaluate,
-      '[data-customer-folder-section-four-booker-identity="true"] option[value="17"]',
-      "fresh Section 4 Booker option",
-    );
-
-    const sectionFourState = await evaluate(`(() => {
-      const company = document.querySelector('[data-customer-folder-section-four-company-identity="true"]');
-      const booker = document.querySelector('[data-customer-folder-section-four-booker-identity="true"]');
-      const traveller = document.querySelector('[data-customer-folder-section-four-traveler-identity="true"]');
-      company.value = "33";
-      company.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    })()`);
-    assert.equal(sectionFourState, true);
-    await waitForCondition(
-      async () => await evaluate(`Boolean(document.querySelector('[data-customer-folder-section-four-booker-identity="true"] option[value="17"]'))`),
-      10000,
-      "fresh Booker option after company selection",
-    );
-    await evaluate(`(() => {
-      const booker = document.querySelector('[data-customer-folder-section-four-booker-identity="true"]');
-      booker.value = "17";
-      booker.dispatchEvent(new Event("change", { bubbles: true }));
-    })()`);
-    await waitForSelector(
-      evaluate,
-      '[data-customer-folder-section-four-traveler-identity="true"] option[value="30"]',
-      "fresh Section 4 Traveller option",
-    );
-    await evaluate(`(() => {
-      const traveller = document.querySelector('[data-customer-folder-section-four-traveler-identity="true"]');
-      traveller.value = "30";
-      traveller.dispatchEvent(new Event("change", { bubbles: true }));
-    })()`);
-
-    const finalState = await evaluate(`(() => ({
-      bookerOption: document.querySelector('[data-customer-folder-section-four-booker-identity="true"] option[value="17"]')?.textContent?.trim() || "",
-      passenger: document.querySelector('[data-customer-folder-section-four-passenger-name="true"]')?.value || "",
-      travellerOption: document.querySelector('[data-customer-folder-section-four-traveler-identity="true"] option[value="30"]')?.textContent?.trim() || "",
+    const resolverState = await evaluate(`(() => ({
+      groupCount: document.querySelectorAll('[data-customer-folder-selected-identity-group]').length,
+      pairOptionCount: document.querySelector('[data-customer-folder-selected-identity-pair="true"]')?.options?.length || 0,
+      saveDisabled: document.querySelector('[data-customer-folder-selected-identity-save="true"]')?.disabled === true,
+      selectedCount: document.querySelectorAll('[data-customer-folder-saved-bookings-select]:checked').length,
     }))()`);
-    assert.deepEqual(finalState, {
-      bookerOption: "Georgina Cheung",
-      passenger: "Ms Tanya Sanwal",
-      travellerOption: "Ms Tanya Sanwal",
+    assert.deepEqual(resolverState, {
+      groupCount: 1,
+      pairOptionCount: 3,
+      saveDisabled: true,
+      selectedCount: 2,
     });
-    assert.ok(rateSetupReadCount >= 4, "Expected a forced same-page Section 4 rate-setup refresh after the profile save.");
+
+    assert.equal(
+      await evaluate(`(() => {
+        const selector = document.querySelector('[data-customer-folder-selected-identity-pair="true"]');
+        if (!(selector instanceof HTMLSelectElement)) return false;
+        selector.value = "30";
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()`),
+      true,
+      "Expected the actual Booker and Traveller pair to be selectable once for both jobs.",
+    );
+    await waitForCondition(
+      async () => await evaluate(
+        `document.querySelector('[data-customer-folder-selected-identity-save="true"]')?.disabled === false`,
+      ),
+      10000,
+      "selected-job identity save enabled after an exact pair choice",
+    );
+
+    await evaluate(`document.querySelector('[data-customer-folder-selected-identity-save="true"]').click()`);
+    await waitForCondition(
+      async () => await evaluate(`document.body.innerText.includes("Saved Booker / Traveller for 2 selected jobs.")`),
+      10000,
+      "batch identity saved confirmation",
+    );
+    assert.equal(
+      await evaluate(`document.querySelector('[data-customer-folder-selected-identity-resolver="true"]') === null`),
+      true,
+      "The resolver must close after persisted success.",
+    );
+    assert.equal(
+      await evaluate(`document.querySelectorAll('[data-customer-folder-saved-bookings-select]:checked').length`),
+      2,
+      "Selected jobs must remain selected after the batch save.",
+    );
+    assert.equal(bookingPatchPayloads.length, 2);
+    assert.deepEqual(
+      bookingPatchPayloads.map((payload) => ({
+        bookerId: payload.booking.booker_id,
+        companyId: payload.booking.company_id,
+        reference: payload.target_booking_reference,
+        travelerId: payload.booking.traveler_id,
+      })),
+      bookingReferences.map((reference) => ({
+        bookerId: 17,
+        companyId: 33,
+        reference,
+        travelerId: 30,
+      })),
+    );
+    assert.ok(rateSetupReadCount >= 4, "Expected a fresh selected-job Booker and Traveller read after the profile save.");
 
     console.log(JSON.stringify(reporter.summary({
       errorCount: 0,
       ok: true,
+      bookingPatchCount: bookingPatchPayloads.length,
       rateSetupReadCount,
     }), null, 2));
   } finally {

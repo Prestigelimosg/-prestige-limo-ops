@@ -18,11 +18,13 @@ export type AdminSavedBookingListReadParams = {
 };
 
 export type AdminSavedBookingRecord = {
+  admin_internal_status: string | null;
   booking_reference: string | null;
   public_booking_reference: string | null;
   source_channel: string | null;
   source_surface: string | null;
   customer_id: number | null;
+  customer_facing_status: string | null;
   booker_id: number | null;
   bookers: {
     booker_name: string | null;
@@ -543,6 +545,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
   }
 
   return {
+    admin_internal_status: textOrNull(row.admin_internal_status, 80),
     booking_reference: textOrNull(row.booking_reference, 160),
     public_booking_reference: textOrNull(row.public_booking_reference, 40),
     source_channel: textOrNull(row.source_channel, 120),
@@ -562,6 +565,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     contact_phone: textOrNull(row.contact_phone, 120),
     created_at: textOrNull(row.created_at, 80),
     customer_id: integerOrNull(row.customer_id),
+    customer_facing_status: textOrNull(row.customer_facing_status, 80),
     customer_display_name: textOrNull(row.customer_display_name, 220),
     customer_price_amount: numberOrNull(row.customer_price_amount),
     customer_price_override_reason: textOrNull(row.customer_price_override_reason, 500),

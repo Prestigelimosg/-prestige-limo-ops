@@ -125,6 +125,8 @@ const safeAgencyFolderSelectionError =
   "Select the exact Hotel / Tour Agency folder before saving this booking.";
 const safeAgencyFolderConflictError =
   "This Hotel / Tour Agency relationship is ambiguous. Review the existing company and customer folder before saving.";
+const safeAgencyFolderCreateError =
+  "The first Hotel / Tour Agency folder could not be created safely. Reload CRM identities and review the exact agency name before saving.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
 const safeStagingReadinessError =
@@ -1342,11 +1344,314 @@ async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
   actor: AdminBookingPersistenceAdapterActor,
+  hotelAgencyFolderCreate: AdminBookingPersistenceInput["hotel_agency_folder_create"] = null,
 ): Promise<AdminBookingResult<DbIdentifier>> {
   const verifiedCustomerId = dbIdentifierOrNull(booking.customer_id);
   const verifiedCompanyId = dbIdentifierOrNull(booking.company_id);
   const verifiedBookerId = dbIdentifierOrNull(booking.booker_id);
   const verifiedTravelerId = dbIdentifierOrNull(booking.traveler_id);
+
+  if (hotelAgencyFolderCreate) {
+    const requestedAgencyName = textOrNull(hotelAgencyFolderCreate.company_name);
+    const bookingAgencyName = textOrNull(booking.customer_display_name);
+    const normalizedRequestedAgencyName = requestedAgencyName?.toLocaleLowerCase() || "";
+    const normalizedBookingAgencyName = bookingAgencyName?.toLocaleLowerCase() || "";
+
+    if (
+      !isVerifiedAdminDispatcherActor(actor) ||
+      !verifiedCompanyId ||
+      verifiedCustomerId ||
+      verifiedBookerId ||
+      verifiedTravelerId ||
+      !requestedAgencyName ||
+      normalizedRequestedAgencyName !== normalizedBookingAgencyName
+    ) {
+      return {
+        error: safeAgencyFolderCreateError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const { data: companyRows, error: companyError } = await client
+      .from("companies")
+      .select("id, company_name")
+      .eq("id", verifiedCompanyId)
+      .limit(2);
+
+    if (companyError) {
+      return safeAdapterFailure(safeSaveError, 500, companyError, "customer_lookup");
+    }
+
+    const exactCompanyRows = asArray(companyRows).filter((row) => {
+      const company = asRecord(row);
+
+      return (
+        String(dbIdentifierOrNull(company.id) || "") === String(verifiedCompanyId) &&
+        textOrNull(company.company_name)?.toLocaleLowerCase() === normalizedRequestedAgencyName
+      );
+    });
+
+    if (exactCompanyRows.length !== 1) {
+      return {
+        error: safeAgencyFolderCreateError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const canonicalAgencyName =
+      textOrNull(asRecord(exactCompanyRows[0]).company_name) || requestedAgencyName;
+    const agencyRecoveryAccountCode = `HOTEL-COMPANY-${String(verifiedCompanyId)}`;
+    const loadRecoverableAgencyFolder = async (): Promise<AdminBookingResult<DbIdentifier | null>> => {
+      const { data: recoveryRows, error: recoveryError } = await client
+        .from("customers")
+        .select("id, account_code, display_name, customer_type, status, account_status")
+        .ilike("account_code", agencyRecoveryAccountCode)
+        .limit(2);
+
+      if (recoveryError) {
+        return safeAdapterFailure(safeSaveError, 500, recoveryError, "customer_lookup");
+      }
+
+      if (asArray(recoveryRows).length === 0) {
+        return { data: null, ok: true };
+      }
+
+      if (asArray(recoveryRows).length !== 1) {
+        return {
+          error: safeAgencyFolderConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      const recoveryFolder = asRecord(asArray(recoveryRows)[0]);
+      const recoveryFolderId = dbIdentifierOrNull(recoveryFolder.id);
+      const recoveryFolderStatuses = [
+        textOrNull(recoveryFolder.status)?.toLowerCase(),
+        textOrNull(recoveryFolder.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+
+      if (
+        !recoveryFolderId ||
+        textOrNull(recoveryFolder.account_code)?.toLowerCase() !==
+          agencyRecoveryAccountCode.toLowerCase() ||
+        textOrNull(recoveryFolder.display_name)?.toLowerCase() !==
+          canonicalAgencyName.toLowerCase() ||
+        textOrNull(recoveryFolder.customer_type)?.toLowerCase() !== "hotel" ||
+        recoveryFolderStatuses.length === 0 ||
+        !recoveryFolderStatuses.every((status) => status === "active")
+      ) {
+        return {
+          error: safeAgencyFolderCreateError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      const { data: recoveryBookingRows, error: recoveryBookingError } = await client
+        .from("bookings")
+        .select("company_id")
+        .eq("customer_id", recoveryFolderId);
+
+      if (recoveryBookingError) {
+        return safeAdapterFailure(safeSaveError, 500, recoveryBookingError, "customer_lookup");
+      }
+
+      const recoveryCompanyIds = new Map<string, DbIdentifier>();
+
+      for (const row of asArray(recoveryBookingRows)) {
+        const companyId = dbIdentifierOrNull(asRecord(row).company_id);
+
+        if (companyId) {
+          recoveryCompanyIds.set(String(companyId), companyId);
+        }
+      }
+
+      if (asArray(recoveryBookingRows).length === 0) {
+        return { data: recoveryFolderId, ok: true };
+      }
+
+      if (
+        recoveryCompanyIds.size === 1 &&
+        recoveryCompanyIds.has(String(verifiedCompanyId))
+      ) {
+        return {
+          error: safeAgencyFolderSelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return {
+        error: safeAgencyFolderConflictError,
+        ok: false,
+        status: 409,
+      };
+    };
+    const recoverableAgencyFolderResult = await loadRecoverableAgencyFolder();
+
+    if (!recoverableAgencyFolderResult.ok) {
+      return recoverableAgencyFolderResult;
+    }
+
+    if (recoverableAgencyFolderResult.data) {
+      return { data: recoverableAgencyFolderResult.data, ok: true };
+    }
+
+    const { data: existingCompanyBookingRows, error: existingCompanyBookingError } = await client
+      .from("bookings")
+      .select("customer_id")
+      .eq("company_id", verifiedCompanyId);
+
+    if (existingCompanyBookingError) {
+      return safeAdapterFailure(safeSaveError, 500, existingCompanyBookingError, "customer_lookup");
+    }
+
+    const existingCompanyCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const row of asArray(existingCompanyBookingRows)) {
+      const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
+
+      if (customerId) {
+        existingCompanyCustomerIds.set(String(customerId), customerId);
+      }
+    }
+
+    let existingCompanyHasOneSelectableAgency = existingCompanyCustomerIds.size === 1;
+
+    for (const customerId of existingCompanyCustomerIds.values()) {
+      const { data: existingCompanyCustomerRows, error: existingCompanyCustomerError } = await client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .eq("id", customerId)
+        .limit(1);
+
+      if (existingCompanyCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, existingCompanyCustomerError, "customer_lookup");
+      }
+
+      const existingCompanyCustomer = asRecord(asArray(existingCompanyCustomerRows)[0]);
+      const existingCompanyCustomerType = textOrNull(existingCompanyCustomer.customer_type)?.toLowerCase();
+      const existingCompanyCustomerStatuses = [
+        textOrNull(existingCompanyCustomer.status)?.toLowerCase(),
+        textOrNull(existingCompanyCustomer.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+
+      if (
+        existingCompanyCustomerType !== "hotel" ||
+        existingCompanyCustomerStatuses.length === 0 ||
+        !existingCompanyCustomerStatuses.every((status) => status === "active")
+      ) {
+        existingCompanyHasOneSelectableAgency = false;
+      }
+    }
+
+    if (existingCompanyCustomerIds.size > 0) {
+      return {
+        error: existingCompanyHasOneSelectableAgency
+          ? safeAgencyFolderSelectionError
+          : safeAgencyFolderConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const loadMatchingCustomerFolders = () =>
+      client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .ilike("display_name", canonicalAgencyName)
+        .limit(2);
+    const matchingCustomerFoldersResult = await loadMatchingCustomerFolders();
+
+    if (matchingCustomerFoldersResult.error) {
+      return safeAdapterFailure(
+        safeSaveError,
+        500,
+        matchingCustomerFoldersResult.error,
+        "customer_lookup",
+      );
+    }
+
+    if (asArray(matchingCustomerFoldersResult.data).length > 0) {
+      return {
+        error: safeAgencyFolderSelectionError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const finalMatchingCustomerFoldersResult = await loadMatchingCustomerFolders();
+
+    if (finalMatchingCustomerFoldersResult.error) {
+      return safeAdapterFailure(
+        safeSaveError,
+        500,
+        finalMatchingCustomerFoldersResult.error,
+        "customer_lookup",
+      );
+    }
+
+    if (asArray(finalMatchingCustomerFoldersResult.data).length > 0) {
+      return {
+        error: safeAgencyFolderSelectionError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const currentAgencyFolderInsertResult = await client
+      .from("customers")
+      .insert({
+        account_code: agencyRecoveryAccountCode,
+        customer_type: "hotel",
+        display_name: canonicalAgencyName,
+        status: "active",
+      })
+      .select("id")
+      .single();
+    const agencyFolderInsertResult =
+      currentAgencyFolderInsertResult.error &&
+      isColumnMissingFailure(currentAgencyFolderInsertResult.error)
+        ? await client
+            .from("customers")
+            .insert({
+              account_code: agencyRecoveryAccountCode,
+              account_status: "active",
+              customer_type: "hotel",
+              display_name: canonicalAgencyName,
+            })
+            .select("id")
+            .single()
+        : currentAgencyFolderInsertResult;
+    const insertedAgencyFolderId = dbIdentifierOrNull(asRecord(agencyFolderInsertResult.data).id);
+
+    if (agencyFolderInsertResult.error || !insertedAgencyFolderId) {
+      const recoveryResult = await loadRecoverableAgencyFolder();
+
+      if (!recoveryResult.ok) {
+        return recoveryResult;
+      }
+
+      if (recoveryResult.data) {
+        return { data: recoveryResult.data, ok: true };
+      }
+
+      return safeAdapterFailure(
+        safeSaveError,
+        500,
+        agencyFolderInsertResult.error,
+        "customer_lookup",
+      );
+    }
+
+    return {
+      data: insertedAgencyFolderId,
+      ok: true,
+    };
+  }
 
   if (
     actor.boundary_mode === "customer-booking-request-surface" &&
@@ -1881,7 +2186,12 @@ export async function createAdminBookingThroughSupabaseAdapter(
   }
 
   const client = clientResult.data;
-  const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
+  const customerIdResult = await findOrCreateCustomerId(
+    client,
+    input.booking,
+    actor,
+    input.hotel_agency_folder_create,
+  );
 
   if (!customerIdResult.ok) {
     return customerIdResult;

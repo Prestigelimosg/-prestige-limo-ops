@@ -21309,6 +21309,9 @@ async function runChromeTest() {
             window.__prestigeCrmSavePersistedBooking = {
               ...parsedBody?.booking,
               booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
+              customer_id: parsedBody?.hotel_agency_folder_create
+                ? 909
+                : parsedBody?.booking?.customer_id,
               route_points: parsedBody?.route_points || [],
               service_items: parsedBody?.service_items || [],
             };
@@ -21892,6 +21895,7 @@ async function runChromeTest() {
 
         return selector instanceof HTMLSelectElement &&
           !selector.disabled &&
+          [...selector.options].some((option) => option.value === "create-new-hotel-tour-agency") &&
           [...selector.options].some((option) => option.value === "161")
           ? true
           : false;
@@ -22028,6 +22032,166 @@ async function runChromeTest() {
       "New booking agency reset",
     );
     assert.deepEqual(resetAgencyUi, { companySelectors: 1, selectedNotices: 0 });
+
+    await setBookingMessageValue(bookingSample, "first agency booking message");
+    const parsedFirstAgencyBooking = await evaluate(`(() => {
+      const parseButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!parseButton || parseButton.disabled) {
+        return false;
+      }
+
+      parseButton.click();
+      return true;
+    })()`);
+    assert.equal(parsedFirstAgencyBooking, true, "Expected the first agency booking to parse");
+
+    await waitForCondition(
+      async () => {
+        const candidateState = await evaluate(extractStateScript);
+
+        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
+          candidateState?.fields?.name === "BROWSER UI TEST TRAVELER"
+          ? candidateState
+          : false;
+      },
+      10000,
+      "parsed first agency booking",
+    );
+
+    const selectedFirstAgencyMode = await evaluate(`(() => {
+      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+
+      if (!(selector instanceof HTMLSelectElement)) {
+        return false;
+      }
+
+      selector.value = "create-new-hotel-tour-agency";
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(selectedFirstAgencyMode, true, "Expected first agency mode to be selectable");
+
+    const firstAgencyUi = await waitForCondition(
+      () => evaluate(`(() => {
+        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const notice = document.querySelector('[data-admin-dispatch-agency-folder-create="true"]');
+        const companyInput = document.querySelector('input[placeholder="Company / Account"]');
+        const passengerInput = document.querySelector('input[placeholder="Passenger name"]');
+
+        return selector instanceof HTMLSelectElement &&
+          selector.value === "create-new-hotel-tour-agency" &&
+          notice &&
+          companyInput instanceof HTMLInputElement &&
+          passengerInput instanceof HTMLInputElement
+          ? {
+              bookerSelectors: document.querySelectorAll('[data-admin-dispatch-booker-identity-select="true"]').length,
+              company: companyInput.value,
+              companySelectors: document.querySelectorAll('[data-admin-dispatch-company-identity-select="true"]').length,
+              notice: notice.textContent || "",
+              passenger: passengerInput.value,
+              travelerSelectors: document.querySelectorAll('[data-admin-dispatch-traveler-identity-select="true"]').length,
+            }
+          : false;
+      })()`),
+      10000,
+      "first agency light-mode UI",
+    );
+    assert.deepEqual(
+      {
+        bookerSelectors: firstAgencyUi.bookerSelectors,
+        companySelectors: firstAgencyUi.companySelectors,
+        travelerSelectors: firstAgencyUi.travelerSelectors,
+      },
+      { bookerSelectors: 0, companySelectors: 0, travelerSelectors: 0 },
+      "Expected first agency mode to keep all verified identity selectors blank",
+    );
+    assert.equal(firstAgencyUi.company, "BROWSER UI TEST COMPANY");
+    assert.equal(firstAgencyUi.passenger, "BROWSER UI TEST TRAVELER");
+    assert.match(firstAgencyUi.notice, /passenger stays on this booking only/i);
+
+    await evaluate(`(() => {
+      window.__prestigeCrmCompanyIdentityRequests = [];
+      window.__prestigeCrmCompanyWriteRequests = [];
+      window.__prestigeCrmSaveBookingRecoveryReads = [];
+      window.__prestigeCrmSaveBookingResponseLossCount = 0;
+      window.__prestigeCrmSavePersistedBooking = null;
+      window.__prestigeSaveRequestBodies = [];
+    })()`);
+    const clickedFirstAgencySave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedFirstAgencySave, true, "Expected first agency Save + CRM to run");
+
+    const firstAgencySaveState = await waitForCondition(
+      () => evaluate(`(() => {
+        const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
+          (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+        );
+
+        return bookingInsert && window.__prestigeCrmSaveBookingResponseLossCount === 1
+          ? {
+              bookingInsert: bookingInsert.body,
+              companyWriteRequests: window.__prestigeCrmCompanyWriteRequests || [],
+              recoveryReads: window.__prestigeCrmSaveBookingRecoveryReads || [],
+            }
+          : false;
+      })()`),
+      10000,
+      "first agency Save + CRM",
+    );
+    assert.equal(
+      firstAgencySaveState.bookingInsert?.hotel_agency_folder_create?.company_name,
+      "BROWSER UI TEST COMPANY",
+    );
+    assert.equal(firstAgencySaveState.bookingInsert?.booking?.customer_id, null);
+    assert.equal(firstAgencySaveState.bookingInsert?.booking?.company_id, 601);
+    assert.equal(firstAgencySaveState.bookingInsert?.booking?.booker_id, null);
+    assert.equal(firstAgencySaveState.bookingInsert?.booking?.traveler_id, null);
+    assert.equal(firstAgencySaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
+    assert.equal(firstAgencySaveState.companyWriteRequests.length, 1);
+    assert.equal(firstAgencySaveState.companyWriteRequests[0]?.body?.action_type, "company_create");
+    assert.equal(firstAgencySaveState.companyWriteRequests[0]?.body?.company_name, "BROWSER UI TEST COMPANY");
+    assert.equal(
+      firstAgencySaveState.recoveryReads.filter(
+        (request) =>
+          request.bookingReference ===
+          firstAgencySaveState.bookingInsert?.booking?.booking_reference,
+      ).length,
+      1,
+      "Expected one exact response-loss recovery read for the first agency booking",
+    );
+
+    const clearedFirstAgencyMode = await waitForCondition(
+      () => evaluate(`(() => {
+        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const companyInput = document.querySelector('input[placeholder="Company / Account"]');
+        const passengerInput = document.querySelector('input[placeholder="Passenger name"]');
+
+        return selector instanceof HTMLSelectElement &&
+          companyInput instanceof HTMLInputElement &&
+          passengerInput instanceof HTMLInputElement &&
+          selector.value === "" &&
+          companyInput.value === "" &&
+          passengerInput.value === ""
+          ? true
+          : false;
+      })()`),
+      10000,
+      "successful first agency save reset",
+    );
+    assert.equal(clearedFirstAgencyMode, true, "Expected successful Save + CRM to clear first agency mode");
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
     await evaluate(`window.confirm = window.__prestigeOriginalConfirm || window.confirm`);

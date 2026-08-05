@@ -389,7 +389,7 @@ class MockSupabaseClient {
   insertRows(table, payload, resultMode, selectedColumns) {
     const failure = this.failureFor("insert", table);
 
-    if (failure) {
+    if (failure && failure.commit_before_error !== true) {
       return {
         data: null,
         error: failure,
@@ -409,6 +409,13 @@ class MockSupabaseClient {
 
       return insertedRow;
     });
+
+    if (failure) {
+      return {
+        data: null,
+        error: failure,
+      };
+    }
 
     if (resultMode === "single") {
       return {
@@ -583,6 +590,9 @@ function adminPayload(overrides = {}) {
       source_surface: "admin-api",
       ...overrides.booking,
     },
+    ...(overrides.hotel_agency_folder_create
+      ? { hotel_agency_folder_create: clone(overrides.hotel_agency_folder_create) }
+      : {}),
     route_points: [
       {
         location: "Gate Safe Pickup",
@@ -1143,6 +1153,291 @@ try {
     171,
     "The new booking must retain the exact verified tuple's existing customer account.",
   );
+
+  const firstNewAgencyMock = installMockClient();
+  firstNewAgencyMock.client.tables.companies.push({
+    company_name: "New Horizon Travel",
+    id: 55,
+  });
+  const firstNewAgencyResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booker_id: null,
+            booking_reference: "GATE-AGENCY-FIRST-BOOKING",
+            company_id: 55,
+            customer_display_name: "New Horizon Travel",
+            customer_id: null,
+            passenger_name: "First Agency Guest",
+            traveler_id: null,
+          },
+          hotel_agency_folder_create: {
+            company_name: "new horizon travel",
+          },
+        }),
+        sessionHeaders(),
+      ),
+    ),
+  );
+  const firstNewAgencyCustomerInsert = firstNewAgencyMock.client.operations.find(
+    (operation) => operation.action === "insert" && operation.table === "customers",
+  );
+  const firstNewAgencyBookingInsert = insertedOperation(firstNewAgencyMock, "bookings");
+
+  assert.equal(firstNewAgencyResult.status, 200);
+  assert.equal(firstNewAgencyResult.body.booking.customer_id, "customers-1");
+  assert.deepEqual(firstNewAgencyCustomerInsert?.payload, {
+    account_code: "HOTEL-COMPANY-55",
+    customer_type: "hotel",
+    display_name: "New Horizon Travel",
+    status: "active",
+  });
+  assert.equal(firstNewAgencyBookingInsert.payload.customer_id, "customers-1");
+  assert.equal(firstNewAgencyBookingInsert.payload.company_id, 55);
+  assert.equal(firstNewAgencyBookingInsert.payload.booker_id, null);
+  assert.equal(firstNewAgencyBookingInsert.payload.traveler_id, null);
+  assert.equal(firstNewAgencyBookingInsert.payload.passenger_name, "First Agency Guest");
+
+  const committedAgencyInsertResponseLossMock = installMockClient({
+    failures: {
+      "insert:customers": {
+        commit_before_error: true,
+        message: "Mock committed insert response loss",
+      },
+    },
+  });
+  committedAgencyInsertResponseLossMock.client.tables.companies.push({
+    company_name: "Response Loss Agency",
+    id: 58,
+  });
+  const committedAgencyInsertResponseLossResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booking_reference: "GATE-AGENCY-INSERT-RESPONSE-LOSS",
+            company_id: 58,
+            customer_display_name: "Response Loss Agency",
+            passenger_name: "Response Loss Guest",
+          },
+          hotel_agency_folder_create: { company_name: "Response Loss Agency" },
+        }),
+        sessionHeaders(),
+      ),
+    ),
+  );
+
+  assert.equal(committedAgencyInsertResponseLossResult.status, 200);
+  assert.equal(committedAgencyInsertResponseLossResult.body.booking.customer_id, "customers-1");
+  assert.equal(
+    committedAgencyInsertResponseLossMock.client.operations.filter(
+      (operation) => operation.action === "insert" && operation.table === "customers",
+    ).length,
+    1,
+    "An uncertain first agency-folder insert response must recover by its server-authored account code without a second INSERT.",
+  );
+
+  for (const failureTable of ["customer_contacts", "bookings"]) {
+    const recoverableDownstreamFailureMock = installMockClient({
+      failures: {
+        [`insert:${failureTable}`]: { message: `Mock ${failureTable} failure` },
+      },
+    });
+    recoverableDownstreamFailureMock.client.tables.companies.push({
+      company_name: `Recoverable ${failureTable} Agency`,
+      id: failureTable === "customer_contacts" ? 59 : 60,
+    });
+    const recoverablePayload = adminPayload({
+      booking: {
+        booking_reference: `GATE-AGENCY-RECOVER-${failureTable.toUpperCase()}`,
+        company_id: failureTable === "customer_contacts" ? 59 : 60,
+        customer_display_name: `Recoverable ${failureTable} Agency`,
+        passenger_name: "Recovery Guest",
+      },
+      hotel_agency_folder_create: {
+        company_name: `Recoverable ${failureTable} Agency`,
+      },
+    });
+    const firstFailureResult = await readResponse(
+      await adminRoute.POST(
+        postJson("http://localhost/api/admin-bookings", recoverablePayload, sessionHeaders()),
+      ),
+    );
+
+    assert.equal(firstFailureResult.status, 500, `${failureTable} first failure`);
+    assert.equal(recoverableDownstreamFailureMock.client.tables.customers.length, 1);
+    delete recoverableDownstreamFailureMock.client.failures[`insert:${failureTable}`];
+
+    const recoverySaveResult = await readResponse(
+      await adminRoute.POST(
+        postJson("http://localhost/api/admin-bookings", recoverablePayload, sessionHeaders()),
+      ),
+    );
+
+    assert.equal(recoverySaveResult.status, 200, `${failureTable} recovery save`);
+    assert.equal(recoverySaveResult.body.booking.customer_id, "customers-1");
+    assert.equal(
+      recoverableDownstreamFailureMock.client.operations.filter(
+        (operation) => operation.action === "insert" && operation.table === "customers",
+      ).length,
+      1,
+      `${failureTable} retry must reuse the server-authored recoverable agency folder instead of creating another one.`,
+    );
+  }
+
+  for (const [label, setup, booking, intent, expectedError] of [
+    [
+      "case-insensitive existing agency name",
+      (mock) => {
+        mock.client.tables.companies.push({ company_name: "New Horizon Travel", id: 55 });
+        mock.client.tables.customers.push({
+          customer_type: "hotel",
+          display_name: "NEW HORIZON TRAVEL",
+          id: 201,
+          status: "active",
+        });
+      },
+      {
+        booking_reference: "GATE-AGENCY-DUPLICATE-NAME",
+        company_id: 55,
+        customer_display_name: "New Horizon Travel",
+      },
+      { company_name: "new horizon travel" },
+      "Select the exact Hotel / Tour Agency folder before saving this booking.",
+    ],
+    [
+      "existing linked agency company",
+      (mock) => {
+        mock.client.tables.companies.push({ company_name: "Linked Agency", id: 56 });
+        mock.client.tables.customers.push({
+          customer_type: "hotel",
+          display_name: "Linked Agency",
+          id: 202,
+          status: "active",
+        });
+        mock.client.tables.bookings.push({ company_id: 56, customer_id: 202, id: 212 });
+      },
+      {
+        booking_reference: "GATE-AGENCY-ALREADY-LINKED",
+        company_id: 56,
+        customer_display_name: "Linked Agency",
+      },
+      { company_name: "Linked Agency" },
+      "Select the exact Hotel / Tour Agency folder before saving this booking.",
+    ],
+    [
+      "partial verified identity",
+      (mock) => {
+        mock.client.tables.companies.push({ company_name: "Unsafe Partial Agency", id: 57 });
+      },
+      {
+        booker_id: 77,
+        booking_reference: "GATE-AGENCY-PARTIAL-IDENTITY",
+        company_id: 57,
+        customer_display_name: "Unsafe Partial Agency",
+      },
+      { company_name: "Unsafe Partial Agency" },
+      "The first Hotel / Tour Agency folder could not be created safely. Reload CRM identities and review the exact agency name before saving.",
+    ],
+    [
+      "inactive folder already linked to company",
+      (mock) => {
+        mock.client.tables.companies.push({ company_name: "Inactive Linked Agency", id: 61 });
+        mock.client.tables.customers.push({
+          customer_type: "hotel",
+          display_name: "Old Inactive Folder Name",
+          id: 203,
+          status: "inactive",
+        });
+        mock.client.tables.bookings.push({ company_id: 61, customer_id: 203, id: 213 });
+      },
+      {
+        booking_reference: "GATE-AGENCY-INACTIVE-COMPANY-LINK",
+        company_id: 61,
+        customer_display_name: "Inactive Linked Agency",
+      },
+      { company_name: "Inactive Linked Agency" },
+      "This Hotel / Tour Agency relationship is ambiguous. Review the existing company and customer folder before saving.",
+    ],
+    [
+      "differently classified folder already linked to company",
+      (mock) => {
+        mock.client.tables.companies.push({ company_name: "Corporate Linked Agency", id: 62 });
+        mock.client.tables.customers.push({
+          customer_type: "corporate",
+          display_name: "Old Corporate Folder Name",
+          id: 204,
+          status: "active",
+        });
+        mock.client.tables.bookings.push({ company_id: 62, customer_id: 204, id: 214 });
+      },
+      {
+        booking_reference: "GATE-AGENCY-CORPORATE-COMPANY-LINK",
+        company_id: 62,
+        customer_display_name: "Corporate Linked Agency",
+      },
+      { company_name: "Corporate Linked Agency" },
+      "This Hotel / Tour Agency relationship is ambiguous. Review the existing company and customer folder before saving.",
+    ],
+    [
+      "recovery folder with a booking missing company identity",
+      (mock) => {
+        mock.client.tables.companies.push({ company_name: "Unsafe Recovery Agency", id: 63 });
+        mock.client.tables.customers.push({
+          account_code: "HOTEL-COMPANY-63",
+          customer_type: "hotel",
+          display_name: "Unsafe Recovery Agency",
+          id: 205,
+          status: "active",
+        });
+        mock.client.tables.bookings.push({ company_id: null, customer_id: 205, id: 215 });
+      },
+      {
+        booking_reference: "GATE-AGENCY-RECOVERY-NULL-COMPANY",
+        company_id: 63,
+        customer_display_name: "Unsafe Recovery Agency",
+      },
+      { company_name: "Unsafe Recovery Agency" },
+      "This Hotel / Tour Agency relationship is ambiguous. Review the existing company and customer folder before saving.",
+    ],
+  ]) {
+    const blockedNewAgencyMock = installMockClient();
+    setup(blockedNewAgencyMock);
+    const blockedNewAgencyResult = await readResponse(
+      await adminRoute.POST(
+        postJson(
+          "http://localhost/api/admin-bookings",
+          adminPayload({ booking, hotel_agency_folder_create: intent }),
+          sessionHeaders(),
+        ),
+      ),
+    );
+
+    assert.equal(blockedNewAgencyResult.status, 409, label);
+    assert.deepEqual(
+      blockedNewAgencyResult.body,
+      { error: expectedError, ok: false },
+      label,
+    );
+    assert.equal(
+      blockedNewAgencyMock.client.operations.some((operation) => operation.action === "insert"),
+      false,
+      `${label} must fail before every write.`,
+    );
+  }
+
+  const updateAgencyCreateIntentResult = persistence.parseAdminBookingUpdatePayload({
+    ...adminPayload({
+      hotel_agency_folder_create: { company_name: "Update Must Reject" },
+    }),
+    target_booking_reference: "GATE-AGENCY-UPDATE-REJECT",
+  });
+
+  assert.equal(updateAgencyCreateIntentResult.ok, false);
+  assert.match(updateAgencyCreateIntentResult.error, /Unknown admin booking fields rejected/);
 
   const firstAgencyLinkMock = installMockClient();
   firstAgencyLinkMock.client.tables.customers.push({

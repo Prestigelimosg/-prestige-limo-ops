@@ -121,6 +121,10 @@ const safeUpdateConflictError =
   "Booking changed on another device. Reload the exact saved booking before updating.";
 const safeCustomerIdentityConflictError =
   "Verified customer identity matches multiple customer accounts. Review the existing customer profiles before saving.";
+const safeAgencyFolderSelectionError =
+  "Select the exact Hotel / Tour Agency folder before saving this booking.";
+const safeAgencyFolderConflictError =
+  "This Hotel / Tour Agency relationship is ambiguous. Review the existing company and customer folder before saving.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
 const safeStagingReadinessError =
@@ -1358,7 +1362,11 @@ async function findOrCreateCustomerId(
     };
   }
 
-  if (verifiedCompanyId && verifiedBookerId && verifiedTravelerId) {
+  const hasCompleteCorporateIdentity = Boolean(
+    verifiedCompanyId && verifiedBookerId && verifiedTravelerId,
+  );
+
+  if (hasCompleteCorporateIdentity) {
     const { data: verifiedIdentityRows, error: verifiedIdentityError } = await client
       .from("bookings")
       .select("customer_id")
@@ -1393,6 +1401,183 @@ async function findOrCreateCustomerId(
         ok: false,
         status: 409,
       };
+    }
+  }
+
+  if (verifiedCustomerId && !verifiedCompanyId) {
+    return {
+      error: safeAgencyFolderSelectionError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  if (verifiedCompanyId && !verifiedBookerId && !verifiedTravelerId) {
+    const { data: companyBookingRows, error: companyBookingError } = await client
+      .from("bookings")
+      .select("customer_id")
+      .eq("company_id", verifiedCompanyId);
+
+    if (companyBookingError) {
+      return safeAdapterFailure(safeSaveError, 500, companyBookingError, "customer_lookup");
+    }
+
+    const companyCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const row of asArray(companyBookingRows)) {
+      const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
+
+      if (customerId) {
+        companyCustomerIds.set(String(customerId), customerId);
+      }
+    }
+
+    const activeAgencyCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const companyCustomerId of companyCustomerIds.values()) {
+      const { data: companyCustomerRows, error: companyCustomerError } = await client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .eq("id", companyCustomerId)
+        .limit(1);
+
+      if (companyCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, companyCustomerError, "customer_lookup");
+      }
+
+      const companyCustomer = asRecord(asArray(companyCustomerRows)[0]);
+      const exactCompanyCustomerId = dbIdentifierOrNull(companyCustomer.id);
+      const companyCustomerType = textOrNull(companyCustomer.customer_type)?.toLowerCase();
+      const companyCustomerStatuses = [
+        textOrNull(companyCustomer.status)?.toLowerCase(),
+        textOrNull(companyCustomer.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+      const companyCustomerIsActive =
+        companyCustomerStatuses.length > 0 &&
+        companyCustomerStatuses.every((status) => status === "active");
+
+      if (
+        exactCompanyCustomerId &&
+        companyCustomerType === "hotel" &&
+        companyCustomerIsActive
+      ) {
+        activeAgencyCustomerIds.set(String(exactCompanyCustomerId), exactCompanyCustomerId);
+      }
+    }
+
+    if (activeAgencyCustomerIds.size > 1) {
+      return {
+        error: safeAgencyFolderConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    let agencyCustomerId = Array.from(activeAgencyCustomerIds.values())[0] || null;
+
+    if (verifiedCustomerId && !activeAgencyCustomerIds.has(String(verifiedCustomerId))) {
+      const { data: selectedCustomerRows, error: selectedCustomerError } = await client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .eq("id", verifiedCustomerId)
+        .limit(1);
+
+      if (selectedCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, selectedCustomerError, "customer_lookup");
+      }
+
+      const selectedCustomer = asRecord(asArray(selectedCustomerRows)[0]);
+      const exactSelectedCustomerId = dbIdentifierOrNull(selectedCustomer.id);
+      const selectedCustomerType = textOrNull(selectedCustomer.customer_type)?.toLowerCase();
+      const selectedCustomerStatuses = [
+        textOrNull(selectedCustomer.status)?.toLowerCase(),
+        textOrNull(selectedCustomer.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+      const selectedCustomerIsActive =
+        selectedCustomerStatuses.length > 0 &&
+        selectedCustomerStatuses.every((status) => status === "active");
+
+      if (
+        !exactSelectedCustomerId ||
+        selectedCustomerType !== "hotel" ||
+        !selectedCustomerIsActive
+      ) {
+        return {
+          error: safeAgencyFolderSelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      if (agencyCustomerId && String(agencyCustomerId) !== String(exactSelectedCustomerId)) {
+        return {
+          error: safeAgencyFolderConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      agencyCustomerId = exactSelectedCustomerId;
+    }
+
+    if (agencyCustomerId) {
+      const { data: customerBookingRows, error: customerBookingError } = await client
+        .from("bookings")
+        .select("company_id")
+        .eq("customer_id", agencyCustomerId);
+
+      if (customerBookingError) {
+        return safeAdapterFailure(safeSaveError, 500, customerBookingError, "customer_lookup");
+      }
+
+      const customerCompanyIds = new Map<string, DbIdentifier>();
+
+      for (const row of asArray(customerBookingRows)) {
+        const companyId = dbIdentifierOrNull(asRecord(row).company_id);
+
+        if (companyId) {
+          customerCompanyIds.set(String(companyId), companyId);
+        }
+      }
+
+      if (
+        customerCompanyIds.size !== 1 ||
+        !customerCompanyIds.has(String(verifiedCompanyId))
+      ) {
+        return {
+          error: safeAgencyFolderConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return {
+        data: agencyCustomerId,
+        ok: true,
+      };
+    }
+
+    const companyDisplayName = textOrNull(booking.customer_display_name);
+
+    if (companyDisplayName) {
+      const { data: matchingAgencyRows, error: matchingAgencyError } = await client
+        .from("customers")
+        .select("id")
+        .eq("customer_type", "hotel")
+        .ilike("display_name", companyDisplayName)
+        .limit(2);
+
+      if (matchingAgencyError) {
+        return safeAdapterFailure(safeSaveError, 500, matchingAgencyError, "customer_lookup");
+      }
+
+      if (asArray(matchingAgencyRows).length > 0) {
+        return {
+          error: safeAgencyFolderSelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
     }
   }
 

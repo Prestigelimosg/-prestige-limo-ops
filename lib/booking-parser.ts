@@ -887,7 +887,10 @@ function normalizeParenthesizedAddress(value: string) {
 
 function detectSharedTransferRequestContext(text: string) {
   const email = firstMatch(text, [/\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i]);
-  const company = cleanCompanyAccount(lineValue(text, ["company", "client", "account"])) || getEmailDomain(email);
+  const company =
+    cleanCompanyAccount(
+      lineValue(text, ["company/account", "company", "client", "account"]),
+    ) || getEmailDomain(email);
   const passenger = detectName(text, "") || cleanDetectedName(lineValue(text, ["passenger", "passenger name"]));
   const booker = detectBookerValue(text, { booker: "", company }) || detectSignatureBooker(text);
   const vehicle = cleanVehicle(lineValue(text, ["vehicle type", "vehicle", "car", "vehicle name"])) || detectVehicle(text);
@@ -3720,7 +3723,9 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const parsedBooking: ParsedBooking = {
     success: true,
     company:
-      cleanCompanyAccount(lineValue(operationalText, ["company", "client", "account"])) ||
+      cleanCompanyAccount(
+        lineValue(operationalText, ["company/account", "company", "client", "account"]),
+      ) ||
       cleanCompanyAccount(bookerCompanyContext.company) ||
       cleanCompanyAccount(whatsappTranscript.senderCompany) ||
       domain,

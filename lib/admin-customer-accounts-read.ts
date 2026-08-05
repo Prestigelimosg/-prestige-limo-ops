@@ -23,6 +23,7 @@ export type AdminCustomerAccountSafeRecord = {
   completed_count: number;
   customer_account: string;
   customer_folder_key: string;
+  customer_folder_active: boolean;
   customer_id: string | null;
   guest_account_billing_enabled: boolean;
   latest_booking_reference: string | null;
@@ -32,6 +33,7 @@ export type AdminCustomerAccountSafeRecord = {
   saved_booking_count: number;
   source: "admin_booking_persistence" | "customer_directory";
   upcoming_count: number;
+  verified_company_id: string | null;
 };
 
 export type AdminCustomerAccountsReadSummary = {
@@ -47,15 +49,17 @@ export type AdminCustomerAccountsReadData = {
 };
 
 type UnknownRecord = Record<string, unknown>;
-type MutableCustomerAccount = AdminCustomerAccountSafeRecord & {
+type MutableCustomerAccount = Omit<AdminCustomerAccountSafeRecord, "verified_company_id"> & {
   latestSortValue: string;
+  verifiedCompanyIds: Set<string>;
 };
 
 const defaultLimit = 10;
-const maxLimit = 25;
+const maxLimit = 1000;
 const accountSourceReadLimit = 200;
+const customerRelationshipReadLimit = 1000;
 const maxSearchLength = 80;
-const customerDirectoryReadLimit = 200;
+const customerDirectoryReadLimit = 1000;
 const malformedParamsError = "Admin customer accounts read parameters are malformed.";
 const forbiddenParamsError =
   "Admin customer accounts read parameters include unsupported or unsafe fields.";
@@ -236,6 +240,22 @@ function statusToken(value: unknown) {
   return normalizeToken(textOrNull(value, 80));
 }
 
+function customerDirectoryRowIsActive(record: UnknownRecord | undefined) {
+  if (!record) {
+    return false;
+  }
+
+  const statuses = [statusToken(record.status), statusToken(record.account_status)].filter(Boolean);
+
+  return statuses.length > 0 && statuses.every((status) => status === "active");
+}
+
+function verifiedCompanyId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : null;
+}
+
 function isCompletedBooking(booking: AdminBookingPersistenceRecord) {
   const adminStatus = statusToken(booking.admin_internal_status);
   const customerStatus = statusToken(booking.customer_facing_status);
@@ -282,6 +302,7 @@ function toSafeAccount(account: MutableCustomerAccount): AdminCustomerAccountSaf
     completed_count: account.completed_count,
     customer_account: account.customer_account,
     customer_folder_key: account.customer_folder_key,
+    customer_folder_active: account.customer_folder_active,
     customer_id: account.customer_id,
     guest_account_billing_enabled: account.guest_account_billing_enabled,
     latest_booking_reference: account.latest_booking_reference,
@@ -291,6 +312,10 @@ function toSafeAccount(account: MutableCustomerAccount): AdminCustomerAccountSaf
     saved_booking_count: account.saved_booking_count,
     source: account.source,
     upcoming_count: account.upcoming_count,
+    verified_company_id:
+      account.verifiedCompanyIds.size === 1
+        ? Array.from(account.verifiedCompanyIds)[0]
+        : null,
   };
 }
 
@@ -317,6 +342,7 @@ function toCustomerAccounts(
         completed_count: 0,
         customer_account: customerAccount,
         customer_folder_key: key,
+        customer_folder_active: false,
         customer_id: customerId,
         guest_account_billing_enabled: false,
         latest_booking_reference: null,
@@ -327,7 +353,14 @@ function toCustomerAccounts(
         saved_booking_count: 0,
         source: "admin_booking_persistence",
         upcoming_count: 0,
+        verifiedCompanyIds: new Set<string>(),
       } satisfies MutableCustomerAccount);
+
+    const companyId = verifiedCompanyId(booking.company_id);
+
+    if (companyId) {
+      current.verifiedCompanyIds.add(companyId);
+    }
 
     current.saved_booking_count += 1;
 
@@ -410,6 +443,7 @@ function exactCustomerId(value: unknown) {
 function mergeCustomerDirectoryRows(
   bookingAccounts: AdminCustomerAccountSafeRecord[],
   rows: unknown[],
+  relationshipRows: unknown[],
 ) {
   const directoryRowsByCustomerId = new Map(
     rows.flatMap((row) => {
@@ -421,8 +455,43 @@ function mergeCustomerDirectoryRows(
       return customerId ? [[customerId, record] as const] : [];
     }),
   );
+  const verifiedCompanyIdsByCustomerId = new Map<string, Set<string>>();
+
+  for (const account of bookingAccounts) {
+    const customerId = exactCustomerId(account.customer_id);
+    const companyId = verifiedCompanyId(account.verified_company_id);
+
+    if (!customerId || !companyId) {
+      continue;
+    }
+
+    const companyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
+
+    companyIds.add(companyId);
+    verifiedCompanyIdsByCustomerId.set(customerId, companyIds);
+  }
+
+  for (const row of relationshipRows) {
+    const record = row !== null && typeof row === "object" && !Array.isArray(row)
+      ? (row as UnknownRecord)
+      : {};
+    const customerId = exactCustomerId(record.customer_id);
+    const companyId = verifiedCompanyId(record.company_id);
+
+    if (!customerId || !companyId) {
+      continue;
+    }
+
+    const companyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
+
+    companyIds.add(companyId);
+    verifiedCompanyIdsByCustomerId.set(customerId, companyIds);
+  }
+
   const enrichedBookingAccounts = bookingAccounts.map((account) => {
-    const directoryRow = directoryRowsByCustomerId.get(exactCustomerId(account.customer_id) || "");
+    const customerId = exactCustomerId(account.customer_id) || "";
+    const directoryRow = directoryRowsByCustomerId.get(customerId);
+    const verifiedCompanyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
     const guestAccountBillingEnabled = directoryRow?.customer_type === "hotel";
     const directoryCustomerAccount = guestAccountBillingEnabled
       ? safeText(directoryRow.display_name, 120)
@@ -431,7 +500,10 @@ function mergeCustomerDirectoryRows(
     return {
       ...account,
       customer_account: directoryCustomerAccount || account.customer_account,
+      customer_folder_active: customerDirectoryRowIsActive(directoryRow),
       guest_account_billing_enabled: guestAccountBillingEnabled,
+      verified_company_id:
+        verifiedCompanyIds.size === 1 ? Array.from(verifiedCompanyIds)[0] : null,
     };
   });
   const linkedCustomerIds = new Set(
@@ -443,6 +515,7 @@ function mergeCustomerDirectoryRows(
       : {};
     const customerId = exactCustomerId(record.id);
     const customerAccount = safeText(record.display_name, 120);
+    const verifiedCompanyIds = verifiedCompanyIdsByCustomerId.get(customerId || "") || new Set<string>();
 
     if (!customerId || !customerAccount || linkedCustomerIds.has(customerId)) {
       return [];
@@ -454,6 +527,7 @@ function mergeCustomerDirectoryRows(
       completed_count: 0,
       customer_account: customerAccount,
       customer_folder_key: `${customerId}::customer_account`,
+      customer_folder_active: customerDirectoryRowIsActive(record),
       customer_id: customerId,
       guest_account_billing_enabled: record.customer_type === "hotel",
       latest_booking_reference: null,
@@ -463,6 +537,8 @@ function mergeCustomerDirectoryRows(
       saved_booking_count: 0,
       source: "customer_directory" as const,
       upcoming_count: 0,
+      verified_company_id:
+        verifiedCompanyIds.size === 1 ? Array.from(verifiedCompanyIds)[0] : null,
     }];
   });
 
@@ -549,7 +625,25 @@ export async function loadAdminCustomerAccounts(
     };
   }
 
-  const accounts = mergeCustomerDirectoryRows(toCustomerAccounts(bookingsResult.data), customerRows);
+
+  const { data: relationshipRows, error: relationshipError } = await client
+    .from("bookings")
+    .select("customer_id, company_id")
+    .limit(customerRelationshipReadLimit);
+
+  if (relationshipError || !Array.isArray(relationshipRows)) {
+    return {
+      error: "Admin customer relationship read failed safely.",
+      ok: false,
+      status: 500,
+    };
+  }
+
+  const accounts = mergeCustomerDirectoryRows(
+    toCustomerAccounts(bookingsResult.data),
+    customerRows,
+    relationshipRows,
+  );
   const exactAccounts = parsed.data.customerId
     ? accounts.filter((account) => account.customer_id === parsed.data.customerId)
     : accounts;
@@ -616,7 +710,7 @@ export async function updateAdminCustomerAccountProfile(
     .from("customers")
     .update(updatePayload)
     .eq("id", customerId)
-    .select("id, display_name, customer_type")
+    .select("id, display_name, customer_type, account_status, status")
     .single();
   const record = data !== null && typeof data === "object" ? (data as UnknownRecord) : {};
   const savedCustomerId = exactCustomerId(record.id);
@@ -633,6 +727,7 @@ export async function updateAdminCustomerAccountProfile(
       completed_count: 0,
       customer_account: customerAccount,
       customer_folder_key: `${customerId}::customer_account`,
+      customer_folder_active: customerDirectoryRowIsActive(record),
       customer_id: customerId,
       guest_account_billing_enabled: record.customer_type === "hotel",
       latest_booking_reference: null,
@@ -642,6 +737,7 @@ export async function updateAdminCustomerAccountProfile(
       saved_booking_count: 0,
       source: "customer_directory",
       upcoming_count: 0,
+      verified_company_id: null,
     },
     ok: true,
   };

@@ -59,6 +59,8 @@ for (const fragment of [
 
 for (const fragment of [
   "customerFolderLegacyIdentityResolution",
+  "sectionFourLegacyIdentityResolverAvailable",
+  "sectionFourLegacyIdentityResolution.groups.length > 0",
   "sectionFourIdentityPairOptions",
   "sectionFourIdentityAssignmentsReady",
   "return options.some((option) => String(option.id) === selectedPairId)",
@@ -76,6 +78,12 @@ for (const fragment of [
     `Section 4 exact-booking owner proceed confirmation is missing ${fragment}`,
   );
 }
+
+assert.match(
+  savedBookingsPanel,
+  /sectionFourLegacyIdentityResolverAvailable \? null : \([\s\S]{0,500}data-customer-folder-create-invoice-selected-disabled="true"/,
+  "A safe in-place identity resolver must replace the duplicate disabled invoice blocker",
+);
 
 for (const fragment of [
   "sectionFourLegacyIdentityResolution.groups.map",

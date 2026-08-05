@@ -1391,6 +1391,13 @@ export function CustomerFolderSavedBookingsPanel({
     selectedUnbilledBookings,
     customerVerifiedCompanyId,
   );
+  const sectionFourLegacyIdentityResolverAvailable = Boolean(
+    selectedTravelerInvoiceGrouping.error &&
+    !guestAccountBillingEnabled &&
+    selectedUnbilledBookings.length > 0 &&
+    !sectionFourLegacyIdentityResolution.error &&
+    sectionFourLegacyIdentityResolution.groups.length > 0,
+  );
   const sectionFourLegacyIdentitySelectionKey = sectionFourLegacyIdentityResolution.groups
     .map((group) =>
       `${group.key}:${group.bookings.map((booking) => safeDispatchReference(booking)).join(",")}`,
@@ -2783,7 +2790,7 @@ export function CustomerFolderSavedBookingsPanel({
                     </Link>
                   ))}
                 </div>
-              ) : (
+              ) : sectionFourLegacyIdentityResolverAvailable ? null : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-400"

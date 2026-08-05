@@ -404,6 +404,80 @@ try {
       true,
       "Companies CRM identity route must remain read-only.",
     );
+
+    setEnv(validEnv());
+    const operationsEmailMock = installMockClient({
+      companies: [
+        {
+          company_name: "Transzend Groundbooker",
+          id: 42,
+          operations_email: "transzend@groundbooker.com",
+        },
+      ],
+    });
+    const operationsEmailMatch = await responseJson(
+      await route.GET(
+        new Request(
+          "http://localhost/api/admin-companies-crm-identity?operations_email=TRANSZEND%40GROUNDBOOKER.COM",
+          { headers: validAdminHeaders() },
+        ),
+      ),
+    );
+
+    assert.equal(operationsEmailMatch.status, 200);
+    assert.equal(operationsEmailMatch.body.company.id, 42);
+    assert.equal(operationsEmailMatch.body.company.company_name, "Transzend Groundbooker");
+    assert.deepEqual(operationsEmailMock.client.selectHistory[0].filters, [
+      {
+        column: "operations_email",
+        type: "ilike",
+        value: "transzend@groundbooker.com",
+      },
+    ]);
+
+    setEnv(validEnv());
+    const ambiguousOperationsEmailMock = installMockClient({
+      companies: [
+        {
+          company_name: "First Agency",
+          id: 43,
+          operations_email: "shared@agency.example",
+        },
+        {
+          company_name: "Second Agency",
+          id: 44,
+          operations_email: "shared@agency.example",
+        },
+      ],
+    });
+    const ambiguousOperationsEmail = await responseJson(
+      await route.GET(
+        new Request(
+          "http://localhost/api/admin-companies-crm-identity?operations_email=shared%40agency.example",
+          { headers: validAdminHeaders() },
+        ),
+      ),
+    );
+
+    assert.equal(ambiguousOperationsEmail.status, 409);
+    assert.deepEqual(ambiguousOperationsEmail.body, {
+      error: "Multiple CRM company profiles match this lookup. Select the exact verified company before saving.",
+      ok: false,
+      readiness: {
+        external_send: false,
+        readOnly: true,
+        setupSafe: true,
+        source: "typed_companies_crm_identity",
+        writeEnabled: false,
+      },
+    });
+    assert.equal(
+      ambiguousOperationsEmailMock.client.operations.every(
+        (operation) => operation.action === "select",
+      ),
+      true,
+      "Ambiguous operations-email detection must stay read-only.",
+    );
     assert.deepEqual(
       routeMock.client.selectHistory.map((entry) => entry.selectedColumns),
       [companyIdentitySelect],

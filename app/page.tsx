@@ -98,6 +98,7 @@ const adminCustomerDriverAppNotificationsApiPath =
 const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
 const adminCustomerBookingInvitationsApiPath = "/api/admin-customer-booking-invitations";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
+const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
   "/api/admin-company-traveler-crm-runtime-write-action";
@@ -461,6 +462,7 @@ async function updateAdminDriverAvailability(
 type BookingForm = {
   company: string;
   companyId: string;
+  customerId: string;
   bookingType: string;
   vehicle: string;
   date: string;
@@ -531,6 +533,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "childSeatType"
   | "company"
   | "companyId"
+  | "customerId"
   | "date"
   | "dspEndDate"
   | "dspEndTime"
@@ -2404,6 +2407,20 @@ type AdminBookingPersistenceRequestBody = {
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
 };
 
+type AdminDispatchAgencyFolder = {
+  customer_account?: string | null;
+  customer_folder_active?: boolean | null;
+  customer_id?: string | null;
+  guest_account_billing_enabled?: boolean | null;
+  verified_company_id?: string | null;
+};
+
+type AdminDispatchAgencyFoldersReadResponse = {
+  accounts?: AdminDispatchAgencyFolder[] | null;
+  error?: string;
+  ok?: boolean;
+};
+
 type SaveCrmBillingIdentityReview = {
   accountLabel: string;
   bookerLabel: string;
@@ -2910,6 +2927,7 @@ function createInitialBooking(): BookingForm {
   return {
     company: "",
     companyId: "",
+    customerId: "",
     bookingType: "MNG",
     vehicle: "AVF",
     date: "",
@@ -3023,6 +3041,7 @@ function adminDispatchSelectableBookingForm(bookingForm: BookingForm): BookingFo
 const fieldLabels: Record<keyof BookingForm, string> = {
   company: "Company / Account",
   companyId: "Verified company",
+  customerId: "Hotel / Tour Agency folder",
   bookingType: "Booking type",
   vehicle: "Vehicle",
   date: "Pickup date",
@@ -6456,6 +6475,56 @@ async function loadSaveCrmCompanyProfileForSave(
   return responseBody.company;
 }
 
+async function loadSaveCrmCompanyProfileCandidateByOperationsEmail(
+  operationsEmail: string,
+): Promise<AdminCompanyCrmIdentityRecord | null> {
+  const normalizedOperationsEmail = clean(operationsEmail).toLowerCase();
+
+  if (!normalizedOperationsEmail) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    operations_email: normalizedOperationsEmail,
+  });
+  const response = await fetch(`${adminCompaniesCrmIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminCompanyCrmIdentityReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "The CRM company duplicate check could not be verified. No booking was saved.",
+    );
+  }
+
+  if (!responseBody.company) {
+    return null;
+  }
+
+  const candidateId = adminDispatchVerifiedIdentityId(responseBody.company.id);
+  const candidateName = clean(responseBody.company.company_name);
+  const candidateEmail = clean(responseBody.company.operations_email).toLowerCase();
+
+  if (
+    !candidateId ||
+    !candidateName ||
+    candidateEmail !== normalizedOperationsEmail
+  ) {
+    throw new Error(
+      "The CRM company duplicate check did not return one exact safe candidate. No booking was saved.",
+    );
+  }
+
+  return responseBody.company;
+}
+
 async function saveCrmCompanyProfileForBooking(
   payload: CompanyTravelerCrmIdentityContactRuntimePayload,
 ): Promise<AdminCompanyCrmIdentityRecord> {
@@ -6497,17 +6566,56 @@ async function resolveSaveCrmCompanyProfileForSave(
   const requestedCompanyId = adminDispatchVerifiedIdentityId(bookingValue.companyId);
   const requestedCompanyName = clean(confirmedAccountLabel);
 
-  if (!requestedCompanyName) {
+  if (bookingValue.customerId && !requestedCompanyId) {
+    return {
+      message: "The selected agency folder has no verified company relationship. Reload CRM identities and select the folder again. No company or booking was saved.",
+      ok: false,
+    };
+  }
+
+  if (!requestedCompanyName && !bookingValue.customerId) {
     return {
       message: "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
       ok: false,
     };
   }
 
-  const existingCompany = await loadSaveCrmCompanyProfileForSave(
+  let existingCompany = await loadSaveCrmCompanyProfileForSave(
     requestedCompanyId,
     requestedCompanyName,
   );
+
+  if (bookingValue.customerId) {
+    if (!existingCompany) {
+      existingCompany = await loadSaveCrmCompanyProfileCandidateByOperationsEmail(
+        bookingValue.bookerEmail,
+      );
+    }
+
+    const agencyCompanyId = adminDispatchVerifiedIdentityId(existingCompany?.id);
+    const agencyCompanyName = clean(existingCompany?.company_name);
+
+    if (!agencyCompanyId || !agencyCompanyName) {
+      return {
+        message: "The selected agency folder has no exact existing CRM company match. Reload CRM identities and review the Company / Account. No company or booking was saved.",
+        ok: false,
+      };
+    }
+
+    return {
+      companyId: agencyCompanyId,
+      companyName: agencyCompanyName,
+      ok: true,
+      profileWritePerformed: false,
+    };
+  }
+
+  if (!requestedCompanyId && existingCompany) {
+    return {
+      message: `Existing CRM company profile "${clean(existingCompany.company_name)}" matches this Company / Account. Select it under Verified company, then Save + CRM again. No booking was saved.`,
+      ok: false,
+    };
+  }
 
   if (requestedCompanyId && !existingCompany) {
     return {
@@ -6517,34 +6625,49 @@ async function resolveSaveCrmCompanyProfileForSave(
   }
 
   if (!existingCompany) {
-    if (
-      !window.confirm(
-        `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
-      )
-    ) {
+    const duplicateCompanyCandidate = requestedCompanyId
+      ? null
+      : await loadSaveCrmCompanyProfileCandidateByOperationsEmail(
+          bookingValue.bookerEmail,
+        );
+
+    if (duplicateCompanyCandidate) {
       return {
-        message: "Save + CRM cancelled before creating the new company profile. No booking was saved.",
+        message: `Existing CRM company profile "${clean(duplicateCompanyCandidate.company_name)}" matches this Booker email. Select it under Verified company, then Save + CRM again. No booking was saved.`,
         ok: false,
       };
     }
 
-    const createdCompany = await saveCrmCompanyProfileForBooking({
-      action_type: "company_create",
-      ...buildSaveCrmCompanyProfileContactPayload(bookingValue, requestedCompanyName),
-    });
-    const createdCompanyId = adminDispatchVerifiedIdentityId(createdCompany.id);
-    const createdCompanyName = clean(createdCompany.company_name) || requestedCompanyName;
+    if (!existingCompany) {
+      if (
+        !window.confirm(
+          `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
+        )
+      ) {
+        return {
+          message: "Save + CRM cancelled before creating the new company profile. No booking was saved.",
+          ok: false,
+        };
+      }
 
-    if (!createdCompanyId) {
-      throw new Error("The new CRM company profile returned no verified ID. No booking was saved.");
+      const createdCompany = await saveCrmCompanyProfileForBooking({
+        action_type: "company_create",
+        ...buildSaveCrmCompanyProfileContactPayload(bookingValue, requestedCompanyName),
+      });
+      const createdCompanyId = adminDispatchVerifiedIdentityId(createdCompany.id);
+      const createdCompanyName = clean(createdCompany.company_name) || requestedCompanyName;
+
+      if (!createdCompanyId) {
+        throw new Error("The new CRM company profile returned no verified ID. No booking was saved.");
+      }
+
+      return {
+        companyId: createdCompanyId,
+        companyName: createdCompanyName,
+        ok: true,
+        profileWritePerformed: true,
+      };
     }
-
-    return {
-      companyId: createdCompanyId,
-      companyName: createdCompanyName,
-      ok: true,
-      profileWritePerformed: true,
-    };
   }
 
   const existingCompanyId = adminDispatchVerifiedIdentityId(existingCompany.id);
@@ -8702,6 +8825,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     company:
       getBookingCustomerAccountDisplayName(bookingRecord),
     companyId: bookingRecord.company_id ? String(bookingRecord.company_id) : "",
+    customerId: "",
     bookingType: serviceType,
     vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
@@ -9114,7 +9238,7 @@ function buildAdminBookingPersistencePayload(
     booking: {
       booking_reference: bookingReference,
       source_channel: "admin-dashboard",
-      customer_id: null,
+      customer_id: adminDispatchVerifiedIdentityId(bookingValue.customerId),
       company_id: adminDispatchVerifiedIdentityId(bookingValue.companyId),
       booker_id: adminDispatchVerifiedIdentityId(bookingValue.bookerId),
       traveler_id: adminDispatchVerifiedIdentityId(bookingValue.travelerId),
@@ -13848,6 +13972,10 @@ export default function Home() {
     useState<RateOverrideDraft>(initialRateOverrideDraft);
   const [rateCompanies, setRateCompanies] = useState<CompanyRecord[]>([]);
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
+  const [adminDispatchAgencyFolders, setAdminDispatchAgencyFolders] =
+    useState<AdminDispatchAgencyFolder[]>([]);
+  const [adminDispatchAgencyFoldersLoaded, setAdminDispatchAgencyFoldersLoaded] = useState(false);
+  const [adminDispatchAgencyFoldersError, setAdminDispatchAgencyFoldersError] = useState("");
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
   const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | "remove-override" | null>(null);
@@ -19395,7 +19523,10 @@ export default function Home() {
     }, 0);
   }
 
-  async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
+  async function loadRates(
+    successText = "Rates loaded.",
+    options?: { includeAgencyFolders?: boolean; preserveAction?: boolean },
+  ) {
     if (typeof fetch !== "function") {
       if (!options?.preserveAction) {
         setRateMessageTarget("header");
@@ -19480,6 +19611,62 @@ export default function Home() {
           driver_payout_rules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
         })),
       );
+
+      if (options?.includeAgencyFolders) {
+        try {
+          const agencyFoldersResponse = await fetch(`${adminCustomerAccountsApiPath}?limit=1000`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+          const agencyFoldersBody = (await agencyFoldersResponse.json().catch(() => null)) as
+            | AdminDispatchAgencyFoldersReadResponse
+            | null;
+
+          if (!agencyFoldersResponse.ok || agencyFoldersBody?.ok !== true) {
+            throw new Error(
+              clean(agencyFoldersBody?.error) || "Hotel / Tour Agency folders could not be loaded.",
+            );
+          }
+
+          const seenAgencyCustomerIds = new Set<string>();
+          const loadedAgencyFolders = (agencyFoldersBody.accounts ?? [])
+          .filter((account): account is AdminDispatchAgencyFolder => {
+            const customerId = clean(account.customer_id);
+            const companyId = clean(account.verified_company_id);
+
+            if (
+              account.guest_account_billing_enabled !== true ||
+              account.customer_folder_active !== true ||
+              !adminDispatchVerifiedIdentityId(customerId) ||
+              !adminDispatchVerifiedIdentityId(companyId) ||
+              seenAgencyCustomerIds.has(customerId)
+            ) {
+              return false;
+            }
+
+            seenAgencyCustomerIds.add(customerId);
+            return true;
+          })
+          .sort((first, second) =>
+            clean(first.customer_account).localeCompare(clean(second.customer_account)),
+          );
+
+          setAdminDispatchAgencyFolders(loadedAgencyFolders);
+          setAdminDispatchAgencyFoldersLoaded(true);
+          setAdminDispatchAgencyFoldersError("");
+        } catch (agencyFoldersError) {
+          setAdminDispatchAgencyFolders([]);
+          setAdminDispatchAgencyFoldersLoaded(false);
+          setAdminDispatchAgencyFoldersError(
+            agencyFoldersError instanceof Error
+              ? agencyFoldersError.message
+              : "Hotel / Tour Agency folders could not be loaded.",
+          );
+        }
+      }
+
       setRatesLoaded(true);
       setMessage({ tone: "success", text: successText });
       return { ok: true, errorMessage: "" };
@@ -20740,7 +20927,7 @@ export default function Home() {
       const companyProfileResolution = companyProfileSyncRequired
         ? await resolveSaveCrmCompanyProfileForSave(
             booking,
-            saveCrmCustomerAccountLabel,
+            saveCrmExplicitCompanyAccount(booking),
           )
         : null;
 
@@ -25382,6 +25569,7 @@ export default function Home() {
       bookerId: String(adminEmailAiRepeatedCustomerCandidate.booker_id),
       company: clean(company?.company_name) || current.company,
       companyId: String(adminEmailAiRepeatedCustomerCandidate.company_id),
+      customerId: "",
       name: clean(adminEmailAiRepeatedCustomerCandidate.traveler_name) || current.name,
       travelerId: String(adminEmailAiRepeatedCustomerCandidate.id),
     }));
@@ -25446,6 +25634,14 @@ export default function Home() {
       name: clean(booking.company) || `Company ${booking.companyId}`,
     });
   }
+  const adminDispatchAgencyFolderOptions = adminDispatchAgencyFolders.map((account) => ({
+    companyId: clean(account.verified_company_id),
+    id: clean(account.customer_id),
+    name: clean(account.customer_account) || `Agency folder ${clean(account.customer_id)}`,
+  }));
+  const adminDispatchSelectedAgencyFolder = adminDispatchAgencyFolderOptions.find(
+    (account) => account.id === booking.customerId,
+  ) ?? null;
 
   const codexPreparedJobCardsPanel = (
     <div
@@ -40038,12 +40234,66 @@ export default function Home() {
                 className="mb-2 grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-2 md:grid-cols-3"
                 data-admin-dispatch-crm-identity-selectors="true"
               >
+                <label className="text-xs font-semibold text-slate-700 md:col-span-3">
+                  Hotel / Tour Agency folder
+                  <select
+                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                    data-admin-dispatch-agency-folder-select="true"
+                    disabled={!adminDispatchAgencyFoldersLoaded || Boolean(clean(appliedAdminBookingSnapshotReference))}
+                    onChange={(event) => {
+                      const customerId = event.target.value;
+
+                      setBooking((current) => ({
+                        ...current,
+                        customerId,
+                        ...(customerId
+                          ? {
+                              bookerId: "",
+                              companyId:
+                                adminDispatchAgencyFolderOptions.find(
+                                  (account) => account.id === customerId,
+                                )?.companyId || "",
+                              travelerId: "",
+                            }
+                          : {}),
+                      }));
+                    }}
+                    value={adminDispatchSelectedAgencyFolder?.id || ""}
+                  >
+                    <option value="">Not an agency booking</option>
+                    {adminDispatchAgencyFolderOptions.map((account) => (
+                      <option key={account.id} value={account.id}>{account.name}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block font-medium text-slate-500">
+                    {clean(appliedAdminBookingSnapshotReference)
+                      ? "Existing booking: the saved agency relationship is preserved."
+                      : "Agency booking: choose this one folder only. Booker and Traveller stay blank."}
+                  </span>
+                </label>
+                {adminDispatchAgencyFoldersError ? (
+                  <p
+                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-800 md:col-span-3"
+                    data-admin-dispatch-agency-folders-error="true"
+                  >
+                    {adminDispatchAgencyFoldersError} Reload CRM identities before saving an agency booking.
+                  </p>
+                ) : null}
+                {adminDispatchSelectedAgencyFolder ? (
+                  <p
+                    className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-3"
+                    data-admin-dispatch-agency-folder-selected="true"
+                  >
+                    Agency folder selected: {adminDispatchSelectedAgencyFolder.name}. Guest name stays on this booking only.
+                  </p>
+                ) : (
+                  <>
                 <label className="text-xs font-semibold text-slate-700">
                   Verified company
                   <select
                     className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
                     data-admin-dispatch-company-identity-select="true"
-                    onChange={(event) => setBooking((current) => ({ ...current, companyId: event.target.value, bookerId: "", travelerId: "" }))}
+                    onChange={(event) => setBooking((current) => ({ ...current, companyId: event.target.value, customerId: "", bookerId: "", travelerId: "" }))}
                     value={booking.companyId}
                   >
                     <option value="">Not selected</option>
@@ -40056,7 +40306,7 @@ export default function Home() {
                     className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
                     data-admin-dispatch-booker-identity-select="true"
                     disabled={!booking.companyId}
-                    onChange={(event) => setBooking((current) => ({ ...current, bookerId: event.target.value, travelerId: "" }))}
+                    onChange={(event) => setBooking((current) => ({ ...current, bookerId: event.target.value, customerId: "", travelerId: "" }))}
                     value={booking.bookerId}
                   >
                     <option value="">Not selected</option>
@@ -40069,13 +40319,15 @@ export default function Home() {
                     className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
                     data-admin-dispatch-traveler-identity-select="true"
                     disabled={!booking.bookerId}
-                    onChange={(event) => setBooking((current) => ({ ...current, travelerId: event.target.value }))}
+                    onChange={(event) => setBooking((current) => ({ ...current, customerId: "", travelerId: event.target.value }))}
                     value={booking.travelerId}
                   >
                     <option value="">Not selected</option>
                     {adminDispatchVerifiedTravelerOptions.map((traveler) => <option key={traveler.id} value={traveler.id}>{clean(traveler.traveler_name) || `Traveler ${traveler.id}`}</option>)}
                   </select>
                 </label>
+                  </>
+                )}
                 {adminEmailAiCustomerStatus ? (
                   <div
                     className={`rounded-md border px-3 py-2 text-xs font-semibold md:col-span-3 ${
@@ -40139,7 +40391,7 @@ export default function Home() {
                     )}
                   </div>
                 ) : null}
-                {!ratesLoaded ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.")} type="button">Load CRM identities</button> : null}
+                {!ratesLoaded || !adminDispatchAgencyFoldersLoaded || adminDispatchAgencyFoldersError ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.", { includeAgencyFolders: true })} type="button">Load CRM identities</button> : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}

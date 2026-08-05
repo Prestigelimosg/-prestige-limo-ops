@@ -12,6 +12,7 @@ const [
   customers,
   sharedCalculation,
   savedBookingsRead,
+  adminSavedBookingsRead,
   rateSetupRoute,
   dspActualTimeRoute,
   invoicePersistence,
@@ -23,6 +24,7 @@ const [
   readFile("app/customers/page.tsx", "utf8"),
   readFile("lib/customer-dsp-invoice-review.ts", "utf8"),
   readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
+  readFile("lib/admin-saved-booking-read.ts", "utf8"),
   readFile("app/api/admin-rate-setup/route.ts", "utf8"),
   readFile("app/api/admin-driver-job-dsp-actual-time-summaries/route.ts", "utf8"),
   readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
@@ -190,6 +192,15 @@ for (const fragment of [
   "function safeCustomerPriceLabel(value: unknown)",
 ]) {
   includes(savedBookingsRead, fragment, `persisted customer price reload projection ${fragment}`);
+}
+
+for (const fragment of [
+  "const adminSavedBookingCurrentReadSelect =",
+  "vehicle_type_or_category, customer_price_amount, admin_internal_status",
+  "const adminSavedBookingCurrentMinimalReadSelect =",
+  "pax_count, customer_price_amount, admin_internal_status",
+]) {
+  includes(adminSavedBookingsRead, fragment, `admin saved-booking price fallback ${fragment}`);
 }
 
 for (const fragment of [

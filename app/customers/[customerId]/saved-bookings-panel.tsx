@@ -517,6 +517,20 @@ function customerFolderBookingPatchPayload(
 function customerFolderBillingReviewForBooking(
   booking: CustomerFolderSavedBookingRecord,
 ): CustomerFolderBillingReview {
+  const bookingType = customerInvoiceBookingType(booking.service_type);
+
+  if (bookingType) {
+    return {
+      amountCents: null,
+      breakdown:
+        bookingType === "DSP"
+          ? "Checking saved booking pickup→Driver JC end and the verified Prestige customer rate."
+          : "Calculating a temporary proposal from the existing Prestige customer rate setup.",
+      message: "Calculating",
+      status: "calculating",
+    };
+  }
+
   const savedAmountCents = parseInvoiceAmountToCents(String(booking.customer_price_label ?? ""));
 
   if (savedAmountCents) {
@@ -528,25 +542,11 @@ function customerFolderBillingReviewForBooking(
     };
   }
 
-  const bookingType = customerInvoiceBookingType(booking.service_type);
-
-  if (!bookingType) {
-    return {
-      amountCents: null,
-      breakdown: "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
-      message: "Review required",
-      status: "required",
-    };
-  }
-
   return {
     amountCents: null,
-    breakdown:
-      bookingType === "DSP"
-        ? "Checking saved booking pickup→Driver JC end and the verified Prestige customer rate."
-        : "Calculating a temporary proposal from the existing Prestige customer rate setup.",
-    message: "Calculating",
-    status: "calculating",
+    breakdown: "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
+    message: "Review required",
+    status: "required",
   };
 }
 

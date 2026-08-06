@@ -20329,19 +20329,24 @@ export default function Home() {
         scalarRateSettings,
         scalarRuntimeSave.saved,
       );
-      const { error } = await adminLegacyDataClient
+      const { data, error } = await adminLegacyDataClient
         .from(adminLegacyTables.rateSettings)
-        .upsert({
+        .update({
           ...legacyScalarFields,
           customer_rates: customerRates,
           driver_payout_rules: driverPayoutRules,
           updated_at: new Date().toISOString(),
         })
+        .eq("id", "default")
         .select("id")
         .single();
 
       if (error) {
         throw new Error(formatSupabaseError(error));
+      }
+
+      if (!data || clean((data as { id?: string }).id) !== "default") {
+        throw new Error("Default rate settings row was not updated safely.");
       }
 
       setRateSettings((current) => ({

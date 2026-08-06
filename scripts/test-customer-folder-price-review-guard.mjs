@@ -110,6 +110,31 @@ assert.equal(
   "unconfirmed calculated proposals must use the same Review required wording before and after reload",
 );
 
+const initialBillingReview = sectionBetween(
+  folder,
+  "function customerFolderBillingReviewForBooking",
+  "function customerFolderRateSourceLabel",
+);
+for (const fragment of [
+  "const bookingType = customerInvoiceBookingType(booking.service_type);",
+  "if (bookingType) {",
+  'message: "Calculating"',
+  'status: "calculating"',
+  "if (savedAmountCents)",
+]) {
+  includes(
+    initialBillingReview,
+    fragment,
+    `customer-folder initial current-price loading state ${fragment}`,
+  );
+}
+assert.equal(
+  initialBillingReview.indexOf("const bookingType =") <
+    initialBillingReview.indexOf("const savedAmountCents ="),
+  true,
+  "supported bookings must enter the current-price calculating state before an older saved amount can be displayed",
+);
+
 const automatedBillingReview = sectionBetween(
   folder,
   "async function loadAutomatedBillingReviews",

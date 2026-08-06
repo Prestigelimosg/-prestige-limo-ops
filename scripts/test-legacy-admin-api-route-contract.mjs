@@ -231,7 +231,29 @@ class MockSupabaseQuery {
       };
     }
 
-    if (this.operation === "update" || this.operation === "delete") {
+    if (this.operation === "update") {
+      const row = this.client.rows[this.table]?.find((candidate) =>
+        this.filters.every((filter) =>
+          filter.operator === "eq"
+            ? String(candidate[filter.column] ?? "") === String(filter.value ?? "")
+            : true,
+        ),
+      );
+
+      if (this.resultMode === "single" && !row) {
+        return {
+          data: null,
+          error: { code: "PGRST116", message: "No exact row matched." },
+        };
+      }
+
+      return {
+        data: this.resultMode === "single" && row ? { ...clone(row), ...clone(this.payload) } : null,
+        error: null,
+      };
+    }
+
+    if (this.operation === "delete") {
       return {
         data: null,
         error: null,
@@ -347,6 +369,17 @@ function postJson(url, body, headers = sessionHeaders()) {
   });
 }
 
+function patchJson(url, body, headers = sessionHeaders()) {
+  return new Request(url, {
+    body: JSON.stringify(body),
+    headers: {
+      "content-type": "application/json",
+      ...headers,
+    },
+    method: "PATCH",
+  });
+}
+
 async function readResponse(response) {
   return {
     body: await response.json(),
@@ -450,6 +483,66 @@ try {
     ["select:companies"],
   );
   assertNoLeaks(response.body, "valid read response");
+
+  setEnv(enabledSessionEnv());
+  mock = installMockClient();
+  response = await readResponse(
+    await route.POST(
+      postJson(
+        "http://localhost/api/admin-legacy-data/rest/v1/rate_settings?upsert=1&select=id&single=single",
+        { id: "default", customer_rates: { DSP: 65 } },
+        adminHeaders(),
+      ),
+      routeContext("rate_settings"),
+    ),
+  );
+
+  assert.equal(response.status, 403, "tokenless shared legacy POST must remain blocked");
+  assertNoSupabaseTouched(mock, "tokenless shared legacy POST");
+  assertNoLeaks(response.body, "tokenless shared legacy POST response");
+
+  setEnv(enabledSessionEnv());
+  mock = installMockClient();
+  response = await readResponse(
+    await route.PATCH(
+      patchJson(
+        "http://localhost/api/admin-legacy-data/rest/v1/rate_settings?id=eq.default&select=id&single=single",
+        { customer_rates: { DSP: 65 } },
+        adminHeaders(),
+      ),
+      routeContext("rate_settings"),
+    ),
+  );
+
+  assert.equal(response.status, 200, "exact default-row PATCH may use the verified server session");
+  assert.equal(response.body.id, "default", "exact default-row PATCH must return the same row");
+  assert.deepEqual(
+    mock.client.operations.map((operation) => ({
+      action: operation.action,
+      filters: operation.filters,
+      table: operation.table,
+    })),
+    [{ action: "update", filters: [{ column: "id", operator: "eq", value: "default" }], table: "rate_settings" }],
+    "exact default-row PATCH must remain one bounded update",
+  );
+  assertNoLeaks(response.body, "exact default-row PATCH response");
+
+  setEnv(enabledSessionEnv());
+  mock = installMockClient();
+  response = await readResponse(
+    await route.PATCH(
+      patchJson(
+        "http://localhost/api/admin-legacy-data/rest/v1/rate_settings?id=eq.missing&select=id&single=single",
+        { customer_rates: { DSP: 65 } },
+        adminHeaders(),
+      ),
+      routeContext("rate_settings"),
+    ),
+  );
+
+  assert.equal(response.status, 500, "missing exact default row must fail closed");
+  assert.equal(response.body.error, safeFailureMessage, "missing exact default row error stays sanitized");
+  assertNoLeaks(response.body, "missing exact default row response");
 
   setEnv(enabledSessionEnv());
   mock = installMockClient();

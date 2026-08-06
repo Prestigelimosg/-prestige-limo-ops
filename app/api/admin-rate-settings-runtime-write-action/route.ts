@@ -43,7 +43,9 @@ type AdminDispatcherBoundaryCheck =
     };
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    allowServerSessionRoleMethodsWithoutRequestToken: ["POST"],
+  });
 
   return boundary.ok
     ? {

@@ -106,13 +106,33 @@ mustInclude(
 );
 mustInclude(
   files.customerFolder,
-  "const recalculatedReviews = await loadAutomatedBillingReviews([booking])",
-  "same-lane price recalculation after correction",
+  "const recalculatedReviews = await loadAutomatedBillingReviews([booking], {",
+  "same-lane explicit price recalculation after correction",
 );
 mustInclude(
   files.customerFolder,
-  "setPriceDraft((recalculatedReview.review.amountCents / 100).toFixed(2))",
+  "forceRateSetup: true",
+  "same-lane recalculation refreshes the current Rates setup",
+);
+mustExclude(
+  files.customerFolder,
+  '!parseInvoiceAmountToCents(String(booking.customer_price_label ?? ""))',
+  "current-rate proposal calculation must not skip an unbilled job with an older saved price",
+);
+mustInclude(
+  files.customerFolder,
+  "setPriceDraft((recalculatedAmountCents / 100).toFixed(2))",
   "same-editor recalculated customer price refresh",
+);
+mustInclude(
+  files.customerFolder,
+  "but the customer proposal requires review.",
+  "saved correction must not claim a rate recalculation when current rate evidence is unavailable",
+);
+mustInclude(
+  inlineEditor,
+  'data-customer-folder-inline-vehicle="true"',
+  "saved vehicle display in the existing Section 3 editor",
 );
 mustExclude(
   files.dashboard,

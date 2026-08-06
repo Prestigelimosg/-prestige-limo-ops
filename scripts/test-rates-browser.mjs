@@ -204,6 +204,11 @@ function assertRatesState(state) {
     16,
     "Expected one customer override input for every service and vehicle combination",
   );
+  assert.equal(
+    state.travelerOverrideControlTag,
+    "SELECT",
+    "Expected Boss / Name to use the exact existing-Traveller selector",
+  );
   assert.ok(
     state.visibleText.includes("Rates loaded.") || state.visibleText.includes("Load failed:"),
     "Expected Load Rates to finish with a visible status message.",
@@ -372,6 +377,9 @@ async function runChromeTest() {
       customerOverrideInputCount: await evaluate(
         `document.querySelectorAll("[data-override-vehicle-customer-rates='true'] input[aria-label$='customer override']").length`,
       ),
+      travelerOverrideControlTag: await evaluate(
+        `document.querySelector("[data-rate-override-traveler-id='true']")?.tagName || ""`,
+      ),
       visibleText: await evaluate(`document.body.innerText`),
     };
     state.errors = [...browserErrors, ...(state.errors || [])];
@@ -454,10 +462,11 @@ async function runChromeTest() {
     const preparedBlankOverride = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const setLabeledInput = (labelText, value) => {
-        const label = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-        );
-        const input = label?.querySelector("input");
+        const label = [...document.querySelectorAll("label")].find((candidate) => {
+          const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+          return candidateLabel === labelText || candidateLabel.startsWith(labelText + " (");
+        });
+        const input = label?.querySelector("input, select");
 
         if (!input) {
           return false;
@@ -555,10 +564,11 @@ async function runChromeTest() {
     const preparedNegativeOverride = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const setLabeledInput = (labelText, value) => {
-        const label = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-        );
-        const input = label?.querySelector("input");
+        const label = [...document.querySelectorAll("label")].find((candidate) => {
+          const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+          return candidateLabel === labelText || candidateLabel.startsWith(labelText + " (");
+        });
+        const input = label?.querySelector("input, select");
 
         if (!input) {
           return false;
@@ -738,10 +748,11 @@ async function runChromeTest() {
       const preparedDuplicateOverride = await evaluate(`(() => {
         const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
         const setLabeledInput = (labelText, value) => {
-          const label = [...document.querySelectorAll("label")].find(
-            (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-          );
-          const input = label?.querySelector("input");
+          const label = [...document.querySelectorAll("label")].find((candidate) => {
+            const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+            return candidateLabel === labelText || candidateLabel.startsWith(labelText + " (");
+          });
+          const input = label?.querySelector("input, select");
 
           if (!input) {
             return false;

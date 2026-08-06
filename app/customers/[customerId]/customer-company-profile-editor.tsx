@@ -68,6 +68,12 @@ function profileValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function positiveProfileId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function agencyCompanyProfileName(customerName: string, guestAccountBillingEnabled: boolean) {
   const normalized = customerName.trim();
 
@@ -105,6 +111,21 @@ function isMissingCompanyProfileResult(response: Response, result: unknown) {
 async function loadCompanyProfile(companyName: string) {
   const params = new URLSearchParams({ company_name: companyName });
   const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": "admin-booking-persistence",
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  return { response, result };
+}
+
+async function loadCompanyProfileById(companyId: number) {
+  const params = new URLSearchParams();
+  params.set("id", String(companyId));
+  const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+    cache: "no-store",
     headers: {
       "x-prestige-admin-purpose": "admin-booking-persistence",
     },
@@ -179,16 +200,32 @@ export function CustomerCompanyProfileEditor({
       setCustomerFolderName(exactCustomerFolderName);
       setLoadedCustomerFolderName(exactCustomerFolderName);
       const companyLookupName = agencyCompanyProfileName(exactCustomerFolderName, guestAccountBillingEnabled);
-      let { response, result } = await loadCompanyProfile(companyLookupName);
+      const verifiedCompanyId = positiveProfileId(account.verified_company_id);
+      let response: Response;
+      let result: {
+        company?: Record<string, unknown> | null;
+        error?: string;
+        ok?: boolean;
+      } | null;
 
-      if (companyLookupName !== exactCustomerFolderName && isMissingCompanyProfileResult(response, result)) {
+      if (verifiedCompanyId) {
+        ({ response, result } = await loadCompanyProfileById(verifiedCompanyId));
+      } else {
+        ({ response, result } = await loadCompanyProfile(companyLookupName));
+      }
+
+      if (
+        !verifiedCompanyId &&
+        companyLookupName !== exactCustomerFolderName &&
+        isMissingCompanyProfileResult(response, result)
+      ) {
         ({ response, result } = await loadCompanyProfile(exactCustomerFolderName));
       }
 
       const company = result?.company;
 
       if (!response.ok || !result?.ok) {
-        if (isMissingCompanyProfileResult(response, result)) {
+        if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result)) {
           setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
           setProfileMode("create");
           setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
@@ -200,6 +237,10 @@ export function CustomerCompanyProfileEditor({
       }
 
       if (!company) {
+        if (verifiedCompanyId) {
+          throw new Error("Verified company CRM profile could not be loaded safely.");
+        }
+
         setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
         setProfileMode("create");
         setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
@@ -209,6 +250,10 @@ export function CustomerCompanyProfileEditor({
 
       if (!Number.isSafeInteger(Number(company.id)) || Number(company.id) <= 0) {
         throw new Error("Customer company profile returned an invalid record id.");
+      }
+
+      if (verifiedCompanyId && Number(company.id) !== verifiedCompanyId) {
+        throw new Error("Verified company CRM profile identity did not match safely.");
       }
 
       setProfile({

@@ -87,10 +87,28 @@ assert.match(
   /const accountResponse = await fetch\(`\$\{adminCustomerAccountsApiPath\}\?\$\{accountParams\.toString\(\)\}`,[\s\S]+?const guestAccountBillingEnabled = account\.guest_account_billing_enabled === true;[\s\S]+?const exactCustomerFolderName = profileValue\(account\.customer_account\);[\s\S]+?const companyLookupName = agencyCompanyProfileName\(exactCustomerFolderName, guestAccountBillingEnabled\);[\s\S]+?await loadCompanyProfile\(companyLookupName\)/,
   "the exact customer account classification must be loaded before choosing the company profile lookup name",
 );
+for (const fragment of [
+  "const verifiedCompanyId = positiveProfileId(account.verified_company_id);",
+  "if (verifiedCompanyId) {",
+  "await loadCompanyProfileById(verifiedCompanyId)",
+  "if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result))",
+  "if (verifiedCompanyId && Number(company.id) !== verifiedCompanyId)",
+]) {
+  assert.equal(
+    editorSource.includes(fragment),
+    true,
+    `verified company exact-ID profile flow must include ${fragment}`,
+  );
+}
 assert.match(
   editorSource,
-  /if \(companyLookupName !== exactCustomerFolderName && isMissingCompanyProfileResult\(response, result\)\) \{[\s\S]+?loadCompanyProfile\(exactCustomerFolderName\)/,
-  "an agency base-name miss must safely fall back to the original folder name instead of creating a duplicate company",
+  /params\.set\("id", String\(companyId\)\)/,
+  "verified company profile lookup must use the established exact-ID CRM read",
+);
+assert.match(
+  editorSource,
+  /if \(\s*!verifiedCompanyId &&\s*companyLookupName !== exactCustomerFolderName &&\s*isMissingCompanyProfileResult\(response, result\)\s*\) \{[\s\S]+?loadCompanyProfile\(exactCustomerFolderName\)/,
+  "an unverified agency base-name miss must safely fall back to the original folder name instead of creating a duplicate company",
 );
 assert.match(
   editorSource,

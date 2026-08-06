@@ -2617,6 +2617,7 @@ type ParsedDebugBooking = BookingForm & {
 type RateOverrideDraft = {
   companyName: string;
   bossName: string;
+  travelerId: string;
   cardOptionDefaultEnabled: boolean;
   cardOptionDefaultTouched: boolean;
   customerRates: RateRules;
@@ -2788,6 +2789,7 @@ function dispatchSummaryUppercaseField(label: string): AdminOperationalUppercase
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
+  travelerId: "",
   cardOptionDefaultEnabled: false,
   cardOptionDefaultTouched: false,
   customerRates: {},
@@ -3115,6 +3117,12 @@ const tripRouteFieldOrder: Array<keyof BookingForm> = [
 
 function clean(value: string | number | null | undefined) {
   return (value ?? "").toString().trim();
+}
+
+function positiveId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function cleanReferenceText(value: string | number | null | undefined) {
@@ -6253,24 +6261,9 @@ type LegacyCompanyRateOverrideInsertPayloadInput = CompanyRateOverridePayloadInp
   companyName: string;
 };
 
-type LegacyTravelerRateOverrideInsertPayloadInput = TravelerRateOverridePayloadInput & {
-  companyId: number;
-  travelerName: string;
-};
-
 function buildCompanyCrmIdentityContactPayload(companyName: string): CompanyCrmIdentityContactPayload {
   return {
     company_name: companyName || "Internal Account",
-  };
-}
-
-function buildTravelerCrmIdentityContactPayload(
-  companyId: number,
-  travelerName: string,
-): TravelerCrmIdentityContactPayload {
-  return {
-    company_id: companyId,
-    traveler_name: travelerName,
   };
 }
 
@@ -7721,27 +7714,6 @@ function buildLegacyCompanyRateOverrideInsertPayload({
       includeCustomerRates,
       includeDriverPayoutRules,
       transzendExcelPrivacy,
-    }),
-  };
-}
-
-function buildLegacyTravelerRateOverrideInsertPayload({
-  cardOptionDefaultEnabled,
-  companyId,
-  customerRates,
-  driverPayoutRules,
-  includeCustomerRates = true,
-  includeDriverPayoutRules = true,
-  travelerName,
-}: LegacyTravelerRateOverrideInsertPayloadInput) {
-  return {
-    ...buildTravelerCrmIdentityContactPayload(companyId, travelerName),
-    ...buildTravelerRateOverridePayload({
-      cardOptionDefaultEnabled,
-      customerRates,
-      driverPayoutRules,
-      includeCustomerRates,
-      includeDriverPayoutRules,
     }),
   };
 }
@@ -18028,6 +18000,24 @@ export default function Home() {
       ),
     [rateTravelers, rateOverrideListMessages.boss?.recordId],
   );
+  const rateOverrideCompany = useMemo(
+    () =>
+      rateCompanies.find(
+        (companyRecord) =>
+          clean(companyRecord.company_name).toLowerCase() ===
+          clean(rateOverrideDraft.companyName).toLowerCase(),
+      ) ?? null,
+    [rateCompanies, rateOverrideDraft.companyName],
+  );
+  const rateOverrideTravelerOptions = useMemo(
+    () =>
+      rateOverrideCompany
+        ? rateTravelers.filter(
+            (travelerRecord) => travelerRecord.company_id === rateOverrideCompany.id,
+          )
+        : [],
+    [rateOverrideCompany, rateTravelers],
+  );
   const assignableDriverAssignmentDisplayDrivers = useMemo(
     () => driverAssignmentDisplayDrivers.filter(isAssignableDriver),
     [driverAssignmentDisplayDrivers],
@@ -20385,7 +20375,15 @@ export default function Home() {
     }
 
     const companyName = clean(rateOverrideDraft.companyName);
-    const bossName = clean(rateOverrideDraft.bossName);
+    const travelerId = positiveId(rateOverrideDraft.travelerId);
+    const selectedDraftTraveler = travelerId
+      ? rateTravelers.find((travelerRecord) => travelerRecord.id === travelerId) ?? null
+      : null;
+    const selectedDraftCompany = rateCompanies.find(
+      (companyRecord) =>
+        clean(companyRecord.company_name).toLowerCase() === companyName.toLowerCase(),
+    );
+    const bossName = clean(selectedDraftTraveler?.traveler_name);
     const invalidRateLabels = getNonPositiveRateOverrideLabels(
       rateOverrideDraft.customerRates,
       rateOverrideDraft.driverPayoutRules,
@@ -20410,6 +20408,25 @@ export default function Home() {
       setMessage({
         tone: "error",
         text: "Save rate override failed: Enter a company/account or boss/name before saving overrides.",
+      });
+      return;
+    }
+
+    if (rateOverrideDraft.travelerId && (!travelerId || !selectedDraftTraveler || !bossName)) {
+      setMessage({
+        tone: "error",
+        text: "Save rate override failed: Select one existing Traveller from this company before saving a Traveller override.",
+      });
+      return;
+    }
+
+    if (
+      travelerId &&
+      (!selectedDraftCompany || selectedDraftTraveler?.company_id !== selectedDraftCompany.id)
+    ) {
+      setMessage({
+        tone: "error",
+        text: "Save rate override failed: Select one existing Traveller from this company before saving a Traveller override.",
       });
       return;
     }
@@ -20573,11 +20590,17 @@ export default function Home() {
       companyOverrideSaved = true;
 
       if (bossName) {
+        if (!travelerId || selectedDraftTraveler?.company_id !== company.id) {
+          throw new Error(
+            "Select one existing Traveller from this company before saving a Traveller override.",
+          );
+        }
+
         const existingTraveler = await adminLegacyDataClient
           .from(adminLegacyTables.travelers)
-          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
+          .select("id, company_id, traveler_name, booker_id, customer_rates, driver_payout_rules, card_option_default_enabled")
+          .eq("id", travelerId)
           .eq("company_id", company.id)
-          .ilike("traveler_name", bossName)
           .limit(1)
           .maybeSingle();
 
@@ -20585,199 +20608,64 @@ export default function Home() {
           throw new Error(existingTraveler.error.message);
         }
 
-        if (existingTraveler.data) {
-          const traveler = existingTraveler.data as TravelerRecord;
-          const travelerIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
-            action_type: "traveler_update",
-            id: traveler.id,
-            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
-          });
+        if (!existingTraveler.data) {
+          throw new Error(
+            "Select one existing Traveller from this company before saving a Traveller override.",
+          );
+        }
 
-          if (!travelerIdentity.ok) {
-            throw new Error(travelerIdentity.errorMessage);
-          }
-
-          const mergedTravelerRates = {
-            ...normalizeCustomerRateRules(traveler.customer_rates),
-            ...overrideCustomerRates,
-          };
-          const mergedTravelerPayouts = {
-            ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
-            ...overrideDriverPayoutRules,
-          };
-          const travelerCustomerRatesRuntime = hasCustomerRateOverrides
-            ? await saveCustomerRatesRuntime(
-                buildTravelerCustomerRatesRuntimeWritePayload(traveler.id, mergedTravelerRates),
-              )
-            : { ok: true as const, saved: false };
-
-          if (!travelerCustomerRatesRuntime.ok) {
-            throw new Error(travelerCustomerRatesRuntime.errorMessage);
-          }
-
-          const travelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
-            ? await saveDriverPayoutRulesRuntime(
-                buildTravelerDriverPayoutRulesRuntimeWritePayload(traveler.id, mergedTravelerPayouts),
-              )
-            : { ok: true as const, saved: false };
-
-          if (!travelerDriverPayoutRulesRuntime.ok) {
-            throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
-          }
-
-          const travelerUpdate = await adminLegacyDataClient
-            .from(adminLegacyTables.travelers)
-            .update(
-              buildTravelerRateOverridePayload({
-                cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                customerRates: mergedTravelerRates,
-                driverPayoutRules: mergedTravelerPayouts,
-                includeCustomerRates: !travelerCustomerRatesRuntime.saved,
-                includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
-                updatedAt: new Date().toISOString(),
-              }),
+        const traveler = existingTraveler.data as TravelerRecord;
+        const mergedTravelerRates = {
+          ...normalizeCustomerRateRules(traveler.customer_rates),
+          ...overrideCustomerRates,
+        };
+        const mergedTravelerPayouts = {
+          ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
+          ...overrideDriverPayoutRules,
+        };
+        const travelerCustomerRatesRuntime = hasCustomerRateOverrides
+          ? await saveCustomerRatesRuntime(
+              buildTravelerCustomerRatesRuntimeWritePayload(traveler.id, mergedTravelerRates),
             )
-            .eq("id", traveler.id);
+          : { ok: true as const, saved: false };
 
-          if (travelerUpdate.error) {
-            throw new Error(travelerUpdate.error.message);
-          }
-        } else {
-          const travelerIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
-            action_type: "traveler_create",
-            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
-          });
+        if (!travelerCustomerRatesRuntime.ok) {
+          throw new Error(travelerCustomerRatesRuntime.errorMessage);
+        }
 
-          if (!travelerIdentity.ok) {
-            throw new Error(travelerIdentity.errorMessage);
-          }
+        const travelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
+          ? await saveDriverPayoutRulesRuntime(
+              buildTravelerDriverPayoutRulesRuntimeWritePayload(traveler.id, mergedTravelerPayouts),
+            )
+          : { ok: true as const, saved: false };
 
-          let travelerCustomerRatesRuntime: { ok: true; saved: boolean } | { errorMessage: string; ok: false } = {
-            ok: true,
-            saved: false,
-          };
+        if (!travelerDriverPayoutRulesRuntime.ok) {
+          throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
+        }
 
-          if (travelerIdentity.recordId && hasCustomerRateOverrides) {
-            travelerCustomerRatesRuntime = await saveCustomerRatesRuntime(
-              buildTravelerCustomerRatesRuntimeWritePayload(travelerIdentity.recordId, overrideCustomerRates),
-            );
+        const travelerUpdate = await adminLegacyDataClient
+          .from(adminLegacyTables.travelers)
+          .update(
+            buildTravelerRateOverridePayload({
+              cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
+              customerRates: mergedTravelerRates,
+              driverPayoutRules: mergedTravelerPayouts,
+              includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+              includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
+              updatedAt: new Date().toISOString(),
+            }),
+          )
+          .eq("id", traveler.id);
 
-            if (!travelerCustomerRatesRuntime.ok) {
-              throw new Error(travelerCustomerRatesRuntime.errorMessage);
-            }
-          }
-
-          let travelerDriverPayoutRulesRuntime: { ok: true; saved: boolean } | { errorMessage: string; ok: false } = {
-            ok: true,
-            saved: false,
-          };
-
-          if (travelerIdentity.recordId && hasDriverPayoutOverrides) {
-            travelerDriverPayoutRulesRuntime = await saveDriverPayoutRulesRuntime(
-              buildTravelerDriverPayoutRulesRuntimeWritePayload(
-                travelerIdentity.recordId,
-                overrideDriverPayoutRules,
-              ),
-            );
-
-            if (!travelerDriverPayoutRulesRuntime.ok) {
-              throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
-            }
-          }
-
-          if (travelerIdentity.recordId) {
-            const travelerInsert = await adminLegacyDataClient
-              .from(adminLegacyTables.travelers)
-              .update(
-                buildTravelerRateOverridePayload({
-                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                  customerRates: overrideCustomerRates,
-                  driverPayoutRules: overrideDriverPayoutRules,
-                  includeCustomerRates: !travelerCustomerRatesRuntime.saved,
-                  includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
-                  updatedAt: new Date().toISOString(),
-                }),
-              )
-              .eq("id", travelerIdentity.recordId);
-
-            if (travelerInsert.error) {
-              throw new Error(travelerInsert.error.message);
-            }
-          } else {
-            const createdTraveler = await adminLegacyDataClient
-              .from(adminLegacyTables.travelers)
-              .insert(
-                buildLegacyTravelerRateOverrideInsertPayload({
-                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                  companyId: company.id,
-                  customerRates: overrideCustomerRates,
-                  driverPayoutRules: overrideDriverPayoutRules,
-                  includeCustomerRates: !hasCustomerRateOverrides,
-                  includeDriverPayoutRules: !hasDriverPayoutOverrides,
-                  travelerName: bossName,
-                }),
-              )
-              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
-              .single();
-
-            if (createdTraveler.error) {
-              throw new Error(createdTraveler.error.message);
-            }
-
-            const createdTravelerRecord = createdTraveler.data as TravelerRecord;
-            const createdTravelerCustomerRatesRuntime = hasCustomerRateOverrides
-              ? await saveCustomerRatesRuntime(
-                  buildTravelerCustomerRatesRuntimeWritePayload(createdTravelerRecord.id, overrideCustomerRates),
-                )
-              : { ok: true as const, saved: false };
-
-            if (!createdTravelerCustomerRatesRuntime.ok) {
-              throw new Error(createdTravelerCustomerRatesRuntime.errorMessage);
-            }
-
-            const createdTravelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
-              ? await saveDriverPayoutRulesRuntime(
-                  buildTravelerDriverPayoutRulesRuntimeWritePayload(
-                    createdTravelerRecord.id,
-                    overrideDriverPayoutRules,
-                  ),
-                )
-              : { ok: true as const, saved: false };
-
-            if (!createdTravelerDriverPayoutRulesRuntime.ok) {
-              throw new Error(createdTravelerDriverPayoutRulesRuntime.errorMessage);
-            }
-
-            if (
-              (!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides) ||
-              (!createdTravelerDriverPayoutRulesRuntime.saved && hasDriverPayoutOverrides)
-            ) {
-              const travelerCustomerRatesFallback = await adminLegacyDataClient
-                .from(adminLegacyTables.travelers)
-                .update(
-                  buildTravelerRateOverridePayload({
-                    cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                    customerRates: overrideCustomerRates,
-                    driverPayoutRules: overrideDriverPayoutRules,
-                    includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides,
-                    includeDriverPayoutRules:
-                      !createdTravelerDriverPayoutRulesRuntime.saved && hasDriverPayoutOverrides,
-                    updatedAt: new Date().toISOString(),
-                  }),
-                )
-                .eq("id", createdTravelerRecord.id);
-
-              if (travelerCustomerRatesFallback.error) {
-                throw new Error(travelerCustomerRatesFallback.error.message);
-              }
-            }
-          }
+        if (travelerUpdate.error) {
+          throw new Error(travelerUpdate.error.message);
         }
       }
 
       setRateOverrideDraft({
         companyName: companyName || "Internal Account",
         bossName,
+        travelerId: travelerId ? String(travelerId) : "",
         cardOptionDefaultEnabled: rateOverrideDraft.cardOptionDefaultEnabled,
         cardOptionDefaultTouched: false,
         customerRates: overrideCustomerRates,
@@ -47016,22 +46904,45 @@ export default function Home() {
                 <input
                   className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   onChange={(event) =>
-                    setRateOverrideDraft((current) => ({ ...current, companyName: event.target.value }))
+                    setRateOverrideDraft((current) => ({
+                      ...current,
+                      bossName: "",
+                      companyName: event.target.value,
+                      travelerId: "",
+                    }))
                   }
                   placeholder="Tiger Global"
                   value={rateOverrideDraft.companyName}
                 />
               </label>
               <label>
-                <span className="mb-1 block text-sm font-medium text-slate-700">Boss / Name</span>
-                <input
+                <span className="mb-1 block text-sm font-medium text-slate-700">
+                  Boss / Name (existing Traveller)
+                </span>
+                <select
                   className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                  onChange={(event) =>
-                    setRateOverrideDraft((current) => ({ ...current, bossName: event.target.value }))
-                  }
-                  placeholder="Su Ling"
-                  value={rateOverrideDraft.bossName}
-                />
+                  data-rate-override-traveler-id="true"
+                  disabled={!rateOverrideCompany}
+                  onChange={(event) => {
+                    const travelerId = event.target.value;
+                    const traveler = rateOverrideTravelerOptions.find(
+                      (candidate) => String(candidate.id) === travelerId,
+                    );
+                    setRateOverrideDraft((current) => ({
+                      ...current,
+                      bossName: clean(traveler?.traveler_name),
+                      travelerId,
+                    }));
+                  }}
+                  value={rateOverrideDraft.travelerId}
+                >
+                  <option value="">Company-wide override</option>
+                  {rateOverrideTravelerOptions.map((travelerRecord) => (
+                    <option key={travelerRecord.id} value={String(travelerRecord.id)}>
+                      {clean(travelerRecord.traveler_name) || `Traveller ${travelerRecord.id}`}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
                 <input
@@ -47199,6 +47110,7 @@ export default function Home() {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord.company_name),
                                     bossName: "",
+                                    travelerId: "",
                                     cardOptionDefaultEnabled: Boolean(
                                       companyRecord.card_option_default_enabled,
                                     ),
@@ -47295,6 +47207,7 @@ export default function Home() {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord?.company_name),
                                     bossName: clean(travelerRecord.traveler_name),
+                                    travelerId: String(travelerRecord.id),
                                     cardOptionDefaultEnabled:
                                       typeof travelerRecord.card_option_default_enabled === "boolean"
                                         ? travelerRecord.card_option_default_enabled

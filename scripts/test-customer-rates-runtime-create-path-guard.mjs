@@ -84,18 +84,10 @@ for (const phrase of [
 const legacyCompanyInsertBuilder = sliceBetween(
   appPage,
   "function buildLegacyCompanyRateOverrideInsertPayload",
-  "function buildLegacyTravelerRateOverrideInsertPayload",
-);
-const legacyTravelerInsertBuilder = sliceBetween(
-  appPage,
-  "function buildLegacyTravelerRateOverrideInsertPayload",
   "function statusClass",
 );
 
-for (const [label, source] of [
-  ["Legacy company create payload", legacyCompanyInsertBuilder],
-  ["Legacy traveler create payload", legacyTravelerInsertBuilder],
-]) {
+for (const [label, source] of [["Legacy company create payload", legacyCompanyInsertBuilder]]) {
   assertIncludes(source, "includeCustomerRates", `${label} customer_rates include gate`);
   assertIncludes(source, "includeDriverPayoutRules", `${label} driver_payout_rules include gate`);
   assertIncludes(source, "build", `${label} split helper composition`);
@@ -112,11 +104,6 @@ const legacyCompanyCreate = sliceBetween(
   saveRateOverride,
   "const createdCompany = await adminLegacyDataClient",
   "} else if (!companyIdentitySynced) {",
-);
-const newTravelerCreate = sliceBetween(
-  saveRateOverride,
-  "const createdTraveler = await adminLegacyDataClient",
-  "if (!reloadResult.ok) {",
 );
 
 assertIncludes(
@@ -141,40 +128,29 @@ assertIncludes(
   "Company legacy fallback only writes customer_rates when runtime did not save",
 );
 
-assertIncludes(
-  newTravelerCreate,
-  "includeCustomerRates: !hasCustomerRateOverrides",
-  "Traveler create omits customer_rates before runtime boundary",
+for (const fragment of [
+  "const travelerId = positiveId(rateOverrideDraft.travelerId);",
+  '.eq("id", travelerId)',
+  '.eq("company_id", company.id)',
+  '.select("id, company_id, traveler_name, booker_id, customer_rates, driver_payout_rules, card_option_default_enabled")',
+  "Select one existing Traveller from this company before saving a Traveller override.",
+]) {
+  assertIncludes(saveRateOverride, fragment, "Verified Traveller rate-override identity");
+}
+assertExcludes(
+  saveRateOverride,
+  'action_type: "traveler_create"',
+  "Rates override save must not create a Traveller identity",
+);
+assertExcludes(
+  saveRateOverride,
+  '.ilike("traveler_name", bossName)',
+  "Rates override save must not resolve a Traveller from typed display text",
 );
 assertIncludes(
-  newTravelerCreate,
-  "includeDriverPayoutRules: !hasDriverPayoutOverrides",
-  "Traveler create omits driver_payout_rules before payout runtime boundary",
-);
-assertIncludes(
-  newTravelerCreate,
-  ".select(\"id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled\")",
-  "Traveler create must return the runtime customer_rates fields plus the established invoice card default",
-);
-assertIncludes(
-  newTravelerCreate,
-  "buildTravelerCustomerRatesRuntimeWritePayload(createdTravelerRecord.id, overrideCustomerRates)",
-  "Traveler create customer_rates runtime call",
-);
-assertIncludes(
-  newTravelerCreate,
-  "(!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides)",
-  "Traveler create closed-gate legacy fallback",
-);
-assertIncludes(
-  newTravelerCreate,
-  "includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides",
-  "Traveler create fallback writes customer_rates only after no-op runtime",
-);
-assertIncludes(
-  newTravelerCreate,
-  "createdTravelerDriverPayoutRulesRuntime",
-  "Traveler create keeps driver payout rules on separate payout runtime path",
+  appPage,
+  'data-rate-override-traveler-id="true"',
+  "Existing Rates override panel exact Traveller selector",
 );
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");

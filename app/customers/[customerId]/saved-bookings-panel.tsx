@@ -998,12 +998,14 @@ export function CustomerFolderSavedBookingsPanel({
     return rateSetup;
   }
 
-  async function loadAutomatedBillingReviews(bookings: CustomerFolderSavedBookingRecord[]) {
+  async function loadAutomatedBillingReviews(
+    bookings: CustomerFolderSavedBookingRecord[],
+    options: { forceRateSetup?: boolean } = {},
+  ) {
     const proposalBookings = bookings.filter(
       (booking) =>
         safeDispatchReference(booking) &&
-        customerInvoiceBookingType(booking.service_type) !== null &&
-        !parseInvoiceAmountToCents(String(booking.customer_price_label ?? "")),
+        customerInvoiceBookingType(booking.service_type) !== null,
     );
 
     if (proposalBookings.length === 0) {
@@ -1011,7 +1013,9 @@ export function CustomerFolderSavedBookingsPanel({
     }
 
     try {
-      const rateSetup = await loadCustomerFolderRateSetup();
+      const rateSetup = await loadCustomerFolderRateSetup({
+        force: options.forceRateSetup,
+      });
 
       const calculatedReviews = await Promise.all(
         proposalBookings.map(async (booking) => {
@@ -1984,18 +1988,23 @@ export function CustomerFolderSavedBookingsPanel({
           status: "calculating",
         },
       }));
-      const recalculatedReviews = await loadAutomatedBillingReviews([booking]);
+      const recalculatedReviews = await loadAutomatedBillingReviews([booking], {
+        forceRateSetup: true,
+      });
       const recalculatedReview = recalculatedReviews.find(
         (candidate) => candidate.reference === reference,
       );
+      const recalculatedAmountCents = recalculatedReview?.review.amountCents ?? null;
 
-      if (recalculatedReview?.review.amountCents) {
-        setPriceDraft((recalculatedReview.review.amountCents / 100).toFixed(2));
+      if (recalculatedAmountCents) {
+        setPriceDraft((recalculatedAmountCents / 100).toFixed(2));
       }
       setReadState((current) => ({
         ...current,
-        message: `Saved DSP billing times and recalculated the customer proposal for ${publicBookingReferenceDisplay(booking)}.`,
-        tone: "success",
+        message: recalculatedAmountCents
+          ? `Saved DSP billing times and recalculated the customer proposal for ${publicBookingReferenceDisplay(booking)}.`
+          : `Saved DSP billing times for ${publicBookingReferenceDisplay(booking)}, but the customer proposal requires review.`,
+        tone: recalculatedAmountCents ? "success" : "info",
       }));
     } catch (error) {
       setDspBillingTimeCorrectionState((current) => ({
@@ -2600,6 +2609,15 @@ export function CustomerFolderSavedBookingsPanel({
                                       data-customer-folder-inline-service="true"
                                       onChange={(event) => updateInlineEditField("serviceType", event.target.value)}
                                       value={inlineEditState.form.serviceType}
+                                    />
+                                  </label>
+                                  <label className="text-xs font-bold text-slate-700">
+                                    Vehicle
+                                    <input
+                                      className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-slate-100 px-2 font-semibold text-slate-950"
+                                      data-customer-folder-inline-vehicle="true"
+                                      readOnly
+                                      value={inlineEditState.booking?.vehicle_type_or_category ?? ""}
                                     />
                                   </label>
                                   <label className="text-xs font-bold text-slate-700">

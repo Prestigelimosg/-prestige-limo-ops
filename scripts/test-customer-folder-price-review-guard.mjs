@@ -455,6 +455,41 @@ try {
   assert.equal(bookingToJcReview?.actualMinutes, 150);
   assert.equal(bookingToJcReview?.billableHours, 3);
   assert.equal(bookingToJcReview?.amountCents, 19_500);
+
+  const bridgeCorrectedMinutes = calculateCustomerDspBillingActualMinutes(
+    "2026-08-06T09:30:00+08:00",
+    "2026-08-06T19:15:00+08:00",
+  );
+  assert.equal(bridgeCorrectedMinutes, 585);
+  const bridgeCorrectedReview = calculateCustomerInvoiceRateReview(
+    {
+      actualMinutes: bridgeCorrectedMinutes,
+      bookingType: "DSP",
+      childSeatCount: 0,
+      companyId: 77,
+      extraStopCount: 0,
+      pickupAt: "2026-08-06T10:00:00+08:00",
+      travelerId: 79,
+      vehicleType: "S",
+    },
+    {
+      companies: [{ customer_rates: {}, id: 77 }],
+      settings: {
+        child_seat_customer_surcharge: 15,
+        customer_rates: { DSP: { S: 160 } },
+        extra_stop_surcharge: 0,
+        midnight_surcharge: 15,
+      },
+      travelers: [
+        { company_id: 77, customer_rates: { DSP: { S: 999 } }, id: 78 },
+        { company_id: 77, customer_rates: {}, id: 79 },
+      ],
+    },
+  );
+  assert.equal(bridgeCorrectedReview?.billableHours, 10);
+  assert.equal(bridgeCorrectedReview?.rateCents, 16_000);
+  assert.equal(bridgeCorrectedReview?.amountCents, 160_000);
+  assert.equal(bridgeCorrectedReview?.customerRateSource, "default");
 } finally {
   await rm(calculationRuntimeDir, { force: true, recursive: true });
 }

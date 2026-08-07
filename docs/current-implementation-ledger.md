@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Profile Saved Confirmation Repair (2026-08-07)
+
+- The owner reproduced a completed `Save profile` action whose exact-customer editor remained open with the action immediately labelled `Save profile` again. The existing green success banner was correct, but the unchanged open form and ready-to-save button left the completed state visually ambiguous; the company and optional exact-customer folder writes themselves were not failing.
+- Only after both existing guarded save steps finish successfully, the same customer-profile component now closes its existing editor and returns to the existing `Edit profile` control while retaining the exact green `Saved customer company profile for {name}.` feedback directly below it. A validation error, rejected company write, partial folder-settings failure, or cancelled confirmation keeps the existing form/error behavior and never claims the full save completed.
+- No page, panel, button, route, API, payload, database writer, Company/Booker/Traveller identity rule, Hotel / Tour Agency classification, booking, invoice, billing, payment, message, Calendar, driver, provider, schema, migration, environment, or Production record is added or changed. Fail-first protection is in `scripts/test-customer-company-profile-browser.mjs`; the source contract remains protected by `scripts/test-customer-company-profile-contract.mjs`.
+
 ### Save + CRM Agency Test-Harness Alignment And Company-Link Diagnosis (2026-08-07)
 
 - Read-only comparison proved the established Save + CRM application page, Hotel / Tour Agency browser coverage, and focused source guard were byte-for-byte identical to `origin/main` before this diagnosis. The source guard alone still searched for the retired browser assertion wording `keep all verified identity selectors blank`; the current browser assertion accurately checks that first-agency mode keeps the corporate customer choices hidden. Only that stale guard fragment is aligned; the visible selector, Save + CRM payload, route, and persistence adapter are unchanged.

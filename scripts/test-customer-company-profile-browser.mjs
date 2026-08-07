@@ -230,13 +230,21 @@ async function main() {
     );
 
     const finalState = await evaluate(`(() => ({
-      folderInputIsLight: document.querySelector('[data-customer-folder-name="${customerId}"]')?.classList.contains("bg-white") === true,
+      editButtonVisible: Boolean(document.querySelector('[data-customer-company-profile-edit="${customerId}"]')),
+      editorVisible: Boolean(document.querySelector('[data-customer-company-profile-editor="${customerId}"]')),
+      folderInputVisible: Boolean(document.querySelector('[data-customer-folder-name="${customerId}"]')),
+      savedMessage: document.querySelector('[data-customer-company-profile-edit="${customerId}"]')?.nextElementSibling?.textContent?.trim() || "",
+      saveButtonVisible: Boolean(document.querySelector('[data-customer-company-profile-save="${customerId}"]')),
       topBanner: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
       travellerEditorVisible: Boolean(document.querySelector('[data-customer-verified-identities="true"]')),
     }))()`);
 
     assert.deepEqual(finalState, {
-      folderInputIsLight: true,
+      editButtonVisible: true,
+      editorVisible: false,
+      folderInputVisible: false,
+      savedMessage: `Saved customer company profile for ${correctedFolderName}.`,
+      saveButtonVisible: false,
       topBanner: correctedFolderName,
       travellerEditorVisible: false,
     });

@@ -232,6 +232,10 @@ async function runChromeTest() {
         window.__driverOtsPhotoUploadBodies = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
+        window.__driverAppUpdateTest = {
+          safeMessage: "Dispatch has a safe app update for this job.",
+          safeTitle: "Dispatch app update",
+        };
         const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
         window.addEventListener("unhandledrejection", (event) => window.__prestigeErrors.push(String(event.reason)));
@@ -432,8 +436,8 @@ async function runChromeTest() {
                     id: "driver-app-update-safe-one",
                     notification_status: "queued",
                     priority: "normal",
-                    safe_message: "Dispatch has a safe app update for this job.",
-                    safe_title: "Dispatch app update",
+                    safe_message: window.__driverAppUpdateTest.safeMessage,
+                    safe_title: window.__driverAppUpdateTest.safeTitle,
                     updated_at: "2026-06-08T03:00:00.000Z",
                   },
                 ],
@@ -621,6 +625,7 @@ async function runChromeTest() {
           acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
           parseButtonText: document.querySelector("[data-driver-job-parse-details]")?.textContent.trim() || "",
           parseMessage: document.querySelector("[data-driver-job-parse-details-message]")?.textContent.trim() || "",
+          saveAcknowledgeDisabled: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")?.disabled),
           saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
           saveAcknowledgeVisible: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")),
           title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
@@ -980,6 +985,16 @@ async function runChromeTest() {
         afterSaveState.fetchCalls.at(-1),
         `PATCH ${expectedDriverJobPatchPath}`,
         "Expected public driver details Save & Acknowledge to persist through the tokenized driver job route.",
+      );
+      assert.equal(
+        afterSaveState.confirmDetails.saveAcknowledgeText,
+        "Saved & Acknowledged",
+        "Expected confirmed unchanged details to show the saved acknowledgement state.",
+      );
+      assert.equal(
+        afterSaveState.confirmDetails.saveAcknowledgeDisabled,
+        true,
+        "Expected confirmed unchanged details to prevent a duplicate acknowledgement save.",
       );
       assert.equal(
         afterSaveState.deviceAlerts.helper,
@@ -1359,12 +1374,17 @@ async function runChromeTest() {
     assert.deepEqual(
       validState.workflowHandoff.items,
       [
+        "Open the private link in Safari. Tap Save & Acknowledge Job.",
         "Install Driver Portal from your browser for best results.",
+        "Add to Home Screen from this acknowledged page.",
+        "Open Driver Portal from your Home Screen.",
+        "Already installed before saving? Add it again from this acknowledged page.",
         "Tap Enable Job Alerts. Allow notifications.",
+        "WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.",
         "Tap OTW to save status and start sharing. Allow location.",
         "Allow camera/photos only for OTS photo.",
         "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
-        "Confirm driver and vehicle details once, then use the status buttons only when ready.",
+        "Use the status buttons only when ready.",
         "Use Report Issue when admin needs an in-app alert.",
       ],
       "Expected compact driver workflow handoff guidance.",
@@ -1483,6 +1503,28 @@ async function runChromeTest() {
       [],
       "Driver app updates feed should stay read-only in this stage.",
     );
+    for (const [eventTarget, eventName, safeMessage] of [
+      ["window", "focus", "Fresh admin message after focus."],
+      ["document", "visibilitychange", "Fresh admin message after returning."],
+      ["window", "pageshow", "Fresh admin message after page restore."],
+    ]) {
+      await evaluate(`(() => {
+        window.__driverAppUpdateTest.safeMessage = ${JSON.stringify(safeMessage)};
+        ${eventTarget}.dispatchEvent(new Event(${JSON.stringify(eventName)}));
+      })()`);
+      const refreshedMessageState = await waitForCondition(
+        () => pageState().then((state) =>
+          state.appUpdates.rows[0]?.message === safeMessage ? state : false,
+        ),
+        10000,
+        `driver app update refresh after ${eventName}`,
+      );
+      assert.equal(
+        refreshedMessageState.appUpdates.state,
+        "loaded",
+        `Expected ${eventName} refresh to preserve the loaded message state.`,
+      );
+    }
     assert.equal(validState.statusBoundary.visible, false, "Expected bulky driver status boundary help to be removed.");
     assert.equal(validState.visibleText.includes("Status Boundary"), false);
     assert.equal(validState.visibleText.includes("Current flow: OTW, OTS, POB, then Job Completed."), false);
@@ -1596,6 +1638,45 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
+    const acknowledgementEditReset = await evaluate(`(() => {
+      const input = document.querySelector("[data-driver-job-detail-vehicle-model]");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+      if (!input || !setter) {
+        return false;
+      }
+
+      setter.call(input, "Toyota Alphard Executive");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      const button = document.querySelector("[data-driver-job-save-acknowledge]");
+      return {
+        disabled: Boolean(button?.disabled),
+        savedDetailsVisible: Boolean(document.querySelector("[data-driver-job-saved-details]")),
+        text: button?.textContent.trim() || "",
+      };
+    })()`);
+    assert.deepEqual(
+      acknowledgementEditReset,
+      {
+        disabled: false,
+        savedDetailsVisible: false,
+        text: "Save & Acknowledge Job",
+      },
+      "Editing confirmed details must restore the save action and allow acknowledgement resave.",
+    );
+    const acknowledgementResaveClicked = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-job-save-acknowledge]");
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(acknowledgementResaveClicked, true, "Expected edited driver details to be resavable.");
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() === "Saved & Acknowledged"`),
+      10000,
+      "edited driver details acknowledgement resave",
+    );
     await saveDriverJobGoogleCalendar();
     await verifyDriverCalendarCallbackFeedback({
       expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",

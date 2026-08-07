@@ -489,6 +489,16 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
   };
 }
 
+function driverDetailsMatch(first: DriverDetails, second: DriverDetails) {
+  const cleanFirst = cleanDriverDetails(first);
+  const cleanSecond = cleanDriverDetails(second);
+
+  return cleanFirst.contact === cleanSecond.contact &&
+    cleanFirst.name === cleanSecond.name &&
+    cleanFirst.plate === cleanSecond.plate &&
+    cleanFirst.vehicleModel === cleanSecond.vehicleModel;
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -894,6 +904,8 @@ export default function DriverJobPage() {
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const driverAppUpdatesAbortControllerRef = useRef<AbortController | null>(null);
+  const driverAppUpdatesRequestSequenceRef = useRef(0);
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
   const driverLiveLocationPostInFlightRef = useRef(false);
@@ -907,6 +919,10 @@ export default function DriverJobPage() {
   const driverStatusTimingRows = useMemo(
     () => statusTimingRows(savedStatusHistory),
     [savedStatusHistory],
+  );
+  const driverDetailsSavedAndUnchanged = useMemo(
+    () => Boolean(savedDriverDetails && driverDetailsMatch(driverDetails, savedDriverDetails)),
+    [driverDetails, savedDriverDetails],
   );
 
   function addActivity(label: string, detail: string) {
@@ -1039,6 +1055,100 @@ export default function DriverJobPage() {
       return false;
     }
   }
+
+  const refreshDriverAppUpdates = useCallback(async (
+    { preserveContent = false }: { preserveContent?: boolean } = {},
+  ) => {
+    if (!token) {
+      return;
+    }
+
+    const requestSequence = driverAppUpdatesRequestSequenceRef.current + 1;
+    driverAppUpdatesRequestSequenceRef.current = requestSequence;
+    driverAppUpdatesAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    driverAppUpdatesAbortControllerRef.current = abortController;
+
+    if (!preserveContent) {
+      setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
+    }
+
+    try {
+      const updateResponse = await fetch(
+        `/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`,
+        {
+          cache: "no-store",
+          signal: abortController.signal,
+        },
+      );
+      const updateResult = await updateResponse.json() as DriverAppUpdateApiResponse;
+
+      if (
+        abortController.signal.aborted ||
+        requestSequence !== driverAppUpdatesRequestSequenceRef.current
+      ) {
+        return;
+      }
+
+      if (!updateResponse.ok || !updateResult.ok) {
+        const feedback: ControlFeedback = {
+          tone: updateResponse.status === 503 ? "success" : "error",
+          text:
+            updateResponse.status === 503
+              ? "Saved app updates are not enabled for this driver link yet."
+              : "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
+        };
+
+        setDriverAppUpdates((currentState) =>
+          preserveContent && currentState.updates.length > 0
+            ? { ...currentState, feedback }
+            : {
+                feedback,
+                kind: updateResponse.status === 503 ? "unavailable" : "error",
+                updates: [],
+              },
+        );
+        return;
+      }
+
+      const updates = Array.isArray(updateResult.notifications)
+        ? updateResult.notifications.slice(0, 5)
+        : [];
+
+      setDriverAppUpdates({
+        feedback: {
+          tone: "success",
+          text:
+            updates.length > 0
+              ? `Loaded ${updates.length} saved app update${updates.length === 1 ? "" : "s"}.`
+              : "No saved app updates for this job.",
+        },
+        kind: updates.length > 0 ? "loaded" : "empty",
+        updates,
+      });
+    } catch {
+      if (
+        abortController.signal.aborted ||
+        requestSequence !== driverAppUpdatesRequestSequenceRef.current
+      ) {
+        return;
+      }
+
+      const feedback: ControlFeedback = {
+        tone: "error",
+        text: "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
+      };
+      setDriverAppUpdates((currentState) =>
+        preserveContent && currentState.updates.length > 0
+          ? { ...currentState, feedback }
+          : { feedback, kind: "error", updates: [] },
+      );
+    } finally {
+      if (requestSequence === driverAppUpdatesRequestSequenceRef.current) {
+        driverAppUpdatesAbortControllerRef.current = null;
+      }
+    }
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -1193,61 +1303,7 @@ export default function DriverJobPage() {
           }
         }
 
-        try {
-          const updateResponse = await fetch(
-            `/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`,
-            {
-              cache: "no-store",
-            },
-          );
-          const updateResult = await updateResponse.json() as DriverAppUpdateApiResponse;
-
-          if (!active) {
-            return;
-          }
-
-          if (!updateResponse.ok || !updateResult.ok) {
-            setDriverAppUpdates({
-              feedback: {
-                tone: updateResponse.status === 503 ? "success" : "error",
-                text:
-                  updateResponse.status === 503
-                    ? "Saved app updates are not enabled for this driver link yet."
-                    : "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
-              },
-              kind: updateResponse.status === 503 ? "unavailable" : "error",
-              updates: [],
-            });
-            return;
-          }
-
-          const updates = Array.isArray(updateResult.notifications)
-            ? updateResult.notifications.slice(0, 5)
-            : [];
-
-          setDriverAppUpdates({
-            feedback: {
-              tone: "success",
-              text:
-                updates.length > 0
-                  ? `Loaded ${updates.length} saved app update${updates.length === 1 ? "" : "s"}.`
-                  : "No saved app updates for this job.",
-            },
-            kind: updates.length > 0 ? "loaded" : "empty",
-            updates,
-          });
-        } catch {
-          if (active) {
-            setDriverAppUpdates({
-              feedback: {
-                tone: "error",
-                text: "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
-              },
-              kind: "error",
-              updates: [],
-            });
-          }
-        }
+        await refreshDriverAppUpdates();
       } catch {
         if (active) {
           setPageState({ kind: "blocked", reason: "unavailable" });
@@ -1259,8 +1315,34 @@ export default function DriverJobPage() {
 
     return () => {
       active = false;
+      driverAppUpdatesAbortControllerRef.current?.abort();
+      driverAppUpdatesRequestSequenceRef.current += 1;
     };
-  }, [stopDriverLiveLocationBrowserWatch, token]);
+  }, [refreshDriverAppUpdates, stopDriverLiveLocationBrowserWatch, token]);
+
+  useEffect(() => {
+    if (!token || pageState.kind !== "ready") {
+      return;
+    }
+
+    const refreshDriverAppUpdatesOnForeground = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void refreshDriverAppUpdates({ preserveContent: true });
+    };
+
+    window.addEventListener("focus", refreshDriverAppUpdatesOnForeground);
+    document.addEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
+    window.addEventListener("pageshow", refreshDriverAppUpdatesOnForeground);
+
+    return () => {
+      window.removeEventListener("focus", refreshDriverAppUpdatesOnForeground);
+      document.removeEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
+      window.removeEventListener("pageshow", refreshDriverAppUpdatesOnForeground);
+    };
+  }, [pageState.kind, refreshDriverAppUpdates, token]);
 
   useEffect(() => {
     return () => {
@@ -2233,10 +2315,25 @@ export default function DriverJobPage() {
                 data-driver-job-workflow-handoff-list="true"
               >
                 <li className="border-l-2 border-slate-200 pl-3">
+                  {"Open the private link in Safari. Tap Save & Acknowledge Job."}
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
                   Install Driver Portal from your browser for best results.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
+                  Add to Home Screen from this acknowledged page.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Open Driver Portal from your Home Screen.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Already installed before saving? Add it again from this acknowledged page.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
                   Tap Enable Job Alerts. Allow notifications.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
                   Tap OTW to save status and start sharing. Allow location.
@@ -2248,7 +2345,7 @@ export default function DriverJobPage() {
                   Review pickup time, pickup place, drop-off, route, and job notes before starting.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
-                  Confirm driver and vehicle details once, then use the status buttons only when ready.
+                  Use the status buttons only when ready.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
                   Use Report Issue when admin needs an in-app alert.
@@ -2465,11 +2562,15 @@ export default function DriverJobPage() {
                     className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     data-driver-job-save-acknowledge="true"
                     data-driver-primary-step="save-acknowledge"
-                    disabled={savingDriverDetails}
+                    disabled={savingDriverDetails || driverDetailsSavedAndUnchanged}
                     onClick={saveAndAcknowledgeJob}
                     type="button"
                   >
-                    {savingDriverDetails ? "Saving..." : "Save & Acknowledge Job"}
+                    {savingDriverDetails
+                      ? "Saving..."
+                      : driverDetailsSavedAndUnchanged
+                        ? "Saved & Acknowledged"
+                        : "Save & Acknowledge Job"}
                   </button>
                   {detailsFeedback ? (
                     <p

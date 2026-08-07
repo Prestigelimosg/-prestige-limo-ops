@@ -35079,6 +35079,8 @@ async function runChromeTest() {
         return {
           activeSection: activeSection?.textContent.trim() || "",
           activeFilter: activeFilter?.textContent.trim() || "",
+          buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
+          buildMarkerText: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
           detailId: detail?.getAttribute("data-customer-portal-detail") || "",
           detailText: detail?.innerText || "",
           docClientWidth: document.documentElement.clientWidth,
@@ -35834,6 +35836,12 @@ async function runChromeTest() {
         "customer portal saved bookings API rows",
       );
       assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
+      assert.equal(initialState.buildMarkerCount, 1, "Expected /my-bookings to show one shared public build marker");
+      assert.match(
+        initialState.buildMarkerText,
+        /^Build (?:[a-f0-9]{8}|unavailable)$/,
+        "Expected /my-bookings to show only the safe short build marker",
+      );
       assert.equal(
         initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
         true,
@@ -36390,6 +36398,7 @@ async function runChromeTest() {
             const submitButton = document.querySelector("[data-customer-booking-submit]");
 
             return {
+              buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
               href: location.href,
               pathname: location.pathname,
               submitVisible: Boolean(submitButton),
@@ -36413,6 +36422,11 @@ async function runChromeTest() {
         routedBookingRequestState.text.includes("Booking Request"),
         true,
         "Expected /my-bookings New Booking Request to open the canonical /book form",
+      );
+      assert.equal(
+        routedBookingRequestState.buildMarkerCount,
+        0,
+        "Expected /book to stay outside the installed Customer Portal build marker scope",
       );
       assert.equal(
         routedBookingRequestState.text.includes("Verify your mobile for a first public booking") &&

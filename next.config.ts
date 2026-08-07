@@ -15,9 +15,20 @@ function resolveBuildCommit() {
   }
 }
 
+function resolvePublicBuildCommit(buildCommit: string) {
+  const normalizedCommit = buildCommit.trim().toLowerCase();
+
+  return /^[a-f0-9]{7,40}$/.test(normalizedCommit)
+    ? normalizedCommit.slice(0, 8)
+    : "unavailable";
+}
+
+const buildCommit = resolveBuildCommit();
+
 const nextConfig: NextConfig = {
   env: {
-    PRESTIGE_BUILD_COMMIT: resolveBuildCommit(),
+    PRESTIGE_BUILD_COMMIT: buildCommit,
+    PRESTIGE_PUBLIC_BUILD_COMMIT: resolvePublicBuildCommit(buildCommit),
   },
 };
 

@@ -3230,6 +3230,15 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - This reuses existing admin live-location runtime, map read paths, and guarded admin map search/route estimate routes for evidence when available; it does not add provider sends, notification sends, customer/driver messages, env changes, DB schema changes, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.
 - Guard coverage lives in `scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Installed Customer And Driver App Build Marker (2026-08-07)
+
+- The installed Customer and Driver app surfaces show only the validated eight-character public build marker, or `Build unavailable` when the configured value is not an exact safe build commit.
+- `/driver-portal`, `/driver-job/[token]`, and `/my-bookings` reuse one compact shared light-mode marker derived from the existing hosting Git SHA or local Git `HEAD` fallback. No second version API, route, provider, database value, or persistence lane is added.
+- The public marker receives only the validated eight-character derivative. It does not render or attach the full commit, private link token, booking/customer/driver ID, contact, price, billing, invoice/payment/payout, internal note, environment value, provider state, or debug data.
+- The admin header keeps its established full deployment-evidence attribute and eight-character visible marker unchanged. `/book` remains outside the installed Customer Portal manifest scope and does not render this marker.
+- Manifests, service workers, install scope, authentication/session, booking, notification, messaging, push, GPS, status, Calendar, invoice/billing/payment/payout, API, persistence, schema, environment assignments, provider actions, and Production data remain unchanged.
+- Focused protection is the updated `scripts/test-admin-deployment-commit-marker-guard.mjs`, now registered in `scripts/test-preactivation-verification-suite.mjs`, with exact hydrated visibility and safe-short-value assertions in `scripts/test-driver-job-page-browser.mjs` and `scripts/test-app-smoke-browser.mjs`.
+
 ### Dispatch Manual Extra Charges Review Toggle
 
 - The existing `Manual Extra Charges Review` details control now displays `Expand` while closed and `Collapse` while open.

@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Compact Driver App Guide (2026-08-07)
+
+- The existing collapsed private Driver Job `How this page works` guide now adds four short device-use instructions: install Driver Portal from the browser for best results; enable Job Alerts and allow notifications; share location when OTW and allow location; and allow camera/photos only for an OTS photo.
+- This is presentation copy only inside the established guide. It adds no control, permission request, service worker, notification, push subscription, live-location action, photo action, Driver Portal lane, API, persistence, Calendar, Driver Reports, booking, customer, message, invoice, billing, payment, payout, PayNow, provider, schema, migration, environment, deployment, or Production data change.
+- Focused protection is the updated `scripts/test-driver-job-device-push-alert-guard.mjs` and `scripts/test-driver-job-page-browser.mjs`. This checkpoint remains local until the bounded checks, review, staged guard, commit, push, ready PR, merge, deployment, and separate visible Production acceptance pass.
+
 ### Rates Save Defaults Server-Session Boundary Repair (2026-08-06)
 
 - Signed-in light-mode Production reproduction proved the existing Rates `Save Defaults` action stopped before any write with `Admin booking persistence is available only from the internal admin dashboard.` The browser correctly sent the established admin purpose from the exact root dashboard, but the dedicated scalar `POST /api/admin-rate-settings-runtime-write-action` route still required the private request token that is intentionally never exposed to browser JavaScript. Its generic route-boundary response also omitted the typed helper's `write_gate_closed` reason, so the caller could not continue through the established closed-gate legacy fallback. The failed action changed no scalar setting, customer rate, or driver payout value.

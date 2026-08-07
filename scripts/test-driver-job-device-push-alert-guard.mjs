@@ -153,6 +153,10 @@ assertIncludes(
     "Device alerts are enabled on this device.",
     "reopen this page to check App Updates",
     'data-driver-job-device-alert-helper="true"',
+    "Install Driver Portal from your browser for best results.",
+    "Tap Enable Job Alerts. Allow notifications.",
+    "Tap Share Location when OTW. Allow location.",
+    "Allow camera/photos only for OTS photo.",
   ],
   "single acknowledgement action",
 );

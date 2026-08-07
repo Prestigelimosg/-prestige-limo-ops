@@ -28,6 +28,7 @@ const originalEnv = {
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_SENTINEL_DO_NOT_LEAK";
 const serverOnlySentinel = "SERVER_ONLY_SECRET_SENTINEL_DO_NOT_LEAK";
 const serverSessionToken = "mock-contract-admin-session-token";
+const customerInvitationToken = "supabase-adapter-contract-valid-invitation";
 const supabaseUrlSentinel = "https://contract-ready.supabase.co";
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_SENTINEL|SERVER_ONLY_SECRET_SENTINEL|service_role|server-only|server_only|sql|stack|secret|key/i;
@@ -109,11 +110,21 @@ async function writeMockModules(tempDir) {
     tempDir,
     "lib/codex-job-card-auto-preparation.js",
   );
+  const customerBookingInvitationPath = path.join(
+    tempDir,
+    "lib/customer-booking-invitation.js",
+  );
+  const customerBookingPhoneOtpPath = path.join(
+    tempDir,
+    "lib/customer-booking-phone-otp.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
   await mkdir(path.dirname(jobCardPreparationPath), { recursive: true });
+  await mkdir(path.dirname(customerBookingInvitationPath), { recursive: true });
+  await mkdir(path.dirname(customerBookingPhoneOtpPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -143,6 +154,30 @@ async function writeMockModules(tempDir) {
     [
       "async function prepareCodexJobCardForAdminReview() {}",
       "module.exports = { prepareCodexJobCardForAdminReview };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerBookingInvitationPath,
+    [
+      "function verifyCustomerBookingInvitationToken(value) {",
+      `  if (value !== ${JSON.stringify(customerInvitationToken)}) {`,
+      "    return { error: 'invalid test invitation', ok: false, status: 403 };",
+      "  }",
+      "  return {",
+      "    data: { booking_reference: 'CUST-INV-CONTRACT-001' },",
+      "    ok: true,",
+      "  };",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerBookingPhoneOtpPath,
+    [
+      "function verifyCustomerBookingPhoneOtpProof() {",
+      "  return { error: 'invalid test phone proof', ok: false, status: 403 };",
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
     ].join("\n"),
   );
 }
@@ -716,6 +751,7 @@ function customerHeaders(overrides = {}) {
     "content-type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-invitation": customerInvitationToken,
     "x-prestige-customer-purpose": "customer-booking-request",
     ...overrides,
   };
@@ -810,6 +846,7 @@ function assertSixTableCreateMapping(mock) {
     flight_no: null,
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
+    pax_count: null,
     pickup_at: "2030-06-08T10:30:00+08:00",
     pickup_location: "Safe Canonical Pickup",
     request_review_status: "pending_review",
@@ -1809,6 +1846,41 @@ try {
   });
   assertNoApiLeak(blockedCustomerRoute, "blocked customer route response should hide server internals");
 
+  const customerHeadersWithoutProof = customerHeaders();
+  delete customerHeadersWithoutProof["x-prestige-customer-booking-invitation"];
+  const customerMissingProofMock = installMockClient();
+  const customerMissingProofRoute = await readRouteResponse(
+    await customerRoute.POST(
+      jsonRequest(
+        "http://localhost/api/customer-booking-requests",
+        canonicalCustomerPayload(),
+        {
+          headers: customerHeadersWithoutProof,
+          method: "POST",
+        },
+      ),
+    ),
+  );
+
+  assert.equal(customerMissingProofRoute.status, 403);
+  assert.deepEqual(customerMissingProofRoute.body, {
+    error: "Phone verification is required for this public booking request.",
+    ok: false,
+  });
+  assert.equal(customerMissingProofMock.createdClients.length, 0);
+  assert.equal(customerMissingProofMock.client.selectHistory.length, 0);
+  assert.equal(customerMissingProofMock.client.operations.length, 0);
+  assertNoApiLeak(
+    customerMissingProofRoute,
+    "customer missing-proof response should hide server internals",
+  );
+
+  setEnv({
+    PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
+    SUPABASE_URL: supabaseUrlSentinel,
+  });
+
   const customerUnsafeRouteMock = installMockClient();
   const customerUnsafeRoute = await readRouteResponse(
     await customerRoute.POST(
@@ -1825,13 +1897,23 @@ try {
     ),
   );
 
-  assert.equal(customerUnsafeRoute.status, 400);
+  assert.equal(
+    customerUnsafeRoute.status,
+    400,
+    JSON.stringify({
+      body: customerUnsafeRoute.body,
+      createdClients: customerUnsafeRouteMock.createdClients.length,
+      selectHistory: customerUnsafeRouteMock.client.selectHistory,
+    }),
+  );
   assert.equal(customerUnsafeRoute.body.ok, false);
   assert.equal(
     customerUnsafeRoute.body.error,
     "Booking request includes fields outside the approved request scope.",
   );
-  assert.equal(customerUnsafeRouteMock.createdClients.length, 0);
+  assert.equal(customerUnsafeRouteMock.createdClients.length, 1);
+  assert.equal(customerUnsafeRouteMock.client.selectHistory.length, 1);
+  assert.equal(customerUnsafeRouteMock.client.selectHistory[0].table, "bookings");
   assert.equal(customerUnsafeRouteMock.client.operations.length, 0);
   assertNoUnsafeKeys(customerUnsafeRoute, "customer unsafe route response");
 
@@ -1855,9 +1937,9 @@ try {
     ),
   );
 
-  assert.equal(customerCreateRoute.status, 503);
+  assert.equal(customerCreateRoute.status, 500);
   assert.deepEqual(customerCreateRoute.body, {
-    error: "Booking request intake is not enabled or configured on this server.",
+    error: "Booking request failed safely.",
     ok: false,
   });
   assert.equal(customerCreateMock.createdClients.length, 0);

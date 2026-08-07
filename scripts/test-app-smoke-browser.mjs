@@ -37865,15 +37865,20 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.driverWorkflowHandoff.items,
         [
+          "Open the private link in Safari. Tap Save & Acknowledge Job.",
           "Install Driver Portal from your browser for best results.",
+          "Add to Home Screen from this acknowledged page.",
+          "Open Driver Portal from your Home Screen.",
+          "Already installed before saving? Add it again from this acknowledged page.",
           "Tap Enable Job Alerts. Allow notifications.",
+          "WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.",
           "Tap OTW to save status and start sharing. Allow location.",
           "Allow camera/photos only for OTS photo.",
           "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
-          "Confirm driver and vehicle details once, then use the status buttons only when ready.",
+          "Use the status buttons only when ready.",
           "Use Report Issue when admin needs an in-app alert.",
         ],
-        `${viewport.label}: expected driver handoff to explain review, confirm-details, status, and report issue steps`,
+        `${viewport.label}: expected driver handoff to explain onboarding, review, status, and report issue steps`,
       );
       assert.equal(
         initialState.driverWorkflowHandoff.boundary,

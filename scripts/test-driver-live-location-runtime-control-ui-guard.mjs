@@ -220,7 +220,7 @@ for (const fragment of [
   "navigator.geolocation.getCurrentPosition",
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",
-  "Dispatch has not opened live location for this job.",
+  "OTW is saved. Live location is not ready. Tap Retry Share Location.",
 ]) {
   assertIncludes(`${driverRoute}\n${driverJobPage}`, fragment, `driver readiness fragment ${fragment}`);
 }

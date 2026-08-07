@@ -109,7 +109,7 @@ for (const forbiddenPhrase of [
 
 assertExcludes(
   driverJobPage,
-  /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch|gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
+  /useEffect\(\(\) => \{\s*(?:void\s+)?shareDriverLiveLocation\(|gpsCaptureEnabled\s*[:=]\s*true|liveMapEnabled\s*[:=]\s*true|locationStorageEnabled\s*[:=]\s*true|customerVisible\s*[:=]\s*true/i,
   "driver job production page live-location activation flags",
 );
 
@@ -125,38 +125,27 @@ for (const phrase of [
   assertIncludes(disabledScaffoldSection, phrase, `disabled consent UI scaffold ledger phrase ${phrase}`);
 }
 
-const liveLocationUiStart = driverJobPage.indexOf(
-  "data-driver-live-location-consent-ui={driverLiveLocationUiState}",
-);
-assert.notEqual(liveLocationUiStart, -1, "Driver live-location disabled consent UI must exist.");
-const liveLocationUiEnd = driverJobPage.indexOf("</section>", liveLocationUiStart);
-assert.notEqual(liveLocationUiEnd, -1, "Driver live-location disabled consent UI section must close.");
+const liveLocationUiStart = driverJobPage.indexOf('data-driver-otw-live-location-control="true"');
+assert.notEqual(liveLocationUiStart, -1, "Driver merged OTW/live-location control must exist.");
+const liveLocationUiEnd = driverJobPage.indexOf('data-driver-primary-step="report-issue"', liveLocationUiStart);
+assert.notEqual(liveLocationUiEnd, -1, "Driver merged OTW/live-location control boundary must close.");
 const liveLocationUi = driverJobPage.slice(liveLocationUiStart, liveLocationUiEnd);
 
 for (const fragment of [
-  "Live Location",
-  "{driverLiveLocationHelperText}",
-  "data-driver-live-location-share-button={driverLiveLocationUiState}",
-  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
-  "data-driver-live-location-sharing-state={driverLiveLocation.sharingState}",
-  "data-driver-live-location-permission-state={driverLiveLocation.permissionState}",
-  "data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? \"shared\" : \"not_shared\"}",
-  "data-driver-live-location-stale-state={driverLiveLocation.staleState}",
-  "Share Location",
-  "Stop Sharing",
+  'data-driver-otw-live-location-control="true"',
+  "{driverOtwLiveLocationControlLabel}",
+  'data-driver-live-location-feedback="true"',
 ]) {
-  assertIncludes(liveLocationUi, fragment, `disabled consent UI fragment ${fragment}`);
+  assertIncludes(liveLocationUi, fragment, `merged consent UI fragment ${fragment}`);
+}
+for (const label of ["Share Location Again", "Retry Share Location", "Stop Sharing", "Retry Stop Sharing"]) {
+  assertIncludes(driverJobPage, label, `merged consent UI label ${label}`);
 }
 
 assertMatches(
-  liveLocationUi,
-  /data-driver-live-location-share-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationShareDisabled\}[\s\S]*?Share Location/,
-  "disabled Share Location control",
-);
-assertMatches(
-  liveLocationUi,
-  /data-driver-live-location-stop-button=\{driverLiveLocationUiState\}[\s\S]*?disabled=\{driverLiveLocationStopDisabled\}[\s\S]*?Stop Sharing/,
-  "disabled Stop Sharing control",
+  driverJobPage,
+  /const otwSaved = await updateStatus\("OTW", "OTW", "I'm on the way"\);[\s\S]*?if \(!otwSaved\) \{[\s\S]*?return;[\s\S]*?await shareDriverLiveLocation\(\);/,
+  "persisted OTW before location sharing",
 );
 for (const forbiddenPattern of [
   /watchPosition|clearWatch|GeolocationPosition/i,
@@ -166,7 +155,7 @@ for (const forbiddenPattern of [
   assertExcludes(liveLocationUi, forbiddenPattern, "disabled live-location consent UI");
 }
 for (const fragment of [
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "handleOtwLiveLocationControl",
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "startDriverLiveLocationBrowserWatch",
@@ -174,8 +163,7 @@ for (const fragment of [
   "navigator.geolocation.getCurrentPosition",
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",
-  "onClick={shareDriverLiveLocation}",
-  "onClick={stopDriverLiveLocation}",
+  "onClick={handleOtwLiveLocationControl}",
 ]) {
   assertIncludes(driverJobPage, fragment, `gated consent UI runtime fragment ${fragment}`);
 }

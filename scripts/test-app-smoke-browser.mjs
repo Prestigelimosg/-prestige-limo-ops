@@ -37341,14 +37341,22 @@ async function runChromeTest() {
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
       }))()`);
 
-    const assertNoForbiddenDriverJobNetwork = (networkState, context) => {
+    const assertNoForbiddenDriverJobNetwork = (
+      networkState,
+      context,
+      allowedExactDriverJobPaths = [],
+    ) => {
       const calls = [
         ...networkState.fetchCalls,
         ...networkState.networkCalls,
         ...networkState.resourceCalls,
       ];
       assert.deepEqual(
-        calls.filter((call) => blockedDriverJobIntegrationPattern.test(call)),
+        calls.filter(
+          (call) =>
+            blockedDriverJobIntegrationPattern.test(call) &&
+            !allowedExactDriverJobPaths.some((path) => call.includes(path)),
+        ),
         [],
         `${context}: expected no Supabase, notification, WhatsApp, email, SMS, calendar, live-location, flight, file/photo, invoice, PDF, payment, or bank calls`,
       );
@@ -37712,6 +37720,7 @@ async function runChromeTest() {
     const checkDriverJobRoute = async (viewport) => {
       const driverJobEndpointPath = `/api/driver-job/${driverJobWorkflowToken}`;
       const statusEndpointPath = `/api/driver-job/${driverJobWorkflowToken}/status`;
+      const liveLocationEndpointPath = `/api/driver-job/${driverJobWorkflowToken}/live-location`;
       await setDriverJobViewportAndLoad(viewport);
 
       const initialState = await readDriverJobState();
@@ -37856,6 +37865,10 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.driverWorkflowHandoff.items,
         [
+          "Install Driver Portal from your browser for best results.",
+          "Tap Enable Job Alerts. Allow notifications.",
+          "Tap OTW to save status and start sharing. Allow location.",
+          "Allow camera/photos only for OTS photo.",
           "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
           "Confirm driver and vehicle details once, then use the status buttons only when ready.",
           "Use Report Issue when admin needs an in-app alert.",
@@ -38058,10 +38071,19 @@ async function runChromeTest() {
         assert.equal(blockedState.currentStatus, expectedStatus);
         const afterNetwork = await readDriverJobNetworkState();
         assert.deepEqual(afterNetwork.fetchCalls, beforeNetwork.fetchCalls, `${viewport.label}: expected blocked ${label} to stay local`);
-        assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} blocked ${label}`);
+        assertNoForbiddenDriverJobNetwork(
+          afterNetwork,
+          `${viewport.label} blocked ${label}`,
+          [liveLocationEndpointPath],
+        );
       };
 
-      const clickValidDriverJobStatus = async (label, expectedStatus, expectedMessage) => {
+      const clickValidDriverJobStatus = async (
+        label,
+        expectedStatus,
+        expectedMessage,
+        allowedAdditionalEndpointPaths = [],
+      ) => {
         const beforeNetwork = await readDriverJobNetworkState();
         await clickDriverJobButton(
           `[data-driver-job-status="${label}"]`,
@@ -38091,7 +38113,11 @@ async function runChromeTest() {
         const afterNetwork = await readDriverJobNetworkState();
         const newFetchCalls = afterNetwork.fetchCalls.slice(beforeNetwork.fetchCalls.length);
         assert.deepEqual(
-          newFetchCalls.filter((call) => !call.includes(statusEndpointPath)),
+          newFetchCalls.filter(
+            (call) =>
+              !call.includes(statusEndpointPath) &&
+              !allowedAdditionalEndpointPaths.some((path) => call.includes(path)),
+          ),
           [],
           `${viewport.label}: expected ${label} to call only the protected driver job status endpoint`,
         );
@@ -38100,7 +38126,11 @@ async function runChromeTest() {
           1,
           `${viewport.label}: expected ${label} to call the protected driver job status endpoint once`,
         );
-        assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} ${label}`);
+        assertNoForbiddenDriverJobNetwork(
+          afterNetwork,
+          `${viewport.label} ${label}`,
+          [liveLocationEndpointPath],
+        );
       };
 
       await clickBlockedDriverJobStatus("OTW", "Save & Acknowledge Job before updating status.", "Assigned");
@@ -38142,7 +38172,12 @@ async function runChromeTest() {
         `${viewport.label}: expected driver details save and acknowledgement to use the token-scoped driver job endpoint once`,
       );
 
-      await clickValidDriverJobStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+      await clickValidDriverJobStatus(
+        "OTW",
+        "I'm on the way",
+        "OTW is saved. Live location is not ready. Tap Retry Share Location.",
+        [liveLocationEndpointPath],
+      );
       await clickBlockedDriverJobStatus("POB", "Update OTS before POB.", "I'm on the way");
       await clickValidDriverJobStatus("OTS", "I've arrived", "Status updated to I've arrived.");
       await clickBlockedDriverJobStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
@@ -38150,16 +38185,30 @@ async function runChromeTest() {
       await clickValidDriverJobStatus("Job Completed", "Completed", "Status updated to Completed.");
 
       const finalNetwork = await readDriverJobNetworkState();
-      assertNoForbiddenDriverJobNetwork(finalNetwork, `${viewport.label} completed driver job link workflow`);
+      assertNoForbiddenDriverJobNetwork(
+        finalNetwork,
+        `${viewport.label} completed driver job link workflow`,
+        [liveLocationEndpointPath],
+      );
       assert.deepEqual(
         finalNetwork.fetchCalls.filter((call) => call.includes(statusEndpointPath)).length,
         4,
         `${viewport.label}: expected exactly four protected mock status API calls for OTW, OTS, POB, and Job Completed`,
       );
       assert.deepEqual(
-        finalNetwork.fetchCalls.filter((call) => call.includes(driverJobEndpointPath) && !call.includes(statusEndpointPath)),
+        finalNetwork.fetchCalls.filter(
+          (call) =>
+            call.includes(driverJobEndpointPath) &&
+            !call.includes(statusEndpointPath) &&
+            !call.includes(liveLocationEndpointPath),
+        ),
         [`PATCH ${driverJobEndpointPath}`],
         `${viewport.label}: expected exactly one token-scoped driver detail save call`,
+      );
+      assert.deepEqual(
+        finalNetwork.fetchCalls.filter((call) => call.includes(liveLocationEndpointPath)),
+        [`GET ${liveLocationEndpointPath}`],
+        `${viewport.label}: expected OTW to perform one token-scoped live-location readiness read only`,
       );
       const finalDriverJobState = await readDriverJobState();
       assert.deepEqual(

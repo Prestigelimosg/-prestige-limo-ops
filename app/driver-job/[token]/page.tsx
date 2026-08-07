@@ -224,6 +224,7 @@ type DriverLiveLocationState = {
   feedback: ControlFeedback | null;
   lastSharedAt: string;
   permissionState: "denied" | "granted" | "not_requested" | "unavailable";
+  retryAction: "share" | "stop" | null;
   sharingState: "active" | "inactive" | "stopped";
   staleState: "active" | "inactive" | "stale";
 };
@@ -316,6 +317,7 @@ const emptyDriverLiveLocationState: DriverLiveLocationState = {
   feedback: null,
   lastSharedAt: "",
   permissionState: "not_requested",
+  retryAction: null,
   sharingState: "inactive",
   staleState: "inactive",
 };
@@ -379,6 +381,10 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
 
 function driverWorkflowHasReachedOts(status: string) {
   return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("ots");
+}
+
+function driverWorkflowHasReachedOtw(status: string) {
+  return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("driver_otw");
 }
 
 function driverOtsPhotoReducedFileName(fileName: string) {
@@ -643,47 +649,6 @@ function formatDriverAppUpdateTime(value: unknown) {
   });
 }
 
-function formatDriverLiveLocationTime(value: string) {
-  const date = value ? new Date(value) : null;
-
-  if (!date || Number.isNaN(date.getTime())) {
-    return "Not shared";
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function driverLiveLocationPermissionLabel(value: DriverLiveLocationState["permissionState"]) {
-  if (value === "granted") {
-    return "Allowed";
-  }
-
-  if (value === "denied") {
-    return "Denied";
-  }
-
-  if (value === "unavailable") {
-    return "Unavailable";
-  }
-
-  return "Not requested";
-}
-
-function driverLiveLocationStaleLabel(value: DriverLiveLocationState["staleState"]) {
-  if (value === "active") {
-    return "Active";
-  }
-
-  if (value === "stale") {
-    return "Stale";
-  }
-
-  return "Not active";
-}
-
 function normalizeStatusKey(value: unknown) {
   return String(value || "")
     .replace(/([a-z])([A-Z])/g, "$1_$2")
@@ -934,6 +899,7 @@ export default function DriverJobPage() {
   const driverLiveLocationPostInFlightRef = useRef(false);
   const driverLiveLocationLastPostAtRef = useRef(0);
   const driverLiveLocationShareActiveRef = useRef(false);
+  const driverOtwLiveLocationActionRef = useRef(false);
   const savedStatusHistory = useMemo(
     () => (pageState.kind === "ready" ? pageState.job.statusHistory : []),
     [pageState],
@@ -1010,6 +976,69 @@ export default function DriverJobPage() {
     navigator.geolocation.clearWatch(driverLiveLocationWatchIdRef.current);
     driverLiveLocationWatchIdRef.current = null;
   }, []);
+
+  function driverLiveLocationRoute() {
+    return `/api/driver-job/${encodeURIComponent(token)}/live-location`;
+  }
+
+  async function checkDriverLiveLocationReadiness(options: { reload?: boolean } = {}) {
+    try {
+      const response = await fetch(driverLiveLocationRoute(), {
+        cache: "no-store",
+        method: "GET",
+      });
+      const result = await response.json() as DriverLiveLocationApiResponse;
+
+      if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
+        setDriverLiveLocation((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: "OTW is saved. Live location is not ready. Tap Retry Share Location.",
+          },
+          retryAction: "share",
+          sharingState: "inactive",
+          staleState: "inactive",
+        }));
+        return false;
+      }
+
+      const sharingState = result.sharing_state === "active" ? "active" : "inactive";
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        feedback: options.reload
+          ? sharingState === "active"
+            ? {
+                tone: "success",
+                text: "Previous location remains on the map. Tap Stop Sharing to clear it.",
+              }
+            : {
+                tone: "success",
+                text: "OTW is saved. Tap Share Location Again.",
+              }
+          : currentState.feedback,
+        lastSharedAt: result.last_shared_at || currentState.lastSharedAt,
+        retryAction: sharingState === "active" ? null : options.reload ? "share" : currentState.retryAction,
+        sharingState,
+        staleState: result.sharing_state === "stale" ? "stale" : sharingState === "active" ? "active" : "inactive",
+      }));
+
+      return true;
+    } catch {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "OTW is saved. Live location could not start. Tap Retry Share Location.",
+        },
+        retryAction: "share",
+      }));
+      return false;
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -1095,6 +1124,14 @@ export default function DriverJobPage() {
         );
         setWorkflowStatus(result.payload.status || "assigned");
         setPageState({ kind: "ready", job: result.payload });
+
+        if (driverWorkflowHasReachedOtw(result.payload.status || "")) {
+          await checkDriverLiveLocationReadiness({ reload: true });
+
+          if (!active) {
+            return;
+          }
+        }
 
         if (result.payload.acknowledged) {
           try {
@@ -1374,8 +1411,8 @@ export default function DriverJobPage() {
         ? " Device alerts are enabled on this device."
         : driverDeviceAlertReadiness.ready
           ? deviceAlertPreparation.permission === "denied"
-            ? " Device alerts were not allowed; reopen this page to check App Updates."
-            : " Device alerts could not be enabled; reopen this page to check App Updates."
+            ? " Device alerts were not allowed; reopen this page to check Messages & Updates."
+            : " Device alerts could not be enabled; reopen this page to check Messages & Updates."
           : "";
       const driverPortalFeedback = driverPortalReady
         ? " Driver Portal is ready on this device."
@@ -1523,55 +1560,6 @@ export default function DriverJobPage() {
     }
   }
 
-  function driverLiveLocationRoute() {
-    return `/api/driver-job/${encodeURIComponent(token)}/live-location`;
-  }
-
-  async function checkDriverLiveLocationReadiness() {
-    try {
-      const response = await fetch(driverLiveLocationRoute(), {
-        cache: "no-store",
-        method: "GET",
-      });
-      const result = await response.json() as DriverLiveLocationApiResponse;
-
-      if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
-        setDriverLiveLocation((currentState) => ({
-          ...currentState,
-          action: "idle",
-          feedback: {
-            tone: "error",
-            text: "Dispatch has not opened live location for this job.",
-          },
-          sharingState: "inactive",
-          staleState: "inactive",
-        }));
-        return false;
-      }
-
-      const sharingState = result.sharing_state === "active" ? "active" : "inactive";
-
-      setDriverLiveLocation((currentState) => ({
-        ...currentState,
-        lastSharedAt: result.last_shared_at || currentState.lastSharedAt,
-        sharingState,
-        staleState: result.sharing_state === "stale" ? "stale" : sharingState === "active" ? "active" : "inactive",
-      }));
-
-      return true;
-    } catch {
-      setDriverLiveLocation((currentState) => ({
-        ...currentState,
-        action: "idle",
-        feedback: {
-          tone: "error",
-          text: "Location sharing readiness failed. Contact dispatch.",
-        },
-      }));
-      return false;
-    }
-  }
-
   async function requestDriverLiveLocationPosition() {
     if (!("geolocation" in navigator)) {
       setDriverLiveLocation((currentState) => ({
@@ -1579,9 +1567,10 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Location is not available in this browser.",
+          text: "OTW is saved. Location is unavailable. Tap Retry Share Location.",
         },
         permissionState: "unavailable",
+        retryAction: "share",
       }));
       return null;
     }
@@ -1603,9 +1592,10 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Location permission was not granted. Share only when you approve browser location.",
+          text: "OTW saved. Location not allowed. Enable Location, then tap Retry Share Location.",
         },
         permissionState: "denied",
+        retryAction: "share",
       }));
       return null;
     }
@@ -1651,8 +1641,9 @@ export default function DriverJobPage() {
           action: "idle",
           feedback: {
             tone: "error",
-            text: "Location sharing was not accepted. Contact dispatch.",
+            text: "OTW is saved. Live location could not start. Tap Retry Share Location.",
           },
+          retryAction: "share",
           sharingState: "inactive",
           staleState: "inactive",
         }));
@@ -1673,6 +1664,7 @@ export default function DriverJobPage() {
           : currentState.feedback,
         lastSharedAt: sharedAt,
         permissionState: "granted",
+        retryAction: null,
         sharingState: "active",
         staleState: "active",
       }));
@@ -1692,8 +1684,9 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Location sharing failed. Contact dispatch.",
+          text: "OTW is saved. Live location could not start. Tap Retry Share Location.",
         },
+        retryAction: "share",
         sharingState: "inactive",
         staleState: "inactive",
       }));
@@ -1773,6 +1766,7 @@ export default function DriverJobPage() {
       ...currentState,
       action: "sharing",
       feedback: null,
+      retryAction: null,
     }));
 
     const ready = await checkDriverLiveLocationReadiness();
@@ -1788,7 +1782,7 @@ export default function DriverJobPage() {
     }
 
     const posted = await postDriverLiveLocationPosition(position, {
-      feedbackText: "Live location is sharing for this job. Keep this page open; dispatch map updates automatically.",
+      feedbackText: "Sharing live location. Keep this app open.",
       logActivity: true,
       stopOnFailure: true,
     });
@@ -1830,10 +1824,11 @@ export default function DriverJobPage() {
           action: "idle",
           feedback: {
             tone: "error",
-            text: "Local sharing stopped, but dispatch cleanup failed. Contact dispatch.",
+            text: "Sharing stopped on this phone, but map cleanup failed. Tap Retry Stop Sharing.",
           },
-          sharingState: "inactive",
-          staleState: "inactive",
+          retryAction: "stop",
+          sharingState: "active",
+          staleState: "stale",
         }));
         return;
       }
@@ -1843,8 +1838,9 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "success",
-          text: "Location sharing stopped for this job.",
+          text: "Location sharing stopped. OTW remains saved.",
         },
+        retryAction: null,
         sharingState: "stopped",
         staleState: "inactive",
       }));
@@ -1855,10 +1851,11 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Local sharing stopped, but dispatch cleanup failed. Contact dispatch.",
+          text: "Sharing stopped on this phone, but map cleanup failed. Tap Retry Stop Sharing.",
         },
-        sharingState: "inactive",
-        staleState: "inactive",
+        retryAction: "stop",
+        sharingState: "active",
+        staleState: "stale",
       }));
     }
   }
@@ -1985,7 +1982,7 @@ export default function DriverJobPage() {
 
   async function updateStatus(nextStatus: string, label: string, displayLabel = label) {
     if (!token || pageState.kind !== "ready") {
-      return;
+      return false;
     }
 
     if (!acknowledged) {
@@ -1994,7 +1991,7 @@ export default function DriverJobPage() {
         tone: "error",
         text: "Save & Acknowledge Job before updating status.",
       });
-      return;
+      return false;
     }
 
     const transitionGuard = guardDriverJobStatusTransition({
@@ -2009,7 +2006,7 @@ export default function DriverJobPage() {
         tone: "error",
         text: transitionGuard.message,
       });
-      return;
+      return false;
     }
 
     setUpdatingStatus(label);
@@ -2037,7 +2034,7 @@ export default function DriverJobPage() {
           tone: "error",
           text: blockedMessages[blockedReason],
         });
-        return;
+        return false;
       }
 
       if (!response.ok) {
@@ -2046,7 +2043,7 @@ export default function DriverJobPage() {
           tone: "error",
           text: blockedMessages.unavailable,
         });
-        return;
+        return false;
       }
 
       const nextStatusText = statusDisplay(result.payload.status, result.payload.statusLabel);
@@ -2068,33 +2065,76 @@ export default function DriverJobPage() {
         tone: "success",
         text: `Status updated to ${nextStatusText}.`,
       });
+      return true;
     } catch {
       setStatusFeedback({
         target: label,
         tone: "error",
         text: "Status update failed. Please try again or contact dispatch.",
       });
+      return false;
     } finally {
       setUpdatingStatus("");
     }
   }
 
-  const driverLiveLocationControlsDisabled =
-    driverLiveLocation.action !== "idle" ||
-    pageState.kind !== "ready";
-  const driverLiveLocationShareDisabled =
-    driverLiveLocationControlsDisabled || driverLiveLocation.sharingState === "active";
-  const driverLiveLocationStopDisabled =
-    driverLiveLocationControlsDisabled || driverLiveLocation.sharingState !== "active";
-  const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";
-  const driverLiveLocationHelperText =
-    "Share only when dispatch opens live location for this job. Keep this page open; Stop Sharing ends it.";
-  const driverLiveLocationSharingLabel =
-    driverLiveLocation.sharingState === "active"
-      ? "Sharing"
-      : driverLiveLocation.sharingState === "stopped"
-        ? "Stopped"
-        : "Off";
+  async function handleOtwLiveLocationControl() {
+    if (driverOtwLiveLocationActionRef.current || !token || pageState.kind !== "ready") {
+      return;
+    }
+
+    driverOtwLiveLocationActionRef.current = true;
+
+    try {
+      if (!driverWorkflowHasReachedOtw(workflowStatus)) {
+        const otwSaved = await updateStatus("OTW", "OTW", "I'm on the way");
+
+        if (!otwSaved) {
+          return;
+        }
+
+        await shareDriverLiveLocation();
+        return;
+      }
+
+      if (
+        driverLiveLocation.retryAction === "stop" ||
+        driverLiveLocation.sharingState === "active"
+      ) {
+        await stopDriverLiveLocation();
+        return;
+      }
+
+      await shareDriverLiveLocation();
+    } finally {
+      driverOtwLiveLocationActionRef.current = false;
+    }
+  }
+
+  const driverOtwRecorded = driverWorkflowHasReachedOtw(workflowStatus);
+  const driverOtwLiveLocationControlDisabled =
+    pageState.kind !== "ready" ||
+    Boolean(updatingStatus) ||
+    driverLiveLocation.action !== "idle";
+  const driverOtwLiveLocationControlLabel =
+    updatingStatus === "OTW"
+      ? "Saving OTW…"
+      : driverLiveLocation.action === "sharing"
+        ? "Starting Sharing…"
+        : driverLiveLocation.action === "stopping"
+          ? "Stopping…"
+          : !driverOtwRecorded
+            ? "OTW"
+            : driverLiveLocation.retryAction === "stop"
+              ? "Retry Stop Sharing"
+              : driverLiveLocation.sharingState === "active"
+                ? "Stop Sharing"
+                : driverLiveLocation.retryAction === "share"
+                  ? "Retry Share Location"
+                  : "Share Location Again";
+  const driverOtwLiveLocationFeedback =
+    driverLiveLocation.feedback ||
+    (statusFeedback?.target === "OTW" ? statusFeedback : null);
   const driverOtsPhotoProofReady =
     pageState.kind === "ready" &&
     acknowledged &&
@@ -2199,7 +2239,7 @@ export default function DriverJobPage() {
                   Tap Enable Job Alerts. Allow notifications.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
-                  Tap Share Location when OTW. Allow location.
+                  Tap OTW to save status and start sharing. Allow location.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
                   Allow camera/photos only for OTS photo.
@@ -2228,7 +2268,7 @@ export default function DriverJobPage() {
               data-driver-job-app-updates="true"
             >
               <h2 id="driver-app-updates-heading" className="text-base font-semibold text-slate-900">
-                App Updates
+                Messages &amp; Updates
               </h2>
               <div className="space-y-2 rounded-md border border-stone-200 bg-white p-2.5">
                 <p className="text-sm font-medium leading-6 text-slate-600">
@@ -2557,93 +2597,6 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="order-[82] space-y-2"
-              aria-labelledby="driver-live-location-heading"
-              data-driver-live-location-consent-ui={driverLiveLocationUiState}
-              data-driver-primary-step="live-location-consent"
-            >
-              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2.5">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
-                      Live Location
-                    </h2>
-                    <p
-                      className="mt-1 text-sm font-medium leading-5 text-slate-600"
-                      data-driver-live-location-helper="true"
-                    >
-                      {driverLiveLocationHelperText}
-                    </p>
-                  </div>
-                  <span
-                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
-                    data-driver-live-location-sharing-state={driverLiveLocation.sharingState}
-                  >
-                    {driverLiveLocationSharingLabel}
-                  </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
-                    data-driver-live-location-share-button={driverLiveLocationUiState}
-                    disabled={driverLiveLocationShareDisabled}
-                    onClick={shareDriverLiveLocation}
-                    type="button"
-                  >
-                    {driverLiveLocation.action === "sharing" ? "Sharing..." : "Share Location"}
-                  </button>
-                  <button
-                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
-                    data-driver-live-location-stop-button={driverLiveLocationUiState}
-                    disabled={driverLiveLocationStopDisabled}
-                    onClick={stopDriverLiveLocation}
-                    type="button"
-                  >
-                    {driverLiveLocation.action === "stopping" ? "Stopping..." : "Stop Sharing"}
-                  </button>
-                </div>
-                {driverLiveLocation.feedback ? (
-                  <p
-                    aria-live="polite"
-                    className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverLiveLocation.feedback.tone)}`}
-                    data-driver-live-location-feedback="true"
-                  >
-                    {driverLiveLocation.feedback.text}
-                  </p>
-                ) : null}
-                <dl className="grid gap-1.5 text-xs font-semibold text-slate-600 sm:grid-cols-3">
-                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
-                    <dt className="uppercase text-slate-500">Permission</dt>
-                    <dd
-                      className="mt-1 text-slate-800"
-                      data-driver-live-location-permission-state={driverLiveLocation.permissionState}
-                    >
-                      {driverLiveLocationPermissionLabel(driverLiveLocation.permissionState)}
-                    </dd>
-                  </div>
-                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
-                    <dt className="uppercase text-slate-500">Last shared</dt>
-                    <dd
-                      className="mt-1 text-slate-800"
-                      data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? "shared" : "not_shared"}
-                    >
-                      {formatDriverLiveLocationTime(driverLiveLocation.lastSharedAt)}
-                    </dd>
-                  </div>
-                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
-                    <dt className="uppercase text-slate-500">State</dt>
-                    <dd
-                      className="mt-1 text-slate-800"
-                      data-driver-live-location-stale-state={driverLiveLocation.staleState}
-                    >
-                      {driverLiveLocationStaleLabel(driverLiveLocation.staleState)}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </section>
-
-            <section
               className="order-3 flex flex-col gap-2 pb-4"
               aria-labelledby="driver-status-heading"
               data-driver-primary-step="status-workflow"
@@ -2654,16 +2607,45 @@ export default function DriverJobPage() {
               <div className="order-1 grid gap-2 md:grid-cols-4" data-driver-primary-step="status-buttons">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
-                    <button
-                      className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-driver-job-status={statusAction.label}
-                      disabled={Boolean(updatingStatus)}
-                      onClick={() => updateStatus(statusAction.value, statusAction.label, statusAction.displayLabel)}
-                      type="button"
-                    >
-                      {updatingStatus === statusAction.label ? "Updating..." : statusAction.label}
-                    </button>
-                    {statusFeedback?.target === statusAction.label ? (
+                    {statusAction.label === "OTW" ? (
+                      <button
+                        aria-label={driverOtwLiveLocationControlLabel}
+                        className="h-11 w-full rounded-md border border-sky-400 bg-sky-50 px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-driver-job-status="OTW"
+                        data-driver-otw-live-location-control="true"
+                        data-driver-otw-live-location-state={
+                          driverLiveLocation.action !== "idle"
+                            ? driverLiveLocation.action
+                            : driverLiveLocation.retryAction || driverLiveLocation.sharingState
+                        }
+                        disabled={driverOtwLiveLocationControlDisabled}
+                        onClick={handleOtwLiveLocationControl}
+                        type="button"
+                      >
+                        {driverOtwLiveLocationControlLabel}
+                      </button>
+                    ) : (
+                      <button
+                        className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-driver-job-status={statusAction.label}
+                        disabled={Boolean(updatingStatus) || driverLiveLocation.action !== "idle"}
+                        onClick={() => updateStatus(statusAction.value, statusAction.label, statusAction.displayLabel)}
+                        type="button"
+                      >
+                        {updatingStatus === statusAction.label ? "Updating..." : statusAction.label}
+                      </button>
+                    )}
+                    {statusAction.label === "OTW" && driverOtwLiveLocationFeedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverOtwLiveLocationFeedback.tone)}`}
+                        data-driver-job-status-message="OTW"
+                        data-driver-live-location-feedback="true"
+                        data-driver-otw-live-location-feedback="true"
+                      >
+                        {driverOtwLiveLocationFeedback.text}
+                      </p>
+                    ) : statusAction.label !== "OTW" && statusFeedback?.target === statusAction.label ? (
                       <p
                         aria-live="polite"
                         className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(statusFeedback.tone)}`}

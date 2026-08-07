@@ -600,6 +600,10 @@ async function runChromeTest() {
         activityLogLabels: [...document.querySelectorAll("[data-driver-job-activity-log-label]")]
           .map((item) => item.textContent.trim()),
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
+        buildMarker: {
+          count: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
+          text: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
+        },
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
@@ -1336,6 +1340,12 @@ async function runChromeTest() {
 
     await resetMockDriverJobData();
     const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
+    assert.equal(validState.buildMarker.count, 1, "Driver Job must show one shared public build marker.");
+    assert.match(
+      validState.buildMarker.text,
+      /^Build (?:[a-f0-9]{8}|unavailable)$/,
+      "Driver Job must show only the safe short build marker.",
+    );
     assert.ok(validState.visibleText.includes("Mock Workflow Dropoff"));
     assert.ok(validState.visibleText.includes("Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff"));
     assert.ok(validState.visibleText.includes("Mock Workflow Waypoint"));
@@ -1919,6 +1929,8 @@ async function runChromeTest() {
               portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
               jobReferences: jobs.map((job) => job.getAttribute("data-driver-portal-job")),
               jobStates: jobs.map((job) => job.querySelector("[data-driver-portal-job-state]")?.textContent.trim()),
+              buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
+              buildMarkerText: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
               text: document.body?.innerText || "",
             }
           : false;
@@ -1931,6 +1943,12 @@ async function runChromeTest() {
       "MOCK-DRIVER-PORTAL-B",
     ]);
     assert.deepEqual(portalState.jobStates, ["On site", "Assigned · Awaiting OTW"]);
+    assert.equal(portalState.buildMarkerCount, 1, "Driver Portal must show one shared public build marker.");
+    assert.match(
+      portalState.buildMarkerText,
+      /^Build (?:[a-f0-9]{8}|unavailable)$/,
+      "Driver Portal must show only the safe short build marker.",
+    );
     assert.equal(
       portalState.fetchCalls.includes("GET /api/driver-portal/jobs"),
       true,

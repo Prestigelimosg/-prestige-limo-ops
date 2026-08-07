@@ -430,6 +430,10 @@ const guardChecks = [
     script: "scripts/test-web-app-install-manifest-guard.mjs",
   },
   {
+    label: "admin and installed public app deployment commit marker guard",
+    script: "scripts/test-admin-deployment-commit-marker-guard.mjs",
+  },
+  {
     label: "public customer/driver visibility boundary guard",
     script: "scripts/test-public-customer-driver-visibility-boundary-guard.mjs",
   },

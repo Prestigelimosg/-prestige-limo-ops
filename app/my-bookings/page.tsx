@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 
 import {
   loadCustomerPortalSavedBookings,
@@ -1425,6 +1426,7 @@ export default function CustomerPortalPage() {
             </button>
           </div>
           <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">My Bookings</h1>
+          <PublicAppBuildMarker />
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
             Customers can view booking requests and booking history here after staff confirmation.
           </p>

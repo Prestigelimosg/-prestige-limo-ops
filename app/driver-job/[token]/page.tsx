@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type {
   SafeDriverJobPayload,
   SafeDriverJobStatusHistoryItem,
@@ -2237,6 +2238,7 @@ export default function DriverJobPage() {
         <header className="space-y-1 border-b border-stone-200 pb-3">
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
+          <PublicAppBuildMarker />
           <p
             className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
             data-driver-job-mobile-web-note="true"

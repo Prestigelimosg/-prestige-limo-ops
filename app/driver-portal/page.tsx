@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
 type DriverPortalJob = {
@@ -251,6 +252,7 @@ export default function DriverPortalPage() {
           <h1 className="mt-1 text-2xl font-bold" data-driver-portal-heading="true">
             Driver Portal
           </h1>
+          <PublicAppBuildMarker tone="dark" />
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">
             Your acknowledged upcoming and active jobs on this device.
           </p>

@@ -2193,6 +2193,18 @@ export default function DriverJobPage() {
                 data-driver-job-workflow-handoff-list="true"
               >
                 <li className="border-l-2 border-slate-200 pl-3">
+                  Install Driver Portal from your browser for best results.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Tap Enable Job Alerts. Allow notifications.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Tap Share Location when OTW. Allow location.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Allow camera/photos only for OTS photo.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
                   Review pickup time, pickup place, drop-off, route, and job notes before starting.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">

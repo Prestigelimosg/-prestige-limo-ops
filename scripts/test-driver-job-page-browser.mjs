@@ -1235,6 +1235,10 @@ async function runChromeTest() {
     assert.deepEqual(
       validState.workflowHandoff.items,
       [
+        "Install Driver Portal from your browser for best results.",
+        "Tap Enable Job Alerts. Allow notifications.",
+        "Tap Share Location when OTW. Allow location.",
+        "Allow camera/photos only for OTS photo.",
         "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
         "Confirm driver and vehicle details once, then use the status buttons only when ready.",
         "Use Report Issue when admin needs an in-app alert.",

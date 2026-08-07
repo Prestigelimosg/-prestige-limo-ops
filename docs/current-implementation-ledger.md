@@ -12,9 +12,18 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Merged Driver OTW And Live Location Control (2026-08-07)
+
+- The private Driver Job page now uses one control in the established OTW position. Its first accepted tap persists OTW through the unchanged token-scoped status lane and only then starts the existing live-location readiness, browser permission, position POST, and page-bounded watch sequence. OTW remains saved when readiness, permission, position, or location persistence fails.
+- After OTW is saved, the same control performs location actions only: active sharing becomes `Stop Sharing`; stopped or inactive sharing becomes `Share Location Again`; bounded failures become `Retry Share Location` or `Retry Stop Sharing`. Later taps never repeat, undo, or append another OTW event. One shared in-browser action lock prevents ordinary double taps across status save and location start.
+- The former separate Live Location section, Share/Stop buttons, and visible Permission, Last shared, and State readouts are removed. One compact `aria-live` line under the merged control keeps permission denial, active sharing, stop success, cleanup failure, and reload state visible. Reopening an OTW-or-later job performs only the existing readiness GET; it never requests GPS or restarts the browser watch automatically.
+- The existing Driver Job `App Updates` heading is renamed `Messages & Updates` because the same established `driver_app` feed can contain dispatch messages, passenger replies, and system updates. The route, outbox records, read/write behavior, device push, and privacy boundary are unchanged.
+- No status API, status persistence helper, live-location API/runtime helper, schema, migration, Supabase configuration, Driver Reports, Admin/customer map, Google Maps renderer, personal or Operations Calendar, message writer, push sender, provider, booking, invoice, billing, payment, payout, PayNow, environment, deployment, or Production data lane is changed.
+- Focused protection is the updated Driver Job browser test, Driver device-alert copy guard, Driver in-app notification label guard, compact/public action-surface guards, and the existing status, Share/Stop, consent, assigned-active eligibility, stale/offline, Admin map, and customer tracking guards.
+
 ### Compact Driver App Guide (2026-08-07)
 
-- The existing collapsed private Driver Job `How this page works` guide now adds four short device-use instructions: install Driver Portal from the browser for best results; enable Job Alerts and allow notifications; share location when OTW and allow location; and allow camera/photos only for an OTS photo.
+- The existing collapsed private Driver Job `How this page works` guide now adds four short device-use instructions: install Driver Portal from the browser for best results; enable Job Alerts and allow notifications; tap OTW to save status and start sharing, then allow location; and allow camera/photos only for an OTS photo.
 - This is presentation copy only inside the established guide. It adds no control, permission request, service worker, notification, push subscription, live-location action, photo action, Driver Portal lane, API, persistence, Calendar, Driver Reports, booking, customer, message, invoice, billing, payment, payout, PayNow, provider, schema, migration, environment, deployment, or Production data change.
 - Focused protection is the updated `scripts/test-driver-job-device-push-alert-guard.mjs` and `scripts/test-driver-job-page-browser.mjs`. This checkpoint remains local until the bounded checks, review, staged guard, commit, push, ready PR, merge, deployment, and separate visible Production acceptance pass.
 

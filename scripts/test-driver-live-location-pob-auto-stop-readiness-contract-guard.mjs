@@ -192,7 +192,8 @@ assertExcludes(
   "production driver job page timer/sendBeacon GPS loop",
 );
 for (const fragment of [
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  'data-driver-otw-live-location-control="true"',
+  "handleOtwLiveLocationControl",
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",

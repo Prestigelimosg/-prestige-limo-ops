@@ -392,8 +392,8 @@ for (const path of publicClientPaths) {
 
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
-  "driver job approved live-location runtime-check UI gate",
+  'data-driver-otw-live-location-control="true"',
+  "driver job approved merged OTW/live-location UI gate",
 );
 assertIncludes(
   files["app/driver-job/[token]/page.tsx"],

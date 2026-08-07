@@ -325,10 +325,11 @@ assertExcludes(
   "production driver job page live-location activation",
 );
 for (const fragment of [
-  'data-driver-live-location-share-button={driverLiveLocationUiState}',
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
-  "Share only when dispatch opens live location for this job.",
-  "Share Location",
+  'data-driver-otw-live-location-control="true"',
+  "handleOtwLiveLocationControl",
+  'const otwSaved = await updateStatus("OTW", "OTW", "I\'m on the way");',
+  "Share Location Again",
+  "Stop Sharing",
   "navigator.geolocation.getCurrentPosition",
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",

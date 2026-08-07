@@ -403,6 +403,7 @@ export function CustomerCompanyProfileEditor({
 
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
       setStatus("saved");
+      setProfile(null);
     } catch (error) {
       setMessage(safeErrorMessage(error));
       setStatus("error");

@@ -145,5 +145,10 @@ assert.match(
   /Controls only this customer folder label and top banner\. Passenger names stay on their bookings\./,
   "the folder-name control must state its narrow booking-preserving scope",
 );
+assert.match(
+  editorSource,
+  /setMessage\(`Saved customer company profile for[\s\S]+?setStatus\("saved"\);\s+setProfile\(null\);/,
+  "a fully successful profile save must close the existing editor while retaining its saved feedback",
+);
 
 console.log("Customer company profile contact contract guard passed.");

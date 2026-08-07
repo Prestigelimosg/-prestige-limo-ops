@@ -808,6 +808,11 @@ function messageIdHash(parsed: ParsedMail, source: Buffer) {
 
 const prestigeTransportBookerConflictReason =
   "Booker name conflicts with the labelled client email; confirm the Booker before Save + CRM.";
+const prestigeTransportBookingSubjectPattern =
+  /^New booking\s+"Prestige Transport \d+"\s+has been received$/i;
+const prestigeTransportKnownBookerEmail = "hyunsoostar@hotmail.com";
+const prestigeTransportKnownBookerName = "Kim Hyun Soo";
+const prestigeTransportKnownBookerContact = "+65 98156017";
 const ignoredPersonIdentityTokens = new Set([
   "dr",
   "miss",
@@ -859,7 +864,7 @@ function prestigeTransportClientIdentity(input: {
   subject: string;
 }) {
   if (
-    !/^New booking\s+"Prestige Transport \d+"\s+has been received$/i.test(
+    !prestigeTransportBookingSubjectPattern.test(
       cleanText(input.subject, 240),
     )
   ) {
@@ -883,6 +888,51 @@ function prestigeTransportClientIdentity(input: {
   return {
     clientName: `${firstName} ${lastName}`,
     email,
+  };
+}
+
+function enforcePrestigeTransportKnownBookerEmail(
+  input: {
+    subject: string;
+  },
+  analysis: AdminEmailAiAnalysis,
+) {
+  if (
+    !prestigeTransportBookingSubjectPattern.test(
+      cleanText(input.subject, 240),
+    )
+  ) {
+    return analysis;
+  }
+
+  let matchedKnownBooker = false;
+  const bookings = analysis.bookingResult.bookings.map((booking) => {
+    if (
+      normalizeAdminEmailAiAddress(booking.bookerEmail) !==
+      prestigeTransportKnownBookerEmail
+    ) {
+      return booking;
+    }
+
+    matchedKnownBooker = true;
+
+    return {
+      ...booking,
+      bookerContact: prestigeTransportKnownBookerContact,
+      bookerName: prestigeTransportKnownBookerName,
+    };
+  });
+
+  if (!matchedKnownBooker) {
+    return analysis;
+  }
+
+  return {
+    ...analysis,
+    bookingResult: {
+      ...analysis.bookingResult,
+      bookings,
+    },
   };
 }
 
@@ -1008,9 +1058,12 @@ async function analyseAllowedEmail(input: {
 
     const analysis = enforceAllowedSenderCompanyAccount(
       input.senderAddress,
-      enforcePrestigeTransportIdentityConsistency(
+      enforcePrestigeTransportKnownBookerEmail(
         input,
-        sanitizeAdminEmailAiAnalysis(parsed),
+        enforcePrestigeTransportIdentityConsistency(
+          input,
+          sanitizeAdminEmailAiAnalysis(parsed),
+        ),
       ),
     );
 

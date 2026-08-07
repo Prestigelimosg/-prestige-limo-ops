@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 const root = process.cwd();
 const contractPath = path.join(root, "lib/admin-email-ai-intake-contract.ts");
 const runtimePath = path.join(root, "lib/admin-email-ai-intake.ts");
+const bookingParserPath = path.join(root, "lib/booking-parser.ts");
 const cronRoutePath = path.join(root, "app/api/cron/admin-email-ai-intake/route.ts");
 const adminRoutePath = path.join(root, "app/api/admin-email-ai-intake/route.ts");
 const pagePath = path.join(root, "app/page.tsx");
@@ -35,6 +36,7 @@ const groundBookerMigrationPath = groundBookerMigrationName
 for (const requiredPath of [
   contractPath,
   runtimePath,
+  bookingParserPath,
   cronRoutePath,
   adminRoutePath,
   pagePath,
@@ -49,6 +51,8 @@ for (const requiredPath of [
 
 const contract = await import(pathToFileURL(contractPath).href);
 const runtimeSource = fs.readFileSync(runtimePath, "utf8");
+const contractSource = fs.readFileSync(contractPath, "utf8");
+const bookingParserSource = fs.readFileSync(bookingParserPath, "utf8");
 const runtimeSourceWithoutEmailInstructions = runtimeSource.replace(
   /const emailAnalysisInstructions = `[\s\S]*?`;/,
   'const emailAnalysisInstructions = "";',
@@ -188,6 +192,21 @@ assert.match(runtimeSource, /email_confirmed_booking/);
 assert.match(runtimeSource, /email_booking_amendment/);
 assert.match(runtimeSource, /email_booking_cancellation/);
 assert.match(runtimeSource, /sendAdminDevicePushAlert/);
+assert.match(runtimeSource, /hyunsoostar@hotmail\.com/);
+assert.match(runtimeSource, /Kim Hyun Soo/);
+assert.match(runtimeSource, /\+65 98156017/);
+assert.match(runtimeSource, /enforcePrestigeTransportKnownBookerEmail/);
+assert.match(
+  runtimeSource,
+  /New booking\\s\+\"Prestige Transport \\d\+\"\\s\+has been received/,
+);
+assert.match(
+  runtimeSource,
+  /enforcePrestigeTransportKnownBookerEmail\(\s*input,\s*enforcePrestigeTransportIdentityConsistency\(/,
+  "The exact known-Booker email mapping must receive the generic identity-consistency result.",
+);
+assert.doesNotMatch(contractSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
+assert.doesNotMatch(bookingParserSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(runtimeSource, /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/);
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);

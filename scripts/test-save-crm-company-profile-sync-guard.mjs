@@ -132,7 +132,7 @@ for (const fragment of [
   "agencySaveState.bookingInsert?.booking?.company_id, 601",
   "Expected New booking to clear the agency-folder selection",
   "first agency light-mode UI",
-  "Expected first agency mode to keep all verified identity selectors blank",
+  "Expected first agency mode to keep the corporate customer choices hidden",
   "firstAgencySaveState.bookingInsert?.hotel_agency_folder_create?.company_name",
   "firstAgencySaveState.bookingInsert?.booking?.customer_id, null",
   "firstAgencySaveState.bookingInsert?.booking?.booker_id, null",

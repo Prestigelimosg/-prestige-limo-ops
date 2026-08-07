@@ -54,6 +54,52 @@ assert.equal(parsedGroundBookerCanonicalIntake.booker, 'Pat');
 assert.equal(parsedGroundBookerCanonicalIntake.bookerEmail, 'transzend@groundbooker.com');
 assert.equal(parsedGroundBookerCanonicalIntake.name, 'Simran Shah');
 
+const prestigeTransport15784KnownBookerCanonical = `Booking type: MNG
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Shohei Ogasawara
+Pax: 3
+Vehicle: Mercedes Benz Viano
+Pickup date: 17-08-2026
+Pickup time: 16:25
+Flight: SQ619
+Drop-off: 7 Raffles Blvd, Singapore 039595`;
+const parsedPrestigeTransport15784KnownBookerCanonical =
+  parseBookingForTest(prestigeTransport15784KnownBookerCanonical) ?? {};
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.booker, 'Kim Hyun Soo');
+assert.notEqual(parsedPrestigeTransport15784KnownBookerCanonical.booker, 'hyunsoostar');
+assert.equal(
+  parsedPrestigeTransport15784KnownBookerCanonical.bookerEmail,
+  'hyunsoostar@hotmail.com',
+);
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.bookerContact, '+65 98156017');
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.name, 'Shohei Ogasawara');
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.bookingType, 'MNG');
+
+const prestigeTransport15785KnownBookerCanonical = `Booking type: DEP
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Shohei Ogasawara
+Pax: 3
+Vehicle: Mercedes Benz Viano
+Pickup date: 19-08-2026
+Pickup time: 6:30
+Flight: SQ620
+Pickup: 7 Raffles Blvd, Singapore 039595`;
+const parsedPrestigeTransport15785KnownBookerCanonical =
+  parseBookingForTest(prestigeTransport15785KnownBookerCanonical) ?? {};
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.booker, 'Kim Hyun Soo');
+assert.notEqual(parsedPrestigeTransport15785KnownBookerCanonical.booker, 'hyunsoostar');
+assert.equal(
+  parsedPrestigeTransport15785KnownBookerCanonical.bookerEmail,
+  'hyunsoostar@hotmail.com',
+);
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.bookerContact, '+65 98156017');
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.name, 'Shohei Ogasawara');
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.bookingType, 'DEP');
+
 const expected = {
   success: true,
   company: 'UOB',

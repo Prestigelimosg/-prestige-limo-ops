@@ -333,6 +333,48 @@ const syntheticPrestigeTransportIdentityConflictSource = Buffer.from(
     "Payment Stripe",
   ].join("\r\n"),
 );
+const syntheticPrestigeTransport15784Source = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-prestige-transport-15784@example.test>",
+    "Date: Thu, 6 Aug 2026 15:05:18 +0000",
+    'Subject: New booking "Prestige Transport 15784" has been received',
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "General",
+    "Title Prestige Transport 15784 Service type Airport transfer Transfer type One Way Pickup date and time 17-08-2026 16:25",
+    "Comment Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)",
+    "Route name Airport arrival Drop off Location 1. 7 Raffles Blvd, Singapore 039595",
+    "Vehicle name Mercedes Benz Viano Bag count 5 Passengers count 7",
+    "Client details",
+    "First name Shohei Last name Ogasawara E-mail address hyunsoostar@hotmail.com Phone number +818024138363 Passangers 3 Flight No. SQ619",
+  ].join("\r\n"),
+);
+const syntheticPrestigeTransport15785Source = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-prestige-transport-15785@example.test>",
+    "Date: Thu, 6 Aug 2026 15:10:29 +0000",
+    'Subject: New booking "Prestige Transport 15785" has been received',
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "General",
+    "Title Prestige Transport 15785 Service type Airport transfer Transfer type One Way Pickup date and time 19-08-2026 6:30",
+    "Comment Trip Organizer: Mr. Kim, Hyun Soo (Tel. No.: +65 98156017)",
+    "Route name Airport departure Pick Up Location 1. 7 Raffles Blvd, Singapore 039595",
+    "Vehicle name Mercedes Benz Viano Bag count 5 Passengers count 7",
+    "Client details",
+    "First name Shohei Last name Ogasawara E-mail address hyunsoostar@hotmail.com Phone number +818024138363 Passangers 3 Flight No. SQ620",
+  ].join("\r\n"),
+);
 
 const fakeMailbox = {
   messages: [],
@@ -420,10 +462,57 @@ class FakeOpenAI {
       const isPrestigeTransportIdentityConflict = body.input.includes(
         'New booking "Prestige Transport 15782" has been received',
       );
+      const isPrestigeTransport15784 = body.input.includes(
+        'New booking "Prestige Transport 15784" has been received',
+      );
+      const isPrestigeTransport15785 = body.input.includes(
+        'New booking "Prestige Transport 15785" has been received',
+      );
       const isGroundBooker = body.input.includes(
         "Synthetic GroundBooker confirmed booking",
       );
-      const analysis = isPrestigeTransportIdentityConflict
+      const analysis = isPrestigeTransport15784 || isPrestigeTransport15785
+        ? {
+            bookingResult: {
+              bookings: [
+                {
+                  bookerContact: isPrestigeTransport15784
+                    ? "+65 98156017"
+                    : "+818024138363",
+                  bookerEmail: "hyunsoostar@hotmail.com",
+                  bookerName: "",
+                  bookingType: isPrestigeTransport15784 ? "MNG" : "DEP",
+                  companyAccount: "",
+                  confidence: 0.96,
+                  customerPriceOverride: isPrestigeTransport15784 ? "115.00 SGD" : "120.00 SGD",
+                  dropoff: isPrestigeTransport15784
+                    ? "7 Raffles Blvd, Singapore 039595"
+                    : "",
+                  extraStopLocation: "",
+                  extraStops: "",
+                  flightNumber: isPrestigeTransport15784 ? "SQ619" : "SQ620",
+                  needsReviewReasons: ["Confirm Booker identity and contact details."],
+                  notes: "Organizer: Mr. Kim, Hyun Soo.",
+                  passengerName: "Shohei Ogasawara",
+                  pax: "3",
+                  pickup: isPrestigeTransport15784
+                    ? ""
+                    : "7 Raffles Blvd, Singapore 039595",
+                  pickupDate: isPrestigeTransport15784 ? "17-08-2026" : "19-08-2026",
+                  pickupTime: isPrestigeTransport15784 ? "16:25" : "6:30",
+                  vehicle: "Mercedes Benz Viano",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.96,
+            reviewReasons: [],
+            suggestedReply: "",
+            summary: "Prestige Transport booking for Shohei Ogasawara.",
+          }
+        : isPrestigeTransportIdentityConflict
         ? {
             bookingResult: {
               bookings: [
@@ -803,13 +892,72 @@ try {
     "email_confirmed_booking",
   ]);
 
+  fakeMailbox.uidNext = 106;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticPrestigeTransport15784Source.length,
+    source: syntheticPrestigeTransport15784Source,
+    uid: 105,
+  });
+
+  const prestigeTransport15784Parsed = await runtime.runAdminEmailAiIntake();
+  assert.equal(prestigeTransport15784Parsed.ok, true);
+  assert.equal(intakeRows.length, 5);
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookerName, "Kim Hyun Soo");
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookerEmail, "hyunsoostar@hotmail.com");
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].passengerName, "Shohei Ogasawara");
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookingType, "MNG");
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].companyId, undefined);
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookerId, undefined);
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].travelerId, undefined);
+  assert.match(intakeRows[4].canonical_booking_text, /^Booker: Kim Hyun Soo$/m);
+  assert.doesNotMatch(intakeRows[4].canonical_booking_text, /^Booker: hyunsoostar$/m);
+
+  fakeMailbox.uidNext = 107;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticPrestigeTransport15785Source.length,
+    source: syntheticPrestigeTransport15785Source,
+    uid: 106,
+  });
+
+  const prestigeTransport15785Parsed = await runtime.runAdminEmailAiIntake();
+  assert.equal(prestigeTransport15785Parsed.ok, true);
+  assert.equal(intakeRows.length, 6);
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookerName, "Kim Hyun Soo");
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookerEmail, "hyunsoostar@hotmail.com");
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].passengerName, "Shohei Ogasawara");
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookingType, "DEP");
+  assert.match(intakeRows[5].normalized_text, /Phone number \+818024138363/);
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].companyId, undefined);
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookerId, undefined);
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].travelerId, undefined);
+  assert.match(intakeRows[5].canonical_booking_text, /^Booker: Kim Hyun Soo$/m);
+  assert.match(intakeRows[5].canonical_booking_text, /^Contact: \+65 98156017$/m);
+  assert.doesNotMatch(intakeRows[5].canonical_booking_text, /^Booker: hyunsoostar$/m);
+  assert.deepEqual(adminDevicePushEvents, [
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+  ]);
+
   const blockedSource = Buffer.from(
     syntheticAllowedSource
       .toString()
       .replaceAll("info@prestigelimo.sg", "other@example.test")
       .replace("synthetic-booking-1", "synthetic-booking-2"),
   );
-  fakeMailbox.uidNext = 106;
+  fakeMailbox.uidNext = 108;
   fakeMailbox.messages.push({
     envelope: {
       from: [{ address: "other@example.test" }],
@@ -817,20 +965,20 @@ try {
     },
     size: blockedSource.length,
     source: blockedSource,
-    uid: 105,
+    uid: 107,
   });
 
   const skipped = await runtime.runAdminEmailAiIntake();
   assert.equal(skipped.ok, true);
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
-  assert.equal(providerRequestBodies.length, 4);
-  assert.equal(downloadCalls, 4, "blocked sender body must not be fetched");
-  assert.equal(intakeRows.length, 4);
+  assert.equal(providerRequestBodies.length, 6);
+  assert.equal(downloadCalls, 6, "blocked sender body must not be fetched");
+  assert.equal(intakeRows.length, 6);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 3);
+  assert.equal(loaded.data.records.length, 5);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
   assert.equal(
     loaded.data.records[1].sender_address,
@@ -838,10 +986,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 400,
+    input_tokens: 600,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 320,
-    total_tokens: 720,
+    output_tokens: 480,
+    total_tokens: 1080,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -872,8 +1020,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 3);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 720);
+  assert.equal(allowedReadBody.records.length, 5);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 1080);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -967,7 +1115,7 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 2);
+  assert.equal(afterReviewRecords.length, 4);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",
@@ -1011,7 +1159,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 4);
+  assert.equal(providerRequestBodies.length, 6);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

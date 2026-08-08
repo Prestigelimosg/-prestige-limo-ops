@@ -113,7 +113,16 @@ async function assertNoRealLocationImplementation() {
     /navigator\.geolocation\.clearWatch/,
     "Driver live-location continuous sharing must be cleared by Stop Sharing and page cleanup.",
   );
-  assert.doesNotMatch(source, /setInterval|setTimeout|sendBeacon/i, "Driver pages must not add timer/sendBeacon GPS loops.");
+  assert.doesNotMatch(
+    source,
+    /(?:setInterval|setTimeout)\([\s\S]{0,500}(?:shareDriverLiveLocation|navigator\.geolocation)|sendBeacon/i,
+    "Driver pages must not add timer/sendBeacon GPS loops.",
+  );
+  assert.equal(
+    source.match(/window\.setInterval\(/g)?.length,
+    1,
+    "Driver pages may use only the one bounded visible Messages & Updates refresh interval.",
+  );
   assert.match(
     source,
     /const otwSaved = await updateStatus\("OTW", "OTW", "I'm on the way"\);[\s\S]*?if \(!otwSaved\) \{[\s\S]*?return;[\s\S]*?await shareDriverLiveLocation\(\);/,
@@ -235,7 +244,12 @@ async function runChromeTest() {
         window.__driverAppUpdateTest = {
           safeMessage: "Dispatch has a safe app update for this job.",
           safeTitle: "Dispatch app update",
+          visibilityState: "visible",
         };
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => window.__driverAppUpdateTest.visibilityState,
+        });
         const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
         window.addEventListener("unhandledrejection", (event) => window.__prestigeErrors.push(String(event.reason)));
@@ -1513,6 +1527,45 @@ async function runChromeTest() {
       [],
       "Driver app updates feed should stay read-only in this stage.",
     );
+    const visiblePollMessage = "Fresh admin message while the page stays visible.";
+    const visiblePollBeforeState = await pageState();
+    await evaluate(`(() => {
+      window.__driverAppUpdateTest.safeMessage = ${JSON.stringify(visiblePollMessage)};
+    })()`);
+    const visiblePollState = await waitForCondition(
+      () => pageState().then((state) =>
+        state.appUpdates.rows[0]?.message === visiblePollMessage ? state : false,
+      ),
+      10000,
+      "driver app update refresh while the page remains visible",
+    );
+    assert.ok(
+      visiblePollState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length >
+        visiblePollBeforeState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length,
+      "Expected the visible page to refresh through the existing token-scoped notifications GET.",
+    );
+
+    const hiddenPollMessage = "Hidden pages must not poll for this message.";
+    await evaluate(`(() => {
+      window.__driverAppUpdateTest.visibilityState = "hidden";
+      window.__driverAppUpdateTest.safeMessage = ${JSON.stringify(hiddenPollMessage)};
+    })()`);
+    const hiddenPollBeforeState = await pageState();
+    await new Promise((resolve) => setTimeout(resolve, 5500));
+    const hiddenPollAfterState = await pageState();
+    assert.equal(
+      hiddenPollAfterState.appUpdates.rows[0]?.message,
+      visiblePollMessage,
+      "Hidden Driver Job pages must retain the last loaded message without polling.",
+    );
+    assert.equal(
+      hiddenPollAfterState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length,
+      hiddenPollBeforeState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length,
+      "Hidden Driver Job pages must not poll the notifications route.",
+    );
+    await evaluate(`(() => {
+      window.__driverAppUpdateTest.visibilityState = "visible";
+    })()`);
     for (const [eventTarget, eventName, safeMessage] of [
       ["window", "focus", "Fresh admin message after focus."],
       ["document", "visibilitychange", "Fresh admin message after returning."],

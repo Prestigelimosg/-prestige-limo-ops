@@ -6,9 +6,13 @@ const pageSource = await readFile(pagePath, "utf8");
 
 const requiredFragments = [
   ["foreground refresh helper", "const refreshDriverAppUpdates = useCallback"],
+  ["visible refresh interval", "const DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS = 5_000"],
   ["focus refresh listener", 'window.addEventListener("focus", refreshDriverAppUpdatesOnForeground)'],
   ["visible refresh listener", 'document.addEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground)'],
   ["page-show refresh listener", 'window.addEventListener("pageshow", refreshDriverAppUpdatesOnForeground)'],
+  ["visible interval refresh helper", "const refreshDriverAppUpdatesWhileVisible = () =>"],
+  ["visible interval setup", "window.setInterval("],
+  ["visible interval cleanup", "window.clearInterval(driverAppUpdatesRefreshInterval)"],
   ["stale request protection", "driverAppUpdatesRequestSequenceRef"],
   ["overlap cancellation", "driverAppUpdatesAbortControllerRef"],
   ["background content preservation", "preserveContent"],
@@ -38,8 +42,14 @@ assert.equal(
 );
 assert.equal(
   /setInterval\([^)]*refreshDriverAppUpdates/.test(pageSource),
-  false,
-  "Driver Job message refresh must not add polling.",
+  true,
+  "Driver Job must refresh app updates through the bounded visible-page interval.",
+);
+
+assert.match(
+  pageSource,
+  /const refreshDriverAppUpdatesWhileVisible = \(\) => \{[\s\S]*?document\.visibilityState !== "visible"[\s\S]*?refreshDriverAppUpdates\(\{ preserveContent: true \}\)[\s\S]*?const driverAppUpdatesRefreshInterval = window\.setInterval\([\s\S]*?DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS[\s\S]*?window\.clearInterval\(driverAppUpdatesRefreshInterval\)/,
+  "Driver Job interval must refresh only while visible, preserve loaded content, and be cleared with the effect.",
 );
 
 console.log("Driver Job foreground messages, acknowledged button state, and iPhone onboarding guard passed.");

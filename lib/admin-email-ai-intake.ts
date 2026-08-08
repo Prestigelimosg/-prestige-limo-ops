@@ -908,14 +908,6 @@ function enforcePrestigeTransportKnownBookerEmail(
   }
 
   let matchedKnownBooker = false;
-  const unresolvedKnownBookerReason = (reason: string) => {
-    const normalizedReason = cleanText(reason, 240).toLowerCase();
-
-    return !(
-      normalizedReason.includes("booker") &&
-      /\b(?:confirm|confirmation)\b/.test(normalizedReason)
-    );
-  };
   const bookings = analysis.bookingResult.bookings.map((booking) => {
     if (
       normalizeAdminEmailAiAddress(booking.bookerEmail) !==
@@ -931,7 +923,7 @@ function enforcePrestigeTransportKnownBookerEmail(
       bookerContact: prestigeTransportKnownBookerContact,
       bookerName: prestigeTransportKnownBookerName,
       needsReviewReasons: booking.needsReviewReasons.filter(
-        unresolvedKnownBookerReason,
+        (reason) => !isResolvedKnownBookerReason(reason),
       ),
     };
   });
@@ -947,8 +939,80 @@ function enforcePrestigeTransportKnownBookerEmail(
       bookings,
     },
     reviewReasons: analysis.reviewReasons.filter(
-      unresolvedKnownBookerReason,
+      (reason) => !isResolvedKnownBookerReason(reason),
     ),
+  };
+}
+
+function isResolvedKnownBookerReason(reason: string) {
+  const normalizedReason = cleanText(reason, 240).toLowerCase();
+
+  return (
+    normalizedReason.includes("booker") &&
+    /\b(?:ambiguous|confirm|confirmation|conflict|missing|unclear|uncertain|unknown|unverified|verify|verification)\b/.test(
+      normalizedReason,
+    )
+  );
+}
+
+function hasSpecificStructuredExtraStop(
+  booking: AdminEmailAiAnalysis["bookingResult"]["bookings"][number],
+) {
+  const stopCount = cleanText(booking.extraStopCount, 12);
+  const stopLocation = cleanText(booking.extraStopLocation, 320);
+
+  return (
+    /^[1-9]\d*$/.test(stopCount) &&
+    /[a-z]/i.test(stopLocation) &&
+    /\d/.test(stopLocation) &&
+    !/^(?:\d+\s*(?:x\s*)?)?(?:extra\s+stop|route\s+stop|second\s+pickup|stop|waypoint)s?$/i.test(
+      stopLocation,
+    )
+  );
+}
+
+function isResolvedStructuredExtraStopReason(reason: string) {
+  const normalizedReason = cleanText(reason, 240).toLowerCase();
+
+  return (
+    /\b(?:extra[\s-]+stop|route[\s-]+stop|second[\s-]+pickup|waypoint)\b/.test(
+      normalizedReason,
+    ) &&
+    /\b(?:ambiguous|confirm|confirmation|missing|not clearly|supported|unclear|uncertain|verify|verification|whether)\b/.test(
+      normalizedReason,
+    )
+  );
+}
+
+function enforceResolvedStructuredReviewReasons(
+  analysis: AdminEmailAiAnalysis,
+) {
+  const bookings = analysis.bookingResult.bookings.map((booking) =>
+    hasSpecificStructuredExtraStop(booking)
+      ? {
+          ...booking,
+          needsReviewReasons: booking.needsReviewReasons.filter(
+            (reason) => !isResolvedStructuredExtraStopReason(reason),
+          ),
+        }
+      : booking,
+  );
+  const singleResolvedExtraStop =
+    !analysis.bookingResult.multipleBookingsDetected &&
+    bookings.length === 1 &&
+    hasSpecificStructuredExtraStop(bookings[0]);
+
+  return {
+    ...analysis,
+    bookingResult: {
+      ...analysis.bookingResult,
+      bookings,
+    },
+    reviewReasons: singleResolvedExtraStop
+      ? analysis.reviewReasons.filter(
+          (reason) => !isResolvedStructuredExtraStopReason(reason),
+        )
+      : analysis.reviewReasons,
   };
 }
 
@@ -1074,11 +1138,13 @@ async function analyseAllowedEmail(input: {
 
     const analysis = enforceAllowedSenderCompanyAccount(
       input.senderAddress,
-      enforcePrestigeTransportKnownBookerEmail(
-        input,
-        enforcePrestigeTransportIdentityConsistency(
+      enforceResolvedStructuredReviewReasons(
+        enforcePrestigeTransportKnownBookerEmail(
           input,
-          sanitizeAdminEmailAiAnalysis(parsed),
+          enforcePrestigeTransportIdentityConsistency(
+            input,
+            sanitizeAdminEmailAiAnalysis(parsed),
+          ),
         ),
       ),
     );

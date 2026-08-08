@@ -157,7 +157,7 @@ assert.equal(
 assert.equal(
   countMatches(bookPage, 'data-customer-booking-portal-link="true"'),
   1,
-  "/book must keep exactly one Portal link.",
+  "/book must keep exactly one My Bookings link.",
 );
 assertFragmentOrder(
   bookPage,
@@ -206,7 +206,7 @@ for (const fragment of [
   'data-customer-voice-booking-speak-button="true"',
   'data-customer-booking-portal-link="true"',
   'href="/my-bookings"',
-  "Portal",
+  "My Bookings",
 ]) {
   assertIncludes(headerActionBlock, fragment, `header action group fragment ${fragment}`);
 }

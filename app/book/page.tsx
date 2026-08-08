@@ -902,7 +902,7 @@ export default function CustomerBookingPage() {
                 data-customer-booking-portal-link="true"
                 href="/my-bookings"
               >
-                Portal
+                My Bookings
               </Link>
             </div>
           </div>

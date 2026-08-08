@@ -12,6 +12,15 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Admin Customer Home And Customer My Bookings Navigation (2026-08-08)
+
+- The existing light-mode admin `/customers` header and exact `/customers/[customerId]` folder header each contain one compact `Home` link to the established admin root `/`. The exact-customer folder retains its existing `Back to customer dashboard` link to `/customers` beside the new root navigation.
+- The existing public `/book` header link to `/my-bookings` is relabelled from `Portal` to the layman-facing `My Bookings`. Its exact route, selector, position beside `Speak`, customer session/authentication behavior, Customer Portal app scope, and app/browser handoff remain unchanged. No customer Home button or automatic installed-app opening is added.
+- These are navigation-label changes only. Customer profile persistence, Customer Billing Overview, the owner-locked invoice sections/layout/routes/APIs, booking request submission, CRM identity, customer/driver messaging, Driver Job, Calendar, rates, billing/payment/payout, provider, schema, migration, environment, deployment, and Production data are unchanged.
+- Focused protection is `scripts/test-admin-customer-home-and-booking-label-guard.mjs`, registered in the preactivation suite, plus the existing customer booking header and invoice workflow guards.
+- Local verification passed the dedicated navigation guard, both existing customer booking-header guards, the Customers workflow guard, all three locked invoice guards, the standalone Production build, and the complete `npm run test:safe` chain. The full safe run reported zero lint errors with 165 existing warnings; its booking UI, mobile-usability, Driver Job, customer profile/identity, and app-smoke browser suites all completed with zero browser or console errors.
+- Visible owner-Chrome light-mode verification at 1440px and 390px proved one exact `Home` link on both admin customer surfaces, the preserved exact-customer dashboard return link, one `My Bookings` link on `/book`, the exact `/` and `/my-bookings` destinations, no horizontal document overflow, and zero Chrome warnings or errors. No form, booking, profile, invoice, message, Calendar, provider, database, environment, deployment, or Production action was performed.
+
 ### Customer Profile Saved Confirmation Repair (2026-08-07)
 
 - The owner reproduced a completed `Save profile` action whose exact-customer editor remained open with the action immediately labelled `Save profile` again. The existing green success banner was correct, but the unchanged open form and ready-to-save button left the completed state visually ambiguous; the company and optional exact-customer folder writes themselves were not failing.

@@ -73,9 +73,18 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
           className="rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md"
           data-customer-folder-sector="profile"
         >
-          <Link className="text-sm font-semibold text-slate-600 underline underline-offset-4" href="/customers">
-            Back to customer dashboard
-          </Link>
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Customer folder navigation">
+            <Link
+              className="inline-flex min-h-9 items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+              data-admin-customer-folder-home-link="true"
+              href="/"
+            >
+              Home
+            </Link>
+            <Link className="text-sm font-semibold text-slate-600 underline underline-offset-4" href="/customers">
+              Back to customer dashboard
+            </Link>
+          </nav>
           <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-800">

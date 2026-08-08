@@ -15,7 +15,7 @@ This document records the approved bounded Customer Voice Booking Draft Field-Fi
 - Current field-fill does not overwrite customer-entered fields.
 - Current field-fill does not submit transcript or audio.
 - Current field-fill does not call parser, API, speech-to-text, or provider routes.
-- `specialRequest` exists in `/book` UI state but is not forwarded by the adapter and is not allowed in customer booking request persistence.
+- The retired `specialRequest` field is absent from `/book`, the adapter, and customer booking request persistence.
 - `/api/ai-parse` remains admin/parser-shaped and includes fields such as `customerPriceOverride`, so it is not safe for public customer voice field-fill without separate owner approval.
 - Existing WhatsApp transcript parsing and admin dispatcher intake draft-fill are not Customer Voice Booking Draft Field-Fill.
 
@@ -31,7 +31,7 @@ This document records the approved bounded Customer Voice Booking Draft Field-Fi
 - Admin review remains required after submission.
 - Existing submit path must remain `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
 - No transcript or audio may be submitted or stored unless separately approved.
-- `specialRequest` remains local-only and excluded from submitted field-fill scope unless separately approved.
+- `specialRequest` remains absent from submitted field-fill scope unless separately approved.
 - `/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.
 - Admin parser/draft-fill cannot be reused directly for public customer voice.
 - If parsing is uncertain, leave fields unchanged and show the transcript for manual review.

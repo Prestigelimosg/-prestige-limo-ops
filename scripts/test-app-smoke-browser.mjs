@@ -2631,7 +2631,7 @@ async function runChromeTest() {
                     contact_phone: "+65 8000 1000",
                     contact_email: "loaded-ops@example.com",
                     pax_count: 2,
-                    luggage_count: null,
+                    luggage_count: 3,
                     vehicle_type_or_category: "AVF",
                     customer_facing_status: "Received",
                     admin_internal_status: "Admin Review Required",
@@ -3905,6 +3905,11 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.contact_phone, "+65 8000 2000");
       assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
       assert.equal(updateState.body.booking.pax_count, 2);
+      assert.equal(
+        updateState.body.booking.luggage_count,
+        3,
+        "Expected applied customer request Save + CRM to preserve the exact bag count",
+      );
       assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
       assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
       assert.equal(updateState.body.booking.admin_internal_status, "Ready for Confirmation");
@@ -33035,7 +33040,6 @@ async function runChromeTest() {
             }
 
             window.__customerBookingRequestCalls.push({ body, method, url });
-
             if (window.__customerBookingRequestMockMode === "disabled") {
               return new Response(
                 JSON.stringify({
@@ -33331,7 +33335,6 @@ async function runChromeTest() {
             "passengerCount",
             "luggage",
             "extraStops",
-            "specialRequest",
           ].map((field) => {
             if (field === "pickupTime") {
               const hidden = document.querySelector("[data-customer-booking-field='pickupTime']");
@@ -33790,6 +33793,8 @@ async function runChromeTest() {
           serviceOptionValues: [
             ...document.querySelectorAll("[data-customer-booking-field='serviceType'] option"),
           ].map((option) => option.value),
+          submitDisabled: Boolean(submit?.disabled),
+          submitText: submit?.textContent.trim() || "",
           submitVisible: Boolean(submitRect && submitRect.width > 0 && submitRect.height >= 44),
           text,
           vehicleOptionLabels: [
@@ -34056,9 +34061,8 @@ async function runChromeTest() {
         "Type of service",
         "Vehicle type",
         "Number of passengers",
-        "Luggage",
+        "Number of bags",
         "Extra stops",
-        "Special request / note",
       ]) {
         assert.equal(initialState.text.includes(expectedField), true, `Expected /book field: ${expectedField}`);
       }
@@ -34432,8 +34436,11 @@ async function runChromeTest() {
       const validState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText ===
-            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
+          return candidateState.customerBookingRequestCalls.length === 1 &&
+            candidateState.submitDisabled &&
+            candidateState.submitText === "Submitted" &&
+            candidateState.feedbackText ===
+              "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -34598,13 +34605,35 @@ async function runChromeTest() {
         "Expected valid /book submit not to show same-date or same-time blocking",
       );
 
-      await setCustomerBookingField("luggage", "2 bags");
+      await setCustomerBookingField("luggage", "2.5");
+      await clickCustomerBookingSubmit("invalid decimal luggage count");
+      const invalidLuggageState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText === "Enter the number of bags as a whole number."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "invalid luggage count feedback",
+      );
+      assert.equal(invalidLuggageState.feedbackTone, "error", "Expected invalid luggage count to fail visibly");
+      assert.equal(
+        invalidLuggageState.customerBookingRequestCalls.length,
+        1,
+        "Expected invalid luggage count not to submit another customer request",
+      );
+
+      await setCustomerBookingField("luggage", "2");
       await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time after edit");
       const sameTimeRepeatState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText ===
-            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
+          return candidateState.customerBookingRequestCalls.length === 2 &&
+            candidateState.submitDisabled &&
+            candidateState.submitText === "Submitted" &&
+            candidateState.feedbackText ===
+              "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -34651,7 +34680,10 @@ async function runChromeTest() {
       const shortNoticeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText ===
+          return candidateState.customerBookingRequestCalls.length === 3 &&
+            candidateState.submitDisabled &&
+            candidateState.submitText === "Submitted" &&
+            candidateState.feedbackText ===
             "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
@@ -34679,18 +34711,23 @@ async function runChromeTest() {
         customerBookingRequestRuntimeAllowedPattern,
       );
 
-      await setCustomerBookingField("luggage", "2 bags retry");
+      await setCustomerBookingField("luggage", "3");
       const failureClicked = await evaluate(`(() => {
         window.__customerBookingRequestMockMode = "disabled";
         const button = document.querySelector("[data-customer-booking-submit]");
-        button?.click();
-        return Boolean(button);
+        if (!button || button.disabled) {
+          return false;
+        }
+        button.click();
+        return true;
       })()`);
       assert.equal(failureClicked, true, "Expected /book submit button for disabled intake check");
       const disabledIntakeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText.includes("Booking request could not be submitted right now")
+          return candidateState.customerBookingRequestCalls.length === 4 &&
+            !candidateState.submitDisabled &&
+            candidateState.feedbackText.includes("Booking request could not be submitted right now")
             ? candidateState
             : false;
         },
@@ -40333,6 +40370,23 @@ async function runChromeTest() {
         viewport: viewport.label,
       };
     };
+
+    if (process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-booking") {
+      reporter.step("focused customer booking route");
+      const customerBooking = await checkCustomerBookingRoute();
+      console.log(
+        JSON.stringify(
+          reporter.summary({
+            customerBooking,
+            ok: true,
+            scope: "customer-booking",
+          }),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
 
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];

@@ -32,7 +32,6 @@ const publicCustomerFormFields = [
   "passengerCount",
   "luggage",
   "extraStops",
-  "specialRequest",
   "travelerId",
 ];
 

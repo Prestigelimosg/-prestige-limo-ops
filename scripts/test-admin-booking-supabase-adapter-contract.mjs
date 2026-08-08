@@ -844,6 +844,7 @@ function assertSixTableCreateMapping(mock) {
     dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     flight_no: null,
+    luggage_count: null,
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
     pax_count: null,
@@ -1010,6 +1011,7 @@ try {
       admin_internal_status: "approved_internally",
       booking_reference: "SAFE-ADM-001",
       customer_facing_status: "confirmed",
+      luggage_count: 4,
       pickup_location: "Updated Safe Pickup",
       route_summary: "Updated Safe Pickup > Updated Safe Dropoff",
       service_type: "Transfer",
@@ -1052,6 +1054,7 @@ try {
   assert.equal(updateResult.ok, true);
   assert.equal(updateResult.data.pickup_location, "Updated Safe Pickup");
   assert.equal(updateResult.data.admin_internal_status, "Ready for Confirmation");
+  assert.equal(updateResult.data.luggage_count, 4);
 
   const updateOperation = createMock.client.operations.find(
     (operation) => operation.action === "update" && operation.table === "bookings",
@@ -1061,6 +1064,7 @@ try {
   assert.equal(updateOperation.payload.service_type, "transfer");
   assert.equal(updateOperation.payload.admin_internal_status, "approved_internal");
   assert.equal(updateOperation.payload.customer_facing_status, "confirmed");
+  assert.equal(updateOperation.payload.luggage_count, 4);
   assert.equal(auditUpdates.at(-1).payload.action_type, "booking_updated");
   assert.equal(auditUpdates.at(-1).payload.safe_before.booking_reference, "SAFE-ADM-001");
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
@@ -1321,6 +1325,7 @@ try {
   const currentSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-CURRENT-001",
+      luggage_count: 2,
     },
   });
   const parsedCurrentSchemaPayload = persistence.parseAdminBookingPersistencePayload(currentSchemaPayload);
@@ -1336,6 +1341,16 @@ try {
 
   assert.equal(currentSchemaResult.ok, true);
   assert.equal(currentSchemaResult.data.booking_reference, "SAFE-CURRENT-001");
+  assert.equal(currentSchemaResult.data.luggage_count, 2);
+  assert.equal(
+    insertedOperation(currentSchemaMock.client, "bookings").payload.luggage_count,
+    2,
+  );
+  assert.match(
+    currentSchemaMock.client.selectHistory.at(-1).selectedColumns,
+    /luggage_count/,
+    "Preferred current booking reload must explicitly select luggage_count.",
+  );
 
   for (const operation of currentSchemaMock.client.operations.filter((item) => item.action === "insert")) {
     assertNoUnsafeKeys(operation, "current-schema insert operation");
@@ -1371,6 +1386,7 @@ try {
       driver_contact: "+65 9000 0100",
       driver_name: "Foundation Safe Driver",
       driver_plate_number: "SFD100A",
+      luggage_count: 3,
     },
   });
   const parsedFoundationSchemaPayload =
@@ -1407,7 +1423,7 @@ try {
     driver_name: "Foundation Safe Driver",
     driver_plate_number: "SFD100A",
     flight_no: null,
-    luggage_count: null,
+    luggage_count: 3,
     parser_source_reference: null,
     pax_count: null,
     pickup_datetime: "2030-06-08T10:30:00+08:00",

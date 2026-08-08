@@ -428,6 +428,30 @@ function integerOrNull(value: unknown) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function customerBookingLuggageCount(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const normalized = typeof value === "string" ? value.trim() : value;
+
+  if (normalized === "") {
+    return null;
+  }
+
+  let parsed = Number.NaN;
+
+  if (typeof normalized === "number") {
+    parsed = normalized;
+  } else if (typeof normalized === "string" && /^\d+$/.test(normalized)) {
+    parsed = Number(normalized);
+  }
+
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 2_147_483_647
+    ? parsed
+    : null;
+}
+
 function pickupIsUnderTwentyFourHours(value: string | null | undefined) {
   const pickupMs = value ? new Date(value).getTime() : Number.NaN;
 
@@ -1071,7 +1095,7 @@ function buildCustomerBookingRequestPayloadForLeg({
       passenger_name: passengerName,
       flight_no: flightNumber,
       pax_count: integerOrNull(body.passengerCount),
-      luggage_count: integerOrNull(body.luggage),
+      luggage_count: customerBookingLuggageCount(body.luggage),
       vehicle_type_or_category: textOrNull(body.vehicleType),
       customer_facing_status: "Request Received",
       admin_internal_status: adminReviewRequiredStatus,
@@ -1168,6 +1192,19 @@ export function parseCustomerBookingRequestPayloads(
 
   const returnTripRequested = isCustomerReturnTripRequested(body.returnTripRequested);
   const flightNumber = textOrNull(body.flightNumber);
+
+  if (
+    body.luggage !== null &&
+    body.luggage !== undefined &&
+    String(body.luggage).trim() !== "" &&
+    customerBookingLuggageCount(body.luggage) === null
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request luggage count rejected.",
+    };
+  }
   const groupReference =
     groupReferenceOverride || createCustomerBookingRequestReference();
   const outbound = buildCustomerBookingRequestPayloadForLeg({

@@ -484,9 +484,11 @@ type BookingForm = {
   bookerId: string;
   bookerContact: string;
   bookerEmail: string;
+  passengerContact: string;
   name: string;
   travelerId: string;
   pax: string;
+  luggageCount: string;
   childSeatRequired: string;
   childSeatCount: string;
   childSeatType: string;
@@ -529,6 +531,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "bookerId"
   | "bookerContact"
   | "bookerEmail"
+  | "passengerContact"
   | "bookingType"
   | "childSeatCount"
   | "childSeatRequired"
@@ -549,6 +552,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "extraStopLocation"
   | "flight"
   | "name"
+  | "luggageCount"
   | "travelerId"
   | "pax"
   | "pickup"
@@ -795,6 +799,7 @@ type BookingRecord = {
   route_summary?: string | null;
   pax: number | null;
   pax_count?: number | null;
+  luggage_count?: number | null;
   passenger_name?: string | null;
   passenger_phone?: string | null;
   customer_display_name?: string | null;
@@ -2958,9 +2963,11 @@ function createInitialBooking(): BookingForm {
     bookerId: "",
     bookerContact: "",
     bookerEmail: "",
+    passengerContact: "",
     name: "",
     travelerId: "",
     pax: "1",
+    luggageCount: "",
     childSeatRequired: "",
     childSeatCount: "",
     childSeatType: "",
@@ -3072,9 +3079,11 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   bookerId: "Verified booker",
   bookerContact: "Booker WhatsApp / Contact",
   bookerEmail: "Booker email (optional)",
+  passengerContact: "Passenger phone",
   name: "Passenger name",
   travelerId: "Verified traveler",
   pax: "Pax",
+  luggageCount: "Number of bags",
   childSeatRequired: "Child seat required",
   childSeatCount: "Child seat count",
   childSeatType: "Child seat type",
@@ -3102,7 +3111,9 @@ const bookingDetailFieldOrder: Array<keyof BookingForm> = [
   "bookerContact",
   "bookerEmail",
   "name",
+  "passengerContact",
   "pax",
+  "luggageCount",
 ];
 
 const tripRouteFieldOrder: Array<keyof BookingForm> = [
@@ -9381,9 +9392,14 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     bookerId: bookingRecord.booker_id ? String(bookingRecord.booker_id) : "",
     bookerContact: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone),
     bookerEmail: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email),
+    passengerContact: clean(bookingRecord.passenger_phone),
     name: getBookingName(bookingRecord),
     travelerId: bookingRecord.traveler_id ? String(bookingRecord.traveler_id) : "",
     pax: String(bookingRecord.pax_count || bookingRecord.pax || 1),
+    luggageCount:
+      safeAdminBookingPersistenceCount(bookingRecord.luggage_count) === null
+        ? ""
+        : String(safeAdminBookingPersistenceCount(bookingRecord.luggage_count)),
     driverId: bookingRecord.driver_id ? String(bookingRecord.driver_id) : "",
     driverName: clean(bookingRecord.driver_name),
     driverContact: clean(bookingRecord.driver_contact),
@@ -9804,14 +9820,20 @@ function buildAdminBookingPersistencePayload(
       contact_phone: clean(bookingValue.bookerContact) || adminDraftContactFallback,
       contact_email: clean(bookingValue.bookerEmail) || null,
       passenger_name: clean(bookingValue.name) || null,
-      passenger_phone: null,
+      passenger_phone: clean(bookingValue.passengerContact) || null,
       flight_no: clean(bookingValue.flight) || null,
       driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId),
       driver_contact: clean(bookingValue.driverContact) || null,
       driver_name: clean(bookingValue.driverName) || null,
       driver_plate_number: clean(bookingValue.driverPlate) || null,
       pax_count: Number(clean(bookingValue.pax)) || null,
-      luggage_count: safeAdminBookingPersistenceCount(options.luggageCountOverride),
+      luggage_count: safeAdminBookingPersistenceCount(
+        options.luggageCountOverride === undefined
+          ? clean(bookingValue.luggageCount)
+            ? Number(bookingValue.luggageCount)
+            : null
+          : options.luggageCountOverride,
+      ),
       customer_special_request: clean(options.customerSpecialRequestOverride) || null,
       vehicle_type_or_category: clean(bookingValue.vehicle) || null,
       customer_facing_status: "Received",
@@ -14289,7 +14311,12 @@ function adminOperationalSnapshotToBookingForm(
       extraStopCount: extraStopCount > 0 ? String(extraStopCount) : "",
       extraStopLocation: stopLocations.join(" > "),
       flight: clean(record.flight_no) || adminSnapshotFlightReference(record),
+      luggageCount:
+        safeAdminBookingPersistenceCount(record.luggage_count) === null
+          ? ""
+          : String(safeAdminBookingPersistenceCount(record.luggage_count)),
       name: passengerDisplayName,
+      passengerContact: clean(record.passenger_phone),
       pax: Number.isInteger(paxCount) && paxCount > 0 ? String(paxCount) : "1",
       pickup: pickupLocation,
       time: dateTimeParts.time,
@@ -26277,13 +26304,13 @@ export default function Home() {
               <input
                 className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                 inputMode={
-                  field === "pax"
+                  field === "pax" || field === "luggageCount"
                     ? "numeric"
-                    : field === "bookerContact" || field === "driverContact"
+                    : field === "bookerContact" || field === "passengerContact" || field === "driverContact"
                       ? "tel"
                       : undefined
                 }
-                min={field === "pax" ? 1 : undefined}
+                min={field === "pax" ? 1 : field === "luggageCount" ? 0 : undefined}
                 data-admin-dispatch-dsp-end-date={field === "dspEndDate" ? "true" : undefined}
                 data-admin-dispatch-dsp-end-time={field === "dspEndTime" ? "true" : undefined}
                 onChange={(event) => update(field, event.target.value)}
@@ -26293,9 +26320,9 @@ export default function Home() {
                     ? "date"
                     : field === "bookerEmail"
                       ? "email"
-                      : field === "bookerContact" || field === "driverContact"
+                      : field === "bookerContact" || field === "passengerContact" || field === "driverContact"
                         ? "tel"
-                        : field === "pax"
+                        : field === "pax" || field === "luggageCount"
                           ? "number"
                           : "text"
                 }

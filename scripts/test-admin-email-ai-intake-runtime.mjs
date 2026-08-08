@@ -375,6 +375,42 @@ const syntheticPrestigeTransport15785Source = Buffer.from(
     "First name Shohei Last name Ogasawara E-mail address hyunsoostar@hotmail.com Phone number +818024138363 Passangers 3 Flight No. SQ620",
   ].join("\r\n"),
 );
+const syntheticPrestigeTransport15787Source = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-prestige-transport-15787@example.test>",
+    "Date: Fri, 7 Aug 2026 12:00:00 +0000",
+    'Subject: New booking "Prestige Transport 15787" has been received',
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "GENERAL",
+    "Title Prestige Transport 15787 Service type Airport transfer Transfer type One Way Pickup date and time 19-08-2026 10:00",
+    "Order total amount S$120.00 Taxes S$0.00 (0%) Distance 12.8 km Duration 24 minutes",
+    "Comment 1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk)",
+    "ROUTE",
+    "Route name Airport Departure",
+    "ROUTE LOCATIONS",
+    "6 Suffolk Walk, Singapore 307464",
+    "PICK UP LOCATION",
+    "26 Newton Rd, Singapore 307957",
+    "VEHICLE",
+    "Vehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4",
+    "EXTRA",
+    "1 x Waypoint 1 - S$25.00",
+    "CLIENT DETAILS",
+    "First name Pui Yu Last name Chan E-mail address hyunsoostar@hotmail.com Phone number +6596389322 Passangers 2 Flight No. SQ958",
+    "PAYMENT",
+    "Stripe",
+  ].join("\r\n"),
+);
+const syntheticPrestigeTransport15787Body = syntheticPrestigeTransport15787Source
+  .toString()
+  .split("\r\n\r\n")[1]
+  .replaceAll("\r\n", "\n");
 
 const fakeMailbox = {
   messages: [],
@@ -468,10 +504,104 @@ class FakeOpenAI {
       const isPrestigeTransport15785 = body.input.includes(
         'New booking "Prestige Transport 15785" has been received',
       );
+      const isPrestigeTransport15787 = body.input.includes(
+        'New booking "Prestige Transport 15787" has been received',
+      );
+      const supportsCompleteSemanticBookingContract =
+        body.instructions.includes(
+          "Read the complete email before producing the structured booking result.",
+        ) &&
+        body.instructions.includes("passengerContact") &&
+        body.instructions.includes("bagCount") &&
+        body.instructions.includes("extraStopCount");
       const isGroundBooker = body.input.includes(
         "Synthetic GroundBooker confirmed booking",
       );
-      const analysis = isPrestigeTransport15784 || isPrestigeTransport15785
+      const analysis = isPrestigeTransport15787
+        ? supportsCompleteSemanticBookingContract
+          ? {
+              bookingResult: {
+                bookings: [
+                  {
+                    bagCount: "3",
+                    bookerContact: "+6596389322",
+                    bookerEmail: "hyunsoostar@hotmail.com",
+                    bookerName: "Pui Yu Chan",
+                    bookingType: "DEP",
+                    companyAccount: "",
+                    confidence: 0.94,
+                    customerPriceOverride: "",
+                    dropoff: "Changi Airport",
+                    extraStopCount: "1",
+                    extraStopLocation: "6 Suffolk Walk, Singapore 307464",
+                    extraStops: "",
+                    flightNumber: "SQ958",
+                    needsReviewReasons: ["Airport terminal not specified."],
+                    notes:
+                      "1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
+                    passengerContact: "+6596389322",
+                    passengerName: "Pui Yu Chan",
+                    pax: "2",
+                    pickup: "26 Newton Rd, Singapore 307957",
+                    pickupDate: "2026-08-19",
+                    pickupTime: "10:00",
+                    vehicle: "Toyota Alphard 2.5",
+                  },
+                ],
+                multipleBookingsDetected: false,
+                rawWarnings: [],
+              },
+              classification: "confirmed_booking",
+              confidence: 0.94,
+              reviewReasons: ["Airport terminal not specified."],
+              suggestedReply: "",
+              summary: "Prestige Transport 15787 airport departure for Pui Yu Chan.",
+            }
+          : {
+            bookingResult: {
+              bookings: [
+                {
+                  bookerContact: "+6596389322",
+                  bookerEmail: "hyunsoostar@hotmail.com",
+                  bookerName: "Pui Yu Chan",
+                  bookingType: "DEP",
+                  companyAccount: "",
+                  confidence: 0.87,
+                  customerPriceOverride: "120.00 SGD",
+                  dropoff: "",
+                  extraStopLocation: "",
+                  extraStops: "1 waypoint",
+                  flightNumber: "SQ958",
+                  needsReviewReasons: [
+                    "Airport drop-off missing.",
+                    "Waypoint location missing.",
+                    "Client details list 2 passengers versus vehicle capacity 4.",
+                    "Booker name requires confirmation.",
+                  ],
+                  notes: "Airport Departure; one way; second pickup: 6 Suffolk Walk, Singapore 307464; order total S$120.00; comment: 1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
+                  passengerName: "Pui Yu Chan",
+                  pax: "2",
+                  pickup: "26 Newton Rd, Singapore 307957",
+                  pickupDate: "2026-08-19",
+                  pickupTime: "10:00",
+                  vehicle: "Toyota Alphard 2.5",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.87,
+            reviewReasons: [
+              "Airport drop-off missing.",
+              "Waypoint location missing.",
+              "Client details list 2 passengers versus vehicle capacity 4.",
+              "Booker name requires confirmation.",
+            ],
+            suggestedReply: "",
+            summary: "Prestige Transport 15787 airport departure for Pui Yu Chan.",
+          }
+        : isPrestigeTransport15784 || isPrestigeTransport15785
         ? {
             bookingResult: {
               bookings: [
@@ -951,13 +1081,87 @@ try {
     "email_confirmed_booking",
   ]);
 
+  fakeMailbox.uidNext = 108;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticPrestigeTransport15787Source.length,
+    source: syntheticPrestigeTransport15787Source,
+    uid: 107,
+  });
+
+  const prestigeTransport15787Parsed = await runtime.runAdminEmailAiIntake();
+  assert.equal(prestigeTransport15787Parsed.ok, true);
+  assert.equal(intakeRows.length, 7);
+  assert.match(
+    providerRequestBodies[6].instructions,
+    /Read the complete email before producing the structured booking result\./,
+  );
+  assert.match(
+    providerRequestBodies[6].input,
+    /Comment 1st Pick up: Ms\. Chan \(26 Newton Road\), 2nd Pick up: Mr\. Kim \(6 Suffolk Walk\)/,
+  );
+  assert.equal(
+    providerRequestBodies[6].input,
+    `Subject:\nNew booking "Prestige Transport 15787" has been received\n\nEmail body:\n${syntheticPrestigeTransport15787Body}`,
+    "The complete parsed original email body must reach the AI contract without omitted or reordered sections.",
+  );
+  assert.match(
+    providerRequestBodies[6].input,
+    /ROUTE LOCATIONS\s+6 Suffolk Walk, Singapore 307464\s+PICK UP LOCATION\s+26 Newton Rd, Singapore 307957/,
+  );
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookerName, "Kim Hyun Soo");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].passengerName, "Pui Yu Chan");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].passengerContact, "+6596389322");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bagCount, "3");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].pax, "2");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookingType, "DEP");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].dropoff, "Changi Airport");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].extraStopCount, "1");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].customerPriceOverride, "");
+  assert.equal(
+    intakeRows[6].booking_parse_result.bookings[0].extraStopLocation,
+    "6 Suffolk Walk, Singapore 307464",
+    "The exact Prestige Transport Comment and ROUTE LOCATIONS waypoint must survive Email AI canonicalization.",
+  );
+  assert.doesNotMatch(
+    intakeRows[6].booking_parse_result.bookings[0].needsReviewReasons.join("\n"),
+    /Waypoint location missing|Booker name requires confirmation|passengers versus vehicle capacity/i,
+  );
+  assert.doesNotMatch(
+    intakeRows[6].review_reasons.join("\n"),
+    /Waypoint location missing|Booker name requires confirmation|passengers versus vehicle capacity/i,
+  );
+  assert.deepEqual(intakeRows[6].review_reasons, ["Airport terminal not specified."]);
+  assert.doesNotMatch(intakeRows[6].canonical_booking_text, /Changi Airport T\d/i);
+  assert.match(intakeRows[6].canonical_booking_text, /^Passenger contact: \+6596389322$/m);
+  assert.match(intakeRows[6].canonical_booking_text, /^Bags: 3$/m);
+  assert.match(intakeRows[6].canonical_booking_text, /^Extra stop count: 1$/m);
+  assert.doesNotMatch(
+    intakeRows[6].canonical_booking_text,
+    /Customer price:\s*(?:120|S\$)|Stripe/i,
+  );
+  assert.match(
+    intakeRows[6].canonical_booking_text,
+    /^Extra stop: 6 Suffolk Walk, Singapore 307464$/m,
+  );
+  assert.doesNotMatch(
+    intakeRows[6].canonical_booking_text,
+    /^Extra stops?: 1 waypoint$/m,
+  );
+  assert.match(intakeRows[6].canonical_booking_text, /^Booker: Kim Hyun Soo$/m);
+  assert.match(intakeRows[6].canonical_booking_text, /^Contact: \+65 98156017$/m);
+
   const blockedSource = Buffer.from(
     syntheticAllowedSource
       .toString()
       .replaceAll("info@prestigelimo.sg", "other@example.test")
       .replace("synthetic-booking-1", "synthetic-booking-2"),
   );
-  fakeMailbox.uidNext = 108;
+  fakeMailbox.uidNext = 109;
   fakeMailbox.messages.push({
     envelope: {
       from: [{ address: "other@example.test" }],
@@ -965,20 +1169,20 @@ try {
     },
     size: blockedSource.length,
     source: blockedSource,
-    uid: 107,
+    uid: 108,
   });
 
   const skipped = await runtime.runAdminEmailAiIntake();
   assert.equal(skipped.ok, true);
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
-  assert.equal(providerRequestBodies.length, 6);
-  assert.equal(downloadCalls, 6, "blocked sender body must not be fetched");
-  assert.equal(intakeRows.length, 6);
+  assert.equal(providerRequestBodies.length, 7);
+  assert.equal(downloadCalls, 7, "blocked sender body must not be fetched");
+  assert.equal(intakeRows.length, 7);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 5);
+  assert.equal(loaded.data.records.length, 6);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
   assert.equal(
     loaded.data.records[1].sender_address,
@@ -986,10 +1190,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 600,
+    input_tokens: 700,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 480,
-    total_tokens: 1080,
+    output_tokens: 560,
+    total_tokens: 1260,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -1020,8 +1224,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 5);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 1080);
+  assert.equal(allowedReadBody.records.length, 6);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 1260);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -1115,7 +1319,7 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 4);
+  assert.equal(afterReviewRecords.length, 5);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",
@@ -1159,7 +1363,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 6);
+  assert.equal(providerRequestBodies.length, 7);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

@@ -11,8 +11,10 @@ export type ParsedBooking = {
   booker?: string;
   bookerContact?: string;
   bookerEmail?: string;
+  passengerContact?: string;
   name?: string;
   pax?: string;
+  luggageCount?: string;
   childSeatRequired?: string;
   childSeatCount?: string;
   childSeatType?: string;
@@ -2328,7 +2330,7 @@ function detectExtraStopDetails(text: string) {
     "route location",
     "route locations",
   ]);
-  const labeledExtraStop = cleanLocation(lineValue(text, [
+  const labeledExtraStop = clean(lineValue(text, [
     "extra stop",
     "extra stops",
     "extra stop location",
@@ -2347,6 +2349,7 @@ function detectExtraStopDetails(text: string) {
     : 0;
   const explicitCount = firstMatch(text, [
     /\b(\d{1,2})[ \t]+extra[ \t]+stops?\b/i,
+    /\bextra[ \t]+stop[ \t]+count[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
     /\bextra[ \t]+stops?[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
     /\b(\d{1,2})\s*x\s+waypoints?\b/i,
   ]);
@@ -3716,6 +3719,14 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const childSeatType = detectChildSeatType(operationalText);
   const childSeatCount = detectChildSeatCount(operationalText);
   const extraStopDetails = multiStopItinerary || detectExtraStopDetails(operationalText);
+  const passengerContact = lineValue(operationalText, [
+    "passenger contact",
+    "passenger phone",
+  ]);
+  const luggageCount = firstMatch(
+    lineValue(operationalText, ["bags", "bag count", "luggage count"]),
+    [/\b(\d{1,2})\b/],
+  );
   const bookingType =
     lineValue(operationalText, ["booking type", "type", "job type"]) ||
     (multiStopItinerary ? "DSP" : detectBookingType(operationalText, flight, routeValues));
@@ -3748,6 +3759,8 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     bookerEmail: email,
     name,
     pax: terminalFlightDetails?.pax || detectPax(operationalText),
+    ...(passengerContact ? { passengerContact } : {}),
+    ...(luggageCount ? { luggageCount } : {}),
     driverName: lineValue(operationalText, ["driver", "driver name", "chauffeur"]) || standbyDriver,
     driverContact: lineValue(operationalText, [
       "driver contact",

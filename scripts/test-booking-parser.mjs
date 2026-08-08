@@ -100,6 +100,43 @@ assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.bookerContact, '+6
 assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.name, 'Shohei Ogasawara');
 assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.bookingType, 'DEP');
 
+const prestigeTransport15787Canonical = `Booking type: DEP
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Pui Yu Chan
+Passenger contact: +6596389322
+Pax: 2
+Bags: 3
+Vehicle: Toyota Alphard 2.5
+Pickup date: 2026-08-19
+Pickup time: 10:00
+Flight: SQ958
+Pickup: 26 Newton Rd, Singapore 307957
+Drop-off: Changi Airport
+Extra stop count: 1
+Extra stop: 6 Suffolk Walk, Singapore 307464
+Notes: 1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).`;
+const parsedPrestigeTransport15787Canonical = parseJobCardBookingMessage(
+  prestigeTransport15787Canonical,
+  { referenceDate: new Date('2026-08-08T12:00:00+08:00') },
+) ?? {};
+assert.equal(parsedPrestigeTransport15787Canonical.booker, 'Kim Hyun Soo');
+assert.equal(parsedPrestigeTransport15787Canonical.bookerContact, '+65 98156017');
+assert.equal(parsedPrestigeTransport15787Canonical.name, 'Pui Yu Chan');
+assert.equal(parsedPrestigeTransport15787Canonical.passengerContact, '+6596389322');
+assert.equal(parsedPrestigeTransport15787Canonical.luggageCount, '3');
+assert.equal(parsedPrestigeTransport15787Canonical.pax, '2');
+assert.equal(parsedPrestigeTransport15787Canonical.bookingType, 'DEP');
+assert.equal(parsedPrestigeTransport15787Canonical.dropoff, 'Changi Airport');
+assert.equal(parsedPrestigeTransport15787Canonical.extraStopCount, '1');
+assert.equal(
+  parsedPrestigeTransport15787Canonical.extraStopLocation,
+  '6 Suffolk Walk, Singapore 307464',
+);
+assert.equal(parsedPrestigeTransport15787Canonical.customerPriceOverride ?? '', '');
+assert.equal(parsedPrestigeTransport15787Canonical.customerPriceOverrideReason ?? '', '');
+
 const expected = {
   success: true,
   company: 'UOB',
@@ -1079,6 +1116,7 @@ assert.deepEqual(parsedStructuredAirportArrivalForm, {
   bookerEmail: 'yasuko.kunisawa@ubs.com',
   name: 'Zenji Nakamura',
   pax: '1',
+  luggageCount: '3',
   customerPriceOverride: '105',
   customerPriceOverrideReason: 'Parsed from message: S$105.00',
   driverName: '',

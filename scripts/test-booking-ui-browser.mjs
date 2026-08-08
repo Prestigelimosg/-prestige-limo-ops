@@ -178,45 +178,50 @@ const dashboardEmailAiConfirmedBookingFixture = {
   booking_parse_result: {
     bookings: [
       {
-        bookerContact: "",
-        bookerEmail: "",
-        bookerName: "",
-        bookingType: "MNG",
+        bagCount: "3",
+        bookerContact: "+65 98156017",
+        bookerEmail: "hyunsoostar@hotmail.com",
+        bookerName: "Kim Hyun Soo",
+        bookingType: "DEP",
         companyAccount: "",
-        confidence: 0.98,
+        confidence: 0.94,
         customerPriceOverride: "",
-        dropoff: "Synthetic Hotel",
-        extraStopLocation: "",
+        dropoff: "Changi Airport",
+        extraStopCount: "1",
+        extraStopLocation: "6 Suffolk Walk, Singapore 307464",
         extraStops: "",
-        flightNumber: "",
-        needsReviewReasons: ["Flight number missing"],
-        notes: "",
-        passengerName: "EMAIL AI TEST PASSENGER",
-        pax: "1",
-        pickup: "Changi Airport",
-        pickupDate: "2026-07-28",
-        pickupTime: "12:00",
-        vehicle: "AVF",
+        flightNumber: "SQ958",
+        needsReviewReasons: ["Airport terminal not specified."],
+        notes:
+          "1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
+        passengerContact: "+6596389322",
+        passengerName: "Pui Yu Chan",
+        pax: "2",
+        pickup: "26 Newton Rd, Singapore 307957",
+        pickupDate: "2026-08-19",
+        pickupTime: "10:00",
+        vehicle: "Toyota Alphard 2.5",
       },
     ],
     multipleBookingsDetected: false,
     rawWarnings: [],
   },
   canonical_booking_text:
-    "Booking type: MNG\nPassenger: EMAIL AI TEST PASSENGER\nPax: 1\nVehicle: AVF\nPickup date: 2026-07-28\nPickup time: 12:00\nPickup: Changi Airport\nDrop-off: Synthetic Hotel",
+    "Booking type: DEP\nBooker: Kim Hyun Soo\nBooker email: hyunsoostar@hotmail.com\nContact: +65 98156017\nPassenger: Pui Yu Chan\nPassenger contact: +6596389322\nPax: 2\nBags: 3\nVehicle: Toyota Alphard 2.5\nPickup date: 2026-08-19\nPickup time: 10:00\nFlight: SQ958\nPickup: 26 Newton Rd, Singapore 307957\nDrop-off: Changi Airport\nExtra stop count: 1\nExtra stop: 6 Suffolk Walk, Singapore 307464\nNotes: 1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
   classification: "confirmed_booking",
-  confidence: 0.98,
+  confidence: 0.94,
   created_at: "2026-07-27T13:30:00.000Z",
   id: "00000000-0000-4000-8000-000000000101",
   mailbox_address: "booking@prestigelimo.sg",
-  normalized_text: "Synthetic confirmed booking for test only.",
+  normalized_text:
+    "GENERAL\nPrestige Transport 15787\nComment 1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk)\nROUTE LOCATIONS\n6 Suffolk Walk, Singapore 307464\nPICK UP LOCATION\n26 Newton Rd, Singapore 307957\nVEHICLE\nVehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4\nCLIENT DETAILS\nPui Yu Chan hyunsoostar@hotmail.com +6596389322 Passangers 2 SQ958\nPAYMENT\nStripe",
   processing_status: "queued",
   received_at: "2026-07-27T13:29:00.000Z",
-  review_reasons: ["Flight number missing"],
-  sender_address: "transzend@groundbooker.com",
-  subject: "Synthetic confirmed booking",
-  suggested_reply: "Thank you. We have received the booking for review.",
-  summary: "Confirmed airport booking requires flight-number review.",
+  review_reasons: ["Airport terminal not specified."],
+  sender_address: "info@prestigelimo.sg",
+  subject: 'New booking "Prestige Transport 15787" has been received',
+  suggested_reply: "",
+  summary: "Prestige Transport 15787 airport departure for Pui Yu Chan.",
 };
 const dashboardEmailAiEnquiryFixture = {
   booking_parse_result: {
@@ -8500,7 +8505,7 @@ async function runChromeTest() {
     );
     assert.match(
       emailAiDashboardState.rowTexts.join(" "),
-      /From transzend@groundbooker\.com/,
+      /From info@prestigelimo\.sg/,
     );
     assert.match(
       emailAiDashboardState.rowTexts.join(" "),
@@ -8547,7 +8552,7 @@ async function runChromeTest() {
             (button) => button.textContent.trim() === "Create Job Card",
           );
 
-          return dispatchTab && textarea?.value.includes("EMAIL AI TEST PASSENGER") && draft
+          return dispatchTab && textarea?.value.includes("Pui Yu Chan") && draft
             ? {
                 createJobCardDisabled: createJobCardButton?.disabled,
                 draftText: draft.textContent.replace(/\\s+/g, " ").trim(),
@@ -8569,8 +8574,86 @@ async function runChromeTest() {
     );
     assert.match(
       emailBookingDispatchState.textareaValue,
-      /Booking type: MNG/,
+      /Booking type: DEP/,
     );
+
+    const createdEmailBookingDraft = await evaluate(`(() => {
+      const createJobCardButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!createJobCardButton || createJobCardButton.disabled) {
+        return false;
+      }
+
+      createJobCardButton.click();
+      return true;
+    })()`);
+    assert.equal(createdEmailBookingDraft, true);
+
+    const emailBookingMappedState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const valueByLabel = (labelText) => {
+            const label = [...document.querySelectorAll("label")].find((candidate) =>
+              [...candidate.children].some(
+                (child) =>
+                  child.tagName === "SPAN" &&
+                  child.textContent.replace(/\\s+\\*/g, "").trim() === labelText,
+              ),
+            );
+
+            return label?.querySelector("input, select")?.value || "";
+          };
+          const state = {
+            bookingType: valueByLabel("Service Type"),
+            booker: valueByLabel("Booker"),
+            bookerContact: valueByLabel("Booker WhatsApp / Contact"),
+            bookerEmail: valueByLabel("Booker email (optional)"),
+            date: valueByLabel("Pickup date"),
+            dropoff: valueByLabel("Drop-off"),
+            extraStopCount: valueByLabel("Extra Stops"),
+            extraStopLocation: valueByLabel("Extra stop location"),
+            flight: valueByLabel("Flight number"),
+            luggageCount: valueByLabel("Number of bags"),
+            name: valueByLabel("Passenger name"),
+            passengerContact: valueByLabel("Passenger phone"),
+            pax: valueByLabel("Pax"),
+            pickup: valueByLabel("Pickup"),
+            time: valueByLabel("Pickup time"),
+            vehicle: valueByLabel("Vehicle Type"),
+          };
+          return state.name === "Pui Yu Chan" && state.extraStopLocation
+            ? {
+                ...state,
+                nonReadRequestMethods: (window.__prestigeFetchCalls || [])
+                  .map((request) => request.method || "GET")
+                  .filter((method) => method !== "GET"),
+              }
+            : false;
+        })()`),
+      10000,
+      "Prestige Transport 15787 canonical fields mapped into existing Booking Details",
+    );
+    assert.deepEqual(emailBookingMappedState, {
+      bookingType: "DEP",
+      booker: "Kim Hyun Soo",
+      bookerContact: "+65 98156017",
+      bookerEmail: "hyunsoostar@hotmail.com",
+      date: "2026-08-19",
+      dropoff: "Changi Airport",
+      extraStopCount: "1",
+      extraStopLocation: "6 Suffolk Walk, Singapore 307464",
+      flight: "SQ958",
+      luggageCount: "3",
+      name: "Pui Yu Chan",
+      nonReadRequestMethods: [],
+      passengerContact: "+6596389322",
+      pax: "2",
+      pickup: "26 Newton Rd, Singapore 307957",
+      time: "1000hrs",
+      vehicle: "AVF",
+    });
 
     await clickTab("Dashboard", "Operations Dashboard");
     const ignoredEmailEnquiryState = await evaluate(`(() => ({

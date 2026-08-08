@@ -180,6 +180,17 @@ assert.match(runtimeSource, /uncertain/);
 assert.match(runtimeSource, /Always return suggestedReply as an empty string/);
 assert.match(
   runtimeSource,
+  /Read the complete email before producing the structured booking result\./,
+);
+assert.match(runtimeSource, /passengerContact/);
+assert.match(runtimeSource, /bagCount/);
+assert.match(runtimeSource, /extraStopCount/);
+assert.match(runtimeSource, /A vehicle's passenger count is capacity and must never replace pax\./);
+assert.match(runtimeSource, /never a generic label such as 1 waypoint/);
+assert.match(runtimeSource, /never invent a terminal/);
+assert.doesNotMatch(runtimeSource, /from "\.\/booking-parser"/);
+assert.match(
+  runtimeSource,
   /Content under a PAYMENT heading is payment metadata only\./,
 );
 assert.match(
@@ -311,7 +322,12 @@ assert.match(browserTestSource, /compact monthly Email AI token usage/);
 assert.match(browserTestSource, /dashboardOverdueSingaporeMidnightMs/);
 assert.match(browserTestSource, /successful Save \+ CRM to close the exact Email AI intake/);
 assert.match(browserTestSource, /Email AI badge to update after successful Save \+ CRM/);
-assert.match(browserTestSource, /From transzend@groundbooker\\\.com/);
+assert.match(browserTestSource, /From info@prestigelimo\\\.sg/);
+assert.match(browserTestSource, /Prestige Transport 15787 canonical fields mapped into existing Booking Details/);
+assert.match(pageSource, /passenger_phone: clean\(bookingValue\.passengerContact\) \|\| null/);
+assert.match(pageSource, /bookingValue\.luggageCount/);
+assert.match(pageSource, /passengerContact: clean\(record\.passenger_phone\)/);
+assert.match(pageSource, /safeAdminBookingPersistenceCount\(record\.luggage_count\)/);
 
 assert.match(ledgerSource, /### Private Semantic Email AI Intake/);
 assert.match(ledgerSource, /booking@prestigelimo\.sg/);

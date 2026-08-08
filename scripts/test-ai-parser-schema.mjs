@@ -8,11 +8,13 @@ import {
 assert.deepEqual(allowedAiBookingTypes, ["MNG", "DEP", "TRF", "DSP"]);
 
 const bookingFields = [
+  "bagCount",
   "bookingType",
   "companyAccount",
   "bookerName",
   "bookerEmail",
   "bookerContact",
+  "passengerContact",
   "passengerName",
   "pax",
   "vehicle",
@@ -21,6 +23,7 @@ const bookingFields = [
   "flightNumber",
   "pickup",
   "dropoff",
+  "extraStopCount",
   "extraStopLocation",
   "extraStops",
   "customerPriceOverride",
@@ -61,11 +64,13 @@ const validResult = sanitizeAiParseResult({
   multipleBookingsDetected: false,
   bookings: [
     {
+      bagCount: " 2 ",
       bookingType: "mng",
       companyAccount: " Warburg Pincus ",
       bookerName: " Jill Van Cook ",
       bookerEmail: " jill@example.com ",
       bookerContact: " 917-734-5070 ",
+      passengerContact: " +65 9000 1111 ",
       passengerName: " Mark Colodny ",
       pax: 2,
       vehicle: " Sedan ",
@@ -74,6 +79,7 @@ const validResult = sanitizeAiParseResult({
       flightNumber: " SG 423 ",
       pickup: " Singapore Changi Airport ",
       dropoff: " The Ritz ",
+      extraStopCount: " 0 ",
       extraStopLocation: " ",
       extraStops: " 0 ",
       customerPriceOverride: " ",
@@ -89,11 +95,13 @@ assert.deepEqual(validResult, {
   multipleBookingsDetected: false,
   bookings: [
     {
+      bagCount: "2",
       bookingType: "MNG",
       companyAccount: "Warburg Pincus",
       bookerName: "Jill Van Cook",
       bookerEmail: "jill@example.com",
       bookerContact: "917-734-5070",
+      passengerContact: "+65 9000 1111",
       passengerName: "Mark Colodny",
       pax: "2",
       vehicle: "Sedan",
@@ -102,6 +110,7 @@ assert.deepEqual(validResult, {
       flightNumber: "SG423",
       pickup: "Singapore Changi Airport",
       dropoff: "The Ritz",
+      extraStopCount: "0",
       extraStopLocation: "",
       extraStops: "0",
       customerPriceOverride: "",

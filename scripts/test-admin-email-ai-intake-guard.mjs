@@ -209,6 +209,12 @@ assert.match(runtimeSource, /\+65 98156017/);
 assert.match(runtimeSource, /enforcePrestigeTransportKnownBookerEmail/);
 assert.match(runtimeSource, /isResolvedKnownBookerReason/);
 assert.match(runtimeSource, /enforceResolvedStructuredReviewReasons/);
+assert.match(runtimeSource, /enforceStructuredPickupSeparation/);
+assert.match(runtimeSource, /AI combined the primary pickup and extra stop/);
+assert.match(
+  runtimeSource,
+  /PICK UP LOCATION is the primary pickup only[\s\S]*ROUTE LOCATIONS[\s\S]*extraStopLocation/,
+);
 assert.match(runtimeSource, /hasSpecificStructuredExtraStop/);
 assert.doesNotMatch(
   runtimeSourceWithoutEmailInstructions,

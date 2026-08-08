@@ -394,9 +394,9 @@ const syntheticPrestigeTransport15787Source = Buffer.from(
     "ROUTE",
     "Route name Airport Departure",
     "ROUTE LOCATIONS",
-    "6 Suffolk Walk, Singapore 307464",
+    "6 Suffolk Walk, 싱가포르 6 Suffolk Walk, Singapore 307464",
     "PICK UP LOCATION",
-    "26 Newton Rd, Singapore 307957",
+    "26 Newton Rd, 싱가포르 307957",
     "VEHICLE",
     "Vehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4",
     "EXTRA",
@@ -546,7 +546,8 @@ class FakeOpenAI {
                     passengerContact: "+6596389322",
                     passengerName: "Pui Yu Chan",
                     pax: "2",
-                    pickup: "26 Newton Rd, Singapore 307957",
+                    pickup:
+                      "26 Newton Rd, Singapore 307957; 6 Suffolk Walk, Singapore 307464",
                     pickupDate: "19-08-2026",
                     pickupTime: "10:00",
                     vehicle: "Toyota Alphard 2.5",
@@ -787,7 +788,11 @@ class FakeOpenAI {
 
 try {
   for (const name of Object.keys(sourcePaths)) {
-    const source = await readFile(sourcePaths[name], "utf8");
+    let source = await readFile(sourcePaths[name], "utf8");
+    if (name === "runtime") {
+      source +=
+        "\nexport { enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation };\n";
+    }
     await mkdir(path.dirname(targetPaths[name]), { recursive: true });
     await writeFile(
       targetPaths[name],
@@ -835,6 +840,44 @@ try {
   });
 
   const runtime = createRequire(import.meta.url)(targetPaths.runtime);
+
+  const unsafeCombinedPickup = runtime.testEnforceStructuredPickupSeparation({
+    bookingResult: {
+      bookings: [
+        {
+          extraStopCount: "1",
+          extraStopLocation: "6 Suffolk Walk, Singapore 307464",
+          needsReviewReasons: ["Airport terminal not specified."],
+          pickup: "6 Suffolk Walk Singapore 307464",
+        },
+      ],
+      multipleBookingsDetected: false,
+      rawWarnings: [],
+    },
+    classification: "confirmed_booking",
+    confidence: 0.8,
+    reviewReasons: ["Airport terminal not specified."],
+    suggestedReply: "",
+    summary: "Unsafe combined pickup test.",
+  });
+  assert.equal(
+    unsafeCombinedPickup.bookingResult.bookings[0].pickup,
+    "",
+    "An inseparable pickup/waypoint overlap must fail visibly instead of keeping a wrong primary pickup.",
+  );
+  assert.match(
+    unsafeCombinedPickup.bookingResult.bookings[0].needsReviewReasons.join("\n"),
+    /AI combined the primary pickup and extra stop; confirm the primary pickup before Create Job Card\./,
+  );
+  assert.match(
+    unsafeCombinedPickup.reviewReasons.join("\n"),
+    /AI combined the primary pickup and extra stop; confirm the primary pickup before Create Job Card\./,
+  );
+  assert.match(
+    unsafeCombinedPickup.reviewReasons.join("\n"),
+    /Airport terminal not specified\./,
+    "Unrelated review reasons must survive the fail-visible location guard.",
+  );
 
   process.env.PRESTIGE_EMAIL_AI_ENABLED = "false";
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1121,7 +1164,7 @@ try {
   );
   assert.match(
     providerRequestBodies[6].input,
-    /ROUTE LOCATIONS\s+6 Suffolk Walk, Singapore 307464\s+PICK UP LOCATION\s+26 Newton Rd, Singapore 307957/,
+    /ROUTE LOCATIONS\s+6 Suffolk Walk, 싱가포르 6 Suffolk Walk, Singapore 307464\s+PICK UP LOCATION\s+26 Newton Rd, 싱가포르 307957/,
   );
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookerName, "Kim Hyun Soo");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
@@ -1131,6 +1174,11 @@ try {
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].pax, "2");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookingType, "DEP");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].pickupDate, "2026-08-19");
+  assert.equal(
+    intakeRows[6].booking_parse_result.bookings[0].pickup,
+    "26 Newton Rd, Singapore 307957",
+    "A provider-combined waypoint must be removed from the primary pickup before Dispatch mapping.",
+  );
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].dropoff, "Changi Airport");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].extraStopCount, "1");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].customerPriceOverride, "");
@@ -1169,6 +1217,10 @@ try {
   assert.match(
     intakeRows[6].canonical_booking_text,
     /^Extra stop: 6 Suffolk Walk, Singapore 307464$/m,
+  );
+  assert.doesNotMatch(
+    intakeRows[6].canonical_booking_text,
+    /^Pickup: .*6 Suffolk Walk, Singapore 307464$/m,
   );
   assert.doesNotMatch(
     intakeRows[6].canonical_booking_text,

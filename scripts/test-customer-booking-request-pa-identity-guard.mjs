@@ -61,9 +61,11 @@ assert.match(
 );
 
 assert.ok(
-  appSmoke.includes('await setCustomerBookingField("luggage", "2 bags");') &&
+  appSmoke.includes(
+    'await setCustomerBookingField("luggage", "2");\n      await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time after edit");',
+  ) &&
     appSmoke.includes('second valid customer booking request for same pickup date/time after edit') &&
-    appSmoke.includes('await setCustomerBookingField("luggage", "2 bags retry");'),
+    appSmoke.includes('await setCustomerBookingField("luggage", "3");'),
   "Browser repeat and disabled-intake checks must edit a safe field before retrying the protected submitted form.",
 );
 

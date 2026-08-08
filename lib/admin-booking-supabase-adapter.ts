@@ -136,7 +136,7 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingCurrentLoadSelectWithoutPublicReference =
   adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
@@ -549,6 +549,12 @@ function integerOrNull(value: unknown) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function luggageCountOrNull(value: unknown) {
+  const parsed = integerOrNull(value);
+
+  return parsed !== null && parsed <= 2_147_483_647 ? parsed : null;
+}
+
 function positiveIntegerOrFallback(value: unknown, fallback = 1) {
   const parsed = integerOrNull(value);
 
@@ -959,6 +965,7 @@ function bookingToDbRow(
     driver_name: textOrNull(booking.driver_name),
     driver_plate_number: textOrNull(booking.driver_plate_number),
     pax_count: integerOrNull(booking.pax_count),
+    luggage_count: luggageCountOrNull(booking.luggage_count),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     admin_internal_status: normalizeAdminInternalStatus(booking.admin_internal_status),
     customer_facing_status: normalizeCustomerFacingStatus(booking.customer_facing_status),
@@ -1017,7 +1024,7 @@ function bookingToFoundationDbRow(
     driver_name: currentRow.driver_name,
     driver_plate_number: currentRow.driver_plate_number,
     pax_count: integerOrNull(booking.pax_count),
-    luggage_count: integerOrNull(booking.luggage_count),
+    luggage_count: currentRow.luggage_count,
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     customer_facing_status: currentRow.customer_facing_status,
     admin_internal_status: currentRow.admin_internal_status,
@@ -1166,7 +1173,7 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     driver_name: textOrNull(row.driver_name),
     driver_plate_number: textOrNull(row.driver_plate_number),
     pax_count: integerOrNull(row.pax_count),
-    luggage_count: integerOrNull(row.luggage_count),
+    luggage_count: luggageCountOrNull(row.luggage_count),
     vehicle_type_or_category: textOrNull(row.vehicle_type_or_category),
     customer_facing_status: customerStatusToUi(row.customer_facing_status),
     admin_internal_status: adminStatusToUi(row.admin_internal_status),

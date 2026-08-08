@@ -164,7 +164,6 @@ assertFragmentOrder(
   [
     'data-customer-booking-field="extraStops"',
     'data-customer-booking-return-trip-control="true"',
-    'data-customer-booking-field="specialRequest"',
   ],
   "/book customer trip details order",
 );

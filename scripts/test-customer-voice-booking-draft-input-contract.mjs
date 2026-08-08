@@ -234,12 +234,12 @@ assertIncludes(
 
 assertSameList(
   extractTypeKeys(bookPage, "BookingRequestForm"),
-  [...safeCustomerBookingFields, "specialRequest"],
+  safeCustomerBookingFields,
   "/book BookingRequestForm fields",
 );
 assertSameList(
   extractObjectKeys(bookPage, "initialForm"),
-  [...safeCustomerBookingFields, "specialRequest"],
+  safeCustomerBookingFields,
   "/book initial form fields",
 );
 assertSameList(

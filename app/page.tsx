@@ -9693,6 +9693,7 @@ function buildAdminBookingPersistencePayload(
   options: {
     customerDisplayNameOverride?: string | null;
     hotelAgencyFolderCreateOverride?: boolean;
+    luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
   } = {},
 ): AdminBookingPersistenceRequestBody {
@@ -9807,7 +9808,7 @@ function buildAdminBookingPersistencePayload(
       driver_name: clean(bookingValue.driverName) || null,
       driver_plate_number: clean(bookingValue.driverPlate) || null,
       pax_count: Number(clean(bookingValue.pax)) || null,
-      luggage_count: null,
+      luggage_count: safeAdminBookingPersistenceCount(options.luggageCountOverride),
       vehicle_type_or_category: clean(bookingValue.vehicle) || null,
       customer_facing_status: "Received",
       admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
@@ -10017,6 +10018,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
   options: {
     customerDisplayNameOverride?: string | null;
     hotelAgencyFolderCreateOverride?: boolean;
+    luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
   } = {},
 ): AdminDispatchReturnTripPersistencePayload[] {
@@ -21524,12 +21526,19 @@ export default function Home() {
         }));
       }
 
+      const appliedCustomerRequestLuggageCount =
+        appliedAdminBookingSnapshot &&
+        adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
+          ? safeAdminBookingPersistenceCount(appliedAdminBookingSnapshot.luggage_count)
+          : null;
+
       const bookingPayloads = buildAdminDispatchReturnTripPersistencePayloads(
         bookingForSave,
         currentTimeMs,
         {
           customerDisplayNameOverride:
             companyProfileResolution?.companyName || saveCrmCustomerAccountLabel,
+          luggageCountOverride: appliedCustomerRequestLuggageCount,
           parserSourceReferenceOverride: activeAdminEmailAiIntakeId
             ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
             : undefined,
@@ -24535,6 +24544,10 @@ export default function Home() {
       targetBookingReference,
       {
         customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+        luggageCountOverride:
+          acceptingCustomerRequest && appliedSnapshot
+            ? safeAdminBookingPersistenceCount(appliedSnapshot.luggage_count)
+            : null,
       },
     );
 

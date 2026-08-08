@@ -11,6 +11,7 @@ const sourcePaths = {
   contract: path.join(root, "lib/admin-email-ai-intake-contract.ts"),
   schema: path.join(root, "lib/admin-email-ai-intake-schema.ts"),
   aiSchema: path.join(root, "lib/ai-parser-schema.ts"),
+  bookingParser: path.join(root, "lib/booking-parser.ts"),
   route: path.join(root, "app/api/admin-email-ai-intake/route.ts"),
   cronRoute: path.join(root, "app/api/cron/admin-email-ai-intake/route.ts"),
   boundary: path.join(root, "lib/admin-dispatcher-auth-boundary.ts"),
@@ -21,6 +22,7 @@ const targetPaths = {
   contract: path.join(tempDir, "lib/admin-email-ai-intake-contract.js"),
   schema: path.join(tempDir, "lib/admin-email-ai-intake-schema.js"),
   aiSchema: path.join(tempDir, "lib/ai-parser-schema.js"),
+  bookingParser: path.join(tempDir, "lib/booking-parser.js"),
   route: path.join(tempDir, "app/api/admin-email-ai-intake/route.js"),
   cronRoute: path.join(tempDir, "app/api/cron/admin-email-ai-intake/route.js"),
   boundary: path.join(tempDir, "lib/admin-dispatcher-auth-boundary.js"),
@@ -543,7 +545,7 @@ class FakeOpenAI {
                     ],
                     notes:
                       "1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
-                    passengerContact: "+6596389322",
+                    passengerContact: "",
                     passengerName: "Pui Yu Chan",
                     pax: "2",
                     pickup:
@@ -616,6 +618,7 @@ class FakeOpenAI {
             bookingResult: {
               bookings: [
                 {
+                  bagCount: "5",
                   bookerContact: isPrestigeTransport15784
                     ? "+65 98156017"
                     : "+818024138363",
@@ -624,7 +627,7 @@ class FakeOpenAI {
                   bookingType: isPrestigeTransport15784 ? "MNG" : "DEP",
                   companyAccount: "",
                   confidence: 0.96,
-                  customerPriceOverride: isPrestigeTransport15784 ? "115.00 SGD" : "120.00 SGD",
+                  customerPriceOverride: "",
                   dropoff: isPrestigeTransport15784
                     ? "7 Raffles Blvd, Singapore 039595"
                     : "",
@@ -633,6 +636,7 @@ class FakeOpenAI {
                   flightNumber: isPrestigeTransport15784 ? "SQ619" : "SQ620",
                   needsReviewReasons: ["Confirm Booker identity and contact details."],
                   notes: "Organizer: Mr. Kim, Hyun Soo.",
+                  passengerContact: "+818024138363",
                   passengerName: "Shohei Ogasawara",
                   pax: "3",
                   pickup: isPrestigeTransport15784
@@ -657,13 +661,14 @@ class FakeOpenAI {
             bookingResult: {
               bookings: [
                 {
+                  bagCount: "3",
                   bookerContact: "+81352933407",
                   bookerEmail: "yasuko.kunisawa@ubs.com",
                   bookerName: "Zenji Nakamura",
                   bookingType: "MNG",
                   companyAccount: "",
                   confidence: 0.98,
-                  customerPriceOverride: "105.00 SGD",
+                  customerPriceOverride: "",
                   dropoff: "5 Raffles Ave., Singapore 039797",
                   extraStopLocation: "",
                   extraStops: "",
@@ -672,6 +677,7 @@ class FakeOpenAI {
                     "Pickup airport/seaport is not specified.",
                   ],
                   notes: "Bag count: 3.",
+                  passengerContact: "+81352933407",
                   passengerName: "Mr. Zenji Nakamura",
                   pax: "1",
                   pickup: "",
@@ -791,7 +797,7 @@ try {
     let source = await readFile(sourcePaths[name], "utf8");
     if (name === "runtime") {
       source +=
-        "\nexport { enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation };\n";
+        "\nexport { enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation, validateExplicitSourceFactsCompleteness as testValidateExplicitSourceFactsCompleteness };\n";
     }
     await mkdir(path.dirname(targetPaths[name]), { recursive: true });
     await writeFile(
@@ -840,6 +846,8 @@ try {
   });
 
   const runtime = createRequire(import.meta.url)(targetPaths.runtime);
+  const emailAiSchema = createRequire(import.meta.url)(targetPaths.schema);
+  const bookingParser = createRequire(import.meta.url)(targetPaths.bookingParser);
 
   const unsafeCombinedPickup = runtime.testEnforceStructuredPickupSeparation({
     bookingResult: {
@@ -878,6 +886,265 @@ try {
     /Airport terminal not specified\./,
     "Unrelated review reasons must survive the fail-visible location guard.",
   );
+
+  const completeExplicitSourceFactsBooking = {
+    bagCount: "3",
+    bookerContact: "+65 98156017",
+    bookerEmail: "hyunsoostar@hotmail.com",
+    bookerName: "Kim Hyun Soo",
+    bookingType: "DEP",
+    companyAccount: "",
+    customerPriceOverride: "",
+    dropoff: "Changi Airport",
+    extraStopCount: "1",
+    extraStopLocation: "6 Suffolk Walk, Singapore 307464",
+    extraStops: "6 Suffolk Walk, Singapore 307464",
+    flightNumber: "SQ958",
+    needsReviewReasons: ["Airport terminal is not explicitly stated."],
+    notes:
+      "1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
+    passengerContact: "+6596389322",
+    passengerName: "Pui Yu Chan",
+    pax: "2",
+    pickup: "26 Newton Rd, Singapore 307957",
+    pickupDate: "2026-08-19",
+    pickupTime: "10:00",
+    vehicle: "Toyota Alphard 2.5",
+  };
+  const completeExplicitSourceFactsAnalysis = {
+    bookingResult: {
+      bookings: [completeExplicitSourceFactsBooking],
+      multipleBookingsDetected: false,
+      rawWarnings: [],
+    },
+    classification: "confirmed_booking",
+    confidence: 0.94,
+    reviewReasons: ["Airport terminal is not explicitly stated."],
+    suggestedReply: "",
+    summary: "Complete source-fact validation test.",
+  };
+  const completeExplicitSourceFacts = runtime.testValidateExplicitSourceFactsCompleteness(
+    {
+      body: syntheticPrestigeTransport15787Body,
+    },
+    completeExplicitSourceFactsAnalysis,
+  );
+  assert.equal(completeExplicitSourceFacts.ok, true);
+  assert.equal(
+    completeExplicitSourceFacts.analysis,
+    completeExplicitSourceFactsAnalysis,
+    "A complete source-consistent AI result must pass through unchanged, never be populated from source text.",
+  );
+  assert.deepEqual(completeExplicitSourceFacts.analysis.reviewReasons, [
+    "Airport terminal is not explicitly stated.",
+  ]);
+  const completeExplicitSourceCanonicalText =
+    emailAiSchema.adminEmailAiCanonicalBookingText(
+      completeExplicitSourceFacts.analysis,
+    );
+  const completeExplicitSourceDispatchBooking =
+    bookingParser.parseBookingMessage(completeExplicitSourceCanonicalText);
+  assert.deepEqual(
+    {
+      bookingType: completeExplicitSourceDispatchBooking.bookingType,
+      date: completeExplicitSourceDispatchBooking.date,
+      extraStopCount: completeExplicitSourceDispatchBooking.extraStopCount,
+      extraStopLocation:
+        completeExplicitSourceDispatchBooking.extraStopLocation,
+      flight: completeExplicitSourceDispatchBooking.flight,
+      luggageCount: completeExplicitSourceDispatchBooking.luggageCount,
+      name: completeExplicitSourceDispatchBooking.name,
+      passengerContact:
+        completeExplicitSourceDispatchBooking.passengerContact,
+      pax: completeExplicitSourceDispatchBooking.pax,
+      pickup: completeExplicitSourceDispatchBooking.pickup,
+      time: completeExplicitSourceDispatchBooking.time,
+      vehicle: completeExplicitSourceDispatchBooking.vehicle,
+    },
+    {
+      bookingType: "DEP",
+      date: "2026-08-19",
+      extraStopCount: "1",
+      extraStopLocation: "6 Suffolk Walk, Singapore 307464",
+      flight: "SQ958",
+      luggageCount: "3",
+      name: "Pui Yu Chan",
+      passengerContact: "+6596389322",
+      pax: "2",
+      pickup: "26 Newton Rd, Singapore 307957",
+      time: "1000hrs",
+      vehicle: "AVF",
+    },
+    "A complete verified AI structure must map through canonical text to the established Dispatch parser without losing a supplied operational field.",
+  );
+
+  const incompleteOrConflictingExplicitSourceFacts = [
+    ["missing service meaning", { bookingType: "" }],
+    ["conflicting service meaning", { bookingType: "MNG" }],
+    ["missing pickup date", { pickupDate: "" }],
+    ["conflicting pickup date", { pickupDate: "2026-08-20" }],
+    ["missing pickup time", { pickupTime: "" }],
+    ["conflicting pickup time", { pickupTime: "11:00" }],
+    ["missing primary pickup", { pickup: "" }],
+    [
+      "combined primary pickup and waypoint",
+      {
+        pickup:
+          "26 Newton Rd, Singapore 307957; 6 Suffolk Walk, Singapore 307464",
+      },
+    ],
+    ["missing waypoint count", { extraStopCount: "" }],
+    ["conflicting waypoint count", { extraStopCount: "2" }],
+    ["missing waypoint location", { extraStopLocation: "" }],
+    [
+      "primary pickup substituted for waypoint",
+      { extraStopLocation: "26 Newton Rd, Singapore 307957" },
+    ],
+    ["missing passenger name", { passengerName: "" }],
+    ["conflicting passenger name", { passengerName: "Kim Hyun Soo" }],
+    ["missing passenger phone", { passengerContact: "" }],
+    ["conflicting passenger phone", { passengerContact: "+6591111111" }],
+    ["missing booked passenger count", { pax: "" }],
+    ["vehicle capacity substituted for booked passengers", { pax: "4" }],
+    ["missing bag count", { bagCount: "" }],
+    ["conflicting bag count", { bagCount: "4" }],
+    ["missing vehicle", { vehicle: "" }],
+    ["conflicting vehicle", { vehicle: "Mercedes Benz Viano" }],
+    ["missing flight", { flightNumber: "" }],
+    ["conflicting flight", { flightNumber: "SQ959" }],
+    ["unsupported override", { customerPriceOverride: "unexpected" }],
+    ["invented company without explicit evidence", { companyAccount: "Invented Agency" }],
+  ];
+
+  for (const [label, bookingPatch] of incompleteOrConflictingExplicitSourceFacts) {
+    const result = runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: syntheticPrestigeTransport15787Body },
+      {
+        ...completeExplicitSourceFactsAnalysis,
+        bookingResult: {
+          ...completeExplicitSourceFactsAnalysis.bookingResult,
+          bookings: [
+            {
+              ...completeExplicitSourceFactsBooking,
+              ...bookingPatch,
+            },
+          ],
+        },
+      },
+    );
+    assert.equal(result.ok, false, `${label} must fail closed`);
+    assert.match(
+      result.error,
+      /AI booking result is missing or conflicts with explicit source evidence; manual review required\./,
+      `${label} must return the bounded source-consistency reason`,
+    );
+  }
+
+  const ambiguousExplicitSourceFacts = runtime.testValidateExplicitSourceFactsCompleteness(
+    {
+      body: `${syntheticPrestigeTransport15787Body}\nPassenger phone: +65 9111 1111`,
+    },
+    completeExplicitSourceFactsAnalysis,
+  );
+  assert.equal(ambiguousExplicitSourceFacts.ok, false);
+
+  const multipleBookingExplicitSourceFacts = runtime.testValidateExplicitSourceFactsCompleteness(
+    { body: syntheticPrestigeTransport15787Body },
+    {
+      ...completeExplicitSourceFactsAnalysis,
+      bookingResult: {
+        ...completeExplicitSourceFactsAnalysis.bookingResult,
+        bookings: [
+          completeExplicitSourceFactsBooking,
+          { ...completeExplicitSourceFactsBooking },
+        ],
+        multipleBookingsDetected: true,
+      },
+    },
+  );
+  assert.equal(multipleBookingExplicitSourceFacts.ok, false);
+  assert.match(
+    multipleBookingExplicitSourceFacts.error,
+    /AI booking result is missing or conflicts with explicit source evidence; manual review required\./,
+  );
+
+  const explicitOrganisationBody = `${syntheticPrestigeTransport15787Body}\nAgency name Atlas Travel Partners`;
+  const explicitOrganisationAnalysis = {
+    ...completeExplicitSourceFactsAnalysis,
+    bookingResult: {
+      ...completeExplicitSourceFactsAnalysis.bookingResult,
+      bookings: [
+        {
+          ...completeExplicitSourceFactsBooking,
+          companyAccount: "Atlas Travel Partners",
+        },
+      ],
+    },
+  };
+  const completeExplicitOrganisation = runtime.testValidateExplicitSourceFactsCompleteness(
+    { body: explicitOrganisationBody },
+    explicitOrganisationAnalysis,
+  );
+  assert.equal(completeExplicitOrganisation.ok, true);
+  assert.equal(completeExplicitOrganisation.analysis, explicitOrganisationAnalysis);
+
+  for (const [label, companyAccount] of [
+    ["missing explicit source organisation", ""],
+    ["conflicting explicit source organisation", "Atlas Travel"],
+  ]) {
+    const result = runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: explicitOrganisationBody },
+      {
+        ...explicitOrganisationAnalysis,
+        bookingResult: {
+          ...explicitOrganisationAnalysis.bookingResult,
+          bookings: [
+            {
+              ...completeExplicitSourceFactsBooking,
+              companyAccount,
+            },
+          ],
+        },
+      },
+    );
+    assert.equal(result.ok, false, `${label} must fail closed`);
+  }
+
+  const internalPrestigeBrandingIsNotCustomerCompany =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      {
+        body: `${syntheticPrestigeTransport15787Body}\nCompany name Prestige Transport`,
+      },
+      completeExplicitSourceFactsAnalysis,
+    );
+  assert.equal(internalPrestigeBrandingIsNotCustomerCompany.ok, true);
+  assert.equal(
+    internalPrestigeBrandingIsNotCustomerCompany.analysis.bookingResult
+      .bookings[0].companyAccount,
+    "",
+    "Legacy internal Prestige Transport branding must never become a customer company account.",
+  );
+
+  const verifiedSenderCanonicalDisplayAccount =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      {
+        body: "Confirmed booking without a separately labelled organisation.",
+        senderAddress: "transzend@groundbooker.com",
+      },
+      {
+        ...completeExplicitSourceFactsAnalysis,
+        bookingResult: {
+          ...completeExplicitSourceFactsAnalysis.bookingResult,
+          bookings: [
+            {
+              ...completeExplicitSourceFactsBooking,
+              companyAccount: "Transzend Groundbooker",
+            },
+          ],
+        },
+      },
+    );
+  assert.equal(verifiedSenderCanonicalDisplayAccount.ok, true);
 
   process.env.PRESTIGE_EMAIL_AI_ENABLED = "false";
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1148,6 +1415,7 @@ try {
 
   const prestigeTransport15787Parsed = await runtime.runAdminEmailAiIntake();
   assert.equal(prestigeTransport15787Parsed.ok, true);
+  assert.equal(prestigeTransport15787Parsed.parsed, 0);
   assert.equal(intakeRows.length, 7);
   assert.match(
     providerRequestBodies[6].instructions,
@@ -1166,68 +1434,22 @@ try {
     providerRequestBodies[6].input,
     /ROUTE LOCATIONS\s+6 Suffolk Walk, 싱가포르 6 Suffolk Walk, Singapore 307464\s+PICK UP LOCATION\s+26 Newton Rd, 싱가포르 307957/,
   );
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookerName, "Kim Hyun Soo");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].passengerName, "Pui Yu Chan");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].passengerContact, "+6596389322");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bagCount, "3");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].pax, "2");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookingType, "DEP");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].pickupDate, "2026-08-19");
-  assert.equal(
-    intakeRows[6].booking_parse_result.bookings[0].pickup,
-    "26 Newton Rd, Singapore 307957",
-    "A provider-combined waypoint must be removed from the primary pickup before Dispatch mapping.",
-  );
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].dropoff, "Changi Airport");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].extraStopCount, "1");
-  assert.equal(intakeRows[6].booking_parse_result.bookings[0].customerPriceOverride, "");
-  assert.equal(
-    intakeRows[6].booking_parse_result.bookings[0].extraStopLocation,
-    "6 Suffolk Walk, Singapore 307464",
-    "The exact Prestige Transport Comment and ROUTE LOCATIONS waypoint must survive Email AI canonicalization.",
-  );
-  assert.doesNotMatch(
-    intakeRows[6].booking_parse_result.bookings[0].needsReviewReasons.join("\n"),
-    /waypoint|extra stop|second pickup|booker name (?:requires confirmation|is unclear)|passengers versus vehicle capacity/i,
-  );
-  assert.doesNotMatch(
-    intakeRows[6].review_reasons.join("\n"),
-    /waypoint|extra stop|second pickup|booker name (?:requires confirmation|is unclear)|passengers versus vehicle capacity/i,
-  );
+  assert.equal(intakeRows[6].processing_status, "failed");
+  assert.deepEqual(intakeRows[6].booking_parse_result, {
+    bookings: [],
+    multipleBookingsDetected: false,
+    rawWarnings: [],
+  });
+  assert.equal(intakeRows[6].canonical_booking_text, "");
   assert.deepEqual(intakeRows[6].review_reasons, [
-    "Booking status is Pending (new); verify whether this is final and confirmed.",
-    "Airport name and terminal are not explicitly stated.",
+    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
   ]);
-  assert.deepEqual(
-    intakeRows[6].booking_parse_result.bookings[0].needsReviewReasons,
-    [
-      "Confirm airport identity and terminal.",
-      "Verify whether Pending (new) represents a final confirmed booking.",
-    ],
+  assert.equal(
+    intakeRows[6].summary,
+    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
   );
-  assert.doesNotMatch(intakeRows[6].canonical_booking_text, /Changi Airport T\d/i);
-  assert.match(intakeRows[6].canonical_booking_text, /^Passenger contact: \+6596389322$/m);
-  assert.match(intakeRows[6].canonical_booking_text, /^Bags: 3$/m);
-  assert.match(intakeRows[6].canonical_booking_text, /^Extra stop count: 1$/m);
-  assert.doesNotMatch(
-    intakeRows[6].canonical_booking_text,
-    /Customer price:\s*(?:120|S\$)|Stripe/i,
-  );
-  assert.match(
-    intakeRows[6].canonical_booking_text,
-    /^Extra stop: 6 Suffolk Walk, Singapore 307464$/m,
-  );
-  assert.doesNotMatch(
-    intakeRows[6].canonical_booking_text,
-    /^Pickup: .*6 Suffolk Walk, Singapore 307464$/m,
-  );
-  assert.doesNotMatch(
-    intakeRows[6].canonical_booking_text,
-    /^Extra stops?: 1 waypoint$/m,
-  );
-  assert.match(intakeRows[6].canonical_booking_text, /^Booker: Kim Hyun Soo$/m);
-  assert.match(intakeRows[6].canonical_booking_text, /^Contact: \+65 98156017$/m);
+  assert.equal(intakeRows[6].openai_input_tokens, undefined);
+  assert.equal(intakeRows[6].openai_output_tokens, undefined);
 
   const blockedSource = Buffer.from(
     syntheticAllowedSource
@@ -1256,7 +1478,7 @@ try {
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 6);
+  assert.equal(loaded.data.records.length, 5);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
   assert.equal(
     loaded.data.records[1].sender_address,
@@ -1264,10 +1486,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 700,
+    input_tokens: 600,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 560,
-    total_tokens: 1260,
+    output_tokens: 480,
+    total_tokens: 1080,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -1298,8 +1520,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 6);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 1260);
+  assert.equal(allowedReadBody.records.length, 5);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 1080);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -1393,7 +1615,7 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 5);
+  assert.equal(afterReviewRecords.length, 4);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",

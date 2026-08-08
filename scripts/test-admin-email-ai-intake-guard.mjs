@@ -186,6 +186,26 @@ assert.match(runtimeSource, /passengerContact/);
 assert.match(runtimeSource, /bagCount/);
 assert.match(runtimeSource, /extraStopCount/);
 assert.match(runtimeSource, /A vehicle's passenger count is capacity and must never replace pax\./);
+assert.match(
+  runtimeSource,
+  /Return one coherent, complete structured booking whose supported facts agree with the whole source email\./,
+);
+assert.match(
+  runtimeSource,
+  /never omit it, contradict it, combine separate location roles, or substitute a vehicle capacity, organizer, or other nearby value\./,
+);
+assert.match(
+  runtimeSource,
+  /Prestige Transport is a legacy internal company name, not an external customer organisation/,
+);
+assert.match(
+  runtimeSource,
+  /This is source\/display text only: never classify customer type, choose a customer folder, or infer a CRM ID\./,
+);
+assert.match(
+  runtimeSource,
+  /Leave companyAccount empty when a separate explicit external organisation name is absent\./,
+);
 assert.match(runtimeSource, /never a generic label such as 1 waypoint/);
 assert.match(runtimeSource, /never invent a terminal/);
 assert.doesNotMatch(runtimeSource, /from "\.\/booking-parser"/);
@@ -211,6 +231,29 @@ assert.match(runtimeSource, /isResolvedKnownBookerReason/);
 assert.match(runtimeSource, /enforceResolvedStructuredReviewReasons/);
 assert.match(runtimeSource, /enforceStructuredPickupSeparation/);
 assert.match(runtimeSource, /AI combined the primary pickup and extra stop/);
+assert.match(runtimeSource, /validateExplicitSourceFactsCompleteness/);
+assert.match(
+  runtimeSource,
+  /AI booking result is missing or conflicts with explicit source evidence; manual review required\./,
+);
+assert.match(runtimeSource, /directPassengerPhoneCandidates/);
+assert.match(runtimeSource, /explicitSourceBookingFacts/);
+assert.match(runtimeSource, /isPrestigeOwnCompanyEvidence/);
+assert.match(runtimeSource, /verifiedSenderCompanyAccount/);
+assert.match(
+  runtimeSource,
+  /const sourceFactsValidation\s*=\s*validateExplicitSourceFactsCompleteness\(\s*input,\s*analysis,\s*\)/,
+  "Explicit source-fact completeness validation must run after the established full-email AI analysis chain.",
+);
+const sourceFactsValidationSource = runtimeSource.match(
+  /function validateExplicitSourceFactsCompleteness\([\s\S]*?\n}\n\nfunction emailLocalPartLooksLikeAnotherPerson/,
+)?.[0] || "";
+assert.ok(sourceFactsValidationSource);
+assert.doesNotMatch(
+  sourceFactsValidationSource,
+  /bookingResult\s*:\s*\{|(?:bagCount|bookingType|companyAccount|extraStopCount|extraStopLocation|flightNumber|passengerContact|passengerName|pax|pickup|pickupDate|pickupTime|vehicle)\s*:/,
+  "The post-AI validator must accept or reject the provider result without populating structured booking fields from source evidence.",
+);
 assert.match(
   runtimeSource,
   /PICK UP LOCATION is the primary pickup only[\s\S]*ROUTE LOCATIONS[\s\S]*extraStopLocation/,

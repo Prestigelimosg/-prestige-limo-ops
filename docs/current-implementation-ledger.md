@@ -12,11 +12,20 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Special Request Dedicated Admin Carry (2026-08-08)
+
+- The owner-approved public `/book` `Special request / note` control is restored in its original request-details location with the exact guidance `Number of vehicles, child seat, meet-and-greet, event timing, or other requests`. It is optional, limited to 500 characters, normalizes CRLF/CR line endings to LF, trims outer whitespace, and visibly rejects oversize or unsupported control-character input instead of truncating or silently dropping it.
+- The same established customer booking request submits this one customer-safe value. The request parser persists it only in the dedicated nullable `bookings.customer_special_request` field; both linked return legs retain the same normalized request. No parser/debug reference, route summary, route/service note, message, or internal admin note is reused.
+- The existing Admin pending-request Apply path retains the exact field. The existing `Save + CRM` POST and pending-request `Accept + Cal` PATCH carry it into their booking payload, reload/reopen retains it, and the existing Dispatch `Booking Details` section shows one conditional plain-text multiline `Customer special request` row at its bottom only when nonblank. There is no editable Admin note control and no separate send.
+- The current and foundation Supabase booking adapters insert and reload the same field. Reads remain compatible before schema rollout by retrying only a missing-column select without that field and returning null. Blank-note writes omit the column, while a nonblank-note write on an unprepared schema fails visibly; it never retries without the note. The CLI-created migration `supabase/migrations/20260808080844_add_customer_special_request.sql` is additive and currently local/unapplied. It must be applied and confirmed through a separately approved database action before this application branch may be merged or deployed.
+- Invoice/PDF/customer invoice portal, Driver Job/cards/reports, Operations and personal Calendar, customer receipt/My Bookings, messaging/notifications, Email AI/parser/debug, internal admin notes, finance, rates, billing, payment, payout, PayNow, provider, environment, and Production data lanes do not receive this field and remain unchanged.
+- Fail-first protection is `scripts/test-customer-booking-special-request-guard.mjs`, the exact current/foundation/missing-column cases in `scripts/test-admin-booking-supabase-adapter-contract.mjs`, the existing customer request adapter/input/form/privacy guards, and the exact POST/PATCH/browser assertions in `scripts/test-app-smoke-browser.mjs`.
+
 ### Customer Booking Luggage Count Carry And Unsaved Note Removal (2026-08-08)
 
 - The existing public `/book` luggage control now matches the established integer-only `bookings.luggage_count` contract: it is labelled `Number of bags`, accepts only a non-negative whole number, leaves an omitted value as null, and shows a visible validation error instead of silently converting supplied descriptive, decimal, negative, exponential, or out-of-range text to null.
 - The same existing public request parser validates the supplied optional count before constructing the operational request. Applying that exact customer request in Admin and using the existing `Save + CRM` or `Accept + Cal` action carries only its validated `luggage_count` into the established accepted-booking payload. The preferred current and foundation Supabase booking adapters both insert and reload that same bounded nullable field; ordinary new Admin bookings remain unchanged and no luggage value is guessed from text.
-- The misleading `/book` `Special request / note` textarea is removed because the established adapter and persistence lane never submitted or saved it. No replacement note field, parser metadata, internal note, route note, service-item note, schema column, route, panel, or writer is added.
+- At this checkpoint, the misleading `/book` `Special request / note` textarea was removed because the established adapter and persistence lane never submitted or saved it. The later owner-approved `Customer Special Request Dedicated Admin Carry` section above supersedes only that removal by adding one dedicated customer-safe field and carry path.
 - Customer Portal/session identity, OTP/private invitation, CRM Company/Booker/Traveller rules, customer profile, return-trip handling, receipt/admin alerts, Driver, messaging, Calendar, GPS, rates, billing, invoice, payment, payout, PayNow, Email AI/parser, provider, schema, migration, environment, deployment, and Production data remain unchanged.
 - Fail-first protection is `scripts/test-customer-booking-luggage-count-guard.mjs`, `scripts/test-admin-booking-supabase-adapter-contract.mjs`, and the exact POST/PATCH browser assertions in `scripts/test-app-smoke-browser.mjs`, alongside the existing request adapter, PA identity, public input/form boundary, return-trip, and voice-field-fill guards.
 
@@ -5036,7 +5045,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/my-bookings` new-request link must not submit to customer booking request persistence.
 - The separately guarded fixed-template customer-to-driver quick-reply POST does not create a duplicate booking-request form, submit booking-request fields, or call customer booking-request persistence.
 - Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.
-- The customer request adapter may submit only the approved API payload fields and must not forward `specialRequest` or finance/internal/free-note fields.
+- The customer request adapter may submit only the approved API payload fields, including the bounded customer-safe `specialRequest`, and must not forward finance/internal fields.
 - This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.
 - No Save Booking + CRM change.
 - No `/api/admin-saved-bookings` change.
@@ -5072,14 +5081,14 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.
 - Admin review remains required after submission.
 - Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
-- Future field-fill may target only existing submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `returnExtraStops`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
-- The retired `specialRequest` field is absent from `/book`, the adapter, and customer booking request persistence.
+- Future field-fill may target only the separately approved voice targets within the submitted customer request fields: `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `returnExtraStops`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`; the manually typed `specialRequest` is submitted but is not a voice target.
+- The separate customer-entered `specialRequest` field is submitted through the booking-request lane, but remains outside the browser-local voice transcript field-fill targets.
 - Transcript/audio must not be submitted or stored unless separately approved.
 - `/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.
 - Admin parser/draft-fill cannot be reused directly for public customer voice.
 - Existing `/api/ai-parse` remains admin/parser-shaped and includes `customerPriceOverride`; existing WhatsApp transcript parsing and admin dispatcher intake draft-fill are not Customer Voice Booking Draft Field-Fill.
 - If parsing is uncertain, leave fields unchanged and show the transcript for manual review; do not guess unsafe fields.
-- Future field-fill must exclude pricing, payout, payment/PDF, billing, dispatch release, driver acknowledgement, admin internal status, provider send fields, auth/location/photo/calendar, `customer_rates`, `driver_payout_rules`, internal/debug/secrets, transcript/audio persistence, and `specialRequest` submission unless separately approved.
+- Future field-fill must exclude pricing, payout, payment/PDF, billing, dispatch release, driver acknowledgement, admin internal status, provider send fields, auth/location/photo/calendar, `customer_rates`, `driver_payout_rules`, internal/debug/secrets, transcript/audio persistence, and `specialRequest` voice field-fill unless separately approved.
 - Future implementation must include browser/mobile coverage proving Speak remains `type="button"`, field-fill does not submit, manual Submit Booking Request / BOOK remains required, customer review/edit remains required, mobile layout does not overflow, Portal remains unchanged, and the submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
 - No duplicate booking page, workflow, sector, card, route, helper, button, or shim is approved.
 - Example future phrase: "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road."
@@ -5114,8 +5123,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Local field-fill runs only from the existing browser `SpeechRecognition` transcript after local capture ends.
 - Field-fill only fills empty approved fields and does not overwrite customer-entered values.
 - Approved local field-fill targets are `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, and `dropoffLocation`.
-- The broader customer request submit allowlist remains `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `returnExtraStops`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, and `extraStops`.
-- `specialRequest` remains absent from submitted field-fill scope and excluded from customer booking request persistence.
+- The broader customer request submit allowlist is `companyName`, `contactNo`, `emailAddress`, `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, `dropoffLocation`, `returnTripRequested`, `returnPickupDate`, `returnPickupTime`, `returnFlightNumber`, `returnPickupLocation`, `returnDropoffLocation`, `returnExtraStops`, `serviceType`, `vehicleType`, `passengerCount`, `luggage`, `extraStops`, and the manually typed `specialRequest`.
+- `specialRequest` remains excluded from voice field-fill; customers may type it manually and submit it through the separate approved booking-request lane.
 - Date field-fill is conservative: explicit year dates may fill `pickupDate`; no-year phrases such as `2 June` remain unchanged for manual review.
 - Example local mapping: "Stanley needs a pickup on 2 June 1000hrs from home to airport SQ123. He stays at 123 Orchard Road." may fill `passengerName` Stanley, `pickupTime` 10:00, `pickupLocation` 123 Orchard Road, `dropoffLocation` airport, and `flightNumber` SQ123, while leaving `pickupDate` unchanged because no year is present.
 - Customer must manually review/edit fields and manually press Submit Booking Request / BOOK.
@@ -5225,7 +5234,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `/book` and `/my-bookings` customer request form surfaces remain guarded to request-only trip/contact fields and safe required fields.
 - `/book` remains on `submitCustomerBookingRequest` through the customer-safe adapter without raw fetch/session/admin plumbing.
 - `/my-bookings` new-request form remains local review-only and does not submit to customer booking request persistence.
-- The customer request adapter remains limited to approved API payload fields and does not forward `specialRequest` or finance/internal/free-note fields.
+- The customer request adapter remains limited to approved API payload fields, including the bounded customer-entered `specialRequest`, and does not forward finance/internal fields.
 - Customer request copy remains request-only and does not create a price, payment, invoice, PDF, or billing file from these forms.
 - Save Booking + CRM remains on `POST /api/admin-bookings`.
 - `/api/admin-saved-bookings` remains separate and unchanged.

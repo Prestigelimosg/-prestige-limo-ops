@@ -317,6 +317,7 @@ class MockSupabaseClient {
     }));
     this.selectHistory = [];
     this.schemaMode = options.schemaMode || "cumulative";
+    this.missingColumns = new Set(options.missingColumns || []);
     this.tables = {
       audit_logs: [],
       booking_route_points: [],
@@ -450,6 +451,20 @@ class MockSupabaseClient {
       };
     }
 
+    const missingColumn = rows
+      .flatMap((row) => Object.keys(row))
+      .find((column) => this.missingColumns.has(`${table}.${column}`));
+
+    if (missingColumn) {
+      return {
+        data: null,
+        error: {
+          code: "PGRST204",
+          message: `Could not find the '${missingColumn}' column in the schema cache`,
+        },
+      };
+    }
+
     if (rows.some((row) => this.insertRejectedByMockSchema(table, row))) {
       return {
         data: null,
@@ -494,6 +509,20 @@ class MockSupabaseClient {
       return {
         data: null,
         error: configuredFailure,
+      };
+    }
+
+    const missingColumn = Object.keys(payload).find((column) =>
+      this.missingColumns.has(`${table}.${column}`),
+    );
+
+    if (missingColumn) {
+      return {
+        data: null,
+        error: {
+          code: "PGRST204",
+          message: `Could not find the '${missingColumn}' column in the schema cache`,
+        },
       };
     }
 
@@ -1325,6 +1354,7 @@ try {
   const currentSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-CURRENT-001",
+      customer_special_request: "Meet-and-greet at the pickup desk.",
       luggage_count: 2,
     },
   });
@@ -1343,8 +1373,16 @@ try {
   assert.equal(currentSchemaResult.data.booking_reference, "SAFE-CURRENT-001");
   assert.equal(currentSchemaResult.data.luggage_count, 2);
   assert.equal(
+    currentSchemaResult.data.customer_special_request,
+    "Meet-and-greet at the pickup desk.",
+  );
+  assert.equal(
     insertedOperation(currentSchemaMock.client, "bookings").payload.luggage_count,
     2,
+  );
+  assert.equal(
+    insertedOperation(currentSchemaMock.client, "bookings").payload.customer_special_request,
+    "Meet-and-greet at the pickup desk.",
   );
   assert.match(
     currentSchemaMock.client.selectHistory.at(-1).selectedColumns,
@@ -1380,9 +1418,128 @@ try {
     }
   }
 
+  const missingSpecialRequestSchemaPayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-MISSING-SPECIAL-001",
+      customer_special_request: "Do not silently drop this request.",
+    },
+  });
+  const parsedMissingSpecialRequestSchemaPayload =
+    persistence.parseAdminBookingPersistencePayload(missingSpecialRequestSchemaPayload);
+
+  assert.equal(parsedMissingSpecialRequestSchemaPayload.ok, true);
+
+  const missingSpecialRequestWriteMock = installMockClient(
+    {},
+    {
+      missingColumns: ["bookings.customer_special_request"],
+      schemaMode: "current",
+    },
+  );
+  const missingSpecialRequestWriteResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      parsedMissingSpecialRequestSchemaPayload.data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(missingSpecialRequestWriteResult.ok, false);
+  assert.equal(missingSpecialRequestWriteResult.category, "column_missing");
+  assert.equal(
+    missingSpecialRequestWriteMock.client.operations.filter(
+      (operation) => operation.action === "insert" && operation.table === "bookings",
+    ).length,
+    0,
+    "A nonblank customer Special Request must never retry without the missing column.",
+  );
+
+  const missingSpecialRequestBlankMock = installMockClient(
+    {},
+    {
+      missingColumns: ["bookings.customer_special_request"],
+      schemaMode: "current",
+    },
+  );
+  const missingSpecialRequestBlankResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      persistence.parseAdminBookingPersistencePayload(
+        canonicalAdminPayload({
+          booking: {
+            booking_reference: "SAFE-MISSING-SPECIAL-BLANK-001",
+            customer_special_request: null,
+          },
+        }),
+      ).data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(missingSpecialRequestBlankResult.ok, true);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      insertedOperation(missingSpecialRequestBlankMock.client, "bookings").payload,
+      "customer_special_request",
+    ),
+    false,
+    "A blank request must keep ordinary booking writes compatible before schema rollout.",
+  );
+
+  const missingSpecialRequestReadMock = installMockClient(
+    {
+      bookings: [
+        {
+          admin_internal_status: "needs_review",
+          booking_reference: "SAFE-MISSING-SPECIAL-READ-001",
+          contact_phone: "+65 9000 0199",
+          customer_display_name: "Old Schema Customer",
+          customer_facing_status: "pending_review",
+          customer_id: 99,
+          dropoff_location: "Old Schema Dropoff",
+          id: 99,
+          pickup_at: "2030-06-08T10:30:00+08:00",
+          pickup_location: "Old Schema Pickup",
+          service_type: "TRF",
+          source_surface: "admin-dashboard",
+          updated_at: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    },
+    {
+      schemaMode: "current",
+      selectFailures: [
+        {
+          column: "customer_special_request",
+          error: {
+            code: "PGRST204",
+            message: "Could not find the 'customer_special_request' column in the schema cache",
+          },
+          table: "bookings",
+        },
+      ],
+    },
+  );
+  const missingSpecialRequestReadResult =
+    await adapter.loadAdminBookingByReferenceThroughSupabaseAdapter(
+      adminActor(),
+      "SAFE-MISSING-SPECIAL-READ-001",
+    );
+
+  assert.equal(missingSpecialRequestReadResult.ok, true);
+  assert.equal(missingSpecialRequestReadResult.data.customer_special_request, null);
+  assert.equal(missingSpecialRequestReadMock.client.selectHistory.length, 2);
+  assert.match(
+    missingSpecialRequestReadMock.client.selectHistory[0].selectedColumns,
+    /customer_special_request/,
+  );
+  assert.doesNotMatch(
+    missingSpecialRequestReadMock.client.selectHistory[1].selectedColumns,
+    /customer_special_request/,
+  );
+
   const foundationSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-FOUNDATION-CREATE-001",
+      customer_special_request: "Child seat required.",
       driver_contact: "+65 9000 0100",
       driver_name: "Foundation Safe Driver",
       driver_plate_number: "SFD100A",
@@ -1416,6 +1573,7 @@ try {
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
     customer_id: 1,
+    customer_special_request: "Child seat required.",
     dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     driver_contact: "+65 9000 0100",
@@ -1476,6 +1634,7 @@ try {
           customer_display_name: "Foundation Safe Customer",
           customer_facing_status: "pending_review",
           customer_id: 25,
+          customer_special_request: "Event timing\nGuest ready at 10:15.",
           dropoff_location: "Foundation Safe Dropoff",
           driver_contact: "+65 9000 0102",
           driver_name: "Foundation Read Driver",
@@ -1528,6 +1687,10 @@ try {
   assert.equal(foundationFallbackRoute.body.bookings[0].service_type, "transfer");
   assert.equal(foundationFallbackRoute.body.bookings[0].pax_count, 2);
   assert.equal(foundationFallbackRoute.body.bookings[0].luggage_count, 1);
+  assert.equal(
+    foundationFallbackRoute.body.bookings[0].customer_special_request,
+    "Event timing\nGuest ready at 10:15.",
+  );
   assert.deepEqual(
     foundationFallbackRoute.body.bookings[0].route_points.map((routePoint) => routePoint.location_text),
     ["Foundation Safe Pickup", "Foundation Safe Dropoff"],

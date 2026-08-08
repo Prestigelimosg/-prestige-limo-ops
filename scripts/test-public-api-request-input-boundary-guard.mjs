@@ -40,7 +40,7 @@ const contractChecks = [
     script: "scripts/test-customer-booking-request-adapter.mjs",
     requiredFragments: [
       "Adapter should submit only approved customer booking request fields.",
-      "Adapter must not forward finance/internal/free-note fields.",
+      "Adapter must not forward finance/internal fields.",
       "x-prestige-customer-purpose",
       "fetchCalls[0].init.credentials",
     ],
@@ -176,6 +176,7 @@ const customerBookingRequestFields = [
   "passengerCount",
   "luggage",
   "extraStops",
+  "specialRequest",
 ];
 
 const customerBookingForbiddenFragments = [
@@ -329,7 +330,7 @@ const customerBookingRequestAdapter = files["lib/customer-booking-request-adapte
 for (const fragment of customerBookingRequestFields) {
   assertIncludes(customerBookingRequestAdapter, `${fragment}: input.${fragment}`, `customer request adapter body field ${fragment}`);
 }
-for (const forbiddenClientFragment of ["customerPrice", "billing", "financeNotes", "internalAdminNotes", "specialRequest"]) {
+for (const forbiddenClientFragment of ["customerPrice", "billing", "financeNotes", "internalAdminNotes"]) {
   assertExcludes(
     customerBookingRequestAdapter.match(/function toCustomerBookingRequestApiBody[\s\S]+?\n}/)?.[0] || "",
     forbiddenClientFragment,

@@ -15,7 +15,7 @@ This document records the approved bounded Customer Voice Booking Draft Field-Fi
 - Current field-fill does not overwrite customer-entered fields.
 - Current field-fill does not submit transcript or audio.
 - Current field-fill does not call parser, API, speech-to-text, or provider routes.
-- The retired `specialRequest` field is absent from `/book`, the adapter, and customer booking request persistence.
+- The separate customer-entered `specialRequest` field is submitted through the booking-request lane, but the Speak helper does not populate it from a transcript.
 - `/api/ai-parse` remains admin/parser-shaped and includes fields such as `customerPriceOverride`, so it is not safe for public customer voice field-fill without separate owner approval.
 - Existing WhatsApp transcript parsing and admin dispatcher intake draft-fill are not Customer Voice Booking Draft Field-Fill.
 
@@ -31,7 +31,7 @@ This document records the approved bounded Customer Voice Booking Draft Field-Fi
 - Admin review remains required after submission.
 - Existing submit path must remain `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.
 - No transcript or audio may be submitted or stored unless separately approved.
-- `specialRequest` remains absent from submitted field-fill scope unless separately approved.
+- `specialRequest` remains excluded from voice field-fill scope; customers may type it manually before submitting the booking request.
 - `/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.
 - Admin parser/draft-fill cannot be reused directly for public customer voice.
 - If parsing is uncertain, leave fields unchanged and show the transcript for manual review.
@@ -72,6 +72,7 @@ The broader customer request submit allowlist remains:
 - `passengerCount`
 - `luggage`
 - `extraStops`
+- `specialRequest`
 
 ## Excluded Fields And Behavior
 
@@ -90,7 +91,7 @@ Field-fill must exclude:
 - `driver_payout_rules`
 - internal/debug/secrets
 - transcript/audio persistence
-- `specialRequest` submission unless separately approved
+- `specialRequest` voice field-fill
 
 ## Example Phrase
 

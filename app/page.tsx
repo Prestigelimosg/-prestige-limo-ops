@@ -2339,6 +2339,7 @@ type AdminBookingPersistenceRecord = {
   driver_plate_number?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
+  customer_special_request?: string | null;
   vehicle_type_or_category?: string | null;
   customer_facing_status?: string | null;
   admin_internal_status?: string | null;
@@ -2396,6 +2397,7 @@ type AdminBookingPersistenceRequestBody = {
     driver_plate_number: string | null;
     pax_count: number | null;
     luggage_count: number | null;
+    customer_special_request?: string | null;
     vehicle_type_or_category: string | null;
     customer_facing_status: string;
     admin_internal_status: string;
@@ -9692,6 +9694,7 @@ function buildAdminBookingPersistencePayload(
   bookingReference = createAdminBookingReference(),
   options: {
     customerDisplayNameOverride?: string | null;
+    customerSpecialRequestOverride?: string | null;
     hotelAgencyFolderCreateOverride?: boolean;
     luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
@@ -9809,6 +9812,7 @@ function buildAdminBookingPersistencePayload(
       driver_plate_number: clean(bookingValue.driverPlate) || null,
       pax_count: Number(clean(bookingValue.pax)) || null,
       luggage_count: safeAdminBookingPersistenceCount(options.luggageCountOverride),
+      customer_special_request: clean(options.customerSpecialRequestOverride) || null,
       vehicle_type_or_category: clean(bookingValue.vehicle) || null,
       customer_facing_status: "Received",
       admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
@@ -9898,6 +9902,7 @@ function adminBookingMatchesResponseLossRecovery(
     [record.driver_name, booking.driver_name],
     [record.driver_plate_number, booking.driver_plate_number],
     [record.vehicle_type_or_category, booking.vehicle_type_or_category],
+    [record.customer_special_request, booking.customer_special_request],
   ];
   const identityPairs: Array<[unknown, unknown]> = [
     [record.company_id, booking.company_id],
@@ -10017,6 +10022,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
   currentTimeMs: number,
   options: {
     customerDisplayNameOverride?: string | null;
+    customerSpecialRequestOverride?: string | null;
     hotelAgencyFolderCreateOverride?: boolean;
     luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
@@ -21531,6 +21537,11 @@ export default function Home() {
         adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
           ? safeAdminBookingPersistenceCount(appliedAdminBookingSnapshot.luggage_count)
           : null;
+      const appliedCustomerRequestSpecialRequest =
+        appliedAdminBookingSnapshot &&
+        adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
+          ? clean(appliedAdminBookingSnapshot.customer_special_request) || null
+          : null;
 
       const bookingPayloads = buildAdminDispatchReturnTripPersistencePayloads(
         bookingForSave,
@@ -21538,6 +21549,7 @@ export default function Home() {
         {
           customerDisplayNameOverride:
             companyProfileResolution?.companyName || saveCrmCustomerAccountLabel,
+          customerSpecialRequestOverride: appliedCustomerRequestSpecialRequest,
           luggageCountOverride: appliedCustomerRequestLuggageCount,
           parserSourceReferenceOverride: activeAdminEmailAiIntakeId
             ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
@@ -24544,6 +24556,10 @@ export default function Home() {
       targetBookingReference,
       {
         customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+        customerSpecialRequestOverride:
+          acceptingCustomerRequest && appliedSnapshot
+            ? clean(appliedSnapshot.customer_special_request) || null
+            : undefined,
         luggageCountOverride:
           acceptingCustomerRequest && appliedSnapshot
             ? safeAdminBookingPersistenceCount(appliedSnapshot.luggage_count)
@@ -41251,6 +41267,19 @@ export default function Home() {
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}
               </div>
+              {clean(appliedAdminBookingSnapshot?.customer_special_request) ? (
+                <div
+                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2"
+                  data-admin-dispatch-customer-special-request="true"
+                >
+                  <p className="text-xs font-semibold text-slate-700">
+                    Customer special request
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-900">
+                    {clean(appliedAdminBookingSnapshot?.customer_special_request)}
+                  </p>
+                </div>
+              ) : null}
             </section>
 
             <section

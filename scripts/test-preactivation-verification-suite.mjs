@@ -498,6 +498,10 @@ const guardChecks = [
     script: "scripts/test-customer-booking-luggage-count-guard.mjs",
   },
   {
+    label: "customer booking Special Request guard",
+    script: "scripts/test-customer-booking-special-request-guard.mjs",
+  },
+  {
     label: "Customer Voice Booking Draft Input contract guard",
     script: "scripts/test-customer-voice-booking-draft-input-contract.mjs",
   },

@@ -1433,7 +1433,7 @@ async function runChromeTest() {
         "[data-admin-booking-persistence-panel]",
         "admin booking persistence panel",
       );
-      await evaluate(`(() => {
+      const initialAdminBookingFieldsSet = await evaluate(`(() => {
         window.__adminBookingPersistenceCalls = [];
         window.__adminBookingCalendarSyncCalls = [];
         window.__adminCorporateIdentityCalls = [];
@@ -2632,6 +2632,7 @@ async function runChromeTest() {
                     contact_email: "loaded-ops@example.com",
                     pax_count: 2,
                     luggage_count: 3,
+                    customer_special_request: "Child seat required\\nEvent starts at 10:00",
                     vehicle_type_or_category: "AVF",
                     customer_facing_status: "Received",
                     admin_internal_status: "Admin Review Required",
@@ -2772,6 +2773,39 @@ async function runChromeTest() {
           setField("Pax", "2"),
         ].every(Boolean);
       })()`);
+      assert.equal(
+        initialAdminBookingFieldsSet,
+        true,
+        "Expected every initial Admin operational snapshot field to be found and updated",
+      );
+      await waitForCondition(
+        () =>
+          evaluate(`(async () => {
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const labels = [
+              ...document.querySelectorAll(
+                [
+                  "[data-dispatch-workflow-step='booking-details'] label",
+                  "[data-dispatch-workflow-step='pickup-dropoff-vehicle'] label",
+                  "[data-dispatch-workflow-step='trip-extras'] label",
+                ].join(","),
+              ),
+            ];
+            const valueFor = (labelText) => {
+              const label = labels.find(
+                (candidate) =>
+                  String(candidate.querySelector("span")?.textContent || "").trim().toLowerCase() ===
+                  labelText.toLowerCase(),
+              );
+              return label?.querySelector("input, textarea, select")?.value || "";
+            };
+            return valueFor("Pickup date") === ${JSON.stringify(nonShortNoticeAdminSnapshotPickupDateText)} &&
+              valueFor("Pickup time") === "1030" &&
+              valueFor("Pickup") === "Ops Test Pickup";
+          })()`),
+        10000,
+        "initial Admin operational snapshot fields settled before save",
+      );
 
       const saveClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-save]");
@@ -2788,7 +2822,13 @@ async function runChromeTest() {
             const postCall = calls.find((call) => call.method === "POST");
             const body = postCall?.body;
             const loadButton = document.querySelector("[data-admin-booking-persistence-load]");
-            if (!feedback.includes("Operational booking saved") || !body || loadButton?.disabled) {
+            const saveSucceeded = feedback.includes("Operational booking saved");
+            const terminalFailure = Boolean(
+              feedback &&
+                !feedback.includes("Saving operational booking fields") &&
+                !feedback.includes("Syncing Google Calendar"),
+            );
+            if ((!saveSucceeded && !terminalFailure) || (!body && !terminalFailure) || loadButton?.disabled) {
               return false;
             }
 
@@ -2821,6 +2861,12 @@ async function runChromeTest() {
           })()`),
         10000,
         "admin booking persistence save feedback",
+      );
+
+      assert.match(
+        saveState.feedback,
+        /Operational booking saved/,
+        `Expected admin operational snapshot save success, received: ${saveState.feedback}`,
       );
 
       assert.deepEqual(
@@ -3487,6 +3533,13 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-duplicate-guidance]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const customerSpecialRequestElement = document.querySelector(
+              "[data-admin-dispatch-customer-special-request='true']",
+            );
+            const customerSpecialRequest = {
+              heading: customerSpecialRequestElement?.querySelector("p:first-child")?.textContent.trim() || "",
+              value: customerSpecialRequestElement?.querySelector("p:last-child")?.textContent.trim() || "",
+            };
             const dispatchReleaseFeedback = document
               .querySelector("[data-admin-dispatch-release-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
@@ -3558,6 +3611,7 @@ async function runChromeTest() {
                   dispatchReleaseFeedback,
                   driverAcknowledgementFeedback,
                   driverStatusCalls: window.__adminDriverJobStatusCalls || [],
+                  customerSpecialRequest,
                   duplicateGuidance,
                   feedback,
                   fields,
@@ -3601,6 +3655,14 @@ async function runChromeTest() {
       assert.equal(appliedSnapshotState.fields.dropoff, "Loaded Ops Dropoff");
       assert.equal(appliedSnapshotState.fields.pax, "2");
       assert.equal(appliedSnapshotState.fields.childSeatCount, "2");
+      assert.deepEqual(
+        appliedSnapshotState.customerSpecialRequest,
+        {
+          heading: "Customer special request",
+          value: "Child seat required\nEvent starts at 10:00",
+        },
+        "Expected the applied request to show its safe multiline note only in Admin Booking Details",
+      );
       assert.equal(appliedSnapshotState.fields.customerPriceOverride, "");
       assert.equal(appliedSnapshotState.fields.driverName, "");
       assert.equal(appliedSnapshotState.fields.manualExtraCharges, "");
@@ -3909,6 +3971,11 @@ async function runChromeTest() {
         updateState.body.booking.luggage_count,
         3,
         "Expected applied customer request Save + CRM to preserve the exact bag count",
+      );
+      assert.equal(
+        updateState.body.booking.customer_special_request,
+        "Child seat required\nEvent starts at 10:00",
+        "Expected applied customer request Accept + Cal to preserve the exact customer special request",
       );
       assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
       assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
@@ -5378,7 +5445,7 @@ async function runChromeTest() {
       const customerUnknownResponse = await fetch(customerBookingRequestApiUrl, {
         body: JSON.stringify({
           ...validCustomerBookingRequestApiPayload,
-          specialRequest: "Do not accept unknown customer note fields in this intake stage",
+          vehicleCount: "2",
         }),
         headers: customerBookingRequestHeaders,
         method: "POST",
@@ -33335,6 +33402,7 @@ async function runChromeTest() {
             "passengerCount",
             "luggage",
             "extraStops",
+            "specialRequest",
           ].map((field) => {
             if (field === "pickupTime") {
               const hidden = document.querySelector("[data-customer-booking-field='pickupTime']");
@@ -34391,6 +34459,10 @@ async function runChromeTest() {
       await setCustomerBookingField("passengerCount", "2");
       await setCustomerBookingField("luggage", "2");
       await setCustomerBookingField("extraStops", "Customer Test Stop");
+      await setCustomerBookingField(
+        "specialRequest",
+        "Child seat required\nEvent starts at 10:00",
+      );
       const requiredOnlyState = await readCustomerBookingPageState();
       assert.equal(requiredOnlyState.fieldState.pickupTime.value, "09:30", "Expected compact time input to set pickupTime");
       assert.equal(
@@ -34509,6 +34581,7 @@ async function runChromeTest() {
           "returnPickupTime",
           "returnTripRequested",
           "serviceType",
+          "specialRequest",
           "travelerId",
           "vehicleType",
         ],
@@ -34531,7 +34604,6 @@ async function runChromeTest() {
           "liveLocation",
           "proofPhoto",
           "parserLearning",
-          "specialRequest",
         ].filter((key) => Object.prototype.hasOwnProperty.call(validState.customerBookingRequestCalls[0].body, key)),
         [],
         "Expected /book not to send forbidden finance/customer/driver/private fields",
@@ -34558,6 +34630,7 @@ async function runChromeTest() {
           returnPickupTime: validState.customerBookingRequestCalls[0].body.returnPickupTime,
           returnTripRequested: validState.customerBookingRequestCalls[0].body.returnTripRequested,
           serviceType: validState.customerBookingRequestCalls[0].body.serviceType,
+          specialRequest: validState.customerBookingRequestCalls[0].body.specialRequest,
           travelerId: validState.customerBookingRequestCalls[0].body.travelerId,
           vehicleType: validState.customerBookingRequestCalls[0].body.vehicleType,
         },
@@ -34582,6 +34655,7 @@ async function runChromeTest() {
           returnPickupTime: "",
           returnTripRequested: "",
           serviceType: "Airport Arrival",
+          specialRequest: "Child seat required\nEvent starts at 10:00",
           travelerId: "",
           vehicleType: "Alphard / Vellfire",
         },
@@ -34603,6 +34677,33 @@ async function runChromeTest() {
         validState.sameTimeBlockingText,
         [],
         "Expected valid /book submit not to show same-date or same-time blocking",
+      );
+
+      await setCustomerBookingField("specialRequest", "x".repeat(501));
+      await clickCustomerBookingSubmit("oversized customer special request");
+      const oversizedSpecialRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText === "Special request must be 500 characters or fewer."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "oversized customer special request feedback",
+      );
+      assert.equal(
+        oversizedSpecialRequestState.feedbackTone,
+        "error",
+        "Expected oversized customer special request to fail visibly",
+      );
+      assert.equal(
+        oversizedSpecialRequestState.customerBookingRequestCalls.length,
+        1,
+        "Expected oversized customer special request not to submit another customer request",
+      );
+      await setCustomerBookingField(
+        "specialRequest",
+        "Child seat required\nEvent starts at 10:00",
       );
 
       await setCustomerBookingField("luggage", "2.5");

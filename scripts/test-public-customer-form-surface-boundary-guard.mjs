@@ -32,6 +32,7 @@ const publicCustomerFormFields = [
   "passengerCount",
   "luggage",
   "extraStops",
+  "specialRequest",
   "travelerId",
 ];
 
@@ -57,6 +58,7 @@ const submittedCustomerRequestFields = [
   "passengerCount",
   "luggage",
   "extraStops",
+  "specialRequest",
   "travelerId",
 ];
 
@@ -123,7 +125,6 @@ const adapterForbiddenPayloadFragments = [
   "payout",
   "pdf",
   "rawAi",
-  "specialRequest",
   "token",
 ];
 
@@ -158,7 +159,7 @@ const contractChecks = [
     script: "scripts/test-customer-booking-request-adapter.mjs",
     requiredFragments: [
       "Adapter should submit only approved customer booking request fields.",
-      "Adapter must not forward finance/internal/free-note fields.",
+      "Adapter must not forward finance/internal fields.",
       "Customer booking request adapter contract passed.",
     ],
   },
@@ -294,7 +295,7 @@ for (const phrase of [
   "`/my-bookings` new-request link must not submit to customer booking request persistence.",
   "The separately guarded fixed-template customer-to-driver quick-reply POST does not create a duplicate booking-request form, submit booking-request fields, or call customer booking-request persistence.",
   "Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.",
-  "The customer request adapter may submit only the approved API payload fields and must not forward `specialRequest` or finance/internal/free-note fields.",
+  "The customer request adapter may submit only the approved API payload fields, including the bounded customer-safe `specialRequest`, and must not forward finance/internal fields.",
   "This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",

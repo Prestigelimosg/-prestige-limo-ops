@@ -26,14 +26,6 @@ for (const fragment of [
   assert.equal(bookPage.includes(fragment), true, `/book luggage contract must include ${fragment}.`);
 }
 
-for (const removedFragment of [
-  "specialRequest: string;",
-  'data-customer-booking-field="specialRequest"',
-  "Special request / note",
-]) {
-  assert.equal(bookPage.includes(removedFragment), false, `/book must remove ${removedFragment}.`);
-}
-
 for (const fragment of [
   "function customerBookingLuggageCount",
   "Malformed customer booking request luggage count rejected.",

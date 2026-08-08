@@ -3,11 +3,13 @@ export const allowedAiBookingTypes = ["MNG", "DEP", "TRF", "DSP"] as const;
 export type AiBookingType = (typeof allowedAiBookingTypes)[number];
 
 export type AiParsedBooking = {
+  bagCount: string;
   bookingType: AiBookingType | "";
   companyAccount: string;
   bookerName: string;
   bookerEmail: string;
   bookerContact: string;
+  passengerContact: string;
   passengerName: string;
   pax: string;
   vehicle: string;
@@ -16,6 +18,7 @@ export type AiParsedBooking = {
   flightNumber: string;
   pickup: string;
   dropoff: string;
+  extraStopCount: string;
   extraStopLocation: string;
   extraStops: string;
   customerPriceOverride: string;
@@ -42,11 +45,13 @@ export const aiParseJsonSchema = {
         type: "object",
         additionalProperties: false,
         required: [
+          "bagCount",
           "bookingType",
           "companyAccount",
           "bookerName",
           "bookerEmail",
           "bookerContact",
+          "passengerContact",
           "passengerName",
           "pax",
           "vehicle",
@@ -55,6 +60,7 @@ export const aiParseJsonSchema = {
           "flightNumber",
           "pickup",
           "dropoff",
+          "extraStopCount",
           "extraStopLocation",
           "extraStops",
           "customerPriceOverride",
@@ -63,11 +69,13 @@ export const aiParseJsonSchema = {
           "needsReviewReasons",
         ],
         properties: {
+          bagCount: { type: "string" },
           bookingType: { type: "string", enum: ["", ...allowedAiBookingTypes] },
           companyAccount: { type: "string" },
           bookerName: { type: "string" },
           bookerEmail: { type: "string" },
           bookerContact: { type: "string" },
+          passengerContact: { type: "string" },
           passengerName: { type: "string" },
           pax: { type: "string" },
           vehicle: { type: "string" },
@@ -76,6 +84,7 @@ export const aiParseJsonSchema = {
           flightNumber: { type: "string" },
           pickup: { type: "string" },
           dropoff: { type: "string" },
+          extraStopCount: { type: "string" },
           extraStopLocation: { type: "string" },
           extraStops: { type: "string" },
           customerPriceOverride: { type: "string" },
@@ -142,9 +151,11 @@ const ownCompanyNames = new Set(["prestige transport"]);
 const countryCodeSecondLevelDomains = new Set(["ac", "co", "com", "edu", "gov", "net", "org"]);
 const allowedAiBookingTypeSet = new Set<string>(allowedAiBookingTypes);
 const aiStringFields = [
+  "bagCount",
   "bookerName",
   "bookerEmail",
   "bookerContact",
+  "passengerContact",
   "passengerName",
   "pax",
   "vehicle",
@@ -152,6 +163,7 @@ const aiStringFields = [
   "pickupTime",
   "pickup",
   "dropoff",
+  "extraStopCount",
   "extraStopLocation",
   "extraStops",
   "customerPriceOverride",
@@ -278,11 +290,13 @@ function sanitizeAiParsedBooking(value: unknown): AiParsedBooking {
   const input = asRecord(value);
   const needsReviewReasons = stringArray(input.needsReviewReasons);
   const booking: AiParsedBooking = {
+    bagCount: "",
     bookingType: sanitizeBookingType(input.bookingType, needsReviewReasons),
     companyAccount: sanitizeCompanyAccount(input.companyAccount, needsReviewReasons),
     bookerName: "",
     bookerEmail: "",
     bookerContact: "",
+    passengerContact: "",
     passengerName: "",
     pax: "",
     vehicle: "",
@@ -291,6 +305,7 @@ function sanitizeAiParsedBooking(value: unknown): AiParsedBooking {
     flightNumber: sanitizeFlightNumber(input.flightNumber, needsReviewReasons),
     pickup: "",
     dropoff: "",
+    extraStopCount: "",
     extraStopLocation: "",
     extraStops: "",
     customerPriceOverride: "",

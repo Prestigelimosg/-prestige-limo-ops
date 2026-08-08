@@ -123,6 +123,8 @@ type DriverAppUpdateRecord = {
   updated_at?: string | null;
 };
 
+const DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS = 5_000;
+
 type DriverAppUpdateApiResponse =
   | {
       notifications?: DriverAppUpdateRecord[];
@@ -1326,7 +1328,7 @@ export default function DriverJobPage() {
       return;
     }
 
-    const refreshDriverAppUpdatesOnForeground = () => {
+    const refreshDriverAppUpdatesWhileVisible = () => {
       if (document.visibilityState !== "visible") {
         return;
       }
@@ -1334,11 +1336,18 @@ export default function DriverJobPage() {
       void refreshDriverAppUpdates({ preserveContent: true });
     };
 
+    const refreshDriverAppUpdatesOnForeground = refreshDriverAppUpdatesWhileVisible;
+    const driverAppUpdatesRefreshInterval = window.setInterval(
+      refreshDriverAppUpdatesWhileVisible,
+      DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS,
+    );
+
     window.addEventListener("focus", refreshDriverAppUpdatesOnForeground);
     document.addEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
     window.addEventListener("pageshow", refreshDriverAppUpdatesOnForeground);
 
     return () => {
+      window.clearInterval(driverAppUpdatesRefreshInterval);
       window.removeEventListener("focus", refreshDriverAppUpdatesOnForeground);
       document.removeEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
       window.removeEventListener("pageshow", refreshDriverAppUpdatesOnForeground);

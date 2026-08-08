@@ -534,16 +534,20 @@ class FakeOpenAI {
                     dropoff: "Changi Airport",
                     extraStopCount: "1",
                     extraStopLocation: "6 Suffolk Walk, Singapore 307464",
-                    extraStops: "",
+                    extraStops: "6 Suffolk Walk, Singapore 307464",
                     flightNumber: "SQ958",
-                    needsReviewReasons: ["Airport terminal not specified."],
+                    needsReviewReasons: [
+                      "Confirm whether the second pickup is the supported extra stop and verify pickup sequence.",
+                      "Confirm airport identity and terminal.",
+                      "Verify whether Pending (new) represents a final confirmed booking.",
+                    ],
                     notes:
                       "1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
                     passengerContact: "+6596389322",
                     passengerName: "Pui Yu Chan",
                     pax: "2",
                     pickup: "26 Newton Rd, Singapore 307957",
-                    pickupDate: "2026-08-19",
+                    pickupDate: "19-08-2026",
                     pickupTime: "10:00",
                     vehicle: "Toyota Alphard 2.5",
                   },
@@ -553,7 +557,12 @@ class FakeOpenAI {
               },
               classification: "confirmed_booking",
               confidence: 0.94,
-              reviewReasons: ["Airport terminal not specified."],
+              reviewReasons: [
+                "Booker name is unclear: client name is Pui Yu Chan, while the email address appears to identify someone else.",
+                "The extra waypoint address is not clearly labelled as a numbered route stop, though the comment identifies a second pickup.",
+                "Booking status is Pending (new); verify whether this is final and confirmed.",
+                "Airport name and terminal are not explicitly stated.",
+              ],
               suggestedReply: "",
               summary: "Prestige Transport 15787 airport departure for Pui Yu Chan.",
             }
@@ -1041,6 +1050,7 @@ try {
   assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
   assert.equal(intakeRows[4].booking_parse_result.bookings[0].passengerName, "Shohei Ogasawara");
   assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookingType, "MNG");
+  assert.equal(intakeRows[4].booking_parse_result.bookings[0].pickupDate, "2026-08-17");
   assert.equal(intakeRows[4].booking_parse_result.bookings[0].companyId, undefined);
   assert.equal(intakeRows[4].booking_parse_result.bookings[0].bookerId, undefined);
   assert.equal(intakeRows[4].booking_parse_result.bookings[0].travelerId, undefined);
@@ -1066,6 +1076,7 @@ try {
   assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookerContact, "+65 98156017");
   assert.equal(intakeRows[5].booking_parse_result.bookings[0].passengerName, "Shohei Ogasawara");
   assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookingType, "DEP");
+  assert.equal(intakeRows[5].booking_parse_result.bookings[0].pickupDate, "2026-08-19");
   assert.match(intakeRows[5].normalized_text, /Phone number \+818024138363/);
   assert.equal(intakeRows[5].booking_parse_result.bookings[0].companyId, undefined);
   assert.equal(intakeRows[5].booking_parse_result.bookings[0].bookerId, undefined);
@@ -1119,6 +1130,7 @@ try {
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].bagCount, "3");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].pax, "2");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].bookingType, "DEP");
+  assert.equal(intakeRows[6].booking_parse_result.bookings[0].pickupDate, "2026-08-19");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].dropoff, "Changi Airport");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].extraStopCount, "1");
   assert.equal(intakeRows[6].booking_parse_result.bookings[0].customerPriceOverride, "");
@@ -1129,13 +1141,23 @@ try {
   );
   assert.doesNotMatch(
     intakeRows[6].booking_parse_result.bookings[0].needsReviewReasons.join("\n"),
-    /Waypoint location missing|Booker name requires confirmation|passengers versus vehicle capacity/i,
+    /waypoint|extra stop|second pickup|booker name (?:requires confirmation|is unclear)|passengers versus vehicle capacity/i,
   );
   assert.doesNotMatch(
     intakeRows[6].review_reasons.join("\n"),
-    /Waypoint location missing|Booker name requires confirmation|passengers versus vehicle capacity/i,
+    /waypoint|extra stop|second pickup|booker name (?:requires confirmation|is unclear)|passengers versus vehicle capacity/i,
   );
-  assert.deepEqual(intakeRows[6].review_reasons, ["Airport terminal not specified."]);
+  assert.deepEqual(intakeRows[6].review_reasons, [
+    "Booking status is Pending (new); verify whether this is final and confirmed.",
+    "Airport name and terminal are not explicitly stated.",
+  ]);
+  assert.deepEqual(
+    intakeRows[6].booking_parse_result.bookings[0].needsReviewReasons,
+    [
+      "Confirm airport identity and terminal.",
+      "Verify whether Pending (new) represents a final confirmed booking.",
+    ],
+  );
   assert.doesNotMatch(intakeRows[6].canonical_booking_text, /Changi Airport T\d/i);
   assert.match(intakeRows[6].canonical_booking_text, /^Passenger contact: \+6596389322$/m);
   assert.match(intakeRows[6].canonical_booking_text, /^Bags: 3$/m);

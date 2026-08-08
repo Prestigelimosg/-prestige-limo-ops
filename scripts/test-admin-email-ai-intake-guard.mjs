@@ -207,6 +207,14 @@ assert.match(runtimeSource, /hyunsoostar@hotmail\.com/);
 assert.match(runtimeSource, /Kim Hyun Soo/);
 assert.match(runtimeSource, /\+65 98156017/);
 assert.match(runtimeSource, /enforcePrestigeTransportKnownBookerEmail/);
+assert.match(runtimeSource, /isResolvedKnownBookerReason/);
+assert.match(runtimeSource, /enforceResolvedStructuredReviewReasons/);
+assert.match(runtimeSource, /hasSpecificStructuredExtraStop/);
+assert.doesNotMatch(
+  runtimeSourceWithoutEmailInstructions,
+  /6 Suffolk Walk|Prestige Transport 15787/,
+  "The post-AI repair must use general structured-field rules instead of booking-specific values.",
+);
 assert.match(
   runtimeSource,
   /New booking\\s\+\"Prestige Transport \\d\+\"\\s\+has been received/,

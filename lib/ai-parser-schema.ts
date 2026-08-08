@@ -286,6 +286,30 @@ function sanitizeConfidence(value: unknown, needsReviewReasons: string[]) {
   return Math.max(0, Math.min(1, numericValue));
 }
 
+function sanitizePickupDate(value: unknown) {
+  const pickupDate = clean(value);
+  const supplierDate = pickupDate.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+
+  if (!supplierDate) {
+    return pickupDate;
+  }
+
+  const day = Number(supplierDate[1]);
+  const month = Number(supplierDate[2]);
+  const year = Number(supplierDate[3]);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month - 1 ||
+    candidate.getUTCDate() !== day
+  ) {
+    return pickupDate;
+  }
+
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function sanitizeAiParsedBooking(value: unknown): AiParsedBooking {
   const input = asRecord(value);
   const needsReviewReasons = stringArray(input.needsReviewReasons);
@@ -317,6 +341,8 @@ function sanitizeAiParsedBooking(value: unknown): AiParsedBooking {
   for (const field of aiStringFields) {
     booking[field] = clean(input[field]);
   }
+
+  booking.pickupDate = sanitizePickupDate(input.pickupDate);
 
   return booking;
 }

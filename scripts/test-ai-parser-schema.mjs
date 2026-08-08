@@ -139,6 +139,29 @@ assert.equal(unclearFieldsResult.bookings[0].flightNumber, "");
 assert.equal(unclearFieldsResult.bookings[0].pickup, "");
 assert.equal(unclearFieldsResult.bookings[0].dropoff, "");
 
+const supplierDateResult = sanitizeAiParseResult({
+  bookings: [{ confidence: 0.5, pickupDate: "19-08-2026" }],
+});
+assert.equal(
+  supplierDateResult.bookings[0].pickupDate,
+  "2026-08-19",
+  "A valid supplier DD-MM-YYYY date must be normalized before canonical Dispatch mapping.",
+);
+
+const supplierSlashDateResult = sanitizeAiParseResult({
+  bookings: [{ confidence: 0.5, pickupDate: "7/8/2026" }],
+});
+assert.equal(supplierSlashDateResult.bookings[0].pickupDate, "2026-08-07");
+
+const invalidSupplierDateResult = sanitizeAiParseResult({
+  bookings: [{ confidence: 0.5, pickupDate: "31-02-2026" }],
+});
+assert.equal(
+  invalidSupplierDateResult.bookings[0].pickupDate,
+  "31-02-2026",
+  "An invalid date must remain visible for review instead of being silently changed.",
+);
+
 assert.equal(
   sanitizeAiParseResult({ bookings: [{ companyAccount: "gmail.com", confidence: 0.5 }] })
     .bookings[0].companyAccount,

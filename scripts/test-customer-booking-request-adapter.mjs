@@ -100,7 +100,7 @@ try {
     returnPickupTime: "18:30",
     returnTripRequested: "yes",
     serviceType: "Airport Arrival",
-    specialRequest: "must not be sent",
+    specialRequest: "Child seat needed at pickup",
     travelerId: "901",
     vehicleType: "Alphard / Vellfire",
   };
@@ -172,6 +172,7 @@ try {
       "returnPickupTime",
       "returnTripRequested",
       "serviceType",
+      "specialRequest",
       "travelerId",
       "vehicleType",
     ],
@@ -183,11 +184,11 @@ try {
       "customerPrice",
       "financeNotes",
       "internalAdminNotes",
-      "specialRequest",
     ].filter((key) => Object.prototype.hasOwnProperty.call(fetchCalls[0].body, key)),
     [],
-    "Adapter must not forward finance/internal/free-note fields.",
+    "Adapter must not forward finance/internal fields.",
   );
+  assert.equal(fetchCalls[0].body.specialRequest, "Child seat needed at pickup");
   assertNoUnsafeCustomerRequestText(success, "mapped success result");
   assertNoUnsafeCustomerRequestText(fetchCalls[0].body, "submitted request body");
 

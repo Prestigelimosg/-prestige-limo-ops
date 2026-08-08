@@ -136,15 +136,15 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, customer_special_request, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingCurrentLoadSelectWithoutPublicReference =
   adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutPublicReference =
   adminBookingFoundationLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelectWithoutDriver =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutDriverOrPublicReference =
   adminBookingFoundationLoadSelectWithoutDriver.replace("public_booking_reference, ", "");
 
@@ -294,6 +294,13 @@ function safeAdapterFailure<T>(
 
 function isColumnMissingFailure(error: unknown) {
   return classifyAdapterDatabaseFailure(error) === "column_missing";
+}
+
+function isCustomerSpecialRequestColumnMissingFailure(error: unknown) {
+  return (
+    isColumnMissingFailure(error) &&
+    JSON.stringify(error).toLowerCase().includes("customer_special_request")
+  );
 }
 
 function adminBookingListLimit(value: AdminBookingListOptions["limit"]) {
@@ -553,6 +560,20 @@ function luggageCountOrNull(value: unknown) {
   const parsed = integerOrNull(value);
 
   return parsed !== null && parsed <= 2_147_483_647 ? parsed : null;
+}
+
+function customerSpecialRequestOrNull(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+
+  return normalized &&
+    normalized.length <= 500 &&
+    !/[\u0000-\u0009\u000b-\u001f\u007f]/.test(normalized)
+    ? normalized
+    : null;
 }
 
 function positiveIntegerOrFallback(value: unknown, fallback = 1) {
@@ -935,6 +956,9 @@ function bookingToDbRow(
   const bookerId = dbIdentifierOrNull(booking.booker_id);
   const travelerId = dbIdentifierOrNull(booking.traveler_id);
   const driverId = integerOrNull(booking.driver_id);
+  const customerSpecialRequest = customerSpecialRequestOrNull(
+    booking.customer_special_request,
+  );
   const pickupAt = textOrNull(booking.pickup_at) || textOrNull(booking.pickup_datetime) || new Date().toISOString();
   const pickupLocation = textOrNull(booking.pickup_location) || "Pickup To Confirm";
   const dropoffLocation = textOrNull(booking.dropoff_location) || "Drop-off To Confirm";
@@ -966,6 +990,9 @@ function bookingToDbRow(
     driver_plate_number: textOrNull(booking.driver_plate_number),
     pax_count: integerOrNull(booking.pax_count),
     luggage_count: luggageCountOrNull(booking.luggage_count),
+    ...(customerSpecialRequest
+      ? { customer_special_request: customerSpecialRequest }
+      : {}),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     admin_internal_status: normalizeAdminInternalStatus(booking.admin_internal_status),
     customer_facing_status: normalizeCustomerFacingStatus(booking.customer_facing_status),
@@ -1025,6 +1052,9 @@ function bookingToFoundationDbRow(
     driver_plate_number: currentRow.driver_plate_number,
     pax_count: integerOrNull(booking.pax_count),
     luggage_count: currentRow.luggage_count,
+    ...(currentRow.customer_special_request
+      ? { customer_special_request: currentRow.customer_special_request }
+      : {}),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     customer_facing_status: currentRow.customer_facing_status,
     admin_internal_status: currentRow.admin_internal_status,
@@ -1059,16 +1089,33 @@ type AdminBookingSelectResult<T> = {
   error: unknown;
 };
 
+async function loadAdminBookingSelectWithCustomerSpecialRequestFallback<T>(
+  buildQuery: (selectedColumns: string) => PromiseLike<AdminBookingSelectResult<T>>,
+  selectedColumns: string,
+): Promise<AdminBookingSelectResult<T>> {
+  const result = await buildQuery(selectedColumns);
+
+  if (!isCustomerSpecialRequestColumnMissingFailure(result.error)) {
+    return result;
+  }
+
+  return buildQuery(selectedColumns.replace("customer_special_request, ", ""));
+}
+
 async function loadAdminBookingsWithFoundationFallback<T>(
   buildQuery: (selectedColumns: string) => PromiseLike<AdminBookingSelectResult<T>>,
 ): Promise<AdminBookingSelectResult<T>> {
-  const currentResult = await buildQuery(adminBookingCurrentLoadSelect);
+  const currentResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
+    adminBookingCurrentLoadSelect,
+  );
 
   if (!currentResult.error || !isColumnMissingFailure(currentResult.error)) {
     return currentResult;
   }
 
-  const currentWithoutPublicReferenceResult = await buildQuery(
+  const currentWithoutPublicReferenceResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
     adminBookingCurrentLoadSelectWithoutPublicReference,
   );
 
@@ -1079,13 +1126,17 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return currentWithoutPublicReferenceResult;
   }
 
-  const foundationResult = await buildQuery(adminBookingFoundationLoadSelect);
+  const foundationResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
+    adminBookingFoundationLoadSelect,
+  );
 
   if (!foundationResult.error || !isColumnMissingFailure(foundationResult.error)) {
     return foundationResult;
   }
 
-  const foundationWithoutPublicReferenceResult = await buildQuery(
+  const foundationWithoutPublicReferenceResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
     adminBookingFoundationLoadSelectWithoutPublicReference,
   );
 
@@ -1096,7 +1147,8 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return foundationWithoutPublicReferenceResult;
   }
 
-  const foundationWithoutDriverResult = await buildQuery(
+  const foundationWithoutDriverResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
     adminBookingFoundationLoadSelectWithoutDriver,
   );
 
@@ -1107,7 +1159,10 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return foundationWithoutDriverResult;
   }
 
-  return buildQuery(adminBookingFoundationLoadSelectWithoutDriverOrPublicReference);
+  return loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
+    adminBookingFoundationLoadSelectWithoutDriverOrPublicReference,
+  );
 }
 
 function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
@@ -1174,6 +1229,9 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     driver_plate_number: textOrNull(row.driver_plate_number),
     pax_count: integerOrNull(row.pax_count),
     luggage_count: luggageCountOrNull(row.luggage_count),
+    customer_special_request: customerSpecialRequestOrNull(
+      row.customer_special_request,
+    ),
     vehicle_type_or_category: textOrNull(row.vehicle_type_or_category),
     customer_facing_status: customerStatusToUi(row.customer_facing_status),
     admin_internal_status: adminStatusToUi(row.admin_internal_status),

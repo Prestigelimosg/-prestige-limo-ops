@@ -23,6 +23,7 @@ export type CustomerBookingRequestSubmitInput = {
   passengerCount?: string;
   luggage?: string;
   extraStops?: string;
+  specialRequest?: string;
 };
 
 export type CustomerBookingRequestSubmitResult =
@@ -166,6 +167,7 @@ function toCustomerBookingRequestApiBody(input: CustomerBookingRequestSubmitInpu
     passengerCount: input.passengerCount,
     luggage: input.luggage,
     extraStops: input.extraStops,
+    specialRequest: input.specialRequest,
   };
 }
 

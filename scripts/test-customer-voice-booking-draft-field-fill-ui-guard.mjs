@@ -46,6 +46,7 @@ const approvedSubmittedFields = [
 
 const acceptedCustomerRequestFields = [
   ...approvedSubmittedFields,
+  "specialRequest",
   "travelerId",
 ];
 
@@ -326,9 +327,18 @@ const persistenceFieldBlock =
 for (const field of approvedSubmittedFields) {
   assertIncludes(adapterBodyBlock, `${field}: input.${field}`, `customer request adapter submitted field ${field}`);
 }
+assertIncludes(
+  adapterBodyBlock,
+  "specialRequest: input.specialRequest",
+  "customer request adapter submitted specialRequest",
+);
+assertIncludes(
+  persistenceFieldBlock,
+  '"specialRequest"',
+  "customer booking persistence specialRequest allowlist",
+);
 
 for (const forbidden of [
-  "specialRequest",
   "voiceTranscript",
   "voice_transcript",
   "transcript",

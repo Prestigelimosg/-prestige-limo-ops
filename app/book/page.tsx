@@ -79,6 +79,7 @@ type BookingRequestForm = {
   passengerCount: string;
   luggage: string;
   extraStops: string;
+  specialRequest: string;
 };
 
 type Feedback = {
@@ -114,6 +115,7 @@ const initialForm: BookingRequestForm = {
   passengerCount: "",
   luggage: "",
   extraStops: "",
+  specialRequest: "",
 };
 
 const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
@@ -139,6 +141,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   passengerCount: "Number of passengers",
   luggage: "Number of bags",
   extraStops: "Extra stops",
+  specialRequest: "Special request / note",
 };
 
 const requiredFields: Array<keyof BookingRequestForm> = [
@@ -717,6 +720,27 @@ export default function CustomerBookingPage() {
     }
 
     const luggageCount = form.luggage.trim();
+    const normalizedSpecialRequest = form.specialRequest.replace(/\r\n?/g, "\n").trim();
+
+    if (normalizedSpecialRequest.length > 500) {
+      setMissingFields(["specialRequest"]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Special request must be 500 characters or fewer.",
+      });
+      return;
+    }
+
+    if (/[\u0000-\u0009\u000b-\u001f\u007f]/.test(normalizedSpecialRequest)) {
+      setMissingFields(["specialRequest"]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Special request contains unsupported control characters.",
+      });
+      return;
+    }
 
     if (
       luggageCount &&
@@ -1551,6 +1575,20 @@ export default function CustomerBookingPage() {
                   </div>
                 ) : null}
 
+                <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
+                  Special request / note
+                  <textarea
+                    aria-invalid={isMissing("specialRequest")}
+                    className={`${fieldClass(isMissing("specialRequest"))} min-h-20 resize-y`}
+                    data-customer-booking-field="specialRequest"
+                    maxLength={500}
+                    name="specialRequest"
+                    onChange={(event) => updateField("specialRequest", event.target.value)}
+                    placeholder="Number of vehicles, child seat, meet-and-greet, event timing, or other requests"
+                    value={form.specialRequest}
+                  />
+                </label>
+
               </div>
             </section>
 
@@ -1682,8 +1720,8 @@ export default function CustomerBookingPage() {
                     {confirmationStatus.detail}
                   </p>
                 </section>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
           </div>
         </form>
       </div>

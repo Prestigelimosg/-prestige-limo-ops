@@ -10,10 +10,11 @@ const requestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const persistencePath = "lib/admin-booking-persistence.ts";
 const supabaseAdapterPath = "lib/admin-booking-supabase-adapter.ts";
 const adminPagePath = "app/page.tsx";
+const browserGuardPath = "scripts/test-app-smoke-browser.mjs";
 const migrationPath = "supabase/migrations/20260808080844_add_customer_special_request.sql";
 
-const [bookPage, requestAdapter, persistence, supabaseAdapter, adminPage, migration] = await Promise.all(
-  [bookPagePath, requestAdapterPath, persistencePath, supabaseAdapterPath, adminPagePath, migrationPath].map(
+const [bookPage, requestAdapter, persistence, supabaseAdapter, adminPage, browserGuard, migration] = await Promise.all(
+  [bookPagePath, requestAdapterPath, persistencePath, supabaseAdapterPath, adminPagePath, browserGuardPath, migrationPath].map(
     (filePath) => readFile(filePath, "utf8"),
   ),
 );
@@ -28,6 +29,17 @@ for (const fragment of [
   "Special request contains unsupported control characters.",
 ]) {
   assert.equal(bookPage.includes(fragment), true, `/book Special Request must include ${fragment}.`);
+}
+
+for (const fragment of [
+  "Open request exact full-record Special Request display",
+  "Expected Open request to render the persisted Special Request after one exact guarded read",
+]) {
+  assert.equal(
+    browserGuard.includes(fragment),
+    true,
+    `Admin Open request browser regression must include ${fragment}.`,
+  );
 }
 
 const extraStopsFieldIndex = bookPage.indexOf('data-customer-booking-field="extraStops"');
@@ -92,6 +104,20 @@ for (const fragment of [
   'data-admin-dispatch-customer-special-request="true"',
 ]) {
   assert.equal(adminPage.includes(fragment), true, `Admin Special Request carry must include ${fragment}.`);
+}
+
+for (const fragment of [
+  "async function openNewBookingRequestNotificationReview",
+  'new URLSearchParams({ booking_reference: exactBookingReference })',
+  'fetch(`/api/admin-bookings?${params.toString()}`',
+  'adminBookingRecordOverride?: AdminBookingPersistenceRecord;',
+  "adminBookingRecordOverride: exactRequestRecord",
+]) {
+  assert.equal(
+    adminPage.includes(fragment),
+    true,
+    `Admin Open request must reload and apply the exact full booking record before showing Special Request: ${fragment}.`,
+  );
 }
 
 for (const fragment of [

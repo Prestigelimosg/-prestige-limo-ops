@@ -22171,6 +22171,7 @@ export default function Home() {
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
+      adminBookingRecordOverride?: AdminBookingPersistenceRecord;
       bookingFormOverride?: BookingForm;
       correctionSummary?: string;
       focusCustomerCopy?: boolean;
@@ -22187,7 +22188,9 @@ export default function Home() {
     const loadedBookingForm = options.bookingFormOverride
       ? { ...options.bookingFormOverride }
       : bookingRecordToForm(bookingRecord);
-    const loadedAdminBookingRecord = bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
+    const loadedAdminBookingRecord =
+      options.adminBookingRecordOverride ||
+      bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
 
     rememberHandledCustomerBookingRequest(bookingRecord);
     setDriverJobLinkCopyMessage(null);
@@ -22796,7 +22799,7 @@ export default function Home() {
     window.setTimeout(() => scrollToAdminAlertLocatorTarget("new-booking-requests"), 150);
   }
 
-  function openNewBookingRequestNotificationReview(bookingReference: string) {
+  async function openNewBookingRequestNotificationReview(bookingReference: string) {
     const safeBookingReference = cleanReferenceText(bookingReference);
 
     if (!safeBookingReference) {
@@ -22818,31 +22821,79 @@ export default function Home() {
       return;
     }
 
-    if (safeBookingReference) {
-      const loadedRecord = findLoadedBookingRecordByReference(bookings, safeBookingReference);
+    const loadedRecord = findLoadedBookingRecordByReference(bookings, safeBookingReference);
+    const exactBookingReference =
+      (loadedRecord ? bookingRecordPersistedReference(loadedRecord) : "") ||
+      safeBookingReference;
 
-      if (loadedRecord) {
-        loadSelectedBooking(loadedRecord, { focusDriverJobLink: true });
-        return;
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: `Loading the exact customer request ${adminVisibleBookingReference(exactBookingReference)}...`,
+    });
+
+    try {
+      const params = new URLSearchParams({ booking_reference: exactBookingReference });
+      const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            booking?: AdminBookingPersistenceRecord | null;
+            error?: string;
+            ok?: boolean;
+          }
+        | null;
+      const exactRequestRecord = result?.booking || null;
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        !exactRequestRecord ||
+        cleanReferenceText(exactRequestRecord.booking_reference) !== exactBookingReference
+      ) {
+        throw new Error(
+          adminBookingPersistenceFailureDetail(
+            result,
+            `Exact customer request ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+          ),
+        );
       }
 
-      const savedRecord = findAdminBookingPersistenceRecordByReference(
-        adminBookingPersistenceRecords,
-        safeBookingReference,
-      );
+      const exactBookingRecord =
+        adminBookingPersistenceRecordToCalendarBookingRecord(exactRequestRecord);
 
-      if (savedRecord) {
-        const bookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
-        setBookings((currentBookings) => {
-          const remainingBookings = currentBookings.filter(
-            (currentBooking) => bookingRecordPersistedReference(currentBooking) !== safeBookingReference,
-          );
+      setBookings((currentBookings) => {
+        const remainingBookings = currentBookings.filter(
+          (currentBooking) =>
+            bookingRecordPersistedReference(currentBooking) !== exactBookingReference,
+        );
 
-          return [bookingRecord, ...remainingBookings];
-        });
-        loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
-        return;
-      }
+        return [exactBookingRecord, ...remainingBookings];
+      });
+      loadSelectedBooking(exactBookingRecord, {
+        adminBookingRecordOverride: exactRequestRecord,
+        focusDriverJobLink: true,
+      });
+      return;
+    } catch (error) {
+      const message = {
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : `Exact customer request ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+      } satisfies Message;
+
+      setMessage(message);
+      setAdminBookingPersistenceMessage(message);
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message,
+      }));
+      return;
     }
 
     if (customerBookingRequestDisplayItems.length > 0) {

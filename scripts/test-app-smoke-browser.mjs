@@ -1451,6 +1451,71 @@ async function runChromeTest() {
           "LOADED-OPS-001": "2026-06-02T00:00:00.000Z",
           "LOW-REQ-003": "2026-06-02T00:20:00.000Z",
         };
+        window.__adminBookingOpenRequestFixture = {
+          "LOADED-OPS-001": {
+            booking_reference: "LOADED-OPS-001",
+            public_booking_reference: "91001",
+            source_channel: "customer-booking-request",
+            source_surface: "customer_booking_request",
+            customer_id: 9165,
+            company_id: 33,
+            booker_id: 17,
+            traveler_id: null,
+            pickup_datetime: "2026-06-02T08:15:00+08:00",
+            pickup_location: "Loaded Ops Pickup",
+            dropoff_location: "Loaded Ops Dropoff",
+            route_type: "MNG",
+            customer_display_name: "Loaded Ops Customer",
+            contact_display_name: "Loaded Ops Booker",
+            passenger_name: "Loaded Ops Passenger",
+            contact_phone: "+65 8000 1000",
+            contact_email: "loaded-ops@example.com",
+            pax_count: 2,
+            luggage_count: 3,
+            customer_special_request: "Child seat required\\nEvent starts at 10:00",
+            vehicle_type_or_category: "AVF",
+            customer_facing_status: "Received",
+            admin_internal_status: "Admin Review Required",
+            short_notice_review_status: "Admin Review Required",
+            request_review_status: "pending_review",
+            parser_source_reference: "Flight SQ001",
+            created_at: "2026-06-02T00:00:00.000Z",
+            updated_at: "2026-06-02T00:00:00.000Z",
+            route_points: [
+              {
+                point_type: "pickup",
+                sequence_number: 1,
+                location_text: "Loaded Ops Pickup",
+                timing_note: null,
+              },
+              {
+                point_type: "stop",
+                sequence_number: 2,
+                location_text: "Loaded Ops Stop",
+                timing_note: null,
+              },
+              {
+                point_type: "dropoff",
+                sequence_number: 3,
+                location_text: "Loaded Ops Dropoff",
+                timing_note: null,
+              },
+            ],
+            service_items: [
+              {
+                service_item_type: "child_seat",
+                quantity: 2,
+                blocks_count: null,
+              },
+              {
+                service_item_type: "extra_stop",
+                quantity: 1,
+                blocks_count: null,
+              },
+            ],
+          },
+        };
+        window.__adminBookingExactRecordsByReference = {};
         window.__adminMonthlyBillingGroupingCalls = [];
         window.__adminMonthlyBillingGroupingGroups = [
           {
@@ -1555,6 +1620,21 @@ async function runChromeTest() {
         ];
         window.__adminAppNotificationCalls = [];
         window.__adminAppNotifications = [
+          {
+            booking_reference: "LOADED-OPS-001",
+            created_at: "2026-06-08T02:01:00.000Z",
+            id: "app-smoke-new-booking-request-one",
+            notification_status: "queued",
+            notification_type: "booking_request",
+            priority: "high",
+            safe_context: {
+              booking_reference: "LOADED-OPS-001",
+            },
+            safe_message: "A new customer booking request is ready for review.",
+            safe_title: "New booking request",
+            updated_at: "2026-06-08T02:01:00.000Z",
+            workflow_area: "new_booking_request",
+          },
           {
             created_at: "2026-06-08T02:00:00.000Z",
             id: "app-smoke-admin-app-notification-one",
@@ -2275,20 +2355,23 @@ async function runChromeTest() {
             const parsedAdminBookingUrl = new URL(String(url), window.location.origin);
             const exactBookingReference =
               parsedAdminBookingUrl.searchParams.get("booking_reference") || "";
+            const exactBookingRecord =
+              window.__adminBookingExactRecordsByReference?.[exactBookingReference] || null;
             if (
               method === "GET" &&
               parsedAdminBookingUrl.pathname === "/api/admin-bookings" &&
               exactBookingReference &&
-              window.__adminBookingPersistedUpdatedAtByReference[exactBookingReference]
+              (exactBookingRecord ||
+                window.__adminBookingPersistedUpdatedAtByReference[exactBookingReference])
             ) {
               return new Response(
                 JSON.stringify({
                   ok: true,
-                  booking: {
-                    booking_reference: exactBookingReference,
-                    updated_at:
-                      window.__adminBookingPersistedUpdatedAtByReference[exactBookingReference],
-                  },
+                  booking: exactBookingRecord || {
+                      booking_reference: exactBookingReference,
+                      updated_at:
+                        window.__adminBookingPersistedUpdatedAtByReference[exactBookingReference],
+                    },
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               );
@@ -4785,6 +4868,69 @@ async function runChromeTest() {
         0,
         "Expected admin booking persistence state not to be written to browser storage",
       );
+
+      await evaluate(`(() => {
+        window.__adminBookingExactRecordsByReference =
+          window.__adminBookingOpenRequestFixture || {};
+      })()`);
+      await clickTab("Dashboard");
+      await waitForSelector(
+        evaluate,
+        "[data-dashboard-new-booking-request-notification-row='LOADED-OPS-001']",
+        "new booking request notification for exact-record reload",
+      );
+      const openExactRequestClicked = await evaluate(`(() => {
+        const row = document.querySelector(
+          "[data-dashboard-new-booking-request-notification-row='LOADED-OPS-001']",
+        );
+        const button = row?.querySelector(
+          "[data-admin-app-notification-review-new-booking-request='true']",
+        );
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(
+        openExactRequestClicked,
+        true,
+        "Expected Open request on the exact customer booking notification",
+      );
+      const openedExactRequestState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const specialRequest = document.querySelector(
+              "[data-admin-dispatch-customer-special-request='true']",
+            );
+            const exactRead = (window.__adminBookingPersistenceCalls || []).find((call) => {
+              const parsedUrl = new URL(call.url, window.location.origin);
+              return call.method === "GET" &&
+                parsedUrl.pathname === "/api/admin-bookings" &&
+                parsedUrl.searchParams.get("booking_reference") === "LOADED-OPS-001";
+            });
+            const activeDispatch = document.querySelector(
+              "[data-admin-booking-persistence-applied-identity]",
+            )?.textContent || "";
+
+            return specialRequest && exactRead && activeDispatch.includes("LOADED-OPS-001")
+              ? {
+                  heading: specialRequest.querySelector("p:first-child")?.textContent.trim() || "",
+                  value: specialRequest.querySelector("p:last-child")?.textContent.trim() || "",
+                }
+              : false;
+          })()`),
+        10000,
+        "Open request exact full-record Special Request display",
+      );
+      assert.deepEqual(
+        openedExactRequestState,
+        {
+          heading: "Customer special request",
+          value: "Child seat required\nEvent starts at 10:00",
+        },
+        "Expected Open request to render the persisted Special Request after one exact guarded read",
+      );
+      await evaluate(`(() => {
+        window.localStorage.removeItem("prestige-admin-handled-customer-booking-requests");
+      })()`);
 
       await evaluate(`(() => {
         window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch;

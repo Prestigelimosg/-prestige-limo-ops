@@ -33822,10 +33822,10 @@ async function runChromeTest() {
         initialState.portalLink,
         {
           href: "/my-bookings",
-          text: "Portal",
+          text: "My Bookings",
           visible: true,
         },
-        "Expected /book to expose a compact Portal link to /my-bookings",
+        "Expected /book to expose a compact My Bookings link to /my-bookings",
       );
       assert.equal(initialState.confirmationStatus.visible, false, "Expected /book status panel to wait for submit");
       assert.equal(

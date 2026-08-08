@@ -8030,7 +8030,14 @@ export default function MockCustomerDashboardPage() {
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <header className="border-b border-slate-200 pb-5">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prestige Limo Ops</p>
+          <Link
+            className="inline-flex min-h-9 items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+            data-admin-customers-home-link="true"
+            href="/"
+          >
+            Home
+          </Link>
+          <p className="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prestige Limo Ops</p>
           <div className="mt-3">
             <div>
               <h1 className="text-3xl font-bold tracking-normal text-slate-950">Customers & Invoices</h1>

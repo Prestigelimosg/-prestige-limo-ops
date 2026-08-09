@@ -36,7 +36,8 @@ for (const fragment of [
 
 for (const fragment of [
   "luggageCountOverride?: number | null;",
-  "luggage_count: safeAdminBookingPersistenceCount(options.luggageCountOverride)",
+  "options.luggageCountOverride === undefined",
+  "clean(bookingValue.luggageCount)",
   "appliedCustomerRequestLuggageCount",
   "luggageCountOverride: appliedCustomerRequestLuggageCount",
   "acceptingCustomerRequest && appliedSnapshot",
@@ -44,6 +45,22 @@ for (const fragment of [
 ]) {
   assert.equal(adminPage.includes(fragment), true, `Save + CRM luggage carry must include ${fragment}.`);
 }
+
+assert.match(
+  adminPage,
+  /const appliedCustomerRequestLuggageCount\s*=\s*[\s\S]{0,320}?adminBookingPersistenceRecordIsCustomerRequest\(appliedAdminBookingSnapshot\)[\s\S]{0,240}?: undefined;/,
+  "Normal Save + CRM must leave the luggage override undefined so the reviewed Number of bags form value is persisted.",
+);
+assert.match(
+  adminPage,
+  /luggageCountOverride:\s*acceptingCustomerRequest && appliedSnapshot\s*\? safeAdminBookingPersistenceCount\(appliedSnapshot\.luggage_count\)\s*: undefined,/,
+  "Normal Update + Cal must leave the luggage override undefined so the reviewed Number of bags form value is persisted.",
+);
+assert.match(
+  adminPage,
+  /customerSpecialRequestOverride:\s*acceptingCustomerRequest && appliedSnapshot\s*\? clean\(appliedSnapshot\.customer_special_request\) \|\| null\s*: undefined,/,
+  "The established customer special-request override must remain unchanged.",
+);
 
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source, {

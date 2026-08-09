@@ -78,6 +78,7 @@ export type AdminSavedBookingRecord = {
   passenger_name: string | null;
   passenger_phone: string | null;
   pax_count: number | null;
+  luggage_count: number | null;
   pickup_address: string | null;
   pickup_at: string | null;
   pickup_datetime: string | null;
@@ -140,13 +141,13 @@ const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference", "id"]);
 const allowedListReadQueryParams = new Set(["limit", "offset", "scope"]);
 const adminSavedBookingLegacyReadSelect =
-  "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+  "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, luggage_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingCurrentReadSelect =
-  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, customer_price_amount, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, customer_price_amount, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingCurrentMinimalReadSelect =
-  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, pax_count, customer_price_amount, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+  "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, pax_count, luggage_count, customer_price_amount, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
 const adminSavedBookingFoundationScalarReadSelect =
-  "id, booking_reference, source_channel, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, created_at, updated_at";
+  "id, booking_reference, source_channel, booking_type, vehicle, pickup_time, pickup_address, dropoff_address, flight_no, route, pax, luggage_count, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, created_at, updated_at";
 const withPublicBookingReference = (select: string) =>
   select.replace("booking_reference, ", "booking_reference, public_booking_reference, ");
 const adminSavedBookingReadSelects = [
@@ -598,6 +599,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     passenger_name: textOrNull(row.passenger_name, 220),
     passenger_phone: textOrNull(row.passenger_phone, 120),
     pax_count: integerOrNull(row.pax_count),
+    luggage_count: integerOrNull(row.luggage_count),
     pickup_at: textOrNull(row.pickup_at, 120),
     pickup_address: textOrNull(row.pickup_address, 1000),
     pickup_datetime: textOrNull(row.pickup_datetime, 120),

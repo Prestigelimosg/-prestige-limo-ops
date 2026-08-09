@@ -440,6 +440,7 @@ const driverDeleteAssignedBookingFixture = {
   route: "Driver Delete Pickup > Driver Delete Waypoint > Driver Delete Drop-off",
   job_card:
     "AVF DEP\n30 Apr 2026, 0945hrs\nFlight: DL9905\nDriver Delete Pickup > Driver Delete Waypoint > Driver Delete Drop-off\nBooker: Driver Delete Booker\nPassenger: DRIVER DELETE STATE TEST TRAVELER\nPax: 1",
+  luggage_count: 3,
   status: "assigned",
   driver_id: 9905,
   driver_name: "Alson Toh",
@@ -15822,6 +15823,7 @@ async function runChromeTest() {
           const primaryButton = document.querySelector("[data-job-card-save-toolbar='primary'] button");
 
           return {
+            bags: fieldValue("Number of bags"),
             editIdentity: document.querySelector("[data-admin-booking-edit-identity='true']")?.textContent.trim() || "",
             flight: fieldValue("Flight number"),
             primaryLabel: primaryButton?.textContent.trim() || "",
@@ -15829,6 +15831,7 @@ async function runChromeTest() {
         })()`);
 
         return candidateState?.primaryLabel === "Update + Cal" &&
+          candidateState?.bags === "3" &&
           candidateState?.flight === "DL9905" &&
           candidateState?.editIdentity.includes("10839")
           ? candidateState
@@ -15839,6 +15842,7 @@ async function runChromeTest() {
     );
 
     assert.equal(clearMessageEditIdentityState.flight, "DL9905");
+    assert.equal(clearMessageEditIdentityState.bags, "3");
     assert.equal(clearMessageEditIdentityState.primaryLabel, "Update + Cal");
     assert.match(clearMessageEditIdentityState.editIdentity, /Editing booking 10839/);
 

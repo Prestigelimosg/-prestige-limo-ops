@@ -30,7 +30,7 @@
     "test:ai-parser-schema": "node --experimental-strip-types scripts/test-ai-parser-schema.mjs",
     "test:ai-parse-api-route": "node scripts/test-ai-parse-api-route.mjs",
     "test:admin-ai-assistant": "node scripts/test-admin-ai-assistant-guard.mjs",
-    "test:admin-email-ai-intake": "node --experimental-strip-types scripts/test-admin-email-ai-intake-guard.mjs && node scripts/test-admin-email-ai-intake-runtime.mjs",
+    "test:admin-email-ai-intake": "node --experimental-strip-types scripts/test-admin-email-ai-intake-guard.mjs && node scripts/test-admin-email-ai-15787-validation-replay-runner-guard.mjs && node scripts/test-admin-email-ai-intake-runtime.mjs",
     "test:browser": "node scripts/test-booking-browser.mjs",
     "test:app-smoke-browser": "node scripts/test-app-smoke-browser.mjs",
     "test:booking-ui-browser": "node scripts/test-booking-ui-browser.mjs",

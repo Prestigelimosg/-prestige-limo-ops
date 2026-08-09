@@ -35,8 +35,82 @@ assert.ok(
 );
 assert.match(
   adminPage,
-  /const adminEmailAiCustomerStatus =\s*!activeAdminEmailAiIntakeId \|\|\s*adminDispatchSelectedAgencyFolder \|\|\s*adminDispatchCreatingAgencyFolder\s*\? null/,
-  "An explicit Hotel / Tour Agency folder must suppress the contradictory corporate new/repeated-customer banner",
+  /const adminEmailAiCustomerStatus =\s*!activeAdminEmailAiIntakeId \|\|\s*adminDispatchSelectedAgencyFolder \|\|\s*adminDispatchCreatingAgencyFolder \|\|\s*adminEmailAiCustomerProfileSuggestion\s*\? null/,
+  "An explicit agency folder or exact app-profile suggestion must suppress the contradictory new/repeated-customer banner",
+);
+
+for (const fragment of [
+  "adminEmailAiRecommendationEmail",
+  "adminEmailAiRecommendationCompanyName",
+  "loadAdminEmailAiCustomerProfileRecommendation",
+  "applyAdminEmailAiCustomerProfileRecommendation",
+  "operations_email",
+  "booker_email",
+  "company_name",
+  "verified_company_id",
+  "guest_account_billing_enabled",
+  'data-admin-email-ai-customer-profile-suggestion="true"',
+  "Suggested from the app customer profile",
+  "Admin can change this selection before Save + CRM",
+]) {
+  assert.ok(
+    adminPage.includes(fragment),
+    `Email AI app customer-profile recommendation is missing ${fragment}`,
+  );
+}
+
+const recommendationStart = adminPage.indexOf(
+  "async function loadAdminEmailAiCustomerProfileRecommendation",
+);
+const recommendationEnd = adminPage.indexOf(
+  "\n  function ",
+  recommendationStart + 1,
+);
+assert.ok(
+  recommendationStart >= 0 && recommendationEnd > recommendationStart,
+  "Email AI customer-profile recommendation must remain one bounded existing-lane helper",
+);
+const recommendationBlock = adminPage.slice(recommendationStart, recommendationEnd);
+
+for (const fragment of [
+  "adminCompaniesCrmIdentityApiPath",
+  "adminBookersApiPath",
+  "adminCustomerAccountsApiPath",
+  'method: "GET"',
+  "exactEmailCompanyIds",
+  "exactNameCompanyIds",
+  "agencyFolders",
+  'matchBasis = "email"',
+  'matchBasis = "company name"',
+  "normaliseEmail(emailCompany?.operations_email",
+  "normaliseEmail(bookerBody.booker?.email",
+  "saveCrmComparableIdentityValue(nameCompany?.company_name)",
+]) {
+  assert.ok(
+    recommendationBlock.includes(fragment),
+    `Email AI customer-profile recommendation read is missing ${fragment}`,
+  );
+}
+
+assert.doesNotMatch(
+  recommendationBlock,
+  /method:\s*["'](?:POST|PATCH|PUT|DELETE)["']|\/rest\/v1\/|createClient|supabase|searchParams\.set\(["']domain["']|billingCompanyIdentityMatches/i,
+  "Email AI customer-profile recommendation must remain read-only through existing typed APIs and must not use domain or fuzzy company matching",
+);
+assert.match(
+  recommendationBlock,
+  /if \(recommendationEmail\)[\s\S]+exactEmailCompanyIds\.size === 1[\s\S]+matchBasis = "email"[\s\S]+if \(!matchBasis && recommendationCompanyName\)/,
+  "Either one exact email match must win first, or exact company name may be used only as the fallback",
+);
+assert.match(
+  adminPage,
+  /adminEmailAiCustomerRecommendationRevisionRef\.current === recommendationRevision[\s\S]{0,500}activeAdminEmailAiIntakeIdRef\.current === recommendationIntakeId/,
+  "A late Email AI customer-profile response must not overwrite another intake or a manual selection",
+);
+assert.match(
+  adminPage,
+  /loadRates\("Email AI customer check loaded\.",\s*\{[\s\S]{0,180}includeAgencyFolders:\s*true/,
+  "Email AI recommendation must load the established customer profiles and agency folders before selecting",
 );
 
 for (const fragment of [

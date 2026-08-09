@@ -223,6 +223,16 @@ const dashboardEmailAiConfirmedBookingFixture = {
   suggested_reply: "",
   summary: "Prestige Transport 15787 airport departure for Pui Yu Chan.",
 };
+const dashboardEmailAiCompanyFallbackCanonical =
+  dashboardEmailAiConfirmedBookingFixture.canonical_booking_text.replace(
+    "Booker: Kim Hyun Soo\nBooker email: hyunsoostar@hotmail.com",
+    "Company/Account: Alson Limousine\nBooker: Alson\nBooker email: unregistered@guestmail.example",
+  );
+const dashboardEmailAiConflictingEmailCanonical =
+  dashboardEmailAiConfirmedBookingFixture.canonical_booking_text.replace(
+    "Booker: Kim Hyun Soo",
+    "Company/Account: Alson Limousine\nBooker: Kim Hyun Soo",
+  );
 const dashboardEmailAiEnquiryFixture = {
   booking_parse_result: {
     bookings: [],
@@ -8451,6 +8461,180 @@ async function runChromeTest() {
     assert.match(dashboardCommandCentreState.visibleText, /Codex Review & Admin App Notifications/);
 
     await evaluate(`(() => {
+      window.__prestigeEmailAiCustomerRecommendationRequests = [];
+      window.__prestigeEmailAiCustomerRecommendationMode = "email-agency";
+      window.__prestigeEmailAiCustomerRecommendationPreviousFetch = window.fetch;
+      window.fetch = async (...args) => {
+        const target = String(args[0]?.url || args[0] || "");
+        const method = args[1]?.method || args[0]?.method || "GET";
+        const url = new URL(target, window.location.origin);
+        const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+
+        if ([
+          "/api/admin-rate-setup",
+          "/api/admin-customer-accounts",
+          "/api/admin-companies-crm-identity",
+          "/api/admin-bookers",
+        ].includes(url.pathname)) {
+          window.__prestigeEmailAiCustomerRecommendationRequests.push({
+            method,
+            url: url.pathname + url.search,
+          });
+        }
+
+        if (method === "GET" && url.pathname === "/api/admin-rate-setup") {
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "company-corporate") {
+            return jsonResponse({
+              companies: [{ company_name: "Alson Limousine", domain: null, id: 55 }],
+              ok: true,
+              settings: null,
+              travelers: [],
+            });
+          }
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "email-conflict") {
+            return jsonResponse({
+              companies: [
+                { company_name: "Kim Hyun Soo", domain: null, id: 41 },
+                { company_name: "Alson Limousine", domain: null, id: 55 },
+              ],
+              ok: true,
+              settings: null,
+              travelers: [],
+            });
+          }
+          return jsonResponse({
+            companies: [{ company_name: "Kim Hyun Soo", domain: null, id: 41 }],
+            ok: true,
+            settings: null,
+            travelers: [],
+          });
+        }
+        if (method === "GET" && url.pathname === "/api/admin-customer-accounts") {
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "company-corporate") {
+            return jsonResponse({
+              accounts: [{
+                customer_account: "BROWSER UI TEST AGENCY",
+                customer_folder_active: true,
+                customer_id: "161",
+                guest_account_billing_enabled: true,
+                verified_company_id: "601",
+              }],
+              ok: true,
+            });
+          }
+          return jsonResponse({
+            accounts: [
+              {
+                customer_account: "Kim Hyun Soo",
+                customer_folder_active: true,
+                customer_id: "174",
+                guest_account_billing_enabled: true,
+                verified_company_id: "41",
+              },
+              {
+                customer_account: "BROWSER UI TEST AGENCY",
+                customer_folder_active: true,
+                customer_id: "161",
+                guest_account_billing_enabled: true,
+                verified_company_id: "601",
+              },
+            ],
+            ok: true,
+          });
+        }
+        if (method === "GET" && url.pathname === "/api/admin-companies-crm-identity") {
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "company-corporate") {
+            if (url.searchParams.get("company_name") === "Alson Limousine") {
+              return jsonResponse({
+                company: {
+                  company_name: "Alson Limousine",
+                  id: 55,
+                  operations_email: null,
+                },
+                ok: true,
+              });
+            }
+            if (url.searchParams.get("id") === "55") {
+              return jsonResponse({
+                company: {
+                  company_name: "Alson Limousine",
+                  id: 55,
+                  operations_email: null,
+                },
+                ok: true,
+              });
+            }
+            return jsonResponse({ company: null, ok: true });
+          }
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "booker-email-agency") {
+            if (url.searchParams.get("id") === "41") {
+              return jsonResponse({
+                company: {
+                  company_name: "Kim Hyun Soo",
+                  id: 41,
+                  operations_email: null,
+                },
+                ok: true,
+              });
+            }
+            return jsonResponse({ company: null, ok: true });
+          }
+          if (url.searchParams.get("operations_email") === "hyunsoostar@hotmail.com") {
+            return jsonResponse({
+              company: {
+                company_name: "Kim Hyun Soo",
+                id: 41,
+                operations_email: "hyunsoostar@hotmail.com",
+              },
+              ok: true,
+            });
+          }
+          if (url.searchParams.get("id") === "41") {
+            return jsonResponse({
+              company: {
+                company_name: "Kim Hyun Soo",
+                id: 41,
+                operations_email: "hyunsoostar@hotmail.com",
+              },
+              ok: true,
+            });
+          }
+          return jsonResponse({ company: null, ok: true });
+        }
+        if (method === "GET" && url.pathname === "/api/admin-bookers") {
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "booker-email-agency") {
+            return jsonResponse({
+              booker: {
+                booker_name: "Kim Hyun Soo",
+                company_id: 41,
+                email: "hyunsoostar@hotmail.com",
+                id: 4101,
+                phone: "+65 98156017",
+              },
+              ok: true,
+            });
+          }
+          if (window.__prestigeEmailAiCustomerRecommendationMode === "email-conflict") {
+            return jsonResponse({
+              booker: {
+                booker_name: "Kim Hyun Soo",
+                company_id: 55,
+                email: "hyunsoostar@hotmail.com",
+                id: 5501,
+                phone: "+65 98156017",
+              },
+              ok: true,
+            });
+          }
+          return jsonResponse({ booker: null, ok: true });
+        }
+
+        return window.__prestigeEmailAiCustomerRecommendationPreviousFetch(...args);
+      };
+
       window.__prestigeFetchCalls = [];
       window.__prestigeAdminEmailAiIntake = [
         ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture)},
@@ -8655,53 +8839,266 @@ async function runChromeTest() {
       vehicle: "AVF",
     });
 
-    const selectedEmailAiAgencyFolder = await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
-      const createAgencyValue = "create-new-hotel-tour-agency";
-
-      if (!(selector instanceof HTMLSelectElement) ||
-          ![...selector.options].some((option) => option.value === createAgencyValue)) {
-        return false;
-      }
-
-      selector.value = createAgencyValue;
-      selector.dispatchEvent(new Event("change", { bubbles: true }));
-      return true;
-    })()`);
-    assert.equal(
-      selectedEmailAiAgencyFolder,
-      true,
-      "Expected the Email AI draft to allow the established first-agency mode",
-    );
     const emailAiAgencyIdentityState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
-          const selectedNotice = document.querySelector('[data-admin-dispatch-agency-folder-create="true"]');
+          const selectedNotice = document.querySelector('[data-admin-dispatch-agency-folder-selected="true"]');
+          const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
           return selector instanceof HTMLSelectElement &&
-            selector.value === "create-new-hotel-tour-agency" &&
-            selectedNotice
+            selector.value === "174" &&
+            selectedNotice &&
+            suggestion
             ? {
                 customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
+                nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.method)
+                  .filter((method) => method !== "GET"),
+                requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.url),
                 selectedNoticeText: selectedNotice.textContent.replace(/\\s+/g, " ").trim(),
+                suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
               }
             : false;
         })()`),
       10000,
-      "Email AI agency identity presentation",
+      "Email AI exact-email app-profile agency suggestion",
     );
     assert.equal(
       emailAiAgencyIdentityState.customerStatusCount,
       0,
       "Expected agency mode to suppress the contradictory corporate customer banner",
     );
-    assert.match(emailAiAgencyIdentityState.selectedNoticeText, /passenger stays on this booking only/i);
+    assert.deepEqual(
+      emailAiAgencyIdentityState.nonGetMethods,
+      [],
+      "Expected Create Job Card customer recommendation to remain GET-only",
+    );
+    assert.ok(
+      emailAiAgencyIdentityState.requestUrls.some((url) =>
+        url.includes("operations_email=hyunsoostar%40hotmail.com"),
+      ),
+      "Expected exact operations email to identify the app customer profile",
+    );
+    assert.match(emailAiAgencyIdentityState.suggestionText, /exact email match/i);
+    assert.match(
+      emailAiAgencyIdentityState.suggestionText,
+      /Admin can change this selection before Save \+ CRM/i,
+    );
+    assert.match(emailAiAgencyIdentityState.selectedNoticeText, /Guest name stays on this booking only/i);
     await evaluate(`(() => {
       const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
       if (selector instanceof HTMLSelectElement) {
         selector.value = "";
         selector.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    })()`);
+    const emailAiManualOverrideState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          return selector instanceof HTMLSelectElement && selector.value === ""
+            ? {
+                suggestionCount: document.querySelectorAll('[data-admin-email-ai-customer-profile-suggestion="true"]').length,
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI customer-profile suggestion manual override",
+    );
+    assert.equal(
+      emailAiManualOverrideState.suggestionCount,
+      0,
+      "Expected Admin agency/corporate override to clear the read-only suggestion",
+    );
+
+    const startedEmailAiCompanyFallback = await evaluate(`(() => {
+      window.__prestigeEmailAiCustomerRecommendationMode = "company-corporate";
+      window.__prestigeEmailAiCustomerRecommendationRequests = [];
+      const textarea = document.querySelector(
+        '[data-dispatch-workflow-step="booking-input-parser"] textarea',
+      );
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(textarea, ${JSON.stringify(dashboardEmailAiCompanyFallbackCanonical)});
+      textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea?.dispatchEvent(new Event("change", { bubbles: true }));
+      const createJobCardButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!createJobCardButton || createJobCardButton.disabled) {
+        return false;
+      }
+
+      createJobCardButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      startedEmailAiCompanyFallback,
+      true,
+      "Expected the no-registered-email company fallback draft to parse",
+    );
+    const emailAiCompanyFallbackState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const corporateSelector = document.querySelector('[data-admin-dispatch-corporate-customer-select="true"]');
+          const agencySelector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
+
+          return corporateSelector instanceof HTMLSelectElement &&
+            corporateSelector.value === "55" &&
+            agencySelector instanceof HTMLSelectElement &&
+            agencySelector.value === "" &&
+            suggestion
+            ? {
+                customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
+                nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.method)
+                  .filter((method) => method !== "GET"),
+                requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.url),
+                suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI exact-company-name corporate profile fallback",
+    );
+    assert.equal(emailAiCompanyFallbackState.customerStatusCount, 0);
+    assert.deepEqual(emailAiCompanyFallbackState.nonGetMethods, []);
+    assert.ok(
+      emailAiCompanyFallbackState.requestUrls.some((url) =>
+        url.includes("operations_email=unregistered%40guestmail.example"),
+      ),
+      "Expected the unregistered exact email to be checked first",
+    );
+    assert.ok(
+      emailAiCompanyFallbackState.requestUrls.some((url) =>
+        url.includes("company_name=Alson+Limousine"),
+      ),
+      "Expected exact company name to be used only after email had no match",
+    );
+    assert.match(emailAiCompanyFallbackState.suggestionText, /corporate, exact company name match/i);
+
+    const startedEmailAiBookerEmailOnly = await evaluate(`(() => {
+      window.__prestigeEmailAiCustomerRecommendationMode = "booker-email-agency";
+      window.__prestigeEmailAiCustomerRecommendationRequests = [];
+      const textarea = document.querySelector(
+        '[data-dispatch-workflow-step="booking-input-parser"] textarea',
+      );
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(textarea, ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture.canonical_booking_text)});
+      textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea?.dispatchEvent(new Event("change", { bubbles: true }));
+      const createJobCardButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!createJobCardButton || createJobCardButton.disabled) {
+        return false;
+      }
+
+      createJobCardButton.click();
+      return true;
+    })()`);
+    assert.equal(startedEmailAiBookerEmailOnly, true);
+    const emailAiBookerEmailOnlyState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const agencySelector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
+
+          return agencySelector instanceof HTMLSelectElement &&
+            agencySelector.value === "174" &&
+            suggestion
+            ? {
+                nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.method)
+                  .filter((method) => method !== "GET"),
+                requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.url),
+                suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI exact Booker email app-profile agency suggestion",
+    );
+    assert.deepEqual(emailAiBookerEmailOnlyState.nonGetMethods, []);
+    assert.ok(
+      emailAiBookerEmailOnlyState.requestUrls.some((url) =>
+        url.includes("operations_email=hyunsoostar%40hotmail.com"),
+      ),
+      "Expected the company operations email source to return no match",
+    );
+    assert.ok(
+      emailAiBookerEmailOnlyState.requestUrls.some((url) =>
+        url.includes("/api/admin-bookers?email=hyunsoostar%40hotmail.com"),
+      ),
+      "Expected the exact Booker email alone to identify the app customer profile",
+    );
+    assert.match(emailAiBookerEmailOnlyState.suggestionText, /agency, exact email match/i);
+
+    const startedEmailAiConflictingEmail = await evaluate(`(() => {
+      window.__prestigeEmailAiCustomerRecommendationMode = "email-conflict";
+      window.__prestigeEmailAiCustomerRecommendationRequests = [];
+      const textarea = document.querySelector(
+        '[data-dispatch-workflow-step="booking-input-parser"] textarea',
+      );
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(textarea, ${JSON.stringify(dashboardEmailAiConflictingEmailCanonical)});
+      textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea?.dispatchEvent(new Event("change", { bubbles: true }));
+      const createJobCardButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Create Job Card",
+      );
+
+      if (!createJobCardButton || createJobCardButton.disabled) {
+        return false;
+      }
+
+      createJobCardButton.click();
+      return true;
+    })()`);
+    assert.equal(startedEmailAiConflictingEmail, true);
+    const emailAiConflictingEmailState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const agencySelector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const corporateSelector = document.querySelector('[data-admin-dispatch-corporate-customer-select="true"]');
+          const visibleText = document.body.innerText.replace(/\\s+/g, " ");
+
+          return agencySelector instanceof HTMLSelectElement &&
+            agencySelector.value === "" &&
+            corporateSelector instanceof HTMLSelectElement &&
+            corporateSelector.value === "" &&
+            visibleText.includes("exact email address points to more than one app customer profile")
+            ? {
+                nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.method)
+                  .filter((method) => method !== "GET"),
+                requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
+                  .map((request) => request.url),
+                suggestionCount: document.querySelectorAll('[data-admin-email-ai-customer-profile-suggestion="true"]').length,
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI conflicting exact email sources fail closed",
+    );
+    assert.deepEqual(emailAiConflictingEmailState.nonGetMethods, []);
+    assert.equal(emailAiConflictingEmailState.suggestionCount, 0);
+    assert.equal(
+      emailAiConflictingEmailState.requestUrls.some((url) => url.includes("company_name=")),
+      false,
+      "Expected conflicting exact email sources not to fall back to company name",
+    );
+
+    await evaluate(`(() => {
+      if (window.__prestigeEmailAiCustomerRecommendationPreviousFetch) {
+        window.fetch = window.__prestigeEmailAiCustomerRecommendationPreviousFetch;
+        delete window.__prestigeEmailAiCustomerRecommendationPreviousFetch;
       }
     })()`);
 
@@ -22092,6 +22489,14 @@ async function runChromeTest() {
     );
 
     const retriedAgencyCustomerList = await evaluate(`(() => {
+      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+      if (
+        selector instanceof HTMLSelectElement &&
+        !selector.disabled &&
+        [...selector.options].some((option) => option.value === "161")
+      ) {
+        return "already-loaded";
+      }
       const retryButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "Retry customer list",
       );
@@ -22101,12 +22506,11 @@ async function runChromeTest() {
       }
 
       retryButton.click();
-      return true;
+      return "retried";
     })()`);
-    assert.equal(
-      retriedAgencyCustomerList,
-      true,
-      "Expected the failed automatic customer-list load to expose one retry for agency folders",
+    assert.ok(
+      ["already-loaded", "retried"].includes(retriedAgencyCustomerList),
+      "Expected the active agency list to be reused or one visible retry to reload it",
     );
 
     await waitForCondition(

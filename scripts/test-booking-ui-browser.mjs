@@ -15847,6 +15847,11 @@ async function runChromeTest() {
       "4",
       "driver profile delete save guard pax change",
     );
+    await setFieldValueByLabel(
+      "Number of bags",
+      "3",
+      "saved booking update luggage count",
+    );
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -15958,6 +15963,7 @@ async function runChromeTest() {
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.traveler_id, 906103);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.driver_id, null);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.pax_count, 4);
+    assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.luggage_count, 3);
     assert.equal(updateAfterDriverDeleteState.bookingUpdate?.booking?.source_channel, "admin-dashboard");
     assert.equal(
       updateAfterDriverDeleteState.bookingDeleteOrPatchCount,
@@ -23637,6 +23643,12 @@ async function runChromeTest() {
       "Expected Mr Lee save fixture to be marked visibly as a browser UI test booking before saving",
     );
 
+    await setFieldValueByLabel(
+      "Number of bags",
+      "3",
+      "normal Save + CRM luggage count",
+    );
+
     await evaluate(`(() => {
       const savedBooking = ${JSON.stringify(mrLeeNoCompanySavedBookingFixture)};
       const jsonResponse = (body, status = 200) =>
@@ -23897,6 +23909,7 @@ async function runChromeTest() {
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.dropoff_location, "Changi Airport");
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.passenger_name, mrLeeSaveTravelerName);
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pax_count, 2);
+    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.luggage_count, 3);
     assert.equal(
       mrLeeNoCompanySaveState.fetchCalls.some(
         (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),

@@ -21892,7 +21892,7 @@ export default function Home() {
         appliedAdminBookingSnapshot &&
         adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
           ? safeAdminBookingPersistenceCount(appliedAdminBookingSnapshot.luggage_count)
-          : null;
+          : undefined;
       const appliedCustomerRequestSpecialRequest =
         appliedAdminBookingSnapshot &&
         adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
@@ -24970,7 +24970,7 @@ export default function Home() {
         luggageCountOverride:
           acceptingCustomerRequest && appliedSnapshot
             ? safeAdminBookingPersistenceCount(appliedSnapshot.luggage_count)
-            : null,
+            : undefined,
       },
     );
 

@@ -526,9 +526,9 @@ class FakeOpenAI {
                 bookings: [
                   {
                     bagCount: "3",
-                    bookerContact: "+6596389322",
+                    bookerContact: "+6598156017",
                     bookerEmail: "hyunsoostar@hotmail.com",
-                    bookerName: "Pui Yu Chan",
+                    bookerName: "Kim Hyun Soo",
                     bookingType: "DEP",
                     companyAccount: "",
                     confidence: 0.94,
@@ -536,20 +536,21 @@ class FakeOpenAI {
                     dropoff: "Changi Airport",
                     extraStopCount: "1",
                     extraStopLocation: "6 Suffolk Walk, Singapore 307464",
-                    extraStops: "6 Suffolk Walk, Singapore 307464",
+                    extraStops: "Second pickup: Mr. Kim",
                     flightNumber: "SQ958",
                     needsReviewReasons: [
-                      "Confirm whether the second pickup is the supported extra stop and verify pickup sequence.",
-                      "Confirm airport identity and terminal.",
+                      "The Booker is not clearly identified even though the structured Booker fields are complete.",
+                      "The source contains a second pickup/waypoint relationship that should be confirmed operationally.",
+                      "Airport name and terminal are not explicitly stated.",
                       "Verify whether Pending (new) represents a final confirmed booking.",
+                      "Unrelated dispatch instruction requires manual confirmation.",
                     ],
                     notes:
                       "1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).",
-                    passengerContact: "",
+                    passengerContact: "+6596389322",
                     passengerName: "Pui Yu Chan",
                     pax: "2",
-                    pickup:
-                      "26 Newton Rd, Singapore 307957; 6 Suffolk Walk, Singapore 307464",
+                    pickup: "26 Newton Rd, Singapore 307957",
                     pickupDate: "19-08-2026",
                     pickupTime: "10:00",
                     vehicle: "Toyota Alphard 2.5",
@@ -561,10 +562,11 @@ class FakeOpenAI {
               classification: "confirmed_booking",
               confidence: 0.94,
               reviewReasons: [
-                "Booker name is unclear: client name is Pui Yu Chan, while the email address appears to identify someone else.",
-                "The extra waypoint address is not clearly labelled as a numbered route stop, though the comment identifies a second pickup.",
+                "The Booker is not clearly identified even though the structured Booker fields are complete.",
+                "The source contains a second pickup/waypoint relationship that should be confirmed operationally.",
                 "Booking status is Pending (new); verify whether this is final and confirmed.",
                 "Airport name and terminal are not explicitly stated.",
+                "Unrelated dispatch instruction requires manual confirmation.",
               ],
               suggestedReply: "",
               summary: "Prestige Transport 15787 airport departure for Pui Yu Chan.",
@@ -1415,7 +1417,7 @@ try {
 
   const prestigeTransport15787Parsed = await runtime.runAdminEmailAiIntake();
   assert.equal(prestigeTransport15787Parsed.ok, true);
-  assert.equal(prestigeTransport15787Parsed.parsed, 0);
+  assert.equal(prestigeTransport15787Parsed.parsed, 1);
   assert.equal(intakeRows.length, 7);
   assert.match(
     providerRequestBodies[6].instructions,
@@ -1434,22 +1436,47 @@ try {
     providerRequestBodies[6].input,
     /ROUTE LOCATIONS\s+6 Suffolk Walk, 싱가포르 6 Suffolk Walk, Singapore 307464\s+PICK UP LOCATION\s+26 Newton Rd, 싱가포르 307957/,
   );
-  assert.equal(intakeRows[6].processing_status, "failed");
-  assert.deepEqual(intakeRows[6].booking_parse_result, {
-    bookings: [],
-    multipleBookingsDetected: false,
-    rawWarnings: [],
-  });
-  assert.equal(intakeRows[6].canonical_booking_text, "");
-  assert.deepEqual(intakeRows[6].review_reasons, [
-    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
-  ]);
+  assert.equal(intakeRows[6].processing_status, "queued");
   assert.equal(
-    intakeRows[6].summary,
-    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
+    intakeRows[6].booking_parse_result.bookings[0].extraStopLocation,
+    "6 Suffolk Walk, Singapore 307464",
   );
-  assert.equal(intakeRows[6].openai_input_tokens, undefined);
-  assert.equal(intakeRows[6].openai_output_tokens, undefined);
+  assert.equal(
+    intakeRows[6].booking_parse_result.bookings[0].extraStops,
+    "6 Suffolk Walk, Singapore 307464",
+    "The legacy extraStops field must agree with the exact AI-returned structured extraStopLocation.",
+  );
+  assert.equal(
+    intakeRows[6].booking_parse_result.bookings[0].bookerName,
+    "Kim Hyun Soo",
+  );
+  assert.equal(
+    intakeRows[6].booking_parse_result.bookings[0].passengerContact,
+    "+6596389322",
+  );
+  assert.deepEqual(intakeRows[6].review_reasons, [
+    "Booking status is Pending (new); verify whether this is final and confirmed.",
+    "Airport name and terminal are not explicitly stated.",
+    "Unrelated dispatch instruction requires manual confirmation.",
+  ]);
+  assert.deepEqual(
+    intakeRows[6].booking_parse_result.bookings[0].needsReviewReasons,
+    [
+      "Airport name and terminal are not explicitly stated.",
+      "Verify whether Pending (new) represents a final confirmed booking.",
+      "Unrelated dispatch instruction requires manual confirmation.",
+    ],
+  );
+  assert.equal(intakeRows[6].openai_input_tokens, 100);
+  assert.equal(intakeRows[6].openai_output_tokens, 80);
+  assert.deepEqual(adminDevicePushEvents, [
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+    "email_confirmed_booking",
+  ]);
 
   const blockedSource = Buffer.from(
     syntheticAllowedSource
@@ -1478,7 +1505,7 @@ try {
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 5);
+  assert.equal(loaded.data.records.length, 6);
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
   assert.equal(
     loaded.data.records[1].sender_address,
@@ -1486,10 +1513,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 600,
+    input_tokens: 700,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 480,
-    total_tokens: 1080,
+    output_tokens: 560,
+    total_tokens: 1260,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -1520,8 +1547,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 5);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 1080);
+  assert.equal(allowedReadBody.records.length, 6);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 1260);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -1615,7 +1642,7 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 4);
+  assert.equal(afterReviewRecords.length, 5);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",

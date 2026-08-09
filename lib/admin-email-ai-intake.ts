@@ -1316,7 +1316,7 @@ function isResolvedKnownBookerReason(reason: string) {
 
   return (
     normalizedReason.includes("booker") &&
-    /\b(?:ambiguous|confirm|confirmation|conflict|missing|unclear|uncertain|unknown|unverified|verify|verification)\b/.test(
+    /\b(?:ambiguous|confirm|confirmation|conflict|missing|not\s+clearly|unclear|uncertain|unknown|unverified|verify|verification)\b/.test(
       normalizedReason,
     )
   );
@@ -1432,7 +1432,7 @@ function isResolvedStructuredExtraStopReason(reason: string) {
     /\b(?:extra[\s-]+stop|route[\s-]+stop|second[\s-]+pickup|waypoint)\b/.test(
       normalizedReason,
     ) &&
-    /\b(?:ambiguous|confirm|confirmation|missing|not clearly|supported|unclear|uncertain|verify|verification|whether)\b/.test(
+    /\b(?:ambiguous|confirm|confirmation|confirmed|missing|not clearly|supported|unclear|uncertain|verify|verification|whether)\b/.test(
       normalizedReason,
     )
   );
@@ -1445,6 +1445,7 @@ function enforceResolvedStructuredReviewReasons(
     hasSpecificStructuredExtraStop(booking)
       ? {
           ...booking,
+          extraStops: booking.extraStopLocation,
           needsReviewReasons: booking.needsReviewReasons.filter(
             (reason) => !isResolvedStructuredExtraStopReason(reason),
           ),

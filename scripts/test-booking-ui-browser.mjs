@@ -8655,6 +8655,56 @@ async function runChromeTest() {
       vehicle: "AVF",
     });
 
+    const selectedEmailAiAgencyFolder = await evaluate(`(() => {
+      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+      const createAgencyValue = "create-new-hotel-tour-agency";
+
+      if (!(selector instanceof HTMLSelectElement) ||
+          ![...selector.options].some((option) => option.value === createAgencyValue)) {
+        return false;
+      }
+
+      selector.value = createAgencyValue;
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(
+      selectedEmailAiAgencyFolder,
+      true,
+      "Expected the Email AI draft to allow the established first-agency mode",
+    );
+    const emailAiAgencyIdentityState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const selectedNotice = document.querySelector('[data-admin-dispatch-agency-folder-create="true"]');
+
+          return selector instanceof HTMLSelectElement &&
+            selector.value === "create-new-hotel-tour-agency" &&
+            selectedNotice
+            ? {
+                customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
+                selectedNoticeText: selectedNotice.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "Email AI agency identity presentation",
+    );
+    assert.equal(
+      emailAiAgencyIdentityState.customerStatusCount,
+      0,
+      "Expected agency mode to suppress the contradictory corporate customer banner",
+    );
+    assert.match(emailAiAgencyIdentityState.selectedNoticeText, /passenger stays on this booking only/i);
+    await evaluate(`(() => {
+      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+      if (selector instanceof HTMLSelectElement) {
+        selector.value = "";
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    })()`);
+
     await clickTab("Dashboard", "Operations Dashboard");
     const ignoredEmailEnquiryState = await evaluate(`(() => ({
       enquiryRow: Boolean(document.querySelector(

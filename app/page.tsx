@@ -26334,6 +26334,15 @@ export default function Home() {
       </div>
     );
   };
+  const adminDispatchAgencyFolderOptions = adminDispatchAgencyFolders.map((account) => ({
+    companyId: clean(account.verified_company_id),
+    id: clean(account.customer_id),
+    name: clean(account.customer_account) || `Agency folder ${clean(account.customer_id)}`,
+  }));
+  const adminDispatchSelectedAgencyFolder = adminDispatchAgencyFolderOptions.find(
+    (account) => account.id === booking.customerId,
+  ) ?? null;
+  const adminDispatchCreatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(booking);
   const adminEmailAiPassengerName = clean(booking.name);
   const adminEmailAiCompanyName = saveCrmExplicitCompanyAccount(booking);
   const adminEmailAiBookerName = clean(booking.booker);
@@ -26368,7 +26377,10 @@ export default function Home() {
     adminEmailAiRepeatedCustomerCandidates.length === 1
       ? adminEmailAiRepeatedCustomerCandidates[0]
       : null;
-  const adminEmailAiCustomerStatus = !activeAdminEmailAiIntakeId
+  const adminEmailAiCustomerStatus =
+    !activeAdminEmailAiIntakeId ||
+    adminDispatchSelectedAgencyFolder ||
+    adminDispatchCreatingAgencyFolder
     ? null
     : !ratesLoaded
       ? savingRates
@@ -26527,16 +26539,6 @@ export default function Home() {
       travelerId: pair?.id || "",
     }));
   }
-  const adminDispatchAgencyFolderOptions = adminDispatchAgencyFolders.map((account) => ({
-    companyId: clean(account.verified_company_id),
-    id: clean(account.customer_id),
-    name: clean(account.customer_account) || `Agency folder ${clean(account.customer_id)}`,
-  }));
-  const adminDispatchSelectedAgencyFolder = adminDispatchAgencyFolderOptions.find(
-    (account) => account.id === booking.customerId,
-  ) ?? null;
-  const adminDispatchCreatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(booking);
-
   const codexPreparedJobCardsPanel = (
     <div
       className={`mt-3 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 ${

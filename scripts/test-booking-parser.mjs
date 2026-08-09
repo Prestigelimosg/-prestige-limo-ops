@@ -4515,6 +4515,34 @@ assert.equal(emailAiTripOrganizerNotes.bookerContact, '+65 98156017');
 assert.equal(emailAiTripOrganizerNotes.name, 'Pui Yu Chan');
 assert.equal(emailAiTripOrganizerNotes.pax, '4');
 
+const emailAiTripOrganizerMetadataMessage = `Booking type: MNG
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Pui Yu Chan
+Passenger contact: +6596389322
+Pax: 2
+Bags: 3
+Vehicle: Toyota Alphard 2.5
+Pickup date: 2026-08-22
+Pickup time: 19:50
+Flight: SQ961
+Pickup: Changi Airport
+Drop-off: 26 Newton Rd, Singapore 307957
+Notes: Trip organizer: Mr Kim, Hyun Soo; vehicle capacity: 4; bag count: 3`;
+const emailAiTripOrganizerMetadata = parseBookingMessage(
+  emailAiTripOrganizerMetadataMessage,
+  {
+    referenceDate: new Date('2026-08-09T12:00:00+08:00'),
+  },
+);
+assert.equal(emailAiTripOrganizerMetadata.booker, 'Kim Hyun Soo');
+assert.equal(emailAiTripOrganizerMetadata.bookerContact, '+65 98156017');
+assert.equal(emailAiTripOrganizerMetadata.name, 'Pui Yu Chan');
+assert.equal(emailAiTripOrganizerMetadata.passengerContact, '+6596389322');
+assert.equal(emailAiTripOrganizerMetadata.pax, '2');
+assert.equal(emailAiTripOrganizerMetadata.luggageCount, '3');
+
 const looseStayAddressTransferMessage = `Roland
 Pickup 0630 and he stay 82 Grange Road
 22 Bedok North Drive

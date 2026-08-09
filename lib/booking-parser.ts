@@ -2627,7 +2627,10 @@ function detectStandaloneHonorificNameLine(text: string) {
 
 function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
-  const rawBooker = clean(match?.[1] ?? "");
+  const rawBooker = clean(match?.[1] ?? "").replace(
+    /\s*;\s*(?:bag\s+count|bags?|passenger\s+capacity|vehicle\s+capacity)\s*:.+$/i,
+    "",
+  );
   const contactText = match?.[2] || match?.[0] || "";
   const contact = firstMatch(contactText, [new RegExp(String.raw`(${phoneNumberPatternSource})`)]);
   const contactIndex = contact ? rawBooker.indexOf(contact) : -1;
@@ -3676,6 +3679,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const domain = getEmailDomain(email);
   const bookerCompanyContext = detectBookerCompanyContext(operationalText);
   const tripOrganizerDetails = detectTripOrganizerDetails(operationalText);
+  const detectedBooker = detectBookerValue(operationalText, bookerCompanyContext);
   const dateText = lineValue(operationalText, ["date", "pickup date", "p/u date", "pu date"]);
   const multiStopItinerary = detectMultiStopItinerary(operationalText);
   const flight = multiStopItinerary ? "" : detectFlight(operationalText);
@@ -3751,8 +3755,9 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     pickup: routeValues.pickup,
     dropoff: routeValues.dropoff,
     booker:
+      (tripOrganizerDetails.contact ? tripOrganizerDetails.booker : "") ||
+      detectedBooker ||
       tripOrganizerDetails.booker ||
-      detectBookerValue(operationalText, bookerCompanyContext) ||
       whatsappTranscript.senderName ||
       (paxNameAndNumber ? structuredClientName : "") ||
       getEmailBooker(email),

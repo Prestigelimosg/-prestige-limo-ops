@@ -33,6 +33,11 @@ assert.ok(
   adminPage.includes("adminDispatchVerifiedIdentityId(bookingValue.companyId)"),
   "Email AI repeated-customer confirmation must continue through the existing verified booking identity fields",
 );
+assert.match(
+  adminPage,
+  /const adminEmailAiCustomerStatus =\s*!activeAdminEmailAiIntakeId \|\|\s*adminDispatchSelectedAgencyFolder \|\|\s*adminDispatchCreatingAgencyFolder\s*\? null/,
+  "An explicit Hotel / Tour Agency folder must suppress the contradictory corporate new/repeated-customer banner",
+);
 
 for (const fragment of [
   'data-customer-folder-section-four-edit="true"',

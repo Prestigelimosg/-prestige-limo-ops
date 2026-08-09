@@ -2433,6 +2433,29 @@ type AdminDispatchAgencyFoldersReadResponse = {
   ok?: boolean;
 };
 
+type AdminEmailAiCustomerProfileRecommendation =
+  | {
+      companyId: number;
+      companyName: string;
+      customerId: string;
+      kind: "agency";
+      matchBasis: "company name" | "email";
+      profileName: string;
+      status: "matched";
+    }
+  | {
+      companyId: number;
+      companyName: string;
+      kind: "corporate";
+      matchBasis: "company name" | "email";
+      profileName: string;
+      status: "matched";
+    }
+  | {
+      message: string;
+      status: "ambiguous" | "unavailable" | "unmatched";
+    };
+
 const adminDispatchCreateAgencyFolderValue = "create-new-hotel-tour-agency";
 
 type SaveCrmBillingIdentityReview = {
@@ -5120,6 +5143,16 @@ function saveCrmBillingBookerLabel(bookingValue: BookingForm) {
 
 function saveCrmExplicitCompanyAccount(bookingValue: BookingForm) {
   return normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
+}
+
+function adminEmailAiRecommendationEmail(bookingValue: BookingForm) {
+  const email = normaliseEmail(bookingValue.bookerEmail);
+
+  return isValidEmail(email) ? email : "";
+}
+
+function adminEmailAiRecommendationCompanyName(bookingValue: BookingForm) {
+  return saveCrmExplicitCompanyAccount(bookingValue);
 }
 
 function saveCrmDefaultCustomerAccount(bookingValue: BookingForm) {
@@ -14716,6 +14749,10 @@ export default function Home() {
     });
   const [activeAdminEmailAiIntakeId, setActiveAdminEmailAiIntakeId] =
     useState("");
+  const activeAdminEmailAiIntakeIdRef = useRef("");
+  const adminEmailAiCustomerRecommendationRevisionRef = useRef(0);
+  const [adminEmailAiCustomerProfileSuggestion, setAdminEmailAiCustomerProfileSuggestion] =
+    useState<Message | null>(null);
   const adminEmailAiInitialLoadAttemptedRef = useRef(false);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
@@ -18986,6 +19023,10 @@ export default function Home() {
   }, [filteredCompletedBookingDisplayItems, todayKey]);
 
   function update(field: keyof BookingForm, value: string) {
+    if (field === "bookerEmail" || field === "company") {
+      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+      setAdminEmailAiCustomerProfileSuggestion(null);
+    }
     if (field === "pickup") {
       setAdminMapPickupLocation(null);
       setAdminMapRouteEstimate(null);
@@ -19335,7 +19376,10 @@ export default function Home() {
     setDispatchLoadFocusTarget(null);
 
     if (!options.preserveAdminEmailAiReview) {
+      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+      activeAdminEmailAiIntakeIdRef.current = "";
       setActiveAdminEmailAiIntakeId("");
+      setAdminEmailAiCustomerProfileSuggestion(null);
     }
   }
 
@@ -19859,6 +19903,7 @@ export default function Home() {
     }
 
     clearParseArtifacts();
+    setAdminEmailAiCustomerProfileSuggestion(null);
     clearLoadedBookingSelectionContext({
       explicitNewBooking: true,
       preserveAdminEmailAiReview: true,
@@ -19915,6 +19960,7 @@ export default function Home() {
       ...(parsedBookingForMerge.cleanedLines ? { cleanedLines: parsedBookingForMerge.cleanedLines } : {}),
     };
 
+    bookingFormRef.current = finalForm;
     setBooking(() => finalForm);
     setParsedDebugBooking(() => ({
       ...finalForm,
@@ -19930,15 +19976,47 @@ export default function Home() {
     }
 
     if (activeAdminEmailAiIntakeId) {
+      const recommendationIntakeId = activeAdminEmailAiIntakeId;
+      const recommendationEmail = adminEmailAiRecommendationEmail(finalForm);
+      const recommendationCompanyName = adminEmailAiRecommendationCompanyName(finalForm);
+      const recommendationRevision =
+        adminEmailAiCustomerRecommendationRevisionRef.current + 1;
+      adminEmailAiCustomerRecommendationRevisionRef.current = recommendationRevision;
       const crmLoadResult = await loadRates("Email AI customer check loaded.", {
+        includeAgencyFolders: true,
         preserveAction: true,
       });
 
+      if (!crmLoadResult.ok) {
+        setAdminEmailAiCustomerProfileSuggestion(null);
+        setMessage({
+          tone: "error",
+          text: `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
+        });
+        return true;
+      }
+
+      const recommendation = await loadAdminEmailAiCustomerProfileRecommendation(finalForm);
+      const currentBooking = bookingFormRef.current;
+      const recommendationIsCurrent =
+        adminEmailAiCustomerRecommendationRevisionRef.current === recommendationRevision &&
+        activeAdminEmailAiIntakeIdRef.current === recommendationIntakeId &&
+        adminEmailAiRecommendationEmail(currentBooking) === recommendationEmail &&
+        adminEmailAiRecommendationCompanyName(currentBooking) === recommendationCompanyName &&
+        !clean(currentBooking.customerId) &&
+        !clean(currentBooking.companyId);
+
+      if (!recommendationIsCurrent) {
+        return true;
+      }
+
+      applyAdminEmailAiCustomerProfileRecommendation(recommendation);
       setMessage({
-        tone: crmLoadResult.ok ? "success" : "error",
-        text: crmLoadResult.ok
-          ? `Parsed ${detectedFields} fields. Email AI customer check loaded; confirm whether this is a repeated or new customer before Save + CRM.`
-          : `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
+        tone: recommendation.status === "matched" ? "success" : "info",
+        text:
+          recommendation.status === "matched"
+            ? `Parsed ${detectedFields} fields. The app customer profile suggested one exact ${recommendation.kind} customer; review or change it before Save + CRM.`
+            : `Parsed ${detectedFields} fields. ${recommendation.message}`,
       });
       return true;
     }
@@ -20138,6 +20216,9 @@ export default function Home() {
 
     clearParseArtifacts();
     clearLoadedBookingSelectionContext({ explicitNewBooking: true });
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
+    activeAdminEmailAiIntakeIdRef.current = clean(record.id);
     setActiveAdminEmailAiIntakeId(clean(record.id));
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
@@ -20161,6 +20242,253 @@ export default function Home() {
       });
       bookingMessageRef.current?.focus();
     }, 0);
+  }
+
+  async function loadAdminEmailAiCustomerProfileRecommendation(
+    bookingValue: BookingForm,
+  ): Promise<AdminEmailAiCustomerProfileRecommendation> {
+    const recommendationEmail = adminEmailAiRecommendationEmail(bookingValue);
+    const recommendationCompanyName = adminEmailAiRecommendationCompanyName(bookingValue);
+    const exactEmailCompanyIds = new Set<number>();
+    const exactNameCompanyIds = new Set<number>();
+    let matchBasis: "company name" | "email" | null = null;
+
+    const readJson = async <T,>(response: Response) =>
+      (await response.json().catch(() => null)) as T | null;
+    const readCompany = async (params: URLSearchParams) => {
+      const response = await fetch(`${adminCompaniesCrmIdentityApiPath}?${params.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const body = await readJson<AdminCompanyCrmIdentityReadResponse>(response);
+
+      if (!response.ok || body?.ok !== true) {
+        throw new Error(
+          clean(body?.error) || "The verified company profile lookup failed safely.",
+        );
+      }
+
+      return body.company ?? null;
+    };
+
+    try {
+      if (recommendationEmail) {
+        const companyParams = new URLSearchParams({
+          operations_email: recommendationEmail,
+        });
+        const bookerParams = new URLSearchParams({
+          email: recommendationEmail,
+        });
+        const [emailCompany, bookerResponse] = await Promise.all([
+          readCompany(companyParams),
+          fetch(`${adminBookersApiPath}?${bookerParams.toString()}`, {
+            cache: "no-store",
+            headers: {
+              "x-prestige-admin-purpose": adminLegacyDataPurpose,
+            },
+            method: "GET",
+          }),
+        ]);
+        const bookerBody = await readJson<SaveCrmBookerResponse>(bookerResponse);
+
+        if (!bookerResponse.ok || bookerBody?.ok !== true) {
+          throw new Error(
+            clean(bookerBody?.error) || "The verified Booker email lookup failed safely.",
+          );
+        }
+
+        if (
+          emailCompany &&
+          normaliseEmail(emailCompany.operations_email ?? "") !== recommendationEmail
+        ) {
+          throw new Error(
+            "The company email response did not match the exact requested email address.",
+          );
+        }
+        if (
+          bookerBody.booker &&
+          normaliseEmail(bookerBody.booker.email ?? "") !== recommendationEmail
+        ) {
+          throw new Error(
+            "The Booker email response did not match the exact requested email address.",
+          );
+        }
+
+        const companyId =
+          normaliseEmail(emailCompany?.operations_email ?? "") === recommendationEmail
+            ? adminDispatchVerifiedIdentityId(emailCompany?.id)
+            : null;
+        const bookerCompanyId =
+          normaliseEmail(bookerBody.booker?.email ?? "") === recommendationEmail
+            ? adminDispatchVerifiedIdentityId(bookerBody.booker?.company_id)
+            : null;
+
+        if (companyId) {
+          exactEmailCompanyIds.add(companyId);
+        }
+        if (bookerCompanyId) {
+          exactEmailCompanyIds.add(bookerCompanyId);
+        }
+
+        if (exactEmailCompanyIds.size > 1) {
+          return {
+            message:
+              "The exact email address points to more than one app customer profile. Select the customer manually before Save + CRM.",
+            status: "ambiguous",
+          };
+        }
+        if (exactEmailCompanyIds.size === 1) {
+          matchBasis = "email";
+        }
+      }
+
+      if (!matchBasis && recommendationCompanyName) {
+        const companyNameParams = new URLSearchParams({
+          company_name: recommendationCompanyName,
+        });
+        const nameCompany = await readCompany(companyNameParams);
+        const companyId =
+          saveCrmComparableIdentityValue(nameCompany?.company_name) ===
+          saveCrmComparableIdentityValue(recommendationCompanyName)
+            ? adminDispatchVerifiedIdentityId(nameCompany?.id)
+            : null;
+
+        if (companyId) {
+          exactNameCompanyIds.add(companyId);
+        }
+        if (exactNameCompanyIds.size === 1) {
+          matchBasis = "company name";
+        }
+      }
+
+      const matchedCompanyId = matchBasis === "email"
+        ? Array.from(exactEmailCompanyIds)[0]
+        : matchBasis === "company name"
+          ? Array.from(exactNameCompanyIds)[0]
+          : null;
+
+      if (!matchedCompanyId || !matchBasis) {
+        return {
+          message:
+            "No exact customer-profile email or company-name match was found. Select the agency or corporate customer manually before Save + CRM.",
+          status: "unmatched",
+        };
+      }
+
+      const customerAccountsResponse = await fetch(`${adminCustomerAccountsApiPath}?limit=1000`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const customerAccountsBody = await readJson<AdminDispatchAgencyFoldersReadResponse>(
+        customerAccountsResponse,
+      );
+
+      if (!customerAccountsResponse.ok || customerAccountsBody?.ok !== true) {
+        throw new Error(
+          clean(customerAccountsBody?.error) || "App customer profiles could not be loaded safely.",
+        );
+      }
+
+      const agencyFolders = (customerAccountsBody.accounts ?? []).filter(
+        (account) =>
+          account.customer_folder_active === true &&
+          account.guest_account_billing_enabled === true &&
+          adminDispatchVerifiedIdentityId(account.customer_id) &&
+          adminDispatchVerifiedIdentityId(account.verified_company_id) === matchedCompanyId,
+      );
+      const uniqueAgencyFolders = Array.from(
+        new Map(
+          agencyFolders.map((account) => [clean(account.customer_id), account]),
+        ).values(),
+      );
+
+      if (uniqueAgencyFolders.length > 1) {
+        return {
+          message:
+            "More than one active agency customer profile belongs to the exact matched company. Select the agency folder manually before Save + CRM.",
+          status: "ambiguous",
+        };
+      }
+
+      const matchedCompany = await readCompany(
+        new URLSearchParams({ id: String(matchedCompanyId) }),
+      );
+      const companyName =
+        adminDispatchVerifiedIdentityId(matchedCompany?.id) === matchedCompanyId
+          ? clean(matchedCompany?.company_name)
+          : "";
+
+      if (!companyName) {
+        return {
+          message:
+            "The exact app customer profile is incomplete. Select the customer manually before Save + CRM.",
+          status: "unavailable",
+        };
+      }
+
+      if (uniqueAgencyFolders.length === 1) {
+        const matchedAgencyFolder = uniqueAgencyFolders[0];
+        const customerId = clean(matchedAgencyFolder.customer_id);
+
+        return {
+          companyId: matchedCompanyId,
+          companyName,
+          customerId,
+          kind: "agency",
+          matchBasis,
+          profileName: clean(matchedAgencyFolder.customer_account) || companyName,
+          status: "matched",
+        };
+      }
+
+      return {
+        companyId: matchedCompanyId,
+        companyName,
+        kind: "corporate",
+        matchBasis,
+        profileName: companyName,
+        status: "matched",
+      };
+    } catch (error) {
+      return {
+        message:
+          error instanceof Error
+            ? `${error.message} No customer was selected automatically.`
+            : "The app customer profile check failed safely. No customer was selected automatically.",
+        status: "unavailable",
+      };
+    }
+  }
+
+  function applyAdminEmailAiCustomerProfileRecommendation(
+    recommendation: AdminEmailAiCustomerProfileRecommendation,
+  ) {
+    if (recommendation.status !== "matched") {
+      setAdminEmailAiCustomerProfileSuggestion(null);
+      return;
+    }
+
+    setBooking((current) => ({
+      ...current,
+      bookerId: "",
+      company: recommendation.companyName || current.company,
+      companyId: String(recommendation.companyId),
+      customerId: recommendation.kind === "agency" ? recommendation.customerId : "",
+      travelerId: "",
+    }));
+    setAdminEmailAiCustomerProfileSuggestion({
+      tone: "success",
+      text:
+        `Suggested from the app customer profile: ${recommendation.profileName} ` +
+        `(${recommendation.kind}, exact ${recommendation.matchBasis} match). ` +
+        "Admin can change this selection before Save + CRM.",
+    });
   }
 
   async function loadRates(
@@ -21369,6 +21697,7 @@ export default function Home() {
           (record) => clean(record.id) !== intakeId,
         ),
       }));
+      activeAdminEmailAiIntakeIdRef.current = "";
       setActiveAdminEmailAiIntakeId("");
       return true;
     } catch {
@@ -26380,7 +26709,8 @@ export default function Home() {
   const adminEmailAiCustomerStatus =
     !activeAdminEmailAiIntakeId ||
     adminDispatchSelectedAgencyFolder ||
-    adminDispatchCreatingAgencyFolder
+    adminDispatchCreatingAgencyFolder ||
+    adminEmailAiCustomerProfileSuggestion
     ? null
     : !ratesLoaded
       ? savingRates
@@ -26507,6 +26837,8 @@ export default function Home() {
   ]);
 
   function updateAdminDispatchCorporateCustomer(companyId: string) {
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
     const exactPairs = rateTravelers.filter(
       (traveler) =>
         String(traveler.company_id) === companyId &&
@@ -26526,6 +26858,8 @@ export default function Home() {
   }
 
   function updateAdminDispatchCorporatePair(travelerId: string) {
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
     const pair = adminDispatchCorporatePairOptions.find(
       (candidate) => candidate.id === travelerId,
     );
@@ -41137,6 +41471,8 @@ export default function Home() {
                     data-admin-dispatch-agency-folder-select="true"
                     disabled={!adminDispatchAgencyFoldersLoaded || Boolean(clean(appliedAdminBookingSnapshotReference))}
                     onChange={(event) => {
+                      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+                      setAdminEmailAiCustomerProfileSuggestion(null);
                       const customerId = event.target.value;
                       const creatingAgencyFolder = customerId === adminDispatchCreateAgencyFolderValue;
 
@@ -41268,6 +41604,14 @@ export default function Home() {
                 ) : null}
                   </>
                 )}
+                {activeAdminEmailAiIntakeId && adminEmailAiCustomerProfileSuggestion ? (
+                  <p
+                    className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-950 md:col-span-3"
+                    data-admin-email-ai-customer-profile-suggestion="true"
+                  >
+                    {adminEmailAiCustomerProfileSuggestion.text}
+                  </p>
+                ) : null}
                 {adminEmailAiCustomerStatus ? (
                   <div
                     className={`rounded-md border px-3 py-2 text-xs font-semibold md:col-span-3 ${

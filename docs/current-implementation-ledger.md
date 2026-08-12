@@ -10166,6 +10166,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Customer/Admin native apps, Driver Job acknowledgement/reporting, live-location API/data, personal and Operations Calendar, booking/CRM, Customer and Admin web/PWA apps, messaging, invoice/billing/payment, payout/PayNow, provider, schema, environment, Production application/data, and every established layout remain untouched.
 - Focused lock: `scripts/test-driver-companion-ios-release-config-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver Live Location Guard Scope Alignment (2026-08-12)
+
+- The pre-signing Driver Companion API audit stopped before any Apple credential, signed build, or upload because two established live-location guards rejected every timer anywhere in the production Driver Job page.
+- Read-only tracing proved the only matched timer is the already-established visible `Driver App Updates` notification refresh. It calls only the token-scoped notification read while the page is visible; it does not request GPS, call the live-location route, use `sendBeacon`, start browser location sharing, or change Driver Job status.
+- The two existing live-location guards are narrowed in place to exclude only that exact identifiable App Updates interval from their GPS timer scan. They still fail if any second interval, any timeout, any `sendBeacon`, or any timer appears elsewhere on the production Driver Job page or inside the live-location route/runtime helper.
+- No Driver Job page, Companion source, message refresh, API, route, runtime helper, GPS behavior, Production data, Apple credential, signed build, or TestFlight record changes in this guard-only alignment. Customer/driver contact, Calendar, booking/CRM, invoice/billing/payment, payout/PayNow, provider, schema, environment, and established layouts remain untouched.
+
 ## Customer Booking Public Reference Lane
 
 - Status: source implementation, bounded local verification, Production schema activation, Production application deployment, and deployed owner-Chrome runtime proof complete.

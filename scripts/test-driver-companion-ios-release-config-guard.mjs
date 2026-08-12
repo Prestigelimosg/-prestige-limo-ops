@@ -25,6 +25,16 @@ assert.equal(
   "The installed/public Driver app name must match its App Store Connect record",
 );
 assert.equal(companionConfig.userInterfaceStyle, "light", "The Companion must remain light mode");
+assert.equal(
+  companionConfig.version,
+  "0.1.0",
+  "The shared Android-facing version must remain unchanged by the iOS release alignment",
+);
+assert.equal(
+  companionConfig.ios.version,
+  "1.0.0",
+  "The iOS public version must match the first App Store release",
+);
 assert.equal(companionConfig.ios.supportsTablet, true, "The iOS Companion must support iPad");
 assert.equal(
   companionConfig.ios.infoPlist?.CFBundleDisplayName,
@@ -74,6 +84,7 @@ for (const phrase of [
   "`Prestige SG Driver`",
   "`Prestige Driver`",
   "`driver-companion/assets/icon.png`",
+  "`ios.version` is explicitly `1.0.0`",
   "`ios.buildNumber` is explicitly `1`",
   "`ios.supportsTablet: true`",
   "`usesNonExemptEncryption: false`",

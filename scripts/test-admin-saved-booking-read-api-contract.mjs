@@ -779,6 +779,13 @@ try {
           traveler_id: 22,
           updated_at: "2026-06-30T16:05:00.000Z",
           vehicle_type_or_category: "AVF",
+          booking_service_items: [
+            {
+              item_type: "extra_stop",
+              notes: null,
+              quantity: 1,
+            },
+          ],
           companies: {
             company_name: "CODEX CUSTOMER REBOOKING TEST",
             domain: "prestigelimo.sg",
@@ -836,6 +843,7 @@ try {
   assert.equal(currentFallbackResult.body.booking.driver_name, "Codex Driver");
   assert.equal(currentFallbackResult.body.booking.driver_contact, "+6598888888");
   assert.equal(currentFallbackResult.body.booking.driver_plate_number, "SCDX1T");
+  assert.equal(currentFallbackResult.body.booking.extra_stop_count, 1);
   assert.equal(currentFallbackResult.body.booking.status, "draft");
   assert.equal(currentFallbackResult.body.booking.internal_admin_note, undefined);
   assert.equal(currentFallbackResult.body.booking.parser_debug, undefined);
@@ -846,6 +854,12 @@ try {
   assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("travelers("), true);
   assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("contact_display_name"), true);
   assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("driver_plate_number"), true);
+  assert.equal(
+    currentFallbackMock.client.selectHistory[2].selectedColumns.includes(
+      "booking_service_items(item_type, quantity, notes)",
+    ),
+    true,
+  );
   assertNoWrites(currentFallbackMock, "current schema fallback read");
   assertNoUnsafeResponse(currentFallbackResult, "current schema fallback response");
 

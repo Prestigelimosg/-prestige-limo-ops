@@ -3,14 +3,16 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const configPath = "driver-companion/app.json";
+const easConfigPath = "driver-companion/eas.json";
 const appPath = "driver-companion/App.tsx";
 const iconPath = "driver-companion/assets/icon.png";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationPath = "scripts/test-preactivation-verification-suite.mjs";
 
-const [configSource, appSource, iconBytes, ledgerSource, preactivationSource] =
+const [configSource, easConfigSource, appSource, iconBytes, ledgerSource, preactivationSource] =
   await Promise.all([
     readFile(configPath, "utf8"),
+    readFile(easConfigPath, "utf8"),
     readFile(appPath, "utf8"),
     readFile(iconPath),
     readFile(ledgerPath, "utf8"),
@@ -18,6 +20,7 @@ const [configSource, appSource, iconBytes, ledgerSource, preactivationSource] =
   ]);
 
 const companionConfig = JSON.parse(configSource).expo;
+const easConfig = JSON.parse(easConfigSource);
 const normalizedAppSource = appSource.replace(/\s+/g, " ");
 assert.equal(
   companionConfig.name,
@@ -43,6 +46,11 @@ assert.equal(
 );
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(companionConfig.ios.buildNumber, "1", "The first iOS build number must be explicit");
+assert.equal(
+  easConfig.submit?.production?.ios?.ascAppId,
+  "6800706103",
+  "The production iOS submit profile must target the exact existing Prestige SG Driver App Store record",
+);
 assert.equal(
   companionConfig.ios.config.usesNonExemptEncryption,
   false,
@@ -90,6 +98,7 @@ for (const phrase of [
   "`usesNonExemptEncryption: false`",
   "does not prove a physical iPhone build",
   "does not prove physical iPad behavior",
+  "production EAS submit profile targets only App Store Connect app `6800706103`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

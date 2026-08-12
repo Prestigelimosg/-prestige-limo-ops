@@ -9,9 +9,14 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "sg.prestigelimo.drivercompanion",
+      "buildNumber": "1",
+      "icon": "./assets/icon.png",
       "associatedDomains": [
         "applinks:app.prestigelimo.sg"
-      ]
+      ],
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "sg.prestigelimo.drivercompanion",

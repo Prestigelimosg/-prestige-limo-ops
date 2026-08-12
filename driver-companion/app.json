@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Prestige Driver Companion",
+    "name": "Prestige SG",
     "slug": "prestige-driver-companion",
     "owner": "prestige-limo-ops",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "sg.prestigelimo.drivercompanion",
       "buildNumber": "1",
       "icon": "./assets/icon.png",

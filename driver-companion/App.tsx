@@ -279,7 +279,7 @@ export default function App() {
           <Text style={styles.title}>Driver Companion</Text>
           <Text style={styles.intro}>
             Keep the admin live map updated for one assigned job while your
-            phone screen is locked.
+            device screen is locked.
           </Text>
 
           <View
@@ -326,7 +326,7 @@ export default function App() {
           ) : screen.active ? (
             <View style={styles.formCard}>
               <Text style={styles.permissionText}>
-                iPhone shows its location indicator. Android keeps a visible
+                iOS shows its location indicator. Android keeps a visible
                 notification while tracking runs.
               </Text>
               <Button
@@ -360,7 +360,14 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: "#f8fafc", flex: 1 },
-  page: { gap: 14, padding: 20, paddingBottom: 36 },
+  page: {
+    alignSelf: "center",
+    gap: 14,
+    maxWidth: 720,
+    padding: 20,
+    paddingBottom: 36,
+    width: "100%",
+  },
   eyebrow: {
     color: "#0f766e",
     fontSize: 12,

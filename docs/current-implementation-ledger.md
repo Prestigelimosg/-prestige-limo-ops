@@ -10173,6 +10173,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The two existing live-location guards are narrowed in place to exclude only that exact identifiable App Updates interval from their GPS timer scan. They still fail if any second interval, any timeout, any `sendBeacon`, or any timer appears elsewhere on the production Driver Job page or inside the live-location route/runtime helper.
 - No Driver Job page, Companion source, message refresh, API, route, runtime helper, GPS behavior, Production data, Apple credential, signed build, or TestFlight record changes in this guard-only alignment. Customer/driver contact, Calendar, booking/CRM, invoice/billing/payment, payout/PayNow, provider, schema, environment, and established layouts remain untouched.
 
+### Driver iOS TestFlight Submit Target (2026-08-12)
+
+- The first approved signed iOS store build completed on EAS as build ID `50e61417-4ebe-47f0-9ee3-5028680ed5d8` from merged source `8be41c43203b5b5a42ed9d9fb434d02954decbb8`. The direct signed IPA inspection proved native version `1.0.0`, build `1`, bundle `sg.prestigelimo.drivercompanion`, display name `Prestige Driver`, iPhone/iPad device families `1` and `2`, background `location` and `fetch` modes, Team `U9Y2574Y7S`, and associated domain `applinks:app.prestigelimo.sg` before any App Store upload.
+- The first non-interactive submit attempt stopped before upload because the existing `driver-companion/eas.json` had no production submit profile and therefore no exact App Store Connect target. No TestFlight build, tester assignment, App Review submission, publication, or metadata change occurred from that stopped attempt.
+- The established production EAS submit profile targets only App Store Connect app `6800706103`, the already-verified `Prestige SG Driver` record. This numeric target configuration does not change or rebuild the signed IPA, add a tester/group, distribute a build, fill App Store metadata, submit App Review, publish, or create Customer/Admin native apps.
+- Driver Job acknowledgement/reporting, live-location API/data, personal and Operations Calendar, booking/CRM, Customer and Admin web/PWA apps, messaging, invoice/billing/payment, payout/PayNow, provider, schema, environment, Production application/data, and every established layout remain untouched.
+
 ## Customer Booking Public Reference Lane
 
 - Status: source implementation, bounded local verification, Production schema activation, Production application deployment, and deployed owner-Chrome runtime proof complete.

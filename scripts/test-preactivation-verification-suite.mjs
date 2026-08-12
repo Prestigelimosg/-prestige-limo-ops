@@ -1155,6 +1155,14 @@ const guardChecks = [
     script: "scripts/test-driver-companion-background-location-foundation-guard.mjs",
   },
   {
+    label: "Driver Companion iOS Universal Link association guard",
+    script: "scripts/test-driver-companion-ios-universal-link-association-guard.mjs",
+  },
+  {
+    label: "Driver Companion iOS release configuration guard",
+    script: "scripts/test-driver-companion-ios-release-config-guard.mjs",
+  },
+  {
     label: "Customer Live Location link readiness contract guard",
     script: "scripts/test-customer-live-location-link-readiness-contract-guard.mjs",
   },

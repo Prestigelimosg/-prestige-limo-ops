@@ -293,6 +293,13 @@ const seed = {
       customer_price_amount: 225,
       dropoff_location: "Private dropoff",
       id: 201,
+      booking_service_items: [
+        {
+          item_type: "extra_stop",
+          notes: null,
+          quantity: 1,
+        },
+      ],
       passenger_name: "Private Passenger",
       passenger_phone: "+65 8888 0000",
       pickup_at: "2026-06-20T10:00:00.000Z",
@@ -449,7 +456,7 @@ try {
       customer_price_label: "225.00",
       customer_status: "completed",
       dropoff_location: "Private dropoff",
-      extra_stop_count: 0,
+      extra_stop_count: 1,
       passenger_name: "Private Passenger",
       pickup_at: "2026-06-20T10:00:00.000Z",
       pickup_location: "Private pickup",

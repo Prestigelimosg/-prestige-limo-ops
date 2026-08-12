@@ -221,11 +221,13 @@ for (const fragment of [
 
 for (const fragment of [
   "const adminSavedBookingCurrentReadSelect =",
-  "vehicle_type_or_category, customer_price_amount, admin_internal_status",
+  "customer_price_amount, admin_internal_status",
   "const adminSavedBookingCurrentMinimalReadSelect =",
-  "pax_count, customer_price_amount, admin_internal_status",
+  "booking_service_items(item_type, quantity, notes)",
+  'normalizedServiceItemCount(row.booking_service_items, "extra_stop")',
+  "integerOrNull(row.extra_stop_count)",
 ]) {
-  includes(adminSavedBookingsRead, fragment, `admin saved-booking price fallback ${fragment}`);
+  includes(adminSavedBookingsRead, fragment, `admin saved-booking current-schema price input ${fragment}`);
 }
 
 for (const fragment of [
@@ -428,6 +430,40 @@ try {
   assert.equal(travelerOverrideReview?.rateCents, 7300);
   assert.equal(travelerOverrideReview?.amountCents, 7300);
   assert.equal(travelerOverrideReview?.customerRateSource, "boss");
+
+  const orchardDepartureSetup = {
+    companies: [{ customer_rates: {}, id: 48 }],
+    settings: {
+      child_seat_customer_surcharge: 15,
+      customer_rates: { DEP: { AVF: 75 } },
+      extra_stop_surcharge: 15,
+      midnight_surcharge: 15,
+    },
+    travelers: [{ company_id: 48, customer_rates: {}, id: 36 }],
+  };
+  const orchardDepartureInput = {
+    actualMinutes: null,
+    bookingType: "DEP",
+    childSeatCount: 0,
+    companyId: 48,
+    extraStopCount: 0,
+    pickupAt: "2026-07-13T06:45:00+08:00",
+    travelerId: 36,
+    vehicleType: "AVF",
+  };
+  const orchardWithoutExtraStop = calculateCustomerInvoiceRateReview(
+    orchardDepartureInput,
+    orchardDepartureSetup,
+  );
+  const orchardWithExtraStop = calculateCustomerInvoiceRateReview(
+    { ...orchardDepartureInput, extraStopCount: 1 },
+    orchardDepartureSetup,
+  );
+  assert.equal(orchardWithoutExtraStop?.baseAmountCents, 7_500);
+  assert.equal(orchardWithoutExtraStop?.surchargeAmountCents, 1_500);
+  assert.equal(orchardWithoutExtraStop?.amountCents, 9_000);
+  assert.equal(orchardWithExtraStop?.surchargeAmountCents, 3_000);
+  assert.equal(orchardWithExtraStop?.amountCents, 10_500);
 
   const mismatchedTravelerReview = calculateCustomerInvoiceRateReview(
     exactIdentityInput,

@@ -22365,6 +22365,14 @@ async function runChromeTest() {
       ),
       "Expected safe Save Booking + CRM request to keep operational child-seat service item",
     );
+    assert.ok(
+      crmSaveState.bookingInsert?.service_items?.some(
+        (serviceItem) =>
+          serviceItem.service_item_type === "extra_stop" &&
+          serviceItem.quantity === 1,
+      ),
+      "Expected safe Save Booking + CRM request to keep the explicit extra-stop billing input",
+    );
 
     const duplicateCalendarAfterCrmSaveState = await evaluate(`(() => ({
       calendarButtonCount: [...document.querySelectorAll("button")].filter(

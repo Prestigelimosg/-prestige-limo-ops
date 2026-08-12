@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const configPath = "driver-companion/app.json";
@@ -20,11 +21,16 @@ const companionConfig = JSON.parse(configSource).expo;
 const normalizedAppSource = appSource.replace(/\s+/g, " ");
 assert.equal(
   companionConfig.name,
-  "Prestige SG",
-  "The installed/public app name must match the owner-approved brand",
+  "Prestige SG Driver",
+  "The installed/public Driver app name must match its App Store Connect record",
 );
 assert.equal(companionConfig.userInterfaceStyle, "light", "The Companion must remain light mode");
 assert.equal(companionConfig.ios.supportsTablet, true, "The iOS Companion must support iPad");
+assert.equal(
+  companionConfig.ios.infoPlist?.CFBundleDisplayName,
+  "Prestige Driver",
+  "The installed iPhone/iPad icon label must remain the owner-approved short Driver name",
+);
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(companionConfig.ios.buildNumber, "1", "The first iOS build number must be explicit");
 assert.equal(
@@ -41,6 +47,11 @@ assert.deepEqual(
 assert.equal(iconBytes.readUInt32BE(16), 1024, "The App Store icon must be 1024 pixels wide");
 assert.equal(iconBytes.readUInt32BE(20), 1024, "The App Store icon must be 1024 pixels high");
 assert.equal(iconBytes[25], 2, "The App Store icon must be RGB without an alpha channel");
+assert.equal(
+  createHash("sha256").update(iconBytes).digest("hex"),
+  "b55f726603fbae4bf0c101fee8dc23e782089f6fcb7f963c2542c9fc297cb670",
+  "The App Store icon must remain the exact owner-supplied Prestige artwork",
+);
 
 for (const phrase of [
   'alignSelf: "center"',
@@ -59,7 +70,9 @@ for (const phrase of [
 for (const phrase of [
   "Driver Companion iOS Release Configuration",
   "Driver Companion iPad Support",
-  "`Prestige SG`",
+  "Driver App Store Name Alignment",
+  "`Prestige SG Driver`",
+  "`Prestige Driver`",
   "`driver-companion/assets/icon.png`",
   "`ios.buildNumber` is explicitly `1`",
   "`ios.supportsTablet: true`",

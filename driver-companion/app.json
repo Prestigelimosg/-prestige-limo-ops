@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Prestige SG",
+    "name": "Prestige SG Driver",
     "slug": "prestige-driver-companion",
     "owner": "prestige-limo-ops",
     "version": "0.1.0",
@@ -14,6 +14,9 @@
       "associatedDomains": [
         "applinks:app.prestigelimo.sg"
       ],
+      "infoPlist": {
+        "CFBundleDisplayName": "Prestige Driver"
+      },
       "config": {
         "usesNonExemptEncryption": false
       }

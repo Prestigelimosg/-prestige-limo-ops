@@ -114,11 +114,15 @@ assertIncludes(
   pageSource,
   [
     'type: "native_notifications_register"',
+    "loadedDriverJobTokenRef.current !== token",
+    "nativeNotificationRegistrationTokenRef.current === token",
+    "requestEmbeddedNativeNotificationsOnce",
+    'pageState.kind !== "ready" || !acknowledged',
     '"prestige-driver-native-notification-result"',
     "Job alerts are enabled in Prestige Driver.",
     "Job alerts are not enabled; check Messages & Updates in this job.",
   ],
-  "embedded acknowledgement native notification handoff",
+  "embedded acknowledgement and acknowledged-reload native notification handoff",
 );
 assertIncludes(
   nativeAppSource,

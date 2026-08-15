@@ -25,8 +25,10 @@ const browserConsoleErrors = [];
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
-function driverJobUrl(token) {
-  return new URL(`/driver-job/${token}`, appUrl).toString();
+function driverJobUrl(token, search = "") {
+  const url = new URL(`/driver-job/${token}`, appUrl);
+  url.search = search;
+  return url.toString();
 }
 
 function driverJobApiUrl(token) {
@@ -239,8 +241,22 @@ async function runChromeTest() {
       source: `
         window.__driverJobFetchCalls = [];
         window.__driverOtsPhotoUploadBodies = [];
+        window.__driverNativeBridgeMessages = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
+        const embeddedDriverHarness = new URLSearchParams(window.location.search).get("embedded") === "1";
+        if (embeddedDriverHarness) {
+          window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
+          window.ReactNativeWebView = {
+            postMessage: (rawMessage) => {
+              try {
+                window.__driverNativeBridgeMessages.push(JSON.parse(rawMessage));
+              } catch {
+                window.__driverNativeBridgeMessages.push({ invalid: true });
+              }
+            },
+          };
+        }
         window.__driverAppUpdateTest = {
           safeMessage: "Dispatch has a safe app update for this job.",
           safeTitle: "Dispatch app update",
@@ -624,6 +640,7 @@ async function runChromeTest() {
         otsPhotoUploadBodies: window.__driverOtsPhotoUploadBodies || [],
         deviceAlerts: {
           helper: document.querySelector("[data-driver-job-device-alert-helper]")?.textContent?.trim() || "",
+          nativeBridgeMessages: window.__driverNativeBridgeMessages || [],
           permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
           registrations: window.__driverDeviceAlertTest?.registrations || [],
           rememberedLinks: window.__driverDeviceAlertTest?.rememberedLinks || [],
@@ -759,11 +776,11 @@ async function runChromeTest() {
         ),
       }))()`);
 
-    const navigateToDriverJob = async (token, expectedText) => {
+    const navigateToDriverJob = async (token, expectedText, search = "") => {
       await navigateAndWaitForBodyText(
         client,
         evaluate,
-        driverJobUrl(token),
+        driverJobUrl(token, search),
         expectedText,
         `driver job page text: ${expectedText}`,
       );
@@ -1701,6 +1718,35 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
+    const embeddedAcknowledgedReloadState = await navigateToDriverJob(
+      mockDriverJobTokens.workflowOrder,
+      "Saved & Acknowledged",
+      "?embedded=1",
+    );
+    assert.deepEqual(
+      embeddedAcknowledgedReloadState.deviceAlerts.nativeBridgeMessages,
+      [{ type: "native_notifications_register" }],
+      "An already-acknowledged job reopened inside Prestige Driver must request the existing native notification registration once.",
+    );
+    assert.equal(
+      embeddedAcknowledgedReloadState.deviceAlerts.permissionRequests,
+      0,
+      "Embedded acknowledged reload must not invoke the browser Notification permission API.",
+    );
+    assert.deepEqual(
+      embeddedAcknowledgedReloadState.deviceAlerts.registrations,
+      [],
+      "Embedded acknowledged reload must not register the browser service worker.",
+    );
+    assert.deepEqual(
+      embeddedAcknowledgedReloadState.fetchCalls.filter((call) =>
+        call === `PATCH /api/driver-job/${mockDriverJobTokens.workflowOrder}`
+      ),
+      [],
+      "Embedded notification enrollment must not repeat Save & Acknowledge or add another writer.",
+    );
+    assertNoSensitiveText(embeddedAcknowledgedReloadState);
+    await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
     const acknowledgementEditReset = await evaluate(`(() => {
       const input = document.querySelector("[data-driver-job-detail-vehicle-model]");
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;

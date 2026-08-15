@@ -1002,6 +1002,8 @@ export default function DriverJobPage() {
   const driverLiveLocationLastPostAtRef = useRef(0);
   const driverLiveLocationShareActiveRef = useRef(false);
   const driverOtwLiveLocationActionRef = useRef(false);
+  const loadedDriverJobTokenRef = useRef("");
+  const nativeNotificationRegistrationTokenRef = useRef("");
   const savedStatusHistory = useMemo(
     () => (pageState.kind === "ready" ? pageState.job.statusHistory : []),
     [pageState],
@@ -1022,6 +1024,27 @@ export default function DriverJobPage() {
 
     return () => window.cancelAnimationFrame(embeddedDetectionFrame);
   }, []);
+
+  const requestEmbeddedNativeNotificationsOnce = useCallback(() => {
+    if (
+      !embeddedDriverApp ||
+      !token ||
+      loadedDriverJobTokenRef.current !== token ||
+      nativeNotificationRegistrationTokenRef.current === token
+    ) {
+      return false;
+    }
+
+    const requested = postEmbeddedDriverBridgeMessage({
+      type: "native_notifications_register",
+    });
+
+    if (requested) {
+      nativeNotificationRegistrationTokenRef.current = token;
+    }
+
+    return requested;
+  }, [embeddedDriverApp, token]);
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -1277,6 +1300,7 @@ export default function DriverJobPage() {
       }
 
       setPageState({ kind: "loading" });
+      loadedDriverJobTokenRef.current = "";
       setAcknowledged(false);
       setDetailsFeedback(null);
       setDriverDetailsRaw("");
@@ -1331,6 +1355,7 @@ export default function DriverJobPage() {
           driverDeviceAlertReadinessFromApi(result.device_alerts),
         );
         setWorkflowStatus(result.payload.status || "assigned");
+        loadedDriverJobTokenRef.current = token;
         setPageState({ kind: "ready", job: result.payload });
 
         if (driverWorkflowHasReachedOtw(result.payload.status || "")) {
@@ -1552,6 +1577,14 @@ export default function DriverJobPage() {
     };
   }, [embeddedDriverApp]);
 
+  useEffect(() => {
+    if (pageState.kind !== "ready" || !acknowledged) {
+      return;
+    }
+
+    requestEmbeddedNativeNotificationsOnce();
+  }, [acknowledged, pageState.kind, requestEmbeddedNativeNotificationsOnce]);
+
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
     setParseDetailsFeedback(null);
@@ -1705,10 +1738,7 @@ export default function DriverJobPage() {
       const driverPortalFeedback = driverPortalReady
         ? " Driver Portal is ready on this device."
         : "";
-      const nativeNotificationRequested = embeddedDriverApp &&
-        postEmbeddedDriverBridgeMessage({
-          type: "native_notifications_register",
-        });
+      const nativeNotificationRequested = requestEmbeddedNativeNotificationsOnce();
       setDetailsFeedback(
         nativeNotificationRequested
           ? {

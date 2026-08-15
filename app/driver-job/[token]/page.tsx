@@ -16,6 +16,10 @@ import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
 } from "../../../lib/driver-job-status-workflow";
+import {
+  driverSafeStatusLabel,
+  formatDriverPickupDateTime,
+} from "../../../driver-companion/src/driver-job-contract";
 
 type DriverJobApiBlockedReason =
   | "acknowledgement_required"
@@ -732,6 +736,14 @@ function detailRows(job: SafeDriverJobPayload) {
     { label: "Flight", value: job.flightNumber },
     { label: "Passenger", value: job.passengerName },
   ].filter((row) => row.value);
+}
+
+function embeddedDriverDetailRows(job: SafeDriverJobPayload) {
+  return detailRows(job).map((row) =>
+    row.label === "Date/time"
+      ? { ...row, value: formatDriverPickupDateTime(row.value) }
+      : row,
+  );
 }
 
 function activityTime() {
@@ -2423,7 +2435,9 @@ export default function DriverJobPage() {
             className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
             data-driver-job-mobile-web-note="true"
           >
-            Mobile web driver card. Keep this link private and use it only for this assigned job.
+            {embeddedDriverApp
+              ? "Prestige Driver job card. Keep this link private and use it only for this assigned job."
+              : "Mobile web driver card. Keep this link private and use it only for this assigned job."}
           </p>
         </header>
 
@@ -2462,12 +2476,17 @@ export default function DriverJobPage() {
                   className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-current-status="true"
                 >
-                  {statusDisplay(pageState.job.status, pageState.job.statusLabel)}
+                  {embeddedDriverApp
+                    ? driverSafeStatusLabel(pageState.job.status)
+                    : statusDisplay(pageState.job.status, pageState.job.statusLabel)}
                 </span>
               </div>
 
               <dl className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
-                {detailRows(pageState.job).map((detail) => (
+                {(embeddedDriverApp
+                  ? embeddedDriverDetailRows(pageState.job)
+                  : detailRows(pageState.job)
+                ).map((detail) => (
                   <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-2 text-sm" key={detail.label}>
                     <dt className="font-semibold text-slate-500">{detail.label}</dt>
                     <dd className="min-w-0 break-words text-slate-950">{displayValue(detail.value)}</dd>

@@ -148,13 +148,18 @@ for (const fragment of [
 
 assert.match(
   driverOtsApprovedSurface,
-  /data-driver-job-ots-photo-proof-shoot="true"[\s\S]{0,300}>\s*Shoot\s*<\/button>/,
-  "driver page must present the existing rear-camera input as Shoot",
+  /data-driver-job-ots-photo-proof-control="true"[\s\S]{0,500}data-driver-job-ots-photo-proof-shoot="true"[\s\S]{0,200}>\s*Shoot\s*<\/span>[\s\S]{0,500}data-driver-job-ots-photo-proof-selected-file="true"/,
+  "driver page must retain one compact file-control row with only its chooser wording changed to Shoot",
 );
 assert.match(
   driverOtsApprovedSurface,
   /className="sr-only"[\s\S]{0,500}data-driver-job-ots-photo-proof-input="true"/,
   "driver page must hide only the browser-generated file-picker label while retaining the established input",
+);
+assert.doesNotMatch(
+  driverOtsApprovedSurface,
+  /data-driver-job-ots-photo-proof-shoot="true"[\s\S]{0,300}<\/button>/,
+  "driver page must not replace the compact file selector with a standalone Shoot button",
 );
 
 assertExcludes(

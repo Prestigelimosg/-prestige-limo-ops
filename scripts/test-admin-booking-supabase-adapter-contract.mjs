@@ -874,6 +874,7 @@ function assertSixTableCreateMapping(mock) {
     dropoff_location: "Safe Canonical Dropoff",
     flight_no: null,
     luggage_count: null,
+    parser_source_reference: null,
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
     pax_count: null,
@@ -1356,6 +1357,8 @@ try {
       booking_reference: "SAFE-CURRENT-001",
       customer_special_request: "Meet-and-greet at the pickup desk.",
       luggage_count: 2,
+      parser_source_reference:
+        "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
     },
   });
   const parsedCurrentSchemaPayload = persistence.parseAdminBookingPersistencePayload(currentSchemaPayload);
@@ -1377,6 +1380,10 @@ try {
     "Meet-and-greet at the pickup desk.",
   );
   assert.equal(
+    currentSchemaResult.data.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+  );
+  assert.equal(
     insertedOperation(currentSchemaMock.client, "bookings").payload.luggage_count,
     2,
   );
@@ -1384,10 +1391,108 @@ try {
     insertedOperation(currentSchemaMock.client, "bookings").payload.customer_special_request,
     "Meet-and-greet at the pickup desk.",
   );
+  assert.equal(
+    insertedOperation(currentSchemaMock.client, "bookings").payload.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+    "Current-schema Email AI saves must retain their exact intake provenance.",
+  );
   assert.match(
     currentSchemaMock.client.selectHistory.at(-1).selectedColumns,
     /luggage_count/,
     "Preferred current booking reload must explicitly select luggage_count.",
+  );
+  assert.match(
+    currentSchemaMock.client.selectHistory.at(-1).selectedColumns,
+    /parser_source_reference/,
+    "Preferred current booking reload must explicitly select parser_source_reference.",
+  );
+
+  const currentSchemaUpdatePayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-CURRENT-001",
+      parser_source_reference: "Flight QR945",
+      pickup_location: "Updated Safe Current Pickup",
+    },
+  });
+  const parsedCurrentSchemaUpdate = persistence.parseAdminBookingUpdatePayload({
+    ...currentSchemaUpdatePayload,
+    target_booking_reference: "SAFE-CURRENT-001",
+  });
+
+  assert.equal(parsedCurrentSchemaUpdate.ok, true);
+
+  const currentSchemaUpdateResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedCurrentSchemaUpdate.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+  const currentSchemaUpdateOperation = currentSchemaMock.client.operations.findLast(
+    (operation) => operation.action === "update" && operation.table === "bookings",
+  );
+
+  assert.equal(currentSchemaUpdateResult.ok, true);
+  assert.equal(
+    currentSchemaUpdateResult.data.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+    "A later Update + Cal or amendment must preserve the exact saved Email AI provenance.",
+  );
+  assert.equal(
+    Object.hasOwn(currentSchemaUpdateOperation.payload, "parser_source_reference"),
+    false,
+    "Current-schema updates must leave immutable parser provenance untouched.",
+  );
+
+  const currentSchemaNullUpdatePayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-CURRENT-001",
+      parser_source_reference: null,
+      pickup_location: "Second Updated Safe Current Pickup",
+    },
+  });
+  const parsedCurrentSchemaNullUpdate = persistence.parseAdminBookingUpdatePayload({
+    ...currentSchemaNullUpdatePayload,
+    target_booking_reference: "SAFE-CURRENT-001",
+  });
+
+  assert.equal(parsedCurrentSchemaNullUpdate.ok, true);
+
+  const currentSchemaNullUpdateResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedCurrentSchemaNullUpdate.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+
+  assert.equal(currentSchemaNullUpdateResult.ok, true);
+  assert.equal(
+    currentSchemaNullUpdateResult.data.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+    "A null manual update payload must not erase existing Email AI provenance.",
+  );
+
+  const currentSchemaManualMock = installMockClient({}, { schemaMode: "current" });
+  const currentSchemaManualPayload = persistence.parseAdminBookingPersistencePayload(
+    canonicalAdminPayload({
+      booking: {
+        booking_reference: "SAFE-CURRENT-MANUAL-001",
+        parser_source_reference: null,
+      },
+    }),
+  );
+
+  assert.equal(currentSchemaManualPayload.ok, true);
+
+  const currentSchemaManualResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    currentSchemaManualPayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(currentSchemaManualResult.ok, true);
+  assert.equal(currentSchemaManualResult.data.parser_source_reference, null);
+  assert.equal(
+    insertedOperation(currentSchemaManualMock.client, "bookings").payload.parser_source_reference,
+    null,
+    "Ordinary current-schema manual creates must retain nullable provenance without guessing.",
   );
 
   for (const operation of currentSchemaMock.client.operations.filter((item) => item.action === "insert")) {

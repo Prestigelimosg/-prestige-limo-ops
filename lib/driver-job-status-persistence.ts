@@ -19,6 +19,7 @@ export const driverJobStatusPersistenceVersion =
   "stage-driver-job-status-production-adapter-v1";
 
 export type DriverJobPersistenceBlockedReason =
+  | "acknowledgement_required"
   | "already_completed"
   | "expired"
   | "invalid_details"
@@ -39,7 +40,11 @@ export type DriverJobProductionPayloadResult =
       payload: null;
       reason: Exclude<
         DriverJobPersistenceBlockedReason,
-        "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+        | "acknowledgement_required"
+        | "already_completed"
+        | "invalid_details"
+        | "invalid_status"
+        | "out_of_order"
       >;
     };
 
@@ -127,7 +132,11 @@ type LinkResolveResult =
       ok: false;
     reason: Exclude<
       DriverJobPersistenceBlockedReason,
-      "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+      | "acknowledgement_required"
+      | "already_completed"
+      | "invalid_details"
+      | "invalid_status"
+      | "out_of_order"
     >;
   };
 
@@ -480,7 +489,11 @@ function safeWaypointList(value: unknown) {
 function linkBlockedResult(
   reason: Exclude<
     DriverJobPersistenceBlockedReason,
-    "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+    | "acknowledgement_required"
+    | "already_completed"
+    | "invalid_details"
+    | "invalid_status"
+    | "out_of_order"
   >,
 ): DriverJobProductionPayloadResult {
   return {
@@ -1420,14 +1433,20 @@ export async function saveDriverJobStatusThroughStatusPersistence(
   }
 
   const transitionGuard = guardDriverJobStatusTransition({
-    acknowledged: true,
+    acknowledged: Boolean(
+      safeTextFromDb(
+        asRecord(resolvedLink.link.safe_link_context).driver_acknowledged_at,
+        80,
+      ),
+    ),
     currentStatus: statusHistory.statuses[0]?.status_value || "",
     nextStatus,
   });
 
   if (!transitionGuard.ok) {
     return statusBlockedResult(
-      transitionGuard.reason === "already_completed" ||
+      transitionGuard.reason === "acknowledgement_required" ||
+        transitionGuard.reason === "already_completed" ||
         transitionGuard.reason === "out_of_order"
         ? transitionGuard.reason
         : "invalid_status",

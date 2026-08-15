@@ -405,6 +405,7 @@ class MockSupabaseClient {
 }
 
 function createSeededClient({
+  acknowledgedAt = "2026-06-07T08:05:00.000Z",
   actualTimeInsertError = false,
   bookingType = "DEP",
   bookings = [],
@@ -430,6 +431,7 @@ function createSeededClient({
         revoked_at: null,
         safe_link_context: {
           customer_price_amount: 160,
+          ...(acknowledgedAt ? { driver_acknowledged_at: acknowledgedAt } : {}),
           driver_job_payload: {
             assigned_driver_contact: "+65 8000 1001",
             assigned_driver_name: "Safe Driver One",
@@ -1032,7 +1034,7 @@ try {
   }
 
   {
-    const client = createSeededClient();
+    const client = createSeededClient({ acknowledgedAt: null });
     client.tables.bookings = [
       {
         admin_internal_status: "confirmed",
@@ -1080,6 +1082,25 @@ try {
       [{ column: "booking_reference", value: "DRV-JOB-API-001" }],
       "Driver token read must scope the current safe booking schedule to the exact link reference.",
     );
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({
+      acknowledgedAt: null,
+      latestStatus: null,
+    });
+    const result = await saveDriverJobStatusThroughStatusPersistence({
+      client,
+      now,
+      status: "OTW",
+      token: validToken,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "acknowledgement_required");
+    assert.equal(result.payload, null);
+    assert.equal(client.operations.length, 0);
     assertNoDriverJobLeaks(result);
   }
 
@@ -1416,6 +1437,28 @@ try {
 
   process.env.DRIVER_JOB_LINK_MODE = "production";
   delete process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;
+
+  {
+    const client = createSeededClient({
+      acknowledgedAt: null,
+      latestStatus: null,
+    });
+    setDriverJobProductionSupabaseClientForTests(client);
+
+    const result = await patchDriverJobStatus(validToken, "OTW");
+    const reloaded = await getDriverJob(validToken);
+
+    assert.equal(result.status, 409);
+    assert.equal(result.body.ok, false);
+    assert.equal(result.body.reason, "acknowledgement_required");
+    assert.equal(result.body.payload, null);
+    assert.equal(reloaded.status, 200);
+    assert.equal(reloaded.body.payload.acknowledged, false);
+    assert.equal(reloaded.body.payload.status, "assigned");
+    assert.equal(client.operations.length, 0);
+    assertNoDriverJobLeaks(result);
+    assertNoDriverJobLeaks(reloaded);
+  }
 
   {
     const client = createSeededClient();

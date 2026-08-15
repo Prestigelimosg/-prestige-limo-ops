@@ -16,7 +16,9 @@
         "applinks:app.prestigelimo.sg"
       ],
       "infoPlist": {
-        "CFBundleDisplayName": "Prestige Driver"
+        "CFBundleDisplayName": "Prestige Driver",
+        "NSCameraUsageDescription": "Prestige uses the camera only when you choose to attach the required OTS proof photo.",
+        "NSPhotoLibraryUsageDescription": "Prestige accesses a photo only when you choose it for the required OTS proof."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -62,7 +64,9 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser",
+      "./plugins/with-driver-camera-query"
     ],
     "extra": {
       "eas": {

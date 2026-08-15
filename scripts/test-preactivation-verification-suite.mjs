@@ -1155,6 +1155,10 @@ const guardChecks = [
     script: "scripts/test-driver-companion-background-location-foundation-guard.mjs",
   },
   {
+    label: "Driver Companion safe summary display guard",
+    script: "scripts/test-driver-companion-safe-summary-display-guard.mjs",
+  },
+  {
     label: "Driver Companion iOS Universal Link association guard",
     script: "scripts/test-driver-companion-ios-universal-link-association-guard.mjs",
   },

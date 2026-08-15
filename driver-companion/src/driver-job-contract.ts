@@ -17,6 +17,31 @@ export type DriverJobSummary = {
 
 type UnknownRecord = Record<string, unknown>;
 
+const driverSafeStatusLabels: Readonly<Record<string, string>> = {
+  assigned: "Assigned",
+  completed: "Completed",
+  confirmed: "Confirmed",
+  driver_otw: "I'm on the way",
+  ots: "I've arrived",
+  pending: "Pending",
+  pob: "Passenger on board",
+};
+
+const pickupMonthLabels = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
 export type NativeLocationCapture = {
   coords: {
     accuracy: number | null;
@@ -48,6 +73,51 @@ function asRecord(value: unknown): UnknownRecord {
 
 function cleanText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+export function driverSafeStatusLabel(value: unknown) {
+  const status = cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return driverSafeStatusLabels[status] || "Pending dispatch confirmation";
+}
+
+export function formatDriverPickupDateTime(value: unknown) {
+  const pickupDateTime = cleanText(value);
+
+  if (!pickupDateTime) {
+    return "Pickup time TBC";
+  }
+
+  const canonicalMatch = pickupDateTime.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/,
+  );
+
+  if (!canonicalMatch) {
+    return pickupDateTime;
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText] = canonicalMatch;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const validationDate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+  if (
+    validationDate.getUTCFullYear() !== year ||
+    validationDate.getUTCMonth() !== month - 1 ||
+    validationDate.getUTCDate() !== day ||
+    validationDate.getUTCHours() !== hour ||
+    validationDate.getUTCMinutes() !== minute
+  ) {
+    return "Pickup time TBC";
+  }
+
+  return `${day} ${pickupMonthLabels[month - 1]} ${year}, ${hourText}${minuteText}hrs SGT`;
 }
 
 function terminalStatus(status: number) {
@@ -112,14 +182,15 @@ export async function loadDriverJobSummary(job: ActiveDriverJob) {
   }
 
   const payload = asRecord(body.payload);
+  const status = cleanText(payload.status, "assigned");
 
   return {
     passengerName: cleanText(payload.passengerName, "Passenger TBC"),
-    pickupDateTime: cleanText(payload.pickupDateTime, "Pickup time TBC"),
+    pickupDateTime: formatDriverPickupDateTime(payload.pickupDateTime),
     reference: cleanText(payload.reference, "Reference unavailable"),
     route: cleanText(payload.route, "Route TBC"),
-    status: cleanText(payload.status, "assigned"),
-    statusLabel: cleanText(payload.statusLabel, "Assigned"),
+    status,
+    statusLabel: driverSafeStatusLabel(status),
   } satisfies DriverJobSummary;
 }
 

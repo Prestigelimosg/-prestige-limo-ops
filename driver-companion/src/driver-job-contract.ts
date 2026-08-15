@@ -201,6 +201,70 @@ export async function loadDriverJobSummary(job: ActiveDriverJob) {
   } satisfies DriverJobSummary;
 }
 
+export async function registerNativeDriverNotifications(
+  job: ActiveDriverJob,
+  expoPushToken: string,
+) {
+  const response = await fetch(
+    `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
+    {
+      body: JSON.stringify({
+        native_device_alert_action: "register",
+        native_push_token: expoPushToken,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "PATCH",
+    },
+  );
+  const body = await responseBody(response);
+  const nativeDeviceAlerts = asRecord(body.native_device_alerts);
+  const jobKey = cleanText(nativeDeviceAlerts.job_key);
+
+  if (
+    !response.ok ||
+    body.ok !== true ||
+    nativeDeviceAlerts.registered !== true ||
+    !/^[0-9a-f]{64}$/.test(jobKey)
+  ) {
+    throw requestError(response, body);
+  }
+
+  return { jobKey };
+}
+
+export async function unregisterNativeDriverNotifications(
+  job: ActiveDriverJob,
+  expoPushToken: string,
+) {
+  const response = await fetch(
+    `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
+    {
+      body: JSON.stringify({
+        native_device_alert_action: "unregister",
+        native_push_token: expoPushToken,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "PATCH",
+    },
+  );
+  const body = await responseBody(response);
+  const nativeDeviceAlerts = asRecord(body.native_device_alerts);
+
+  if (
+    !response.ok ||
+    body.ok !== true ||
+    nativeDeviceAlerts.unregistered !== true
+  ) {
+    throw requestError(response, body);
+  }
+}
+
 async function liveLocationRequest(
   job: ActiveDriverJob,
   init: RequestInit,

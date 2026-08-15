@@ -5,15 +5,19 @@ import {
 
 export { parseDriverJobUrl } from "./driver-job-contract.ts";
 
-export type DriverBridgeMessage = {
+export type DriverTrackingBridgeMessage = {
   type: "tracking_start" | "tracking_stop" | "tracking_terminal";
 };
+
+export type DriverBridgeMessage =
+  | DriverTrackingBridgeMessage
+  | { type: "native_notifications_register" };
 
 export type DriverTrackingResult = {
   active: boolean;
   message: string;
   ok: boolean;
-  request: DriverBridgeMessage["type"];
+  request: DriverTrackingBridgeMessage["type"];
 };
 
 const nativeCalendarOauthStartPath =
@@ -38,7 +42,12 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
     if (
       keys.length !== 1 ||
       keys[0] !== "type" ||
-      !["tracking_start", "tracking_stop", "tracking_terminal"].includes(
+      ![
+        "native_notifications_register",
+        "tracking_start",
+        "tracking_stop",
+        "tracking_terminal",
+      ].includes(
         String(parsed.type),
       )
     ) {
@@ -146,6 +155,20 @@ export function driverTrackingResultScript(result: DriverTrackingResult) {
   };
 
   return `window.dispatchEvent(new CustomEvent("prestige-driver-native-tracking-result", { detail: ${JSON.stringify(
+    safeResult,
+  )} })); true;`;
+}
+
+export function driverNativeNotificationResultScript(result: {
+  ok: boolean;
+  state: "denied" | "enabled" | "failed";
+}) {
+  const safeResult = {
+    ok: result.ok === true,
+    state: result.state,
+  };
+
+  return `window.dispatchEvent(new CustomEvent("prestige-driver-native-notification-result", { detail: ${JSON.stringify(
     safeResult,
   )} })); true;`;
 }

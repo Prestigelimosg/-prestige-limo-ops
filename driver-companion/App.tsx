@@ -1,4 +1,6 @@
 import * as WebBrowser from "expo-web-browser";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -22,16 +24,27 @@ import {
 import {
   DriverJobRequestError,
   productionOrigin,
+  registerNativeDriverNotifications,
+  unregisterNativeDriverNotifications,
 } from "./src/driver-job-contract";
 import {
+  driverNativeNotificationResultScript,
   driverTrackingResultScript,
   embeddedDriverBridgeBootstrap,
   parseDriverBridgeMessage,
   parseDriverJobUrl,
   parseNativeCalendarOauthStartUrl,
   shouldAllowDriverWebViewNavigation,
-  type DriverBridgeMessage,
+  type DriverTrackingBridgeMessage,
 } from "./src/driver-webview-bridge";
+import {
+  forgetNativeNotificationToken,
+  loadNativeDriverJob,
+  nativeNotificationJobKey,
+  readNativeNotificationToken,
+  rememberNativeDriverJob,
+  rememberNativeNotificationToken,
+} from "./src/native-notifications";
 import {
   readTrackingState,
   startDriverTracking,
@@ -52,6 +65,15 @@ const initialScreenState: ScreenState = {
   message: "Open the private Driver Job Link sent by Prestige.",
   navigationKey: 0,
 };
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 function readableFailure(error: unknown) {
   if (error instanceof DriverJobRequestError) {
@@ -174,6 +196,47 @@ export default function App() {
   }, [receiveDriverJobUrl]);
 
   useEffect(() => {
+    let mounted = true;
+
+    const openNotificationJob = async (
+      response: Notifications.NotificationResponse | null,
+    ) => {
+      const jobKey = nativeNotificationJobKey(
+        response?.notification.request.content.data,
+      );
+      if (!jobKey) {
+        return;
+      }
+
+      const job = await loadNativeDriverJob(jobKey);
+      if (mounted && job) {
+        await receiveDriverJobUrl(job.jobUrl);
+      }
+    };
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        void openNotificationJob(response);
+      },
+    );
+
+    try {
+      const initialResponse = Notifications.getLastNotificationResponse();
+      if (initialResponse) {
+        void openNotificationJob(initialResponse)
+          .finally(() => Notifications.clearLastNotificationResponse());
+      }
+    } catch {
+      // A notification response is optional; ordinary exact-link opening remains available.
+    }
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [receiveDriverJobUrl]);
+
+  useEffect(() => {
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
@@ -191,11 +254,20 @@ export default function App() {
 
   const sendTrackingResult = useCallback(
     (
-      request: DriverBridgeMessage["type"],
+      request: DriverTrackingBridgeMessage["type"],
       result: { active: boolean; message: string; ok: boolean },
     ) => {
       webViewRef.current?.injectJavaScript(
         driverTrackingResultScript({ request, ...result }),
+      );
+    },
+    [],
+  );
+
+  const sendNativeNotificationResult = useCallback(
+    (result: { ok: boolean; state: "denied" | "enabled" | "failed" }) => {
+      webViewRef.current?.injectJavaScript(
+        driverNativeNotificationResultScript(result),
       );
     },
     [],
@@ -210,17 +282,67 @@ export default function App() {
       }
 
       if (bridgeBusyRef.current) {
-        sendTrackingResult(request.type, {
-          active: screen.active,
-          message: "Another tracking action is still running.",
-          ok: false,
-        });
+        if (request.type === "native_notifications_register") {
+          sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else {
+          sendTrackingResult(request.type, {
+            active: screen.active,
+            message: "Another tracking action is still running.",
+            ok: false,
+          });
+        }
         return;
       }
 
       bridgeBusyRef.current = true;
 
       try {
+        if (request.type === "native_notifications_register") {
+          const job = parseDriverJobUrl(screen.jobUrl);
+          const existingToken = await readNativeNotificationToken();
+          const permission = await Notifications.requestPermissionsAsync();
+
+          if (!permission.granted) {
+            if (existingToken) {
+              await unregisterNativeDriverNotifications(job, existingToken);
+              await forgetNativeNotificationToken();
+            }
+            sendNativeNotificationResult({ ok: false, state: "denied" });
+            return;
+          }
+
+          const projectId =
+            Constants.easConfig?.projectId ||
+            Constants.expoConfig?.extra?.eas?.projectId;
+          if (typeof projectId !== "string" || !projectId) {
+            throw new Error("Native notification project identity is unavailable.");
+          }
+
+          const tokenResult = await Notifications.getExpoPushTokenAsync({
+            projectId,
+          });
+          const nextToken = tokenResult.data;
+          if (existingToken && existingToken !== nextToken) {
+            await unregisterNativeDriverNotifications(job, existingToken);
+          }
+
+          const registration = await registerNativeDriverNotifications(
+            job,
+            nextToken,
+          );
+          try {
+            await rememberNativeDriverJob(registration.jobKey, job);
+            await rememberNativeNotificationToken(nextToken);
+          } catch (error) {
+            await unregisterNativeDriverNotifications(job, nextToken).catch(
+              () => undefined,
+            );
+            throw error;
+          }
+          sendNativeNotificationResult({ ok: true, state: "enabled" });
+          return;
+        }
+
         if (request.type === "tracking_terminal") {
           await stopTrackingAfterTerminalResponse();
           const message = "Trip tracking stopped after Job Completed.";
@@ -257,16 +379,20 @@ export default function App() {
           active: trackingState.active,
           message,
         }));
-        sendTrackingResult(request.type, {
-          active: trackingState.active,
-          message,
-          ok: false,
-        });
+        if (request.type === "native_notifications_register") {
+          sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else {
+          sendTrackingResult(request.type, {
+            active: trackingState.active,
+            message,
+            ok: false,
+          });
+        }
       } finally {
         bridgeBusyRef.current = false;
       }
     },
-    [screen.active, screen.jobUrl, sendTrackingResult],
+    [screen.active, screen.jobUrl, sendNativeNotificationResult, sendTrackingResult],
   );
 
   const openCalendarAuthorization = useCallback(

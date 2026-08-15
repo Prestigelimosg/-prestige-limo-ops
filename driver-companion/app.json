@@ -64,6 +64,7 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
+      "expo-notifications",
       "expo-secure-store",
       "expo-web-browser",
       "./plugins/with-driver-camera-query"

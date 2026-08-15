@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import {
   driverSafeStatusLabel,
@@ -6,6 +7,32 @@ import {
   loadDriverJobSummary,
   productionOrigin,
 } from "../driver-companion/src/driver-job-contract.ts";
+
+const embeddedDriverPageSource = await readFile(
+  new URL("../app/driver-job/[token]/page.tsx", import.meta.url),
+  "utf8",
+);
+
+assert.match(
+  embeddedDriverPageSource,
+  /embeddedDriverApp\s*\?\s*"Prestige Driver job card\. Keep this link private and use it only for this assigned job\."\s*:\s*"Mobile web driver card\. Keep this link private and use it only for this assigned job\."/,
+  "The verified embedded app must identify the in-app Prestige Driver card while ordinary browser wording stays unchanged",
+);
+assert.match(
+  embeddedDriverPageSource,
+  /embeddedDriverApp\s*\?\s*driverSafeStatusLabel\(pageState\.job\.status\)\s*:\s*statusDisplay\(pageState\.job\.status, pageState\.job\.statusLabel\)/,
+  "The verified embedded app status badge must fail closed through the established driver-safe label while ordinary browser display stays unchanged",
+);
+assert.match(
+  embeddedDriverPageSource,
+  /embeddedDriverApp\s*\?\s*embeddedDriverDetailRows\(pageState\.job\)\s*:\s*detailRows\(pageState\.job\)/,
+  "The exact embedded job card must pass its verified app context into safe detail presentation",
+);
+assert.match(
+  embeddedDriverPageSource,
+  /function embeddedDriverDetailRows\(job: SafeDriverJobPayload\)[\s\S]*?row\.label === "Date\/time"[\s\S]*?formatDriverPickupDateTime\(row\.value\)/,
+  "The verified embedded app must format the persisted pickup key as friendly SGT while ordinary browser detail output stays unchanged",
+);
 
 assert.equal(
   driverSafeStatusLabel("admin_review_required"),

@@ -39,8 +39,13 @@ export async function GET(request: Request) {
       process.env.VERCEL_ENV === "production",
   });
 
-  const response = Response.redirect(result.authorization_url, 303);
-  response.headers.set("cache-control", "private, no-store, max-age=0");
-  response.headers.set("referrer-policy", "no-referrer");
+  const response = new Response(null, {
+    headers: {
+      "cache-control": "private, no-store, max-age=0",
+      location: result.authorization_url,
+      "referrer-policy": "no-referrer",
+    },
+    status: 303,
+  });
   return response;
 }

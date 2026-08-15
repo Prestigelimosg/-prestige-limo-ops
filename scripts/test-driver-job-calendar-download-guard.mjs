@@ -141,11 +141,63 @@ for (const fragment of [
   'searchParams.get("state")',
   "httpOnly: true",
   'sameSite: "lax"',
-  "Response.redirect",
+  "const response =",
 ]) {
   assert.equal(nativeStart.includes(fragment), true, `Native OAuth start must include ${fragment}.`);
 }
 assert.doesNotMatch(nativeStart, /createClient|\.from\(|POST|PATCH|DELETE/);
+
+const nativeStartResponseConstructionStart = nativeStart.indexOf("  const response =");
+const nativeStartResponseConstructionEnd = nativeStart.indexOf(
+  "\n  return response;",
+  nativeStartResponseConstructionStart,
+);
+assert.notEqual(
+  nativeStartResponseConstructionStart,
+  -1,
+  "Native OAuth start must keep one bounded redirect response construction.",
+);
+assert.notEqual(
+  nativeStartResponseConstructionEnd,
+  -1,
+  "Native OAuth start must return its bounded redirect response.",
+);
+const nativeStartResponseConstruction = nativeStart.slice(
+  nativeStartResponseConstructionStart,
+  nativeStartResponseConstructionEnd + "\n  return response;".length,
+);
+const nativeStartResponseModule = { exports: {} };
+const nativeStartResponseJavascript = ts.transpileModule(
+  `export function executeNativeStartResponse(result: { authorization_url: string }) {\n${nativeStartResponseConstruction}\n}`,
+  {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  },
+).outputText;
+new Function("exports", "Response", nativeStartResponseJavascript)(
+  nativeStartResponseModule.exports,
+  Response,
+);
+let nativeStartResponse;
+assert.doesNotThrow(
+  () => {
+    nativeStartResponse = nativeStartResponseModule.exports.executeNativeStartResponse({
+      authorization_url: "https://accounts.google.com/o/oauth2/v2/auth",
+    });
+  },
+  "Native OAuth start must construct its 303 response without mutating immutable redirect headers.",
+);
+assert.equal(nativeStartResponse.status, 303);
+assert.equal(
+  nativeStartResponse.headers.get("location"),
+  "https://accounts.google.com/o/oauth2/v2/auth",
+);
+assert.equal(nativeStartResponse.headers.get("cache-control"), "private, no-store, max-age=0");
+assert.equal(nativeStartResponse.headers.get("referrer-policy"), "no-referrer");
+assert.doesNotMatch(
+  nativeStart,
+  /Response\.redirect|response\.headers\.set/,
+  "Native OAuth start must not mutate the immutable headers returned by Response.redirect().",
+);
 
 for (const fragment of [
   'data-driver-job-calendar-action="true"',

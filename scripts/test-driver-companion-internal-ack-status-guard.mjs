@@ -195,7 +195,11 @@ assert.match(source.nativeOauthRoute, /export async function GET/);
 assert.doesNotMatch(source.nativeOauthRoute, /export async function (?:POST|PATCH|DELETE)/);
 assert.match(source.nativeOauthRoute, /driverGoogleCalendarOauthCookieName/);
 assert.match(source.nativeOauthRoute, /readDriverGoogleCalendarNativeOauthStart/);
-assert.match(source.nativeOauthRoute, /Response\.redirect/);
+assert.match(
+  source.nativeOauthRoute,
+  /const response = new Response\(null, \{[\s\S]*?location: result\.authorization_url,[\s\S]*?status: 303,/,
+);
+assert.doesNotMatch(source.nativeOauthRoute, /Response\.redirect|response\.headers\.set/);
 assert.doesNotMatch(source.nativeOauthRoute, /\.from\(|createClient|SUPABASE|POST|PATCH|DELETE/);
 assert.match(source.calendarRoute, /google_consent_url/);
 

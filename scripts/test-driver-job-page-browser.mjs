@@ -654,6 +654,11 @@ async function runChromeTest() {
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
           .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
+        otsPhotoControl: {
+          compact: Boolean(document.querySelector('[data-driver-job-ots-photo-proof-control="true"]')),
+          standaloneButton: Boolean(document.querySelector('button[data-driver-job-ots-photo-proof-shoot="true"]')),
+          text: document.querySelector('[data-driver-job-ots-photo-proof-control="true"]')?.textContent?.trim() || "",
+        },
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         confirmDetails: {
@@ -1903,10 +1908,10 @@ async function runChromeTest() {
       true,
       "Expected approved OTS photo proof control after OTS.",
     );
-    assert.equal(
-      depOtsState.buttonLabels.includes("Shoot"),
-      true,
-      "Expected the established rear-camera input to display Shoot after OTS.",
+    assert.deepEqual(
+      depOtsState.otsPhotoControl,
+      { compact: true, standaloneButton: false, text: "ShootNo photo selected." },
+      "Expected the compact rear-camera file control to retain its appearance with only the chooser wording changed to Shoot.",
     );
     assert.equal(depOtsState.fileInputs.length, 1, "Expected one approved OTS image input after OTS.");
     await uploadOtsPhotoProof();

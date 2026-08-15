@@ -3086,34 +3086,42 @@ export default function DriverJobPage() {
                   </div>
                   <div className="space-y-1 text-sm font-semibold text-sky-950">
                     <span className="block">Photo</span>
-                    <button
-                      aria-controls="driver-ots-photo-proof-input"
-                      className="h-11 w-full rounded-md border border-sky-300 bg-sky-100 px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-driver-job-ots-photo-proof-shoot="true"
-                      disabled={driverOtsPhotoProof.action !== "idle"}
-                      onClick={() => driverOtsPhotoProofInputRef.current?.click()}
-                      type="button"
+                    <label
+                      aria-disabled={driverOtsPhotoProof.action !== "idle"}
+                      className={`flex h-11 w-full items-stretch overflow-hidden rounded-md border border-sky-300 bg-white text-sm font-semibold text-slate-900 ${
+                        driverOtsPhotoProof.action !== "idle"
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer"
+                      }`}
+                      data-driver-job-ots-photo-proof-control="true"
+                      htmlFor="driver-ots-photo-proof-input"
                     >
-                      Shoot
-                    </button>
+                      <span
+                        className="flex shrink-0 items-center border-r border-sky-300 bg-sky-100 px-3 text-sky-950"
+                        data-driver-job-ots-photo-proof-shoot="true"
+                      >
+                        Shoot
+                      </span>
+                      <span
+                        aria-live="polite"
+                        className="flex min-w-0 items-center truncate px-3 text-xs font-semibold text-sky-900"
+                        data-driver-job-ots-photo-proof-selected-file="true"
+                      >
+                        {driverOtsPhotoProof.selectedFileName || "No photo selected."}
+                      </span>
+                    </label>
                     <input
                       accept="image/heic,image/heif,image/jpeg,image/png,image/webp,image/*"
                       aria-label="OTS photo"
                       capture="environment"
                       className="sr-only"
                       data-driver-job-ots-photo-proof-input="true"
+                      disabled={driverOtsPhotoProof.action !== "idle"}
                       id="driver-ots-photo-proof-input"
                       onChange={handleDriverOtsPhotoFileChange}
                       ref={driverOtsPhotoProofInputRef}
                       type="file"
                     />
-                    <span
-                      aria-live="polite"
-                      className="block text-xs font-semibold text-sky-900"
-                      data-driver-job-ots-photo-proof-selected-file="true"
-                    >
-                      {driverOtsPhotoProof.selectedFileName || "No photo selected."}
-                    </span>
                   </div>
                   <button
                     className="h-11 w-full rounded-md border border-sky-400 bg-white px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"

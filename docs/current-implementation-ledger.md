@@ -10236,6 +10236,13 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - No public App Review submission, publication, automatic future-build distribution, new tester, new group, Customer/Admin native app, Driver Job API, payload schema, acknowledgement/reporting, status writer, live-location route or task, permission behavior, Calendar, Operations Calendar, booking/CRM, messaging, customer surface, invoice/billing/payment, payout/PayNow, schema, environment, or Production record change is included.
 - Focused lock: `scripts/test-driver-companion-ios-release-config-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`.
 
+### Driver iOS TestFlight Build 3 (2026-08-15)
+
+- The owner approved one iOS-only internal TestFlight build carrying the merged complete in-app Driver workflow from `cc9c3f6fbc0feb92449e4a83dccd94cfb15f9294`. The established `ios.buildNumber` is explicitly `3`; public iOS version `1.0.0`, bundle `sg.prestigelimo.drivercompanion`, EAS project `2a797181-d09d-4384-8d01-583456e83c3e`, App Store Connect app `6800706103`, installed label `Prestige Driver`, iPhone/iPad support, light mode, icon, Universal Link, permissions, and background tracking contract remain unchanged.
+- This build must reuse the existing Apple Distribution certificate, App Store provisioning profile, and App Store Connect API key. Any prompt to create, replace, rotate, download, or expose credentials is outside approval and must stop before mutation. Only one iOS production build and one submission are approved; queued or processing work must be monitored rather than retried or re-uploaded.
+- This source checkpoint does not prove signed IPA contents, upload, Apple processing, TestFlight availability, physical-device behavior, or internal-group assignment. Direct IPA inspection and Apple processing evidence remain required. No Android build, tester/group change, App Review, public release, Customer/Admin native app, provider configuration, data/schema/runtime mutation, or unrelated source change is included.
+- Focused lock: `scripts/test-driver-companion-ios-release-config-guard.mjs`, registered in `scripts/test-preactivation-verification-suite.mjs`.
+
 ## Customer Booking Public Reference Lane
 
 - Status: source implementation, bounded local verification, Production schema activation, Production application deployment, and deployed owner-Chrome runtime proof complete.

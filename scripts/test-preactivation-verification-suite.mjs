@@ -1159,6 +1159,10 @@ const guardChecks = [
     script: "scripts/test-driver-companion-safe-summary-display-guard.mjs",
   },
   {
+    label: "Driver Companion internal ACK and status guard",
+    script: "scripts/test-driver-companion-internal-ack-status-guard.mjs",
+  },
+  {
     label: "Driver Companion iOS Universal Link association guard",
     script: "scripts/test-driver-companion-ios-universal-link-association-guard.mjs",
   },

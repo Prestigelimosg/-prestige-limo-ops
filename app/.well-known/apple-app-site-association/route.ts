@@ -12,6 +12,9 @@ const appleAppSiteAssociation = {
       },
     ],
   },
+  webcredentials: {
+    apps: ["U9Y2574Y7S.sg.prestigelimo.drivercompanion"],
+  },
 } as const;
 
 export const dynamic = "force-static";

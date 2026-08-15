@@ -71,8 +71,11 @@ for (const fragment of [
 
 assert.deepEqual(
   companionConfig.ios.associatedDomains,
-  ["applinks:app.prestigelimo.sg"],
-  "iOS must claim only the established production Driver Job origin",
+  [
+    "applinks:app.prestigelimo.sg",
+    "webcredentials:app.prestigelimo.sg",
+  ],
+  "iOS must claim only the established production Driver Job and HTTPS auth callback origin",
 );
 assert.equal(companionConfig.userInterfaceStyle, "light", "Companion must remain light mode");
 assert.deepEqual(

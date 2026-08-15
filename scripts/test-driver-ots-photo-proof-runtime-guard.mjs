@@ -128,7 +128,10 @@ assertExcludes(adminRoute, /export async function (POST|PUT|PATCH|DELETE)/, "adm
 for (const fragment of [
   "/api/driver-job/${encodeURIComponent(token)}/ots-photo",
   "data-driver-job-ots-photo-proof-input=\"true\"",
+  "data-driver-job-ots-photo-proof-shoot=\"true\"",
+  "data-driver-job-ots-photo-proof-selected-file=\"true\"",
   "capture=\"environment\"",
+  'driverOtsPhotoProof.selectedFileName || "No photo selected."',
   "const driverOtsPhotoMaxRequestBytes = 4 * 1024 * 1024",
   "const driverOtsPhotoMaxDimension = 1600",
   "prepareDriverOtsPhotoForUpload",
@@ -142,6 +145,17 @@ for (const fragment of [
 ]) {
   assertIncludes(driverPage, fragment, `driver page approved OTS fragment: ${fragment}`);
 }
+
+assert.match(
+  driverOtsApprovedSurface,
+  /data-driver-job-ots-photo-proof-shoot="true"[\s\S]{0,300}>\s*Shoot\s*<\/button>/,
+  "driver page must present the existing rear-camera input as Shoot",
+);
+assert.match(
+  driverOtsApprovedSurface,
+  /className="sr-only"[\s\S]{0,500}data-driver-job-ots-photo-proof-input="true"/,
+  "driver page must hide only the browser-generated file-picker label while retaining the established input",
+);
 
 assertExcludes(
   driverOtsApprovedSurface,

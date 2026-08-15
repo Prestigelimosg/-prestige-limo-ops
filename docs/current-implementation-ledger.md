@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver OTS Camera Button Label Repair (2026-08-15)
+
+- Physical iPhone acceptance of the complete installed Driver workflow proved the established optional `OTS Photo to Admin` control works through the native file chooser, but iOS presented the generic browser text `Choose File` for its rear-camera input. The owner requested the role-appropriate action label `Shoot` without changing the photo workflow.
+- The existing post-OTS camera input remains one `type="file"` control with the same image accept list, `capture="environment"`, selected file, local large-photo reduction, token-scoped upload route, storage writer, Admin-only visibility, and separate `Send Photo to Admin` action. Only the browser-generated picker presentation is hidden behind one visible `Shoot` button; the selected filename remains visibly confirmed before upload.
+- This presentation repair adds no second camera, file input, upload route, writer, storage lane, message, status, GPS action, customer visibility, or external send. It changes no acknowledgement, Calendar, Report Issue, Driver Reports, Admin/Customer app, booking, invoice/payment/payout/PayNow, schema, data, provider, credential, environment, EAS build, TestFlight group, or public release behavior.
+- Fail-first protection is the extended `scripts/test-driver-ots-photo-proof-runtime-guard.mjs`, which requires the exact visible `Shoot` control, hidden native-generated picker label, retained rear-camera input, selected-file confirmation, established compression/upload lane, and privacy boundary. The Driver Job browser regression separately proves the control is visible after OTS while the same approved image input remains available for upload.
+
 ### Driver Native Calendar Redirect Response Repair (2026-08-15)
 
 - Physical iPhone 15 TestFlight Build 6 acceptance on the acknowledged booking `10889` proved the earlier HTTPS authentication-session association repair: one `Add / Update Calendar` action opened Apple's provider-controlled authorization sheet and displayed the exact same host `app.prestigelimo.sg`. The sheet then remained blank white and never presented Google account selection or consent. No retry, refresh, close, status, message, tracking, Calendar provider, or Production data action was performed during diagnosis; the screenshot separately confirmed native tracking remained off.

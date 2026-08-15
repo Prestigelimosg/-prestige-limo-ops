@@ -18,6 +18,7 @@ import {
 } from "../../../lib/driver-job-status-workflow";
 
 type DriverJobApiBlockedReason =
+  | "acknowledgement_required"
   | "already_completed"
   | "expired"
   | "invalid_details"
@@ -344,6 +345,7 @@ const driverLiveLocationPositionOptions: PositionOptions = {
 };
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
+  acknowledgement_required: "Acknowledge this job before updating status.",
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
   invalid_details: "Driver details were not accepted. Check the name and contact dispatch if this continues.",
@@ -371,7 +373,8 @@ type PreparedDriverOtsPhoto = {
 };
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
-  return value === "already_completed" ||
+  return value === "acknowledgement_required" ||
+    value === "already_completed" ||
     value === "expired" ||
     value === "revoked" ||
     value === "unauthorized" ||

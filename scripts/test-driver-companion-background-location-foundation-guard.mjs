@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const files = {
   app: "driver-companion/App.tsx",
+  bridge: "driver-companion/src/driver-webview-bridge.ts",
   config: "driver-companion/app.json",
   contract: "driver-companion/src/driver-job-contract.ts",
   index: "driver-companion/index.ts",
@@ -109,8 +110,13 @@ includes("tracking", "Location.stopLocationUpdatesAsync");
 includes("tracking", 'notificationTitle: "Prestige trip tracking active"');
 includes("tracking", "showsBackgroundLocationIndicator: true");
 includes("tracking", "waiting for the first server update");
-includes("app", "Start trip tracking");
-includes("app", "Stop trip tracking");
+includes("app", "handleBridgeMessage");
+includes("app", 'request.type === "tracking_start"');
+includes("app", 'request.type === "tracking_stop"');
+includes("app", "startDriverTracking(job)");
+includes("app", "stopDriverTracking()");
+includes("app", "<WebView");
+includes("bridge", 'type: "tracking_start" | "tracking_stop" | "tracking_terminal"');
 includes("app", 'from "react-native-safe-area-context"');
 includes("app", "<SafeAreaProvider initialMetrics={initialWindowMetrics}>");
 includes("app", 'edges={["top", "right", "bottom", "left"]}');
@@ -120,12 +126,13 @@ includes("app", "Linking.getInitialURL()");
 includes("app", 'Linking.addEventListener("url"');
 includes("app", "parseDriverJobUrl(incomingUrl)");
 includes("app", "Open the private Driver Job Link sent by Prestige");
-includes("readme", "Expo Go cannot test this background-location workflow.");
+includes("readme", "Expo Go cannot prove the complete embedded workflow or background location.");
 includes("rootTsconfig", '"exclude": ["node_modules", "driver-companion"]');
 includes("preactivation", "scripts/test-driver-companion-background-location-foundation-guard.mjs");
 
 const combinedNativeSource = [
   source.app,
+  source.bridge,
   source.contract,
   source.index,
   source.locationTask,
@@ -156,8 +163,8 @@ assert.equal(
   1,
   "Only the existing explicit Start action may call native tracking",
 );
-const incomingLinkStart = source.app.indexOf("async function receiveDriverJobUrl");
-const incomingLinkEnd = source.app.indexOf("async function openInitialJob", incomingLinkStart);
+const incomingLinkStart = source.app.indexOf("const receiveDriverJobUrl");
+const incomingLinkEnd = source.app.indexOf("useEffect(() =>", incomingLinkStart);
 assert.notEqual(incomingLinkStart, -1, "Incoming Driver Job link handler must exist");
 assert.notEqual(incomingLinkEnd, -1, "Incoming Driver Job link handler must be bounded");
 const incomingLinkBlock = source.app.slice(incomingLinkStart, incomingLinkEnd);
@@ -169,12 +176,20 @@ assert.equal(
   "Opening a Driver Job link must not start tracking or request location permission",
 );
 
-for (const pattern of [
-  /Start trip tracking[\s\S]{0,120}onPress=\{startTripTracking\}/,
-  /Stop trip tracking[\s\S]{0,120}onPress=\{stopTripTracking\}/,
-]) {
-  assert.equal(pattern.test(source.app), true, `explicit tracking control must match ${pattern}`);
-}
+assert.equal(
+  /parseDriverBridgeMessage\(event\.nativeEvent\.data\)[\s\S]*?request\.type === "tracking_start"[\s\S]*?startDriverTracking\(job\)/.test(
+    source.app,
+  ),
+  true,
+  "Only the exact embedded OTW bridge may start native tracking",
+);
+assert.equal(
+  /request\.type === "tracking_start"[\s\S]*?startDriverTracking\(job\)[\s\S]*?: await stopDriverTracking\(\)/.test(
+    source.app,
+  ),
+  true,
+  "Only the exact embedded Stop Sharing bridge may stop native tracking",
+);
 
 const ledgerHeading = "### Driver Companion iPhone/Android Background-Location Foundation";
 const ledgerStart = source.ledger.indexOf(ledgerHeading);

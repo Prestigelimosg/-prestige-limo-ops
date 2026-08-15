@@ -233,6 +233,20 @@ type DriverLiveLocationState = {
   staleState: "active" | "inactive" | "stale";
 };
 
+type EmbeddedDriverTrackingResult = {
+  active?: boolean;
+  message?: string;
+  ok?: boolean;
+  request?: "tracking_start" | "tracking_stop" | "tracking_terminal";
+};
+
+type EmbeddedDriverWindow = Window & {
+  ReactNativeWebView?: {
+    postMessage: (message: string) => void;
+  };
+  __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
+};
+
 type DriverOtsPhotoProofState = {
   action: "idle" | "uploading";
   feedback: ControlFeedback | null;
@@ -757,6 +771,52 @@ function safeGoogleConsentUrl(value: string | undefined) {
   }
 }
 
+function isVerifiedEmbeddedDriverApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const embeddedWindow = window as EmbeddedDriverWindow;
+  return embeddedWindow.__PRESTIGE_DRIVER_NATIVE_APP__ === true &&
+    typeof embeddedWindow.ReactNativeWebView?.postMessage === "function";
+}
+
+function postEmbeddedDriverBridgeMessage(
+  message: { type: "tracking_start" | "tracking_stop" | "tracking_terminal" },
+) {
+  if (!isVerifiedEmbeddedDriverApp()) {
+    return false;
+  }
+
+  (window as EmbeddedDriverWindow).ReactNativeWebView?.postMessage(
+    JSON.stringify(message),
+  );
+  return true;
+}
+
+function safeDriverNativeCalendarOauthStartUrl(googleConsentUrl: string) {
+  const safeConsentUrl = safeGoogleConsentUrl(googleConsentUrl);
+
+  if (!safeConsentUrl) {
+    return "";
+  }
+
+  const state = new URL(safeConsentUrl).searchParams.get("state") || "";
+  const parts = state.split(".");
+
+  if (
+    state.length < 80 ||
+    state.length > 4096 ||
+    parts.length !== 4 ||
+    parts[0] !== "v1" ||
+    parts.slice(1).some((part) => !/^[A-Za-z0-9_-]+$/.test(part))
+  ) {
+    return "";
+  }
+
+  return `/api/driver-google-calendar-oauth/native-start?state=${encodeURIComponent(state)}`;
+}
+
 function driverDeviceAlertReadinessFromApi(
   value: DriverDeviceAlertApiState | undefined,
 ): DriverDeviceAlertReadiness {
@@ -881,6 +941,7 @@ export default function DriverJobPage() {
     return Array.isArray(rawToken) ? rawToken[0] || "" : rawToken || "";
   }, [params]);
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
+  const [embeddedDriverApp, setEmbeddedDriverApp] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
@@ -930,6 +991,14 @@ export default function DriverJobPage() {
     () => Boolean(savedDriverDetails && driverDetailsMatch(driverDetails, savedDriverDetails)),
     [driverDetails, savedDriverDetails],
   );
+
+  useEffect(() => {
+    const embeddedDetectionFrame = window.requestAnimationFrame(() => {
+      setEmbeddedDriverApp(isVerifiedEmbeddedDriverApp());
+    });
+
+    return () => window.cancelAnimationFrame(embeddedDetectionFrame);
+  }, []);
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -1363,6 +1432,75 @@ export default function DriverJobPage() {
     };
   }, [stopDriverLiveLocationBrowserWatch]);
 
+  useEffect(() => {
+    if (!embeddedDriverApp || !isVerifiedEmbeddedDriverApp()) {
+      return;
+    }
+
+    const handleNativeTrackingResult = (event: Event) => {
+      const result = (event as CustomEvent<EmbeddedDriverTrackingResult>).detail;
+
+      if (
+        !result ||
+        !["tracking_start", "tracking_stop", "tracking_terminal"].includes(
+          result.request || "",
+        ) ||
+        typeof result.active !== "boolean" ||
+        typeof result.message !== "string" ||
+        result.message.length > 240
+      ) {
+        return;
+      }
+
+      if (result.request === "tracking_terminal") {
+        return;
+      }
+
+      const stopped = result.request === "tracking_stop" && result.ok === true;
+      const active = result.request === "tracking_start" && result.active === true;
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: stopped || active ? "success" : "error",
+          text: result.message || "Tracking action could not be completed.",
+        },
+        permissionState: active ? "granted" : currentState.permissionState,
+        retryAction: stopped || active
+          ? null
+          : result.request === "tracking_stop"
+            ? "stop"
+            : "share",
+        sharingState: stopped ? "stopped" : active ? "active" : "inactive",
+        staleState: active ? "active" : "inactive",
+      }));
+
+      if (active) {
+        addActivity(
+          "Location sharing started",
+          "Native background location is sharing for this assigned job only.",
+        );
+      } else if (stopped) {
+        addActivity(
+          "Location stopped",
+          "Native background location was stopped for this assigned job.",
+        );
+      }
+    };
+
+    window.addEventListener(
+      "prestige-driver-native-tracking-result",
+      handleNativeTrackingResult,
+    );
+    return () => {
+      window.removeEventListener(
+        "prestige-driver-native-tracking-result",
+        handleNativeTrackingResult,
+      );
+    };
+  }, [embeddedDriverApp]);
+
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
     setParseDetailsFeedback(null);
@@ -1433,9 +1571,13 @@ export default function DriverJobPage() {
       text: "Saving driver details...",
     });
 
-    const deviceAlertPreparation = await prepareDriverDeviceAlert(
-      driverDeviceAlertReadiness,
-    );
+    const deviceAlertPreparation = embeddedDriverApp
+      ? {
+          permission: "not_requested" as const,
+          registration: null,
+          subscription: null,
+        }
+      : await prepareDriverDeviceAlert(driverDeviceAlertReadiness);
 
     try {
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
@@ -1478,7 +1620,7 @@ export default function DriverJobPage() {
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
-      const driverPortalReady =
+      const driverPortalReady = !embeddedDriverApp &&
         result.driver_portal?.enrolled === true &&
         typeof result.driver_portal.link_key === "string" &&
         /^[0-9a-f]{64}$/.test(result.driver_portal.link_key);
@@ -1486,7 +1628,7 @@ export default function DriverJobPage() {
       if (driverPortalReady && result.driver_portal?.link_key) {
         await rememberAcknowledgedDriverPortalLink(result.driver_portal.link_key).catch(() => undefined);
       }
-      const deviceAlertsRegistered =
+      const deviceAlertsRegistered = !embeddedDriverApp &&
         result.device_alerts?.subscription_registered === true &&
         typeof result.device_alerts.link_key === "string" &&
         Boolean(deviceAlertPreparation.registration);
@@ -1565,8 +1707,11 @@ export default function DriverJobPage() {
 
       if (result.action === "authorize") {
         const googleConsentUrl = safeGoogleConsentUrl(result.google_consent_url);
+        const calendarNavigationUrl = embeddedDriverApp
+          ? safeDriverNativeCalendarOauthStartUrl(googleConsentUrl)
+          : googleConsentUrl;
 
-        if (!googleConsentUrl) {
+        if (!calendarNavigationUrl) {
           setDriverCalendar((current) => ({
             ...current,
             action: "idle",
@@ -1578,7 +1723,7 @@ export default function DriverJobPage() {
           return;
         }
 
-        window.location.assign(googleConsentUrl);
+        window.location.assign(calendarNavigationUrl);
         return;
       }
 
@@ -1870,6 +2015,14 @@ export default function DriverJobPage() {
       return;
     }
 
+    if (
+      embeddedDriverApp &&
+      isVerifiedEmbeddedDriverApp() &&
+      postEmbeddedDriverBridgeMessage({ type: "tracking_start" })
+    ) {
+      return;
+    }
+
     const position = await requestDriverLiveLocationPosition();
 
     if (!position) {
@@ -1905,6 +2058,14 @@ export default function DriverJobPage() {
       action: "stopping",
       feedback: null,
     }));
+
+    if (
+      embeddedDriverApp &&
+      isVerifiedEmbeddedDriverApp() &&
+      postEmbeddedDriverBridgeMessage({ type: "tracking_stop" })
+    ) {
+      return;
+    }
 
     try {
       const response = await fetch(driverLiveLocationRoute(), {
@@ -2155,6 +2316,13 @@ export default function DriverJobPage() {
           },
         }));
       }
+      if (
+        result.payload.status === "completed" &&
+        embeddedDriverApp &&
+        isVerifiedEmbeddedDriverApp()
+      ) {
+        postEmbeddedDriverBridgeMessage({ type: "tracking_terminal" });
+      }
       setStatusFeedback({
         target: label,
         tone: "success",
@@ -2328,29 +2496,47 @@ export default function DriverJobPage() {
                 className="mt-2 grid gap-1.5 text-sm font-medium leading-6 text-slate-700"
                 data-driver-job-workflow-handoff-list="true"
               >
+                {embeddedDriverApp ? (
+                  <>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      This private job stays inside Prestige Driver.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap Save & Acknowledge Job after confirming driver and vehicle details.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap OTW to save status and start native background location sharing.
+                    </li>
+                  </>
+                ) : (
+                  <>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      {"Open the private link in Safari. Tap Save & Acknowledge Job."}
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Install Driver Portal from your browser for best results.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Add to Home Screen from this acknowledged page.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Open Driver Portal from your Home Screen.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Already installed before saving? Add it again from this acknowledged page.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap Enable Job Alerts. Allow notifications.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.
+                    </li>
+                  </>
+                )}
                 <li className="border-l-2 border-slate-200 pl-3">
-                  {"Open the private link in Safari. Tap Save & Acknowledge Job."}
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Install Driver Portal from your browser for best results.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Add to Home Screen from this acknowledged page.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Open Driver Portal from your Home Screen.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Already installed before saving? Add it again from this acknowledged page.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Tap Enable Job Alerts. Allow notifications.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Tap OTW to save status and start sharing. Allow location.
+                  {embeddedDriverApp
+                    ? "Use Stop Sharing when native background location is no longer needed."
+                    : "Tap OTW to save status and start sharing. Allow location."}
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
                   Allow camera/photos only for OTS photo.
@@ -2595,15 +2781,23 @@ export default function DriverJobPage() {
                       {detailsFeedback.text}
                     </p>
                   ) : null}
-                  <p
-                    className="text-xs font-medium leading-5 text-slate-500"
-                    data-driver-job-device-alert-helper="true"
-                  >
-                    This same action enables Driver Job alerts on this device when supported and allowed.
-                  </p>
-                  <p className="text-xs font-medium leading-5 text-slate-500" data-driver-portal-enrolment-helper="true">
-                    When securely configured, acknowledgement also enrols this device in Driver Portal.
-                  </p>
+                  {embeddedDriverApp ? (
+                    <p className="text-xs font-medium leading-5 text-slate-500">
+                      This saves the same acknowledgement used by Dispatch and Driver Reports.
+                    </p>
+                  ) : (
+                    <>
+                      <p
+                        className="text-xs font-medium leading-5 text-slate-500"
+                        data-driver-job-device-alert-helper="true"
+                      >
+                        This same action enables Driver Job alerts on this device when supported and allowed.
+                      </p>
+                      <p className="text-xs font-medium leading-5 text-slate-500" data-driver-portal-enrolment-helper="true">
+                        When securely configured, acknowledgement also enrols this device in Driver Portal.
+                      </p>
+                    </>
+                  )}
                 </div>
                 {savedDriverDetails ? (
                   <div
@@ -2689,7 +2883,7 @@ export default function DriverJobPage() {
                     ) : null}
                   </div>
                 ) : null}
-                {driverPortalEnrolled ? (
+                {driverPortalEnrolled && !embeddedDriverApp ? (
                   <div
                     className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
                     data-driver-portal-entry="enrolled"

@@ -15,36 +15,6 @@ export type DriverJobSummary = {
   statusLabel: string;
 };
 
-export type DriverDetailsInput = {
-  contact: string;
-  name: string;
-  plate: string;
-  vehicleModel: string;
-};
-
-export type DriverJobStatusAction = "OTW" | "OTS" | "POB" | "Job Completed";
-
-export type DriverJobStatusHistoryItem = {
-  occurredAt: string;
-  safeNote: string | null;
-  status: string;
-  statusLabel: string;
-};
-
-export type DriverJobDetails = DriverJobSummary & {
-  acknowledged: boolean;
-  assignedDriver: DriverDetailsInput;
-  bookingType: string;
-  bookingTypeLabel: string;
-  dropoffLocation: string;
-  flightNumber: string;
-  pickupDate: string;
-  pickupLocation: string;
-  pickupTime: string;
-  statusHistory: DriverJobStatusHistoryItem[];
-  waypoints: string[];
-};
-
 type UnknownRecord = Record<string, unknown>;
 
 const driverSafeStatusLabels: Readonly<Record<string, string>> = {
@@ -172,14 +142,6 @@ function liveLocationUrl(job: ActiveDriverJob) {
   return `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}/live-location`;
 }
 
-function driverJobUrl(job: ActiveDriverJob) {
-  return `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`;
-}
-
-function driverJobStatusUrl(job: ActiveDriverJob) {
-  return `${driverJobUrl(job)}/status`;
-}
-
 export function parseDriverJobUrl(value: string): ActiveDriverJob {
   let parsed: URL;
 
@@ -195,157 +157,48 @@ export function parseDriverJobUrl(value: string): ActiveDriverJob {
 
   const match = parsed.pathname.match(/^\/driver-job\/([A-Za-z0-9_-]{20,})\/?$/);
 
-  if (!match || parsed.search || parsed.hash) {
+  const calendarReturnState = parsed.searchParams.get("calendar");
+  const hasSafeCalendarReturn =
+    parsed.searchParams.size === 1 &&
+    (calendarReturnState === "saved" || calendarReturnState === "error");
+
+  if (!match || parsed.hash || (parsed.search && !hasSafeCalendarReturn)) {
     throw new Error("This is not a valid private Driver Job URL.");
   }
 
   const token = match[1];
 
   return {
-    jobUrl: `${productionOrigin}/driver-job/${encodeURIComponent(token)}`,
+    jobUrl: `${productionOrigin}/driver-job/${encodeURIComponent(token)}${
+      hasSafeCalendarReturn ? `?calendar=${calendarReturnState}` : ""
+    }`,
     origin: productionOrigin,
     token,
   };
 }
 
-function safeTextList(value: unknown) {
-  return Array.isArray(value)
-    ? value.map((item) => cleanText(item)).filter(Boolean)
-    : [];
-}
-
-function safeStatusHistory(value: unknown): DriverJobStatusHistoryItem[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((item) => {
-    const record = asRecord(item);
-    const status = cleanText(record.status);
-
-    return {
-      occurredAt: cleanText(record.occurredAt),
-      safeNote: cleanText(record.safeNote) || null,
-      status,
-      statusLabel: driverSafeStatusLabel(status),
-    };
-  });
-}
-
-function safeDriverJobDetails(value: unknown): DriverJobDetails {
-  const payload = asRecord(value);
-  const assignedDriver = asRecord(payload.assignedDriver);
-  const status = cleanText(payload.status, "assigned");
-
-  return {
-    acknowledged: payload.acknowledged === true,
-    assignedDriver: {
-      contact: cleanText(assignedDriver.contact),
-      name: cleanText(assignedDriver.name),
-      plate: cleanText(assignedDriver.plate),
-      vehicleModel: cleanText(assignedDriver.vehicleModel),
-    },
-    bookingType: cleanText(payload.bookingType),
-    bookingTypeLabel: cleanText(payload.bookingTypeLabel),
-    dropoffLocation: cleanText(payload.dropoffLocation),
-    flightNumber: cleanText(payload.flightNumber),
-    passengerName: cleanText(payload.passengerName, "Passenger TBC"),
-    pickupDate: cleanText(payload.pickupDate),
-    pickupDateTime: formatDriverPickupDateTime(payload.pickupDateTime),
-    pickupLocation: cleanText(payload.pickupLocation),
-    pickupTime: cleanText(payload.pickupTime),
-    reference: cleanText(payload.reference, "Reference unavailable"),
-    route: cleanText(payload.route, "Route TBC"),
-    status,
-    statusHistory: safeStatusHistory(payload.statusHistory),
-    statusLabel: driverSafeStatusLabel(status),
-    waypoints: safeTextList(payload.waypoints),
-  };
-}
-
-async function driverJobRequest(job: ActiveDriverJob, url: string, init: RequestInit) {
-  const response = await fetch(url, init);
+export async function loadDriverJobSummary(job: ActiveDriverJob) {
+  const response = await fetch(
+    `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
+    { headers: { Accept: "application/json" } },
+  );
   const body = await responseBody(response);
 
   if (!response.ok || body.ok !== true) {
     throw requestError(response, body);
   }
 
-  return safeDriverJobDetails(body.payload);
-}
-
-export async function loadDriverJobDetails(job: ActiveDriverJob) {
-  return driverJobRequest(job, driverJobUrl(job), {
-    headers: { Accept: "application/json" },
-    method: "GET",
-  });
-}
-
-export async function loadDriverJobSummary(job: ActiveDriverJob) {
-  const details = await loadDriverJobDetails(job);
+  const payload = asRecord(body.payload);
+  const status = cleanText(payload.status, "assigned");
 
   return {
-    passengerName: details.passengerName,
-    pickupDateTime: details.pickupDateTime,
-    reference: details.reference,
-    route: details.route,
-    status: details.status,
-    statusLabel: details.statusLabel,
+    passengerName: cleanText(payload.passengerName, "Passenger TBC"),
+    pickupDateTime: formatDriverPickupDateTime(payload.pickupDateTime),
+    reference: cleanText(payload.reference, "Reference unavailable"),
+    route: cleanText(payload.route, "Route TBC"),
+    status,
+    statusLabel: driverSafeStatusLabel(status),
   } satisfies DriverJobSummary;
-}
-
-export async function saveAndAcknowledgeDriverJob(
-  job: ActiveDriverJob,
-  details: DriverDetailsInput,
-) {
-  return driverJobRequest(job, driverJobUrl(job), {
-    body: JSON.stringify({
-      driver_contact: details.contact,
-      driver_name: details.name,
-      driver_plate_number: details.plate,
-      driver_vehicle_model: details.vehicleModel,
-    }),
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    method: "PATCH",
-  });
-}
-
-export async function updateDriverJobStatus(
-  job: ActiveDriverJob,
-  status: DriverJobStatusAction,
-) {
-  return driverJobRequest(job, driverJobStatusUrl(job), {
-    body: JSON.stringify({ status }),
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    method: "PATCH",
-  });
-}
-
-export function nextDriverJobStatusAction(
-  status: string,
-): DriverJobStatusAction | null {
-  const normalized = cleanText(status).toLowerCase();
-
-  if (["assigned", "confirmed", "pending"].includes(normalized)) {
-    return "OTW";
-  }
-  if (normalized === "driver_otw") {
-    return "OTS";
-  }
-  if (normalized === "ots") {
-    return "POB";
-  }
-  if (normalized === "pob") {
-    return "Job Completed";
-  }
-
-  return null;
 }
 
 async function liveLocationRequest(

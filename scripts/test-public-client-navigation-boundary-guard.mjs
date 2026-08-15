@@ -166,12 +166,13 @@ for (const fragment of [
   'url.protocol === "https:"',
   'url.hostname === "accounts.google.com"',
   'url.pathname === "/o/oauth2/v2/auth"',
-  "window.location.assign(googleConsentUrl)",
+  "safeDriverNativeCalendarOauthStartUrl",
+  "window.location.assign(calendarNavigationUrl)",
 ]) {
   assertIncludes(driverJobPage, fragment, `Driver Google consent navigation ${fragment}`);
 }
 assert.equal(
-  countOccurrences(driverJobPage, "window.location.assign(googleConsentUrl)"),
+  countOccurrences(driverJobPage, "window.location.assign(calendarNavigationUrl)"),
   1,
   "Driver Job page must have exactly one bounded Google consent navigation",
 );
@@ -187,7 +188,7 @@ const driverJobPageWithoutGoogleConsent = driverJobPage
   .replace('url.protocol === "https:"', "")
   .replace('url.hostname === "accounts.google.com"', "")
   .replace('url.pathname === "/o/oauth2/v2/auth"', "")
-  .replace("window.location.assign(googleConsentUrl)", "");
+  .replace("window.location.assign(calendarNavigationUrl)", "");
 
 for (const [path, sourceValue] of publicPagePaths.map((path) => [path, files[path]])) {
   const source = path === "app/driver-job/[token]/page.tsx"

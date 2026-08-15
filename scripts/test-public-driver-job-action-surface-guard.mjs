@@ -358,7 +358,8 @@ for (const fragment of [
   "async function openDriverJobCalendar()",
   'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
   "safeGoogleConsentUrl",
-  "window.location.assign(googleConsentUrl)",
+  "safeDriverNativeCalendarOauthStartUrl",
+  "window.location.assign(calendarNavigationUrl)",
   "onClick={openDriverJobCalendar}",
 ]) {
   assertIncludes(driverPage, fragment, `driver page action caller ${fragment}`);

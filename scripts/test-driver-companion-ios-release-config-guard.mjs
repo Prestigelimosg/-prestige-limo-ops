@@ -76,11 +76,11 @@ assert.equal(
 );
 
 for (const phrase of [
-  'alignSelf: "center"',
-  "maxWidth: 720",
-  'width: "100%"',
-  "while your device screen is locked",
-  "iOS shows its location indicator",
+  "<WebView",
+  "style={styles.webView}",
+  'webView: { backgroundColor: "#f8fafc", flex: 1 }',
+  "Prestige Driver",
+  "allowsBackForwardNavigationGestures",
 ]) {
   assert.equal(
     normalizedAppSource.includes(phrase),

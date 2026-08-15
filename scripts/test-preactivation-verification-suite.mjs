@@ -1159,7 +1159,7 @@ const guardChecks = [
     script: "scripts/test-driver-companion-safe-summary-display-guard.mjs",
   },
   {
-    label: "Driver Companion internal ACK and status guard",
+    label: "Driver Companion complete embedded workflow guard",
     script: "scripts/test-driver-companion-internal-ack-status-guard.mjs",
   },
   {

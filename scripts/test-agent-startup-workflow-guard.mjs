@@ -62,6 +62,7 @@ assert.equal(
 const stagedGuard = await readFile("scripts/test-staged-app-change-ledger-guard.mjs", "utf8");
 for (const requiredFragment of [
   "git diff --cached --name-only --diff-filter=ACMR",
+  '"driver-companion/"',
   "docs/current-implementation-ledger.md",
   "scripts/test-",
   "Application changes require the implementation ledger",

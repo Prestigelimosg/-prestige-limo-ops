@@ -8,7 +8,7 @@ import {
 const nativeNotificationTokenStorageKey =
   "prestige-driver-native-notification-token-v1";
 const nativeNotificationJobStoragePrefix =
-  "prestige-driver-native-notification-job-v1:";
+  "prestige-driver-native-notification-job-v1.";
 
 function validJobKey(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);

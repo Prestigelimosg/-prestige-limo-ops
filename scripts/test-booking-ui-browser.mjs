@@ -256,6 +256,57 @@ const dashboardEmailAiEnquiryFixture = {
     "Thank you for your enquiry. We are checking availability and will confirm shortly.",
   summary: "Customer asks for airport pickup availability.",
 };
+const dashboardEmailAiGroundBookerOrderRequestFixture = {
+  booking_parse_result: {
+    bookings: [
+      {
+        bookerContact: "",
+        bookerEmail: "transzend@groundbooker.com",
+        bookerName: "Pat",
+        bookingType: "DEP",
+        companyAccount: "Transzend Groundbooker",
+        confidence: 0.98,
+        customerPriceOverride: "",
+        dropoff: "Singapore Changi Airport Main Terminal",
+        extraStopLocation: "",
+        extraStops: "",
+        flightNumber: "QR945",
+        needsReviewReasons: [
+          "Sender asks for confirmation; booking is not clearly confirmed.",
+        ],
+        notes: "",
+        passengerContact: "+6590000000",
+        passengerName: "Synthetic GroundBooker Guest",
+        pax: "1",
+        pickup: "Fullerton Hotel",
+        pickupDate: "2026-08-16",
+        pickupTime: "00:45",
+        vehicle: "",
+      },
+    ],
+    multipleBookingsDetected: false,
+    rawWarnings: [],
+  },
+  canonical_booking_text:
+    "Booking type: DEP\nCompany/account: Transzend Groundbooker\nBooker: Pat\nBooker email: transzend@groundbooker.com\nPassenger: Synthetic GroundBooker Guest\nPassenger contact: +6590000000\nPax: 1\nPickup date: 2026-08-16\nPickup time: 00:45\nFlight: QR945\nPickup: Fullerton Hotel\nDrop-off: Singapore Changi Airport Main Terminal",
+  classification: "enquiry",
+  confidence: 0.98,
+  created_at: "2026-08-14T02:17:06.000Z",
+  id: "00000000-0000-4000-8000-000000000103",
+  mailbox_address: "booking@prestigelimo.sg",
+  normalized_text:
+    "I have a request for an airport transfer. Please can you confirm this ground transportation service?",
+  processing_status: "queued",
+  received_at: "2026-08-14T02:16:14.000Z",
+  review_reasons: [
+    "Sender asks for confirmation; booking is not clearly confirmed.",
+  ],
+  sender_address: "transzend@groundbooker.com",
+  subject:
+    "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  suggested_reply: "",
+  summary: "GroundBooker asks Prestige to confirm one transport order.",
+};
 const codexCalendarConflictExistingBookingFixture = {
   ...loadedSavedBookingFixture,
   id: "ui-codex-calendar-conflict-existing",
@@ -8640,6 +8691,7 @@ async function runChromeTest() {
       window.__prestigeAdminEmailAiIntake = [
         ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture)},
         ${JSON.stringify(dashboardEmailAiEnquiryFixture)},
+        ${JSON.stringify(dashboardEmailAiGroundBookerOrderRequestFixture)},
       ];
       const refreshButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "Refresh Dashboard",
@@ -8657,7 +8709,7 @@ async function runChromeTest() {
             '[data-bookings-new-request-badge="true"]',
           );
 
-          return rows.length === 1 && count?.textContent.trim() === "1 email"
+          return rows.length === 2 && count?.textContent.trim() === "2 email"
             ? {
                 countAttribute: count.getAttribute("data-dashboard-email-ai-intake-count"),
                 dashboardBadgeText: dashboardBadge?.textContent.trim() || "",
@@ -8675,10 +8727,10 @@ async function runChromeTest() {
       10000,
       "private email AI rows inside existing Booking Requests",
     );
-    assert.equal(emailAiDashboardState.countAttribute, "1");
-    assert.equal(emailAiDashboardState.dashboardBadgeText, "1 new");
-    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "1");
-    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "1");
+    assert.equal(emailAiDashboardState.countAttribute, "2");
+    assert.equal(emailAiDashboardState.dashboardBadgeText, "2 new");
+    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "2");
+    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "2");
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),
       true,
@@ -8695,6 +8747,14 @@ async function runChromeTest() {
     assert.match(
       emailAiDashboardState.rowTexts.join(" "),
       /Confirmed booking/,
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /Needs review/,
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /From transzend@groundbooker\.com/,
     );
     assert.doesNotMatch(emailAiDashboardState.rowTexts.join(" "), /Enquiry/);
     assert.match(

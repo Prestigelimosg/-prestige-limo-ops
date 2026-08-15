@@ -244,6 +244,11 @@ type EmbeddedDriverTrackingResult = {
   request?: "tracking_start" | "tracking_stop" | "tracking_terminal";
 };
 
+type EmbeddedDriverNativeNotificationResult = {
+  ok?: boolean;
+  state?: "denied" | "enabled" | "failed";
+};
+
 type EmbeddedDriverWindow = Window & {
   ReactNativeWebView?: {
     postMessage: (message: string) => void;
@@ -794,7 +799,13 @@ function isVerifiedEmbeddedDriverApp() {
 }
 
 function postEmbeddedDriverBridgeMessage(
-  message: { type: "tracking_start" | "tracking_stop" | "tracking_terminal" },
+  message: {
+    type:
+      | "native_notifications_register"
+      | "tracking_start"
+      | "tracking_stop"
+      | "tracking_terminal";
+  },
 ) {
   if (!isVerifiedEmbeddedDriverApp()) {
     return false;
@@ -1501,14 +1512,42 @@ export default function DriverJobPage() {
       }
     };
 
+    const handleNativeNotificationResult = (event: Event) => {
+      const result = (
+        event as CustomEvent<EmbeddedDriverNativeNotificationResult>
+      ).detail;
+
+      if (
+        !result ||
+        !["denied", "enabled", "failed"].includes(result.state || "")
+      ) {
+        return;
+      }
+
+      setDetailsFeedback({
+        tone: "success",
+        text: result.ok === true && result.state === "enabled"
+          ? "Driver details saved and job acknowledged. Job alerts are enabled in Prestige Driver."
+          : "Driver details saved and job acknowledged. Job alerts are not enabled; check Messages & Updates in this job.",
+      });
+    };
+
     window.addEventListener(
       "prestige-driver-native-tracking-result",
       handleNativeTrackingResult,
+    );
+    window.addEventListener(
+      "prestige-driver-native-notification-result",
+      handleNativeNotificationResult,
     );
     return () => {
       window.removeEventListener(
         "prestige-driver-native-tracking-result",
         handleNativeTrackingResult,
+      );
+      window.removeEventListener(
+        "prestige-driver-native-notification-result",
+        handleNativeNotificationResult,
       );
     };
   }, [embeddedDriverApp]);
@@ -1666,8 +1705,17 @@ export default function DriverJobPage() {
       const driverPortalFeedback = driverPortalReady
         ? " Driver Portal is ready on this device."
         : "";
+      const nativeNotificationRequested = embeddedDriverApp &&
+        postEmbeddedDriverBridgeMessage({
+          type: "native_notifications_register",
+        });
       setDetailsFeedback(
-        deviceAlertFeedback || driverPortalFeedback
+        nativeNotificationRequested
+          ? {
+              tone: "success",
+              text: "Driver details saved and job acknowledged. Enabling job alerts in Prestige Driver...",
+            }
+          : deviceAlertFeedback || driverPortalFeedback
           ? {
               tone: "success",
               text: `Driver details saved and job acknowledged.${driverPortalFeedback}${deviceAlertFeedback}`,

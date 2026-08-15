@@ -14,7 +14,10 @@ import {
   type DriverJobStatusPersistenceClient,
 } from "./driver-job-status-persistence.ts";
 import {
+  registerDriverNativeDevicePushSubscriptionForAcknowledgedLink,
   registerDriverDevicePushSubscriptionForAcknowledgedLink,
+  unregisterDriverNativeDevicePushSubscriptionForAcknowledgedLink,
+  type DriverNativeDeviceAlertUpdateResult,
   type DriverDevicePushRegistrationResult,
 } from "./driver-device-push-notification.ts";
 import {
@@ -48,6 +51,30 @@ export type ProductionDriverJobStatusUpdateInput = {
   status: string;
   token: string;
 };
+
+export async function applyProductionDriverNativeDeviceAlertUpdate(input: {
+  action: "register" | "unregister";
+  expoPushToken: unknown;
+  token: string;
+}): Promise<DriverNativeDeviceAlertUpdateResult | DriverJobLinkDisabledResult> {
+  const clientResult = resolveProductionClient();
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  return input.action === "register"
+    ? registerDriverNativeDevicePushSubscriptionForAcknowledgedLink({
+        client: clientResult.client,
+        expoPushToken: input.expoPushToken,
+        token: input.token,
+      })
+    : unregisterDriverNativeDevicePushSubscriptionForAcknowledgedLink({
+        client: clientResult.client,
+        expoPushToken: input.expoPushToken,
+        token: input.token,
+      });
+}
 
 const adminDevicePushEventForDriverStatus = {
   driver_otw: "driver_otw",

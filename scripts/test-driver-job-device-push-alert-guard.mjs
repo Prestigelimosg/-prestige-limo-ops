@@ -17,6 +17,12 @@ const serviceWorkerPath = "public/prestige-driver-push-sw.js";
 const migrationPath = "supabase/migrations/202607220001_driver_device_push_subscriptions.sql";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
+const nativeAppPath = "driver-companion/App.tsx";
+const nativeBridgePath = "driver-companion/src/driver-webview-bridge.ts";
+const nativeContractPath = "driver-companion/src/driver-job-contract.ts";
+const nativeNotificationStoragePath = "driver-companion/src/native-notifications.ts";
+const nativeConfigPath = "driver-companion/app.json";
+const nativePackagePath = "driver-companion/package.json";
 
 function assertIncludes(source, fragments, label) {
   for (const fragment of fragments) {
@@ -59,6 +65,12 @@ const [
   migrationSource,
   ledgerSource,
   suiteSource,
+  nativeAppSource,
+  nativeBridgeSource,
+  nativeContractSource,
+  nativeNotificationStorageSource,
+  nativeConfigSource,
+  nativePackageSource,
 ] = await Promise.all(
   [
     helperPath,
@@ -74,7 +86,105 @@ const [
     migrationPath,
     ledgerPath,
     suitePath,
+    nativeAppPath,
+    nativeBridgePath,
+    nativeContractPath,
+    nativeNotificationStoragePath,
+    nativeConfigPath,
+    nativePackagePath,
   ].map((relativePath) => readFile(path.join(process.cwd(), relativePath), "utf8")),
+);
+
+assertIncludes(
+  nativePackageSource,
+  ['"expo-constants"', '"expo-notifications"'],
+  "native notification dependencies",
+);
+assertIncludes(
+  nativeConfigSource,
+  ['"expo-notifications"'],
+  "native notification config plugin",
+);
+assertIncludes(
+  nativeBridgeSource,
+  ['"native_notifications_register"'],
+  "parameterless native notification bridge",
+);
+assertIncludes(
+  pageSource,
+  [
+    'type: "native_notifications_register"',
+    '"prestige-driver-native-notification-result"',
+    "Job alerts are enabled in Prestige Driver.",
+    "Job alerts are not enabled; check Messages & Updates in this job.",
+  ],
+  "embedded acknowledgement native notification handoff",
+);
+assertIncludes(
+  nativeAppSource,
+  [
+    'from "expo-constants"',
+    'from "expo-notifications"',
+    "requestPermissionsAsync",
+    "getExpoPushTokenAsync",
+    "addNotificationResponseReceivedListener",
+    "registerNativeDriverNotifications",
+    "rememberNativeDriverJob",
+    "loadNativeDriverJob",
+    'request.type === "native_notifications_register"',
+  ],
+  "native iOS notification registration and tap handling",
+);
+assertExcludes(
+  nativeAppSource,
+  ["console.log", "passenger_name", "customer_price", "driver_payout", "paynow"],
+  "native notification privacy",
+);
+assertIncludes(
+  nativeContractSource,
+  [
+    "registerNativeDriverNotifications",
+    'native_device_alert_action: "register"',
+    "native_push_token",
+  ],
+  "native token-scoped registration adapter",
+);
+assertIncludes(
+  nativeNotificationStorageSource,
+  [
+    'from "expo-secure-store"',
+    "nativeNotificationJobKey",
+    "rememberNativeDriverJob",
+    "loadNativeDriverJob",
+    "parseDriverJobUrl",
+    "/^[0-9a-f]{64}$/",
+  ],
+  "device-local opaque job mapping",
+);
+assertExcludes(
+  nativeNotificationStorageSource,
+  ["console.log", "passenger", "route", "price", "payment", "payout", "paynow"],
+  "device-local notification mapping privacy",
+);
+assertIncludes(
+  helperSource,
+  [
+    "registerDriverNativeDevicePushSubscriptionForAcknowledgedLink",
+    "unregisterDriverNativeDevicePushSubscriptionForAcknowledgedLink",
+    'source_surface: "driver_native_ios"',
+    "https://exp.host/--/api/v2/push/send",
+    'title: "Prestige Driver"',
+    'body: "Job update available"',
+  ],
+  "single native extension of the existing driver push sender",
+);
+assertIncludes(
+  routeSource,
+  [
+    "readDriverNativeDeviceAlertBody",
+    "applyProductionDriverNativeDeviceAlertUpdate",
+  ],
+  "existing exact Driver Job route native notification registration",
 );
 
 assertIncludes(
@@ -394,6 +504,80 @@ try {
     false,
   );
 
+  const nativeExpoPushToken =
+    "ExpoPushToken[abcdefghijklmnopqrstuvwxyz1234567890]";
+  const nativeRegistrationClient = createMockClient();
+  const nativeRegistration =
+    await helper.registerDriverNativeDevicePushSubscriptionForAcknowledgedLink({
+      client: nativeRegistrationClient,
+      env: configuredEnv,
+      expoPushToken: nativeExpoPushToken,
+      token: "PRIVATE-RAW-DRIVER-LINK-TOKEN",
+    });
+  assert.equal(nativeRegistration.ok, true);
+  assert.equal(nativeRegistration.registered, true);
+  assert.match(nativeRegistration.job_key, /^[0-9a-f]{64}$/);
+  const nativeSubscriptionWrite = nativeRegistrationClient.calls.find(
+    (call) =>
+      call.table === "driver_device_push_subscriptions" &&
+      call.operation === "upsert",
+  );
+  assert.equal(nativeSubscriptionWrite.value.driver_id, 8);
+  assert.equal(nativeSubscriptionWrite.value.endpoint, nativeExpoPushToken);
+  assert.equal(nativeSubscriptionWrite.value.source_surface, "driver_native_ios");
+  assert.equal(
+    JSON.stringify(nativeSubscriptionWrite).includes("PRIVATE-RAW-DRIVER-LINK-TOKEN"),
+    false,
+    "raw private Driver Job token must not be persisted with native registration",
+  );
+
+  const closedNativeClient = createMockClient();
+  const closedNativeRegistration =
+    await helper.registerDriverNativeDevicePushSubscriptionForAcknowledgedLink({
+      client: closedNativeClient,
+      env: {},
+      expoPushToken: nativeExpoPushToken,
+      token: "PRIVATE-RAW-DRIVER-LINK-TOKEN",
+    });
+  assert.equal(closedNativeRegistration.ok, false);
+  assert.equal(closedNativeRegistration.reason, "push_gate_closed");
+  assert.equal(
+    closedNativeClient.calls.some(
+      (call) => call.table === "driver_device_push_subscriptions",
+    ),
+    false,
+  );
+
+  const invalidNativeRegistration =
+    await helper.registerDriverNativeDevicePushSubscriptionForAcknowledgedLink({
+      client: createMockClient(),
+      env: configuredEnv,
+      expoPushToken: "not-an-expo-token",
+      token: "PRIVATE-RAW-DRIVER-LINK-TOKEN",
+    });
+  assert.equal(invalidNativeRegistration.ok, false);
+  assert.equal(invalidNativeRegistration.reason, "invalid_subscription");
+
+  const nativeUnregisterClient = createMockClient();
+  const nativeUnregister =
+    await helper.unregisterDriverNativeDevicePushSubscriptionForAcknowledgedLink({
+      client: nativeUnregisterClient,
+      expoPushToken: nativeExpoPushToken,
+      token: "PRIVATE-RAW-DRIVER-LINK-TOKEN",
+    });
+  assert.equal(nativeUnregister.ok, true);
+  assert.equal(nativeUnregister.unregistered, true);
+  const nativeUnregisterWrite = nativeUnregisterClient.calls.find(
+    (call) =>
+      call.table === "driver_device_push_subscriptions" &&
+      call.operation === "update",
+  );
+  assert.deepEqual(nativeUnregisterWrite.value, {
+    revoked_at: nativeUnregisterWrite.value.revoked_at,
+    subscription_status: "revoked",
+    updated_at: nativeUnregisterWrite.value.updated_at,
+  });
+
   const portalRegistrationClient = createMockClient();
   const portalRegistration = await helper.registerDriverDevicePushSubscriptionForPortalSession({
     client: portalRegistrationClient,
@@ -458,6 +642,73 @@ try {
     "safe driver push payload",
   );
 
+  let nativeProviderRequest = null;
+  const nativeAlertClient = createMockClient({
+    subscriptions: [
+      {
+        auth: "native_expo_push_token",
+        endpoint: nativeExpoPushToken,
+        p256dh: "native_expo_push_token",
+        source_surface: "driver_native_ios",
+      },
+    ],
+  });
+  const nativeAlertResult = await helper.sendDriverDevicePushAlertForAppUpdate(
+    nativeAlertClient,
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+    },
+    {
+      env: configuredEnv,
+      nativeFetch: async (url, init) => {
+        nativeProviderRequest = {
+          body: JSON.parse(init.body),
+          url,
+        };
+        return new Response(JSON.stringify({ data: { status: "ok" } }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      },
+    },
+  );
+  assert.equal(nativeAlertResult.ok, true);
+  assert.equal(nativeAlertResult.provider_request_count, 1);
+  assert.equal(nativeProviderRequest.url, "https://exp.host/--/api/v2/push/send");
+  assert.deepEqual(Object.keys(nativeProviderRequest.body).sort(), [
+    "body",
+    "data",
+    "priority",
+    "sound",
+    "title",
+    "to",
+  ]);
+  assert.equal(nativeProviderRequest.body.title, "Prestige Driver");
+  assert.equal(nativeProviderRequest.body.body, "Job update available");
+  assert.equal(nativeProviderRequest.body.to, nativeExpoPushToken);
+  assert.match(nativeProviderRequest.body.data.job_key, /^[0-9a-f]{64}$/);
+  assertExcludes(
+    JSON.stringify({ ...nativeProviderRequest.body, to: "" }),
+    [
+      "PRIVATE-BOOKING-REFERENCE",
+      "PRIVATE-RAW-DRIVER-LINK-TOKEN",
+      "passenger",
+      "route",
+      "flight",
+      "contact",
+      "price",
+      "payment",
+      "payout",
+      "paynow",
+      "admin",
+      "parser",
+      "debug",
+    ],
+    "native push provider-visible payload privacy",
+  );
+
   let issuedJobPayload = null;
   const issuedJobClient = createMockClient({
     acknowledged: false,
@@ -505,6 +756,32 @@ try {
     ],
     "newly issued driver push visible-data privacy",
   );
+  let preAcknowledgementNativeSendCount = 0;
+  const nativeOnlyIssuedJobClient = createMockClient({
+    acknowledged: false,
+    subscriptions: [
+      {
+        auth: "native_expo_push_token",
+        endpoint: nativeExpoPushToken,
+        p256dh: "native_expo_push_token",
+        source_surface: "driver_native_ios",
+      },
+    ],
+  });
+  const nativeOnlyIssuedJobAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
+    nativeOnlyIssuedJobClient,
+    {
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      driver_job_token: "NEW-PRIVATE-DRIVER-JOB-TOKEN",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async () => { preAcknowledgementNativeSendCount += 1; },
+    },
+  );
+  assert.equal(nativeOnlyIssuedJobAlert.ok, false);
+  assert.equal(nativeOnlyIssuedJobAlert.reason, "no_active_subscriptions");
+  assert.equal(preAcknowledgementNativeSendCount, 0);
   const mismatchedIssuedJobAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
     issuedJobClient,
     {

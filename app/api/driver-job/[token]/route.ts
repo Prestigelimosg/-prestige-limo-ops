@@ -3,6 +3,7 @@ import {
   getDriverJobPayloadForTokenContract,
 } from "../../../../lib/driver-job-link-contract.ts";
 import {
+  applyProductionDriverNativeDeviceAlertUpdate,
   applyProductionDriverJobDetailsUpdate,
   getProductionDriverJobPayloadForToken,
 } from "../../../../lib/driver-job-link-production.ts";
@@ -36,6 +37,27 @@ const blockedStatusByReason = {
   unauthorized: 401,
 } as const;
 
+export function readDriverNativeDeviceAlertBody(body: unknown) {
+  const record = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+  const action = record.native_device_alert_action;
+
+  if (
+    !["register", "unregister"].includes(String(action)) ||
+    Object.keys(record).some((key) =>
+      !["native_device_alert_action", "native_push_token"].includes(key)
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    action: action as "register" | "unregister",
+    expoPushToken: record.native_push_token,
+  };
+}
+
 function publicDriverDeviceAlertReadiness() {
   const readiness = getDriverDevicePushReadiness();
 
@@ -64,6 +86,24 @@ function publicDriverPortalEnrollment(result: {
     enrolled: result.ok,
     link_key: result.ok ? result.jobKey : null,
   };
+}
+
+function nativeDeviceAlertBlockedStatus(reason: string) {
+  if (reason === "invalid_subscription") {
+    return 400;
+  }
+  if (
+    reason === "not_configured" ||
+    reason === "provider_not_configured" ||
+    reason === "push_gate_closed" ||
+    reason === "subscription_write_failed"
+  ) {
+    return 503;
+  }
+  if (reason === "unverified_driver") {
+    return 403;
+  }
+  return 401;
 }
 
 function readDriverDetailsBody(body: unknown) {
@@ -131,9 +171,37 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
 
 export async function PATCH(request: Request, context: DriverJobRouteContext) {
   const { token } = await context.params;
-  const details = readDriverDetailsBody(await request.json().catch(() => null));
+  const body = await request.json().catch(() => null);
+  const nativeDeviceAlertUpdate = readDriverNativeDeviceAlertBody(body);
+  const details = readDriverDetailsBody(body);
 
   if (isProductionDriverJobLinkMode()) {
+    if (nativeDeviceAlertUpdate) {
+      const result = await applyProductionDriverNativeDeviceAlertUpdate({
+        ...nativeDeviceAlertUpdate,
+        token,
+      });
+
+      if (result.ok) {
+        return Response.json(
+          {
+            native_device_alerts: {
+              job_key: result.job_key,
+              registered: result.registered,
+              unregistered: result.unregistered,
+            },
+            ok: true,
+            mode: "production",
+          },
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      }
+
+      return Response.json(result, {
+        status: nativeDeviceAlertBlockedStatus(result.reason),
+      });
+    }
+
     const result = await applyProductionDriverJobDetailsUpdate({
       driverPortalCookieHeader: request.headers.get("cookie"),
       token,

@@ -22,7 +22,10 @@ const driverDevicePushContactEmailEnvName =
 const driverDevicePushProviderTimeoutMs = 5000;
 const driverDevicePushLinkSelect =
   "id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at, token_hash";
-const driverDevicePushSubscriptionSelect = "endpoint, p256dh, auth";
+const driverDevicePushSubscriptionSelect = "endpoint, p256dh, auth, source_surface";
+const driverNativePushSubscriptionSource = "driver_native_ios";
+const driverNativePushSubscriptionSentinel = "native_expo_push_token";
+const expoPushEndpoint = "https://exp.host/--/api/v2/push/send";
 
 const requiredEnvNames = [
   driverDevicePushEnabledEnvName,
@@ -87,6 +90,22 @@ export type DriverDevicePushAlertResult = {
   version: typeof driverDevicePushNotificationVersion;
 };
 
+export type DriverNativeDeviceAlertUpdateResult = {
+  job_key: string | null;
+  ok: boolean;
+  reason:
+    | "invalid_driver_link"
+    | "invalid_subscription"
+    | "provider_not_configured"
+    | "push_gate_closed"
+    | "subscription_registered"
+    | "subscription_unregistered"
+    | "subscription_write_failed"
+    | "unverified_driver";
+  registered: boolean;
+  unregistered: boolean;
+};
+
 type DriverDevicePushSubscriptionInput = {
   endpoint: string;
   keys: {
@@ -118,8 +137,15 @@ export type DriverDevicePushSender = (
   payload: DriverDevicePushPayload,
 ) => Promise<void>;
 
+export type DriverNativePushSender = (
+  expoPushToken: string,
+  jobKey: string,
+) => Promise<void>;
+
 type DriverDevicePushAlertOptions = {
   env?: EnvInput;
+  nativeFetch?: typeof fetch;
+  nativePushSender?: DriverNativePushSender;
   pushSender?: DriverDevicePushSender;
 };
 
@@ -220,6 +246,13 @@ function parseSubscription(value: unknown): DriverDevicePushSubscriptionInput | 
 
   return endpoint && p256dh && auth
     ? { endpoint, keys: { auth, p256dh } }
+    : null;
+}
+
+function parseExpoPushToken(value: unknown): string | null {
+  const token = safeText(value, 512);
+  return token && /^(?:Exponent|Expo)PushToken\[[A-Za-z0-9_-]{20,400}\]$/.test(token)
+    ? token
     : null;
 }
 
@@ -350,6 +383,139 @@ export async function registerDriverDevicePushSubscriptionForAcknowledgedLink(
   });
 }
 
+function nativeDeviceAlertUpdateResult(
+  reason: DriverNativeDeviceAlertUpdateResult["reason"],
+  options: {
+    jobKey?: string | null;
+    ok?: boolean;
+    registered?: boolean;
+    unregistered?: boolean;
+  } = {},
+): DriverNativeDeviceAlertUpdateResult {
+  return {
+    job_key: options.jobKey ?? null,
+    ok: options.ok === true,
+    reason,
+    registered: options.registered === true,
+    unregistered: options.unregistered === true,
+  };
+}
+
+async function resolveAcknowledgedDriverLinkForToken(
+  client: DriverDevicePushClient,
+  token: string,
+) {
+  let tokenHash: string;
+  try {
+    tokenHash = hashDriverJobLinkToken(token);
+  } catch {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from("driver_job_links")
+    .select(driverDevicePushLinkSelect)
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+  const link = asRecord(data);
+  const linkId = safeUuid(link.id);
+  const driverId = safePositiveInteger(link.driver_id);
+
+  return !error && linkId && driverId && linkIsActive(link) && linkWasAcknowledged(link)
+    ? { driverId, linkId }
+    : null;
+}
+
+export async function registerDriverNativeDevicePushSubscriptionForAcknowledgedLink(
+  input: {
+    client: DriverDevicePushClient;
+    env?: EnvInput;
+    expoPushToken: unknown;
+    token: string;
+  },
+): Promise<DriverNativeDeviceAlertUpdateResult> {
+  const env = input.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  if (!resolveProviderConfig(env)) {
+    return nativeDeviceAlertUpdateResult(
+      enabled ? "provider_not_configured" : "push_gate_closed",
+    );
+  }
+
+  const expoPushToken = parseExpoPushToken(input.expoPushToken);
+  if (!expoPushToken) {
+    return nativeDeviceAlertUpdateResult("invalid_subscription");
+  }
+
+  const link = await resolveAcknowledgedDriverLinkForToken(input.client, input.token);
+  if (!link) {
+    return nativeDeviceAlertUpdateResult("invalid_driver_link");
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await input.client
+    .from("driver_device_push_subscriptions")
+    .upsert(
+      {
+        auth: driverNativePushSubscriptionSentinel,
+        driver_id: link.driverId,
+        endpoint: expoPushToken,
+        last_driver_job_link_id: link.linkId,
+        p256dh: driverNativePushSubscriptionSentinel,
+        revoked_at: null,
+        source_surface: "driver_native_ios",
+        subscription_status: "active",
+        updated_at: now,
+      },
+      { onConflict: "endpoint" },
+    );
+
+  return error
+    ? nativeDeviceAlertUpdateResult("subscription_write_failed")
+    : nativeDeviceAlertUpdateResult("subscription_registered", {
+        jobKey: opaqueDriverJobLinkKey(link.linkId),
+        ok: true,
+        registered: true,
+      });
+}
+
+export async function unregisterDriverNativeDevicePushSubscriptionForAcknowledgedLink(
+  input: {
+    client: DriverDevicePushClient;
+    expoPushToken: unknown;
+    token: string;
+  },
+): Promise<DriverNativeDeviceAlertUpdateResult> {
+  const expoPushToken = parseExpoPushToken(input.expoPushToken);
+  if (!expoPushToken) {
+    return nativeDeviceAlertUpdateResult("invalid_subscription");
+  }
+
+  const link = await resolveAcknowledgedDriverLinkForToken(input.client, input.token);
+  if (!link) {
+    return nativeDeviceAlertUpdateResult("invalid_driver_link");
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await input.client
+    .from("driver_device_push_subscriptions")
+    .update({
+      revoked_at: now,
+      subscription_status: "revoked",
+      updated_at: now,
+    })
+    .eq("driver_id", link.driverId)
+    .eq("endpoint", expoPushToken)
+    .eq("source_surface", driverNativePushSubscriptionSource);
+
+  return error
+    ? nativeDeviceAlertUpdateResult("subscription_write_failed")
+    : nativeDeviceAlertUpdateResult("subscription_unregistered", {
+        ok: true,
+        unregistered: true,
+      });
+}
+
 export async function registerDriverDevicePushSubscriptionForPortalSession(
   input: {
     client: DriverDevicePushClient;
@@ -476,6 +642,30 @@ function toPushSubscription(row: UnknownRecord): PushSubscription | null {
     : null;
 }
 
+type LoadedDriverSubscription = {
+  channel: "native_ios" | "web";
+  endpoint: string;
+  webSubscription: PushSubscription | null;
+};
+
+function toLoadedDriverSubscription(row: UnknownRecord): LoadedDriverSubscription | null {
+  const endpoint = safeText(row.endpoint, 2048);
+  if (!endpoint) {
+    return null;
+  }
+
+  if (row.source_surface === driverNativePushSubscriptionSource) {
+    return parseExpoPushToken(endpoint)
+      ? { channel: "native_ios", endpoint, webSubscription: null }
+      : null;
+  }
+
+  const webSubscription = toPushSubscription(row);
+  return webSubscription
+    ? { channel: "web", endpoint, webSubscription }
+    : null;
+}
+
 function safePayload(linkId: string): DriverDevicePushPayload {
   const jobKey = opaqueDriverJobLinkKey(linkId);
   return {
@@ -532,6 +722,50 @@ async function sendWebPush(
   });
 }
 
+async function sendNativePush(
+  expoPushToken: string,
+  jobKey: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), driverDevicePushProviderTimeoutMs);
+
+  try {
+    const response = await fetcher(expoPushEndpoint, {
+      body: JSON.stringify({
+        body: "Job update available",
+        data: { job_key: jobKey },
+        priority: "high",
+        sound: "default",
+        title: "Prestige Driver",
+        to: expoPushToken,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: controller.signal,
+    });
+    const body = asRecord(await response.json().catch(() => null));
+    const ticket = Array.isArray(body.data)
+      ? asRecord(body.data[0])
+      : asRecord(body.data);
+
+    if (!response.ok || ticket.status !== "ok") {
+      const error = new Error("Native push provider rejected the request.") as Error & {
+        statusCode?: number;
+      };
+      error.statusCode = asRecord(ticket.details).error === "DeviceNotRegistered"
+        ? 410
+        : response.status || 502;
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function providerStatusCode(error: unknown): number | null {
   const statusCode = asRecord(error).statusCode;
   return typeof statusCode === "number" ? statusCode : null;
@@ -539,7 +773,7 @@ function providerStatusCode(error: unknown): number | null {
 
 async function recordDeliveryHealth(
   client: DriverDevicePushClient,
-  subscription: PushSubscription,
+  endpoint: string,
   error: unknown | null,
 ) {
   const now = new Date().toISOString();
@@ -561,7 +795,7 @@ async function recordDeliveryHealth(
     await client
       .from("driver_device_push_subscriptions")
       .update(update)
-      .eq("endpoint", subscription.endpoint);
+      .eq("endpoint", endpoint);
   } catch {
     // Delivery health is best-effort and never changes the saved App Update.
   }
@@ -570,7 +804,7 @@ async function recordDeliveryHealth(
 async function loadActiveDriverSubscriptions(
   client: DriverDevicePushClient,
   driverId: number,
-): Promise<{ ok: boolean; subscriptions: PushSubscription[] }> {
+): Promise<{ ok: boolean; subscriptions: LoadedDriverSubscription[] }> {
   try {
     const { data, error } = await client
       .from("driver_device_push_subscriptions")
@@ -584,8 +818,8 @@ async function loadActiveDriverSubscriptions(
     return {
       ok: true,
       subscriptions: asRows(data)
-        .map(toPushSubscription)
-        .filter((value): value is PushSubscription => Boolean(value)),
+        .map(toLoadedDriverSubscription)
+        .filter((value): value is LoadedDriverSubscription => Boolean(value)),
     };
   } catch {
     return { ok: false, subscriptions: [] };
@@ -611,16 +845,32 @@ async function sendPayloadToDriverSubscriptions(
     ((subscription: PushSubscription, pushPayload: DriverDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
   const shouldRecordHealth = !options.pushSender;
+  const eligibleSubscriptions = payload.target_path
+    ? loaded.subscriptions.filter((subscription) => subscription.channel === "web")
+    : loaded.subscriptions;
+  if (eligibleSubscriptions.length === 0) {
+    return alertResult("no_active_subscriptions", { enabled: true });
+  }
   const results = await Promise.allSettled(
-    loaded.subscriptions.map((subscription) => sender(subscription, payload)),
+    eligibleSubscriptions.map((subscription) =>
+      subscription.channel === "native_ios"
+        ? options.nativePushSender
+          ? options.nativePushSender(subscription.endpoint, payload.job_key)
+          : sendNativePush(
+              subscription.endpoint,
+              payload.job_key,
+              options.nativeFetch,
+            )
+        : sender(subscription.webSubscription!, payload),
+    ),
   );
 
-  if (shouldRecordHealth) {
+  if (shouldRecordHealth && !options.nativePushSender) {
     await Promise.all(
-      loaded.subscriptions.map((subscription, index) =>
+      eligibleSubscriptions.map((subscription, index) =>
         recordDeliveryHealth(
           client,
-          subscription,
+          subscription.endpoint,
           results[index].status === "rejected" ? results[index].reason : null,
         ),
       ),
@@ -632,12 +882,12 @@ async function sendPayloadToDriverSubscriptions(
     ? alertResult("send_succeeded", {
         enabled: true,
         ok: true,
-        providerRequestCount: loaded.subscriptions.length,
+        providerRequestCount: eligibleSubscriptions.length,
         status: "sent",
       })
     : alertResult("provider_failure", {
         enabled: true,
-        providerRequestCount: loaded.subscriptions.length,
+        providerRequestCount: eligibleSubscriptions.length,
         status: "failed",
       });
 }

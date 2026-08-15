@@ -136,7 +136,7 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, customer_special_request, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, customer_special_request, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, parser_source_reference, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingCurrentLoadSelectWithoutPublicReference =
   adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
@@ -951,6 +951,9 @@ function bookingToDbRow(
   booking: AdminBookingRecordInput,
   customerId: DbIdentifier | null,
   actor: AdminBookingPersistenceAdapterActor,
+  options: {
+    includeParserSourceReference?: boolean;
+  } = {},
 ) {
   const companyId = dbIdentifierOrNull(booking.company_id);
   const bookerId = dbIdentifierOrNull(booking.booker_id);
@@ -1000,6 +1003,9 @@ function bookingToDbRow(
     request_review_status: normalizeRequestReviewStatus(booking.request_review_status),
     change_review_status: normalizeChangeReviewStatus(booking.change_review_status),
     cancellation_review_status: normalizeCancellationReviewStatus(booking.cancellation_review_status),
+    ...(options.includeParserSourceReference === false
+      ? {}
+      : { parser_source_reference: textOrNull(booking.parser_source_reference) }),
     source_surface: normalizeSourceSurface(
       textOrNull(booking.source_surface) || textOrNull(booking.source_channel),
       actor.source_surface,
@@ -2379,7 +2385,9 @@ export async function updateAdminBookingThroughSupabaseAdapter(
     customerId = customerIdResult.data;
   }
 
-  const bookingRow = bookingToDbRow(input.booking, customerId, actor);
+  const bookingRow = bookingToDbRow(input.booking, customerId, actor, {
+    includeParserSourceReference: false,
+  });
   const nextUpdatedAt = new Date().toISOString();
   let bookingUpdateQuery = client
     .from("bookings")

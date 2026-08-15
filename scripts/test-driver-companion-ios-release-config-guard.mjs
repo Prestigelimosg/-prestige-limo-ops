@@ -45,7 +45,11 @@ assert.equal(
   "The installed iPhone/iPad icon label must remain the owner-approved short Driver name",
 );
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
-assert.equal(companionConfig.ios.buildNumber, "1", "The first iOS build number must be explicit");
+assert.equal(
+  companionConfig.ios.buildNumber,
+  "2",
+  "The approved second TestFlight build number must be explicit",
+);
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
   "6800706103",
@@ -99,6 +103,8 @@ for (const phrase of [
   "does not prove a physical iPhone build",
   "does not prove physical iPad behavior",
   "production EAS submit profile targets only App Store Connect app `6800706103`",
+  "Driver iOS TestFlight Build 2 (2026-08-15)",
+  "`ios.buildNumber` is explicitly `2`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

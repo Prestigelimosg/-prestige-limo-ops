@@ -139,6 +139,20 @@ assertIncludes(
   ],
   "native iOS notification registration and tap handling",
 );
+const nativeLocalRegistrationFinalization = nativeAppSource.slice(
+  nativeAppSource.indexOf("const registration = await registerNativeDriverNotifications"),
+  nativeAppSource.indexOf("sendNativeNotificationResult({ ok: true, state: \"enabled\" })"),
+);
+assertIncludes(
+  nativeLocalRegistrationFinalization,
+  [
+    "await rememberNativeDriverJob(registration.jobKey, job)",
+    "await rememberNativeNotificationToken(nextToken)",
+    "await unregisterNativeDriverNotifications(job, nextToken).catch(",
+    "throw error",
+  ],
+  "native local registration failure cleanup",
+);
 assertExcludes(
   nativeAppSource,
   ["console.log", "passenger_name", "customer_price", "driver_payout", "paynow"],
@@ -383,6 +397,18 @@ assertIncludes(
 const tempDir = path.join(process.cwd(), ".tmp-driver-device-push-guard");
 const tempHelperPath = path.join(tempDir, "lib/driver-device-push-notification.js");
 const tempDriverLinkPath = path.join(tempDir, "lib/driver-job-link.ts");
+const tempNativeStoragePath = path.join(
+  tempDir,
+  "driver-companion/src/native-notifications.js",
+);
+const tempNativeContractPath = path.join(
+  tempDir,
+  "driver-companion/src/driver-job-contract.js",
+);
+const tempSecureStorePath = path.join(
+  tempDir,
+  "node_modules/expo-secure-store/index.js",
+);
 await rm(tempDir, { force: true, recursive: true });
 await mkdir(path.dirname(tempHelperPath), { recursive: true });
 await writeFile(
@@ -394,6 +420,44 @@ await writeFile(
   `exports.hashDriverJobLinkToken = (token) => "hash:" + token;
 exports.isDriverJobLinkExpired = () => false;
 exports.isDriverJobLinkExpiryOutsideAllowedWindow = () => false;
+`,
+);
+await mkdir(path.dirname(tempNativeStoragePath), { recursive: true });
+await mkdir(path.dirname(tempSecureStorePath), { recursive: true });
+await writeFile(
+  tempNativeStoragePath,
+  transpileTypescript(
+    nativeNotificationStorageSource,
+    path.join(process.cwd(), nativeNotificationStoragePath),
+  ).replace(
+    'require("./driver-job-contract.ts")',
+    'require("./driver-job-contract.js")',
+  ),
+);
+await writeFile(
+  tempNativeContractPath,
+  `exports.parseDriverJobUrl = (value) => {
+  const parsed = new URL(value);
+  const match = parsed.pathname.match(/^\\/driver-job\\/([A-Za-z0-9_-]{20,})$/);
+  if (parsed.origin !== "https://app.prestigelimo.sg" || !match) throw new Error("invalid job");
+  return { jobUrl: value, origin: parsed.origin, token: match[1] };
+};
+`,
+);
+await writeFile(
+  tempSecureStorePath,
+  `const values = new Map();
+const keys = [];
+function validKey(key) {
+  if (typeof key !== "string" || !/^[\\w.-]+$/.test(key)) {
+    throw new Error("Invalid SecureStore key");
+  }
+  keys.push(key);
+}
+exports.__keys = keys;
+exports.deleteItemAsync = async (key) => { validKey(key); values.delete(key); };
+exports.getItemAsync = async (key) => { validKey(key); return values.get(key) ?? null; };
+exports.setItemAsync = async (key, value) => { validKey(key); values.set(key, value); };
 `,
 );
 
@@ -464,6 +528,38 @@ const configuredEnv = {
 
 try {
   const helper = createRequire(import.meta.url)(tempHelperPath);
+  const nativeStorage = createRequire(import.meta.url)(tempNativeStoragePath);
+  const secureStore = createRequire(import.meta.url)(tempSecureStorePath);
+  const nativeJobKey = "a".repeat(64);
+  const nativeJob = {
+    jobUrl: `https://app.prestigelimo.sg/driver-job/${"b".repeat(32)}`,
+    origin: "https://app.prestigelimo.sg",
+    token: "b".repeat(32),
+  };
+  await nativeStorage.rememberNativeDriverJob(nativeJobKey, nativeJob);
+  assert.deepEqual(
+    await nativeStorage.loadNativeDriverJob(nativeJobKey),
+    nativeJob,
+    "the exact opaque job key must resolve the locally stored private Driver Job",
+  );
+  assert.equal(await nativeStorage.loadNativeDriverJob("invalid"), null);
+  await nativeStorage.rememberNativeNotificationToken(
+    "ExpoPushToken[abcdefghijklmnopqrstuvwxyz1234567890]",
+  );
+  assert.equal(
+    await nativeStorage.readNativeNotificationToken(),
+    "ExpoPushToken[abcdefghijklmnopqrstuvwxyz1234567890]",
+  );
+  await nativeStorage.forgetNativeNotificationToken();
+  assert.equal(await nativeStorage.readNativeNotificationToken(), null);
+  assert.equal(secureStore.__keys.length > 0, true);
+  for (const key of secureStore.__keys) {
+    assert.match(
+      key,
+      /^[\w.-]+$/,
+      "every actual derived native notification SecureStore key must satisfy Expo's key contract",
+    );
+  }
   const closed = helper.getDriverDevicePushReadiness({});
   assert.equal(closed.ready, false);
   assert.equal(closed.reason, "push_gate_closed");

@@ -1903,6 +1903,11 @@ async function runChromeTest() {
       true,
       "Expected approved OTS photo proof control after OTS.",
     );
+    assert.equal(
+      depOtsState.buttonLabels.includes("Shoot"),
+      true,
+      "Expected the established rear-camera input to display Shoot after OTS.",
+    );
     assert.equal(depOtsState.fileInputs.length, 1, "Expected one approved OTS image input after OTS.");
     await uploadOtsPhotoProof();
     assert.equal(

@@ -150,7 +150,7 @@ excludes(
   "app",
   /import\s*\{[^}]*\bSafeAreaView\b[^}]*\}\s*from\s*"react-native"/,
 );
-excludes("app", /\bTextInput\b|privateJobUrl|Paste the private Driver Job URL|title="Check job"/);
+excludes("app", /privateJobUrl|Paste the private Driver Job URL|title="Check job"/);
 assert.equal(
   countOccurrences(source.app, "startDriverTracking("),
   1,

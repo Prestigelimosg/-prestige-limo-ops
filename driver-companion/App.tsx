@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import {
@@ -16,9 +17,14 @@ import {
 
 import {
   DriverJobRequestError,
-  type DriverJobSummary,
-  loadDriverJobSummary,
+  type DriverDetailsInput,
+  type DriverJobDetails,
+  type DriverJobStatusAction,
+  loadDriverJobDetails,
+  nextDriverJobStatusAction,
   parseDriverJobUrl,
+  saveAndAcknowledgeDriverJob,
+  updateDriverJobStatus,
 } from "./src/driver-job-contract";
 import {
   readTrackingState,
@@ -31,8 +37,22 @@ type ScreenState = {
   active: boolean;
   jobUrl: string | null;
   message: string;
-  summary: DriverJobSummary | null;
+  summary: DriverJobDetails | null;
 };
+
+const emptyDriverDetails: DriverDetailsInput = {
+  contact: "",
+  name: "",
+  plate: "",
+  vehicleModel: "",
+};
+
+const driverStatusActions: DriverJobStatusAction[] = [
+  "OTW",
+  "OTS",
+  "POB",
+  "Job Completed",
+];
 
 const initialScreenState: ScreenState = {
   active: false,
@@ -58,6 +78,8 @@ function readableFailure(error: unknown) {
 
 export default function App() {
   const [busy, setBusy] = useState(false);
+  const [driverDetails, setDriverDetails] =
+    useState<DriverDetailsInput>(emptyDriverDetails);
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
 
   useEffect(() => {
@@ -74,7 +96,7 @@ export default function App() {
       }
 
       try {
-        const summary = await loadDriverJobSummary(state.job);
+        const summary = await loadDriverJobDetails(state.job);
 
         if (summary.status === "completed") {
           const result = await stopDriverTracking();
@@ -131,7 +153,7 @@ export default function App() {
           trackingState.job &&
           trackingState.job.token !== incomingJob.token
         ) {
-          const activeSummary = await loadDriverJobSummary(trackingState.job);
+          const activeSummary = await loadDriverJobDetails(trackingState.job);
 
           if (mounted && request === latestRequest) {
             setScreen({
@@ -144,7 +166,7 @@ export default function App() {
           return;
         }
 
-        const summary = await loadDriverJobSummary(incomingJob);
+        const summary = await loadDriverJobDetails(incomingJob);
         const sameJobIsActive =
           trackingState.active && trackingState.job?.token === incomingJob.token;
 
@@ -213,11 +235,19 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!screen.summary) {
+      return;
+    }
+
+    setDriverDetails(screen.summary.assignedDriver);
+  }, [screen.summary]);
+
   async function startTripTracking() {
     setBusy(true);
     try {
       const job = parseDriverJobUrl(screen.jobUrl || "");
-      const summary = await loadDriverJobSummary(job);
+      const summary = await loadDriverJobDetails(job);
 
       if (summary.status === "completed") {
         throw new Error(
@@ -241,6 +271,61 @@ export default function App() {
       setBusy(false);
     }
   }
+
+  function updateDriverDetail(field: keyof DriverDetailsInput, value: string) {
+    setDriverDetails((current) => ({ ...current, [field]: value }));
+  }
+
+  async function acknowledgeJob() {
+    setBusy(true);
+    try {
+      const job = parseDriverJobUrl(screen.jobUrl || "");
+      const summary = await saveAndAcknowledgeDriverJob(job, driverDetails);
+      setScreen((current) => ({
+        ...current,
+        jobUrl: job.jobUrl,
+        message: "Job saved and acknowledged.",
+        summary,
+      }));
+    } catch (error) {
+      setScreen((current) => ({
+        ...current,
+        message: readableFailure(error),
+      }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reportDriverStatus(status: DriverJobStatusAction) {
+    setBusy(true);
+    try {
+      const job = parseDriverJobUrl(screen.jobUrl || "");
+      const summary = await updateDriverJobStatus(job, status);
+
+      if (status === "Job Completed") {
+        await stopTrackingAfterTerminalResponse();
+      }
+
+      setScreen({
+        active: status === "Job Completed" ? false : screen.active,
+        jobUrl: job.jobUrl,
+        message: `${status} recorded.`,
+        summary,
+      });
+    } catch (error) {
+      setScreen((current) => ({
+        ...current,
+        message: readableFailure(error),
+      }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nextStatusAction = screen.summary
+    ? nextDriverJobStatusAction(screen.summary.status)
+    : null;
 
   async function stopTripTracking() {
     setBusy(true);
@@ -297,20 +382,137 @@ export default function App() {
           {screen.summary ? (
             <View style={styles.jobCard}>
               <Text style={styles.reference}>{screen.summary.reference}</Text>
+              {screen.summary.bookingTypeLabel ? (
+                <Text style={styles.jobType}>
+                  {screen.summary.bookingTypeLabel}
+                </Text>
+              ) : null}
               <Text style={styles.jobLine}>
                 {screen.summary.pickupDateTime}
               </Text>
               <Text style={styles.jobLine}>
                 Passenger: {screen.summary.passengerName}
               </Text>
-              <Text style={styles.jobLine}>{screen.summary.route}</Text>
+              {screen.summary.flightNumber ? (
+                <Text style={styles.jobLine}>
+                  Flight: {screen.summary.flightNumber}
+                </Text>
+              ) : null}
+              <Text style={styles.routeLabel}>ROUTE</Text>
+              <Text style={styles.jobLine}>
+                Pickup: {screen.summary.pickupLocation || "TBC"}
+              </Text>
+              {screen.summary.waypoints.map((waypoint, index) => (
+                <Text key={`${waypoint}-${index}`} style={styles.jobLine}>
+                  Stop {index + 1}: {waypoint}
+                </Text>
+              ))}
+              <Text style={styles.jobLine}>
+                Drop-off: {screen.summary.dropoffLocation || "TBC"}
+              </Text>
+              <Text style={styles.routeSummary}>{screen.summary.route}</Text>
               <Text style={styles.jobStatus}>
                 Job status: {screen.summary.statusLabel}
               </Text>
             </View>
           ) : null}
 
-          {!screen.active && screen.jobUrl ? (
+          {screen.summary && screen.jobUrl ? (
+            <View style={styles.formCard}>
+              <Text style={styles.sectionTitle}>Driver confirmation</Text>
+              <Text style={styles.permissionText}>
+                Confirm the driver and vehicle for this exact job before
+                reporting status.
+              </Text>
+              <Text style={styles.inputLabel}>Driver name</Text>
+              <TextInput
+                autoCapitalize="words"
+                editable={!busy}
+                onChangeText={(value) => updateDriverDetail("name", value)}
+                placeholder="Driver name"
+                style={styles.input}
+                value={driverDetails.name}
+              />
+              <Text style={styles.inputLabel}>Contact</Text>
+              <TextInput
+                editable={!busy}
+                keyboardType="phone-pad"
+                onChangeText={(value) => updateDriverDetail("contact", value)}
+                placeholder="Contact number"
+                style={styles.input}
+                value={driverDetails.contact}
+              />
+              <Text style={styles.inputLabel}>Plate</Text>
+              <TextInput
+                autoCapitalize="characters"
+                editable={!busy}
+                onChangeText={(value) => updateDriverDetail("plate", value)}
+                placeholder="Vehicle plate"
+                style={styles.input}
+                value={driverDetails.plate}
+              />
+              <Text style={styles.inputLabel}>Vehicle</Text>
+              <TextInput
+                autoCapitalize="words"
+                editable={!busy}
+                onChangeText={(value) =>
+                  updateDriverDetail("vehicleModel", value)
+                }
+                placeholder="Vehicle model"
+                style={styles.input}
+                value={driverDetails.vehicleModel}
+              />
+              <Button
+                disabled={busy}
+                title="Save & Acknowledge Job"
+                onPress={acknowledgeJob}
+              />
+              <Text style={styles.acknowledgementState}>
+                {screen.summary.acknowledged
+                  ? "Acknowledged"
+                  : "Acknowledgement required"}
+              </Text>
+            </View>
+          ) : null}
+
+          {screen.summary?.acknowledged ? (
+            <View style={styles.formCard}>
+              <Text style={styles.sectionTitle}>Job reporting</Text>
+              <Text style={styles.permissionText}>
+                Report each step in order. Only the next required step is
+                available.
+              </Text>
+              <View style={styles.statusActions}>
+                {driverStatusActions.map((action) => (
+                  <View key={action} style={styles.statusAction}>
+                    <Button
+                      disabled={busy || nextStatusAction !== action}
+                      title={action}
+                      onPress={() => reportDriverStatus(action)}
+                    />
+                  </View>
+                ))}
+              </View>
+              {screen.summary.statusHistory.length ? (
+                <View style={styles.history}>
+                  {screen.summary.statusHistory.map((item, index) => (
+                    <Text
+                      key={`${item.status}-${item.occurredAt}-${index}`}
+                      style={styles.historyLine}
+                    >
+                      {item.statusLabel}
+                      {item.occurredAt ? ` · ${item.occurredAt}` : ""}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {!screen.active &&
+          screen.jobUrl &&
+          screen.summary?.acknowledged &&
+          screen.summary.status !== "completed" ? (
             <View style={styles.formCard}>
               <Text style={styles.permissionText}>
                 Tracking does not start automatically. After checking the exact
@@ -334,15 +536,6 @@ export default function App() {
                 title="Stop trip tracking"
                 color="#b91c1c"
                 onPress={stopTripTracking}
-              />
-            </View>
-          ) : null}
-
-          {screen.jobUrl ? (
-            <View style={styles.secondaryButton}>
-              <Button
-                title="Open Driver Job reporting"
-                onPress={() => Linking.openURL(screen.jobUrl!)}
               />
             </View>
           ) : null}
@@ -399,7 +592,22 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   reference: { color: "#0f172a", fontSize: 18, fontWeight: "800" },
+  jobType: { color: "#475569", fontSize: 13, fontWeight: "700" },
   jobLine: { color: "#334155", fontSize: 15, lineHeight: 21 },
+  routeLabel: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    marginTop: 7,
+  },
+  routeSummary: {
+    color: "#334155",
+    fontSize: 14,
+    fontStyle: "italic",
+    lineHeight: 20,
+    marginTop: 3,
+  },
   jobStatus: {
     color: "#0f766e",
     fontSize: 14,
@@ -407,7 +615,38 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   formCard: { backgroundColor: "#fff", borderRadius: 14, gap: 12, padding: 16 },
+  sectionTitle: { color: "#0f172a", fontSize: 17, fontWeight: "800" },
   permissionText: { color: "#475569", fontSize: 14, lineHeight: 20 },
-  secondaryButton: { marginTop: -2 },
+  inputLabel: {
+    color: "#334155",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: -7,
+  },
+  input: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    borderWidth: 1,
+    color: "#0f172a",
+    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  acknowledgementState: {
+    color: "#0f766e",
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  statusActions: { gap: 8 },
+  statusAction: { width: "100%" },
+  history: {
+    borderTopColor: "#e2e8f0",
+    borderTopWidth: 1,
+    gap: 5,
+    paddingTop: 10,
+  },
+  historyLine: { color: "#475569", fontSize: 13, lineHeight: 18 },
   warning: { color: "#7c2d12", fontSize: 13, lineHeight: 19, marginTop: 2 },
 });

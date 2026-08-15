@@ -42,6 +42,32 @@ export function adminEmailAiClassificationAppearsInApp(value: unknown) {
   );
 }
 
+export function adminEmailAiIntakeAppearsInApp(input: {
+  classification?: unknown;
+  senderAddress?: unknown;
+  subject?: unknown;
+}) {
+  if (adminEmailAiClassificationAppearsInApp(input.classification)) {
+    return true;
+  }
+
+  const classification =
+    typeof input.classification === "string"
+      ? input.classification.trim().toLowerCase()
+      : "";
+  const subject =
+    typeof input.subject === "string" || typeof input.subject === "number"
+      ? String(input.subject).replace(/\s+/g, " ").trim()
+      : "";
+
+  return (
+    classification === "enquiry" &&
+    normalizeAdminEmailAiAddress(input.senderAddress) ===
+      adminEmailAiGroundBookerSenderAddress &&
+    /\border from groundbooker transzend\s*\[inq#\d+\]\s*$/i.test(subject)
+  );
+}
+
 export type AdminEmailAiEnvelopeInput = {
   deliveredTo: string[];
   from: string[];

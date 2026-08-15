@@ -12,7 +12,7 @@ import {
   type AiParseResult,
 } from "../lib/ai-parser-schema";
 import {
-  adminEmailAiClassificationAppearsInApp,
+  adminEmailAiIntakeAppearsInApp,
   adminEmailAiSenderAddressIsAllowed,
   type AdminEmailAiClassification,
 } from "../lib/admin-email-ai-intake-contract";
@@ -11826,7 +11826,11 @@ async function loadAdminEmailAiIntakeRead() {
     enabled: result.enabled === true,
     records: Array.isArray(result.records)
       ? (result.records as AdminEmailAiIntakeRecord[]).filter((record) =>
-          adminEmailAiClassificationAppearsInApp(record.classification),
+          adminEmailAiIntakeAppearsInApp({
+            classification: record.classification,
+            senderAddress: record.sender_address,
+            subject: record.subject,
+          }),
         )
       : [],
     tokenUsage:
@@ -20206,7 +20210,13 @@ export default function Home() {
   ) {
     const classification = clean(record.classification).toLowerCase();
 
-    if (!adminEmailAiClassificationAppearsInApp(classification)) {
+    if (
+      !adminEmailAiIntakeAppearsInApp({
+        classification,
+        senderAddress: record.sender_address,
+        subject: record.subject,
+      })
+    ) {
       return;
     }
 
@@ -48026,7 +48036,7 @@ export default function Home() {
                   </div>
                   <p className="mt-1 text-xs text-slate-600 sm:text-sm">
                     New, urgent, Driver TBC, amendment, and cancellation work in one place. Each row states its job type.
-                    Only confirmed booking, amendment, and cancellation email reviews appear here.
+                    Confirmed bookings, amendments, cancellations, and exact verified GroundBooker order requests appear here.
                   </p>
                 </div>
               </div>

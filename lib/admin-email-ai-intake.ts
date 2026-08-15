@@ -10,7 +10,7 @@ import OpenAI from "openai";
 import {
   adminEmailAiAppReviewClassifications,
   adminEmailAiCanonicalCompanyAccountForSender,
-  adminEmailAiClassificationAppearsInApp,
+  adminEmailAiIntakeAppearsInApp,
   adminEmailAiInboxFolder,
   adminEmailAiMailboxAddress,
   adminEmailAiRecipientIsAllowedForSender,
@@ -468,7 +468,7 @@ export async function markAdminEmailAiIntakeReviewed(
   const database = client || createServerClient();
   const existingResult = await database
     .from(intakeTable)
-    .select("id, classification, processing_status")
+    .select("id, classification, processing_status, sender_address, subject")
     .eq("id", cleanedIntakeId)
     .maybeSingle();
 
@@ -484,11 +484,17 @@ export async function markAdminEmailAiIntakeReviewed(
     classification?: unknown;
     id?: unknown;
     processing_status?: unknown;
+    sender_address?: unknown;
+    subject?: unknown;
   } | null;
   const classification = classificationValue(existingRecord?.classification);
   const processingStatus = intakeStatusValue(
     existingRecord?.processing_status,
   );
+  const senderAddress = normalizeAdminEmailAiAddress(
+    existingRecord?.sender_address,
+  );
+  const subject = cleanText(existingRecord?.subject, 240);
 
   if (!existingRecord || cleanText(existingRecord.id, 120) !== cleanedIntakeId) {
     return {
@@ -498,7 +504,13 @@ export async function markAdminEmailAiIntakeReviewed(
     };
   }
 
-  if (!adminEmailAiClassificationAppearsInApp(classification)) {
+  if (
+    !adminEmailAiIntakeAppearsInApp({
+      classification,
+      senderAddress,
+      subject,
+    })
+  ) {
     return {
       error: "Email AI intake is not eligible for app review.",
       ok: false,
@@ -533,7 +545,9 @@ export async function markAdminEmailAiIntakeReviewed(
     })
     .eq("id", cleanedIntakeId)
     .eq("processing_status", "queued")
-    .in("classification", [...adminEmailAiAppReviewClassifications])
+    .eq("classification", classification)
+    .eq("sender_address", senderAddress)
+    .eq("subject", subject)
     .select("id, processing_status")
     .maybeSingle();
 
@@ -603,7 +617,10 @@ export async function loadAdminEmailAiIntake(
       "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
     )
     .eq("processing_status", "queued")
-    .in("classification", [...adminEmailAiAppReviewClassifications])
+    .in("classification", [
+      ...adminEmailAiAppReviewClassifications,
+      "enquiry",
+    ])
     .order("created_at", { ascending: false })
     .limit(25);
 
@@ -625,7 +642,11 @@ export async function loadAdminEmailAiIntake(
         .filter(
           (record): record is AdminEmailAiIntakeRecord =>
             record !== null &&
-            adminEmailAiClassificationAppearsInApp(record.classification),
+            adminEmailAiIntakeAppearsInApp({
+              classification: record.classification,
+              senderAddress: record.sender_address,
+              subject: record.subject,
+            }),
         )
     : [];
   let inputTokens = 0;
@@ -1749,6 +1770,10 @@ async function updateProcessedIntake(
   client: SupabaseClient,
   intakeId: string,
   providerResult: AdminEmailAiProviderResult,
+  source: {
+    senderAddress: AdminEmailAiAllowedSenderAddress;
+    subject: string;
+  },
 ) {
   if (!providerResult.ok) {
     const failedResult = await client
@@ -1782,9 +1807,11 @@ async function updateProcessedIntake(
       model: providerResult.model,
       openai_input_tokens: providerResult.inputTokens,
       openai_output_tokens: providerResult.outputTokens,
-      processing_status: adminEmailAiClassificationAppearsInApp(
-        analysis.classification,
-      )
+      processing_status: adminEmailAiIntakeAppearsInApp({
+        classification: analysis.classification,
+        senderAddress: source.senderAddress,
+        subject: source.subject,
+      })
         ? "queued"
         : "dismissed",
       review_reasons: analysis.reviewReasons,
@@ -2070,6 +2097,10 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
         database,
         intakeId,
         providerResult,
+        {
+          senderAddress,
+          subject: cleanText(parsedMail.subject, 240),
+        },
       );
 
       if (completed) {

@@ -88,6 +88,44 @@ for (const classification of contract.adminEmailAiClassifications) {
   );
 }
 
+assert.equal(
+  contract.adminEmailAiIntakeAppearsInApp({
+    classification: "enquiry",
+    senderAddress: "transzend@groundbooker.com",
+    subject:
+      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  }),
+  true,
+  "An exact verified GroundBooker order request must enter the existing Admin review lane even when AI honestly classifies the confirmation request as an enquiry.",
+);
+for (const blockedGroundBookerReviewInput of [
+  {
+    classification: "enquiry",
+    senderAddress: "info@prestigelimo.sg",
+    subject:
+      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  },
+  {
+    classification: "enquiry",
+    senderAddress: "transzend@groundbooker.com",
+    subject: "Can you quote an airport transfer?",
+  },
+  {
+    classification: "unrelated",
+    senderAddress: "transzend@groundbooker.com",
+    subject:
+      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  },
+]) {
+  assert.equal(
+    contract.adminEmailAiIntakeAppearsInApp(
+      blockedGroundBookerReviewInput,
+    ),
+    false,
+    "Only exact verified GroundBooker order-shaped enquiries may enter the existing review lane.",
+  );
+}
+
 assert.deepEqual(
   contract.decideAdminEmailAiEnvelope({
     deliveredTo: ["booking@prestigelimo.sg"],
@@ -218,7 +256,7 @@ assert.match(
   /Never copy Stripe or another payment method\/provider into booking pickup, drop-off, extraStopLocation, extraStops, route, or notes\./,
 );
 assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
-assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(runtimeSource, /adminEmailAiIntakeAppearsInApp/);
 assert.match(runtimeSource, /email_confirmed_booking/);
 assert.match(runtimeSource, /email_booking_amendment/);
 assert.match(runtimeSource, /email_booking_cancellation/);
@@ -279,7 +317,10 @@ assert.match(
 assert.doesNotMatch(contractSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.doesNotMatch(bookingParserSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
-assert.match(runtimeSource, /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/);
+assert.match(
+  runtimeSource,
+  /\.in\("classification", \[\s*\.\.\.adminEmailAiAppReviewClassifications,\s*"enquiry",\s*\]\)/,
+);
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
 assert.match(runtimeSource, /currentSingaporeMonthWindow/);
 assert.match(runtimeSource, /tokenUsageMaximumPages/);
@@ -291,7 +332,7 @@ assert.match(runtimeSource, /processing_status:\s*"reviewed"/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(
   runtimeSource,
-  /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/,
+  /\.eq\("classification", classification\)/,
 );
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
@@ -351,7 +392,7 @@ assert.match(pageSource, /grid-cols-4/);
 assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
 assert.doesNotMatch(pageSource, /Review enquiry/);
-assert.match(pageSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(pageSource, /adminEmailAiIntakeAppearsInApp/);
 assert.match(pageSource, /adminEmailAiSenderAddressIsAllowed/);
 assert.match(pageSource, /From \{clean\(record\.sender_address\)\}/);
 assert.match(pageSource, /activeAdminEmailAiIntakeId/);
@@ -376,6 +417,15 @@ assert.match(
   browserTestSource,
   /00000000-0000-4000-8000-000000000102/,
 );
+assert.match(
+  browserTestSource,
+  /00000000-0000-4000-8000-000000000103/,
+);
+assert.match(
+  browserTestSource,
+  /order from Groundbooker Transzend \[INQ#817905\]/,
+);
+assert.match(browserTestSource, /Needs review/);
 assert.match(browserTestSource, /Expected enquiry email to remain outside the app review feed/);
 assert.match(browserTestSource, /Expected private email AI dashboard lane to remain read-only/);
 assert.match(browserTestSource, /compact monthly Email AI token usage/);

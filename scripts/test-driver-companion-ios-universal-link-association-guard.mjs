@@ -16,13 +16,18 @@ const [routeSource, configSource, ledgerSource, preactivationSource] = await Pro
 const companionConfig = JSON.parse(configSource).expo;
 assert.deepEqual(
   companionConfig.ios.associatedDomains,
-  ["applinks:app.prestigelimo.sg"],
-  "The iOS entitlement must remain limited to the established Production Driver Job host",
+  [
+    "applinks:app.prestigelimo.sg",
+    "webcredentials:app.prestigelimo.sg",
+  ],
+  "The iOS entitlement must keep the Driver Job Universal Link and authorize the same host for HTTPS auth-session callbacks",
 );
 
 for (const expected of [
   '"U9Y2574Y7S.sg.prestigelimo.drivercompanion"',
   '"/": "/driver-job/*"',
+  "webcredentials:",
+  'apps: ["U9Y2574Y7S.sg.prestigelimo.drivercompanion"]',
   '"Content-Type": "application/json"',
   '"Cache-Control": "public, max-age=300, s-maxage=3600"',
   "export function GET()",

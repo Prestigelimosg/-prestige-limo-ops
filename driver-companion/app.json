@@ -13,7 +13,8 @@
       "buildNumber": "5",
       "icon": "./assets/icon.png",
       "associatedDomains": [
-        "applinks:app.prestigelimo.sg"
+        "applinks:app.prestigelimo.sg",
+        "webcredentials:app.prestigelimo.sg"
       ],
       "infoPlist": {
         "CFBundleDisplayName": "Prestige Driver",

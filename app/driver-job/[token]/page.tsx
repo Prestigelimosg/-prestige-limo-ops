@@ -3033,207 +3033,6 @@ export default function DriverJobPage() {
                     </dl>
                   </div>
                 ) : null}
-                {acknowledged ? (
-                  <div
-                    className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
-                    data-driver-account-setup="true"
-                  >
-                    <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
-                    <p className="text-xs font-medium leading-5 text-violet-900">
-                      Optional. This acknowledged Job Link can create one account only. You may continue every
-                      reporting action in this browser without installing Prestige Driver.
-                    </p>
-                    {driverAccountSetup.status !== "created" ? (
-                      <>
-                        {driverAccountSetup.stage === "email" ? (
-                          <form
-                            className="space-y-2"
-                            data-driver-account-email-step="true"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              setDriverAccountSetup((current) => ({
-                                ...current,
-                                feedback: null,
-                                stage: "password",
-                              }));
-                            }}
-                          >
-                            <label className="block space-y-1 text-sm font-semibold text-violet-950">
-                              <span>Email</span>
-                              <input
-                                autoCapitalize="none"
-                                autoComplete="email"
-                                autoCorrect="off"
-                                className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
-                                inputMode="email"
-                                name="email"
-                                onChange={(event) => setDriverAccountSetup((current) => ({
-                                  ...current,
-                                  email: event.target.value,
-                                  feedback: null,
-                                }))}
-                                required
-                                spellCheck={false}
-                                type="email"
-                                value={driverAccountSetup.email}
-                              />
-                            </label>
-                            <button
-                              className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white"
-                              type="submit"
-                            >Continue</button>
-                          </form>
-                        ) : null}
-                        {driverAccountSetup.stage === "password" ? (
-                          <div className="space-y-2">
-                            <div className="rounded-md border border-violet-200 bg-white px-3 py-2 text-sm text-violet-950">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Email</p>
-                              <div className="flex items-center justify-between gap-2">
-                                <p
-                                  className="min-w-0 break-all font-semibold"
-                                  data-driver-account-confirmed-email="true"
-                                >
-                                  {driverAccountSetup.email}
-                                </p>
-                                <button
-                                  className="shrink-0 rounded-md border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-950"
-                                  onClick={() => setDriverAccountSetup((current) => ({
-                                    ...current,
-                                    feedback: null,
-                                    password: "",
-                                    stage: "email",
-                                  }))}
-                                  type="button"
-                                >
-                                  Change email
-                                </button>
-                              </div>
-                            </div>
-                            <div
-                              className="flex items-center justify-between gap-2 text-[11px] font-medium leading-tight text-violet-800"
-                              data-driver-account-password-guide="true"
-                            >
-                              <p
-                                data-driver-account-password-instruction="true"
-                              >
-                                6 digits only. No repeated or sequential numbers.
-                              </p>
-                              {driverAccountPasswordReady ? (
-                                <span
-                                  aria-live="polite"
-                                  className="shrink-0 font-bold text-emerald-800"
-                                  data-driver-account-password-ready="true"
-                                >Ready</span>
-                              ) : null}
-                            </div>
-                            <form
-                              className="space-y-2"
-                              data-driver-account-creation-form="true"
-                              onSubmit={(event) => {
-                                event.preventDefault();
-                                void createDriverAccount();
-                              }}
-                            >
-                              <label className="block space-y-1 text-sm font-semibold text-violet-950">
-                                <span>Password</span>
-                                <input
-                                  autoComplete="new-password"
-                                  className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
-                                  inputMode="numeric"
-                                  maxLength={6}
-                                  minLength={6}
-                                  name="new-password"
-                                  onChange={(event) => setDriverAccountSetup((current) => ({
-                                    ...current,
-                                    feedback: null,
-                                    password: event.target.value.replace(/\D/g, "").slice(0, 6),
-                                  }))}
-                                  pattern="[0-9]{6}"
-                                  required
-                                  type="password"
-                                  value={driverAccountSetup.password}
-                                />
-                              </label>
-                              <button
-                                className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
-                                disabled={driverAccountSetup.saving || !driverAccountPasswordReady}
-                                type="submit"
-                              >
-                                {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
-                              </button>
-                            </form>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-                    {driverAccountSetup.feedback ? (
-                      <p
-                        aria-live="polite"
-                        className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverAccountSetup.feedback.tone)}`}
-                      >
-                        {driverAccountSetup.feedback.text}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-                {acknowledged ? (
-                  <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-sky-950">Google Calendar</p>
-                      {driverCalendar.status === "cal_saved" ? (
-                        <span
-                          className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900"
-                          data-driver-job-calendar-saved="true"
-                        >
-                          Calendar saved
-                        </span>
-                      ) : driverCalendar.status === "update_calendar" ? (
-                        <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
-                          Update needed
-                        </span>
-                      ) : null}
-                    </div>
-                    <button
-                      className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
-                      data-driver-job-calendar-action="true"
-                      data-driver-job-calendar-source="current-driver-job-schedule"
-                      disabled={driverCalendar.action === "saving"}
-                      onClick={openDriverJobCalendar}
-                      type="button"
-                    >
-                      {driverCalendar.action === "saving" ? "Saving Calendar..." : "Add / Update Calendar"}
-                    </button>
-                    <p className="text-xs font-medium leading-5 text-sky-900">
-                      First use connects your Google account. The same action updates this one event after an
-                      amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
-                      Job Completed reporting. Do not share the calendar event.
-                    </p>
-                    <div
-                      className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
-                      data-driver-job-calendar-policy-links="true"
-                    >
-                      <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
-                        Calendar data use
-                      </Link>
-                      <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
-                        Privacy Policy
-                      </Link>
-                      <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
-                        Terms of Service
-                      </Link>
-                    </div>
-                    {driverCalendar.feedback ? (
-                      <p
-                        className={`text-xs font-semibold leading-5 ${
-                          driverCalendar.feedback.tone === "success" ? "text-emerald-800" : "text-red-700"
-                        }`}
-                        data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
-                      >
-                        {driverCalendar.feedback.text}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
                 {driverPortalEnrolled && !embeddedDriverApp ? (
                   <div
                     className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
@@ -3452,8 +3251,208 @@ export default function DriverJobPage() {
               </div>
             </section>
 
+            {acknowledged ? (
+              <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">
+                <div
+                  className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
+                  data-driver-account-setup="true"
+                >
+                  <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                  <p className="text-xs font-medium leading-5 text-violet-900">
+                    Optional. This acknowledged Job Link can create one account only. You may continue every
+                    reporting action in this browser without installing Prestige Driver.
+                  </p>
+                  {driverAccountSetup.status !== "created" ? (
+                    <>
+                      {driverAccountSetup.stage === "email" ? (
+                        <form
+                          className="space-y-2"
+                          data-driver-account-email-step="true"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            setDriverAccountSetup((current) => ({
+                              ...current,
+                              feedback: null,
+                              stage: "password",
+                            }));
+                          }}
+                        >
+                          <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                            <span>Email</span>
+                            <input
+                              autoCapitalize="none"
+                              autoComplete="email"
+                              autoCorrect="off"
+                              className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                              inputMode="email"
+                              name="email"
+                              onChange={(event) => setDriverAccountSetup((current) => ({
+                                ...current,
+                                email: event.target.value,
+                                feedback: null,
+                              }))}
+                              required
+                              spellCheck={false}
+                              type="email"
+                              value={driverAccountSetup.email}
+                            />
+                          </label>
+                          <button
+                            className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white"
+                            type="submit"
+                          >Continue</button>
+                        </form>
+                      ) : null}
+                      {driverAccountSetup.stage === "password" ? (
+                        <div className="space-y-2">
+                          <div className="rounded-md border border-violet-200 bg-white px-3 py-2 text-sm text-violet-950">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Email</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p
+                                className="min-w-0 break-all font-semibold"
+                                data-driver-account-confirmed-email="true"
+                              >
+                                {driverAccountSetup.email}
+                              </p>
+                              <button
+                                className="shrink-0 rounded-md border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-950"
+                                onClick={() => setDriverAccountSetup((current) => ({
+                                  ...current,
+                                  feedback: null,
+                                  password: "",
+                                  stage: "email",
+                                }))}
+                                type="button"
+                              >
+                                Change email
+                              </button>
+                            </div>
+                          </div>
+                          <div
+                            className="flex items-center justify-between gap-2 text-[11px] font-medium leading-tight text-violet-800"
+                            data-driver-account-password-guide="true"
+                          >
+                            <p data-driver-account-password-instruction="true">
+                              6 digits only. No repeated or sequential numbers.
+                            </p>
+                            {driverAccountPasswordReady ? (
+                              <span
+                                aria-live="polite"
+                                className="shrink-0 font-bold text-emerald-800"
+                                data-driver-account-password-ready="true"
+                              >Ready</span>
+                            ) : null}
+                          </div>
+                          <form
+                            className="space-y-2"
+                            data-driver-account-creation-form="true"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void createDriverAccount();
+                            }}
+                          >
+                            <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                              <span>Password</span>
+                              <input
+                                autoComplete="new-password"
+                                className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                                inputMode="numeric"
+                                maxLength={6}
+                                minLength={6}
+                                name="new-password"
+                                onChange={(event) => setDriverAccountSetup((current) => ({
+                                  ...current,
+                                  feedback: null,
+                                  password: event.target.value.replace(/\D/g, "").slice(0, 6),
+                                }))}
+                                pattern="[0-9]{6}"
+                                required
+                                type="password"
+                                value={driverAccountSetup.password}
+                              />
+                            </label>
+                            <button
+                              className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
+                              disabled={driverAccountSetup.saving || !driverAccountPasswordReady}
+                              type="submit"
+                            >
+                              {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
+                            </button>
+                          </form>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {driverAccountSetup.feedback ? (
+                    <p
+                      aria-live="polite"
+                      className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverAccountSetup.feedback.tone)}`}
+                    >
+                      {driverAccountSetup.feedback.text}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-sky-950">Google Calendar</p>
+                    {driverCalendar.status === "cal_saved" ? (
+                      <span
+                        className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900"
+                        data-driver-job-calendar-saved="true"
+                      >
+                        Calendar saved
+                      </span>
+                    ) : driverCalendar.status === "update_calendar" ? (
+                      <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
+                        Update needed
+                      </span>
+                    ) : null}
+                  </div>
+                  <button
+                    className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
+                    data-driver-job-calendar-action="true"
+                    data-driver-job-calendar-source="current-driver-job-schedule"
+                    disabled={driverCalendar.action === "saving"}
+                    onClick={openDriverJobCalendar}
+                    type="button"
+                  >
+                    {driverCalendar.action === "saving" ? "Saving Calendar..." : "Add / Update Calendar"}
+                  </button>
+                  <p className="text-xs font-medium leading-5 text-sky-900">
+                    First use connects your Google account. The same action updates this one event after an
+                    amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
+                    Job Completed reporting. Do not share the calendar event.
+                  </p>
+                  <div
+                    className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
+                    data-driver-job-calendar-policy-links="true"
+                  >
+                    <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
+                      Calendar data use
+                    </Link>
+                    <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
+                      Privacy Policy
+                    </Link>
+                    <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
+                      Terms of Service
+                    </Link>
+                  </div>
+                  {driverCalendar.feedback ? (
+                    <p
+                      className={`text-xs font-semibold leading-5 ${
+                        driverCalendar.feedback.tone === "success" ? "text-emerald-800" : "text-red-700"
+                      }`}
+                      data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
+                    >
+                      {driverCalendar.feedback.text}
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
             <section
-              className="order-[92] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"
+              className="order-[93] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"
               data-driver-job-report-issue="true"
               data-driver-primary-step="report-issue"
             >

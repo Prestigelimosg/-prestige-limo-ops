@@ -94,16 +94,24 @@ includes("authRoute", "clearDriverPortalSessionCookie", "account logout cookie c
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
 for (const fragment of [
+  'stage: "email" | "password"',
+  'stage: "email"',
+  'data-driver-account-email-step="true"',
+  'driverAccountSetup.stage === "email"',
+  'autoComplete="email"',
+  'name="email"',
+  '>Continue</button>',
+  'data-driver-account-confirmed-email="true"',
   'data-driver-account-creation-form="true"',
-  'autoComplete="username"',
-  'autoCapitalize="none"',
-  'name="username"',
+  'driverAccountSetup.stage === "password"',
+  'Change email',
   'spellCheck={false}',
   'autoComplete="new-password"',
   'name="new-password"',
 ]) {
-  includes("jobPage", fragment, `Apple-compatible Driver account form ${fragment}`);
+  includes("jobPage", fragment, `iOS-safe email-first Driver account form ${fragment}`);
 }
+excludes("jobPage", /autoComplete="username"/, "iOS Password AutoFill username classification on the acknowledged Job Link");
 includes("portalPage", "Driver sign in", "Driver Portal sign-in form");
 includes("portalPage", "driver-installation-required", "native installation requirement");
 includes("portalPage", "nativeBridgeReady && readState.accountSession", "Face ID after account session only");

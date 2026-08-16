@@ -23,6 +23,7 @@ import {
 
 type DriverJobApiBlockedReason =
   | "acknowledgement_required"
+  | "already_acknowledged"
   | "already_completed"
   | "expired"
   | "invalid_details"
@@ -72,6 +73,14 @@ type StatusFeedback = {
 type ControlFeedback = {
   tone: "success" | "error";
   text: string;
+};
+
+type DriverAccountSetupState = {
+  email: string;
+  feedback: ControlFeedback | null;
+  password: string;
+  saving: boolean;
+  status: "idle" | "created";
 };
 
 type DriverCalendarApiResponse =
@@ -360,6 +369,13 @@ const emptyDriverCalendarState: DriverCalendarState = {
   feedback: null,
   status: "loading",
 };
+const emptyDriverAccountSetupState: DriverAccountSetupState = {
+  email: "",
+  feedback: null,
+  password: "",
+  saving: false,
+  status: "idle",
+};
 const driverLiveLocationContinuousShareMinMs = 5000;
 const driverLiveLocationPositionOptions: PositionOptions = {
   enableHighAccuracy: true,
@@ -369,6 +385,7 @@ const driverLiveLocationPositionOptions: PositionOptions = {
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
   acknowledgement_required: "Acknowledge this job before updating status.",
+  already_acknowledged: "This Job Link is already locked to the driver who saved and acknowledged it.",
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
   invalid_details: "Driver details were not accepted. Check the name and contact dispatch if this continues.",
@@ -397,6 +414,7 @@ type PreparedDriverOtsPhoto = {
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
   return value === "acknowledgement_required" ||
+    value === "already_acknowledged" ||
     value === "already_completed" ||
     value === "expired" ||
     value === "revoked" ||
@@ -991,6 +1009,8 @@ export default function DriverJobPage() {
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [driverCalendar, setDriverCalendar] =
     useState<DriverCalendarState>(emptyDriverCalendarState);
+  const [driverAccountSetup, setDriverAccountSetup] =
+    useState<DriverAccountSetupState>(emptyDriverAccountSetupState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
@@ -1316,6 +1336,7 @@ export default function DriverJobPage() {
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
       setDriverCalendar(emptyDriverCalendarState);
+      setDriverAccountSetup(emptyDriverAccountSetupState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -1761,6 +1782,66 @@ export default function DriverJobPage() {
       });
     } finally {
       setSavingDriverDetails(false);
+    }
+  }
+
+  async function createDriverAccount() {
+    if (!acknowledged || !token || driverAccountSetup.saving) return;
+
+    setDriverAccountSetup((current) => ({ ...current, feedback: null, saving: true }));
+    try {
+      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/account`, {
+        body: JSON.stringify({
+          email: driverAccountSetup.email,
+          password: driverAccountSetup.password,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-driver-purpose": "driver-account-create",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null) as {
+        account_created?: boolean;
+        ok?: boolean;
+        reason?: string;
+      } | null;
+
+      if (!response.ok || result?.ok !== true || result.account_created !== true) {
+        const message = result?.reason === "account_exists"
+          ? "A Driver account already exists for this driver or Job Link. Sign in from Prestige Driver."
+          : result?.reason === "invalid_input"
+            ? "Use a valid email and a password of at least 12 characters with uppercase, lowercase, number and symbol."
+            : result?.reason === "not_configured"
+              ? "Driver account creation is not enabled yet. Continue reporting with this Job Link."
+              : "Driver account could not be created. Continue reporting with this Job Link and contact Admin.";
+        setDriverAccountSetup((current) => ({
+          ...current,
+          feedback: { tone: "error", text: message },
+          saving: false,
+        }));
+        return;
+      }
+
+      setDriverAccountSetup((current) => ({
+        ...current,
+        feedback: {
+          tone: "success",
+          text: "Driver account created. The first sign-in inside Prestige Driver will bind it to that phone. This Job Link remains available for browser reporting.",
+        },
+        password: "",
+        saving: false,
+        status: "created",
+      }));
+    } catch {
+      setDriverAccountSetup((current) => ({
+        ...current,
+        feedback: {
+          tone: "error",
+          text: "Driver account could not be created. Continue reporting with this Job Link and contact Admin.",
+        },
+        saving: false,
+      }));
     }
   }
 
@@ -2920,6 +3001,66 @@ export default function DriverJobPage() {
                         <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.vehicleModel)}</dd>
                       </div>
                     </dl>
+                  </div>
+                ) : null}
+                {acknowledged ? (
+                  <div
+                    className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
+                    data-driver-account-setup="true"
+                  >
+                    <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                    <p className="text-xs font-medium leading-5 text-violet-900">
+                      Optional. This acknowledged Job Link can create one account only. You may continue every
+                      reporting action in this browser without installing Prestige Driver.
+                    </p>
+                    {driverAccountSetup.status !== "created" ? (
+                      <>
+                        <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                          <span>Email</span>
+                          <input
+                            autoComplete="email"
+                            className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                            onChange={(event) => setDriverAccountSetup((current) => ({
+                              ...current,
+                              email: event.target.value,
+                              feedback: null,
+                            }))}
+                            type="email"
+                            value={driverAccountSetup.email}
+                          />
+                        </label>
+                        <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                          <span>Password</span>
+                          <input
+                            autoComplete="new-password"
+                            className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                            onChange={(event) => setDriverAccountSetup((current) => ({
+                              ...current,
+                              feedback: null,
+                              password: event.target.value,
+                            }))}
+                            type="password"
+                            value={driverAccountSetup.password}
+                          />
+                        </label>
+                        <button
+                          className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
+                          disabled={driverAccountSetup.saving}
+                          onClick={() => void createDriverAccount()}
+                          type="button"
+                        >
+                          {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
+                        </button>
+                      </>
+                    ) : null}
+                    {driverAccountSetup.feedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverAccountSetup.feedback.tone)}`}
+                      >
+                        {driverAccountSetup.feedback.text}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
                 {acknowledged ? (

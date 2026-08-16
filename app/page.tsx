@@ -6276,6 +6276,7 @@ type FullDriverProfileRuntimeWritePayload =
   | FullDriverProfileRuntimeSavePayload;
 
 type FullDriverProfileRuntimeWriteResponse = {
+  driver_account_revoked?: boolean;
   error?: string;
   no_op?: boolean;
   ok?: boolean;
@@ -7523,6 +7524,12 @@ function fullDriverProfileRuntimeWriteDeleted(
   return value?.ok === true && value.status === "deleted" && value.no_op !== true;
 }
 
+function fullDriverProfileRuntimeAccountRevoked(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+) {
+  return fullDriverProfileRuntimeWriteDeleted(value) && value?.driver_account_revoked === true;
+}
+
 function fullDriverProfileRuntimeWriteSaved(
   value: FullDriverProfileRuntimeWriteResponse | null,
 ) {
@@ -7573,7 +7580,7 @@ function buildFullDriverProfileRuntimeDeletePayload(
 async function saveFullDriverProfileRuntime(
   payload: FullDriverProfileRuntimeWritePayload,
 ): Promise<
-  | { deleted: boolean; ok: true; saved: boolean }
+  | { accountRevoked: boolean; deleted: boolean; ok: true; saved: boolean }
   | { errorMessage: string; ok: false }
 > {
   try {
@@ -7591,6 +7598,7 @@ async function saveFullDriverProfileRuntime(
 
     if (response.ok && responseBody?.ok === true) {
       return {
+        accountRevoked: fullDriverProfileRuntimeAccountRevoked(responseBody),
         deleted: fullDriverProfileRuntimeWriteDeleted(responseBody),
         ok: true,
         saved: fullDriverProfileRuntimeWriteSaved(responseBody),
@@ -7598,7 +7606,7 @@ async function saveFullDriverProfileRuntime(
     }
 
     if (isFullDriverProfileRuntimeWriteBlockedNoOp(responseBody)) {
-      return { deleted: false, ok: true, saved: false };
+      return { accountRevoked: false, deleted: false, ok: true, saved: false };
     }
 
     return {
@@ -21624,10 +21632,12 @@ export default function Home() {
       return;
     }
 
+    const revokeAndDeleteWarning =
+      "Delete this driver from the Driver Database and permanently revoke this selected driver's Driver app account? Existing bookings will keep their saved driver details. Private Driver Job Links remain separately controlled. This cannot be undone.";
     const confirmationText =
       assignedJobCount > 0
-        ? `This driver has ${assignedJobCount} assigned job${assignedJobCount === 1 ? "" : "s"}. Delete this driver from the Driver Database? Existing bookings will keep their saved driver details. This cannot be undone.`
-        : "Delete this driver from the Driver Database? This cannot be undone.";
+        ? `This driver has ${assignedJobCount} assigned job${assignedJobCount === 1 ? "" : "s"}. ${revokeAndDeleteWarning}`
+        : revokeAndDeleteWarning;
 
     if (!window.confirm(confirmationText)) {
       setDriverDeleteMessage({
@@ -21642,14 +21652,14 @@ export default function Home() {
     setDriverDeleteMessage({
       driverId,
       tone: "info",
-      text: "Deleting driver...",
+      text: "Deleting driver and revoking Driver app account...",
     });
 
     try {
       const fullDriverProfileRuntimePayload = buildFullDriverProfileRuntimeDeletePayload(driverId);
       const fullDriverProfileRuntime = fullDriverProfileRuntimePayload
         ? await saveFullDriverProfileRuntime(fullDriverProfileRuntimePayload)
-        : { deleted: false, ok: true as const, saved: false };
+        : { accountRevoked: false, deleted: false, ok: true as const, saved: false };
 
       if (!fullDriverProfileRuntime.ok) {
         throw new Error(fullDriverProfileRuntime.errorMessage);
@@ -21677,7 +21687,9 @@ export default function Home() {
       setDriverDeleteMessage({
         driverId,
         tone: "success",
-        text: "Driver deleted.",
+        text: fullDriverProfileRuntime.accountRevoked
+          ? "Driver deleted and Driver app account revoked."
+          : "Driver deleted. No Driver app account was present to revoke.",
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver delete error.";

@@ -65,6 +65,12 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Prestige Driver to use Face ID to unlock the approved Driver account."
+        }
+      ],
       "expo-notifications",
       "expo-secure-store",
       "expo-web-browser",

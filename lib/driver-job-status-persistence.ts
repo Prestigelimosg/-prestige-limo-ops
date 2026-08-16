@@ -29,6 +29,10 @@ export type DriverJobPersistenceBlockedReason =
   | "revoked"
   | "unauthorized";
 
+export type DriverJobDetailsBlockedReason =
+  | DriverJobPersistenceBlockedReason
+  | "already_acknowledged";
+
 export type DriverJobProductionPayloadResult =
   | {
       ok: true;
@@ -74,7 +78,7 @@ export type DriverJobProductionDetailsUpdateResult =
   | {
       ok: false;
       payload: null;
-      reason: DriverJobPersistenceBlockedReason;
+      reason: DriverJobDetailsBlockedReason;
     };
 
 export type DriverJobStatusPersistenceClient = Pick<SupabaseClient, "from">;
@@ -441,6 +445,22 @@ function safeDriverDetailsFromInput(input: SaveDriverJobDetailsPersistenceInput)
   };
 }
 
+function lockedAcknowledgedDriverDetailsMatch(
+  link: DriverJobLinkPersistenceRow,
+  nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
+) {
+  const saved = safePayloadRecordFromLink(link);
+
+  return Boolean(
+    saved.driver_acknowledged_at &&
+    link.driver_id &&
+    saved.driver_contact === nextDetails.contact &&
+    saved.driver_name === nextDetails.name &&
+    saved.driver_plate_number === nextDetails.plate &&
+    saved.driver_vehicle_model === nextDetails.vehicleModel,
+  );
+}
+
 function safeDateTextFromDb(value: unknown) {
   const cleaned = cleanText(value);
 
@@ -504,7 +524,7 @@ function linkBlockedResult(
 }
 
 function detailsBlockedResult(
-  reason: DriverJobPersistenceBlockedReason,
+  reason: DriverJobDetailsBlockedReason,
 ): DriverJobProductionDetailsUpdateResult {
   return {
     ok: false,
@@ -1291,6 +1311,36 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
 
   if (!statusHistory.ok) {
     return detailsBlockedResult(statusHistory.reason);
+  }
+
+  const alreadyAcknowledged = Boolean(
+    safeTextFromDb(
+      asRecord(resolvedLink.link.safe_link_context).driver_acknowledged_at,
+      80,
+    ),
+  );
+
+  if (alreadyAcknowledged) {
+    if (!lockedAcknowledgedDriverDetailsMatch(resolvedLink.link, nextDetails)) {
+      return detailsBlockedResult("already_acknowledged");
+    }
+
+    const currentSafeSchedule = await loadCurrentSafeBookingSchedule(
+      input.client,
+      resolvedLink.link,
+    );
+
+    return {
+      booking_reference: resolvedLink.link.booking_reference,
+      ok: true,
+      payload: payloadForLink(
+        resolvedLink.link,
+        statusHistory.statuses[0]?.status_value || null,
+        statusHistory.statuses,
+        currentSafeSchedule,
+      ),
+      reason: "updated",
+    };
   }
 
   const identity = await resolveAcknowledgedDriverIdentity(

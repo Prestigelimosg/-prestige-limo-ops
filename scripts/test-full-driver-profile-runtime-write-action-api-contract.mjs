@@ -17,6 +17,7 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const routePathFragment = "/api/admin-full-driver-profile-runtime-write-action";
 const guardScript = "scripts/test-full-driver-profile-runtime-write-action-api-contract.mjs";
 const gateEnvName = "PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED";
+const accountRevokeGateEnvName = "PRESTIGE_DRIVER_ACCOUNT_AUTH_ENABLED";
 const forbiddenRuntimeWiringPattern =
   /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|legacy_shim|shim\s*\(/i;
 const forbiddenWritePayloadPattern =
@@ -25,6 +26,7 @@ const forbiddenSafeOutputPattern =
   /payout_preferences|driver_payout_rules|customer_rates|customer_rate|customer_price|pricing_snapshot|payment|billing|invoice|pdf|provider|send_state|send_log|auth_session|live_location|photo|calendar|internal_admin|admin_notes|parser_debug|debug_payload|mock_archive|mock_qa|service_role|server_secret|secret|api_key|access_token|raw_token|paynow|pay_now|preferred_areas|airport_permit_notes|notes/i;
 const originalEnv = {
   [gateEnvName]: process.env[gateEnvName],
+  [accountRevokeGateEnvName]: process.env[accountRevokeGateEnvName],
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED,
   PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: process.env.PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE,
@@ -240,6 +242,23 @@ function mockedClient(calls) {
   });
 
   return {
+    async rpc(functionName, payload) {
+      calls.push({ functionName, payload, rpc: true });
+      return {
+        data: {
+          account_revoked: true,
+          record: {
+            availability_status: "inactive",
+            contact_number: "+65 9000 1234",
+            driver_name: "Safe Runtime Driver",
+            id: payload.p_driver_id,
+            plate_number: "SMA1234Z",
+            vehicle_type: "Mercedes V-Class",
+          },
+        },
+        error: null,
+      };
+    },
     from(table) {
       calls.push({ table });
 
@@ -388,6 +407,7 @@ for (const fragment of [
 assertExcludes(writePayloadSource, forbiddenWritePayloadPattern, "Full driver profile runtime write payload");
 
 assertIncludes(helperSource, gateEnvName, "Full driver profile runtime env gate");
+assertIncludes(helperSource, accountRevokeGateEnvName, "Driver account revoke env gate");
 assertIncludes(helperSource, "full_driver_profile_save", "Save action type");
 assertIncludes(helperSource, "full_driver_profile_delete", "Delete action type");
 assertIncludes(helperSource, "forbiddenFieldPattern", "Forbidden field pattern");
@@ -543,6 +563,31 @@ try {
   assert.deepEqual(deleteCalls[1], { delete: true });
   assert.equal(deleteCalls[2].column, "id");
   assert.equal(deleteCalls[2].id, 42);
+
+  setEnv({
+    [accountRevokeGateEnvName]: "true",
+    [gateEnvName]: undefined,
+  });
+  const revokeDeleteCalls = [];
+  const revokedAndDeleted = await executeAdminFullDriverProfileRuntimeWriteAction(
+    safeDeleteInput(),
+    serverAdminActor,
+    { clientFactory: () => mockedClient(revokeDeleteCalls) },
+  );
+  assertDeleted(revokedAndDeleted, "mocked account-revoking delete write");
+  assert.equal(revokedAndDeleted.driver_account_revoked, true);
+  assert.equal(revokedAndDeleted.driver_account_revoke_gate_open, true);
+  assert.deepEqual(revokeDeleteCalls, [
+    {
+      functionName: "admin_revoke_driver_account_and_delete_profile",
+      payload: {
+        p_actor_label: "Runtime test admin",
+        p_actor_role: "admin",
+        p_driver_id: 42,
+      },
+      rpc: true,
+    },
+  ]);
 } finally {
   restoreEnv();
   await harness.cleanup();

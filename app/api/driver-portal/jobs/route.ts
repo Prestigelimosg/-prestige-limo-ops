@@ -1,6 +1,10 @@
 import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
+import { verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock";
 import { loadDriverPortalJobs } from "../../../../lib/driver-portal-jobs";
-import { resolveDriverPortalSession } from "../../../../lib/driver-portal-session";
+import {
+  clearDriverPortalSessionCookie,
+  resolveDriverPortalSession,
+} from "../../../../lib/driver-portal-session";
 import {
   getDriverDevicePushReadiness,
   registerDriverDevicePushSubscriptionForPortalSession,
@@ -8,14 +12,31 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function response(body: Record<string, unknown>, status: number) {
+function response(body: Record<string, unknown>, status: number, cookie?: string) {
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    Vary: "Cookie",
+  });
+  if (cookie) {
+    headers.set("Set-Cookie", cookie);
+  }
+
   return Response.json(body, {
-    headers: {
-      "Cache-Control": "no-store",
-      Vary: "Cookie",
-    },
+    headers,
     status,
   });
+}
+
+function inactiveDriverAccountResponse(includeJobs: boolean) {
+  return response(
+    {
+      ...(includeJobs ? { jobs: [] } : {}),
+      ok: false,
+      reason: "unauthorized",
+    },
+    401,
+    clearDriverPortalSessionCookie(),
+  );
 }
 
 function sameOriginDriverPortalRequest(request: Request, purpose: string) {
@@ -80,6 +101,19 @@ export async function GET(request: Request) {
     return response({ jobs: [], ok: false, reason: "not_configured" }, 503);
   }
 
+  if (session.claims.accountId && session.claims.deviceIdHash) {
+    const activeAccount = await verifyDriverAccountSession({
+      accountId: session.claims.accountId,
+      client: clientResult.client,
+      deviceIdHash: session.claims.deviceIdHash,
+      driverId: session.claims.driverId,
+      installationId: request.headers.get("x-prestige-driver-installation-id"),
+    });
+    if (!activeAccount) {
+      return inactiveDriverAccountResponse(true);
+    }
+  }
+
   const jobsResult = await loadDriverPortalJobs({
     client: clientResult.client,
     driverId: session.claims.driverId,
@@ -98,6 +132,7 @@ export async function GET(request: Request) {
         state_label: job.stateLabel,
       })),
       ok: true,
+      session: session.claims.accountId ? "account" : "link",
       version: jobsResult.version,
     },
     200,
@@ -127,6 +162,19 @@ export async function POST(request: Request) {
   const clientResult = getDriverJobStatusPersistenceClientForProduction();
   if (!clientResult.ok) {
     return response({ ok: false, reason: "not_configured" }, 503);
+  }
+
+  if (session.claims.accountId && session.claims.deviceIdHash) {
+    const activeAccount = await verifyDriverAccountSession({
+      accountId: session.claims.accountId,
+      client: clientResult.client,
+      deviceIdHash: session.claims.deviceIdHash,
+      driverId: session.claims.driverId,
+      installationId: request.headers.get("x-prestige-driver-installation-id"),
+    });
+    if (!activeAccount) {
+      return inactiveDriverAccountResponse(false);
+    }
   }
 
   const body = await readJsonBody(request);

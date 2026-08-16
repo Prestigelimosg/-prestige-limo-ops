@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 const appPagePath = "app/page.tsx";
 const helperPath = "lib/admin-full-driver-profile-runtime-write-action.ts";
 const migrationPath = "supabase/migrations/20260816040725_driver_account_device_lock.sql";
+const enrollmentDeleteCascadeMigrationPath =
+  "supabase/migrations/20260816102009_driver_account_enrollment_delete_cascade.sql";
 const portalRoutePath = "app/api/driver-portal/jobs/route.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -25,10 +27,19 @@ function sectionBetween(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
-const [appPage, helper, migration, portalRoute, ledger, preactivationSuite] = await Promise.all([
+const [
+  appPage,
+  helper,
+  migration,
+  enrollmentDeleteCascadeMigration,
+  portalRoute,
+  ledger,
+  preactivationSuite,
+] = await Promise.all([
   readFile(appPagePath, "utf8"),
   readFile(helperPath, "utf8"),
   readFile(migrationPath, "utf8"),
+  readFile(enrollmentDeleteCascadeMigrationPath, "utf8"),
   readFile(portalRoutePath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
@@ -62,6 +73,10 @@ includes(
 );
 excludes(appPage, "data-driver-account-revoke-button", "No second revoke button");
 excludes(appPage, "data-driver-account-suspend-button", "No second suspension button");
+excludes(appPage, "data-driver-deactivate-button", "No separate deactivate button");
+excludes(appPage, "deactivateDriverProfile", "No separate deactivate handler");
+excludes(appPage, "deactivatingDriverProfile", "No separate deactivate state");
+excludes(appPage, "/api/admin-driver-availability", "No separate deactivate client write path");
 
 includes(helper, "PRESTIGE_DRIVER_ACCOUNT_AUTH_ENABLED", "Driver account gate");
 includes(
@@ -90,6 +105,33 @@ for (const fragment of [
 ]) {
   includes(migration.toLowerCase(), fragment.toLowerCase(), `Migration ${fragment}`);
 }
+
+for (const fragment of [
+  "set lock_timeout = '5s'",
+  "set statement_timeout = '30s'",
+  "drop constraint if exists driver_account_enrollments_driver_id_fkey",
+  "add constraint driver_account_enrollments_driver_id_fkey",
+  "foreign key (driver_id)",
+  "references public.drivers(id)",
+  "on delete cascade",
+  "comment on constraint driver_account_enrollments_driver_id_fkey",
+]) {
+  includes(
+    enrollmentDeleteCascadeMigration.toLowerCase(),
+    fragment.toLowerCase(),
+    `Enrollment delete-cascade repair ${fragment}`,
+  );
+}
+excludes(
+  enrollmentDeleteCascadeMigration.toLowerCase(),
+  "driver_job_link_id",
+  "Exact Driver enrollment repair must not change the Job Link foreign key",
+);
+excludes(
+  enrollmentDeleteCascadeMigration.toLowerCase(),
+  "driver_access_accounts",
+  "Revoked access-account tombstone remains outside the enrollment cascade repair",
+);
 
 includes(portalRoute, "clearDriverPortalSessionCookie", "Revoked session cookie clearing");
 includes(

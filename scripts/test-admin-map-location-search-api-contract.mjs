@@ -330,6 +330,14 @@ try {
         }),
       }),
     ],
+    [
+      "same-origin admin GET with wrong request token",
+      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
+        headers: sessionHeaders({
+          "x-prestige-admin-session-token": "wrong-token",
+        }),
+      }),
+    ],
   ]) {
     setEnv(enabledEnv());
     const blockedFetchCalls = installFetchMock();
@@ -349,14 +357,6 @@ try {
       "same-origin admin GET without request token",
       new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
         headers: adminHeaders(),
-      }),
-    ],
-    [
-      "same-origin admin GET with ignored wrong request token",
-      new Request("http://localhost/api/admin-map-location-search?query=Raffles%20Hotel", {
-        headers: sessionHeaders({
-          "x-prestige-admin-session-token": "wrong-token",
-        }),
       }),
     ],
   ]) {

@@ -486,6 +486,34 @@ try {
 
   setEnv(enabledEnv());
 
+  const sameOriginServerSessionFetchCalls = installFetchMock();
+  const sameOriginServerSessionResult = await readRouteResponse(
+    await route.POST(
+      new Request("http://localhost/api/admin-map-route-estimates", {
+        body: JSON.stringify(routePayload()),
+        headers: adminHeaders(),
+        method: "POST",
+      }),
+    ),
+  );
+
+  assert.equal(
+    sameOriginServerSessionResult.status,
+    200,
+    "same-origin Admin POST should reuse the verified server session without a browser token",
+  );
+  assert.equal(
+    sameOriginServerSessionFetchCalls.length,
+    1,
+    "same-origin Admin POST should call Google Maps exactly once",
+  );
+  assertNoLeaks(
+    sameOriginServerSessionResult,
+    "same-origin Admin POST response should stay safe",
+  );
+
+  setEnv(enabledEnv());
+
   const googleRouteFetchCalls = installFetchMock();
   const googleRouteResult = await readRouteResponse(
     await route.POST(

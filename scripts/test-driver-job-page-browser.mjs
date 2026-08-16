@@ -677,6 +677,23 @@ async function runChromeTest() {
           standaloneButton: Boolean(document.querySelector('button[data-driver-job-ots-photo-proof-shoot="true"]')),
           text: document.querySelector('[data-driver-job-ots-photo-proof-control="true"]')?.textContent?.trim() || "",
         },
+        postAcknowledgementTools: (() => {
+          const section = document.querySelector("[data-driver-job-post-ack-tools]");
+          const status = document.querySelector("[data-driver-primary-step='status-workflow']");
+          const reportIssue = document.querySelector("[data-driver-job-report-issue]");
+
+          return {
+            accountCount: document.querySelectorAll("[data-driver-account-setup='true']").length,
+            afterStatus: Boolean(
+              section && status && (status.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING),
+            ),
+            beforeReportIssue: Boolean(
+              section && reportIssue && (section.compareDocumentPosition(reportIssue) & Node.DOCUMENT_POSITION_FOLLOWING),
+            ),
+            calendarActionCount: document.querySelectorAll("[data-driver-job-calendar-action='true']").length,
+            visible: Boolean(section),
+          };
+        })(),
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         confirmDetails: {
@@ -1058,6 +1075,17 @@ async function runChromeTest() {
         afterSaveState.confirmDetails.saveAcknowledgeDisabled,
         true,
         "Expected confirmed unchanged details to prevent a duplicate acknowledgement save.",
+      );
+      assert.deepEqual(
+        afterSaveState.postAcknowledgementTools,
+        {
+          accountCount: 1,
+          afterStatus: true,
+          beforeReportIssue: true,
+          calendarActionCount: 1,
+          visible: true,
+        },
+        "Expected one established Account block and one Calendar action after Job Status and before Report Issue.",
       );
       assert.equal(
         afterSaveState.confirmDetails.editorOpen,
@@ -1633,6 +1661,17 @@ async function runChromeTest() {
     assert.equal(validState.confirmDetails.rawDetailsVisible, true, "Expected compact paste driver details box.");
     assert.equal(validState.confirmDetails.parseButtonText, "Parse Driver Details");
     assert.equal(validState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
+    assert.deepEqual(
+      validState.postAcknowledgementTools,
+      {
+        accountCount: 0,
+        afterStatus: false,
+        beforeReportIssue: false,
+        calendarActionCount: 0,
+        visible: false,
+      },
+      "Expected Account and Calendar to remain hidden before acknowledgement.",
+    );
     assert.equal(
       validState.confirmDetails.acknowledgedState,
       "Paste or confirm driver details once before starting the job.",

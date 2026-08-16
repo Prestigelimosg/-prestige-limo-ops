@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type {
   SafeDriverJobPayload,
   SafeDriverJobStatusHistoryItem,
@@ -15,8 +16,14 @@ import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
 } from "../../../lib/driver-job-status-workflow";
+import {
+  driverSafeStatusLabel,
+  formatDriverPickupDateTime,
+} from "../../../driver-companion/src/driver-job-contract";
 
 type DriverJobApiBlockedReason =
+  | "acknowledgement_required"
+  | "already_acknowledged"
   | "already_completed"
   | "expired"
   | "invalid_details"
@@ -66,6 +73,15 @@ type StatusFeedback = {
 type ControlFeedback = {
   tone: "success" | "error";
   text: string;
+};
+
+type DriverAccountSetupState = {
+  email: string;
+  feedback: ControlFeedback | null;
+  password: string;
+  saving: boolean;
+  stage: "email" | "password";
+  status: "idle" | "created";
 };
 
 type DriverCalendarApiResponse =
@@ -121,6 +137,8 @@ type DriverAppUpdateRecord = {
   safe_title?: string | null;
   updated_at?: string | null;
 };
+
+const DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS = 5_000;
 
 type DriverAppUpdateApiResponse =
   | {
@@ -224,8 +242,28 @@ type DriverLiveLocationState = {
   feedback: ControlFeedback | null;
   lastSharedAt: string;
   permissionState: "denied" | "granted" | "not_requested" | "unavailable";
+  retryAction: "share" | "stop" | null;
   sharingState: "active" | "inactive" | "stopped";
   staleState: "active" | "inactive" | "stale";
+};
+
+type EmbeddedDriverTrackingResult = {
+  active?: boolean;
+  message?: string;
+  ok?: boolean;
+  request?: "tracking_start" | "tracking_stop" | "tracking_terminal";
+};
+
+type EmbeddedDriverNativeNotificationResult = {
+  ok?: boolean;
+  state?: "denied" | "enabled" | "failed";
+};
+
+type EmbeddedDriverWindow = Window & {
+  ReactNativeWebView?: {
+    postMessage: (message: string) => void;
+  };
+  __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
 };
 
 type DriverOtsPhotoProofState = {
@@ -316,6 +354,7 @@ const emptyDriverLiveLocationState: DriverLiveLocationState = {
   feedback: null,
   lastSharedAt: "",
   permissionState: "not_requested",
+  retryAction: null,
   sharingState: "inactive",
   staleState: "inactive",
 };
@@ -331,6 +370,14 @@ const emptyDriverCalendarState: DriverCalendarState = {
   feedback: null,
   status: "loading",
 };
+const emptyDriverAccountSetupState: DriverAccountSetupState = {
+  email: "",
+  feedback: null,
+  password: "",
+  saving: false,
+  stage: "email",
+  status: "idle",
+};
 const driverLiveLocationContinuousShareMinMs = 5000;
 const driverLiveLocationPositionOptions: PositionOptions = {
   enableHighAccuracy: true,
@@ -339,6 +386,8 @@ const driverLiveLocationPositionOptions: PositionOptions = {
 };
 
 const blockedMessages: Record<DriverJobApiBlockedReason, string> = {
+  acknowledgement_required: "Acknowledge this job before updating status.",
+  already_acknowledged: "This Job Link is already locked to the driver who saved and acknowledged it.",
   already_completed: "This job is already completed. Contact dispatch if this is incorrect.",
   expired: "This driver job link has expired. Please contact dispatch for a fresh link.",
   invalid_details: "Driver details were not accepted. Check the name and contact dispatch if this continues.",
@@ -366,7 +415,9 @@ type PreparedDriverOtsPhoto = {
 };
 
 function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
-  return value === "already_completed" ||
+  return value === "acknowledgement_required" ||
+    value === "already_acknowledged" ||
+    value === "already_completed" ||
     value === "expired" ||
     value === "revoked" ||
     value === "unauthorized" ||
@@ -379,6 +430,10 @@ function normalizeBlockedReason(value: unknown): DriverJobApiBlockedReason {
 
 function driverWorkflowHasReachedOts(status: string) {
   return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("ots");
+}
+
+function driverWorkflowHasReachedOtw(status: string) {
+  return driverWorkflowStatusOrder.indexOf(status) >= driverWorkflowStatusOrder.indexOf("driver_otw");
 }
 
 function driverOtsPhotoReducedFileName(fileName: string) {
@@ -481,6 +536,16 @@ function cleanDriverDetails(details: DriverDetails): DriverDetails {
     plate: details.plate.trim().replace(/\s+/g, " "),
     vehicleModel: details.vehicleModel.trim().replace(/\s+/g, " "),
   };
+}
+
+function driverDetailsMatch(first: DriverDetails, second: DriverDetails) {
+  const cleanFirst = cleanDriverDetails(first);
+  const cleanSecond = cleanDriverDetails(second);
+
+  return cleanFirst.contact === cleanSecond.contact &&
+    cleanFirst.name === cleanSecond.name &&
+    cleanFirst.plate === cleanSecond.plate &&
+    cleanFirst.vehicleModel === cleanSecond.vehicleModel;
 }
 
 function escapeRegExp(value: string) {
@@ -643,47 +708,6 @@ function formatDriverAppUpdateTime(value: unknown) {
   });
 }
 
-function formatDriverLiveLocationTime(value: string) {
-  const date = value ? new Date(value) : null;
-
-  if (!date || Number.isNaN(date.getTime())) {
-    return "Not shared";
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function driverLiveLocationPermissionLabel(value: DriverLiveLocationState["permissionState"]) {
-  if (value === "granted") {
-    return "Allowed";
-  }
-
-  if (value === "denied") {
-    return "Denied";
-  }
-
-  if (value === "unavailable") {
-    return "Unavailable";
-  }
-
-  return "Not requested";
-}
-
-function driverLiveLocationStaleLabel(value: DriverLiveLocationState["staleState"]) {
-  if (value === "active") {
-    return "Active";
-  }
-
-  if (value === "stale") {
-    return "Stale";
-  }
-
-  return "Not active";
-}
-
 function normalizeStatusKey(value: unknown) {
   return String(value || "")
     .replace(/([a-z])([A-Z])/g, "$1_$2")
@@ -739,6 +763,14 @@ function detailRows(job: SafeDriverJobPayload) {
   ].filter((row) => row.value);
 }
 
+function embeddedDriverDetailRows(job: SafeDriverJobPayload) {
+  return detailRows(job).map((row) =>
+    row.label === "Date/time"
+      ? { ...row, value: formatDriverPickupDateTime(row.value) }
+      : row,
+  );
+}
+
 function activityTime() {
   return new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -774,6 +806,58 @@ function safeGoogleConsentUrl(value: string | undefined) {
   } catch {
     return "";
   }
+}
+
+function isVerifiedEmbeddedDriverApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const embeddedWindow = window as EmbeddedDriverWindow;
+  return embeddedWindow.__PRESTIGE_DRIVER_NATIVE_APP__ === true &&
+    typeof embeddedWindow.ReactNativeWebView?.postMessage === "function";
+}
+
+function postEmbeddedDriverBridgeMessage(
+  message: {
+    type:
+      | "native_notifications_register"
+      | "tracking_start"
+      | "tracking_stop"
+      | "tracking_terminal";
+  },
+) {
+  if (!isVerifiedEmbeddedDriverApp()) {
+    return false;
+  }
+
+  (window as EmbeddedDriverWindow).ReactNativeWebView?.postMessage(
+    JSON.stringify(message),
+  );
+  return true;
+}
+
+function safeDriverNativeCalendarOauthStartUrl(googleConsentUrl: string) {
+  const safeConsentUrl = safeGoogleConsentUrl(googleConsentUrl);
+
+  if (!safeConsentUrl) {
+    return "";
+  }
+
+  const state = new URL(safeConsentUrl).searchParams.get("state") || "";
+  const parts = state.split(".");
+
+  if (
+    state.length < 80 ||
+    state.length > 4096 ||
+    parts.length !== 4 ||
+    parts[0] !== "v1" ||
+    parts.slice(1).some((part) => !/^[A-Za-z0-9_-]+$/.test(part))
+  ) {
+    return "";
+  }
+
+  return `/api/driver-google-calendar-oauth/native-start?state=${encodeURIComponent(state)}`;
 }
 
 function driverDeviceAlertReadinessFromApi(
@@ -900,6 +984,7 @@ export default function DriverJobPage() {
     return Array.isArray(rawToken) ? rawToken[0] || "" : rawToken || "";
   }, [params]);
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
+  const [embeddedDriverApp, setEmbeddedDriverApp] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
@@ -926,14 +1011,21 @@ export default function DriverJobPage() {
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [driverCalendar, setDriverCalendar] =
     useState<DriverCalendarState>(emptyDriverCalendarState);
+  const [driverAccountSetup, setDriverAccountSetup] =
+    useState<DriverAccountSetupState>(emptyDriverAccountSetupState);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const driverAppUpdatesAbortControllerRef = useRef<AbortController | null>(null);
+  const driverAppUpdatesRequestSequenceRef = useRef(0);
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
   const driverLiveLocationPostInFlightRef = useRef(false);
   const driverLiveLocationLastPostAtRef = useRef(0);
   const driverLiveLocationShareActiveRef = useRef(false);
+  const driverOtwLiveLocationActionRef = useRef(false);
+  const loadedDriverJobTokenRef = useRef("");
+  const nativeNotificationRegistrationTokenRef = useRef("");
   const savedStatusHistory = useMemo(
     () => (pageState.kind === "ready" ? pageState.job.statusHistory : []),
     [pageState],
@@ -942,6 +1034,39 @@ export default function DriverJobPage() {
     () => statusTimingRows(savedStatusHistory),
     [savedStatusHistory],
   );
+  const driverDetailsSavedAndUnchanged = useMemo(
+    () => Boolean(savedDriverDetails && driverDetailsMatch(driverDetails, savedDriverDetails)),
+    [driverDetails, savedDriverDetails],
+  );
+
+  useEffect(() => {
+    const embeddedDetectionFrame = window.requestAnimationFrame(() => {
+      setEmbeddedDriverApp(isVerifiedEmbeddedDriverApp());
+    });
+
+    return () => window.cancelAnimationFrame(embeddedDetectionFrame);
+  }, []);
+
+  const requestEmbeddedNativeNotificationsOnce = useCallback(() => {
+    if (
+      !embeddedDriverApp ||
+      !token ||
+      loadedDriverJobTokenRef.current !== token ||
+      nativeNotificationRegistrationTokenRef.current === token
+    ) {
+      return false;
+    }
+
+    const requested = postEmbeddedDriverBridgeMessage({
+      type: "native_notifications_register",
+    });
+
+    if (requested) {
+      nativeNotificationRegistrationTokenRef.current = token;
+    }
+
+    return requested;
+  }, [embeddedDriverApp, token]);
 
   function addActivity(label: string, detail: string) {
     setActivityLog((currentLog) => [
@@ -1011,6 +1136,163 @@ export default function DriverJobPage() {
     driverLiveLocationWatchIdRef.current = null;
   }, []);
 
+  function driverLiveLocationRoute() {
+    return `/api/driver-job/${encodeURIComponent(token)}/live-location`;
+  }
+
+  async function checkDriverLiveLocationReadiness(options: { reload?: boolean } = {}) {
+    try {
+      const response = await fetch(driverLiveLocationRoute(), {
+        cache: "no-store",
+        method: "GET",
+      });
+      const result = await response.json() as DriverLiveLocationApiResponse;
+
+      if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
+        setDriverLiveLocation((currentState) => ({
+          ...currentState,
+          action: "idle",
+          feedback: {
+            tone: "error",
+            text: "OTW is saved. Live location is not ready. Tap Retry Share Location.",
+          },
+          retryAction: "share",
+          sharingState: "inactive",
+          staleState: "inactive",
+        }));
+        return false;
+      }
+
+      const sharingState = result.sharing_state === "active" ? "active" : "inactive";
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        feedback: options.reload
+          ? sharingState === "active"
+            ? {
+                tone: "success",
+                text: "Previous location remains on the map. Tap Stop Sharing to clear it.",
+              }
+            : {
+                tone: "success",
+                text: "OTW is saved. Tap Share Location Again.",
+              }
+          : currentState.feedback,
+        lastSharedAt: result.last_shared_at || currentState.lastSharedAt,
+        retryAction: sharingState === "active" ? null : options.reload ? "share" : currentState.retryAction,
+        sharingState,
+        staleState: result.sharing_state === "stale" ? "stale" : sharingState === "active" ? "active" : "inactive",
+      }));
+
+      return true;
+    } catch {
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: "error",
+          text: "OTW is saved. Live location could not start. Tap Retry Share Location.",
+        },
+        retryAction: "share",
+      }));
+      return false;
+    }
+  }
+
+  const refreshDriverAppUpdates = useCallback(async (
+    { preserveContent = false }: { preserveContent?: boolean } = {},
+  ) => {
+    if (!token) {
+      return;
+    }
+
+    const requestSequence = driverAppUpdatesRequestSequenceRef.current + 1;
+    driverAppUpdatesRequestSequenceRef.current = requestSequence;
+    driverAppUpdatesAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    driverAppUpdatesAbortControllerRef.current = abortController;
+
+    if (!preserveContent) {
+      setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
+    }
+
+    try {
+      const updateResponse = await fetch(
+        `/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`,
+        {
+          cache: "no-store",
+          signal: abortController.signal,
+        },
+      );
+      const updateResult = await updateResponse.json() as DriverAppUpdateApiResponse;
+
+      if (
+        abortController.signal.aborted ||
+        requestSequence !== driverAppUpdatesRequestSequenceRef.current
+      ) {
+        return;
+      }
+
+      if (!updateResponse.ok || !updateResult.ok) {
+        const feedback: ControlFeedback = {
+          tone: updateResponse.status === 503 ? "success" : "error",
+          text:
+            updateResponse.status === 503
+              ? "Saved app updates are not enabled for this driver link yet."
+              : "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
+        };
+
+        setDriverAppUpdates((currentState) =>
+          preserveContent && currentState.updates.length > 0
+            ? { ...currentState, feedback }
+            : {
+                feedback,
+                kind: updateResponse.status === 503 ? "unavailable" : "error",
+                updates: [],
+              },
+        );
+        return;
+      }
+
+      const updates = Array.isArray(updateResult.notifications)
+        ? updateResult.notifications.slice(0, 5)
+        : [];
+
+      setDriverAppUpdates({
+        feedback: {
+          tone: "success",
+          text:
+            updates.length > 0
+              ? `Loaded ${updates.length} saved app update${updates.length === 1 ? "" : "s"}.`
+              : "No saved app updates for this job.",
+        },
+        kind: updates.length > 0 ? "loaded" : "empty",
+        updates,
+      });
+    } catch {
+      if (
+        abortController.signal.aborted ||
+        requestSequence !== driverAppUpdatesRequestSequenceRef.current
+      ) {
+        return;
+      }
+
+      const feedback: ControlFeedback = {
+        tone: "error",
+        text: "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
+      };
+      setDriverAppUpdates((currentState) =>
+        preserveContent && currentState.updates.length > 0
+          ? { ...currentState, feedback }
+          : { feedback, kind: "error", updates: [] },
+      );
+    } finally {
+      if (requestSequence === driverAppUpdatesRequestSequenceRef.current) {
+        driverAppUpdatesAbortControllerRef.current = null;
+      }
+    }
+  }, [token]);
+
   useEffect(() => {
     let active = true;
 
@@ -1040,6 +1322,7 @@ export default function DriverJobPage() {
       }
 
       setPageState({ kind: "loading" });
+      loadedDriverJobTokenRef.current = "";
       setAcknowledged(false);
       setDetailsFeedback(null);
       setDriverDetailsRaw("");
@@ -1055,6 +1338,7 @@ export default function DriverJobPage() {
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
       setDriverCalendar(emptyDriverCalendarState);
+      setDriverAccountSetup(emptyDriverAccountSetupState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
@@ -1094,7 +1378,16 @@ export default function DriverJobPage() {
           driverDeviceAlertReadinessFromApi(result.device_alerts),
         );
         setWorkflowStatus(result.payload.status || "assigned");
+        loadedDriverJobTokenRef.current = token;
         setPageState({ kind: "ready", job: result.payload });
+
+        if (driverWorkflowHasReachedOtw(result.payload.status || "")) {
+          await checkDriverLiveLocationReadiness({ reload: true });
+
+          if (!active) {
+            return;
+          }
+        }
 
         if (result.payload.acknowledged) {
           try {
@@ -1156,61 +1449,7 @@ export default function DriverJobPage() {
           }
         }
 
-        try {
-          const updateResponse = await fetch(
-            `/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`,
-            {
-              cache: "no-store",
-            },
-          );
-          const updateResult = await updateResponse.json() as DriverAppUpdateApiResponse;
-
-          if (!active) {
-            return;
-          }
-
-          if (!updateResponse.ok || !updateResult.ok) {
-            setDriverAppUpdates({
-              feedback: {
-                tone: updateResponse.status === 503 ? "success" : "error",
-                text:
-                  updateResponse.status === 503
-                    ? "Saved app updates are not enabled for this driver link yet."
-                    : "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
-              },
-              kind: updateResponse.status === 503 ? "unavailable" : "error",
-              updates: [],
-            });
-            return;
-          }
-
-          const updates = Array.isArray(updateResult.notifications)
-            ? updateResult.notifications.slice(0, 5)
-            : [];
-
-          setDriverAppUpdates({
-            feedback: {
-              tone: "success",
-              text:
-                updates.length > 0
-                  ? `Loaded ${updates.length} saved app update${updates.length === 1 ? "" : "s"}.`
-                  : "No saved app updates for this job.",
-            },
-            kind: updates.length > 0 ? "loaded" : "empty",
-            updates,
-          });
-        } catch {
-          if (active) {
-            setDriverAppUpdates({
-              feedback: {
-                tone: "error",
-                text: "Saved app updates could not be loaded. Contact dispatch if you need the latest instructions.",
-              },
-              kind: "error",
-              updates: [],
-            });
-          }
-        }
+        await refreshDriverAppUpdates();
       } catch {
         if (active) {
           setPageState({ kind: "blocked", reason: "unavailable" });
@@ -1222,14 +1461,152 @@ export default function DriverJobPage() {
 
     return () => {
       active = false;
+      driverAppUpdatesAbortControllerRef.current?.abort();
+      driverAppUpdatesRequestSequenceRef.current += 1;
     };
-  }, [stopDriverLiveLocationBrowserWatch, token]);
+  }, [refreshDriverAppUpdates, stopDriverLiveLocationBrowserWatch, token]);
+
+  useEffect(() => {
+    if (!token || pageState.kind !== "ready") {
+      return;
+    }
+
+    const refreshDriverAppUpdatesWhileVisible = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void refreshDriverAppUpdates({ preserveContent: true });
+    };
+
+    const refreshDriverAppUpdatesOnForeground = refreshDriverAppUpdatesWhileVisible;
+    const driverAppUpdatesRefreshInterval = window.setInterval(
+      refreshDriverAppUpdatesWhileVisible,
+      DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS,
+    );
+
+    window.addEventListener("focus", refreshDriverAppUpdatesOnForeground);
+    document.addEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
+    window.addEventListener("pageshow", refreshDriverAppUpdatesOnForeground);
+
+    return () => {
+      window.clearInterval(driverAppUpdatesRefreshInterval);
+      window.removeEventListener("focus", refreshDriverAppUpdatesOnForeground);
+      document.removeEventListener("visibilitychange", refreshDriverAppUpdatesOnForeground);
+      window.removeEventListener("pageshow", refreshDriverAppUpdatesOnForeground);
+    };
+  }, [pageState.kind, refreshDriverAppUpdates, token]);
 
   useEffect(() => {
     return () => {
       stopDriverLiveLocationBrowserWatch();
     };
   }, [stopDriverLiveLocationBrowserWatch]);
+
+  useEffect(() => {
+    if (!embeddedDriverApp || !isVerifiedEmbeddedDriverApp()) {
+      return;
+    }
+
+    const handleNativeTrackingResult = (event: Event) => {
+      const result = (event as CustomEvent<EmbeddedDriverTrackingResult>).detail;
+
+      if (
+        !result ||
+        !["tracking_start", "tracking_stop", "tracking_terminal"].includes(
+          result.request || "",
+        ) ||
+        typeof result.active !== "boolean" ||
+        typeof result.message !== "string" ||
+        result.message.length > 240
+      ) {
+        return;
+      }
+
+      if (result.request === "tracking_terminal") {
+        return;
+      }
+
+      const stopped = result.request === "tracking_stop" && result.ok === true;
+      const active = result.request === "tracking_start" && result.active === true;
+
+      setDriverLiveLocation((currentState) => ({
+        ...currentState,
+        action: "idle",
+        feedback: {
+          tone: stopped || active ? "success" : "error",
+          text: result.message || "Tracking action could not be completed.",
+        },
+        permissionState: active ? "granted" : currentState.permissionState,
+        retryAction: stopped || active
+          ? null
+          : result.request === "tracking_stop"
+            ? "stop"
+            : "share",
+        sharingState: stopped ? "stopped" : active ? "active" : "inactive",
+        staleState: active ? "active" : "inactive",
+      }));
+
+      if (active) {
+        addActivity(
+          "Location sharing started",
+          "Native background location is sharing for this assigned job only.",
+        );
+      } else if (stopped) {
+        addActivity(
+          "Location stopped",
+          "Native background location was stopped for this assigned job.",
+        );
+      }
+    };
+
+    const handleNativeNotificationResult = (event: Event) => {
+      const result = (
+        event as CustomEvent<EmbeddedDriverNativeNotificationResult>
+      ).detail;
+
+      if (
+        !result ||
+        !["denied", "enabled", "failed"].includes(result.state || "")
+      ) {
+        return;
+      }
+
+      setDetailsFeedback({
+        tone: "success",
+        text: result.ok === true && result.state === "enabled"
+          ? "Driver details saved and job acknowledged. Job alerts are enabled in Prestige Driver."
+          : "Driver details saved and job acknowledged. Job alerts are not enabled; check Messages & Updates in this job.",
+      });
+    };
+
+    window.addEventListener(
+      "prestige-driver-native-tracking-result",
+      handleNativeTrackingResult,
+    );
+    window.addEventListener(
+      "prestige-driver-native-notification-result",
+      handleNativeNotificationResult,
+    );
+    return () => {
+      window.removeEventListener(
+        "prestige-driver-native-tracking-result",
+        handleNativeTrackingResult,
+      );
+      window.removeEventListener(
+        "prestige-driver-native-notification-result",
+        handleNativeNotificationResult,
+      );
+    };
+  }, [embeddedDriverApp]);
+
+  useEffect(() => {
+    if (pageState.kind !== "ready" || !acknowledged) {
+      return;
+    }
+
+    requestEmbeddedNativeNotificationsOnce();
+  }, [acknowledged, pageState.kind, requestEmbeddedNativeNotificationsOnce]);
 
   function updateDriverDetail(field: keyof DriverDetails, value: string) {
     setDetailsFeedback(null);
@@ -1301,9 +1678,13 @@ export default function DriverJobPage() {
       text: "Saving driver details...",
     });
 
-    const deviceAlertPreparation = await prepareDriverDeviceAlert(
-      driverDeviceAlertReadiness,
-    );
+    const deviceAlertPreparation = embeddedDriverApp
+      ? {
+          permission: "not_requested" as const,
+          registration: null,
+          subscription: null,
+        }
+      : await prepareDriverDeviceAlert(driverDeviceAlertReadiness);
 
     try {
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
@@ -1346,7 +1727,7 @@ export default function DriverJobPage() {
       setStatusFeedback(null);
       setWorkflowStatus(result.payload.status || "assigned");
       setPageState({ kind: "ready", job: result.payload });
-      const driverPortalReady =
+      const driverPortalReady = !embeddedDriverApp &&
         result.driver_portal?.enrolled === true &&
         typeof result.driver_portal.link_key === "string" &&
         /^[0-9a-f]{64}$/.test(result.driver_portal.link_key);
@@ -1354,7 +1735,7 @@ export default function DriverJobPage() {
       if (driverPortalReady && result.driver_portal?.link_key) {
         await rememberAcknowledgedDriverPortalLink(result.driver_portal.link_key).catch(() => undefined);
       }
-      const deviceAlertsRegistered =
+      const deviceAlertsRegistered = !embeddedDriverApp &&
         result.device_alerts?.subscription_registered === true &&
         typeof result.device_alerts.link_key === "string" &&
         Boolean(deviceAlertPreparation.registration);
@@ -1374,14 +1755,20 @@ export default function DriverJobPage() {
         ? " Device alerts are enabled on this device."
         : driverDeviceAlertReadiness.ready
           ? deviceAlertPreparation.permission === "denied"
-            ? " Device alerts were not allowed; reopen this page to check App Updates."
-            : " Device alerts could not be enabled; reopen this page to check App Updates."
+            ? " Device alerts were not allowed; reopen this page to check Messages & Updates."
+            : " Device alerts could not be enabled; reopen this page to check Messages & Updates."
           : "";
       const driverPortalFeedback = driverPortalReady
         ? " Driver Portal is ready on this device."
         : "";
+      const nativeNotificationRequested = requestEmbeddedNativeNotificationsOnce();
       setDetailsFeedback(
-        deviceAlertFeedback || driverPortalFeedback
+        nativeNotificationRequested
+          ? {
+              tone: "success",
+              text: "Driver details saved and job acknowledged. Enabling job alerts in Prestige Driver...",
+            }
+          : deviceAlertFeedback || driverPortalFeedback
           ? {
               tone: "success",
               text: `Driver details saved and job acknowledged.${driverPortalFeedback}${deviceAlertFeedback}`,
@@ -1397,6 +1784,71 @@ export default function DriverJobPage() {
       });
     } finally {
       setSavingDriverDetails(false);
+    }
+  }
+
+  async function createDriverAccount() {
+    if (
+      !acknowledged ||
+      !token ||
+      driverAccountSetup.saving ||
+      driverAccountSetup.stage !== "password"
+    ) return;
+
+    setDriverAccountSetup((current) => ({ ...current, feedback: null, saving: true }));
+    try {
+      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/account`, {
+        body: JSON.stringify({
+          email: driverAccountSetup.email,
+          password: driverAccountSetup.password,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-driver-purpose": "driver-account-create",
+        },
+        method: "POST",
+      });
+      const result = await response.json().catch(() => null) as {
+        account_created?: boolean;
+        ok?: boolean;
+        reason?: string;
+      } | null;
+
+      if (!response.ok || result?.ok !== true || result.account_created !== true) {
+        const message = result?.reason === "account_exists"
+          ? "A Driver account already exists for this driver or Job Link. Sign in from Prestige Driver."
+          : result?.reason === "invalid_input"
+            ? "Use a valid email and a password of at least 12 characters with uppercase, lowercase, number and symbol."
+            : result?.reason === "not_configured"
+              ? "Driver account creation is not enabled yet. Continue reporting with this Job Link."
+              : "Driver account could not be created. Continue reporting with this Job Link and contact Admin.";
+        setDriverAccountSetup((current) => ({
+          ...current,
+          feedback: { tone: "error", text: message },
+          saving: false,
+        }));
+        return;
+      }
+
+      setDriverAccountSetup((current) => ({
+        ...current,
+        feedback: {
+          tone: "success",
+          text: "Driver account created. The first sign-in inside Prestige Driver will bind it to that phone. This Job Link remains available for browser reporting.",
+        },
+        password: "",
+        saving: false,
+        status: "created",
+      }));
+    } catch {
+      setDriverAccountSetup((current) => ({
+        ...current,
+        feedback: {
+          tone: "error",
+          text: "Driver account could not be created. Continue reporting with this Job Link and contact Admin.",
+        },
+        saving: false,
+      }));
     }
   }
 
@@ -1433,8 +1885,11 @@ export default function DriverJobPage() {
 
       if (result.action === "authorize") {
         const googleConsentUrl = safeGoogleConsentUrl(result.google_consent_url);
+        const calendarNavigationUrl = embeddedDriverApp
+          ? safeDriverNativeCalendarOauthStartUrl(googleConsentUrl)
+          : googleConsentUrl;
 
-        if (!googleConsentUrl) {
+        if (!calendarNavigationUrl) {
           setDriverCalendar((current) => ({
             ...current,
             action: "idle",
@@ -1446,7 +1901,7 @@ export default function DriverJobPage() {
           return;
         }
 
-        window.location.assign(googleConsentUrl);
+        window.location.assign(calendarNavigationUrl);
         return;
       }
 
@@ -1523,55 +1978,6 @@ export default function DriverJobPage() {
     }
   }
 
-  function driverLiveLocationRoute() {
-    return `/api/driver-job/${encodeURIComponent(token)}/live-location`;
-  }
-
-  async function checkDriverLiveLocationReadiness() {
-    try {
-      const response = await fetch(driverLiveLocationRoute(), {
-        cache: "no-store",
-        method: "GET",
-      });
-      const result = await response.json() as DriverLiveLocationApiResponse;
-
-      if (!response.ok || !result.ok || result.customerVisible !== false || result.external_send !== false) {
-        setDriverLiveLocation((currentState) => ({
-          ...currentState,
-          action: "idle",
-          feedback: {
-            tone: "error",
-            text: "Dispatch has not opened live location for this job.",
-          },
-          sharingState: "inactive",
-          staleState: "inactive",
-        }));
-        return false;
-      }
-
-      const sharingState = result.sharing_state === "active" ? "active" : "inactive";
-
-      setDriverLiveLocation((currentState) => ({
-        ...currentState,
-        lastSharedAt: result.last_shared_at || currentState.lastSharedAt,
-        sharingState,
-        staleState: result.sharing_state === "stale" ? "stale" : sharingState === "active" ? "active" : "inactive",
-      }));
-
-      return true;
-    } catch {
-      setDriverLiveLocation((currentState) => ({
-        ...currentState,
-        action: "idle",
-        feedback: {
-          tone: "error",
-          text: "Location sharing readiness failed. Contact dispatch.",
-        },
-      }));
-      return false;
-    }
-  }
-
   async function requestDriverLiveLocationPosition() {
     if (!("geolocation" in navigator)) {
       setDriverLiveLocation((currentState) => ({
@@ -1579,9 +1985,10 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Location is not available in this browser.",
+          text: "OTW is saved. Location is unavailable. Tap Retry Share Location.",
         },
         permissionState: "unavailable",
+        retryAction: "share",
       }));
       return null;
     }
@@ -1603,9 +2010,10 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Location permission was not granted. Share only when you approve browser location.",
+          text: "OTW saved. Location not allowed. Enable Location, then tap Retry Share Location.",
         },
         permissionState: "denied",
+        retryAction: "share",
       }));
       return null;
     }
@@ -1651,8 +2059,9 @@ export default function DriverJobPage() {
           action: "idle",
           feedback: {
             tone: "error",
-            text: "Location sharing was not accepted. Contact dispatch.",
+            text: "OTW is saved. Live location could not start. Tap Retry Share Location.",
           },
+          retryAction: "share",
           sharingState: "inactive",
           staleState: "inactive",
         }));
@@ -1673,6 +2082,7 @@ export default function DriverJobPage() {
           : currentState.feedback,
         lastSharedAt: sharedAt,
         permissionState: "granted",
+        retryAction: null,
         sharingState: "active",
         staleState: "active",
       }));
@@ -1692,8 +2102,9 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Location sharing failed. Contact dispatch.",
+          text: "OTW is saved. Live location could not start. Tap Retry Share Location.",
         },
+        retryAction: "share",
         sharingState: "inactive",
         staleState: "inactive",
       }));
@@ -1773,11 +2184,20 @@ export default function DriverJobPage() {
       ...currentState,
       action: "sharing",
       feedback: null,
+      retryAction: null,
     }));
 
     const ready = await checkDriverLiveLocationReadiness();
 
     if (!ready) {
+      return;
+    }
+
+    if (
+      embeddedDriverApp &&
+      isVerifiedEmbeddedDriverApp() &&
+      postEmbeddedDriverBridgeMessage({ type: "tracking_start" })
+    ) {
       return;
     }
 
@@ -1788,7 +2208,7 @@ export default function DriverJobPage() {
     }
 
     const posted = await postDriverLiveLocationPosition(position, {
-      feedbackText: "Live location is sharing for this job. Keep this page open; dispatch map updates automatically.",
+      feedbackText: "Sharing live location. Keep this app open.",
       logActivity: true,
       stopOnFailure: true,
     });
@@ -1817,6 +2237,14 @@ export default function DriverJobPage() {
       feedback: null,
     }));
 
+    if (
+      embeddedDriverApp &&
+      isVerifiedEmbeddedDriverApp() &&
+      postEmbeddedDriverBridgeMessage({ type: "tracking_stop" })
+    ) {
+      return;
+    }
+
     try {
       const response = await fetch(driverLiveLocationRoute(), {
         cache: "no-store",
@@ -1830,10 +2258,11 @@ export default function DriverJobPage() {
           action: "idle",
           feedback: {
             tone: "error",
-            text: "Local sharing stopped, but dispatch cleanup failed. Contact dispatch.",
+            text: "Sharing stopped on this phone, but map cleanup failed. Tap Retry Stop Sharing.",
           },
-          sharingState: "inactive",
-          staleState: "inactive",
+          retryAction: "stop",
+          sharingState: "active",
+          staleState: "stale",
         }));
         return;
       }
@@ -1843,8 +2272,9 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "success",
-          text: "Location sharing stopped for this job.",
+          text: "Location sharing stopped. OTW remains saved.",
         },
+        retryAction: null,
         sharingState: "stopped",
         staleState: "inactive",
       }));
@@ -1855,10 +2285,11 @@ export default function DriverJobPage() {
         action: "idle",
         feedback: {
           tone: "error",
-          text: "Local sharing stopped, but dispatch cleanup failed. Contact dispatch.",
+          text: "Sharing stopped on this phone, but map cleanup failed. Tap Retry Stop Sharing.",
         },
-        sharingState: "inactive",
-        staleState: "inactive",
+        retryAction: "stop",
+        sharingState: "active",
+        staleState: "stale",
       }));
     }
   }
@@ -1985,7 +2416,7 @@ export default function DriverJobPage() {
 
   async function updateStatus(nextStatus: string, label: string, displayLabel = label) {
     if (!token || pageState.kind !== "ready") {
-      return;
+      return false;
     }
 
     if (!acknowledged) {
@@ -1994,7 +2425,7 @@ export default function DriverJobPage() {
         tone: "error",
         text: "Save & Acknowledge Job before updating status.",
       });
-      return;
+      return false;
     }
 
     const transitionGuard = guardDriverJobStatusTransition({
@@ -2009,7 +2440,7 @@ export default function DriverJobPage() {
         tone: "error",
         text: transitionGuard.message,
       });
-      return;
+      return false;
     }
 
     setUpdatingStatus(label);
@@ -2037,7 +2468,7 @@ export default function DriverJobPage() {
           tone: "error",
           text: blockedMessages[blockedReason],
         });
-        return;
+        return false;
       }
 
       if (!response.ok) {
@@ -2046,7 +2477,7 @@ export default function DriverJobPage() {
           tone: "error",
           text: blockedMessages.unavailable,
         });
-        return;
+        return false;
       }
 
       const nextStatusText = statusDisplay(result.payload.status, result.payload.statusLabel);
@@ -2063,38 +2494,88 @@ export default function DriverJobPage() {
           },
         }));
       }
+      if (
+        result.payload.status === "completed" &&
+        embeddedDriverApp &&
+        isVerifiedEmbeddedDriverApp()
+      ) {
+        postEmbeddedDriverBridgeMessage({ type: "tracking_terminal" });
+      }
       setStatusFeedback({
         target: label,
         tone: "success",
         text: `Status updated to ${nextStatusText}.`,
       });
+      return true;
     } catch {
       setStatusFeedback({
         target: label,
         tone: "error",
         text: "Status update failed. Please try again or contact dispatch.",
       });
+      return false;
     } finally {
       setUpdatingStatus("");
     }
   }
 
-  const driverLiveLocationControlsDisabled =
-    driverLiveLocation.action !== "idle" ||
-    pageState.kind !== "ready";
-  const driverLiveLocationShareDisabled =
-    driverLiveLocationControlsDisabled || driverLiveLocation.sharingState === "active";
-  const driverLiveLocationStopDisabled =
-    driverLiveLocationControlsDisabled || driverLiveLocation.sharingState !== "active";
-  const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";
-  const driverLiveLocationHelperText =
-    "Share only when dispatch opens live location for this job. Keep this page open; Stop Sharing ends it.";
-  const driverLiveLocationSharingLabel =
-    driverLiveLocation.sharingState === "active"
-      ? "Sharing"
-      : driverLiveLocation.sharingState === "stopped"
-        ? "Stopped"
-        : "Off";
+  async function handleOtwLiveLocationControl() {
+    if (driverOtwLiveLocationActionRef.current || !token || pageState.kind !== "ready") {
+      return;
+    }
+
+    driverOtwLiveLocationActionRef.current = true;
+
+    try {
+      if (!driverWorkflowHasReachedOtw(workflowStatus)) {
+        const otwSaved = await updateStatus("OTW", "OTW", "I'm on the way");
+
+        if (!otwSaved) {
+          return;
+        }
+
+        await shareDriverLiveLocation();
+        return;
+      }
+
+      if (
+        driverLiveLocation.retryAction === "stop" ||
+        driverLiveLocation.sharingState === "active"
+      ) {
+        await stopDriverLiveLocation();
+        return;
+      }
+
+      await shareDriverLiveLocation();
+    } finally {
+      driverOtwLiveLocationActionRef.current = false;
+    }
+  }
+
+  const driverOtwRecorded = driverWorkflowHasReachedOtw(workflowStatus);
+  const driverOtwLiveLocationControlDisabled =
+    pageState.kind !== "ready" ||
+    Boolean(updatingStatus) ||
+    driverLiveLocation.action !== "idle";
+  const driverOtwLiveLocationControlLabel =
+    updatingStatus === "OTW"
+      ? "Saving OTW…"
+      : driverLiveLocation.action === "sharing"
+        ? "Starting Sharing…"
+        : driverLiveLocation.action === "stopping"
+          ? "Stopping…"
+          : !driverOtwRecorded
+            ? "OTW"
+            : driverLiveLocation.retryAction === "stop"
+              ? "Retry Stop Sharing"
+              : driverLiveLocation.sharingState === "active"
+                ? "Stop Sharing"
+                : driverLiveLocation.retryAction === "share"
+                  ? "Retry Share Location"
+                  : "Share Location Again";
+  const driverOtwLiveLocationFeedback =
+    driverLiveLocation.feedback ||
+    (statusFeedback?.target === "OTW" ? statusFeedback : null);
   const driverOtsPhotoProofReady =
     pageState.kind === "ready" &&
     acknowledged &&
@@ -2115,11 +2596,14 @@ export default function DriverJobPage() {
         <header className="space-y-1 border-b border-stone-200 pb-3">
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
+          <PublicAppBuildMarker />
           <p
             className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
             data-driver-job-mobile-web-note="true"
           >
-            Mobile web driver card. Keep this link private and use it only for this assigned job.
+            {embeddedDriverApp
+              ? "Prestige Driver job card. Keep this link private and use it only for this assigned job."
+              : "Mobile web driver card. Keep this link private and use it only for this assigned job."}
           </p>
         </header>
 
@@ -2158,12 +2642,17 @@ export default function DriverJobPage() {
                   className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-current-status="true"
                 >
-                  {statusDisplay(pageState.job.status, pageState.job.statusLabel)}
+                  {embeddedDriverApp
+                    ? driverSafeStatusLabel(pageState.job.status)
+                    : statusDisplay(pageState.job.status, pageState.job.statusLabel)}
                 </span>
               </div>
 
               <dl className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
-                {detailRows(pageState.job).map((detail) => (
+                {(embeddedDriverApp
+                  ? embeddedDriverDetailRows(pageState.job)
+                  : detailRows(pageState.job)
+                ).map((detail) => (
                   <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-2 text-sm" key={detail.label}>
                     <dt className="font-semibold text-slate-500">{detail.label}</dt>
                     <dd className="min-w-0 break-words text-slate-950">{displayValue(detail.value)}</dd>
@@ -2192,11 +2681,56 @@ export default function DriverJobPage() {
                 className="mt-2 grid gap-1.5 text-sm font-medium leading-6 text-slate-700"
                 data-driver-job-workflow-handoff-list="true"
               >
+                {embeddedDriverApp ? (
+                  <>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      This private job stays inside Prestige Driver.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap Save & Acknowledge Job after confirming driver and vehicle details.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap OTW to save status and start native background location sharing.
+                    </li>
+                  </>
+                ) : (
+                  <>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      {"Open the private link in Safari. Tap Save & Acknowledge Job."}
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Install Driver Portal from your browser for best results.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Add to Home Screen from this acknowledged page.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Open Driver Portal from your Home Screen.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Already installed before saving? Add it again from this acknowledged page.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap Enable Job Alerts. Allow notifications.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.
+                    </li>
+                  </>
+                )}
+                <li className="border-l-2 border-slate-200 pl-3">
+                  {embeddedDriverApp
+                    ? "Use Stop Sharing when native background location is no longer needed."
+                    : "Tap OTW to save status and start sharing. Allow location."}
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Allow camera/photos only for OTS photo.
+                </li>
                 <li className="border-l-2 border-slate-200 pl-3">
                   Review pickup time, pickup place, drop-off, route, and job notes before starting.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
-                  Confirm driver and vehicle details once, then use the status buttons only when ready.
+                  Use the status buttons only when ready.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
                   Use Report Issue when admin needs an in-app alert.
@@ -2216,7 +2750,7 @@ export default function DriverJobPage() {
               data-driver-job-app-updates="true"
             >
               <h2 id="driver-app-updates-heading" className="text-base font-semibold text-slate-900">
-                App Updates
+                Messages &amp; Updates
               </h2>
               <div className="space-y-2 rounded-md border border-stone-200 bg-white p-2.5">
                 <p className="text-sm font-medium leading-6 text-slate-600">
@@ -2413,11 +2947,15 @@ export default function DriverJobPage() {
                     className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     data-driver-job-save-acknowledge="true"
                     data-driver-primary-step="save-acknowledge"
-                    disabled={savingDriverDetails}
+                    disabled={savingDriverDetails || driverDetailsSavedAndUnchanged}
                     onClick={saveAndAcknowledgeJob}
                     type="button"
                   >
-                    {savingDriverDetails ? "Saving..." : "Save & Acknowledge Job"}
+                    {savingDriverDetails
+                      ? "Saving..."
+                      : driverDetailsSavedAndUnchanged
+                        ? "Saved & Acknowledged"
+                        : "Save & Acknowledge Job"}
                   </button>
                   {detailsFeedback ? (
                     <p
@@ -2428,15 +2966,23 @@ export default function DriverJobPage() {
                       {detailsFeedback.text}
                     </p>
                   ) : null}
-                  <p
-                    className="text-xs font-medium leading-5 text-slate-500"
-                    data-driver-job-device-alert-helper="true"
-                  >
-                    This same action enables Driver Job alerts on this device when supported and allowed.
-                  </p>
-                  <p className="text-xs font-medium leading-5 text-slate-500" data-driver-portal-enrolment-helper="true">
-                    When securely configured, acknowledgement also enrols this device in Driver Portal.
-                  </p>
+                  {embeddedDriverApp ? (
+                    <p className="text-xs font-medium leading-5 text-slate-500">
+                      This saves the same acknowledgement used by Dispatch and Driver Reports.
+                    </p>
+                  ) : (
+                    <>
+                      <p
+                        className="text-xs font-medium leading-5 text-slate-500"
+                        data-driver-job-device-alert-helper="true"
+                      >
+                        This same action enables Driver Job alerts on this device when supported and allowed.
+                      </p>
+                      <p className="text-xs font-medium leading-5 text-slate-500" data-driver-portal-enrolment-helper="true">
+                        When securely configured, acknowledgement also enrols this device in Driver Portal.
+                      </p>
+                    </>
+                  )}
                 </div>
                 {savedDriverDetails ? (
                   <div
@@ -2462,6 +3008,127 @@ export default function DriverJobPage() {
                         <dd className="min-w-0 break-words">{displayValue(savedDriverDetails.vehicleModel)}</dd>
                       </div>
                     </dl>
+                  </div>
+                ) : null}
+                {acknowledged ? (
+                  <div
+                    className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
+                    data-driver-account-setup="true"
+                  >
+                    <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                    <p className="text-xs font-medium leading-5 text-violet-900">
+                      Optional. This acknowledged Job Link can create one account only. You may continue every
+                      reporting action in this browser without installing Prestige Driver.
+                    </p>
+                    {driverAccountSetup.status !== "created" ? (
+                      <>
+                        {driverAccountSetup.stage === "email" ? (
+                          <form
+                            className="space-y-2"
+                            data-driver-account-email-step="true"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              setDriverAccountSetup((current) => ({
+                                ...current,
+                                feedback: null,
+                                stage: "password",
+                              }));
+                            }}
+                          >
+                            <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                              <span>Email</span>
+                              <input
+                                autoCapitalize="none"
+                                autoComplete="email"
+                                autoCorrect="off"
+                                className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                                inputMode="email"
+                                name="email"
+                                onChange={(event) => setDriverAccountSetup((current) => ({
+                                  ...current,
+                                  email: event.target.value,
+                                  feedback: null,
+                                }))}
+                                required
+                                spellCheck={false}
+                                type="email"
+                                value={driverAccountSetup.email}
+                              />
+                            </label>
+                            <button
+                              className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white"
+                              type="submit"
+                            >Continue</button>
+                          </form>
+                        ) : null}
+                        {driverAccountSetup.stage === "password" ? (
+                          <div className="space-y-2">
+                            <div className="rounded-md border border-violet-200 bg-white px-3 py-2 text-sm text-violet-950">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Email</p>
+                              <div className="flex items-center justify-between gap-2">
+                                <p
+                                  className="min-w-0 break-all font-semibold"
+                                  data-driver-account-confirmed-email="true"
+                                >
+                                  {driverAccountSetup.email}
+                                </p>
+                                <button
+                                  className="shrink-0 rounded-md border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-950"
+                                  onClick={() => setDriverAccountSetup((current) => ({
+                                    ...current,
+                                    feedback: null,
+                                    password: "",
+                                    stage: "email",
+                                  }))}
+                                  type="button"
+                                >
+                                  Change email
+                                </button>
+                              </div>
+                            </div>
+                            <form
+                              className="space-y-2"
+                              data-driver-account-creation-form="true"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void createDriverAccount();
+                              }}
+                            >
+                              <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                                <span>Password</span>
+                                <input
+                                  autoComplete="new-password"
+                                  className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                                  name="new-password"
+                                  onChange={(event) => setDriverAccountSetup((current) => ({
+                                    ...current,
+                                    feedback: null,
+                                    password: event.target.value,
+                                  }))}
+                                  type="password"
+                                  value={driverAccountSetup.password}
+                                />
+                              </label>
+                              <button
+                                className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
+                                disabled={driverAccountSetup.saving}
+                                type="submit"
+                              >
+                                {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
+                              </button>
+                            </form>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {driverAccountSetup.feedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverAccountSetup.feedback.tone)}`}
+                      >
+                        {driverAccountSetup.feedback.text}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
                 {acknowledged ? (
@@ -2522,7 +3189,7 @@ export default function DriverJobPage() {
                     ) : null}
                   </div>
                 ) : null}
-                {driverPortalEnrolled ? (
+                {driverPortalEnrolled && !embeddedDriverApp ? (
                   <div
                     className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
                     data-driver-portal-entry="enrolled"
@@ -2545,93 +3212,6 @@ export default function DriverJobPage() {
             </section>
 
             <section
-              className="order-[82] space-y-2"
-              aria-labelledby="driver-live-location-heading"
-              data-driver-live-location-consent-ui={driverLiveLocationUiState}
-              data-driver-primary-step="live-location-consent"
-            >
-              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2.5">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2 id="driver-live-location-heading" className="text-base font-semibold text-slate-900">
-                      Live Location
-                    </h2>
-                    <p
-                      className="mt-1 text-sm font-medium leading-5 text-slate-600"
-                      data-driver-live-location-helper="true"
-                    >
-                      {driverLiveLocationHelperText}
-                    </p>
-                  </div>
-                  <span
-                    className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
-                    data-driver-live-location-sharing-state={driverLiveLocation.sharingState}
-                  >
-                    {driverLiveLocationSharingLabel}
-                  </span>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
-                    data-driver-live-location-share-button={driverLiveLocationUiState}
-                    disabled={driverLiveLocationShareDisabled}
-                    onClick={shareDriverLiveLocation}
-                    type="button"
-                  >
-                    {driverLiveLocation.action === "sharing" ? "Sharing..." : "Share Location"}
-                  </button>
-                  <button
-                    className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
-                    data-driver-live-location-stop-button={driverLiveLocationUiState}
-                    disabled={driverLiveLocationStopDisabled}
-                    onClick={stopDriverLiveLocation}
-                    type="button"
-                  >
-                    {driverLiveLocation.action === "stopping" ? "Stopping..." : "Stop Sharing"}
-                  </button>
-                </div>
-                {driverLiveLocation.feedback ? (
-                  <p
-                    aria-live="polite"
-                    className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverLiveLocation.feedback.tone)}`}
-                    data-driver-live-location-feedback="true"
-                  >
-                    {driverLiveLocation.feedback.text}
-                  </p>
-                ) : null}
-                <dl className="grid gap-1.5 text-xs font-semibold text-slate-600 sm:grid-cols-3">
-                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
-                    <dt className="uppercase text-slate-500">Permission</dt>
-                    <dd
-                      className="mt-1 text-slate-800"
-                      data-driver-live-location-permission-state={driverLiveLocation.permissionState}
-                    >
-                      {driverLiveLocationPermissionLabel(driverLiveLocation.permissionState)}
-                    </dd>
-                  </div>
-                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
-                    <dt className="uppercase text-slate-500">Last shared</dt>
-                    <dd
-                      className="mt-1 text-slate-800"
-                      data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? "shared" : "not_shared"}
-                    >
-                      {formatDriverLiveLocationTime(driverLiveLocation.lastSharedAt)}
-                    </dd>
-                  </div>
-                  <div className="rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
-                    <dt className="uppercase text-slate-500">State</dt>
-                    <dd
-                      className="mt-1 text-slate-800"
-                      data-driver-live-location-stale-state={driverLiveLocation.staleState}
-                    >
-                      {driverLiveLocationStaleLabel(driverLiveLocation.staleState)}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </section>
-
-            <section
               className="order-3 flex flex-col gap-2 pb-4"
               aria-labelledby="driver-status-heading"
               data-driver-primary-step="status-workflow"
@@ -2642,16 +3222,45 @@ export default function DriverJobPage() {
               <div className="order-1 grid gap-2 md:grid-cols-4" data-driver-primary-step="status-buttons">
                 {statusActions.map((statusAction) => (
                   <div className="space-y-2" key={statusAction.label}>
-                    <button
-                      className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-driver-job-status={statusAction.label}
-                      disabled={Boolean(updatingStatus)}
-                      onClick={() => updateStatus(statusAction.value, statusAction.label, statusAction.displayLabel)}
-                      type="button"
-                    >
-                      {updatingStatus === statusAction.label ? "Updating..." : statusAction.label}
-                    </button>
-                    {statusFeedback?.target === statusAction.label ? (
+                    {statusAction.label === "OTW" ? (
+                      <button
+                        aria-label={driverOtwLiveLocationControlLabel}
+                        className="h-11 w-full rounded-md border border-sky-400 bg-sky-50 px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-driver-job-status="OTW"
+                        data-driver-otw-live-location-control="true"
+                        data-driver-otw-live-location-state={
+                          driverLiveLocation.action !== "idle"
+                            ? driverLiveLocation.action
+                            : driverLiveLocation.retryAction || driverLiveLocation.sharingState
+                        }
+                        disabled={driverOtwLiveLocationControlDisabled}
+                        onClick={handleOtwLiveLocationControl}
+                        type="button"
+                      >
+                        {driverOtwLiveLocationControlLabel}
+                      </button>
+                    ) : (
+                      <button
+                        className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-driver-job-status={statusAction.label}
+                        disabled={Boolean(updatingStatus) || driverLiveLocation.action !== "idle"}
+                        onClick={() => updateStatus(statusAction.value, statusAction.label, statusAction.displayLabel)}
+                        type="button"
+                      >
+                        {updatingStatus === statusAction.label ? "Updating..." : statusAction.label}
+                      </button>
+                    )}
+                    {statusAction.label === "OTW" && driverOtwLiveLocationFeedback ? (
+                      <p
+                        aria-live="polite"
+                        className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverOtwLiveLocationFeedback.tone)}`}
+                        data-driver-job-status-message="OTW"
+                        data-driver-live-location-feedback="true"
+                        data-driver-otw-live-location-feedback="true"
+                      >
+                        {driverOtwLiveLocationFeedback.text}
+                      </p>
+                    ) : statusAction.label !== "OTW" && statusFeedback?.target === statusAction.label ? (
                       <p
                         aria-live="polite"
                         className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(statusFeedback.tone)}`}
@@ -2684,18 +3293,45 @@ export default function DriverJobPage() {
                       {driverOtsPhotoProofStatusLabel}
                     </span>
                   </div>
-                  <label className="block space-y-1 text-sm font-semibold text-sky-950">
-                    <span>Photo</span>
+                  <div className="space-y-1 text-sm font-semibold text-sky-950">
+                    <span className="block">Photo</span>
+                    <label
+                      aria-disabled={driverOtsPhotoProof.action !== "idle"}
+                      className={`flex h-11 w-full items-stretch overflow-hidden rounded-md border border-sky-300 bg-white text-sm font-semibold text-slate-900 ${
+                        driverOtsPhotoProof.action !== "idle"
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer"
+                      }`}
+                      data-driver-job-ots-photo-proof-control="true"
+                      htmlFor="driver-ots-photo-proof-input"
+                    >
+                      <span
+                        className="flex shrink-0 items-center border-r border-sky-300 bg-sky-100 px-3 text-sky-950"
+                        data-driver-job-ots-photo-proof-shoot="true"
+                      >
+                        Shoot
+                      </span>
+                      <span
+                        aria-live="polite"
+                        className="flex min-w-0 items-center truncate px-3 text-xs font-semibold text-sky-900"
+                        data-driver-job-ots-photo-proof-selected-file="true"
+                      >
+                        {driverOtsPhotoProof.selectedFileName || "No photo selected."}
+                      </span>
+                    </label>
                     <input
                       accept="image/heic,image/heif,image/jpeg,image/png,image/webp,image/*"
+                      aria-label="OTS photo"
                       capture="environment"
-                      className="block w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 file:mr-3 file:rounded file:border-0 file:bg-sky-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-sky-950"
+                      className="sr-only"
                       data-driver-job-ots-photo-proof-input="true"
+                      disabled={driverOtsPhotoProof.action !== "idle"}
+                      id="driver-ots-photo-proof-input"
                       onChange={handleDriverOtsPhotoFileChange}
                       ref={driverOtsPhotoProofInputRef}
                       type="file"
                     />
-                  </label>
+                  </div>
                   <button
                     className="h-11 w-full rounded-md border border-sky-400 bg-white px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                     data-driver-job-ots-photo-proof-upload="true"

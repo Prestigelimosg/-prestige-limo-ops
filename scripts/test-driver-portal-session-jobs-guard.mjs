@@ -267,6 +267,27 @@ try {
     "Tampered Driver Portal sessions must fail closed.",
   );
 
+  const accountId = "77777777-7777-4777-8777-777777777777";
+  const deviceIdHash = "a".repeat(64);
+  const accountCookie = harness.session.issueDriverPortalAccountSession({
+    accountId,
+    deviceIdHash,
+    driverId: 7,
+    env,
+    now,
+  });
+  assert.equal(typeof accountCookie, "string");
+  const accountSession = harness.session.resolveDriverPortalSession(cookiePair(accountCookie), { env, now });
+  assert.equal(accountSession.ok, true);
+  assert.deepEqual(accountSession.claims, {
+    accountId,
+    deviceIdHash,
+    driverId: 7,
+    expiresAt: now.getTime() + 30 * 24 * 60 * 60 * 1000,
+    issuedAt: now.getTime(),
+  });
+  assert.match(harness.session.clearDriverPortalSessionCookie(), /Max-Age=0/);
+
   const wrongDriverEnrollment = await harness.session.issueDriverPortalSessionForAcknowledgedToken({
     client,
     cookieHeader: cookiePair(enrolled.cookie),

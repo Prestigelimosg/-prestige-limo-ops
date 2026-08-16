@@ -120,25 +120,23 @@ for (const relatedGuard of [
   assertIncludes(preactivationSuite, relatedGuard, `related guard registration ${relatedGuard}`);
 }
 
-const driverConsentStart = driverJobPage.indexOf("data-driver-live-location-consent-ui={driverLiveLocationUiState}");
-assert.notEqual(driverConsentStart, -1, "Driver consent UI disabled scaffold must exist.");
-const driverConsentEnd = driverJobPage.indexOf("</section>", driverConsentStart);
-assert.notEqual(driverConsentEnd, -1, "Driver consent UI disabled scaffold must close.");
+const driverConsentStart = driverJobPage.indexOf('data-driver-otw-live-location-control="true"');
+assert.notEqual(driverConsentStart, -1, "Driver merged OTW/live-location control must exist.");
+const driverConsentEnd = driverJobPage.indexOf('data-driver-primary-step="report-issue"', driverConsentStart);
+assert.notEqual(driverConsentEnd, -1, "Driver merged OTW/live-location boundary must close.");
 const driverConsentUi = driverJobPage.slice(driverConsentStart, driverConsentEnd);
 
 for (const fragment of [
-  "data-driver-live-location-share-button={driverLiveLocationUiState}",
-  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
-  "data-driver-live-location-sharing-state={driverLiveLocation.sharingState}",
-  "data-driver-live-location-permission-state={driverLiveLocation.permissionState}",
-  "Share Location",
-  "Stop Sharing",
+  'data-driver-otw-live-location-control="true"',
 ]) {
-  assertIncludes(driverConsentUi, fragment, `driver consent disabled UI fragment ${fragment}`);
+  assertIncludes(driverConsentUi, fragment, `driver merged consent UI fragment ${fragment}`);
+}
+for (const label of ["Share Location Again", "Retry Share Location", "Stop Sharing", "Retry Stop Sharing"]) {
+  assertIncludes(driverJobPage, label, `driver merged consent UI label ${label}`);
 }
 
 for (const fragment of [
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "handleOtwLiveLocationControl",
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "navigator.geolocation.getCurrentPosition",

@@ -382,18 +382,33 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "function openNewBookingRequestNotificationReview(bookingReference: string)",
+  "async function openNewBookingRequestNotificationReview(bookingReference: string)",
   "New booking notification review helper",
 );
 assertIncludes(
   appPage,
-  "loadSelectedBooking(loadedRecord, { focusDriverJobLink: true });",
-  "New booking notification loads loaded booking record",
+  "const params = new URLSearchParams({ booking_reference: exactBookingReference });",
+  "New booking notification performs an exact booking-detail lookup",
 );
 assertIncludes(
   appPage,
-  "adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord)",
-  "New booking notification can load saved booking record",
+  'fetch(`/api/admin-bookings?${params.toString()}`',
+  "New booking notification reuses the guarded Admin booking route",
+);
+assertIncludes(
+  appPage,
+  '"x-prestige-admin-purpose": "admin-booking-persistence"',
+  "New booking notification retains the Admin booking purpose boundary",
+);
+assertIncludes(
+  appPage,
+  "adminBookingPersistenceRecordToCalendarBookingRecord(exactRequestRecord)",
+  "New booking notification converts the exact full saved record for Dispatch",
+);
+assertIncludes(
+  appPage,
+  "adminBookingRecordOverride: exactRequestRecord",
+  "New booking notification preserves the exact full Admin record while loading Dispatch",
 );
 assertIncludes(appPage, "Open request", "New booking notification row open label");
 assertExcludes(appPage, "Jump to request", "New booking notification row old jump label");

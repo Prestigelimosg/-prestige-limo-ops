@@ -322,7 +322,8 @@ for (const fragment of [
   "const calendarResponse = await fetch(",
   'const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`',
   "safeGoogleConsentUrl",
-  "window.location.assign(googleConsentUrl)",
+  "safeDriverNativeCalendarOauthStartUrl",
+  "window.location.assign(calendarNavigationUrl)",
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",
@@ -355,7 +356,7 @@ assertExcludes(driverPage, /credentials\s*:/, "driver page manual credentials");
 assertExcludes(driverPage, forbiddenClientAuthPattern, "driver page manual auth/header/env-token plumbing");
 assertExcludes(sourceWithoutDriverPaymentFilter(driverPage), forbiddenDriverVisiblePattern, "driver page forbidden visible/source fields");
 assertExcludes(driverPage, /localStorage|sessionStorage|document\.cookie|navigator\.credentials/i, "driver page browser credential storage");
-assertIncludes(driverPage, "driverLiveLocationUiState", "driver page live-location UI state gate");
+assertIncludes(driverPage, 'data-driver-otw-live-location-control="true"', "driver page merged OTW/live-location UI gate");
 assertIncludes(driverPage, "checkDriverLiveLocationReadiness", "driver page server readiness gate");
 assertIncludes(
   driverPage,

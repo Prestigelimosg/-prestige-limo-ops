@@ -159,7 +159,7 @@ assertIncludes(
 const driverAppUpdateRecordBlock = blockBetween(
   driverJobPage,
   "type DriverAppUpdateRecord = {",
-  "};\n\ntype DriverAppUpdateApiResponse",
+  "\n};",
 );
 
 for (const safeField of ["safe_message?: string | null;", "safe_title?: string | null;"]) {

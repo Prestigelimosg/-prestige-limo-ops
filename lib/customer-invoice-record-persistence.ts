@@ -1553,7 +1553,7 @@ export async function refreshAdminCustomerAmendedUnpaidInvoice(
   const { data: bookingData, error: bookingError } = await invoiceClient
     .from("bookings")
     .select(
-      "booking_reference, customer_id, public_booking_reference, service_type, route_type, route_summary, pickup_at, pickup_datetime, pickup_location, dropoff_location, flight_no, passenger_name, vehicle_type_or_category",
+      "booking_reference, customer_id, public_booking_reference, service_type, route_type, route_summary, pickup_at, pickup_datetime, pickup_location, dropoff_location, flight_no, passenger_name, vehicle_type_or_category, customer_price_amount, updated_at",
     )
     .eq("booking_reference", bookingReference)
     .eq("customer_id", customerId)
@@ -1565,16 +1565,104 @@ export async function refreshAdminCustomerAmendedUnpaidInvoice(
   const verifiedServiceType =
     safeText(verifiedBooking.service_type, 80) ||
     safeText(verifiedBooking.route_type, 80);
+  const verifiedUpdatedAt = safeText(verifiedBooking.updated_at, 160);
 
   if (
     bookingError ||
     verifiedBookingReference !== bookingReference ||
     verifiedCustomerId !== customerId ||
-    !verifiedServiceType
+    !verifiedServiceType ||
+    !verifiedUpdatedAt
   ) {
     return safeFailure(safeValidationError, 403);
   }
 
+  const matchingInvoiceBookingReferences = new Set(
+    [verifiedBookingReference, verifiedPublicReference].filter(
+      (reference): reference is string => Boolean(reference),
+    ),
+  );
+  const { data: invoiceRows, error: invoiceReadError } = await invoiceClient
+    .from(customerInvoiceRecordTableName)
+    .select(customerInvoiceSelect)
+    .eq("customer_id", customerId)
+    .eq("status", "Unpaid")
+    .eq("document_type", "invoice")
+    .eq("document_state", "issued");
+
+  if (invoiceReadError) {
+    return safeFailure(safeReadError, 503);
+  }
+
+  const matchingInvoices = asArray(invoiceRows)
+    .map((row) => toStoredRecord(asRecord(row)))
+    .filter((invoice): invoice is CustomerInvoiceStoredRecord => {
+      if (!invoice) {
+        return false;
+      }
+
+      return (
+        matchingInvoiceBookingReferences.has(invoice.reference) ||
+        invoice.lineItems.some((item) =>
+          item.bookingReference
+            ? matchingInvoiceBookingReferences.has(item.bookingReference)
+            : false,
+        )
+      );
+    });
+
+  if (matchingInvoices.length === 0) {
+    const reviewedAt = new Date().toISOString();
+    const { data: savedBookingData, error: savedBookingError } = await invoiceClient
+      .from("bookings")
+      .update({
+        customer_price_amount: amountCents / 100,
+        customer_price_override_reason: "Admin reviewed customer-folder price.",
+        updated_at: reviewedAt,
+      })
+      .eq("booking_reference", bookingReference)
+      .eq("customer_id", customerId)
+      .eq("updated_at", verifiedUpdatedAt)
+      .select("booking_reference, customer_id, customer_price_amount, updated_at")
+      .maybeSingle();
+    const savedBooking = asRecord(savedBookingData);
+    const savedReviewedAt = safeText(savedBooking.updated_at, 160);
+
+    if (savedBookingError) {
+      return safeFailure(safeWriteError, 500);
+    }
+
+    if (
+      safeText(savedBooking.booking_reference, 160) !== bookingReference ||
+      safeText(savedBooking.customer_id, 160) !== customerId ||
+      safeAmountCents(Math.round(Number(savedBooking.customer_price_amount) * 100)) !== amountCents ||
+      !savedReviewedAt ||
+      Date.parse(savedReviewedAt) !== Date.parse(reviewedAt)
+    ) {
+      return safeFailure(
+        "The booking changed before its reviewed customer price could be saved. Reload and review the latest booking.",
+        409,
+      );
+    }
+
+    return {
+      data: {
+        invoice: null,
+        linked: false,
+      },
+      ok: true,
+      version: customerInvoiceRecordVersion,
+    };
+  }
+
+  if (matchingInvoices.length !== 1) {
+    return safeFailure(
+      "More than one unpaid invoice contains this amended booking. No invoice was changed.",
+      409,
+    );
+  }
+
+  const [matchingInvoice] = matchingInvoices;
   const isDspBooking = ["DSP", "HOURLY"].includes(verifiedServiceType.toUpperCase());
   let dspStartedAt: string | null = null;
   let dspEndedAt: string | null = null;
@@ -1632,60 +1720,6 @@ export async function refreshAdminCustomerAmendedUnpaidInvoice(
     serviceType: verifiedServiceType,
     vehicleType: safeText(verifiedBooking.vehicle_type_or_category, 160),
   });
-
-  const matchingInvoiceBookingReferences = new Set(
-    [verifiedBookingReference, verifiedPublicReference].filter(
-      (reference): reference is string => Boolean(reference),
-    ),
-  );
-  const { data: invoiceRows, error: invoiceReadError } = await invoiceClient
-    .from(customerInvoiceRecordTableName)
-    .select(customerInvoiceSelect)
-    .eq("customer_id", customerId)
-    .eq("status", "Unpaid")
-    .eq("document_type", "invoice")
-    .eq("document_state", "issued");
-
-  if (invoiceReadError) {
-    return safeFailure(safeReadError, 503);
-  }
-
-  const matchingInvoices = asArray(invoiceRows)
-    .map((row) => toStoredRecord(asRecord(row)))
-    .filter((invoice): invoice is CustomerInvoiceStoredRecord => {
-      if (!invoice) {
-        return false;
-      }
-
-      return (
-        matchingInvoiceBookingReferences.has(invoice.reference) ||
-        invoice.lineItems.some((item) =>
-          item.bookingReference
-            ? matchingInvoiceBookingReferences.has(item.bookingReference)
-            : false,
-        )
-      );
-    });
-
-  if (matchingInvoices.length === 0) {
-    return {
-      data: {
-        invoice: null,
-        linked: false,
-      },
-      ok: true,
-      version: customerInvoiceRecordVersion,
-    };
-  }
-
-  if (matchingInvoices.length !== 1) {
-    return safeFailure(
-      "More than one unpaid invoice contains this amended booking. No invoice was changed.",
-      409,
-    );
-  }
-
-  const [matchingInvoice] = matchingInvoices;
   const matchingLineItemIndexes = matchingInvoice.lineItems.reduce<number[]>(
     (indexes, existingLineItem, index) => {
       if (

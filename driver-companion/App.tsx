@@ -1,12 +1,15 @@
+import * as WebBrowser from "expo-web-browser";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AppState,
   Button,
+  BackHandler,
   Linking,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import {
@@ -14,13 +17,43 @@ import {
   SafeAreaView,
   initialWindowMetrics,
 } from "react-native-safe-area-context";
+import {
+  WebView,
+  type WebViewMessageEvent,
+  type WebViewNavigation,
+} from "react-native-webview";
 
 import {
   DriverJobRequestError,
-  type DriverJobSummary,
-  loadDriverJobSummary,
-  parseDriverJobUrl,
+  productionOrigin,
+  registerNativeDriverNotifications,
+  unregisterNativeDriverNotifications,
 } from "./src/driver-job-contract";
+import {
+  driverNativeBiometricResultScript,
+  driverNativeNotificationResultScript,
+  driverTrackingResultScript,
+  embeddedDriverBridgeBootstrap,
+  parseDriverBridgeMessage,
+  parseDriverJobUrl,
+  parseNativeCalendarOauthStartUrl,
+  shouldAllowDriverWebViewNavigation,
+  type DriverTrackingBridgeMessage,
+} from "./src/driver-webview-bridge";
+import {
+  authenticateDriverAppUnlock,
+  enableDriverBiometricUnlock,
+  isDriverBiometricUnlockEnabled,
+  readOrCreateDriverInstallationId,
+} from "./src/driver-installation";
+import {
+  forgetNativeNotificationToken,
+  loadNativeDriverJob,
+  nativeNotificationJobKey,
+  readNativeNotificationToken,
+  rememberNativeDriverJob,
+  rememberNativeNotificationToken,
+} from "./src/native-notifications";
 import {
   readTrackingState,
   startDriverTracking,
@@ -32,15 +65,24 @@ type ScreenState = {
   active: boolean;
   jobUrl: string | null;
   message: string;
-  summary: DriverJobSummary | null;
+  navigationKey: number;
 };
 
 const initialScreenState: ScreenState = {
   active: false,
-  jobUrl: null,
-  message: "Paste the private Driver Job URL for the exact assigned job.",
-  summary: null,
+  jobUrl: `${productionOrigin}/driver-portal`,
+  message: "Driver Portal is ready.",
+  navigationKey: 0,
 };
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 function readableFailure(error: unknown) {
   if (error instanceof DriverJobRequestError) {
@@ -57,144 +99,467 @@ function readableFailure(error: unknown) {
     : "The request could not be completed.";
 }
 
+function baseDriverJobUrl(value: string) {
+  const job = parseDriverJobUrl(value);
+  return `${job.origin}/driver-job/${encodeURIComponent(job.token)}`;
+}
+
 export default function App() {
-  const [privateJobUrl, setPrivateJobUrl] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
+  const [installationId, setInstallationId] = useState("");
+  const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
+  const biometricPromptBusyRef = useRef(false);
+  const bridgeBusyRef = useRef(false);
+  const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
+  const pendingOauthTokenRef = useRef("");
+  const webViewRef = useRef<WebView>(null);
+
+  const unlockDriverApp = useCallback(async () => {
+    if (biometricPromptBusyRef.current) return;
+    biometricPromptBusyRef.current = true;
+    setUnlockState("checking");
+    try {
+      const unlocked = await authenticateDriverAppUnlock().catch(() => false);
+      setUnlockState(unlocked ? "ready" : "locked");
+    } finally {
+      biometricPromptBusyRef.current = false;
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    async function restoreTrackingState() {
-      const state = await readTrackingState();
-
-      if (!mounted || !state.job) {
-        return;
-      }
-
+    async function prepareInstallation() {
       try {
-        const summary = await loadDriverJobSummary(state.job);
+        const nextInstallationId = await readOrCreateDriverInstallationId();
+        const biometricEnabled = await isDriverBiometricUnlockEnabled();
+        if (!mounted) return;
 
-        if (summary.status === "completed") {
-          const result = await stopDriverTracking();
-
-          if (mounted) {
-            setScreen({
-              active: false,
-              jobUrl: state.job.jobUrl,
-              message: result.message,
-              summary,
-            });
-          }
+        setInstallationId(nextInstallationId);
+        if (!biometricEnabled) {
+          setUnlockState("ready");
           return;
         }
 
-        if (mounted) {
-          setScreen({
-            active: state.active,
-            jobUrl: state.job.jobUrl,
-            message: state.active
-              ? "Trip tracking is active."
-              : "This job is saved, but phone tracking is not active.",
-            summary,
-          });
-        }
-      } catch (error) {
-        const terminalFailure =
-          error instanceof DriverJobRequestError && error.terminal;
-
-        if (terminalFailure) {
-          await stopTrackingAfterTerminalResponse();
-        }
-        if (mounted) {
-          setScreen({
-            active: terminalFailure ? false : state.active,
-            jobUrl: state.job.jobUrl,
-            message: readableFailure(error),
-            summary: null,
-          });
-        }
+        biometricPromptBusyRef.current = true;
+        const unlocked = await authenticateDriverAppUnlock().catch(() => false);
+        biometricPromptBusyRef.current = false;
+        if (mounted) setUnlockState(unlocked ? "ready" : "locked");
+      } catch {
+        biometricPromptBusyRef.current = false;
+        if (mounted) setUnlockState("locked");
       }
     }
 
-    void restoreTrackingState();
+    void prepareInstallation();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const returningToForeground = previousState !== "active" && nextState === "active";
+      previousState = nextState;
+      if (!returningToForeground || biometricPromptBusyRef.current) return;
+
+      void isDriverBiometricUnlockEnabled().then((enabled) => {
+        if (enabled) void unlockDriverApp();
+      });
+    });
+
+    return () => subscription.remove();
+  }, [unlockDriverApp]);
+
+  const receiveDriverJobUrl = useCallback(async (incomingUrl: string) => {
+    try {
+      const incomingJob = parseDriverJobUrl(incomingUrl);
+      const trackingState = await readTrackingState();
+
+      if (
+        trackingState.active &&
+        trackingState.job &&
+        trackingState.job.token !== incomingJob.token
+      ) {
+        setScreen((current) => ({
+          active: true,
+          jobUrl: trackingState.job!.jobUrl,
+          message: "Stop the current trip before opening another job.",
+          navigationKey: current.navigationKey + 1,
+        }));
+        return;
+      }
+
+      if (incomingJob.jobUrl.includes("?calendar=")) {
+        pendingOauthTokenRef.current = "";
+      }
+
+      currentWebViewUrlRef.current = incomingJob.jobUrl;
+      setCanGoBack(false);
+      setScreen((current) => ({
+        active:
+          trackingState.active && trackingState.job?.token === incomingJob.token,
+        jobUrl: incomingJob.jobUrl,
+        message:
+          trackingState.active && trackingState.job?.token === incomingJob.token
+            ? "Trip tracking is active."
+            : "Private Driver Job opened securely in Prestige Driver.",
+        navigationKey: current.navigationKey + 1,
+      }));
+    } catch (error) {
+      setScreen((current) => ({
+        ...current,
+        message: readableFailure(error),
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    let warmLinkReceived = false;
+
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      warmLinkReceived = true;
+      if (mounted) {
+        void receiveDriverJobUrl(url);
+      }
+    });
+
+    async function openInitialJob() {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+
+        if (!mounted || warmLinkReceived) {
+          return;
+        }
+
+        if (initialUrl) {
+          await receiveDriverJobUrl(initialUrl);
+          return;
+        }
+      } catch {
+        if (!mounted || warmLinkReceived) {
+          return;
+        }
+      }
+
+      const trackingState = await readTrackingState();
+
+      if (mounted && trackingState.active && trackingState.job) {
+        currentWebViewUrlRef.current = trackingState.job.jobUrl;
+        setScreen((current) => ({
+          active: true,
+          jobUrl: trackingState.job!.jobUrl,
+          message: "Trip tracking is active.",
+          navigationKey: current.navigationKey + 1,
+        }));
+      }
+    }
+
+    void openInitialJob();
 
     return () => {
       mounted = false;
+      subscription.remove();
     };
-  }, []);
+  }, [receiveDriverJobUrl]);
 
-  async function checkJob() {
-    setBusy(true);
+  useEffect(() => {
+    let mounted = true;
+
+    const openNotificationJob = async (
+      response: Notifications.NotificationResponse | null,
+    ) => {
+      const jobKey = nativeNotificationJobKey(
+        response?.notification.request.content.data,
+      );
+      if (!jobKey) {
+        return;
+      }
+
+      const job = await loadNativeDriverJob(jobKey);
+      if (mounted && job) {
+        await receiveDriverJobUrl(job.jobUrl);
+      }
+    };
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        void openNotificationJob(response);
+      },
+    );
+
     try {
-      const job = parseDriverJobUrl(privateJobUrl);
-      const summary = await loadDriverJobSummary(job);
-      setScreen({
-        active: false,
-        jobUrl: job.jobUrl,
-        message: "Check the booking below before starting tracking.",
-        summary,
-      });
-    } catch (error) {
-      setScreen({ ...initialScreenState, message: readableFailure(error) });
-    } finally {
-      setBusy(false);
+      const initialResponse = Notifications.getLastNotificationResponse();
+      if (initialResponse) {
+        void openNotificationJob(initialResponse)
+          .finally(() => Notifications.clearLastNotificationResponse());
+      }
+    } catch {
+      // A notification response is optional; ordinary exact-link opening remains available.
     }
-  }
 
-  async function startTripTracking() {
-    setBusy(true);
-    try {
-      const job = parseDriverJobUrl(privateJobUrl || screen.jobUrl || "");
-      const summary = await loadDriverJobSummary(job);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [receiveDriverJobUrl]);
 
-      if (summary.status === "completed") {
-        throw new Error(
-          "This job is already completed and cannot start tracking.",
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (!canGoBack) {
+          return false;
+        }
+
+        webViewRef.current?.goBack();
+        return true;
+      },
+    );
+
+    return () => subscription.remove();
+  }, [canGoBack]);
+
+  const sendTrackingResult = useCallback(
+    (
+      request: DriverTrackingBridgeMessage["type"],
+      result: { active: boolean; message: string; ok: boolean },
+    ) => {
+      webViewRef.current?.injectJavaScript(
+        driverTrackingResultScript({ request, ...result }),
+      );
+    },
+    [],
+  );
+
+  const sendNativeNotificationResult = useCallback(
+    (result: { ok: boolean; state: "denied" | "enabled" | "failed" }) => {
+      webViewRef.current?.injectJavaScript(
+        driverNativeNotificationResultScript(result),
+      );
+    },
+    [],
+  );
+
+  const handleBridgeMessage = useCallback(
+    async (event: WebViewMessageEvent) => {
+      const request = parseDriverBridgeMessage(event.nativeEvent.data);
+      const currentWebViewUrl = currentWebViewUrlRef.current;
+
+      if (!request || !currentWebViewUrl) {
+        return;
+      }
+
+      if (bridgeBusyRef.current) {
+        if (request.type === "native_biometrics_enable") {
+          webViewRef.current?.injectJavaScript(
+            driverNativeBiometricResultScript({ ok: false }),
+          );
+        } else if (request.type === "native_notifications_register") {
+          sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else {
+          sendTrackingResult(request.type, {
+            active: screen.active,
+            message: "Another tracking action is still running.",
+            ok: false,
+          });
+        }
+        return;
+      }
+
+      bridgeBusyRef.current = true;
+
+      try {
+        if (request.type === "native_biometrics_enable") {
+          biometricPromptBusyRef.current = true;
+          const enabled = await enableDriverBiometricUnlock();
+          biometricPromptBusyRef.current = false;
+          webViewRef.current?.injectJavaScript(
+            driverNativeBiometricResultScript({ ok: enabled }),
+          );
+          return;
+        }
+
+        if (request.type === "native_notifications_register") {
+          const job = parseDriverJobUrl(currentWebViewUrl);
+          const existingToken = await readNativeNotificationToken();
+          const permission = await Notifications.requestPermissionsAsync();
+
+          if (!permission.granted) {
+            if (existingToken) {
+              await unregisterNativeDriverNotifications(job, existingToken);
+              await forgetNativeNotificationToken();
+            }
+            sendNativeNotificationResult({ ok: false, state: "denied" });
+            return;
+          }
+
+          const projectId =
+            Constants.easConfig?.projectId ||
+            Constants.expoConfig?.extra?.eas?.projectId;
+          if (typeof projectId !== "string" || !projectId) {
+            throw new Error("Native notification project identity is unavailable.");
+          }
+
+          const tokenResult = await Notifications.getExpoPushTokenAsync({
+            projectId,
+          });
+          const nextToken = tokenResult.data;
+          if (existingToken && existingToken !== nextToken) {
+            await unregisterNativeDriverNotifications(job, existingToken);
+          }
+
+          const registration = await registerNativeDriverNotifications(
+            job,
+            nextToken,
+          );
+          try {
+            await rememberNativeDriverJob(registration.jobKey, job);
+            await rememberNativeNotificationToken(nextToken);
+          } catch (error) {
+            await unregisterNativeDriverNotifications(job, nextToken).catch(
+              () => undefined,
+            );
+            throw error;
+          }
+          sendNativeNotificationResult({ ok: true, state: "enabled" });
+          return;
+        }
+
+        if (request.type === "tracking_terminal") {
+          await stopTrackingAfterTerminalResponse();
+          const message = "Trip tracking stopped after Job Completed.";
+          setScreen((current) => ({ ...current, active: false, message }));
+          sendTrackingResult(request.type, { active: false, message, ok: true });
+          return;
+        }
+
+        const job = parseDriverJobUrl(currentWebViewUrl);
+        const result =
+          request.type === "tracking_start"
+            ? await startDriverTracking(job)
+            : await stopDriverTracking();
+
+        setScreen((current) => ({
+          ...current,
+          active: result.active,
+          message: result.message,
+        }));
+        sendTrackingResult(request.type, {
+          active: result.active,
+          message: result.message,
+          ok: request.type === "tracking_stop" || result.active,
+        });
+      } catch (error) {
+        if (request.type === "native_biometrics_enable") {
+          biometricPromptBusyRef.current = false;
+        }
+        if (error instanceof DriverJobRequestError && error.terminal) {
+          await stopTrackingAfterTerminalResponse();
+        }
+
+        const trackingState = await readTrackingState();
+        const message = readableFailure(error);
+        setScreen((current) => ({
+          ...current,
+          active: trackingState.active,
+          message,
+        }));
+        if (request.type === "native_biometrics_enable") {
+          webViewRef.current?.injectJavaScript(
+            driverNativeBiometricResultScript({ ok: false }),
+          );
+        } else if (request.type === "native_notifications_register") {
+          sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else {
+          sendTrackingResult(request.type, {
+            active: trackingState.active,
+            message,
+            ok: false,
+          });
+        }
+      } finally {
+        bridgeBusyRef.current = false;
+      }
+    },
+    [screen.active, sendNativeNotificationResult, sendTrackingResult],
+  );
+
+  const openCalendarAuthorization = useCallback(
+    async (requestedUrl: string) => {
+      const safeStartUrl = parseNativeCalendarOauthStartUrl(requestedUrl);
+      const currentWebViewUrl = currentWebViewUrlRef.current;
+
+      if (!safeStartUrl || !currentWebViewUrl) {
+        return;
+      }
+
+      if (pendingOauthTokenRef.current) {
+        return;
+      }
+
+      const callbackUrl = baseDriverJobUrl(currentWebViewUrl);
+      const callbackJob = parseDriverJobUrl(callbackUrl);
+      pendingOauthTokenRef.current = callbackJob.token;
+
+      try {
+        const result = await WebBrowser.openAuthSessionAsync(
+          safeStartUrl,
+          callbackUrl,
+          { preferUniversalLinks: true },
         );
+
+        if (result.type === "success" && "url" in result && result.url) {
+          await receiveDriverJobUrl(result.url);
+          return;
+        }
+
+        if (pendingOauthTokenRef.current === callbackJob.token) {
+          pendingOauthTokenRef.current = "";
+          await receiveDriverJobUrl(`${callbackUrl}?calendar=error`);
+        }
+      } catch {
+        if (pendingOauthTokenRef.current === callbackJob.token) {
+          pendingOauthTokenRef.current = "";
+          await receiveDriverJobUrl(`${callbackUrl}?calendar=error`);
+        }
+      }
+    },
+    [receiveDriverJobUrl],
+  );
+
+  const shouldStartNavigation = useCallback(
+    (request: { url: string }) => {
+      const currentWebViewUrl = currentWebViewUrlRef.current;
+      if (!currentWebViewUrl) {
+        return false;
       }
 
-      const result = await startDriverTracking(job);
-      setScreen({
-        active: result.active,
-        jobUrl: job.jobUrl,
-        message: result.message,
-        summary,
-      });
-      if (result.active) {
-        setPrivateJobUrl("");
+      if (parseNativeCalendarOauthStartUrl(request.url)) {
+        void openCalendarAuthorization(request.url);
+        return false;
       }
-    } catch (error) {
-      setScreen((current) => ({
-        ...current,
-        message: readableFailure(error),
-      }));
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  async function stopTripTracking() {
-    setBusy(true);
-    try {
-      const result = await stopDriverTracking();
-      setScreen((current) => ({
-        ...current,
-        active: false,
-        message: result.message,
-      }));
-    } catch (error) {
-      const state = await readTrackingState();
-      setScreen((current) => ({
-        ...current,
-        active: state.active,
-        jobUrl: state.job?.jobUrl || current.jobUrl,
-        message: readableFailure(error),
-      }));
-    } finally {
-      setBusy(false);
-    }
-  }
+      const allowed = shouldAllowDriverWebViewNavigation(request.url, currentWebViewUrl);
+      if (allowed) {
+        try {
+          currentWebViewUrlRef.current = parseDriverJobUrl(request.url).jobUrl;
+        } catch {
+          const requested = new URL(request.url);
+          if (requested.origin === productionOrigin && requested.pathname === "/driver-portal") {
+            currentWebViewUrlRef.current = `${productionOrigin}/driver-portal`;
+          }
+        }
+      }
+      return allowed;
+    },
+    [openCalendarAuthorization],
+  );
+
+  const updateNavigationState = useCallback((navigation: WebViewNavigation) => {
+    setCanGoBack(navigation.canGoBack);
+  }, []);
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
@@ -203,105 +568,62 @@ export default function App() {
         style={styles.safeArea}
       >
         <StatusBar style="dark" />
-        <ScrollView
-          contentContainerStyle={styles.page}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.eyebrow}>PRESTIGE LIMO</Text>
-          <Text style={styles.title}>Driver Companion</Text>
-          <Text style={styles.intro}>
-            Keep the admin live map updated for one assigned job while your
-            phone screen is locked.
-          </Text>
-
-          <View
-            style={[
-              styles.statusCard,
-              screen.active && styles.statusCardActive,
-            ]}
-          >
-            <Text style={styles.statusLabel}>
-              {screen.active ? "TRACKING ACTIVE" : "TRACKING OFF"}
-            </Text>
-            <Text style={styles.statusMessage}>{screen.message}</Text>
+        <View style={styles.roleBar}>
+          <View>
+            <Text style={styles.eyebrow}>PRESTIGE LIMO</Text>
+            <Text style={styles.title}>Prestige Driver</Text>
           </View>
+          <View style={screen.active ? styles.activePill : styles.inactivePill}>
+            <Text style={styles.pillText}>
+              {screen.active ? "TRACKING ON" : "TRACKING OFF"}
+            </Text>
+          </View>
+        </View>
 
-          {screen.summary ? (
-            <View style={styles.jobCard}>
-              <Text style={styles.reference}>{screen.summary.reference}</Text>
-              <Text style={styles.jobLine}>
-                {screen.summary.pickupDateTime}
-              </Text>
-              <Text style={styles.jobLine}>
-                Passenger: {screen.summary.passengerName}
-              </Text>
-              <Text style={styles.jobLine}>{screen.summary.route}</Text>
-              <Text style={styles.jobStatus}>
-                Job status: {screen.summary.statusLabel}
-              </Text>
-            </View>
-          ) : null}
-
-          {!screen.active ? (
-            <View style={styles.formCard}>
-              <Text style={styles.formLabel}>Private Driver Job URL</Text>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!busy}
-                onChangeText={setPrivateJobUrl}
-                placeholder="https://app.prestigelimo.sg/driver-job/..."
-                style={styles.input}
-                value={privateJobUrl}
-              />
-              <View style={styles.buttonGap}>
-                <Button
-                  disabled={busy || !privateJobUrl.trim()}
-                  title="Check job"
-                  onPress={checkJob}
-                />
-              </View>
-              <Text style={styles.permissionText}>
-                Tracking does not start automatically. After checking the exact
-                booking, tap Start and allow precise location plus Always /
-                Allow all the time.
-              </Text>
-              <Button
-                disabled={busy || (!privateJobUrl.trim() && !screen.jobUrl)}
-                title="Start trip tracking"
-                onPress={startTripTracking}
-              />
-            </View>
-          ) : (
-            <View style={styles.formCard}>
-              <Text style={styles.permissionText}>
-                iPhone shows its location indicator. Android keeps a visible
-                notification while tracking runs.
-              </Text>
-              <Button
-                disabled={busy}
-                title="Stop trip tracking"
-                color="#b91c1c"
-                onPress={stopTripTracking}
-              />
-            </View>
-          )}
-
-          {screen.jobUrl ? (
-            <View style={styles.secondaryButton}>
-              <Button
-                title="Open Driver Job reporting"
-                onPress={() => Linking.openURL(screen.jobUrl!)}
-              />
-            </View>
-          ) : null}
-
-          <Text style={styles.warning}>
-            Force-quitting the app, switching off Location Services, or revoking
-            permission can stop updates. The admin map will then show the last
-            update as stale or offline.
-          </Text>
-        </ScrollView>
+        {unlockState === "locked" ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Prestige Driver is locked</Text>
+            <Text style={styles.emptyMessage}>
+              Use Face ID to unlock this approved Driver installation.
+            </Text>
+            <Button onPress={() => void unlockDriverApp()} title="Unlock with Face ID" />
+          </View>
+        ) : unlockState === "checking" || !installationId ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Securing Prestige Driver…</Text>
+          </View>
+        ) : screen.jobUrl ? (
+          <WebView
+            key={screen.navigationKey}
+            ref={webViewRef}
+            allowFileAccess
+            allowsBackForwardNavigationGestures
+            geolocationEnabled={false}
+            injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(installationId)}
+            javaScriptCanOpenWindowsAutomatically={false}
+            mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+            onMessage={handleBridgeMessage}
+            onNavigationStateChange={updateNavigationState}
+            onShouldStartLoadWithRequest={shouldStartNavigation}
+            originWhitelist={[productionOrigin]}
+            setSupportMultipleWindows={false}
+            sharedCookiesEnabled
+            source={{ uri: currentWebViewUrlRef.current || screen.jobUrl }}
+            style={styles.webView}
+          />
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Open your private Driver Job Link</Text>
+            <Text style={styles.emptyMessage}>{screen.message}</Text>
+            <Text style={styles.emptyHelp}>
+              The safe job card, acknowledgement, Calendar, messages, status
+              reporting, OTS photo and issue controls will stay inside this app.
+              Tracking does not start automatically. Force-quitting the app,
+              switching off Location Services, or revoking permission can stop
+              updates after you start sharing.
+            </Text>
+          </View>
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -309,59 +631,55 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: "#f8fafc", flex: 1 },
-  page: { gap: 14, padding: 20, paddingBottom: 36 },
-  eyebrow: {
-    color: "#0f766e",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-  },
-  title: { color: "#0f172a", fontSize: 28, fontWeight: "800" },
-  intro: { color: "#475569", fontSize: 16, lineHeight: 23 },
-  statusCard: { backgroundColor: "#e2e8f0", borderRadius: 14, padding: 16 },
-  statusCardActive: { backgroundColor: "#ccfbf1" },
-  statusLabel: {
-    color: "#0f172a",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-  },
-  statusMessage: {
-    color: "#1e293b",
-    fontSize: 15,
-    lineHeight: 21,
-    marginTop: 5,
-  },
-  jobCard: {
-    backgroundColor: "#fff",
-    borderColor: "#cbd5e1",
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 5,
-    padding: 16,
-  },
-  reference: { color: "#0f172a", fontSize: 18, fontWeight: "800" },
-  jobLine: { color: "#334155", fontSize: 15, lineHeight: 21 },
-  jobStatus: {
-    color: "#0f766e",
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  formCard: { backgroundColor: "#fff", borderRadius: 14, gap: 12, padding: 16 },
-  formLabel: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
-  input: {
-    borderColor: "#94a3b8",
-    borderRadius: 10,
-    borderWidth: 1,
-    color: "#0f172a",
-    fontSize: 14,
-    minHeight: 48,
-    paddingHorizontal: 12,
+  roleBar: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderBottomColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  buttonGap: { marginBottom: 2 },
-  permissionText: { color: "#475569", fontSize: 14, lineHeight: 20 },
-  secondaryButton: { marginTop: -2 },
-  warning: { color: "#7c2d12", fontSize: 13, lineHeight: 19, marginTop: 2 },
+  eyebrow: {
+    color: "#9a6a16",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  title: { color: "#0f172a", fontSize: 17, fontWeight: "800" },
+  activePill: {
+    backgroundColor: "#ccfbf1",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  inactivePill: {
+    backgroundColor: "#e2e8f0",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pillText: {
+    color: "#0f172a",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  webView: { backgroundColor: "#f8fafc", flex: 1 },
+  emptyState: {
+    alignSelf: "center",
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    margin: 20,
+    maxWidth: 560,
+    padding: 22,
+    width: "90%",
+  },
+  emptyTitle: { color: "#0f172a", fontSize: 20, fontWeight: "800" },
+  emptyMessage: { color: "#334155", fontSize: 15, lineHeight: 22 },
+  emptyHelp: { color: "#64748b", fontSize: 13, lineHeight: 19 },
 });

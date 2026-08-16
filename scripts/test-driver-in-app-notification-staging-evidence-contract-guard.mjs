@@ -160,7 +160,7 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "App Updates",
+  "Messages &amp; Updates",
   'data-driver-job-app-updates="true"',
   'data-driver-job-app-updates-list="true"',
   'data-driver-job-app-update-row="true"',

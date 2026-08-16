@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, type MouseEvent, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import {
   calculateCustomerDspBillingActualMinutes,
@@ -20,14 +20,12 @@ const adminCustomerSavedBookingsApiPath = "/api/admin-customer-saved-bookings";
 const adminCustomerInvoicesApiPath = "/api/admin-customer-invoices";
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminBookingsApiPath = "/api/admin-bookings";
-const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
-  "/api/admin-company-traveler-crm-runtime-write-action";
 const adminDriverJobDspActualTimeSummariesApiPath =
   "/api/admin-driver-job-dsp-actual-time-summaries";
-const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerFolderFocusBookingReferenceParam = "focus_booking_reference";
 const customerFolderLoadSavedJobsParam = "load_saved_jobs";
+const customerFolderPaidBookingReferenceParam = "paid_booking_reference";
 const customerFolderSelectedPriceReviewsParam = "selected_booking_price_reviews";
 const customerFolderInvoiceSelectionLimit = 4;
 const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpaid_invoice";
@@ -74,6 +72,23 @@ type CustomerFolderTravelerInvoiceGroup = {
   guestAccountBillingEnabled: boolean;
   passengerName: string;
   travelerId: number | null;
+};
+
+type CustomerFolderLegacyIdentityGroup = {
+  bookings: CustomerFolderSavedBookingRecord[];
+  companyId: number;
+  key: string;
+  passengerName: string;
+};
+
+type CustomerFolderLegacyIdentityResolution = {
+  error: string;
+  groups: CustomerFolderLegacyIdentityGroup[];
+};
+
+type CustomerFolderIdentityResolverState = {
+  message: string;
+  status: "idle" | "loading" | "saving" | "saved" | "error";
 };
 
 type CustomerFolderRateSetup = Omit<CustomerInvoiceRateSetupRecord, "companies" | "travelers"> & {
@@ -303,6 +318,11 @@ const initialDspBillingTimeCorrectionState: CustomerFolderDspBillingTimeCorrecti
   status: "idle",
 };
 
+const initialIdentityResolverState: CustomerFolderIdentityResolverState = {
+  message: "",
+  status: "idle",
+};
+
 function inlineEditText(value: unknown, maxLength = 300) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
@@ -446,9 +466,71 @@ function inlineEditServiceItems(booking: CustomerFolderExactBooking) {
   }));
 }
 
+function customerFolderBookingPatchPayload(
+  exactBooking: CustomerFolderExactBooking,
+  form: CustomerFolderInlineEditForm,
+  reference: string,
+) {
+  return {
+    booking: {
+      admin_internal_status: exactBooking.admin_internal_status ?? "Draft",
+      booker_id: inlineEditIdentityId(form.bookerId),
+      booking_reference: reference,
+      cancellation_review_status: exactBooking.cancellation_review_status ?? null,
+      change_review_status: exactBooking.change_review_status ?? null,
+      company_id: inlineEditIdentityId(form.companyId),
+      contact_display_name: inlineEditText(form.bookerName, 160) || null,
+      contact_email: inlineEditEmail(form.bookerEmail),
+      contact_phone: inlineEditText(form.bookerContact, 120) || null,
+      customer_display_name: inlineEditText(form.customerName, 160),
+      customer_facing_status: exactBooking.customer_facing_status ?? "Received",
+      customer_id: exactBooking.customer_id ?? null,
+      driver_contact: exactBooking.driver_contact ?? null,
+      driver_name: exactBooking.driver_name ?? null,
+      driver_plate_number: exactBooking.driver_plate_number ?? null,
+      dropoff_datetime: exactBooking.dropoff_datetime ?? null,
+      dropoff_location: inlineEditText(form.dropoffLocation),
+      flight_no: exactBooking.flight_no ?? null,
+      luggage_count: exactBooking.luggage_count ?? null,
+      parser_source_reference: exactBooking.parser_source_reference ?? null,
+      passenger_name: inlineEditText(form.passengerName, 160),
+      passenger_phone: exactBooking.passenger_phone ?? null,
+      pax_count: exactBooking.pax_count ?? null,
+      pickup_datetime: inlineEditApiDateTime(form.pickupDateTime),
+      pickup_location: inlineEditText(form.pickupLocation),
+      request_review_status: exactBooking.request_review_status ?? null,
+      route_summary: inlineEditText(form.routeSummary, 500),
+      route_type: inlineEditText(form.serviceType, 80),
+      service_type: inlineEditText(form.serviceType, 80),
+      short_notice_review_status: exactBooking.short_notice_review_status ?? null,
+      source_channel: exactBooking.source_channel || exactBooking.source_surface || "admin-dashboard",
+      source_surface: exactBooking.source_surface || exactBooking.source_channel || "admin-dashboard",
+      traveler_id: inlineEditIdentityId(form.travelerId),
+      vehicle_type_or_category: exactBooking.vehicle_type_or_category ?? null,
+    },
+    route_points: inlineEditRoutePoints(exactBooking, form),
+    service_items: inlineEditServiceItems(exactBooking),
+    target_booking_reference: reference,
+  };
+}
+
 function customerFolderBillingReviewForBooking(
   booking: CustomerFolderSavedBookingRecord,
 ): CustomerFolderBillingReview {
+  const bookingType = customerInvoiceBookingType(booking.service_type);
+
+  if (bookingType) {
+    return {
+      amountCents: null,
+      breakdown:
+        bookingType === "DSP"
+          ? "Checking saved booking pickup→Driver JC end and the verified Prestige customer rate."
+          : "Calculating a temporary proposal from the existing Prestige customer rate setup.",
+      message: "Calculating",
+      status: "calculating",
+    };
+  }
+
   const savedAmountCents = parseInvoiceAmountToCents(String(booking.customer_price_label ?? ""));
 
   if (savedAmountCents) {
@@ -460,25 +542,11 @@ function customerFolderBillingReviewForBooking(
     };
   }
 
-  const bookingType = customerInvoiceBookingType(booking.service_type);
-
-  if (!bookingType) {
-    return {
-      amountCents: null,
-      breakdown: "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
-      message: "Review required",
-      status: "required",
-    };
-  }
-
   return {
     amountCents: null,
-    breakdown:
-      bookingType === "DSP"
-        ? "Checking saved booking pickup→Driver JC end and the verified Prestige customer rate."
-        : "Calculating a temporary proposal from the existing Prestige customer rate setup.",
-    message: "Calculating",
-    status: "calculating",
+    breakdown: "Confirm a supported saved service (MNG, DEP, TRF, or DSP) before price review.",
+    message: "Review required",
+    status: "required",
   };
 }
 
@@ -531,6 +599,7 @@ function customerFolderInvoiceHref(
   selectedBookings: CustomerFolderSavedBookingRecord[],
   reviews: CustomerFolderBillingReviews,
   guestAccountBillingEnabled = false,
+  paidBookingReference = "",
 ) {
   const baseHref = customerWorkspaceHref(booking, customerId, customerName, "open");
   const references = selectedBookings
@@ -569,6 +638,11 @@ function customerFolderInvoiceHref(
     params.set("guest_account_billing", "1");
   }
   params.set("selected_booking_references", references.join(","));
+  const safePaidBookingReference = safeBookingReferenceValue(paidBookingReference);
+
+  if (references.length === 1 && safePaidBookingReference === references[0]) {
+    params.set(customerFolderPaidBookingReferenceParam, safePaidBookingReference);
+  }
   params.set(
     customerFolderSelectedPriceReviewsParam,
     customerFolderReviewedPricePayload(selectedBookings, reviews),
@@ -635,6 +709,68 @@ function customerFolderTravelerInvoiceGroups(
     error: "",
     groups: [...groups.values()],
   };
+}
+
+function customerFolderLegacyIdentityResolution(
+  bookings: CustomerFolderSavedBookingRecord[],
+  customerCompanyId: number | null,
+): CustomerFolderLegacyIdentityResolution {
+  const groups = new Map<string, CustomerFolderLegacyIdentityGroup>();
+
+  for (const booking of bookings) {
+    const companyId = inlineEditIdentityId(booking.company_id);
+    const bookerId = inlineEditIdentityId(booking.booker_id);
+    const travelerId = inlineEditIdentityId(booking.traveler_id);
+    const hasBooker = Boolean(bookerId);
+    const hasTraveler = Boolean(travelerId);
+
+    if (hasBooker !== hasTraveler) {
+      return {
+        error: `${publicBookingReferenceDisplay(booking)} has an incomplete saved Booker / Traveller pair. Reload and repair that exact booking before continuing.`,
+        groups: [],
+      };
+    }
+
+    if (hasBooker && hasTraveler) {
+      continue;
+    }
+
+    if (companyId && customerCompanyId && companyId !== customerCompanyId) {
+      return {
+        error: `${publicBookingReferenceDisplay(booking)} belongs to a different saved customer. No identity was changed.`,
+        groups: [],
+      };
+    }
+
+    const resolvedCompanyId = companyId || customerCompanyId;
+    const passengerName = inlineEditText(booking.passenger_name, 160);
+    const key = inlineEditComparableText(passengerName, 160);
+
+    if (!resolvedCompanyId || !key) {
+      return {
+        error: `${publicBookingReferenceDisplay(booking)} needs an exact customer and passenger before Booker / Traveller can be saved.`,
+        groups: [],
+      };
+    }
+
+    const current = groups.get(key);
+
+    if (current && current.companyId !== resolvedCompanyId) {
+      return {
+        error: `${passengerName} is linked to conflicting saved customers. No identity was changed.`,
+        groups: [],
+      };
+    }
+
+    groups.set(key, {
+      bookings: [...(current?.bookings || []), booking],
+      companyId: resolvedCompanyId,
+      key,
+      passengerName: current?.passengerName || passengerName,
+    });
+  }
+
+  return { error: "", groups: [...groups.values()] };
 }
 
 function customerWorkspaceHref(
@@ -808,15 +944,22 @@ export function CustomerFolderSavedBookingsPanel({
   const customerFolderRateSetupRef = useRef<CustomerFolderRateSetup | null>(null);
   const [customerFolderRateSetup, setCustomerFolderRateSetup] =
     useState<CustomerFolderRateSetup | null>(null);
-  const [customerFolderRateSetupMessage, setCustomerFolderRateSetupMessage] =
-    useState("");
   const [sectionFourEditingReference, setSectionFourEditingReference] = useState("");
+  const [sectionFourIdentitySelections, setSectionFourIdentitySelections] =
+    useState<Record<string, string>>({});
+  const [sectionFourIdentityResolverState, setSectionFourIdentityResolverState] =
+    useState<CustomerFolderIdentityResolverState>(initialIdentityResolverState);
+  const sectionFourIdentitySaveInFlightRef = useRef(false);
+  const sectionFourIdentityRateLoadAttemptedRef = useRef("");
+  const [customerVerifiedCompanyId, setCustomerVerifiedCompanyId] =
+    useState<number | null>(null);
   const [dspBillingTimeCorrectionState, setDspBillingTimeCorrectionState] =
     useState<CustomerFolderDspBillingTimeCorrectionState>(
       initialDspBillingTimeCorrectionState,
     );
   const [priceDraft, setPriceDraft] = useState("");
   const [expandedSavedBookingReference, setExpandedSavedBookingReference] = useState("");
+  const [paidReferences, setPaidReferences] = useState<Record<string, boolean>>({});
   const [selectedReferences, setSelectedReferences] = useState<Record<string, boolean>>({});
   const [guestAccountBillingEnabled, setGuestAccountBillingEnabled] = useState(false);
   const [readState, setReadState] = useState<CustomerFolderSavedBookingsState>({
@@ -835,8 +978,8 @@ export function CustomerFolderSavedBookingsPanel({
       return customerFolderRateSetupRef.current;
     }
 
-    setCustomerFolderRateSetupMessage("Loading verified CRM identities...");
     const rateResponse = await fetch(adminRateSetupApiPath, {
+      cache: "no-store",
       headers: {
         "x-prestige-admin-purpose": "admin-booking-persistence",
       },
@@ -847,24 +990,22 @@ export function CustomerFolderSavedBookingsPanel({
       | null;
 
     if (!rateResponse.ok || rateSetup?.ok !== true) {
-      setCustomerFolderRateSetupMessage(
-        "Verified CRM identities could not be loaded. No customer identity is assumed.",
-      );
       throw new Error("CRM rate setup unavailable");
     }
 
     customerFolderRateSetupRef.current = rateSetup;
     setCustomerFolderRateSetup(rateSetup);
-    setCustomerFolderRateSetupMessage("Verified CRM identities loaded.");
     return rateSetup;
   }
 
-  async function loadAutomatedBillingReviews(bookings: CustomerFolderSavedBookingRecord[]) {
+  async function loadAutomatedBillingReviews(
+    bookings: CustomerFolderSavedBookingRecord[],
+    options: { forceRateSetup?: boolean } = {},
+  ) {
     const proposalBookings = bookings.filter(
       (booking) =>
         safeDispatchReference(booking) &&
-        customerInvoiceBookingType(booking.service_type) !== null &&
-        !parseInvoiceAmountToCents(String(booking.customer_price_label ?? "")),
+        customerInvoiceBookingType(booking.service_type) !== null,
     );
 
     if (proposalBookings.length === 0) {
@@ -872,7 +1013,9 @@ export function CustomerFolderSavedBookingsPanel({
     }
 
     try {
-      const rateSetup = await loadCustomerFolderRateSetup();
+      const rateSetup = await loadCustomerFolderRateSetup({
+        force: options.forceRateSetup,
+      });
 
       const calculatedReviews = await Promise.all(
         proposalBookings.map(async (booking) => {
@@ -1101,6 +1244,7 @@ export function CustomerFolderSavedBookingsPanel({
       }
 
       setGuestAccountBillingEnabled(exactAccount.guest_account_billing_enabled === true);
+      setCustomerVerifiedCompanyId(inlineEditIdentityId(exactAccount.verified_company_id));
 
       const savedBookings = Array.isArray(result.saved_bookings)
         ? (result.saved_bookings as CustomerFolderSavedBookingRecord[])
@@ -1247,40 +1391,85 @@ export function CustomerFolderSavedBookingsPanel({
   const selectedPublicReferencesReady = selectedUnbilledBookings.every((booking) =>
     Boolean(safePublicBookingReference(booking.public_booking_reference)),
   );
-  const sectionFourCrmCompanies = (customerFolderRateSetup?.companies || [])
-    .filter((company) => inlineEditIdentityId(company.id))
-    .map((company) => ({
-      id: String(company.id),
-      name: displayText(company.company_name, `Company ${company.id}`),
-    }));
-  const sectionFourCompanyId = inlineEditIdentityId(inlineEditState.form.companyId);
-  const sectionFourBookerId = inlineEditIdentityId(inlineEditState.form.bookerId);
-  const sectionFourCrmBookers = Array.from(
-    new Map(
-      (customerFolderRateSetup?.travelers || [])
-        .filter(
-          (traveler) =>
-            sectionFourCompanyId &&
-            inlineEditIdentityId(traveler.company_id) === sectionFourCompanyId &&
-            inlineEditIdentityId(traveler.booker_id),
-        )
-        .map((traveler) => [
-          String(traveler.booker_id),
-          {
-            id: String(traveler.booker_id),
-            name: displayText(traveler.booker_name, `Booker ${traveler.booker_id}`),
-          },
-        ]),
-    ).values(),
+  const sectionFourLegacyIdentityResolution = customerFolderLegacyIdentityResolution(
+    selectedUnbilledBookings,
+    customerVerifiedCompanyId,
   );
-  const sectionFourCrmTravelers = (customerFolderRateSetup?.travelers || []).filter(
-    (traveler) =>
-      sectionFourCompanyId &&
-      sectionFourBookerId &&
-      inlineEditIdentityId(traveler.company_id) === sectionFourCompanyId &&
-      inlineEditIdentityId(traveler.booker_id) === sectionFourBookerId &&
-      inlineEditIdentityId(traveler.id),
+  const sectionFourLegacyIdentityResolverAvailable = Boolean(
+    selectedTravelerInvoiceGrouping.error &&
+    !guestAccountBillingEnabled &&
+    selectedUnbilledBookings.length > 0 &&
+    !sectionFourLegacyIdentityResolution.error &&
+    sectionFourLegacyIdentityResolution.groups.length > 0,
   );
+  const sectionFourLegacyIdentitySelectionKey = sectionFourLegacyIdentityResolution.groups
+    .map((group) =>
+      `${group.key}:${group.bookings.map((booking) => safeDispatchReference(booking)).join(",")}`,
+    )
+    .join("|");
+
+  function sectionFourIdentityPairOptions(group: CustomerFolderLegacyIdentityGroup) {
+    return (customerFolderRateSetup?.travelers || [])
+      .filter(
+        (traveler) =>
+          inlineEditIdentityId(traveler.company_id) === group.companyId &&
+          inlineEditIdentityId(traveler.booker_id) &&
+          inlineEditIdentityId(traveler.id),
+      )
+      .map((traveler) => ({
+        bookerId: inlineEditIdentityId(traveler.booker_id) as number,
+        bookerName: displayText(traveler.booker_name, "Saved booker"),
+        companyId: group.companyId,
+        id: inlineEditIdentityId(traveler.id) as number,
+        label: `${displayText(traveler.booker_name, "Saved booker")} / ${displayText(traveler.traveler_name, "Saved traveller")}`,
+      }));
+  }
+  const sectionFourIdentityAssignmentsReady =
+    sectionFourLegacyIdentityResolution.groups.length > 0 &&
+    sectionFourLegacyIdentityResolution.groups.every((group) => {
+      const options = sectionFourIdentityPairOptions(group);
+      const selectedPairId =
+        sectionFourIdentitySelections[group.key] ||
+        (options.length === 1 ? String(options[0]?.id || "") : "");
+
+      return options.some((option) => String(option.id) === selectedPairId);
+    });
+
+  useEffect(() => {
+    if (
+      guestAccountBillingEnabled ||
+      !selectedTravelerInvoiceGrouping.error ||
+      sectionFourLegacyIdentityResolution.error ||
+      sectionFourLegacyIdentityResolution.groups.length === 0 ||
+      !sectionFourLegacyIdentitySelectionKey ||
+      sectionFourIdentityRateLoadAttemptedRef.current === sectionFourLegacyIdentitySelectionKey
+    ) {
+      return;
+    }
+
+    sectionFourIdentityRateLoadAttemptedRef.current = sectionFourLegacyIdentitySelectionKey;
+    setSectionFourIdentityResolverState({
+      message: "Loading saved Booker / Traveller choices...",
+      status: "loading",
+    });
+    void loadCustomerFolderRateSetup({ force: true })
+      .then(() => {
+        setSectionFourIdentityResolverState({ message: "", status: "idle" });
+      })
+      .catch(() => {
+        setSectionFourIdentityResolverState({
+          message: "Saved Booker / Traveller choices could not be loaded. Reload this customer folder and try again.",
+          status: "error",
+        });
+      });
+    // Load the exact current choices once for each selected legacy booking set.
+  }, [
+    guestAccountBillingEnabled,
+    sectionFourLegacyIdentityResolution.error,
+    sectionFourLegacyIdentityResolution.groups.length,
+    sectionFourLegacyIdentitySelectionKey,
+    selectedTravelerInvoiceGrouping.error,
+  ]);
 
   function toggleSelectedBooking(booking: CustomerFolderSavedBookingRecord, selected: boolean) {
     const reference = safeDispatchReference(booking);
@@ -1342,11 +1531,6 @@ export function CustomerFolderSavedBookingsPanel({
 
     if (options.surface === "invoice-review") {
       setSectionFourEditingReference(reference);
-      try {
-        await loadCustomerFolderRateSetup();
-      } catch {
-        // The visible Section 4 identity editor remains fail closed.
-      }
     } else {
       setExpandedSavedBookingReference(reference);
       setSectionFourEditingReference("");
@@ -1462,299 +1646,239 @@ export function CustomerFolderSavedBookingsPanel({
     }));
   }
 
-  function updateSectionFourCompanyIdentity(value: string) {
-    setInlineEditState((current) => ({
-      ...current,
-      form: {
-        ...current.form,
-        bookerId: "",
-        companyId: value,
-        travelerId: "",
-      },
-      message: "Unsaved verified customer identity changes.",
-    }));
-  }
-
-  function updateSectionFourBookerIdentity(value: string) {
-    const selectedBooker = sectionFourCrmBookers.find((booker) => booker.id === value);
-
-    setInlineEditState((current) => ({
-      ...current,
-      form: {
-        ...current.form,
-        bookerId: value,
-        bookerName: selectedBooker?.name || current.form.bookerName,
-        travelerId: "",
-      },
-      message: "Unsaved verified customer identity changes.",
-    }));
-  }
-
-  function updateSectionFourTravelerIdentity(value: string) {
-    const selectedTraveler = sectionFourCrmTravelers.find(
-      (traveler) => String(traveler.id) === value,
-    );
-
-    setInlineEditState((current) => ({
-      ...current,
-      form: {
-        ...current.form,
-        passengerName:
-          inlineEditText(selectedTraveler?.traveler_name, 160) ||
-          current.form.passengerName,
-        travelerId: value,
-      },
-      message: "Unsaved verified customer identity changes.",
-    }));
-  }
-
-  function sectionFourVerifiedIdentityIsValid(form: CustomerFolderInlineEditForm) {
-    const companyId = inlineEditIdentityId(form.companyId);
-    const bookerId = inlineEditIdentityId(form.bookerId);
-    const travelerId = inlineEditIdentityId(form.travelerId);
-
-    return Boolean(
-      companyId &&
-      bookerId &&
-      travelerId &&
-      (customerFolderRateSetupRef.current?.travelers ||
-        customerFolderRateSetup?.travelers ||
-        []).some(
-        (traveler) =>
-          inlineEditIdentityId(traveler.id) === travelerId &&
-          inlineEditIdentityId(traveler.company_id) === companyId &&
-          inlineEditIdentityId(traveler.booker_id) === bookerId,
-      ),
-    );
-  }
-
-  function sectionFourProceedCause(form: CustomerFolderInlineEditForm) {
-    const companyId = inlineEditIdentityId(form.companyId);
-    const bookerId = inlineEditIdentityId(form.bookerId);
-    const travelerId = inlineEditIdentityId(form.travelerId);
-
-    if (!companyId) {
-      return "No verified company is selected for this booking.";
-    }
-
-    if (!bookerId) {
-      return "No verified PA / booker is selected beneath the verified company.";
-    }
-
-    if (!travelerId) {
-      return "A verified traveller is missing. The existing guarded correction will try to create and link only that traveller beneath the selected company and PA / booker.";
-    }
-
-    if (!sectionFourVerifiedIdentityIsValid(form)) {
-      return "The selected company, PA / booker, and traveller chain must be re-read and verified before this booking can continue to invoice review.";
-    }
-
-    return "You reviewed corrections to this booking's customer identity or job details.";
-  }
-
-  function sectionFourProceedConfirmation(
-    booking: CustomerFolderSavedBookingRecord,
-    form: CustomerFolderInlineEditForm,
-  ) {
-    return [
-      `Proceed for booking ${publicBookingReferenceDisplay(booking)}?`,
-      "",
-      `Cause: ${sectionFourProceedCause(form)}`,
-      "",
-      "This saves only the reviewed customer identity and job fields for this booking.",
-      "If one traveller is missing, the existing guarded correction may create and link only that traveller beneath the selected company and PA / booker.",
-      "The customer price returns to Review required.",
-      "No invoice, PDF, email, reminder, payment, driver, Calendar, messaging, payout, PayNow, or other booking action will run.",
-      "",
-      "Email AI and Ask AI cannot approve this action. Continue only if you pressed this visible Admin button yourself.",
-    ].join("\n");
-  }
-
-  async function proceedWithSectionFourBookingCorrection(
-    event: MouseEvent<HTMLButtonElement>,
-    booking: CustomerFolderSavedBookingRecord,
-  ) {
-    const reference = safeDispatchReference(booking);
-    const editingReference = safeBookingReferenceValue(
-      inlineEditText(inlineEditState.booking?.booking_reference, 120),
-    );
-
-    if (!event.isTrusted) {
-      setInlineEditState((current) => ({
-        ...current,
-        message:
-          "Use the visible Proceed for this booking button. Email AI and Ask AI cannot approve this action. No job was changed.",
-        status: "error",
-      }));
+  async function saveSelectedLegacyBookingIdentities() {
+    if (sectionFourIdentitySaveInFlightRef.current) {
       return;
     }
-
-    if (!reference || reference !== editingReference) {
-      setInlineEditState((current) => ({
-        ...current,
-        message:
-          "The exact booking changed before confirmation. Reopen Edit job and review it again. No job was changed.",
-        status: "error",
-      }));
-      return;
-    }
-
-    if (!window.confirm(sectionFourProceedConfirmation(booking, inlineEditState.form))) {
-      setInlineEditState((current) => ({
-        ...current,
-        message: `Proceed cancelled for ${publicBookingReferenceDisplay(booking)}. No job was changed.`,
-        status: "loaded",
-      }));
-      return;
-    }
-
-    await saveInlineBookingDetails(booking, {
-      keepEditorOpen: true,
-      requireVerifiedIdentity: true,
-    });
-  }
-
-  async function ensureSectionFourVerifiedIdentity(
-    form: CustomerFolderInlineEditForm,
-  ) {
-    const companyId = inlineEditIdentityId(form.companyId);
-    const bookerId = inlineEditIdentityId(form.bookerId);
-    const travelerName = inlineEditText(form.passengerName, 160);
-    const bookerName = inlineEditText(form.bookerName, 160);
-    const bookerContact = inlineEditText(form.bookerContact, 120);
-    const bookerEmail = inlineEditEmail(form.bookerEmail);
-
-    if (!companyId || !bookerId || !travelerName || !bookerName) {
-      throw new Error(
-        "Select the exact verified company and booker, then enter the traveller name.",
-      );
-    }
-
-    const freshRateSetup = await loadCustomerFolderRateSetup({ force: true });
-    const companyExists = (freshRateSetup.companies || []).some(
-      (company) => inlineEditIdentityId(company.id) === companyId,
-    );
-
-    if (!companyExists) {
-      throw new Error("Select one existing verified company before saving.");
-    }
-
-    const bookerBelongsToCompany = (freshRateSetup.travelers || []).some(
-      (traveler) =>
-        inlineEditIdentityId(traveler.company_id) === companyId &&
-        inlineEditIdentityId(traveler.booker_id) === bookerId,
-    );
-
-    if (!bookerBelongsToCompany) {
-      throw new Error("Select one existing verified booker for this company.");
-    }
-    const matchingTraveler = (freshRateSetup.travelers || []).find(
-      (traveler) =>
-        inlineEditIdentityId(traveler.company_id) === companyId &&
-        inlineEditComparableText(traveler.traveler_name, 160) ===
-          inlineEditComparableText(travelerName, 160),
-    );
-    const linkedBookerId = inlineEditIdentityId(matchingTraveler?.booker_id);
-
-    if (linkedBookerId && linkedBookerId !== bookerId) {
-      throw new Error(
-        "That traveller is already linked to another verified booker. Select the exact traveller instead.",
-      );
-    }
-
-    let travelerId = inlineEditIdentityId(matchingTraveler?.id);
-
-    if (!travelerId) {
-      const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
-        body: JSON.stringify({
-          action_type: "traveler_create",
-          booker_contact: bookerContact || null,
-          booker_email: bookerEmail,
-          booker_name: bookerName,
-          company_id: companyId,
-          traveler_name: travelerName,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "POST",
-      });
-      const result = (await response.json().catch(() => null)) as
-        | {
-            error?: string;
-            ok?: boolean;
-            record?: {
-              company_id?: number | null;
-              id?: number | null;
-            } | null;
-          }
-        | null;
-
-      travelerId = inlineEditIdentityId(result?.record?.id);
-
-      if (
-        !response.ok ||
-        result?.ok !== true ||
-        !travelerId ||
-        inlineEditIdentityId(result.record?.company_id) !== companyId
-      ) {
-        throw new Error(
-          result?.error ||
-            "Verified traveller could not be created. No invoice was created or emailed.",
-        );
-      }
-    }
-
-    const travelerLinkParams = new URLSearchParams({
-      id: `eq.${travelerId}`,
-      select:
-        "id,company_id,booker_id,traveler_name,booker_name,booker_contact,booker_email",
-      single: "single",
-    });
-    const travelerLinkResponse = await fetch(
-      `${adminLegacyTravelersApiPath}?${travelerLinkParams.toString()}`,
-      {
-        body: JSON.stringify({
-          booker_contact: bookerContact || null,
-          booker_email: bookerEmail,
-          booker_id: bookerId,
-          booker_name: bookerName,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "PATCH",
-      },
-    );
-    const linkedTraveler = (await travelerLinkResponse.json().catch(() => null)) as
-      | {
-          booker_id?: number | null;
-          company_id?: number | null;
-          id?: number | null;
-        }
-      | null;
 
     if (
-      !travelerLinkResponse.ok ||
-      inlineEditIdentityId(linkedTraveler?.id) !== travelerId ||
-      inlineEditIdentityId(linkedTraveler?.company_id) !== companyId ||
-      inlineEditIdentityId(linkedTraveler?.booker_id) !== bookerId
+      sectionFourLegacyIdentityResolution.error ||
+      sectionFourLegacyIdentityResolution.groups.length === 0
     ) {
-      throw new Error(
-        "Verified traveller could not be linked to the exact booker. No invoice was created or emailed.",
-      );
+      setSectionFourIdentityResolverState({
+        message:
+          sectionFourLegacyIdentityResolution.error ||
+          "The selected jobs no longer need Booker / Traveller repair.",
+        status: "error",
+      });
+      return;
     }
 
-    await loadCustomerFolderRateSetup({ force: true });
+    sectionFourIdentitySaveInFlightRef.current = true;
+    setSectionFourIdentityResolverState({
+      message: "Saving Booker / Traveller for the selected jobs...",
+      status: "saving",
+    });
 
-    return {
-      ...form,
-      bookerId: String(bookerId),
-      companyId: String(companyId),
-      travelerId: String(travelerId),
-    } satisfies CustomerFolderInlineEditForm;
+    const updatedBookings = new Map<string, CustomerFolderExactBooking>();
+    let savedCount = 0;
+
+    try {
+      const freshRateSetup = await loadCustomerFolderRateSetup({ force: true });
+      const assignments = sectionFourLegacyIdentityResolution.groups.map((group) => {
+        const options = (freshRateSetup.travelers || [])
+          .filter(
+            (traveler) =>
+              inlineEditIdentityId(traveler.company_id) === group.companyId &&
+              inlineEditIdentityId(traveler.booker_id) &&
+              inlineEditIdentityId(traveler.id),
+          )
+          .map((traveler) => ({
+            bookerId: inlineEditIdentityId(traveler.booker_id) as number,
+            bookerName: displayText(traveler.booker_name, "Saved booker"),
+            companyId: group.companyId,
+            id: inlineEditIdentityId(traveler.id) as number,
+          }));
+        const selectedTravelerId = inlineEditIdentityId(
+          sectionFourIdentitySelections[group.key] ||
+            (options.length === 1 ? options[0]?.id : null),
+        );
+        const pair = options.find((option) => option.id === selectedTravelerId);
+
+        if (!pair) {
+          throw new Error(
+            `Choose the actual Booker / Traveller for ${group.passengerName}. No booking was changed.`,
+          );
+        }
+
+        return { group, pair };
+      });
+
+      for (const { group, pair } of assignments) {
+        for (const booking of group.bookings) {
+          const reference = safeDispatchReference(booking);
+
+          if (!reference) {
+            throw new Error("One selected booking has no safe internal reference. No further booking was changed.");
+          }
+
+          const params = new URLSearchParams({ booking_reference: reference });
+          const exactResponse = await fetch(`${adminBookingsApiPath}?${params.toString()}`, {
+            headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+            method: "GET",
+          });
+          const exactResult = (await exactResponse.json().catch(() => null)) as
+            | { booking?: CustomerFolderExactBooking | null; error?: string; ok?: boolean }
+            | null;
+          const exactBooking = exactResult?.booking ?? null;
+
+          if (
+            !exactResponse.ok ||
+            exactResult?.ok !== true ||
+            !exactBooking ||
+            safeBookingReferenceValue(exactBooking.booking_reference) !== reference
+          ) {
+            throw new Error(
+              `${publicBookingReferenceDisplay(booking)} could not be reloaded safely. No further booking was changed.`,
+            );
+          }
+
+          if (
+            String(exactBooking.customer_id ?? "") !== customerId ||
+            inlineEditComparableText(exactBooking.passenger_name, 160) !== group.key
+          ) {
+            throw new Error(
+              `${publicBookingReferenceDisplay(booking)} changed after selection. Reload this customer folder before trying again.`,
+            );
+          }
+
+          const exactCompanyId = inlineEditIdentityId(exactBooking.company_id);
+          const exactBookerId = inlineEditIdentityId(exactBooking.booker_id);
+          const exactTravelerId = inlineEditIdentityId(exactBooking.traveler_id);
+
+          if (
+            (exactCompanyId && exactCompanyId !== pair.companyId) ||
+            (exactBookerId && exactBookerId !== pair.bookerId) ||
+            (exactTravelerId && exactTravelerId !== pair.id) ||
+            Boolean(exactBookerId) !== Boolean(exactTravelerId)
+          ) {
+            throw new Error(
+              `${publicBookingReferenceDisplay(booking)} already has different saved ownership. Nothing was overwritten; reload and review that exact booking.`,
+            );
+          }
+
+          if (
+            exactCompanyId === pair.companyId &&
+            exactBookerId === pair.bookerId &&
+            exactTravelerId === pair.id
+          ) {
+            updatedBookings.set(reference, exactBooking);
+            continue;
+          }
+
+          const form = {
+            ...inlineEditFormFromBooking(exactBooking),
+            bookerId: String(pair.bookerId),
+            bookerName: pair.bookerName,
+            companyId: String(pair.companyId),
+            travelerId: String(pair.id),
+          };
+          const requiredValues = [
+            form.customerName,
+            form.passengerName,
+            form.pickupDateTime,
+            form.pickupLocation,
+            form.dropoffLocation,
+            form.routeSummary,
+            form.serviceType,
+          ];
+
+          if (requiredValues.some((value) => !inlineEditText(value))) {
+            throw new Error(
+              `${publicBookingReferenceDisplay(booking)} has incomplete job details. Nothing was overwritten; use Edit job first.`,
+            );
+          }
+
+          const updateResponse = await fetch(adminBookingsApiPath, {
+            body: JSON.stringify(
+              customerFolderBookingPatchPayload(exactBooking, form, reference),
+            ),
+            headers: {
+              "Content-Type": "application/json",
+              "x-prestige-admin-purpose": "admin-booking-persistence",
+            },
+            method: "PATCH",
+          });
+          const updateResult = (await updateResponse.json().catch(() => null)) as
+            | { booking?: CustomerFolderExactBooking | null; error?: string; ok?: boolean }
+            | null;
+          const updatedBooking = updateResult?.booking ?? null;
+
+          if (
+            !updateResponse.ok ||
+            updateResult?.ok !== true ||
+            !updatedBooking ||
+            safeBookingReferenceValue(updatedBooking.booking_reference) !== reference ||
+            inlineEditIdentityId(updatedBooking.company_id) !== pair.companyId ||
+            inlineEditIdentityId(updatedBooking.booker_id) !== pair.bookerId ||
+            inlineEditIdentityId(updatedBooking.traveler_id) !== pair.id
+          ) {
+            throw new Error(
+              `${publicBookingReferenceDisplay(booking)} did not return the saved Booker / Traveller. Stop and reload before retrying.`,
+            );
+          }
+
+          updatedBookings.set(reference, updatedBooking);
+          savedCount += 1;
+        }
+      }
+
+      setReadState((current) => ({
+        ...current,
+        message: `Saved Booker / Traveller for ${countLabel(updatedBookings.size, "selected job")}.`,
+        savedBookings: current.savedBookings.map((savedBooking) => {
+          const reference = safeDispatchReference(savedBooking);
+          const updatedBooking = updatedBookings.get(reference);
+
+          return updatedBooking
+            ? {
+                ...savedBooking,
+                booker_id: updatedBooking.booker_id,
+                company_id: updatedBooking.company_id,
+                customer_account: updatedBooking.customer_display_name,
+                passenger_name: updatedBooking.passenger_name,
+                traveler_id: updatedBooking.traveler_id,
+              }
+            : savedBooking;
+        }),
+        tone: "success",
+      }));
+      setBillingReviews((current) => {
+        const next = { ...current };
+
+        updatedBookings.forEach((_updatedBooking, reference) => {
+          next[reference] = {
+            amountCents: current[reference]?.amountCents ?? null,
+            breakdown:
+              "Booker / Traveller was saved. Review and confirm the displayed customer price before invoice preparation.",
+            message: "Review corrected job price",
+            status: "proposed",
+          };
+        });
+
+        return next;
+      });
+      setSectionFourEditingReference("");
+      setEditingPriceReference("");
+      setInlineEditState(initialInlineEditState);
+      setPriceDraft("");
+      setSectionFourIdentitySelections({});
+      setSectionFourIdentityResolverState({
+        message: `Saved ${countLabel(updatedBookings.size, "selected job")}.`,
+        status: "saved",
+      });
+    } catch (error) {
+      setSectionFourIdentityResolverState({
+        message:
+          `${error instanceof Error ? error.message : "Booker / Traveller was not saved."}` +
+          (savedCount > 0
+            ? ` ${countLabel(savedCount, "job")} saved before the failure; reload before retrying.`
+            : ""),
+        status: "error",
+      });
+    } finally {
+      sectionFourIdentitySaveInFlightRef.current = false;
+    }
   }
 
   function updateDspBillingTimeCorrectionField(
@@ -1864,18 +1988,23 @@ export function CustomerFolderSavedBookingsPanel({
           status: "calculating",
         },
       }));
-      const recalculatedReviews = await loadAutomatedBillingReviews([booking]);
+      const recalculatedReviews = await loadAutomatedBillingReviews([booking], {
+        forceRateSetup: true,
+      });
       const recalculatedReview = recalculatedReviews.find(
         (candidate) => candidate.reference === reference,
       );
+      const recalculatedAmountCents = recalculatedReview?.review.amountCents ?? null;
 
-      if (recalculatedReview?.review.amountCents) {
-        setPriceDraft((recalculatedReview.review.amountCents / 100).toFixed(2));
+      if (recalculatedAmountCents) {
+        setPriceDraft((recalculatedAmountCents / 100).toFixed(2));
       }
       setReadState((current) => ({
         ...current,
-        message: `Saved DSP billing times and recalculated the customer proposal for ${publicBookingReferenceDisplay(booking)}.`,
-        tone: "success",
+        message: recalculatedAmountCents
+          ? `Saved DSP billing times and recalculated the customer proposal for ${publicBookingReferenceDisplay(booking)}.`
+          : `Saved DSP billing times for ${publicBookingReferenceDisplay(booking)}, but the customer proposal requires review.`,
+        tone: recalculatedAmountCents ? "success" : "info",
       }));
     } catch (error) {
       setDspBillingTimeCorrectionState((current) => ({
@@ -1893,12 +2022,11 @@ export function CustomerFolderSavedBookingsPanel({
     booking: CustomerFolderSavedBookingRecord,
     options: {
       keepEditorOpen?: boolean;
-      requireVerifiedIdentity?: boolean;
     } = {},
   ) {
     const exactBooking = inlineEditState.booking;
     const reference = safeDispatchReference(booking);
-    let form = inlineEditState.form;
+    const form = inlineEditState.form;
     const pickupDateTime = inlineEditApiDateTime(form.pickupDateTime);
     const requiredValues = [
       form.customerName,
@@ -1928,85 +2056,13 @@ export function CustomerFolderSavedBookingsPanel({
       return;
     }
 
-    if (options.requireVerifiedIdentity && !sectionFourVerifiedIdentityIsValid(form)) {
-      setInlineEditState((current) => ({
-        ...current,
-        message: "Creating or linking the missing verified traveller...",
-        status: "saving",
-      }));
-
-      try {
-        form = await ensureSectionFourVerifiedIdentity(form);
-      } catch (error) {
-        setInlineEditState((current) => ({
-          ...current,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Verified traveller could not be saved. No invoice was created or emailed.",
-          status: "error",
-        }));
-        return;
-      }
-
-      if (!sectionFourVerifiedIdentityIsValid(form)) {
-        setInlineEditState((current) => ({
-          ...current,
-          message:
-            "Verified identity could not be confirmed after saving. No invoice was created or emailed.",
-          status: "error",
-        }));
-        return;
-      }
-    }
-
     setInlineEditState((current) => ({
       ...current,
       message: `Saving job ${publicBookingReferenceDisplay(booking)}...`,
       status: "saving",
     }));
 
-    const payload = {
-      booking: {
-        admin_internal_status: exactBooking.admin_internal_status ?? "Draft",
-        booker_id: inlineEditIdentityId(form.bookerId),
-        booking_reference: reference,
-        cancellation_review_status: exactBooking.cancellation_review_status ?? null,
-        change_review_status: exactBooking.change_review_status ?? null,
-        company_id: inlineEditIdentityId(form.companyId),
-        contact_display_name: inlineEditText(form.bookerName, 160) || null,
-        contact_email: inlineEditEmail(form.bookerEmail),
-        contact_phone: inlineEditText(form.bookerContact, 120) || null,
-        customer_display_name: inlineEditText(form.customerName, 160),
-        customer_facing_status: exactBooking.customer_facing_status ?? "Received",
-        customer_id: exactBooking.customer_id ?? null,
-        driver_contact: exactBooking.driver_contact ?? null,
-        driver_name: exactBooking.driver_name ?? null,
-        driver_plate_number: exactBooking.driver_plate_number ?? null,
-        dropoff_datetime: exactBooking.dropoff_datetime ?? null,
-        dropoff_location: inlineEditText(form.dropoffLocation),
-        flight_no: exactBooking.flight_no ?? null,
-        luggage_count: exactBooking.luggage_count ?? null,
-        parser_source_reference: exactBooking.parser_source_reference ?? null,
-        passenger_name: inlineEditText(form.passengerName, 160),
-        passenger_phone: exactBooking.passenger_phone ?? null,
-        pax_count: exactBooking.pax_count ?? null,
-        pickup_datetime: pickupDateTime,
-        pickup_location: inlineEditText(form.pickupLocation),
-        request_review_status: exactBooking.request_review_status ?? null,
-        route_summary: inlineEditText(form.routeSummary, 500),
-        route_type: inlineEditText(form.serviceType, 80),
-        service_type: inlineEditText(form.serviceType, 80),
-        short_notice_review_status: exactBooking.short_notice_review_status ?? null,
-        source_channel: exactBooking.source_channel || exactBooking.source_surface || "admin-dashboard",
-        source_surface: exactBooking.source_surface || exactBooking.source_channel || "admin-dashboard",
-        traveler_id: inlineEditIdentityId(form.travelerId),
-        vehicle_type_or_category: exactBooking.vehicle_type_or_category ?? null,
-      },
-      route_points: inlineEditRoutePoints(exactBooking, form),
-      service_items: inlineEditServiceItems(exactBooking),
-      target_booking_reference: reference,
-    };
+    const payload = customerFolderBookingPatchPayload(exactBooking, form, reference);
 
     try {
       const response = await fetch(adminBookingsApiPath, {
@@ -2323,12 +2379,17 @@ export function CustomerFolderSavedBookingsPanel({
                 const billingReview = bookingReference ? billingReviews[bookingReference] : null;
                 const priceReviewed =
                   billingReview?.status === "reviewed" && Boolean(billingReview.amountCents);
+                const paidForInvoice = Boolean(
+                  bookingReference && paidReferences[bookingReference],
+                );
                 const createSingleInvoiceHref = customerFolderInvoiceHref(
                   booking,
                   customerId,
                   customerName,
                   [booking],
                   billingReviews,
+                  false,
+                  paidForInvoice ? bookingReference : "",
                 );
                 const rowKey = booking.booking_reference || `${booking.customer_account}-${booking.pickup_at}`;
                 const isExpanded = Boolean(
@@ -2404,6 +2465,26 @@ export function CustomerFolderSavedBookingsPanel({
                           >
                             Edit
                           </button>
+                          <label className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2 text-xs font-bold text-emerald-900">
+                            <input
+                              aria-label={`Mark ${publicBookingReferenceDisplay(booking)} paid`}
+                              checked={paidForInvoice}
+                              className="h-3.5 w-3.5 rounded border-emerald-500 text-emerald-700"
+                              data-customer-folder-saved-bookings-paid={booking.booking_reference || ""}
+                              onChange={(event) => {
+                                if (!bookingReference) {
+                                  return;
+                                }
+
+                                setPaidReferences((current) => ({
+                                  ...current,
+                                  [bookingReference]: event.target.checked,
+                                }));
+                              }}
+                              type="checkbox"
+                            />
+                            <span>Paid</span>
+                          </label>
                           <Link
                             className="inline-flex min-h-8 items-center rounded-md border border-rose-200 bg-white px-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
                             data-customer-folder-saved-bookings-delete={booking.booking_reference || ""}
@@ -2528,6 +2609,15 @@ export function CustomerFolderSavedBookingsPanel({
                                       data-customer-folder-inline-service="true"
                                       onChange={(event) => updateInlineEditField("serviceType", event.target.value)}
                                       value={inlineEditState.form.serviceType}
+                                    />
+                                  </label>
+                                  <label className="text-xs font-bold text-slate-700">
+                                    Vehicle
+                                    <input
+                                      className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-slate-100 px-2 font-semibold text-slate-950"
+                                      data-customer-folder-inline-vehicle="true"
+                                      readOnly
+                                      value={inlineEditState.booking?.vehicle_type_or_category ?? ""}
                                     />
                                   </label>
                                   <label className="text-xs font-bold text-slate-700">
@@ -2718,7 +2808,7 @@ export function CustomerFolderSavedBookingsPanel({
                     </Link>
                   ))}
                 </div>
-              ) : (
+              ) : sectionFourLegacyIdentityResolverAvailable ? null : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     className="inline-flex h-8 cursor-not-allowed items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-400"
@@ -2734,23 +2824,118 @@ export function CustomerFolderSavedBookingsPanel({
                         ? "Public reference required"
                         : "Customer price required"}
                   </button>
-                  {selectedTravelerInvoiceGrouping.error && selectedUnbilledBookings.length === 1 ? (
-                    <button
-                      className="inline-flex h-8 items-center justify-center rounded-md border border-sky-800 bg-sky-800 px-2.5 text-[11px] font-bold text-white hover:bg-sky-700"
-                      data-customer-folder-blocked-proceed="true"
-                      onClick={() =>
-                        void openInlineBookingEditor(selectedUnbilledBookings[0], {
-                          surface: "invoice-review",
-                        })
-                      }
-                      type="button"
-                    >
-                      Proceed for this booking
-                    </button>
-                  ) : null}
                 </div>
               )}
             </div>
+            {selectedTravelerInvoiceGrouping.error &&
+            !guestAccountBillingEnabled &&
+            selectedUnbilledBookings.length > 0 ? (
+              <div
+                className="mt-3 rounded-md border border-sky-300 bg-white p-3"
+                data-customer-folder-selected-identity-resolver="true"
+              >
+                <p className="text-sm font-bold text-slate-950">
+                  Choose Booker / Traveller once for the selected jobs
+                </p>
+                <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                  Jobs for the same passenger are saved together. Different passengers stay separate.
+                  No invoice, email, payment, driver, Calendar, or messaging action runs here.
+                </p>
+                {sectionFourLegacyIdentityResolution.error ? (
+                  <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-900">
+                    {sectionFourLegacyIdentityResolution.error}
+                  </p>
+                ) : (
+                  <div className="mt-3 grid gap-3">
+                    {sectionFourLegacyIdentityResolution.groups.map((group) => {
+                      const options = sectionFourIdentityPairOptions(group);
+                      const selectedPairId =
+                        sectionFourIdentitySelections[group.key] ||
+                        (options.length === 1 ? String(options[0]?.id || "") : "");
+
+                      return (
+                        <div
+                          className="rounded-md border border-slate-200 bg-slate-50 p-3"
+                          data-customer-folder-selected-identity-group={group.key}
+                          key={group.key}
+                        >
+                          <p className="text-xs font-bold text-slate-950">
+                            {group.passengerName} · {countLabel(group.bookings.length, "job")}
+                          </p>
+                          {options.length === 1 ? (
+                            <p
+                              className="mt-2 rounded-md border border-emerald-200 bg-white px-2.5 py-2 text-xs font-semibold text-emerald-900"
+                              data-customer-folder-selected-identity-carried="true"
+                            >
+                              Booker / Traveller: {options[0].label}
+                            </p>
+                          ) : options.length > 1 ? (
+                            <label className="mt-2 block text-xs font-bold text-slate-700">
+                              Booker / Traveller
+                              <select
+                                className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950"
+                                data-customer-folder-selected-identity-pair="true"
+                                disabled={sectionFourIdentityResolverState.status === "saving"}
+                                onChange={(event) =>
+                                  setSectionFourIdentitySelections((current) => ({
+                                    ...current,
+                                    [group.key]: event.target.value,
+                                  }))
+                                }
+                                value={selectedPairId}
+                              >
+                                <option value="">Choose the actual Booker / Traveller</option>
+                                {options.map((option) => (
+                                  <option key={option.id} value={option.id}>{option.label}</option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : (
+                            <p className="mt-2 rounded-md border border-amber-200 bg-white px-2.5 py-2 text-xs font-semibold text-amber-900">
+                              Add this Booker / Traveller once in the customer profile, then return here.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {sectionFourIdentityResolverState.message ? (
+                  <p
+                    className={`mt-3 rounded-md border px-3 py-2 text-xs font-bold ${
+                      sectionFourIdentityResolverState.status === "error"
+                        ? "border-rose-200 bg-rose-50 text-rose-900"
+                        : sectionFourIdentityResolverState.status === "saved"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                          : "border-sky-200 bg-sky-50 text-sky-900"
+                    }`}
+                    data-customer-folder-selected-identity-message="true"
+                  >
+                    {sectionFourIdentityResolverState.message}
+                  </p>
+                ) : null}
+                {!sectionFourLegacyIdentityResolution.error &&
+                sectionFourLegacyIdentityResolution.groups.length > 0 ? (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      className="h-9 rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+                      data-customer-folder-selected-identity-save="true"
+                      disabled={
+                        sectionFourIdentityResolverState.status === "loading" ||
+                        sectionFourIdentityResolverState.status === "saving" ||
+                        !sectionFourIdentityAssignmentsReady
+                      }
+                      onClick={() => void saveSelectedLegacyBookingIdentities()}
+                      type="button"
+                    >
+                      {sectionFourIdentityResolverState.status === "saving"
+                        ? "Saving..."
+                        : "Save selected jobs"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {selectedUnbilledBookings.length > 0 ? (
               <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
                 <table className="w-full min-w-[560px] text-left text-xs">
@@ -2806,17 +2991,16 @@ export function CustomerFolderSavedBookingsPanel({
                             <td className="px-3 py-3" colSpan={5}>
                               <div
                                 className="rounded-md border border-sky-300 bg-white p-3"
-                                data-customer-folder-section-four-identity-editor="true"
+                                data-customer-folder-section-four-job-editor="true"
                               >
                                 <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                                   <div>
                                     <p className="text-xs font-bold uppercase tracking-wide text-sky-900">
-                                      Correct saved customer identity and job information
+                                      Edit this saved job
                                     </p>
                                     <p className="text-xs font-semibold leading-5 text-slate-600">
-                                      Reuses the exact saved-booking Edit/PATCH lane. Invoice preparation
-                                      stays blocked until one verified company, PA / booker, traveller,
-                                      and reviewed price are confirmed.
+                                      Reuses the exact saved-booking Edit/PATCH lane. Booker / Traveller
+                                      for selected legacy jobs is handled once above.
                                     </p>
                                   </div>
                                   <button
@@ -2838,69 +3022,7 @@ export function CustomerFolderSavedBookingsPanel({
                                   </p>
                                 ) : inlineEditState.booking ? (
                                   <>
-                                    <p className="mt-2 text-xs font-semibold text-slate-600">
-                                      {customerFolderRateSetupMessage}
-                                    </p>
                                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                                      <label className="text-xs font-bold text-slate-700">
-                                        Verified company
-                                        <select
-                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950"
-                                          data-customer-folder-section-four-company-identity="true"
-                                          onChange={(event) =>
-                                            updateSectionFourCompanyIdentity(event.target.value)
-                                          }
-                                          value={inlineEditState.form.companyId}
-                                        >
-                                          <option value="">Select exact company</option>
-                                          {sectionFourCrmCompanies.map((company) => (
-                                            <option key={company.id} value={company.id}>
-                                              {company.name}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </label>
-                                      <label className="text-xs font-bold text-slate-700">
-                                        Verified PA / booker
-                                        <select
-                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950 disabled:bg-slate-100"
-                                          data-customer-folder-section-four-booker-identity="true"
-                                          disabled={!sectionFourCompanyId}
-                                          onChange={(event) =>
-                                            updateSectionFourBookerIdentity(event.target.value)
-                                          }
-                                          value={inlineEditState.form.bookerId}
-                                        >
-                                          <option value="">Select exact PA / booker</option>
-                                          {sectionFourCrmBookers.map((booker) => (
-                                            <option key={booker.id} value={booker.id}>
-                                              {booker.name}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </label>
-                                      <label className="text-xs font-bold text-slate-700">
-                                        Verified traveller
-                                        <select
-                                          className="mt-1 h-9 w-full rounded-md border border-sky-300 bg-white px-2 font-semibold text-slate-950 disabled:bg-slate-100"
-                                          data-customer-folder-section-four-traveler-identity="true"
-                                          disabled={!sectionFourBookerId}
-                                          onChange={(event) =>
-                                            updateSectionFourTravelerIdentity(event.target.value)
-                                          }
-                                          value={inlineEditState.form.travelerId}
-                                        >
-                                          <option value="">Select exact traveller</option>
-                                          {sectionFourCrmTravelers.map((traveler) => (
-                                            <option key={traveler.id} value={String(traveler.id)}>
-                                              {displayText(
-                                                traveler.traveler_name,
-                                                `Traveller ${traveler.id}`,
-                                              )}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </label>
                                       <label className="text-xs font-bold text-slate-700">
                                         Customer / company
                                         <input
@@ -3023,29 +3145,27 @@ export function CustomerFolderSavedBookingsPanel({
                                     </p>
                                     <p
                                       className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2 text-xs font-semibold text-sky-950"
-                                      data-customer-folder-section-four-exact-booking-proceed="true"
+                                      data-customer-folder-section-four-exact-job-save="true"
                                     >
-                                      Proceed applies only to this exact booking. The confirmation
-                                      explains the cause, affected fields, and untouched actions
-                                      before the existing guarded save runs. Email AI and Ask AI do
-                                      not call this control.
+                                      Save job details applies only to this exact booking. No invoice,
+                                      email, payment, driver, Calendar, messaging, payout, or PayNow
+                                      action runs here.
                                     </p>
                                     <div className="mt-3 flex flex-wrap justify-end gap-2">
                                       <button
                                         className="h-9 rounded-md border border-sky-800 bg-sky-800 px-3 text-xs font-bold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
-                                        data-customer-folder-section-four-save="true"
+                                        data-customer-folder-section-four-job-save="true"
                                         disabled={inlineEditState.status === "saving"}
-                                        onClick={(event) =>
-                                          void proceedWithSectionFourBookingCorrection(
-                                            event,
-                                            booking,
-                                          )
+                                        onClick={() =>
+                                          void saveInlineBookingDetails(booking, {
+                                            keepEditorOpen: true,
+                                          })
                                         }
                                         type="button"
                                       >
                                         {inlineEditState.status === "saving"
                                           ? "Saving..."
-                                          : "Proceed for this booking"}
+                                          : "Save job details"}
                                       </button>
                                       <button
                                         className="h-9 rounded-md border border-emerald-700 bg-emerald-700 px-3 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"

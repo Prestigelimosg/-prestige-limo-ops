@@ -12,7 +12,7 @@ import {
   type AiParseResult,
 } from "../lib/ai-parser-schema";
 import {
-  adminEmailAiClassificationAppearsInApp,
+  adminEmailAiIntakeAppearsInApp,
   adminEmailAiSenderAddressIsAllowed,
   type AdminEmailAiClassification,
 } from "../lib/admin-email-ai-intake-contract";
@@ -98,7 +98,10 @@ const adminCustomerDriverAppNotificationsApiPath =
 const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links";
 const adminCustomerBookingInvitationsApiPath = "/api/admin-customer-booking-invitations";
 const adminCompaniesCrmIdentityApiPath = "/api/admin-companies-crm-identity";
+const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
 const adminTravelersCrmIdentityApiPath = "/api/admin-travelers-crm-identity";
+const adminBookersApiPath = "/api/admin-bookers";
+const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
   "/api/admin-company-traveler-crm-runtime-write-action";
 const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
@@ -461,6 +464,7 @@ async function updateAdminDriverAvailability(
 type BookingForm = {
   company: string;
   companyId: string;
+  customerId: string;
   bookingType: string;
   vehicle: string;
   date: string;
@@ -480,9 +484,11 @@ type BookingForm = {
   bookerId: string;
   bookerContact: string;
   bookerEmail: string;
+  passengerContact: string;
   name: string;
   travelerId: string;
   pax: string;
+  luggageCount: string;
   childSeatRequired: string;
   childSeatCount: string;
   childSeatType: string;
@@ -525,12 +531,14 @@ type LoadBookingsOperationalFormFields = Pick<
   | "bookerId"
   | "bookerContact"
   | "bookerEmail"
+  | "passengerContact"
   | "bookingType"
   | "childSeatCount"
   | "childSeatRequired"
   | "childSeatType"
   | "company"
   | "companyId"
+  | "customerId"
   | "date"
   | "dspEndDate"
   | "dspEndTime"
@@ -544,6 +552,7 @@ type LoadBookingsOperationalFormFields = Pick<
   | "extraStopLocation"
   | "flight"
   | "name"
+  | "luggageCount"
   | "travelerId"
   | "pax"
   | "pickup"
@@ -790,6 +799,7 @@ type BookingRecord = {
   route_summary?: string | null;
   pax: number | null;
   pax_count?: number | null;
+  luggage_count?: number | null;
   passenger_name?: string | null;
   passenger_phone?: string | null;
   customer_display_name?: string | null;
@@ -2334,6 +2344,7 @@ type AdminBookingPersistenceRecord = {
   driver_plate_number?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
+  customer_special_request?: string | null;
   vehicle_type_or_category?: string | null;
   customer_facing_status?: string | null;
   admin_internal_status?: string | null;
@@ -2391,6 +2402,7 @@ type AdminBookingPersistenceRequestBody = {
     driver_plate_number: string | null;
     pax_count: number | null;
     luggage_count: number | null;
+    customer_special_request?: string | null;
     vehicle_type_or_category: string | null;
     customer_facing_status: string;
     admin_internal_status: string;
@@ -2400,9 +2412,51 @@ type AdminBookingPersistenceRequestBody = {
     cancellation_review_status?: string | null;
     parser_source_reference: string | null;
   };
+  hotel_agency_folder_create?: {
+    company_name: string;
+  };
   route_points: NonNullable<AdminBookingPersistenceRecord["route_points"]>;
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
 };
+
+type AdminDispatchAgencyFolder = {
+  customer_account?: string | null;
+  customer_folder_active?: boolean | null;
+  customer_id?: string | null;
+  guest_account_billing_enabled?: boolean | null;
+  verified_company_id?: string | null;
+};
+
+type AdminDispatchAgencyFoldersReadResponse = {
+  accounts?: AdminDispatchAgencyFolder[] | null;
+  error?: string;
+  ok?: boolean;
+};
+
+type AdminEmailAiCustomerProfileRecommendation =
+  | {
+      companyId: number;
+      companyName: string;
+      customerId: string;
+      kind: "agency";
+      matchBasis: "company name" | "email";
+      profileName: string;
+      status: "matched";
+    }
+  | {
+      companyId: number;
+      companyName: string;
+      kind: "corporate";
+      matchBasis: "company name" | "email";
+      profileName: string;
+      status: "matched";
+    }
+  | {
+      message: string;
+      status: "ambiguous" | "unavailable" | "unmatched";
+    };
+
+const adminDispatchCreateAgencyFolderValue = "create-new-hotel-tour-agency";
 
 type SaveCrmBillingIdentityReview = {
   accountLabel: string;
@@ -2593,6 +2647,7 @@ type ParsedDebugBooking = BookingForm & {
 type RateOverrideDraft = {
   companyName: string;
   bossName: string;
+  travelerId: string;
   cardOptionDefaultEnabled: boolean;
   cardOptionDefaultTouched: boolean;
   customerRates: RateRules;
@@ -2764,6 +2819,7 @@ function dispatchSummaryUppercaseField(label: string): AdminOperationalUppercase
 const initialRateOverrideDraft: RateOverrideDraft = {
   companyName: "",
   bossName: "",
+  travelerId: "",
   cardOptionDefaultEnabled: false,
   cardOptionDefaultTouched: false,
   customerRates: {},
@@ -2910,6 +2966,7 @@ function createInitialBooking(): BookingForm {
   return {
     company: "",
     companyId: "",
+    customerId: "",
     bookingType: "MNG",
     vehicle: "AVF",
     date: "",
@@ -2929,9 +2986,11 @@ function createInitialBooking(): BookingForm {
     bookerId: "",
     bookerContact: "",
     bookerEmail: "",
+    passengerContact: "",
     name: "",
     travelerId: "",
     pax: "1",
+    luggageCount: "",
     childSeatRequired: "",
     childSeatCount: "",
     childSeatType: "",
@@ -2952,6 +3011,33 @@ function createInitialBooking(): BookingForm {
     driverNotes: "",
     driverIncludePayout: "",
   };
+}
+
+function adminBookingFormSyncSignature(booking: BookingForm) {
+  return JSON.stringify(
+    Object.entries(booking)
+      .sort(([leftField], [rightField]) => leftField.localeCompare(rightField))
+      .map(([field, value]) => [field, clean(value)]),
+  );
+}
+
+function adminBookingVersionsMatch(
+  leftValue: string | null | undefined,
+  rightValue: string | null | undefined,
+) {
+  const left = clean(leftValue);
+  const right = clean(rightValue);
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftTimestamp = Date.parse(left);
+  const rightTimestamp = Date.parse(right);
+
+  return Number.isFinite(leftTimestamp) && Number.isFinite(rightTimestamp)
+    ? leftTimestamp === rightTimestamp
+    : left === right;
 }
 
 function adminDispatchSafeServiceTypeValue(
@@ -2996,6 +3082,7 @@ function adminDispatchSelectableBookingForm(bookingForm: BookingForm): BookingFo
 const fieldLabels: Record<keyof BookingForm, string> = {
   company: "Company / Account",
   companyId: "Verified company",
+  customerId: "Hotel / Tour Agency folder",
   bookingType: "Booking type",
   vehicle: "Vehicle",
   date: "Pickup date",
@@ -3015,9 +3102,11 @@ const fieldLabels: Record<keyof BookingForm, string> = {
   bookerId: "Verified booker",
   bookerContact: "Booker WhatsApp / Contact",
   bookerEmail: "Booker email (optional)",
+  passengerContact: "Passenger phone",
   name: "Passenger name",
   travelerId: "Verified traveler",
   pax: "Pax",
+  luggageCount: "Number of bags",
   childSeatRequired: "Child seat required",
   childSeatCount: "Child seat count",
   childSeatType: "Child seat type",
@@ -3045,7 +3134,9 @@ const bookingDetailFieldOrder: Array<keyof BookingForm> = [
   "bookerContact",
   "bookerEmail",
   "name",
+  "passengerContact",
   "pax",
+  "luggageCount",
 ];
 
 const tripRouteFieldOrder: Array<keyof BookingForm> = [
@@ -3062,6 +3153,12 @@ const tripRouteFieldOrder: Array<keyof BookingForm> = [
 
 function clean(value: string | number | null | undefined) {
   return (value ?? "").toString().trim();
+}
+
+function positiveId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function cleanReferenceText(value: string | number | null | undefined) {
@@ -5048,6 +5145,16 @@ function saveCrmExplicitCompanyAccount(bookingValue: BookingForm) {
   return normalizeCompanyAccount(bookingValue.company, bookingValue.bookerEmail);
 }
 
+function adminEmailAiRecommendationEmail(bookingValue: BookingForm) {
+  const email = normaliseEmail(bookingValue.bookerEmail);
+
+  return isValidEmail(email) ? email : "";
+}
+
+function adminEmailAiRecommendationCompanyName(bookingValue: BookingForm) {
+  return saveCrmExplicitCompanyAccount(bookingValue);
+}
+
 function saveCrmDefaultCustomerAccount(bookingValue: BookingForm) {
   const companyAccount = saveCrmExplicitCompanyAccount(bookingValue);
   const travelerName = clean(bookingValue.name);
@@ -6104,11 +6211,16 @@ type CompanyTravelerCrmRuntimeWriteResponse = {
   ok?: boolean;
   reason?: string;
   record?: {
+    booker_contact?: string | null;
+    booker_email?: string | null;
+    booker_name?: string | null;
+    company_id?: number | string | null;
     company_name?: string | null;
     id?: number | string | null;
     mobile_phone?: string | null;
     operations_email?: string | null;
     primary_contact_name?: string | null;
+    traveler_name?: string | null;
   } | null;
   rejected_fields?: unknown;
   status?: string;
@@ -6164,6 +6276,7 @@ type FullDriverProfileRuntimeWritePayload =
   | FullDriverProfileRuntimeSavePayload;
 
 type FullDriverProfileRuntimeWriteResponse = {
+  driver_account_revoked?: boolean;
   error?: string;
   no_op?: boolean;
   ok?: boolean;
@@ -6195,24 +6308,9 @@ type LegacyCompanyRateOverrideInsertPayloadInput = CompanyRateOverridePayloadInp
   companyName: string;
 };
 
-type LegacyTravelerRateOverrideInsertPayloadInput = TravelerRateOverridePayloadInput & {
-  companyId: number;
-  travelerName: string;
-};
-
 function buildCompanyCrmIdentityContactPayload(companyName: string): CompanyCrmIdentityContactPayload {
   return {
     company_name: companyName || "Internal Account",
-  };
-}
-
-function buildTravelerCrmIdentityContactPayload(
-  companyId: number,
-  travelerName: string,
-): TravelerCrmIdentityContactPayload {
-  return {
-    company_id: companyId,
-    traveler_name: travelerName,
   };
 }
 
@@ -6429,6 +6527,56 @@ async function loadSaveCrmCompanyProfileForSave(
   return responseBody.company;
 }
 
+async function loadSaveCrmCompanyProfileCandidateByOperationsEmail(
+  operationsEmail: string,
+): Promise<AdminCompanyCrmIdentityRecord | null> {
+  const normalizedOperationsEmail = clean(operationsEmail).toLowerCase();
+
+  if (!normalizedOperationsEmail) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    operations_email: normalizedOperationsEmail,
+  });
+  const response = await fetch(`${adminCompaniesCrmIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminCompanyCrmIdentityReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "The CRM company duplicate check could not be verified. No booking was saved.",
+    );
+  }
+
+  if (!responseBody.company) {
+    return null;
+  }
+
+  const candidateId = adminDispatchVerifiedIdentityId(responseBody.company.id);
+  const candidateName = clean(responseBody.company.company_name);
+  const candidateEmail = clean(responseBody.company.operations_email).toLowerCase();
+
+  if (
+    !candidateId ||
+    !candidateName ||
+    candidateEmail !== normalizedOperationsEmail
+  ) {
+    throw new Error(
+      "The CRM company duplicate check did not return one exact safe candidate. No booking was saved.",
+    );
+  }
+
+  return responseBody.company;
+}
+
 async function saveCrmCompanyProfileForBooking(
   payload: CompanyTravelerCrmIdentityContactRuntimePayload,
 ): Promise<AdminCompanyCrmIdentityRecord> {
@@ -6469,18 +6617,87 @@ async function resolveSaveCrmCompanyProfileForSave(
 ): Promise<SaveCrmCompanyProfileResolution> {
   const requestedCompanyId = adminDispatchVerifiedIdentityId(bookingValue.companyId);
   const requestedCompanyName = clean(confirmedAccountLabel);
+  const creatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(bookingValue);
 
-  if (!requestedCompanyName) {
+  if (bookingValue.customerId && !creatingAgencyFolder && !requestedCompanyId) {
     return {
-      message: "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
+      message: "The selected agency folder has no verified company relationship. Reload CRM identities and select the folder again. No company or booking was saved.",
       ok: false,
     };
   }
 
-  const existingCompany = await loadSaveCrmCompanyProfileForSave(
+  if (!requestedCompanyName && (!bookingValue.customerId || creatingAgencyFolder)) {
+    return {
+      message: creatingAgencyFolder
+        ? "Enter the new Hotel / Tour Agency name under Company / Account before saving. No company or booking was saved."
+        : "Save + CRM needs one confirmed customer company profile name. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  let existingCompany = await loadSaveCrmCompanyProfileForSave(
     requestedCompanyId,
     requestedCompanyName,
   );
+
+  if (bookingValue.customerId && !creatingAgencyFolder) {
+    if (!existingCompany) {
+      existingCompany = await loadSaveCrmCompanyProfileCandidateByOperationsEmail(
+        bookingValue.bookerEmail,
+      );
+    }
+
+    const agencyCompanyId = adminDispatchVerifiedIdentityId(existingCompany?.id);
+    const agencyCompanyName = clean(existingCompany?.company_name);
+
+    if (!agencyCompanyId || !agencyCompanyName) {
+      return {
+        message: "The selected agency folder has no exact existing CRM company match. Reload CRM identities and review the Company / Account. No company or booking was saved.",
+        ok: false,
+      };
+    }
+
+    return {
+      companyId: agencyCompanyId,
+      companyName: agencyCompanyName,
+      ok: true,
+      profileWritePerformed: false,
+    };
+  }
+
+  if (creatingAgencyFolder && existingCompany) {
+    const existingAgencyCompanyId = adminDispatchVerifiedIdentityId(existingCompany.id);
+    const existingAgencyCompanyName = clean(existingCompany.company_name);
+
+    if (!existingAgencyCompanyId || !existingAgencyCompanyName) {
+      throw new Error("The exact CRM company profile is incomplete. No booking was saved.");
+    }
+
+    if (
+      !window.confirm(
+        `Use the existing CRM company profile "${existingAgencyCompanyName}" and create its first Hotel / Tour Agency folder with this booking? Booker and Traveller identities stay blank; the passenger stays on this booking only.`,
+      )
+    ) {
+      return {
+        message: "Save + CRM cancelled before creating the first Hotel / Tour Agency folder. No booking was saved.",
+        ok: false,
+      };
+    }
+
+    return {
+      companyId: existingAgencyCompanyId,
+      companyName: existingAgencyCompanyName,
+      ok: true,
+      profileWritePerformed: false,
+    };
+  }
+
+  if (!requestedCompanyId && existingCompany) {
+    return {
+      message: `Existing CRM company profile "${clean(existingCompany.company_name)}" matches this Company / Account. Select it under Verified company, then Save + CRM again. No booking was saved.`,
+      ok: false,
+    };
+  }
 
   if (requestedCompanyId && !existingCompany) {
     return {
@@ -6490,34 +6707,51 @@ async function resolveSaveCrmCompanyProfileForSave(
   }
 
   if (!existingCompany) {
-    if (
-      !window.confirm(
-        `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
-      )
-    ) {
+    const duplicateCompanyCandidate = requestedCompanyId
+      ? null
+      : await loadSaveCrmCompanyProfileCandidateByOperationsEmail(
+          bookingValue.bookerEmail,
+        );
+
+    if (duplicateCompanyCandidate) {
       return {
-        message: "Save + CRM cancelled before creating the new company profile. No booking was saved.",
+        message: `Existing CRM company profile "${clean(duplicateCompanyCandidate.company_name)}" matches this Booker email. Select it under Verified company, then Save + CRM again. No booking was saved.`,
         ok: false,
       };
     }
 
-    const createdCompany = await saveCrmCompanyProfileForBooking({
-      action_type: "company_create",
-      ...buildSaveCrmCompanyProfileContactPayload(bookingValue, requestedCompanyName),
-    });
-    const createdCompanyId = adminDispatchVerifiedIdentityId(createdCompany.id);
-    const createdCompanyName = clean(createdCompany.company_name) || requestedCompanyName;
+    if (!existingCompany) {
+      if (
+        !window.confirm(
+          creatingAgencyFolder
+            ? `Create the new CRM company profile "${requestedCompanyName}" and its first Hotel / Tour Agency folder with this booking? Booker and Traveller identities stay blank; the passenger stays on this booking only. This does not create an invoice, change rates or Calendar, or send a message.`
+            : `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
+        )
+      ) {
+        return {
+          message: "Save + CRM cancelled before creating the new company profile. No booking was saved.",
+          ok: false,
+        };
+      }
 
-    if (!createdCompanyId) {
-      throw new Error("The new CRM company profile returned no verified ID. No booking was saved.");
+      const createdCompany = await saveCrmCompanyProfileForBooking({
+        action_type: "company_create",
+        ...buildSaveCrmCompanyProfileContactPayload(bookingValue, requestedCompanyName),
+      });
+      const createdCompanyId = adminDispatchVerifiedIdentityId(createdCompany.id);
+      const createdCompanyName = clean(createdCompany.company_name) || requestedCompanyName;
+
+      if (!createdCompanyId) {
+        throw new Error("The new CRM company profile returned no verified ID. No booking was saved.");
+      }
+
+      return {
+        companyId: createdCompanyId,
+        companyName: createdCompanyName,
+        ok: true,
+        profileWritePerformed: true,
+      };
     }
-
-    return {
-      companyId: createdCompanyId,
-      companyName: createdCompanyName,
-      ok: true,
-      profileWritePerformed: true,
-    };
   }
 
   const existingCompanyId = adminDispatchVerifiedIdentityId(existingCompany.id);
@@ -6568,6 +6802,529 @@ async function resolveSaveCrmCompanyProfileForSave(
     companyName: clean(savedCompany.company_name) || existingCompanyName,
     ok: true,
     profileWritePerformed: true,
+  };
+}
+
+type SaveCrmBookerRecord = {
+  booker_name?: string | null;
+  company_id?: number | string | null;
+  email?: string | null;
+  id?: number | string | null;
+  phone?: string | null;
+};
+
+type SaveCrmBookerResponse = {
+  booker?: SaveCrmBookerRecord | null;
+  error?: string;
+  ok?: boolean;
+};
+
+type SaveCrmCorporateIdentityResolution =
+  | {
+      bookerId: number;
+      bookerName: string;
+      companyId: number;
+      ok: true;
+      travelerId: number;
+    }
+  | {
+      message: string;
+      ok: false;
+    };
+
+function saveCrmComparableIdentityValue(value: string | null | undefined) {
+  return clean(value).replace(/\s+/g, " ").toLowerCase();
+}
+
+function saveCrmValidatedBookerRecord(
+  value: SaveCrmBookerRecord | null | undefined,
+  companyId: number,
+  bookerName: string,
+) {
+  const recordId = adminDispatchVerifiedIdentityId(value?.id);
+
+  if (
+    !recordId ||
+    adminDispatchVerifiedIdentityId(value?.company_id) !== companyId ||
+    saveCrmComparableIdentityValue(value?.booker_name) !==
+      saveCrmComparableIdentityValue(bookerName)
+  ) {
+    throw new Error(
+      "The verified Booker response did not match the exact company and name. No booking was saved.",
+    );
+  }
+
+  return {
+    ...value,
+    id: recordId,
+  };
+}
+
+async function loadSaveCrmCorporateIdentityRows(companyId: number) {
+  const response = await fetch(adminRateSetupApiPath, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminRateSetupReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "Verified CRM identities could not be reloaded. No booking was saved.",
+    );
+  }
+
+  if (
+    !(responseBody.companies ?? []).some(
+      (company) => adminDispatchVerifiedIdentityId(company.id) === companyId,
+    )
+  ) {
+    throw new Error(
+      "The selected verified company no longer exists. Reload CRM identities before saving.",
+    );
+  }
+
+  return (responseBody.travelers ?? []).filter(
+    (traveler) => adminDispatchVerifiedIdentityId(traveler.company_id) === companyId,
+  );
+}
+
+async function loadSaveCrmAgencyCustomerClassification(
+  customerId: number,
+  companyId: number,
+) {
+  const response = await fetch(`${adminCustomerAccountsApiPath}?limit=1000`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | AdminDispatchAgencyFoldersReadResponse
+    | null;
+
+  if (!response.ok || responseBody?.ok !== true) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "Hotel / Tour Agency folders could not be verified before saving.",
+    );
+  }
+
+  return (responseBody.accounts ?? []).some(
+    (account) =>
+      account.guest_account_billing_enabled === true &&
+      account.customer_folder_active === true &&
+      adminDispatchVerifiedIdentityId(account.customer_id) === customerId &&
+      adminDispatchVerifiedIdentityId(account.verified_company_id) === companyId,
+  );
+}
+
+async function loadSaveCrmBookerById(companyId: number, bookerId: number) {
+  const params = new URLSearchParams({ id: String(bookerId) });
+  const response = await fetch(`${adminBookersApiPath}?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | SaveCrmBookerResponse
+    | null;
+  const returnedBookerId = adminDispatchVerifiedIdentityId(responseBody?.booker?.id);
+  const returnedCompanyId = adminDispatchVerifiedIdentityId(
+    responseBody?.booker?.company_id,
+  );
+  const returnedBookerName = clean(responseBody?.booker?.booker_name);
+
+  if (
+    !response.ok ||
+    responseBody?.ok !== true ||
+    returnedBookerId !== bookerId ||
+    returnedCompanyId !== companyId ||
+    !returnedBookerName
+  ) {
+    throw new Error(
+      clean(responseBody?.error) ||
+        "The booking's verified Booker could not be reloaded under the exact company. No booking was saved.",
+    );
+  }
+
+  return {
+    ...responseBody.booker,
+    booker_name: returnedBookerName,
+    id: returnedBookerId,
+  };
+}
+
+async function findOrCreateSaveCrmBooker(
+  companyId: number,
+  bookingValue: BookingForm,
+) {
+  const bookerName = clean(bookingValue.booker);
+  const bookerEmail = clean(bookingValue.bookerEmail).toLowerCase();
+  const bookerContact = clean(bookingValue.bookerContact);
+  const params = new URLSearchParams({
+    booker_name: bookerName,
+    company_id: String(companyId),
+  });
+  const lookupResponse = await fetch(`${adminBookersApiPath}?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "GET",
+  });
+  const lookupBody = (await lookupResponse.json().catch(() => null)) as
+    | SaveCrmBookerResponse
+    | null;
+
+  if (!lookupResponse.ok || lookupBody?.ok !== true) {
+    throw new Error(
+      clean(lookupBody?.error) ||
+        "The verified Booker could not be checked safely. No booking was saved.",
+    );
+  }
+
+  if (lookupBody.booker) {
+    let booker = saveCrmValidatedBookerRecord(
+      lookupBody.booker,
+      companyId,
+      bookerName,
+    );
+    const savedEmail = clean(booker.email).toLowerCase();
+    const savedContact = clean(booker.phone);
+
+    if (
+      (savedEmail && bookerEmail && savedEmail !== bookerEmail) ||
+      (savedContact && bookerContact && savedContact !== bookerContact)
+    ) {
+      throw new Error(
+        "That verified Booker already has different contact details. Review the exact Booker in the customer profile before retrying; no booking was saved.",
+      );
+    }
+
+    if ((!savedEmail && bookerEmail) || (!savedContact && bookerContact)) {
+      const updateResponse = await fetch(adminBookersApiPath, {
+        body: JSON.stringify({
+          booker_name: clean(booker.booker_name) || bookerName,
+          email: savedEmail || bookerEmail || null,
+          id: booker.id,
+          phone: savedContact || bookerContact || null,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const updateBody = (await updateResponse.json().catch(() => null)) as
+        | SaveCrmBookerResponse
+        | null;
+
+      if (!updateResponse.ok || updateBody?.ok !== true || !updateBody.booker) {
+        throw new Error(
+          clean(updateBody?.error) ||
+            "The verified Booker contact could not be completed safely. No booking was saved.",
+        );
+      }
+
+      booker = saveCrmValidatedBookerRecord(
+        updateBody.booker,
+        companyId,
+        bookerName,
+      );
+    }
+
+    return booker;
+  }
+
+  const createResponse = await fetch(adminBookersApiPath, {
+    body: JSON.stringify({
+      booker_name: bookerName,
+      company_id: companyId,
+      email: bookerEmail || null,
+      phone: bookerContact || null,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const createBody = (await createResponse.json().catch(() => null)) as
+    | SaveCrmBookerResponse
+    | null;
+
+  if (!createResponse.ok || createBody?.ok !== true || !createBody.booker) {
+    throw new Error(
+      clean(createBody?.error) ||
+        "The verified Booker could not be created safely. No booking was saved.",
+    );
+  }
+
+  return saveCrmValidatedBookerRecord(createBody.booker, companyId, bookerName);
+}
+
+async function createSaveCrmTraveler(
+  companyId: number,
+  bookingValue: BookingForm,
+) {
+  const travelerName = clean(bookingValue.name);
+  const response = await fetch(adminCompanyTravelerCrmRuntimeWriteActionApiPath, {
+    body: JSON.stringify({
+      action_type: "traveler_create",
+      booker_name: clean(bookingValue.booker),
+      company_id: companyId,
+      traveler_name: travelerName,
+      ...(clean(bookingValue.bookerContact)
+        ? { booker_contact: clean(bookingValue.bookerContact) }
+        : {}),
+      ...(clean(bookingValue.bookerEmail)
+        ? { booker_email: clean(bookingValue.bookerEmail).toLowerCase() }
+        : {}),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "POST",
+  });
+  const responseBody = (await response.json().catch(() => null)) as
+    | CompanyTravelerCrmRuntimeWriteResponse
+    | null;
+  const travelerId = crmRuntimeRecordId(responseBody);
+
+  if (
+    !response.ok ||
+    responseBody?.ok !== true ||
+    responseBody.status !== "saved" ||
+    !travelerId ||
+    adminDispatchVerifiedIdentityId(responseBody.record?.company_id) !== companyId ||
+    saveCrmComparableIdentityValue(responseBody.record?.traveler_name) !==
+      saveCrmComparableIdentityValue(travelerName)
+  ) {
+    throw new Error(
+      crmRuntimeWriteError(
+        responseBody,
+        "The verified Traveller could not be created safely. No booking was saved.",
+      ),
+    );
+  }
+
+  return travelerId;
+}
+
+async function linkSaveCrmTravelerToBooker(
+  companyId: number,
+  bookerId: number,
+  travelerId: number,
+  bookingValue: BookingForm,
+) {
+  const bookerName = clean(bookingValue.booker);
+  const travelerName = clean(bookingValue.name);
+  const bookerSnapshotPayload = {
+    ...(clean(bookingValue.bookerContact)
+      ? { booker_contact: clean(bookingValue.bookerContact) }
+      : {}),
+    ...(clean(bookingValue.bookerEmail)
+      ? { booker_email: clean(bookingValue.bookerEmail).toLowerCase() }
+      : {}),
+  };
+  const linkParams = new URLSearchParams({
+    id: `eq.${travelerId}`,
+    select: "id,company_id,booker_id,traveler_name,booker_name,booker_contact,booker_email",
+    single: "single",
+  });
+  const linkResponse = await fetch(`${adminLegacyTravelersApiPath}?${linkParams.toString()}`, {
+    body: JSON.stringify({
+      booker_id: bookerId,
+      booker_name: bookerName,
+      traveler_name: travelerName,
+      ...bookerSnapshotPayload,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-prestige-admin-purpose": adminLegacyDataPurpose,
+    },
+    method: "PATCH",
+  });
+  const linkedTraveler = (await linkResponse.json().catch(() => null)) as
+    | TravelerRecord
+    | null;
+
+  if (
+    !linkResponse.ok ||
+    adminDispatchVerifiedIdentityId(linkedTraveler?.id) !== travelerId ||
+    adminDispatchVerifiedIdentityId(linkedTraveler?.company_id) !== companyId ||
+    adminDispatchVerifiedIdentityId(linkedTraveler?.booker_id) !== bookerId ||
+    saveCrmComparableIdentityValue(linkedTraveler?.traveler_name) !==
+      saveCrmComparableIdentityValue(travelerName) ||
+    saveCrmComparableIdentityValue(linkedTraveler?.booker_name) !==
+      saveCrmComparableIdentityValue(bookerName)
+  ) {
+    throw new Error(
+      "The verified Traveller could not be linked to the exact Booker. No booking was saved.",
+    );
+  }
+}
+
+async function resolveSaveCrmCorporateIdentityForSave(
+  bookingValue: BookingForm,
+  companyId: number,
+  companyName: string,
+): Promise<SaveCrmCorporateIdentityResolution> {
+  const currentBookerId = adminDispatchVerifiedIdentityId(bookingValue.bookerId);
+  const currentTravelerId = adminDispatchVerifiedIdentityId(bookingValue.travelerId);
+
+  if (currentBookerId && currentTravelerId) {
+    const currentRows = await loadSaveCrmCorporateIdentityRows(companyId);
+    const verifiedPair = currentRows.find(
+      (traveler) =>
+        adminDispatchVerifiedIdentityId(traveler.id) === currentTravelerId &&
+        adminDispatchVerifiedIdentityId(traveler.company_id) === companyId &&
+        adminDispatchVerifiedIdentityId(traveler.booker_id) === currentBookerId &&
+        saveCrmComparableIdentityValue(traveler.traveler_name) ===
+          saveCrmComparableIdentityValue(bookingValue.name) &&
+        saveCrmComparableIdentityValue(traveler.booker_name) ===
+          saveCrmComparableIdentityValue(bookingValue.booker),
+    );
+
+    if (!verifiedPair) {
+      throw new Error(
+        "The selected Booker + Traveller pair no longer matches this exact company and booking. Reload CRM identities before saving; no booking was changed.",
+      );
+    }
+
+    return {
+      bookerId: currentBookerId,
+      bookerName: clean(bookingValue.booker),
+      companyId,
+      ok: true,
+      travelerId: currentTravelerId,
+    };
+  }
+
+  if (!currentBookerId && currentTravelerId) {
+    return {
+      message: "The booking has a verified Traveller without its verified Booker. Reload CRM identities and select the exact pair before saving.",
+      ok: false,
+    };
+  }
+
+  const existingBooker = currentBookerId
+    ? await loadSaveCrmBookerById(companyId, currentBookerId)
+    : null;
+  const identityBookingValue = existingBooker
+    ? {
+        ...bookingValue,
+        booker: clean(existingBooker.booker_name),
+      }
+    : bookingValue;
+  const bookerName = clean(identityBookingValue.booker);
+  const travelerName = clean(bookingValue.name);
+
+  if (!bookerName || !travelerName) {
+    return {
+      message: "Enter both Booker / PA name and Passenger name before saving this corporate booking.",
+      ok: false,
+    };
+  }
+
+  if (
+    !window.confirm(
+      `Create or reuse this verified Booker + Traveller under ${companyName}? Booker: ${bookerName}. Traveller: ${travelerName}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change Calendar, driver, payment, or agency guests.`,
+    )
+  ) {
+    return {
+      message: "Save cancelled before creating or reusing the verified Booker + Traveller. No booking was saved.",
+      ok: false,
+    };
+  }
+
+  const currentRows = await loadSaveCrmCorporateIdentityRows(companyId);
+  const matchingTravelers = currentRows.filter(
+    (traveler) =>
+      saveCrmComparableIdentityValue(traveler.traveler_name) ===
+      saveCrmComparableIdentityValue(travelerName),
+  );
+
+  if (matchingTravelers.length > 1) {
+    throw new Error(
+      "More than one verified Traveller matches this company and name. Review the customer profile before retrying; no booking was saved.",
+    );
+  }
+
+  const matchingTraveler = matchingTravelers[0] ?? null;
+  const existingLinkedBookerId = adminDispatchVerifiedIdentityId(matchingTraveler?.booker_id);
+  const existingLinkedBookerName = clean(matchingTraveler?.booker_name);
+
+  if (
+    existingLinkedBookerId &&
+    saveCrmComparableIdentityValue(existingLinkedBookerName) !==
+      saveCrmComparableIdentityValue(bookerName)
+  ) {
+    throw new Error(
+      "That Traveller is already linked to another verified Booker. Review the customer profile before retrying; no booking was saved.",
+    );
+  }
+
+  const booker =
+    existingBooker ||
+    (await findOrCreateSaveCrmBooker(companyId, identityBookingValue));
+  const bookerId = adminDispatchVerifiedIdentityId(booker.id);
+
+  if (!bookerId) {
+    throw new Error("The verified Booker returned no safe ID. No booking was saved.");
+  }
+
+  if (existingLinkedBookerId && existingLinkedBookerId !== bookerId) {
+    throw new Error(
+      "That Traveller is already linked to another verified Booker. Review the customer profile before retrying; no booking was saved.",
+    );
+  }
+
+  const travelerId =
+    adminDispatchVerifiedIdentityId(matchingTraveler?.id) ||
+    (await createSaveCrmTraveler(companyId, identityBookingValue));
+
+  await linkSaveCrmTravelerToBooker(
+    companyId,
+    bookerId,
+    travelerId,
+    identityBookingValue,
+  );
+
+  const verifiedRows = await loadSaveCrmCorporateIdentityRows(companyId);
+  const verifiedPair = verifiedRows.find(
+    (traveler) =>
+      adminDispatchVerifiedIdentityId(traveler.id) === travelerId &&
+      adminDispatchVerifiedIdentityId(traveler.company_id) === companyId &&
+      adminDispatchVerifiedIdentityId(traveler.booker_id) === bookerId &&
+      saveCrmComparableIdentityValue(traveler.traveler_name) ===
+        saveCrmComparableIdentityValue(travelerName) &&
+      saveCrmComparableIdentityValue(traveler.booker_name) ===
+        saveCrmComparableIdentityValue(bookerName),
+  );
+
+  if (!verifiedPair) {
+    throw new Error(
+      "The saved Booker + Traveller pair could not be verified before the booking write. No booking was saved; review the customer profile before retrying.",
+    );
+  }
+
+  return {
+    bookerId,
+    bookerName,
+    companyId,
+    ok: true,
+    travelerId,
   };
 }
 
@@ -6767,6 +7524,12 @@ function fullDriverProfileRuntimeWriteDeleted(
   return value?.ok === true && value.status === "deleted" && value.no_op !== true;
 }
 
+function fullDriverProfileRuntimeAccountRevoked(
+  value: FullDriverProfileRuntimeWriteResponse | null,
+) {
+  return fullDriverProfileRuntimeWriteDeleted(value) && value?.driver_account_revoked === true;
+}
+
 function fullDriverProfileRuntimeWriteSaved(
   value: FullDriverProfileRuntimeWriteResponse | null,
 ) {
@@ -6817,7 +7580,7 @@ function buildFullDriverProfileRuntimeDeletePayload(
 async function saveFullDriverProfileRuntime(
   payload: FullDriverProfileRuntimeWritePayload,
 ): Promise<
-  | { deleted: boolean; ok: true; saved: boolean }
+  | { accountRevoked: boolean; deleted: boolean; ok: true; saved: boolean }
   | { errorMessage: string; ok: false }
 > {
   try {
@@ -6835,6 +7598,7 @@ async function saveFullDriverProfileRuntime(
 
     if (response.ok && responseBody?.ok === true) {
       return {
+        accountRevoked: fullDriverProfileRuntimeAccountRevoked(responseBody),
         deleted: fullDriverProfileRuntimeWriteDeleted(responseBody),
         ok: true,
         saved: fullDriverProfileRuntimeWriteSaved(responseBody),
@@ -6842,7 +7606,7 @@ async function saveFullDriverProfileRuntime(
     }
 
     if (isFullDriverProfileRuntimeWriteBlockedNoOp(responseBody)) {
-      return { deleted: false, ok: true, saved: false };
+      return { accountRevoked: false, deleted: false, ok: true, saved: false };
     }
 
     return {
@@ -7004,27 +7768,6 @@ function buildLegacyCompanyRateOverrideInsertPayload({
       includeCustomerRates,
       includeDriverPayoutRules,
       transzendExcelPrivacy,
-    }),
-  };
-}
-
-function buildLegacyTravelerRateOverrideInsertPayload({
-  cardOptionDefaultEnabled,
-  companyId,
-  customerRates,
-  driverPayoutRules,
-  includeCustomerRates = true,
-  includeDriverPayoutRules = true,
-  travelerName,
-}: LegacyTravelerRateOverrideInsertPayloadInput) {
-  return {
-    ...buildTravelerCrmIdentityContactPayload(companyId, travelerName),
-    ...buildTravelerRateOverridePayload({
-      cardOptionDefaultEnabled,
-      customerRates,
-      driverPayoutRules,
-      includeCustomerRates,
-      includeDriverPayoutRules,
     }),
   };
 }
@@ -8675,6 +9418,7 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     company:
       getBookingCustomerAccountDisplayName(bookingRecord),
     companyId: bookingRecord.company_id ? String(bookingRecord.company_id) : "",
+    customerId: "",
     bookingType: serviceType,
     vehicle: vehicleDisplay,
     date: getBookingDateKey(bookingRecord),
@@ -8689,9 +9433,14 @@ function bookingRecordToOperationalFormFields(bookingRecord: BookingRecord): Loa
     bookerId: bookingRecord.booker_id ? String(bookingRecord.booker_id) : "",
     bookerContact: clean(bookingRecord.contact_phone) || clean(bookingRecord.bookers?.phone),
     bookerEmail: clean(bookingRecord.contact_email) || clean(bookingRecord.bookers?.email),
+    passengerContact: clean(bookingRecord.passenger_phone),
     name: getBookingName(bookingRecord),
     travelerId: bookingRecord.traveler_id ? String(bookingRecord.traveler_id) : "",
     pax: String(bookingRecord.pax_count || bookingRecord.pax || 1),
+    luggageCount:
+      safeAdminBookingPersistenceCount(bookingRecord.luggage_count) === null
+        ? ""
+        : String(safeAdminBookingPersistenceCount(bookingRecord.luggage_count)),
     driverId: bookingRecord.driver_id ? String(bookingRecord.driver_id) : "",
     driverName: clean(bookingRecord.driver_name),
     driverContact: clean(bookingRecord.driver_contact),
@@ -8973,6 +9722,10 @@ function adminDispatchVerifiedIdentityId(value: string | number | null | undefin
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function adminDispatchIsCreatingAgencyFolder(bookingValue: Pick<BookingForm, "customerId">) {
+  return clean(bookingValue.customerId) === adminDispatchCreateAgencyFolderValue;
+}
+
 function getAdminExtraStopLocations(value: string) {
   const cleanedValue = clean(value);
 
@@ -8998,6 +9751,9 @@ function buildAdminBookingPersistencePayload(
   bookingReference = createAdminBookingReference(),
   options: {
     customerDisplayNameOverride?: string | null;
+    customerSpecialRequestOverride?: string | null;
+    hotelAgencyFolderCreateOverride?: boolean;
+    luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
   } = {},
 ): AdminBookingPersistenceRequestBody {
@@ -9065,6 +9821,8 @@ function buildAdminBookingPersistencePayload(
     clean(options.customerDisplayNameOverride) ||
     saveCrmDefaultCustomerAccount(bookingValue) ||
     adminDraftCustomerFallback;
+  const createHotelAgencyFolder =
+    options.hotelAgencyFolderCreateOverride ?? adminDispatchIsCreatingAgencyFolder(bookingValue);
   const contactDisplayName =
     clean(bookingValue.booker) ||
     clean(bookingValue.name) ||
@@ -9087,7 +9845,7 @@ function buildAdminBookingPersistencePayload(
     booking: {
       booking_reference: bookingReference,
       source_channel: "admin-dashboard",
-      customer_id: null,
+      customer_id: adminDispatchVerifiedIdentityId(bookingValue.customerId),
       company_id: adminDispatchVerifiedIdentityId(bookingValue.companyId),
       booker_id: adminDispatchVerifiedIdentityId(bookingValue.bookerId),
       traveler_id: adminDispatchVerifiedIdentityId(bookingValue.travelerId),
@@ -9103,14 +9861,21 @@ function buildAdminBookingPersistencePayload(
       contact_phone: clean(bookingValue.bookerContact) || adminDraftContactFallback,
       contact_email: clean(bookingValue.bookerEmail) || null,
       passenger_name: clean(bookingValue.name) || null,
-      passenger_phone: null,
+      passenger_phone: clean(bookingValue.passengerContact) || null,
       flight_no: clean(bookingValue.flight) || null,
       driver_id: adminDispatchVerifiedIdentityId(bookingValue.driverId),
       driver_contact: clean(bookingValue.driverContact) || null,
       driver_name: clean(bookingValue.driverName) || null,
       driver_plate_number: clean(bookingValue.driverPlate) || null,
       pax_count: Number(clean(bookingValue.pax)) || null,
-      luggage_count: null,
+      luggage_count: safeAdminBookingPersistenceCount(
+        options.luggageCountOverride === undefined
+          ? clean(bookingValue.luggageCount)
+            ? Number(bookingValue.luggageCount)
+            : null
+          : options.luggageCountOverride,
+      ),
+      customer_special_request: clean(options.customerSpecialRequestOverride) || null,
       vehicle_type_or_category: clean(bookingValue.vehicle) || null,
       customer_facing_status: "Received",
       admin_internal_status: shortNoticeReviewRequired ? "Admin Review Required" : "Draft",
@@ -9118,6 +9883,13 @@ function buildAdminBookingPersistencePayload(
       request_review_status: "pending_review",
       parser_source_reference: clean(options.parserSourceReferenceOverride) || parsedSourceReference(bookingValue),
     },
+    ...(createHotelAgencyFolder
+      ? {
+          hotel_agency_folder_create: {
+            company_name: customerDisplayName,
+          },
+        }
+      : {}),
     route_points: routePoints,
     service_items: serviceItems,
   };
@@ -9193,6 +9965,7 @@ function adminBookingMatchesResponseLossRecovery(
     [record.driver_name, booking.driver_name],
     [record.driver_plate_number, booking.driver_plate_number],
     [record.vehicle_type_or_category, booking.vehicle_type_or_category],
+    [record.customer_special_request, booking.customer_special_request],
   ];
   const identityPairs: Array<[unknown, unknown]> = [
     [record.company_id, booking.company_id],
@@ -9312,6 +10085,9 @@ function buildAdminDispatchReturnTripPersistencePayloads(
   currentTimeMs: number,
   options: {
     customerDisplayNameOverride?: string | null;
+    customerSpecialRequestOverride?: string | null;
+    hotelAgencyFolderCreateOverride?: boolean;
+    luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
   } = {},
 ): AdminDispatchReturnTripPersistencePayload[] {
@@ -9362,6 +10138,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
         `${groupReference}-RET`,
         {
           ...options,
+          hotelAgencyFolderCreateOverride: false,
           parserSourceReferenceOverride: adminDispatchLinkedReturnParserSource(
             returnBookingValue,
             groupReference,
@@ -11057,7 +11834,11 @@ async function loadAdminEmailAiIntakeRead() {
     enabled: result.enabled === true,
     records: Array.isArray(result.records)
       ? (result.records as AdminEmailAiIntakeRecord[]).filter((record) =>
-          adminEmailAiClassificationAppearsInApp(record.classification),
+          adminEmailAiIntakeAppearsInApp({
+            classification: record.classification,
+            senderAddress: record.sender_address,
+            subject: record.subject,
+          }),
         )
       : [],
     tokenUsage:
@@ -13552,12 +14333,21 @@ function adminOperationalSnapshotToBookingForm(
     booking: adminDispatchSelectableBookingForm({
       ...createInitialBooking(),
       booker: clean(record.contact_display_name) || customerDisplayName,
+      bookerId: adminDispatchVerifiedIdentityId(record.booker_id)
+        ? String(record.booker_id)
+        : "",
       bookerContact: contactPhone,
       bookerEmail: clean(record.contact_email),
       bookingType: routeType,
       childSeatCount: childSeatCount > 0 ? String(childSeatCount) : "",
       childSeatRequired: childSeatCount > 0 ? "yes" : "",
       company: customerDisplayName,
+      companyId: adminDispatchVerifiedIdentityId(record.company_id)
+        ? String(record.company_id)
+        : "",
+      customerId: adminDispatchVerifiedIdentityId(record.customer_id)
+        ? String(record.customer_id)
+        : "",
       date: dateTimeParts.date,
       dropoff: dropoffLocation,
       driverContact: clean(record.driver_contact),
@@ -13566,10 +14356,18 @@ function adminOperationalSnapshotToBookingForm(
       extraStopCount: extraStopCount > 0 ? String(extraStopCount) : "",
       extraStopLocation: stopLocations.join(" > "),
       flight: clean(record.flight_no) || adminSnapshotFlightReference(record),
+      luggageCount:
+        safeAdminBookingPersistenceCount(record.luggage_count) === null
+          ? ""
+          : String(safeAdminBookingPersistenceCount(record.luggage_count)),
       name: passengerDisplayName,
+      passengerContact: clean(record.passenger_phone),
       pax: Number.isInteger(paxCount) && paxCount > 0 ? String(paxCount) : "1",
       pickup: pickupLocation,
       time: dateTimeParts.time,
+      travelerId: adminDispatchVerifiedIdentityId(record.traveler_id)
+        ? String(record.traveler_id)
+        : "",
       vehicle: clean(record.vehicle_type_or_category) || "AVF",
     }),
     ok: true,
@@ -13677,6 +14475,7 @@ export default function Home() {
   const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
+  const bookingFormRef = useRef(booking);
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
   const activeTabRef = useRef<AppTab>(initialTab);
@@ -13820,8 +14619,13 @@ export default function Home() {
     useState<RateOverrideDraft>(initialRateOverrideDraft);
   const [rateCompanies, setRateCompanies] = useState<CompanyRecord[]>([]);
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
+  const [adminDispatchAgencyFolders, setAdminDispatchAgencyFolders] =
+    useState<AdminDispatchAgencyFolder[]>([]);
+  const [adminDispatchAgencyFoldersLoaded, setAdminDispatchAgencyFoldersLoaded] = useState(false);
+  const [adminDispatchAgencyFoldersError, setAdminDispatchAgencyFoldersError] = useState("");
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
+  const adminDispatchCustomerListAutoLoadAttemptedRef = useRef(false);
   const [rateAction, setRateAction] = useState<"load" | "defaults" | "override" | "remove-override" | null>(null);
   const [rateMessageTarget, setRateMessageTarget] = useState<"header" | "override">("header");
   const [rateOverrideListMessages, setRateOverrideListMessages] =
@@ -13836,6 +14640,17 @@ export default function Home() {
   const [appliedAdminBookingSnapshotReference, setAppliedAdminBookingSnapshotReference] =
     useState("");
   const appliedAdminBookingSnapshotReferenceRef = useRef("");
+  const adminBookingCreateIntentRef = useRef(true);
+  const loadedAdminBookingBaselineRef = useRef<{
+    bookingReference: string;
+    formSignature: string;
+    updatedAt: string;
+  } | null>(null);
+  const [adminBookingCrossDeviceConflict, setAdminBookingCrossDeviceConflict] = useState<{
+    bookingReference: string;
+    displayReference: string;
+    updatedAt: string;
+  } | null>(null);
   const [adminBookingPersistenceSearch, setAdminBookingPersistenceSearch] =
     useState("");
   const [adminBookingPersistenceStatusFilter, setAdminBookingPersistenceStatusFilter] =
@@ -13946,6 +14761,10 @@ export default function Home() {
     });
   const [activeAdminEmailAiIntakeId, setActiveAdminEmailAiIntakeId] =
     useState("");
+  const activeAdminEmailAiIntakeIdRef = useRef("");
+  const adminEmailAiCustomerRecommendationRevisionRef = useRef(0);
+  const [adminEmailAiCustomerProfileSuggestion, setAdminEmailAiCustomerProfileSuggestion] =
+    useState<Message | null>(null);
   const adminEmailAiInitialLoadAttemptedRef = useRef(false);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
@@ -14207,6 +15026,25 @@ export default function Home() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (
+      activeTab !== "dispatch" ||
+      adminDispatchCustomerListAutoLoadAttemptedRef.current ||
+      savingRates ||
+      (ratesLoaded && adminDispatchAgencyFoldersLoaded)
+    ) {
+      return;
+    }
+
+    adminDispatchCustomerListAutoLoadAttemptedRef.current = true;
+    void loadRates("Customers ready.", {
+      includeAgencyFolders: true,
+      preserveAction: true,
+      silent: true,
+    });
+    // Reuse the existing guarded customer/rate read once when Dispatch opens.
+  }, [activeTab, adminDispatchAgencyFoldersLoaded, ratesLoaded, savingRates]);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setCurrentTimeMs(Date.now());
     }, 30 * 1000);
@@ -14295,6 +15133,10 @@ export default function Home() {
 
     return () => window.clearTimeout(timeoutId);
   }, [adminDriverJobLinkState.message]);
+
+  useEffect(() => {
+    bookingFormRef.current = booking;
+  }, [booking]);
 
   useEffect(() => {
     loadedBookingIdRef.current = loadedBookingId;
@@ -17149,6 +17991,7 @@ export default function Home() {
   function markAdminBookingAsActiveForUpdates(
     bookingReference: string,
     savedRecord?: AdminBookingPersistenceRecord | null,
+    bookingFormOverride?: BookingForm,
   ) {
     const safeBookingReference = clean(bookingReference);
 
@@ -17158,10 +18001,19 @@ export default function Home() {
 
     appliedAdminBookingSnapshotReferenceRef.current = safeBookingReference;
     loadedBookingIdRef.current = safeBookingReference;
+    adminBookingCreateIntentRef.current = false;
     setAppliedAdminBookingSnapshotReference(safeBookingReference);
     setLoadedBookingId(safeBookingReference);
+    setAdminBookingCrossDeviceConflict(null);
 
     if (savedRecord) {
+      loadedAdminBookingBaselineRef.current = {
+        bookingReference: safeBookingReference,
+        formSignature: adminBookingFormSyncSignature(
+          bookingFormOverride ?? bookingFormRef.current,
+        ),
+        updatedAt: clean(savedRecord.updated_at),
+      };
       setAdminBookingPersistenceRecords((current) => [
         savedRecord,
         ...current.filter(
@@ -17231,6 +18083,24 @@ export default function Home() {
           rateOverrideListMessages.boss?.recordId === travelerRecord.id,
       ),
     [rateTravelers, rateOverrideListMessages.boss?.recordId],
+  );
+  const rateOverrideCompany = useMemo(
+    () =>
+      rateCompanies.find(
+        (companyRecord) =>
+          clean(companyRecord.company_name).toLowerCase() ===
+          clean(rateOverrideDraft.companyName).toLowerCase(),
+      ) ?? null,
+    [rateCompanies, rateOverrideDraft.companyName],
+  );
+  const rateOverrideTravelerOptions = useMemo(
+    () =>
+      rateOverrideCompany
+        ? rateTravelers.filter(
+            (travelerRecord) => travelerRecord.company_id === rateOverrideCompany.id,
+          )
+        : [],
+    [rateOverrideCompany, rateTravelers],
   );
   const assignableDriverAssignmentDisplayDrivers = useMemo(
     () => driverAssignmentDisplayDrivers.filter(isAssignableDriver),
@@ -18165,6 +19035,10 @@ export default function Home() {
   }, [filteredCompletedBookingDisplayItems, todayKey]);
 
   function update(field: keyof BookingForm, value: string) {
+    if (field === "bookerEmail" || field === "company") {
+      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+      setAdminEmailAiCustomerProfileSuggestion(null);
+    }
     if (field === "pickup") {
       setAdminMapPickupLocation(null);
       setAdminMapRouteEstimate(null);
@@ -18496,20 +19370,39 @@ export default function Home() {
   }
 
   function clearLoadedBookingSelectionContext(
-    options: { preserveAdminEmailAiReview?: boolean } = {},
+    options: {
+      explicitNewBooking?: boolean;
+      preserveAdminEmailAiReview?: boolean;
+    } = {},
   ) {
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
+    adminBookingCreateIntentRef.current = options.explicitNewBooking === true;
+    loadedAdminBookingBaselineRef.current = null;
     driverJobLinkHandoffFocusAppliedRef.current = "";
     setLoadedBookingId("");
     setAppliedAdminBookingSnapshotReference("");
+    setAdminBookingCrossDeviceConflict(null);
     setDriverJobLinkHandoffReference("");
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
 
     if (!options.preserveAdminEmailAiReview) {
+      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+      activeAdminEmailAiIntakeIdRef.current = "";
       setActiveAdminEmailAiIntakeId("");
+      setAdminEmailAiCustomerProfileSuggestion(null);
     }
+  }
+
+  function resetAdminBookingFormAfterSuccessfulPersistence() {
+    const emptyBooking = createInitialBooking();
+
+    bookingFormRef.current = emptyBooking;
+    setBooking(() => emptyBooking);
+    clearLoadedBookingSelectionContext({ explicitNewBooking: true });
+    clearBookingMessageInput();
+    setMobileDispatchBookingStep("message");
   }
 
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
@@ -19009,8 +19902,22 @@ export default function Home() {
   }
 
   async function applyParsedBookingMessage(messageText: string) {
+    const loadedBookingReference =
+      cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+      cleanReferenceText(loadedBookingIdRef.current);
+
+    if (loadedBookingReference || !adminBookingCreateIntentRef.current) {
+      setMessage({
+        tone: "error",
+        text: "A saved booking is already loaded for editing. Update its existing fields, or choose New booking before creating another Job Card.",
+      });
+      return false;
+    }
+
     clearParseArtifacts();
+    setAdminEmailAiCustomerProfileSuggestion(null);
     clearLoadedBookingSelectionContext({
+      explicitNewBooking: true,
       preserveAdminEmailAiReview: true,
     });
 
@@ -19065,6 +19972,7 @@ export default function Home() {
       ...(parsedBookingForMerge.cleanedLines ? { cleanedLines: parsedBookingForMerge.cleanedLines } : {}),
     };
 
+    bookingFormRef.current = finalForm;
     setBooking(() => finalForm);
     setParsedDebugBooking(() => ({
       ...finalForm,
@@ -19080,15 +19988,47 @@ export default function Home() {
     }
 
     if (activeAdminEmailAiIntakeId) {
+      const recommendationIntakeId = activeAdminEmailAiIntakeId;
+      const recommendationEmail = adminEmailAiRecommendationEmail(finalForm);
+      const recommendationCompanyName = adminEmailAiRecommendationCompanyName(finalForm);
+      const recommendationRevision =
+        adminEmailAiCustomerRecommendationRevisionRef.current + 1;
+      adminEmailAiCustomerRecommendationRevisionRef.current = recommendationRevision;
       const crmLoadResult = await loadRates("Email AI customer check loaded.", {
+        includeAgencyFolders: true,
         preserveAction: true,
       });
 
+      if (!crmLoadResult.ok) {
+        setAdminEmailAiCustomerProfileSuggestion(null);
+        setMessage({
+          tone: "error",
+          text: `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
+        });
+        return true;
+      }
+
+      const recommendation = await loadAdminEmailAiCustomerProfileRecommendation(finalForm);
+      const currentBooking = bookingFormRef.current;
+      const recommendationIsCurrent =
+        adminEmailAiCustomerRecommendationRevisionRef.current === recommendationRevision &&
+        activeAdminEmailAiIntakeIdRef.current === recommendationIntakeId &&
+        adminEmailAiRecommendationEmail(currentBooking) === recommendationEmail &&
+        adminEmailAiRecommendationCompanyName(currentBooking) === recommendationCompanyName &&
+        !clean(currentBooking.customerId) &&
+        !clean(currentBooking.companyId);
+
+      if (!recommendationIsCurrent) {
+        return true;
+      }
+
+      applyAdminEmailAiCustomerProfileRecommendation(recommendation);
       setMessage({
-        tone: crmLoadResult.ok ? "success" : "error",
-        text: crmLoadResult.ok
-          ? `Parsed ${detectedFields} fields. Email AI customer check loaded; confirm whether this is a repeated or new customer before Save + CRM.`
-          : `Parsed ${detectedFields} fields, but the Email AI customer check could not load safely. Review the CRM selectors before saving.`,
+        tone: recommendation.status === "matched" ? "success" : "info",
+        text:
+          recommendation.status === "matched"
+            ? `Parsed ${detectedFields} fields. The app customer profile suggested one exact ${recommendation.kind} customer; review or change it before Save + CRM.`
+            : `Parsed ${detectedFields} fields. ${recommendation.message}`,
       });
       return true;
     }
@@ -19278,7 +20218,13 @@ export default function Home() {
   ) {
     const classification = clean(record.classification).toLowerCase();
 
-    if (!adminEmailAiClassificationAppearsInApp(classification)) {
+    if (
+      !adminEmailAiIntakeAppearsInApp({
+        classification,
+        senderAddress: record.sender_address,
+        subject: record.subject,
+      })
+    ) {
       return;
     }
 
@@ -19287,7 +20233,10 @@ export default function Home() {
     const canonicalBookingText = clean(record.canonical_booking_text);
 
     clearParseArtifacts();
-    clearLoadedBookingSelectionContext();
+    clearLoadedBookingSelectionContext({ explicitNewBooking: true });
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
+    activeAdminEmailAiIntakeIdRef.current = clean(record.id);
     setActiveAdminEmailAiIntakeId(clean(record.id));
     setBooking(() => createInitialBooking());
     setActiveTab("dispatch");
@@ -19313,7 +20262,257 @@ export default function Home() {
     }, 0);
   }
 
-  async function loadRates(successText = "Rates loaded.", options?: { preserveAction?: boolean }) {
+  async function loadAdminEmailAiCustomerProfileRecommendation(
+    bookingValue: BookingForm,
+  ): Promise<AdminEmailAiCustomerProfileRecommendation> {
+    const recommendationEmail = adminEmailAiRecommendationEmail(bookingValue);
+    const recommendationCompanyName = adminEmailAiRecommendationCompanyName(bookingValue);
+    const exactEmailCompanyIds = new Set<number>();
+    const exactNameCompanyIds = new Set<number>();
+    let matchBasis: "company name" | "email" | null = null;
+
+    const readJson = async <T,>(response: Response) =>
+      (await response.json().catch(() => null)) as T | null;
+    const readCompany = async (params: URLSearchParams) => {
+      const response = await fetch(`${adminCompaniesCrmIdentityApiPath}?${params.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const body = await readJson<AdminCompanyCrmIdentityReadResponse>(response);
+
+      if (!response.ok || body?.ok !== true) {
+        throw new Error(
+          clean(body?.error) || "The verified company profile lookup failed safely.",
+        );
+      }
+
+      return body.company ?? null;
+    };
+
+    try {
+      if (recommendationEmail) {
+        const companyParams = new URLSearchParams({
+          operations_email: recommendationEmail,
+        });
+        const bookerParams = new URLSearchParams({
+          email: recommendationEmail,
+        });
+        const [emailCompany, bookerResponse] = await Promise.all([
+          readCompany(companyParams),
+          fetch(`${adminBookersApiPath}?${bookerParams.toString()}`, {
+            cache: "no-store",
+            headers: {
+              "x-prestige-admin-purpose": adminLegacyDataPurpose,
+            },
+            method: "GET",
+          }),
+        ]);
+        const bookerBody = await readJson<SaveCrmBookerResponse>(bookerResponse);
+
+        if (!bookerResponse.ok || bookerBody?.ok !== true) {
+          throw new Error(
+            clean(bookerBody?.error) || "The verified Booker email lookup failed safely.",
+          );
+        }
+
+        if (
+          emailCompany &&
+          normaliseEmail(emailCompany.operations_email ?? "") !== recommendationEmail
+        ) {
+          throw new Error(
+            "The company email response did not match the exact requested email address.",
+          );
+        }
+        if (
+          bookerBody.booker &&
+          normaliseEmail(bookerBody.booker.email ?? "") !== recommendationEmail
+        ) {
+          throw new Error(
+            "The Booker email response did not match the exact requested email address.",
+          );
+        }
+
+        const companyId =
+          normaliseEmail(emailCompany?.operations_email ?? "") === recommendationEmail
+            ? adminDispatchVerifiedIdentityId(emailCompany?.id)
+            : null;
+        const bookerCompanyId =
+          normaliseEmail(bookerBody.booker?.email ?? "") === recommendationEmail
+            ? adminDispatchVerifiedIdentityId(bookerBody.booker?.company_id)
+            : null;
+
+        if (companyId) {
+          exactEmailCompanyIds.add(companyId);
+        }
+        if (bookerCompanyId) {
+          exactEmailCompanyIds.add(bookerCompanyId);
+        }
+
+        if (exactEmailCompanyIds.size > 1) {
+          return {
+            message:
+              "The exact email address points to more than one app customer profile. Select the customer manually before Save + CRM.",
+            status: "ambiguous",
+          };
+        }
+        if (exactEmailCompanyIds.size === 1) {
+          matchBasis = "email";
+        }
+      }
+
+      if (!matchBasis && recommendationCompanyName) {
+        const companyNameParams = new URLSearchParams({
+          company_name: recommendationCompanyName,
+        });
+        const nameCompany = await readCompany(companyNameParams);
+        const companyId =
+          saveCrmComparableIdentityValue(nameCompany?.company_name) ===
+          saveCrmComparableIdentityValue(recommendationCompanyName)
+            ? adminDispatchVerifiedIdentityId(nameCompany?.id)
+            : null;
+
+        if (companyId) {
+          exactNameCompanyIds.add(companyId);
+        }
+        if (exactNameCompanyIds.size === 1) {
+          matchBasis = "company name";
+        }
+      }
+
+      const matchedCompanyId = matchBasis === "email"
+        ? Array.from(exactEmailCompanyIds)[0]
+        : matchBasis === "company name"
+          ? Array.from(exactNameCompanyIds)[0]
+          : null;
+
+      if (!matchedCompanyId || !matchBasis) {
+        return {
+          message:
+            "No exact customer-profile email or company-name match was found. Select the agency or corporate customer manually before Save + CRM.",
+          status: "unmatched",
+        };
+      }
+
+      const customerAccountsResponse = await fetch(`${adminCustomerAccountsApiPath}?limit=1000`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const customerAccountsBody = await readJson<AdminDispatchAgencyFoldersReadResponse>(
+        customerAccountsResponse,
+      );
+
+      if (!customerAccountsResponse.ok || customerAccountsBody?.ok !== true) {
+        throw new Error(
+          clean(customerAccountsBody?.error) || "App customer profiles could not be loaded safely.",
+        );
+      }
+
+      const agencyFolders = (customerAccountsBody.accounts ?? []).filter(
+        (account) =>
+          account.customer_folder_active === true &&
+          account.guest_account_billing_enabled === true &&
+          adminDispatchVerifiedIdentityId(account.customer_id) &&
+          adminDispatchVerifiedIdentityId(account.verified_company_id) === matchedCompanyId,
+      );
+      const uniqueAgencyFolders = Array.from(
+        new Map(
+          agencyFolders.map((account) => [clean(account.customer_id), account]),
+        ).values(),
+      );
+
+      if (uniqueAgencyFolders.length > 1) {
+        return {
+          message:
+            "More than one active agency customer profile belongs to the exact matched company. Select the agency folder manually before Save + CRM.",
+          status: "ambiguous",
+        };
+      }
+
+      const matchedCompany = await readCompany(
+        new URLSearchParams({ id: String(matchedCompanyId) }),
+      );
+      const companyName =
+        adminDispatchVerifiedIdentityId(matchedCompany?.id) === matchedCompanyId
+          ? clean(matchedCompany?.company_name)
+          : "";
+
+      if (!companyName) {
+        return {
+          message:
+            "The exact app customer profile is incomplete. Select the customer manually before Save + CRM.",
+          status: "unavailable",
+        };
+      }
+
+      if (uniqueAgencyFolders.length === 1) {
+        const matchedAgencyFolder = uniqueAgencyFolders[0];
+        const customerId = clean(matchedAgencyFolder.customer_id);
+
+        return {
+          companyId: matchedCompanyId,
+          companyName,
+          customerId,
+          kind: "agency",
+          matchBasis,
+          profileName: clean(matchedAgencyFolder.customer_account) || companyName,
+          status: "matched",
+        };
+      }
+
+      return {
+        companyId: matchedCompanyId,
+        companyName,
+        kind: "corporate",
+        matchBasis,
+        profileName: companyName,
+        status: "matched",
+      };
+    } catch (error) {
+      return {
+        message:
+          error instanceof Error
+            ? `${error.message} No customer was selected automatically.`
+            : "The app customer profile check failed safely. No customer was selected automatically.",
+        status: "unavailable",
+      };
+    }
+  }
+
+  function applyAdminEmailAiCustomerProfileRecommendation(
+    recommendation: AdminEmailAiCustomerProfileRecommendation,
+  ) {
+    if (recommendation.status !== "matched") {
+      setAdminEmailAiCustomerProfileSuggestion(null);
+      return;
+    }
+
+    setBooking((current) => ({
+      ...current,
+      bookerId: "",
+      company: recommendation.companyName || current.company,
+      companyId: String(recommendation.companyId),
+      customerId: recommendation.kind === "agency" ? recommendation.customerId : "",
+      travelerId: "",
+    }));
+    setAdminEmailAiCustomerProfileSuggestion({
+      tone: "success",
+      text:
+        `Suggested from the app customer profile: ${recommendation.profileName} ` +
+        `(${recommendation.kind}, exact ${recommendation.matchBasis} match). ` +
+        "Admin can change this selection before Save + CRM.",
+    });
+  }
+
+  async function loadRates(
+    successText = "Rates loaded.",
+    options?: { includeAgencyFolders?: boolean; preserveAction?: boolean; silent?: boolean },
+  ) {
     if (typeof fetch !== "function") {
       if (!options?.preserveAction) {
         setRateMessageTarget("header");
@@ -19321,10 +20520,12 @@ export default function Home() {
       const errorMessage =
         "Admin rate setup API is not available.";
 
-      setMessage({
-        tone: "error",
-        text: `Load failed: ${errorMessage}`,
-      });
+      if (!options?.silent) {
+        setMessage({
+          tone: "error",
+          text: `Load failed: ${errorMessage}`,
+        });
+      }
       return { ok: false, errorMessage };
     }
 
@@ -19333,7 +20534,9 @@ export default function Home() {
       setRateAction("load");
       setRateMessageTarget("header");
     }
-    setMessage({ tone: "info", text: "Loading rates..." });
+    if (!options?.silent) {
+      setMessage({ tone: "info", text: "Loading rates..." });
+    }
 
     try {
       const response = await fetch(adminRateSetupApiPath, {
@@ -19398,16 +20601,76 @@ export default function Home() {
           driver_payout_rules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
         })),
       );
+
+      if (options?.includeAgencyFolders) {
+        try {
+          const agencyFoldersResponse = await fetch(`${adminCustomerAccountsApiPath}?limit=1000`, {
+          headers: {
+            "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          },
+          method: "GET",
+        });
+          const agencyFoldersBody = (await agencyFoldersResponse.json().catch(() => null)) as
+            | AdminDispatchAgencyFoldersReadResponse
+            | null;
+
+          if (!agencyFoldersResponse.ok || agencyFoldersBody?.ok !== true) {
+            throw new Error(
+              clean(agencyFoldersBody?.error) || "Hotel / Tour Agency folders could not be loaded.",
+            );
+          }
+
+          const seenAgencyCustomerIds = new Set<string>();
+          const loadedAgencyFolders = (agencyFoldersBody.accounts ?? [])
+          .filter((account): account is AdminDispatchAgencyFolder => {
+            const customerId = clean(account.customer_id);
+            const companyId = clean(account.verified_company_id);
+
+            if (
+              account.guest_account_billing_enabled !== true ||
+              account.customer_folder_active !== true ||
+              !adminDispatchVerifiedIdentityId(customerId) ||
+              !adminDispatchVerifiedIdentityId(companyId) ||
+              seenAgencyCustomerIds.has(customerId)
+            ) {
+              return false;
+            }
+
+            seenAgencyCustomerIds.add(customerId);
+            return true;
+          })
+          .sort((first, second) =>
+            clean(first.customer_account).localeCompare(clean(second.customer_account)),
+          );
+
+          setAdminDispatchAgencyFolders(loadedAgencyFolders);
+          setAdminDispatchAgencyFoldersLoaded(true);
+          setAdminDispatchAgencyFoldersError("");
+        } catch (agencyFoldersError) {
+          setAdminDispatchAgencyFolders([]);
+          setAdminDispatchAgencyFoldersLoaded(false);
+          setAdminDispatchAgencyFoldersError(
+            agencyFoldersError instanceof Error
+              ? agencyFoldersError.message
+              : "Hotel / Tour Agency folders could not be loaded.",
+          );
+        }
+      }
+
       setRatesLoaded(true);
-      setMessage({ tone: "success", text: successText });
+      if (!options?.silent) {
+        setMessage({ tone: "success", text: successText });
+      }
       return { ok: true, errorMessage: "" };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown rate load error.";
 
-      setMessage({
-        tone: "error",
-        text: formatRatesSetupError(errorMessage, "Load failed: "),
-      });
+      if (!options?.silent) {
+        setMessage({
+          tone: "error",
+          text: formatRatesSetupError(errorMessage, "Load failed: "),
+        });
+      }
       return { ok: false, errorMessage };
     } finally {
       if (!options?.preserveAction) {
@@ -19447,19 +20710,24 @@ export default function Home() {
         scalarRateSettings,
         scalarRuntimeSave.saved,
       );
-      const { error } = await adminLegacyDataClient
+      const { data, error } = await adminLegacyDataClient
         .from(adminLegacyTables.rateSettings)
-        .upsert({
+        .update({
           ...legacyScalarFields,
           customer_rates: customerRates,
           driver_payout_rules: driverPayoutRules,
           updated_at: new Date().toISOString(),
         })
+        .eq("id", "default")
         .select("id")
         .single();
 
       if (error) {
         throw new Error(formatSupabaseError(error));
+      }
+
+      if (!data || clean((data as { id?: string }).id) !== "default") {
+        throw new Error("Default rate settings row was not updated safely.");
       }
 
       setRateSettings((current) => ({
@@ -19493,7 +20761,15 @@ export default function Home() {
     }
 
     const companyName = clean(rateOverrideDraft.companyName);
-    const bossName = clean(rateOverrideDraft.bossName);
+    const travelerId = positiveId(rateOverrideDraft.travelerId);
+    const selectedDraftTraveler = travelerId
+      ? rateTravelers.find((travelerRecord) => travelerRecord.id === travelerId) ?? null
+      : null;
+    const selectedDraftCompany = rateCompanies.find(
+      (companyRecord) =>
+        clean(companyRecord.company_name).toLowerCase() === companyName.toLowerCase(),
+    );
+    const bossName = clean(selectedDraftTraveler?.traveler_name);
     const invalidRateLabels = getNonPositiveRateOverrideLabels(
       rateOverrideDraft.customerRates,
       rateOverrideDraft.driverPayoutRules,
@@ -19518,6 +20794,25 @@ export default function Home() {
       setMessage({
         tone: "error",
         text: "Save rate override failed: Enter a company/account or boss/name before saving overrides.",
+      });
+      return;
+    }
+
+    if (rateOverrideDraft.travelerId && (!travelerId || !selectedDraftTraveler || !bossName)) {
+      setMessage({
+        tone: "error",
+        text: "Save rate override failed: Select one existing Traveller from this company before saving a Traveller override.",
+      });
+      return;
+    }
+
+    if (
+      travelerId &&
+      (!selectedDraftCompany || selectedDraftTraveler?.company_id !== selectedDraftCompany.id)
+    ) {
+      setMessage({
+        tone: "error",
+        text: "Save rate override failed: Select one existing Traveller from this company before saving a Traveller override.",
       });
       return;
     }
@@ -19681,11 +20976,17 @@ export default function Home() {
       companyOverrideSaved = true;
 
       if (bossName) {
+        if (!travelerId || selectedDraftTraveler?.company_id !== company.id) {
+          throw new Error(
+            "Select one existing Traveller from this company before saving a Traveller override.",
+          );
+        }
+
         const existingTraveler = await adminLegacyDataClient
           .from(adminLegacyTables.travelers)
-          .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
+          .select("id, company_id, traveler_name, booker_id, customer_rates, driver_payout_rules, card_option_default_enabled")
+          .eq("id", travelerId)
           .eq("company_id", company.id)
-          .ilike("traveler_name", bossName)
           .limit(1)
           .maybeSingle();
 
@@ -19693,199 +20994,64 @@ export default function Home() {
           throw new Error(existingTraveler.error.message);
         }
 
-        if (existingTraveler.data) {
-          const traveler = existingTraveler.data as TravelerRecord;
-          const travelerIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
-            action_type: "traveler_update",
-            id: traveler.id,
-            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
-          });
+        if (!existingTraveler.data) {
+          throw new Error(
+            "Select one existing Traveller from this company before saving a Traveller override.",
+          );
+        }
 
-          if (!travelerIdentity.ok) {
-            throw new Error(travelerIdentity.errorMessage);
-          }
-
-          const mergedTravelerRates = {
-            ...normalizeCustomerRateRules(traveler.customer_rates),
-            ...overrideCustomerRates,
-          };
-          const mergedTravelerPayouts = {
-            ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
-            ...overrideDriverPayoutRules,
-          };
-          const travelerCustomerRatesRuntime = hasCustomerRateOverrides
-            ? await saveCustomerRatesRuntime(
-                buildTravelerCustomerRatesRuntimeWritePayload(traveler.id, mergedTravelerRates),
-              )
-            : { ok: true as const, saved: false };
-
-          if (!travelerCustomerRatesRuntime.ok) {
-            throw new Error(travelerCustomerRatesRuntime.errorMessage);
-          }
-
-          const travelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
-            ? await saveDriverPayoutRulesRuntime(
-                buildTravelerDriverPayoutRulesRuntimeWritePayload(traveler.id, mergedTravelerPayouts),
-              )
-            : { ok: true as const, saved: false };
-
-          if (!travelerDriverPayoutRulesRuntime.ok) {
-            throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
-          }
-
-          const travelerUpdate = await adminLegacyDataClient
-            .from(adminLegacyTables.travelers)
-            .update(
-              buildTravelerRateOverridePayload({
-                cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                customerRates: mergedTravelerRates,
-                driverPayoutRules: mergedTravelerPayouts,
-                includeCustomerRates: !travelerCustomerRatesRuntime.saved,
-                includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
-                updatedAt: new Date().toISOString(),
-              }),
+        const traveler = existingTraveler.data as TravelerRecord;
+        const mergedTravelerRates = {
+          ...normalizeCustomerRateRules(traveler.customer_rates),
+          ...overrideCustomerRates,
+        };
+        const mergedTravelerPayouts = {
+          ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
+          ...overrideDriverPayoutRules,
+        };
+        const travelerCustomerRatesRuntime = hasCustomerRateOverrides
+          ? await saveCustomerRatesRuntime(
+              buildTravelerCustomerRatesRuntimeWritePayload(traveler.id, mergedTravelerRates),
             )
-            .eq("id", traveler.id);
+          : { ok: true as const, saved: false };
 
-          if (travelerUpdate.error) {
-            throw new Error(travelerUpdate.error.message);
-          }
-        } else {
-          const travelerIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
-            action_type: "traveler_create",
-            ...buildTravelerCrmIdentityContactPayload(company.id, bossName),
-          });
+        if (!travelerCustomerRatesRuntime.ok) {
+          throw new Error(travelerCustomerRatesRuntime.errorMessage);
+        }
 
-          if (!travelerIdentity.ok) {
-            throw new Error(travelerIdentity.errorMessage);
-          }
+        const travelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
+          ? await saveDriverPayoutRulesRuntime(
+              buildTravelerDriverPayoutRulesRuntimeWritePayload(traveler.id, mergedTravelerPayouts),
+            )
+          : { ok: true as const, saved: false };
 
-          let travelerCustomerRatesRuntime: { ok: true; saved: boolean } | { errorMessage: string; ok: false } = {
-            ok: true,
-            saved: false,
-          };
+        if (!travelerDriverPayoutRulesRuntime.ok) {
+          throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
+        }
 
-          if (travelerIdentity.recordId && hasCustomerRateOverrides) {
-            travelerCustomerRatesRuntime = await saveCustomerRatesRuntime(
-              buildTravelerCustomerRatesRuntimeWritePayload(travelerIdentity.recordId, overrideCustomerRates),
-            );
+        const travelerUpdate = await adminLegacyDataClient
+          .from(adminLegacyTables.travelers)
+          .update(
+            buildTravelerRateOverridePayload({
+              cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
+              customerRates: mergedTravelerRates,
+              driverPayoutRules: mergedTravelerPayouts,
+              includeCustomerRates: !travelerCustomerRatesRuntime.saved,
+              includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
+              updatedAt: new Date().toISOString(),
+            }),
+          )
+          .eq("id", traveler.id);
 
-            if (!travelerCustomerRatesRuntime.ok) {
-              throw new Error(travelerCustomerRatesRuntime.errorMessage);
-            }
-          }
-
-          let travelerDriverPayoutRulesRuntime: { ok: true; saved: boolean } | { errorMessage: string; ok: false } = {
-            ok: true,
-            saved: false,
-          };
-
-          if (travelerIdentity.recordId && hasDriverPayoutOverrides) {
-            travelerDriverPayoutRulesRuntime = await saveDriverPayoutRulesRuntime(
-              buildTravelerDriverPayoutRulesRuntimeWritePayload(
-                travelerIdentity.recordId,
-                overrideDriverPayoutRules,
-              ),
-            );
-
-            if (!travelerDriverPayoutRulesRuntime.ok) {
-              throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
-            }
-          }
-
-          if (travelerIdentity.recordId) {
-            const travelerInsert = await adminLegacyDataClient
-              .from(adminLegacyTables.travelers)
-              .update(
-                buildTravelerRateOverridePayload({
-                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                  customerRates: overrideCustomerRates,
-                  driverPayoutRules: overrideDriverPayoutRules,
-                  includeCustomerRates: !travelerCustomerRatesRuntime.saved,
-                  includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
-                  updatedAt: new Date().toISOString(),
-                }),
-              )
-              .eq("id", travelerIdentity.recordId);
-
-            if (travelerInsert.error) {
-              throw new Error(travelerInsert.error.message);
-            }
-          } else {
-            const createdTraveler = await adminLegacyDataClient
-              .from(adminLegacyTables.travelers)
-              .insert(
-                buildLegacyTravelerRateOverrideInsertPayload({
-                  cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                  companyId: company.id,
-                  customerRates: overrideCustomerRates,
-                  driverPayoutRules: overrideDriverPayoutRules,
-                  includeCustomerRates: !hasCustomerRateOverrides,
-                  includeDriverPayoutRules: !hasDriverPayoutOverrides,
-                  travelerName: bossName,
-                }),
-              )
-              .select("id, company_id, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled")
-              .single();
-
-            if (createdTraveler.error) {
-              throw new Error(createdTraveler.error.message);
-            }
-
-            const createdTravelerRecord = createdTraveler.data as TravelerRecord;
-            const createdTravelerCustomerRatesRuntime = hasCustomerRateOverrides
-              ? await saveCustomerRatesRuntime(
-                  buildTravelerCustomerRatesRuntimeWritePayload(createdTravelerRecord.id, overrideCustomerRates),
-                )
-              : { ok: true as const, saved: false };
-
-            if (!createdTravelerCustomerRatesRuntime.ok) {
-              throw new Error(createdTravelerCustomerRatesRuntime.errorMessage);
-            }
-
-            const createdTravelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
-              ? await saveDriverPayoutRulesRuntime(
-                  buildTravelerDriverPayoutRulesRuntimeWritePayload(
-                    createdTravelerRecord.id,
-                    overrideDriverPayoutRules,
-                  ),
-                )
-              : { ok: true as const, saved: false };
-
-            if (!createdTravelerDriverPayoutRulesRuntime.ok) {
-              throw new Error(createdTravelerDriverPayoutRulesRuntime.errorMessage);
-            }
-
-            if (
-              (!createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides) ||
-              (!createdTravelerDriverPayoutRulesRuntime.saved && hasDriverPayoutOverrides)
-            ) {
-              const travelerCustomerRatesFallback = await adminLegacyDataClient
-                .from(adminLegacyTables.travelers)
-                .update(
-                  buildTravelerRateOverridePayload({
-                    cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-                    customerRates: overrideCustomerRates,
-                    driverPayoutRules: overrideDriverPayoutRules,
-                    includeCustomerRates: !createdTravelerCustomerRatesRuntime.saved && hasCustomerRateOverrides,
-                    includeDriverPayoutRules:
-                      !createdTravelerDriverPayoutRulesRuntime.saved && hasDriverPayoutOverrides,
-                    updatedAt: new Date().toISOString(),
-                  }),
-                )
-                .eq("id", createdTravelerRecord.id);
-
-              if (travelerCustomerRatesFallback.error) {
-                throw new Error(travelerCustomerRatesFallback.error.message);
-              }
-            }
-          }
+        if (travelerUpdate.error) {
+          throw new Error(travelerUpdate.error.message);
         }
       }
 
       setRateOverrideDraft({
         companyName: companyName || "Internal Account",
         bossName,
+        travelerId: travelerId ? String(travelerId) : "",
         cardOptionDefaultEnabled: rateOverrideDraft.cardOptionDefaultEnabled,
         cardOptionDefaultTouched: false,
         customerRates: overrideCustomerRates,
@@ -20466,10 +21632,12 @@ export default function Home() {
       return;
     }
 
+    const revokeAndDeleteWarning =
+      "Delete this driver from the Driver Database and permanently revoke this selected driver's Driver app account? Existing bookings will keep their saved driver details. Private Driver Job Links remain separately controlled. This cannot be undone.";
     const confirmationText =
       assignedJobCount > 0
-        ? `This driver has ${assignedJobCount} assigned job${assignedJobCount === 1 ? "" : "s"}. Delete this driver from the Driver Database? Existing bookings will keep their saved driver details. This cannot be undone.`
-        : "Delete this driver from the Driver Database? This cannot be undone.";
+        ? `This driver has ${assignedJobCount} assigned job${assignedJobCount === 1 ? "" : "s"}. ${revokeAndDeleteWarning}`
+        : revokeAndDeleteWarning;
 
     if (!window.confirm(confirmationText)) {
       setDriverDeleteMessage({
@@ -20484,14 +21652,14 @@ export default function Home() {
     setDriverDeleteMessage({
       driverId,
       tone: "info",
-      text: "Deleting driver...",
+      text: "Deleting driver and revoking Driver app account...",
     });
 
     try {
       const fullDriverProfileRuntimePayload = buildFullDriverProfileRuntimeDeletePayload(driverId);
       const fullDriverProfileRuntime = fullDriverProfileRuntimePayload
         ? await saveFullDriverProfileRuntime(fullDriverProfileRuntimePayload)
-        : { deleted: false, ok: true as const, saved: false };
+        : { accountRevoked: false, deleted: false, ok: true as const, saved: false };
 
       if (!fullDriverProfileRuntime.ok) {
         throw new Error(fullDriverProfileRuntime.errorMessage);
@@ -20519,7 +21687,9 @@ export default function Home() {
       setDriverDeleteMessage({
         driverId,
         tone: "success",
-        text: "Driver deleted.",
+        text: fullDriverProfileRuntime.accountRevoked
+          ? "Driver deleted and Driver app account revoked."
+          : "Driver deleted. No Driver app account was present to revoke.",
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown driver delete error.";
@@ -20549,6 +21719,7 @@ export default function Home() {
           (record) => clean(record.id) !== intakeId,
         ),
       }));
+      activeAdminEmailAiIntakeIdRef.current = "";
       setActiveAdminEmailAiIntakeId("");
       return true;
     } catch {
@@ -20653,12 +21824,13 @@ export default function Home() {
         saveCrmDefaultCustomerAccount(booking);
       const companyProfileSyncRequired = Boolean(
         adminDispatchVerifiedIdentityId(booking.companyId) ||
-        saveCrmExplicitCompanyAccount(booking),
+        saveCrmExplicitCompanyAccount(booking) ||
+        adminDispatchIsCreatingAgencyFolder(booking),
       );
       const companyProfileResolution = companyProfileSyncRequired
         ? await resolveSaveCrmCompanyProfileForSave(
             booking,
-            saveCrmCustomerAccountLabel,
+            saveCrmExplicitCompanyAccount(booking),
           )
         : null;
 
@@ -20674,19 +21846,80 @@ export default function Home() {
         return null;
       }
 
+      const existingCustomerId = adminDispatchVerifiedIdentityId(booking.customerId);
+      const hotelAgencyBooking =
+        adminDispatchIsCreatingAgencyFolder(booking) ||
+        Boolean(
+          existingCustomerId &&
+            companyProfileResolution &&
+            (await loadSaveCrmAgencyCustomerClassification(
+              existingCustomerId,
+              companyProfileResolution.companyId,
+            )),
+        );
+      const corporateIdentityResolution =
+        companyProfileResolution && !hotelAgencyBooking
+          ? await resolveSaveCrmCorporateIdentityForSave(
+              booking,
+              companyProfileResolution.companyId,
+              companyProfileResolution.companyName,
+            )
+          : null;
+
+      if (corporateIdentityResolution && !corporateIdentityResolution.ok) {
+        const cancelledMessage = {
+          tone: "info",
+          text: corporateIdentityResolution.message,
+        } satisfies Message;
+
+        setMessage(cancelledMessage);
+        setBookingSaveMessage(cancelledMessage);
+        setAdminBookingPersistenceMessage(cancelledMessage);
+        return null;
+      }
+
       const bookingForSave = {
         ...booking,
         ...(companyProfileResolution
           ? { companyId: String(companyProfileResolution.companyId) }
           : {}),
+        ...(corporateIdentityResolution
+          ? {
+              booker: corporateIdentityResolution.bookerName,
+              bookerId: String(corporateIdentityResolution.bookerId),
+              companyId: String(corporateIdentityResolution.companyId),
+              travelerId: String(corporateIdentityResolution.travelerId),
+            }
+          : {}),
       };
 
-      if (companyProfileResolution) {
+      if (companyProfileResolution || corporateIdentityResolution) {
         setBooking((currentBooking) => ({
           ...currentBooking,
-          companyId: String(companyProfileResolution.companyId),
+          ...(companyProfileResolution
+            ? { companyId: String(companyProfileResolution.companyId) }
+            : {}),
+          ...(corporateIdentityResolution
+            ? {
+                booker: corporateIdentityResolution.bookerName,
+                bookerId: String(corporateIdentityResolution.bookerId),
+                companyId: String(corporateIdentityResolution.companyId),
+                travelerId: String(corporateIdentityResolution.travelerId),
+              }
+            : {}),
         }));
       }
+
+      const appliedCustomerRequestLuggageCount =
+        appliedAdminBookingSnapshot &&
+        adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
+          ? safeAdminBookingPersistenceCount(appliedAdminBookingSnapshot.luggage_count)
+          : undefined;
+      const appliedCustomerRequestSpecialRequest =
+        appliedAdminBookingSnapshot &&
+        adminBookingPersistenceRecordIsCustomerRequest(appliedAdminBookingSnapshot)
+          ? clean(appliedAdminBookingSnapshot.customer_special_request) || null
+          : null;
 
       const bookingPayloads = buildAdminDispatchReturnTripPersistencePayloads(
         bookingForSave,
@@ -20694,6 +21927,8 @@ export default function Home() {
         {
           customerDisplayNameOverride:
             companyProfileResolution?.companyName || saveCrmCustomerAccountLabel,
+          customerSpecialRequestOverride: appliedCustomerRequestSpecialRequest,
+          luggageCountOverride: appliedCustomerRequestLuggageCount,
           parserSourceReferenceOverride: activeAdminEmailAiIntakeId
             ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
             : undefined,
@@ -20706,6 +21941,23 @@ export default function Home() {
       }> = [];
 
       for (const bookingPayload of bookingPayloads) {
+        if (
+          bookingPayload.legLabel === "return" &&
+          adminDispatchIsCreatingAgencyFolder(bookingForSave)
+        ) {
+          const createdAgencyCustomerId = adminDispatchVerifiedIdentityId(
+            savedBookings[0]?.record.customer_id,
+          );
+
+          if (!createdAgencyCustomerId) {
+            throw new Error(
+              "The outbound booking returned no verified Hotel / Tour Agency folder. The return booking was not saved.",
+            );
+          }
+
+          bookingPayload.payload.booking.customer_id = createdAgencyCustomerId;
+        }
+
         let responseOk = false;
         let responseBody: {
           booking?: AdminBookingPersistenceRecord | null;
@@ -20851,6 +22103,9 @@ export default function Home() {
             )}. Google Calendar auto-synced; reminders included; no guest email sent.`,
       } satisfies Message;
 
+      if (!calendarSyncFailed) {
+        resetAdminBookingFormAfterSuccessfulPersistence();
+      }
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
       setAdminBookingPersistenceMessage(saveMessage);
@@ -20897,6 +22152,84 @@ export default function Home() {
         bookingRecordReferenceCandidates(record).includes(targetReference),
       ) ?? null
     );
+  }
+
+  function syncLoadedBookingFromRemoteRecord(
+    record: BookingRecord | null | undefined,
+  ): "conflict" | "refreshed" | "unchanged" {
+    const baseline = loadedAdminBookingBaselineRef.current;
+
+    if (!record || !baseline) {
+      return "unchanged";
+    }
+
+    const remoteReference = bookingRecordPersistedReference(record);
+    const remoteUpdatedAt = clean(record.updated_at);
+
+    if (
+      !remoteReference ||
+      remoteReference !== baseline.bookingReference ||
+      !remoteUpdatedAt ||
+      adminBookingVersionsMatch(remoteUpdatedAt, baseline.updatedAt)
+    ) {
+      return "unchanged";
+    }
+
+    const baselineTimestamp = Date.parse(baseline.updatedAt);
+    const remoteTimestamp = Date.parse(remoteUpdatedAt);
+
+    if (
+      Number.isFinite(baselineTimestamp) &&
+      Number.isFinite(remoteTimestamp) &&
+      remoteTimestamp < baselineTimestamp
+    ) {
+      return "unchanged";
+    }
+
+    const currentFormSignature = adminBookingFormSyncSignature(bookingFormRef.current);
+    const displayReference = bookingPublicReference(record) || remoteReference;
+
+    if (currentFormSignature !== baseline.formSignature) {
+      setAdminBookingCrossDeviceConflict({
+        bookingReference: remoteReference,
+        displayReference,
+        updatedAt: remoteUpdatedAt,
+      });
+      setAdminBookingPersistenceMessage({
+        tone: "error",
+        text: `Booking ${displayReference} changed on another device while this form has unsaved edits. Reopen the saved booking before updating; nothing was overwritten.`,
+      });
+      return "conflict";
+    }
+
+    const remoteForm = bookingRecordToForm(record);
+    const remoteAdminRecord = bookingRecordToAdminBookingPersistenceRecord(record);
+
+    bookingFormRef.current = remoteForm;
+    setBooking(() => remoteForm);
+    adminBookingCreateIntentRef.current = false;
+    loadedAdminBookingBaselineRef.current = {
+      bookingReference: remoteReference,
+      formSignature: adminBookingFormSyncSignature(remoteForm),
+      updatedAt: remoteUpdatedAt,
+    };
+    setAdminBookingCrossDeviceConflict(null);
+
+    if (remoteAdminRecord) {
+      setAdminBookingPersistenceRecords((current) => [
+        remoteAdminRecord,
+        ...current.filter(
+          (currentRecord) =>
+            clean(currentRecord.booking_reference) !== remoteReference,
+        ),
+      ]);
+    }
+
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: `Booking ${displayReference} refreshed from another device.`,
+    });
+    return "refreshed";
   }
 
   function requestDriverJobLinkVehicleFallbackRefresh(bookingReference: string) {
@@ -21113,11 +22446,18 @@ export default function Home() {
         const selectedBookingReference =
           cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
           cleanReferenceText(loadedBookingIdRef.current);
+        const selectedBookingRecord = findLoadedBookingRecordByReference(
+          loadedBookings,
+          selectedBookingReference,
+        );
+        const selectedBookingSyncResult = syncLoadedBookingFromRemoteRecord(
+          selectedBookingRecord,
+        );
 
         setBookings(loadedBookings);
-        mergeCurrentBookingDriverDetailsFromRecord(
-          findLoadedBookingRecordByReference(loadedBookings, selectedBookingReference),
-        );
+        if (selectedBookingSyncResult === "unchanged") {
+          mergeCurrentBookingDriverDetailsFromRecord(selectedBookingRecord);
+        }
         if (activeTabRef.current === "dispatch") {
           requestDriverJobLinkVehicleFallbackRefresh(selectedBookingReference);
         }
@@ -21209,6 +22549,7 @@ export default function Home() {
   function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
+      adminBookingRecordOverride?: AdminBookingPersistenceRecord;
       bookingFormOverride?: BookingForm;
       correctionSummary?: string;
       focusCustomerCopy?: boolean;
@@ -21225,7 +22566,9 @@ export default function Home() {
     const loadedBookingForm = options.bookingFormOverride
       ? { ...options.bookingFormOverride }
       : bookingRecordToForm(bookingRecord);
-    const loadedAdminBookingRecord = bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
+    const loadedAdminBookingRecord =
+      options.adminBookingRecordOverride ||
+      bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
 
     rememberHandledCustomerBookingRequest(bookingRecord);
     setDriverJobLinkCopyMessage(null);
@@ -21249,17 +22592,25 @@ export default function Home() {
       proofs: [],
       status: "loading",
     });
+    bookingFormRef.current = loadedBookingForm;
     setBooking(() => loadedBookingForm);
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
     }
     if (bookingReference && loadedAdminBookingRecord) {
-      markAdminBookingAsActiveForUpdates(bookingReference, loadedAdminBookingRecord);
+      markAdminBookingAsActiveForUpdates(
+        bookingReference,
+        loadedAdminBookingRecord,
+        loadedBookingForm,
+      );
     } else {
       appliedAdminBookingSnapshotReferenceRef.current = "";
       loadedBookingIdRef.current = bookingReference;
+      adminBookingCreateIntentRef.current = false;
+      loadedAdminBookingBaselineRef.current = null;
       setAppliedAdminBookingSnapshotReference("");
       setLoadedBookingId(bookingReference);
+      setAdminBookingCrossDeviceConflict(null);
     }
     if (bookingReference) {
       bookingAutoSyncPausedUntilRef.current = Date.now() + 5_000;
@@ -21826,7 +23177,7 @@ export default function Home() {
     window.setTimeout(() => scrollToAdminAlertLocatorTarget("new-booking-requests"), 150);
   }
 
-  function openNewBookingRequestNotificationReview(bookingReference: string) {
+  async function openNewBookingRequestNotificationReview(bookingReference: string) {
     const safeBookingReference = cleanReferenceText(bookingReference);
 
     if (!safeBookingReference) {
@@ -21848,31 +23199,79 @@ export default function Home() {
       return;
     }
 
-    if (safeBookingReference) {
-      const loadedRecord = findLoadedBookingRecordByReference(bookings, safeBookingReference);
+    const loadedRecord = findLoadedBookingRecordByReference(bookings, safeBookingReference);
+    const exactBookingReference =
+      (loadedRecord ? bookingRecordPersistedReference(loadedRecord) : "") ||
+      safeBookingReference;
 
-      if (loadedRecord) {
-        loadSelectedBooking(loadedRecord, { focusDriverJobLink: true });
-        return;
+    setAdminBookingPersistenceMessage({
+      tone: "info",
+      text: `Loading the exact customer request ${adminVisibleBookingReference(exactBookingReference)}...`,
+    });
+
+    try {
+      const params = new URLSearchParams({ booking_reference: exactBookingReference });
+      const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | {
+            booking?: AdminBookingPersistenceRecord | null;
+            error?: string;
+            ok?: boolean;
+          }
+        | null;
+      const exactRequestRecord = result?.booking || null;
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        !exactRequestRecord ||
+        cleanReferenceText(exactRequestRecord.booking_reference) !== exactBookingReference
+      ) {
+        throw new Error(
+          adminBookingPersistenceFailureDetail(
+            result,
+            `Exact customer request ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+          ),
+        );
       }
 
-      const savedRecord = findAdminBookingPersistenceRecordByReference(
-        adminBookingPersistenceRecords,
-        safeBookingReference,
-      );
+      const exactBookingRecord =
+        adminBookingPersistenceRecordToCalendarBookingRecord(exactRequestRecord);
 
-      if (savedRecord) {
-        const bookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
-        setBookings((currentBookings) => {
-          const remainingBookings = currentBookings.filter(
-            (currentBooking) => bookingRecordPersistedReference(currentBooking) !== safeBookingReference,
-          );
+      setBookings((currentBookings) => {
+        const remainingBookings = currentBookings.filter(
+          (currentBooking) =>
+            bookingRecordPersistedReference(currentBooking) !== exactBookingReference,
+        );
 
-          return [bookingRecord, ...remainingBookings];
-        });
-        loadSelectedBooking(bookingRecord, { focusDriverJobLink: true });
-        return;
-      }
+        return [exactBookingRecord, ...remainingBookings];
+      });
+      loadSelectedBooking(exactBookingRecord, {
+        adminBookingRecordOverride: exactRequestRecord,
+        focusDriverJobLink: true,
+      });
+      return;
+    } catch (error) {
+      const message = {
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : `Exact customer request ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+      } satisfies Message;
+
+      setMessage(message);
+      setAdminBookingPersistenceMessage(message);
+      setAdminAppNotificationReadState((current) => ({
+        ...current,
+        message,
+      }));
+      return;
     }
 
     if (customerBookingRequestDisplayItems.length > 0) {
@@ -22115,6 +23514,13 @@ export default function Home() {
         ? " Admin Review Required."
         : "";
 
+    bookingFormRef.current = appliedSnapshot.booking;
+    adminBookingCreateIntentRef.current = false;
+    loadedAdminBookingBaselineRef.current = {
+      bookingReference,
+      formSignature: adminBookingFormSyncSignature(appliedSnapshot.booking),
+      updatedAt: clean(record.updated_at),
+    };
     setBooking(() => appliedSnapshot.booking);
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = bookingReference;
@@ -23277,8 +24683,111 @@ export default function Home() {
     };
   }
 
+  async function verifyLoadedAdminBookingVersionBeforeUpdate(
+    targetBookingReference: string,
+  ): Promise<string | null> {
+    const baseline = loadedAdminBookingBaselineRef.current;
+
+    if (
+      !baseline ||
+      baseline.bookingReference !== targetBookingReference ||
+      !clean(baseline.updatedAt)
+    ) {
+      const message = {
+        tone: "error",
+        text: `Booking ${targetBookingReference} cannot be updated because its saved version is not loaded. Reopen the exact booking; no new booking was created.`,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(message);
+      setMessage(message);
+      setBookingSaveMessage(message);
+      return null;
+    }
+
+    try {
+      const searchParams = new URLSearchParams({
+        booking_reference: targetBookingReference,
+      });
+      const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as
+        | { booking?: AdminBookingPersistenceRecord | null; error?: string; ok?: boolean }
+        | null;
+      const latestBooking = result?.booking ?? null;
+      const latestReference = clean(latestBooking?.booking_reference);
+      const latestUpdatedAt = clean(latestBooking?.updated_at);
+
+      if (
+        !response.ok ||
+        result?.ok !== true ||
+        !latestBooking ||
+        latestReference !== targetBookingReference ||
+        !latestUpdatedAt
+      ) {
+        throw new Error(
+          adminBookingPersistenceFailureDetail(
+            result,
+            `Booking ${targetBookingReference} version check failed.`,
+          ),
+        );
+      }
+
+      if (!adminBookingVersionsMatch(latestUpdatedAt, baseline.updatedAt)) {
+        const latestBookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(
+          latestBooking,
+        );
+        const syncResult = syncLoadedBookingFromRemoteRecord(latestBookingRecord);
+        const displayReference = bookingPublicReference(latestBookingRecord) || targetBookingReference;
+
+        if (syncResult === "unchanged") {
+          setAdminBookingCrossDeviceConflict({
+            bookingReference: targetBookingReference,
+            displayReference,
+            updatedAt: latestUpdatedAt,
+          });
+        }
+
+        const message = {
+          tone: "error",
+          text:
+            syncResult === "refreshed"
+              ? `Booking ${displayReference} was refreshed from another device. Review the latest details before updating.`
+              : `Booking ${displayReference} changed on another device while this form was open. Reopen the saved booking before updating; nothing was overwritten.`,
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(message);
+        setMessage(message);
+        setBookingSaveMessage(message);
+        return null;
+      }
+
+      return baseline.updatedAt;
+    } catch (error) {
+      const message = {
+        tone: "error",
+        text: `Booking version check failed: ${
+          error instanceof Error ? error.message : "Reload the exact saved booking before updating."
+        } No booking or Calendar event was changed.`,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(message);
+      setMessage(message);
+      setBookingSaveMessage(message);
+      return null;
+    }
+  }
+
   async function updateAppliedAdminBookingOperationalSnapshot() {
-    const targetBookingReference = clean(appliedAdminBookingSnapshotReference);
+    const targetBookingReference =
+      cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
+      cleanReferenceText(appliedAdminBookingSnapshotReference) ||
+      cleanReferenceText(loadedBookingIdRef.current) ||
+      cleanReferenceText(loadedBookingId);
     const customerReturnUrl = dispatchHandoffCustomerReturnUrlRef.current;
 
     if (!targetBookingReference) {
@@ -23311,6 +24820,14 @@ export default function Home() {
       return;
     }
 
+    const expectedUpdatedAt = await verifyLoadedAdminBookingVersionBeforeUpdate(
+      targetBookingReference,
+    );
+
+    if (!expectedUpdatedAt) {
+      return;
+    }
+
     const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
 
     if (!billingIdentityResolution.ok) {
@@ -23325,16 +24842,159 @@ export default function Home() {
       return;
     }
 
+    const appliedSnapshot = appliedAdminBookingSnapshot;
+    const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
+    const updateCompanyId = adminDispatchVerifiedIdentityId(booking.companyId);
+    const updateCustomerId = adminDispatchVerifiedIdentityId(booking.customerId);
+    const updateBookerId = adminDispatchVerifiedIdentityId(booking.bookerId);
+    const updateTravelerId = adminDispatchVerifiedIdentityId(booking.travelerId);
+    let updateIsHotelAgencyBooking = false;
+
+    if (acceptingCustomerRequest) {
+      if (!updateCustomerId || !updateCompanyId) {
+        const malformedRequestMessage = {
+          tone: "error",
+          text: "This customer request is missing its exact verified customer or company. Reload and review the request before Accept + Cal; no booking or identity was changed.",
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(malformedRequestMessage);
+        setMessage(malformedRequestMessage);
+        setBookingSaveMessage(malformedRequestMessage);
+        return;
+      }
+
+      try {
+        updateIsHotelAgencyBooking = await loadSaveCrmAgencyCustomerClassification(
+          updateCustomerId,
+          updateCompanyId,
+        );
+      } catch (error) {
+        const classificationMessage = {
+          tone: "error",
+          text: `${
+            error instanceof Error
+              ? error.message
+              : "Hotel / Tour Agency classification could not be verified."
+          } No booking or identity was changed.`,
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(classificationMessage);
+        setMessage(classificationMessage);
+        setBookingSaveMessage(classificationMessage);
+        return;
+      }
+
+      if (!updateIsHotelAgencyBooking && !updateBookerId) {
+        const missingBookerMessage = {
+          tone: "error",
+          text: "This non-agency customer request has no verified Booker. Reload and review the exact request before Accept + Cal; no booking or identity was changed.",
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(missingBookerMessage);
+        setMessage(missingBookerMessage);
+        setBookingSaveMessage(missingBookerMessage);
+        return;
+      }
+    }
+
+    if (
+      acceptingCustomerRequest &&
+      updateIsHotelAgencyBooking &&
+      (updateBookerId || updateTravelerId)
+    ) {
+      const agencyIdentityMessage = {
+        tone: "error",
+        text: "This Hotel / Tour Agency request unexpectedly carries a verified Booker or Traveller. Reload and review the exact request; no booking or identity was changed.",
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(agencyIdentityMessage);
+      setMessage(agencyIdentityMessage);
+      setBookingSaveMessage(agencyIdentityMessage);
+      return;
+    }
+
+    const updateCompanyName =
+      clean(
+        rateCompanies.find(
+          (company) => adminDispatchVerifiedIdentityId(company.id) === updateCompanyId,
+        )?.company_name,
+      ) ||
+      clean(billingIdentityResolution.accountLabel) ||
+      clean(booking.company) ||
+      (appliedSnapshot ? adminBookingPersistenceCustomerDisplayName(appliedSnapshot) : "") ||
+      `verified company ${updateCompanyId}`;
+    let corporateIdentityResolution: SaveCrmCorporateIdentityResolution | null = null;
+
+    if (acceptingCustomerRequest && updateCompanyId && !updateIsHotelAgencyBooking) {
+      try {
+        corporateIdentityResolution = await resolveSaveCrmCorporateIdentityForSave(
+          booking,
+          updateCompanyId,
+          updateCompanyName,
+        );
+      } catch (error) {
+        const identityMessage = {
+          tone: "error",
+          text: error instanceof Error
+            ? error.message
+            : "The exact Booker + Traveller pair could not be verified. No booking or identity was changed.",
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(identityMessage);
+        setMessage(identityMessage);
+        setBookingSaveMessage(identityMessage);
+        return;
+      }
+    }
+
+    if (corporateIdentityResolution && !corporateIdentityResolution.ok) {
+      const cancelledMessage = {
+        tone: "info",
+        text: corporateIdentityResolution.message,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(cancelledMessage);
+      setMessage(cancelledMessage);
+      setBookingSaveMessage(cancelledMessage);
+      return;
+    }
+
+    const bookingForUpdate = corporateIdentityResolution
+      ? {
+          ...booking,
+          booker: corporateIdentityResolution.bookerName,
+          bookerId: String(corporateIdentityResolution.bookerId),
+          companyId: String(corporateIdentityResolution.companyId),
+          travelerId: String(corporateIdentityResolution.travelerId),
+        }
+      : booking;
+
+    if (corporateIdentityResolution) {
+      setBooking((currentBooking) => ({
+        ...currentBooking,
+        booker: corporateIdentityResolution.bookerName,
+        bookerId: String(corporateIdentityResolution.bookerId),
+        companyId: String(corporateIdentityResolution.companyId),
+        travelerId: String(corporateIdentityResolution.travelerId),
+      }));
+    }
+
     const payload = buildAdminBookingPersistencePayload(
-      booking,
+      bookingForUpdate,
       currentTimeMs,
       targetBookingReference,
       {
         customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+        customerSpecialRequestOverride:
+          acceptingCustomerRequest && appliedSnapshot
+            ? clean(appliedSnapshot.customer_special_request) || null
+            : undefined,
+        luggageCountOverride:
+          acceptingCustomerRequest && appliedSnapshot
+            ? safeAdminBookingPersistenceCount(appliedSnapshot.luggage_count)
+            : undefined,
       },
     );
-    const appliedSnapshot = appliedAdminBookingSnapshot;
-    const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
 
     if (appliedSnapshot) {
       payload.booking.source_channel = clean(appliedSnapshot.source_channel) || payload.booking.source_channel;
@@ -23369,6 +25029,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/admin-bookings", {
         body: JSON.stringify({
+          expected_updated_at: expectedUpdatedAt,
           target_booking_reference: targetBookingReference,
           ...payload,
         }),
@@ -23425,22 +25086,30 @@ export default function Home() {
           : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} ${calendarSyncResult.message}`,
       } satisfies Message;
 
-      setAdminBookingPersistenceMessage(updateMessage);
-      setMessage(updateMessage);
-      setBookingSaveMessage(updateMessage);
       if (calendarSyncResult.ok) {
         lastSuccessfulBookingSaveRef.current = {
           bookingId: updatedBookingReference,
           key: getBookingSaveGuardKey(updatedBookingReference),
           record: updatedBooking,
         };
+        resetAdminBookingFormAfterSuccessfulPersistence();
         returnToCustomerFolderAfterUpdate();
       }
+      setAdminBookingPersistenceMessage(updateMessage);
+      setMessage(updateMessage);
+      setBookingSaveMessage(updateMessage);
     } catch (error) {
-      setAdminBookingPersistenceMessage({
+      const failureText = adminBookingPersistenceFailureMessage("update", error);
+      const updateMessage = {
         tone: "error",
-        text: adminBookingPersistenceFailureMessage("update", error),
-      });
+        text: /another device|saved version|conflict/i.test(failureText)
+          ? `${failureText} Reopen the exact saved booking; nothing was overwritten.`
+          : failureText,
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(updateMessage);
+      setMessage(updateMessage);
+      setBookingSaveMessage(updateMessage);
     } finally {
       setAdminBookingPersistenceAction(null);
     }
@@ -24986,13 +26655,13 @@ export default function Home() {
               <input
                 className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                 inputMode={
-                  field === "pax"
+                  field === "pax" || field === "luggageCount"
                     ? "numeric"
-                    : field === "bookerContact" || field === "driverContact"
+                    : field === "bookerContact" || field === "passengerContact" || field === "driverContact"
                       ? "tel"
                       : undefined
                 }
-                min={field === "pax" ? 1 : undefined}
+                min={field === "pax" ? 1 : field === "luggageCount" ? 0 : undefined}
                 data-admin-dispatch-dsp-end-date={field === "dspEndDate" ? "true" : undefined}
                 data-admin-dispatch-dsp-end-time={field === "dspEndTime" ? "true" : undefined}
                 onChange={(event) => update(field, event.target.value)}
@@ -25002,9 +26671,9 @@ export default function Home() {
                     ? "date"
                     : field === "bookerEmail"
                       ? "email"
-                      : field === "bookerContact" || field === "driverContact"
+                      : field === "bookerContact" || field === "passengerContact" || field === "driverContact"
                         ? "tel"
-                        : field === "pax"
+                        : field === "pax" || field === "luggageCount"
                           ? "number"
                           : "text"
                 }
@@ -25016,6 +26685,15 @@ export default function Home() {
       </div>
     );
   };
+  const adminDispatchAgencyFolderOptions = adminDispatchAgencyFolders.map((account) => ({
+    companyId: clean(account.verified_company_id),
+    id: clean(account.customer_id),
+    name: clean(account.customer_account) || `Agency folder ${clean(account.customer_id)}`,
+  }));
+  const adminDispatchSelectedAgencyFolder = adminDispatchAgencyFolderOptions.find(
+    (account) => account.id === booking.customerId,
+  ) ?? null;
+  const adminDispatchCreatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(booking);
   const adminEmailAiPassengerName = clean(booking.name);
   const adminEmailAiCompanyName = saveCrmExplicitCompanyAccount(booking);
   const adminEmailAiBookerName = clean(booking.booker);
@@ -25050,7 +26728,11 @@ export default function Home() {
     adminEmailAiRepeatedCustomerCandidates.length === 1
       ? adminEmailAiRepeatedCustomerCandidates[0]
       : null;
-  const adminEmailAiCustomerStatus = !activeAdminEmailAiIntakeId
+  const adminEmailAiCustomerStatus =
+    !activeAdminEmailAiIntakeId ||
+    adminDispatchSelectedAgencyFolder ||
+    adminDispatchCreatingAgencyFolder ||
+    adminEmailAiCustomerProfileSuggestion
     ? null
     : !ratesLoaded
       ? savingRates
@@ -25077,6 +26759,7 @@ export default function Home() {
       bookerId: String(adminEmailAiRepeatedCustomerCandidate.booker_id),
       company: clean(company?.company_name) || current.company,
       companyId: String(adminEmailAiRepeatedCustomerCandidate.company_id),
+      customerId: "",
       name: clean(adminEmailAiRepeatedCustomerCandidate.traveler_name) || current.name,
       travelerId: String(adminEmailAiRepeatedCustomerCandidate.id),
     }));
@@ -25087,47 +26770,6 @@ export default function Home() {
     });
   }
 
-  const adminDispatchVerifiedBookerOptions = Array.from(
-    new Map(
-      rateTravelers
-        .filter((traveler) => !booking.companyId || traveler.company_id === Number(booking.companyId))
-        .filter((traveler) => traveler.booker_id)
-        .map((traveler) => [
-          String(traveler.booker_id),
-          {
-            id: String(traveler.booker_id),
-            name: clean(traveler.booker_name) || `Booker ${traveler.booker_id}`,
-          },
-        ]),
-    ).values(),
-  );
-  if (
-    booking.bookerId &&
-    !adminDispatchVerifiedBookerOptions.some((booker) => booker.id === booking.bookerId)
-  ) {
-    adminDispatchVerifiedBookerOptions.push({
-      id: booking.bookerId,
-      name: clean(booking.booker) || `Booker ${booking.bookerId}`,
-    });
-  }
-  const adminDispatchVerifiedTravelerOptions = rateTravelers.filter(
-    (traveler) =>
-      (!booking.companyId || traveler.company_id === Number(booking.companyId)) &&
-      (!booking.bookerId || traveler.booker_id === Number(booking.bookerId)),
-  );
-  if (
-    booking.travelerId &&
-    !adminDispatchVerifiedTravelerOptions.some(
-      (traveler) => String(traveler.id) === booking.travelerId,
-    )
-  ) {
-    adminDispatchVerifiedTravelerOptions.push({
-      booker_id: booking.bookerId ? Number(booking.bookerId) : null,
-      company_id: booking.companyId ? Number(booking.companyId) : 0,
-      id: Number(booking.travelerId),
-      traveler_name: clean(booking.name) || `Traveler ${booking.travelerId}`,
-    });
-  }
   const adminDispatchVerifiedCompanyOptions = rateCompanies.map((company) => ({
     id: String(company.id),
     name: clean(company.company_name) || `Company ${company.id}`,
@@ -25141,7 +26783,118 @@ export default function Home() {
       name: clean(booking.company) || `Company ${booking.companyId}`,
     });
   }
+  const adminDispatchCorporatePairOptions = rateTravelers
+    .filter(
+      (traveler) =>
+        adminDispatchVerifiedIdentityId(traveler.id) &&
+        adminDispatchVerifiedIdentityId(traveler.company_id) &&
+        adminDispatchVerifiedIdentityId(traveler.booker_id) &&
+        (!booking.companyId || traveler.company_id === Number(booking.companyId)),
+    )
+    .map((traveler) => ({
+      bookerId: String(traveler.booker_id),
+      bookerName: clean(traveler.booker_name) || "Saved booker",
+      companyId: String(traveler.company_id),
+      id: String(traveler.id),
+      label: `${clean(traveler.booker_name) || "Saved booker"} / ${clean(traveler.traveler_name) || "Saved traveller"}`,
+      travelerName: clean(traveler.traveler_name) || "Saved traveller",
+    }));
+  const adminDispatchSelectedCorporatePair = adminDispatchCorporatePairOptions.find(
+    (pair) => pair.id === booking.travelerId && pair.bookerId === booking.bookerId,
+  ) ?? null;
+  const adminDispatchSingleCorporatePair =
+    adminDispatchCorporatePairOptions.length === 1
+      ? adminDispatchCorporatePairOptions[0]
+      : null;
+  const adminDispatchSingleCorporatePairBookerId =
+    adminDispatchSingleCorporatePair?.bookerId || "";
+  const adminDispatchSingleCorporatePairBookerName =
+    adminDispatchSingleCorporatePair?.bookerName || "";
+  const adminDispatchSingleCorporatePairCompanyId =
+    adminDispatchSingleCorporatePair?.companyId || "";
+  const adminDispatchSingleCorporatePairTravelerId =
+    adminDispatchSingleCorporatePair?.id || "";
 
+  useEffect(() => {
+    if (
+      activeTab !== "dispatch" ||
+      clean(booking.customerId) ||
+      !booking.companyId ||
+      booking.bookerId ||
+      booking.travelerId ||
+      !adminDispatchSingleCorporatePairBookerId ||
+      adminDispatchSingleCorporatePairCompanyId !== booking.companyId ||
+      !adminDispatchSingleCorporatePairTravelerId
+    ) {
+      return;
+    }
+
+    setBooking((current) => {
+      if (
+        clean(current.customerId) ||
+        current.companyId !== adminDispatchSingleCorporatePairCompanyId ||
+        current.bookerId ||
+        current.travelerId
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        booker: adminDispatchSingleCorporatePairBookerName || current.booker,
+        bookerId: adminDispatchSingleCorporatePairBookerId,
+        travelerId: adminDispatchSingleCorporatePairTravelerId,
+      };
+    });
+  }, [
+    activeTab,
+    adminDispatchSingleCorporatePairBookerId,
+    adminDispatchSingleCorporatePairBookerName,
+    adminDispatchSingleCorporatePairCompanyId,
+    adminDispatchSingleCorporatePairTravelerId,
+    booking.bookerId,
+    booking.companyId,
+    booking.customerId,
+    booking.travelerId,
+  ]);
+
+  function updateAdminDispatchCorporateCustomer(companyId: string) {
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
+    const exactPairs = rateTravelers.filter(
+      (traveler) =>
+        String(traveler.company_id) === companyId &&
+        adminDispatchVerifiedIdentityId(traveler.id) &&
+        adminDispatchVerifiedIdentityId(traveler.booker_id),
+    );
+    const onlyPair = exactPairs.length === 1 ? exactPairs[0] : null;
+
+    setBooking((current) => ({
+      ...current,
+      booker: onlyPair ? clean(onlyPair.booker_name) || current.booker : current.booker,
+      bookerId: onlyPair ? String(onlyPair.booker_id) : "",
+      companyId,
+      customerId: "",
+      travelerId: onlyPair ? String(onlyPair.id) : "",
+    }));
+  }
+
+  function updateAdminDispatchCorporatePair(travelerId: string) {
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
+    const pair = adminDispatchCorporatePairOptions.find(
+      (candidate) => candidate.id === travelerId,
+    );
+
+    setBooking((current) => ({
+      ...current,
+      booker: pair?.bookerName || current.booker,
+      bookerId: pair?.bookerId || "",
+      companyId: pair?.companyId || current.companyId,
+      customerId: "",
+      travelerId: pair?.id || "",
+    }));
+  }
   const codexPreparedJobCardsPanel = (
     <div
       className={`mt-3 rounded-md border border-emerald-200 bg-emerald-50/60 p-3 ${
@@ -25383,6 +27136,9 @@ export default function Home() {
           const routeText =
             operationalCard.route_points_summary ||
             (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
+          const routeRepeatsPickupAndDropoff =
+            clean(routeText).toLocaleLowerCase() ===
+            clean(`${pickup} > ${dropoff}`).toLocaleLowerCase();
           const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
           const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
@@ -25574,7 +27330,16 @@ export default function Home() {
                       <OperationalCardSection section="route" title="Route">
                         <p>Pickup: <AdminOperationalUppercaseValue field="pickup">{pickup}</AdminOperationalUppercaseValue></p>
                         <p>Drop-off: <AdminOperationalUppercaseValue field="dropoff">{dropoff}</AdminOperationalUppercaseValue></p>
-                        <p className="break-words">Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue></p>
+                        <p
+                          className={`break-words ${routeRepeatsPickupAndDropoff ? "hidden md:block" : ""}`}
+                          data-bookings-route-detail={
+                            routeRepeatsPickupAndDropoff
+                              ? "duplicate-direct-route"
+                              : "additional-route-detail"
+                          }
+                        >
+                          Route: <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue>
+                        </p>
                       </OperationalCardSection>
                     </div>
                     <div className="grid gap-2" data-operational-card-summary-grid={bookingId}>
@@ -32332,7 +34097,22 @@ export default function Home() {
     ? "Midnight Charge shown under Extra Charges - Mock Only"
     : "No Midnight Charge shown - Mock Only";
   const showLegacyExtraChargeQaSections = false;
-  const activeAppliedBookingReference = clean(appliedAdminBookingSnapshotReference);
+  const activeAppliedBookingReference = cleanReferenceText(
+    appliedAdminBookingSnapshotReference,
+  );
+  const bookingUpdateIdentityNeedsReload = Boolean(
+    !activeAppliedBookingReference && cleanReferenceText(loadedBookingId),
+  );
+  const activeAppliedBookingRecord = findLoadedBookingRecordByReference(
+    bookings,
+    activeAppliedBookingReference,
+  );
+  const activeAppliedBookingDisplayReference = activeAppliedBookingRecord
+    ? bookingPublicReference(activeAppliedBookingRecord)
+    : activeAppliedBookingReference;
+  const activeAppliedBookingEditLabel = activeAppliedBookingReference
+    ? `Editing booking ${activeAppliedBookingDisplayReference}`
+    : "";
   const currentBookingSaveGuardKey = getBookingSaveGuardKey();
   const bookingSaveSucceededForCurrentDraft =
     bookingSaveMessage?.tone === "success" &&
@@ -32368,6 +34148,8 @@ export default function Home() {
       ? "Updating..."
     : bookingSaveSucceededForCurrentDraft
       ? "Saved"
+      : bookingUpdateIdentityNeedsReload
+        ? "Reload booking"
       : activeAppliedBookingReference
         ? appliedAdminBookingSnapshotIsPendingCustomerRequest
           ? "Accept + Cal"
@@ -32376,6 +34158,18 @@ export default function Home() {
   function handleJobCardPrimaryBookingAction() {
     if (activeAppliedBookingReference) {
       void updateAppliedAdminBookingOperationalSnapshot();
+      return;
+    }
+
+    if (bookingUpdateIdentityNeedsReload || !adminBookingCreateIntentRef.current) {
+      const identityLostMessage = {
+        tone: "error",
+        text: "Booking update identity was lost. Reopen the exact saved booking before saving; no new booking was created.",
+      } satisfies Message;
+
+      setAdminBookingPersistenceMessage(identityLostMessage);
+      setMessage(identityLostMessage);
+      setBookingSaveMessage(identityLostMessage);
       return;
     }
 
@@ -39312,12 +41106,12 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setBooking(() => createInitialBooking());
-                  clearLoadedBookingSelectionContext();
+                  clearLoadedBookingSelectionContext({ explicitNewBooking: true });
                   clearBookingMessageInput();
                   setMobileDispatchBookingStep("message");
                 }}
               >
-                Clear
+                New booking
               </button>
             </div>
 
@@ -39446,7 +41240,6 @@ export default function Home() {
                     className="min-h-11 w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:bg-slate-50 md:min-h-9 md:min-w-32"
                     data-dispatcher-clear-message-button="true"
                     onClick={() => {
-                      clearLoadedBookingSelectionContext();
                       clearBookingMessageInput();
                       setMobileDispatchBookingStep("message");
                     }}
@@ -39693,44 +41486,154 @@ export default function Home() {
                 className="mb-2 grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-2 md:grid-cols-3"
                 data-admin-dispatch-crm-identity-selectors="true"
               >
-                <label className="text-xs font-semibold text-slate-700">
-                  Verified company
+                <label className="text-xs font-semibold text-slate-700 md:col-span-3">
+                  Hotel / Tour Agency folder
                   <select
                     className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-company-identity-select="true"
-                    onChange={(event) => setBooking((current) => ({ ...current, companyId: event.target.value, bookerId: "", travelerId: "" }))}
+                    data-admin-dispatch-agency-folder-select="true"
+                    disabled={!adminDispatchAgencyFoldersLoaded || Boolean(clean(appliedAdminBookingSnapshotReference))}
+                    onChange={(event) => {
+                      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+                      setAdminEmailAiCustomerProfileSuggestion(null);
+                      const customerId = event.target.value;
+                      const creatingAgencyFolder = customerId === adminDispatchCreateAgencyFolderValue;
+
+                      setBooking((current) => ({
+                        ...current,
+                        customerId,
+                        ...(creatingAgencyFolder
+                          ? {
+                              bookerId: "",
+                              companyId: "",
+                              travelerId: "",
+                            }
+                          : customerId
+                          ? {
+                              bookerId: "",
+                              companyId:
+                                adminDispatchAgencyFolderOptions.find(
+                                  (account) => account.id === customerId,
+                                )?.companyId || "",
+                              travelerId: "",
+                            }
+                          : {}),
+                      }));
+                    }}
+                    value={
+                      adminDispatchCreatingAgencyFolder
+                        ? adminDispatchCreateAgencyFolderValue
+                        : adminDispatchSelectedAgencyFolder?.id || ""
+                    }
+                  >
+                    <option value="">Not an agency booking</option>
+                    <option value={adminDispatchCreateAgencyFolderValue}>
+                      Create new Hotel / Tour Agency
+                    </option>
+                    {adminDispatchAgencyFolderOptions.map((account) => (
+                      <option key={account.id} value={account.id}>{account.name}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block font-medium text-slate-500">
+                    {clean(appliedAdminBookingSnapshotReference)
+                      ? "Existing booking: the saved agency relationship is preserved."
+                      : adminDispatchCreatingAgencyFolder
+                        ? "Enter the agency name once under Company / Account. Booker and Traveller stay blank; the passenger stays on this booking only."
+                        : "Agency booking: choose this one folder only. Booker and Traveller stay blank."}
+                  </span>
+                </label>
+                {adminDispatchAgencyFoldersError ? (
+                  <p
+                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-800 md:col-span-3"
+                    data-admin-dispatch-agency-folders-error="true"
+                  >
+                    {adminDispatchAgencyFoldersError} Retry the customer list before saving an agency booking.
+                  </p>
+                ) : null}
+                {adminDispatchSelectedAgencyFolder ? (
+                  <p
+                    className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-3"
+                    data-admin-dispatch-agency-folder-selected="true"
+                  >
+                    Agency folder selected: {adminDispatchSelectedAgencyFolder.name}. Guest name stays on this booking only.
+                  </p>
+                ) : adminDispatchCreatingAgencyFolder ? (
+                  <p
+                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-3"
+                    data-admin-dispatch-agency-folder-create="true"
+                  >
+                    First agency booking: enter the exact agency name in Company / Account below. Booker and Traveller stay blank. The passenger stays on this booking only.
+                  </p>
+                ) : (
+                  <>
+                <label className="text-xs font-semibold text-slate-700">
+                  Customer
+                  <select
+                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                    data-admin-dispatch-corporate-customer-select="true"
+                    onChange={(event) => updateAdminDispatchCorporateCustomer(event.target.value)}
                     value={booking.companyId}
                   >
-                    <option value="">Not selected</option>
+                    <option value="">Choose customer</option>
                     {adminDispatchVerifiedCompanyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                   </select>
                 </label>
-                <label className="text-xs font-semibold text-slate-700">
-                  Verified PA / booker
-                  <select
-                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-booker-identity-select="true"
-                    disabled={!booking.companyId}
-                    onChange={(event) => setBooking((current) => ({ ...current, bookerId: event.target.value, travelerId: "" }))}
-                    value={booking.bookerId}
+                {booking.companyId && adminDispatchCorporatePairOptions.length > 1 ? (
+                  <label className="text-xs font-semibold text-slate-700 md:col-span-2">
+                    Booker / Traveller
+                    <select
+                      className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
+                      data-admin-dispatch-corporate-pair-select="true"
+                      onChange={(event) => updateAdminDispatchCorporatePair(event.target.value)}
+                      value={adminDispatchSelectedCorporatePair?.id || ""}
+                    >
+                      <option value="">Choose the actual Booker / Traveller</option>
+                      {adminDispatchCorporatePairOptions.map((pair) => (
+                        <option key={pair.id} value={pair.id}>{pair.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : booking.companyId && adminDispatchSelectedCorporatePair ? (
+                  <p
+                    className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-carried="true"
                   >
-                    <option value="">Not selected</option>
-                    {adminDispatchVerifiedBookerOptions.map((booker) => <option key={booker.id} value={booker.id}>{booker.name}</option>)}
-                  </select>
-                </label>
-                <label className="text-xs font-semibold text-slate-700">
-                  Verified traveler / boss
-                  <select
-                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-traveler-identity-select="true"
-                    disabled={!booking.bookerId}
-                    onChange={(event) => setBooking((current) => ({ ...current, travelerId: event.target.value }))}
-                    value={booking.travelerId}
+                    Booker / Traveller: {adminDispatchCorporatePairOptions[0].label}
+                  </p>
+                ) : booking.companyId &&
+                  adminDispatchCorporatePairOptions.length === 1 &&
+                  !booking.bookerId &&
+                  !booking.travelerId ? (
+                  <p
+                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-applying="true"
                   >
-                    <option value="">Not selected</option>
-                    {adminDispatchVerifiedTravelerOptions.map((traveler) => <option key={traveler.id} value={traveler.id}>{clean(traveler.traveler_name) || `Traveler ${traveler.id}`}</option>)}
-                  </select>
-                </label>
+                    Applying saved Booker / Traveller...
+                  </p>
+                ) : booking.companyId && adminDispatchCorporatePairOptions.length === 1 ? (
+                  <p
+                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-conflict="true"
+                  >
+                    Saved Booker / Traveller does not match this booking. Review the booking before saving.
+                  </p>
+                ) : booking.companyId ? (
+                  <p
+                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-2"
+                    data-admin-dispatch-corporate-pair-missing="true"
+                  >
+                    Add the Booker / Traveller once in this customer profile before preparing an invoice.
+                  </p>
+                ) : null}
+                  </>
+                )}
+                {activeAdminEmailAiIntakeId && adminEmailAiCustomerProfileSuggestion ? (
+                  <p
+                    className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-950 md:col-span-3"
+                    data-admin-email-ai-customer-profile-suggestion="true"
+                  >
+                    {adminEmailAiCustomerProfileSuggestion.text}
+                  </p>
+                ) : null}
                 {adminEmailAiCustomerStatus ? (
                   <div
                     className={`rounded-md border px-3 py-2 text-xs font-semibold md:col-span-3 ${
@@ -39794,11 +41697,35 @@ export default function Home() {
                     )}
                   </div>
                 ) : null}
-                {!ratesLoaded ? <button className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold" onClick={() => loadRates("CRM identities loaded.")} type="button">Load CRM identities</button> : null}
+                {adminDispatchCustomerListAutoLoadAttemptedRef.current &&
+                !savingRates &&
+                (!ratesLoaded || !adminDispatchAgencyFoldersLoaded || adminDispatchAgencyFoldersError) ? (
+                  <button
+                    className="h-8 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold"
+                    data-admin-dispatch-customer-list-retry="true"
+                    onClick={() => loadRates("Customers ready.", { includeAgencyFolders: true })}
+                    type="button"
+                  >
+                    Retry customer list
+                  </button>
+                ) : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {bookingDetailFieldOrder.map(renderDispatchBookingField)}
               </div>
+              {clean(appliedAdminBookingSnapshot?.customer_special_request) ? (
+                <div
+                  className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2"
+                  data-admin-dispatch-customer-special-request="true"
+                >
+                  <p className="text-xs font-semibold text-slate-700">
+                    Customer special request
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-900">
+                    {clean(appliedAdminBookingSnapshot?.customer_special_request)}
+                  </p>
+                </div>
+              ) : null}
             </section>
 
             <section
@@ -43489,6 +45416,22 @@ export default function Home() {
                       className="flex items-center rounded-md border border-red-100 bg-red-50/70 p-1"
                       data-job-card-save-toolbar="primary"
                     >
+                      {activeAppliedBookingReference ? (
+                        <span
+                          className="rounded bg-white px-2 py-1 text-[10px] font-semibold text-slate-700"
+                          data-admin-booking-edit-identity="true"
+                        >
+                          {activeAppliedBookingEditLabel}
+                        </span>
+                      ) : null}
+                      {adminBookingCrossDeviceConflict ? (
+                        <span
+                          className="rounded bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800"
+                          data-admin-booking-cross-device-conflict="true"
+                        >
+                          Changed on another device — reopen booking {adminBookingCrossDeviceConflict.displayReference}.
+                        </span>
+                      ) : null}
                       <button
                         className={`h-8 whitespace-nowrap rounded px-2.5 text-[11px] font-semibold leading-none transition disabled:cursor-not-allowed disabled:bg-slate-400 ${
                           actionFeedbackButtonClass(
@@ -45454,22 +47397,45 @@ export default function Home() {
                 <input
                   className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                   onChange={(event) =>
-                    setRateOverrideDraft((current) => ({ ...current, companyName: event.target.value }))
+                    setRateOverrideDraft((current) => ({
+                      ...current,
+                      bossName: "",
+                      companyName: event.target.value,
+                      travelerId: "",
+                    }))
                   }
                   placeholder="Tiger Global"
                   value={rateOverrideDraft.companyName}
                 />
               </label>
               <label>
-                <span className="mb-1 block text-sm font-medium text-slate-700">Boss / Name</span>
-                <input
+                <span className="mb-1 block text-sm font-medium text-slate-700">
+                  Boss / Name (existing Traveller)
+                </span>
+                <select
                   className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                  onChange={(event) =>
-                    setRateOverrideDraft((current) => ({ ...current, bossName: event.target.value }))
-                  }
-                  placeholder="Su Ling"
-                  value={rateOverrideDraft.bossName}
-                />
+                  data-rate-override-traveler-id="true"
+                  disabled={!rateOverrideCompany}
+                  onChange={(event) => {
+                    const travelerId = event.target.value;
+                    const traveler = rateOverrideTravelerOptions.find(
+                      (candidate) => String(candidate.id) === travelerId,
+                    );
+                    setRateOverrideDraft((current) => ({
+                      ...current,
+                      bossName: clean(traveler?.traveler_name),
+                      travelerId,
+                    }));
+                  }}
+                  value={rateOverrideDraft.travelerId}
+                >
+                  <option value="">Company-wide override</option>
+                  {rateOverrideTravelerOptions.map((travelerRecord) => (
+                    <option key={travelerRecord.id} value={String(travelerRecord.id)}>
+                      {clean(travelerRecord.traveler_name) || `Traveller ${travelerRecord.id}`}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="flex items-end gap-2 pb-2 text-sm text-slate-700">
                 <input
@@ -45637,6 +47603,7 @@ export default function Home() {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord.company_name),
                                     bossName: "",
+                                    travelerId: "",
                                     cardOptionDefaultEnabled: Boolean(
                                       companyRecord.card_option_default_enabled,
                                     ),
@@ -45733,6 +47700,7 @@ export default function Home() {
                                   setRateOverrideDraft({
                                     companyName: clean(companyRecord?.company_name),
                                     bossName: clean(travelerRecord.traveler_name),
+                                    travelerId: String(travelerRecord.id),
                                     cardOptionDefaultEnabled:
                                       typeof travelerRecord.card_option_default_enabled === "boolean"
                                         ? travelerRecord.card_option_default_enabled
@@ -46080,7 +48048,7 @@ export default function Home() {
                   </div>
                   <p className="mt-1 text-xs text-slate-600 sm:text-sm">
                     New, urgent, Driver TBC, amendment, and cancellation work in one place. Each row states its job type.
-                    Only confirmed booking, amendment, and cancellation email reviews appear here.
+                    Confirmed bookings, amendments, cancellations, and exact verified GroundBooker order requests appear here.
                   </p>
                 </div>
               </div>

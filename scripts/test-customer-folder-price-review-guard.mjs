@@ -12,8 +12,10 @@ const [
   customers,
   sharedCalculation,
   savedBookingsRead,
+  adminSavedBookingsRead,
   rateSetupRoute,
   dspActualTimeRoute,
+  invoicePersistence,
   ledger,
   suite,
 ] = await Promise.all([
@@ -22,8 +24,10 @@ const [
   readFile("app/customers/page.tsx", "utf8"),
   readFile("lib/customer-dsp-invoice-review.ts", "utf8"),
   readFile("lib/admin-customer-saved-bookings-read.ts", "utf8"),
+  readFile("lib/admin-saved-booking-read.ts", "utf8"),
   readFile("app/api/admin-rate-setup/route.ts", "utf8"),
   readFile("app/api/admin-driver-job-dsp-actual-time-summaries/route.ts", "utf8"),
+  readFile("lib/customer-invoice-record-persistence.ts", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
   readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
 ]);
@@ -106,6 +110,31 @@ assert.equal(
   "unconfirmed calculated proposals must use the same Review required wording before and after reload",
 );
 
+const initialBillingReview = sectionBetween(
+  folder,
+  "function customerFolderBillingReviewForBooking",
+  "function customerFolderRateSourceLabel",
+);
+for (const fragment of [
+  "const bookingType = customerInvoiceBookingType(booking.service_type);",
+  "if (bookingType) {",
+  'message: "Calculating"',
+  'status: "calculating"',
+  "if (savedAmountCents)",
+]) {
+  includes(
+    initialBillingReview,
+    fragment,
+    `customer-folder initial current-price loading state ${fragment}`,
+  );
+}
+assert.equal(
+  initialBillingReview.indexOf("const bookingType =") <
+    initialBillingReview.indexOf("const savedAmountCents ="),
+  true,
+  "supported bookings must enter the current-price calculating state before an older saved amount can be displayed",
+);
+
 const automatedBillingReview = sectionBetween(
   folder,
   "async function loadAutomatedBillingReviews",
@@ -172,12 +201,33 @@ for (const forbidden of ["driverPayout", "payout", "payNow", "internal", "financ
 
 for (const fragment of [
   "company_id: number | null;",
+  "customer_price_label: string | null;",
   "traveler_id: number | null;",
   "vehicle_type_or_category: string | null;",
   "child_seat_count: number;",
   "extra_stop_count: number;",
 ]) {
   includes(savedBookingsRead, fragment, `existing safe booking calculation input ${fragment}`);
+}
+
+for (const fragment of [
+  'import { loadAdminSavedBookingList } from "./admin-saved-booking-read";',
+  "const bookingsResult = await loadAdminSavedBookingList({",
+  "customer_price_label: safeCustomerPriceLabel(booking.customer_price_amount)",
+  "function safeCustomerPriceLabel(value: unknown)",
+]) {
+  includes(savedBookingsRead, fragment, `persisted customer price reload projection ${fragment}`);
+}
+
+for (const fragment of [
+  "const adminSavedBookingCurrentReadSelect =",
+  "customer_price_amount, admin_internal_status",
+  "const adminSavedBookingCurrentMinimalReadSelect =",
+  "booking_service_items(item_type, quantity, notes)",
+  'normalizedServiceItemCount(row.booking_service_items, "extra_stop")',
+  "integerOrNull(row.extra_stop_count)",
+]) {
+  includes(adminSavedBookingsRead, fragment, `admin saved-booking current-schema price input ${fragment}`);
 }
 
 for (const fragment of [
@@ -197,12 +247,37 @@ for (const phrase of [
   "Every existing `Jobs not billed yet` row now has one compact `Customer price` tag.",
   "DEP, TRF, and MNG rows without a saved amount receive a temporary Codex proposal from the existing Prestige rate setup",
   "The proposal remains in browser memory only until admin clicks `Save price review`",
+  "persists the exact reviewed amount on that exact unbilled booking",
+  "phone or desktop reload",
   "Multi-job `Review invoice & email` remains disabled until every selected row has a positive reviewed customer price.",
   "no driver payout or payout comparison is returned or rendered.",
   guardScript,
 ]) {
   includes(ledgerSection, phrase, `price-review ledger phrase ${phrase}`);
 }
+
+const sharedPricePersistence = sectionBetween(
+  invoicePersistence,
+  "export async function refreshAdminCustomerAmendedUnpaidInvoice(",
+  "export async function recordCustomerInvoiceActionEmailDelivery(",
+);
+
+for (const fragment of [
+  "if (matchingInvoices.length === 0)",
+  'customer_price_amount: amountCents / 100',
+  '.eq("booking_reference", bookingReference)',
+  '.eq("customer_id", customerId)',
+  '.eq("updated_at", verifiedUpdatedAt)',
+  'select("booking_reference, customer_id, customer_price_amount, updated_at")',
+]) {
+  includes(sharedPricePersistence, fragment, `shared price persistence ${fragment}`);
+}
+
+assert.equal(
+  sharedPricePersistence.includes('.insert('),
+  false,
+  "reviewed-price persistence must never create a replacement booking or invoice",
+);
 
 const bookingToJcLedgerSection = sectionBetween(
   ledger,
@@ -356,6 +431,40 @@ try {
   assert.equal(travelerOverrideReview?.amountCents, 7300);
   assert.equal(travelerOverrideReview?.customerRateSource, "boss");
 
+  const orchardDepartureSetup = {
+    companies: [{ customer_rates: {}, id: 48 }],
+    settings: {
+      child_seat_customer_surcharge: 15,
+      customer_rates: { DEP: { AVF: 75 } },
+      extra_stop_surcharge: 15,
+      midnight_surcharge: 15,
+    },
+    travelers: [{ company_id: 48, customer_rates: {}, id: 36 }],
+  };
+  const orchardDepartureInput = {
+    actualMinutes: null,
+    bookingType: "DEP",
+    childSeatCount: 0,
+    companyId: 48,
+    extraStopCount: 0,
+    pickupAt: "2026-07-13T06:45:00+08:00",
+    travelerId: 36,
+    vehicleType: "AVF",
+  };
+  const orchardWithoutExtraStop = calculateCustomerInvoiceRateReview(
+    orchardDepartureInput,
+    orchardDepartureSetup,
+  );
+  const orchardWithExtraStop = calculateCustomerInvoiceRateReview(
+    { ...orchardDepartureInput, extraStopCount: 1 },
+    orchardDepartureSetup,
+  );
+  assert.equal(orchardWithoutExtraStop?.baseAmountCents, 7_500);
+  assert.equal(orchardWithoutExtraStop?.surchargeAmountCents, 1_500);
+  assert.equal(orchardWithoutExtraStop?.amountCents, 9_000);
+  assert.equal(orchardWithExtraStop?.surchargeAmountCents, 3_000);
+  assert.equal(orchardWithExtraStop?.amountCents, 10_500);
+
   const mismatchedTravelerReview = calculateCustomerInvoiceRateReview(
     exactIdentityInput,
     {
@@ -407,6 +516,41 @@ try {
   assert.equal(bookingToJcReview?.actualMinutes, 150);
   assert.equal(bookingToJcReview?.billableHours, 3);
   assert.equal(bookingToJcReview?.amountCents, 19_500);
+
+  const bridgeCorrectedMinutes = calculateCustomerDspBillingActualMinutes(
+    "2026-08-06T09:30:00+08:00",
+    "2026-08-06T19:15:00+08:00",
+  );
+  assert.equal(bridgeCorrectedMinutes, 585);
+  const bridgeCorrectedReview = calculateCustomerInvoiceRateReview(
+    {
+      actualMinutes: bridgeCorrectedMinutes,
+      bookingType: "DSP",
+      childSeatCount: 0,
+      companyId: 77,
+      extraStopCount: 0,
+      pickupAt: "2026-08-06T10:00:00+08:00",
+      travelerId: 79,
+      vehicleType: "S",
+    },
+    {
+      companies: [{ customer_rates: {}, id: 77 }],
+      settings: {
+        child_seat_customer_surcharge: 15,
+        customer_rates: { DSP: { S: 160 } },
+        extra_stop_surcharge: 0,
+        midnight_surcharge: 15,
+      },
+      travelers: [
+        { company_id: 77, customer_rates: { DSP: { S: 999 } }, id: 78 },
+        { company_id: 77, customer_rates: {}, id: 79 },
+      ],
+    },
+  );
+  assert.equal(bridgeCorrectedReview?.billableHours, 10);
+  assert.equal(bridgeCorrectedReview?.rateCents, 16_000);
+  assert.equal(bridgeCorrectedReview?.amountCents, 160_000);
+  assert.equal(bridgeCorrectedReview?.customerRateSource, "default");
 } finally {
   await rm(calculationRuntimeDir, { force: true, recursive: true });
 }

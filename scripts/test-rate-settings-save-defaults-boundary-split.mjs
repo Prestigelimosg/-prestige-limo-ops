@@ -172,12 +172,24 @@ for (const fragment of [
   "const legacyScalarFields = buildDefaultRateSettingsLegacyScalarFallbackPayload(",
   "scalarRuntimeSave.saved",
   ".from(adminLegacyTables.rateSettings)",
+  ".update({",
+  '.eq("id", "default")',
   "...legacyScalarFields",
   "customer_rates: customerRates",
   "driver_payout_rules: driverPayoutRules",
 ]) {
   assertIncludes(saveDefaultRates, fragment, `saveDefaultRates split fragment: ${fragment}`);
 }
+assertExcludes(
+  saveDefaultRates,
+  ".upsert({",
+  "saveDefaultRates must not depend on the shared legacy POST boundary",
+);
+assertIncludes(
+  saveDefaultRates,
+  'throw new Error("Default rate settings row was not updated safely.")',
+  "missing exact default row fail-closed message",
+);
 for (const fragment of [
   "midnight_surcharge: scalarRateSettings.midnight_surcharge",
   "extra_stop_surcharge: scalarRateSettings.extra_stop_surcharge",

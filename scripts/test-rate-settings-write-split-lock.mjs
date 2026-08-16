@@ -98,7 +98,8 @@ const saveDefaultRates = sliceBetween(
 for (const fragment of [
   "adminLegacyDataClient",
   ".from(adminLegacyTables.rateSettings)",
-  ".upsert({",
+  ".update({",
+  '.eq("id", "default")',
   "const scalarRateSettings = buildDefaultRateSettingsScalarPayload(rateSettings);",
   "const legacyRateMapFields = buildDefaultRateSettingsLegacyRateMapsPayload(rateSettings);",
   "const legacyScalarFields = buildDefaultRateSettingsLegacyScalarFallbackPayload(",
@@ -109,6 +110,11 @@ for (const fragment of [
 ]) {
   assertIncludes(saveDefaultRates, fragment, `Parked rate_settings default save fragment: ${fragment}`);
 }
+assertExcludes(
+  saveDefaultRates,
+  ".upsert({",
+  "Parked rate_settings default save must not depend on shared legacy POST",
+);
 
 for (const fragment of [
   "id: scalarRateSettings.id",

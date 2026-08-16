@@ -84,18 +84,17 @@ for (const removedFragment of [
 for (const fragment of [
   'data-driver-primary-step="job-summary"',
   'data-driver-primary-step="confirm-details"',
-  'data-driver-primary-step="live-location-consent"',
+  'data-driver-otw-live-location-control="true"',
   'data-driver-primary-step="status-workflow"',
   'data-driver-job-app-updates="true"',
   'data-driver-job-report-issue="true"',
   'className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6"',
   'className="space-y-1 border-b border-stone-200 pb-3"',
-  'className="order-[82] space-y-2"',
   'className="order-3 flex flex-col gap-2 pb-4"',
   'className="order-[92] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"',
   'className="order-1 grid gap-2 md:grid-cols-4"',
   'className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"',
-  'className="h-11 w-full rounded-md border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-500 disabled:cursor-not-allowed disabled:opacity-70"',
+  'className="h-11 w-full rounded-md border border-sky-400 bg-sky-50 px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"',
 ]) {
   assertIncludes(driverJobPage, fragment, `driver job compact UI fragment ${fragment}`);
 }

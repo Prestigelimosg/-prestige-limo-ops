@@ -220,7 +220,7 @@ for (const fragment of [
   "navigator.geolocation.getCurrentPosition",
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",
-  "Dispatch has not opened live location for this job.",
+  "OTW is saved. Live location is not ready. Tap Retry Share Location.",
 ]) {
   assertIncludes(`${driverRoute}\n${driverJobPage}`, fragment, `driver readiness fragment ${fragment}`);
 }
@@ -231,8 +231,29 @@ assertExcludes(
   "driver page build-time public live-location flags",
 );
 
+const establishedDriverAppUpdatesRefreshPattern =
+  /const driverAppUpdatesRefreshInterval = window\.setInterval\(\s*refreshDriverAppUpdatesWhileVisible,\s*DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS,\s*\);/;
+const establishedDriverAppUpdatesCleanupPattern =
+  /window\.clearInterval\(driverAppUpdatesRefreshInterval\);/;
+assert.equal(
+  establishedDriverAppUpdatesRefreshPattern.test(driverJobPage),
+  true,
+  "established visible Driver App Updates refresh must stay identifiable outside the GPS lane",
+);
+assert.equal(
+  establishedDriverAppUpdatesCleanupPattern.test(driverJobPage),
+  true,
+  "established visible Driver App Updates refresh cleanup must stay identifiable outside the GPS lane",
+);
+const driverJobPageWithoutEstablishedAppUpdatesRefresh = driverJobPage
+  .replace(
+    establishedDriverAppUpdatesRefreshPattern,
+    "/* established visible Driver App Updates refresh excluded from GPS safety scope */",
+  )
+  .replace(establishedDriverAppUpdatesCleanupPattern, "");
+
 assertExcludes(
-  driverJobPage,
+  driverJobPageWithoutEstablishedAppUpdatesRefresh,
   /setInterval|setTimeout|sendBeacon|localStorage|sessionStorage/i,
   "driver page timer/storage/sendBeacon GPS loop",
 );

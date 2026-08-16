@@ -32,6 +32,111 @@ const requiredConfidenceCategories = [
 const referenceDate = new Date(2026, 4, 13, 12, 0, 0);
 const parseBookingForTest = (input) => parseBookingMessage(input, { referenceDate });
 
+const groundBookerCanonicalIntake = `Company/account: Transzend Groundbooker
+Booker: Pat
+Booker email: transzend@groundbooker.com
+Passenger: Simran Shah
+Type: MNG
+Pickup date: 2026-08-05
+Pickup time: 16:05
+Flight: BA11
+Pickup: Changi Airport T1
+Drop-off: Marina Bay`;
+const parsedGroundBookerCanonicalIntake = parseBookingForTest(groundBookerCanonicalIntake) ?? {};
+
+assert.equal(
+  parsedGroundBookerCanonicalIntake.company,
+  'Transzend Groundbooker',
+  'The canonical Email AI Company/account label must win over the lowercase email-domain fallback.',
+);
+assert.notEqual(parsedGroundBookerCanonicalIntake.company, 'GROUNDBOOKER');
+assert.equal(parsedGroundBookerCanonicalIntake.booker, 'Pat');
+assert.equal(parsedGroundBookerCanonicalIntake.bookerEmail, 'transzend@groundbooker.com');
+assert.equal(parsedGroundBookerCanonicalIntake.name, 'Simran Shah');
+
+const prestigeTransport15784KnownBookerCanonical = `Booking type: MNG
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Shohei Ogasawara
+Pax: 3
+Vehicle: Mercedes Benz Viano
+Pickup date: 17-08-2026
+Pickup time: 16:25
+Flight: SQ619
+Drop-off: 7 Raffles Blvd, Singapore 039595`;
+const parsedPrestigeTransport15784KnownBookerCanonical =
+  parseBookingForTest(prestigeTransport15784KnownBookerCanonical) ?? {};
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.booker, 'Kim Hyun Soo');
+assert.notEqual(parsedPrestigeTransport15784KnownBookerCanonical.booker, 'hyunsoostar');
+assert.equal(
+  parsedPrestigeTransport15784KnownBookerCanonical.bookerEmail,
+  'hyunsoostar@hotmail.com',
+);
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.bookerContact, '+65 98156017');
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.name, 'Shohei Ogasawara');
+assert.equal(parsedPrestigeTransport15784KnownBookerCanonical.bookingType, 'MNG');
+
+const prestigeTransport15785KnownBookerCanonical = `Booking type: DEP
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Shohei Ogasawara
+Pax: 3
+Vehicle: Mercedes Benz Viano
+Pickup date: 19-08-2026
+Pickup time: 6:30
+Flight: SQ620
+Pickup: 7 Raffles Blvd, Singapore 039595`;
+const parsedPrestigeTransport15785KnownBookerCanonical =
+  parseBookingForTest(prestigeTransport15785KnownBookerCanonical) ?? {};
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.booker, 'Kim Hyun Soo');
+assert.notEqual(parsedPrestigeTransport15785KnownBookerCanonical.booker, 'hyunsoostar');
+assert.equal(
+  parsedPrestigeTransport15785KnownBookerCanonical.bookerEmail,
+  'hyunsoostar@hotmail.com',
+);
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.bookerContact, '+65 98156017');
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.name, 'Shohei Ogasawara');
+assert.equal(parsedPrestigeTransport15785KnownBookerCanonical.bookingType, 'DEP');
+
+const prestigeTransport15787Canonical = `Booking type: DEP
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Pui Yu Chan
+Passenger contact: +6596389322
+Pax: 2
+Bags: 3
+Vehicle: Toyota Alphard 2.5
+Pickup date: 2026-08-19
+Pickup time: 10:00
+Flight: SQ958
+Pickup: 26 Newton Rd, Singapore 307957
+Drop-off: Changi Airport
+Extra stop count: 1
+Extra stop: 6 Suffolk Walk, Singapore 307464
+Notes: 1st Pick up: Ms. Chan (26 Newton Road), 2nd Pick up: Mr. Kim (6 Suffolk Walk).`;
+const parsedPrestigeTransport15787Canonical = parseJobCardBookingMessage(
+  prestigeTransport15787Canonical,
+  { referenceDate: new Date('2026-08-08T12:00:00+08:00') },
+) ?? {};
+assert.equal(parsedPrestigeTransport15787Canonical.booker, 'Kim Hyun Soo');
+assert.equal(parsedPrestigeTransport15787Canonical.bookerContact, '+65 98156017');
+assert.equal(parsedPrestigeTransport15787Canonical.name, 'Pui Yu Chan');
+assert.equal(parsedPrestigeTransport15787Canonical.passengerContact, '+6596389322');
+assert.equal(parsedPrestigeTransport15787Canonical.luggageCount, '3');
+assert.equal(parsedPrestigeTransport15787Canonical.pax, '2');
+assert.equal(parsedPrestigeTransport15787Canonical.bookingType, 'DEP');
+assert.equal(parsedPrestigeTransport15787Canonical.dropoff, 'Changi Airport');
+assert.equal(parsedPrestigeTransport15787Canonical.extraStopCount, '1');
+assert.equal(
+  parsedPrestigeTransport15787Canonical.extraStopLocation,
+  '6 Suffolk Walk, Singapore 307464',
+);
+assert.equal(parsedPrestigeTransport15787Canonical.customerPriceOverride ?? '', '');
+assert.equal(parsedPrestigeTransport15787Canonical.customerPriceOverrideReason ?? '', '');
+
 const expected = {
   success: true,
   company: 'UOB',
@@ -1011,6 +1116,7 @@ assert.deepEqual(parsedStructuredAirportArrivalForm, {
   bookerEmail: 'yasuko.kunisawa@ubs.com',
   name: 'Zenji Nakamura',
   pax: '1',
+  luggageCount: '3',
   customerPriceOverride: '105',
   customerPriceOverrideReason: 'Parsed from message: S$105.00',
   driverName: '',
@@ -3935,6 +4041,45 @@ assert.deepEqual(parseJobCardBookingMessage(
   ],
 });
 
+const departureWithSecondaryFamilyFlightContextSample = `Wed, 5 Aug 26*
+Pickup at 6:15am from 3 Nassim Road > *T3 or T2*  Taking SQ882, ETD: 8:40am (total pax is 3.  His son David is taking SQ910, which departs from T2 at 6:50am.  So, please ask driver to check with SYH that morning on which terminal to drop off`;
+assert.deepEqual(parseJobCardBookingMessage(
+  departureWithSecondaryFamilyFlightContextSample,
+  { referenceDate: new Date(2026, 7, 4, 12, 0, 0) },
+), {
+  success: true,
+  company: '',
+  bookingType: 'DEP',
+  vehicle: '',
+  date: '2026-08-05',
+  time: '0615hrs',
+  flight: 'SQ882',
+  pickup: '3 Nassim Road',
+  dropoff: 'Changi Airport T3 or T2',
+  booker: '',
+  bookerEmail: '',
+  name: '',
+  pax: '3',
+  driverName: '',
+  driverContact: '',
+  driverNotes: 'His son David is taking SQ910, which departs from T2 at 6:50am. Please ask driver to check with SYH that morning on which terminal to drop off.',
+  bookerContact: '',
+  cleanedLines: [
+    'Wed, 5 Aug 26*',
+    'Pickup at 6:15am from 3 Nassim Road > *T3 or T2*  Taking SQ882, ETD: 8:40am (total pax is 3.  His son David is taking SQ910, which departs from T2 at 6:50am.  So, please ask driver to check with SYH that morning on which terminal to drop off',
+  ],
+});
+
+const separateFamilyFlightsWithoutSharedTerminalInstructionSample = `Wed, 5 Aug 26
+Pickup at 6:15am from 3 Nassim Road > T3 Taking SQ882, ETD: 8:40am. His son David is taking SQ910, which departs from T2 at 6:50am.`;
+const parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction = parseJobCardBookingMessage(
+  separateFamilyFlightsWithoutSharedTerminalInstructionSample,
+  { referenceDate: new Date(2026, 7, 4, 12, 0, 0) },
+) ?? {};
+assert.equal(parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction.success, false);
+assert.equal(parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction.multipleBookingsDetected, true);
+assert.equal(parsedSeparateFamilyFlightsWithoutSharedTerminalInstruction.extractedBookingsPreview?.length, 2);
+
 const multiTerminalArrivalChangeMessage = `Hi William, some changes for tomorrow arrival:
 Total 2 pickup from T3 and T4 to Grand Hyatt below:
 T3: MU567 Shanghai - Singapore Arrival 15:45 (1 Passenger - Ye Yueqin)
@@ -4369,6 +4514,34 @@ assert.equal(emailAiTripOrganizerNotes.booker, 'Mr Kim, Hyun Soo');
 assert.equal(emailAiTripOrganizerNotes.bookerContact, '+65 98156017');
 assert.equal(emailAiTripOrganizerNotes.name, 'Pui Yu Chan');
 assert.equal(emailAiTripOrganizerNotes.pax, '4');
+
+const emailAiTripOrganizerMetadataMessage = `Booking type: MNG
+Booker: Kim Hyun Soo
+Booker email: hyunsoostar@hotmail.com
+Contact: +65 98156017
+Passenger: Pui Yu Chan
+Passenger contact: +6596389322
+Pax: 2
+Bags: 3
+Vehicle: Toyota Alphard 2.5
+Pickup date: 2026-08-22
+Pickup time: 19:50
+Flight: SQ961
+Pickup: Changi Airport
+Drop-off: 26 Newton Rd, Singapore 307957
+Notes: Trip organizer: Mr Kim, Hyun Soo; vehicle capacity: 4; bag count: 3`;
+const emailAiTripOrganizerMetadata = parseBookingMessage(
+  emailAiTripOrganizerMetadataMessage,
+  {
+    referenceDate: new Date('2026-08-09T12:00:00+08:00'),
+  },
+);
+assert.equal(emailAiTripOrganizerMetadata.booker, 'Kim Hyun Soo');
+assert.equal(emailAiTripOrganizerMetadata.bookerContact, '+65 98156017');
+assert.equal(emailAiTripOrganizerMetadata.name, 'Pui Yu Chan');
+assert.equal(emailAiTripOrganizerMetadata.passengerContact, '+6596389322');
+assert.equal(emailAiTripOrganizerMetadata.pax, '2');
+assert.equal(emailAiTripOrganizerMetadata.luggageCount, '3');
 
 const looseStayAddressTransferMessage = `Roland
 Pickup 0630 and he stay 82 Grange Road

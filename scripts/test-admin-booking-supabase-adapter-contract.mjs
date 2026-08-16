@@ -28,6 +28,7 @@ const originalEnv = {
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_SENTINEL_DO_NOT_LEAK";
 const serverOnlySentinel = "SERVER_ONLY_SECRET_SENTINEL_DO_NOT_LEAK";
 const serverSessionToken = "mock-contract-admin-session-token";
+const customerInvitationToken = "supabase-adapter-contract-valid-invitation";
 const supabaseUrlSentinel = "https://contract-ready.supabase.co";
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_SENTINEL|SERVER_ONLY_SECRET_SENTINEL|service_role|server-only|server_only|sql|stack|secret|key/i;
@@ -109,11 +110,21 @@ async function writeMockModules(tempDir) {
     tempDir,
     "lib/codex-job-card-auto-preparation.js",
   );
+  const customerBookingInvitationPath = path.join(
+    tempDir,
+    "lib/customer-booking-invitation.js",
+  );
+  const customerBookingPhoneOtpPath = path.join(
+    tempDir,
+    "lib/customer-booking-phone-otp.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
   await mkdir(path.dirname(jobCardPreparationPath), { recursive: true });
+  await mkdir(path.dirname(customerBookingInvitationPath), { recursive: true });
+  await mkdir(path.dirname(customerBookingPhoneOtpPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -143,6 +154,30 @@ async function writeMockModules(tempDir) {
     [
       "async function prepareCodexJobCardForAdminReview() {}",
       "module.exports = { prepareCodexJobCardForAdminReview };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerBookingInvitationPath,
+    [
+      "function verifyCustomerBookingInvitationToken(value) {",
+      `  if (value !== ${JSON.stringify(customerInvitationToken)}) {`,
+      "    return { error: 'invalid test invitation', ok: false, status: 403 };",
+      "  }",
+      "  return {",
+      "    data: { booking_reference: 'CUST-INV-CONTRACT-001' },",
+      "    ok: true,",
+      "  };",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
+    customerBookingPhoneOtpPath,
+    [
+      "function verifyCustomerBookingPhoneOtpProof() {",
+      "  return { error: 'invalid test phone proof', ok: false, status: 403 };",
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
     ].join("\n"),
   );
 }
@@ -282,6 +317,7 @@ class MockSupabaseClient {
     }));
     this.selectHistory = [];
     this.schemaMode = options.schemaMode || "cumulative";
+    this.missingColumns = new Set(options.missingColumns || []);
     this.tables = {
       audit_logs: [],
       booking_route_points: [],
@@ -415,6 +451,20 @@ class MockSupabaseClient {
       };
     }
 
+    const missingColumn = rows
+      .flatMap((row) => Object.keys(row))
+      .find((column) => this.missingColumns.has(`${table}.${column}`));
+
+    if (missingColumn) {
+      return {
+        data: null,
+        error: {
+          code: "PGRST204",
+          message: `Could not find the '${missingColumn}' column in the schema cache`,
+        },
+      };
+    }
+
     if (rows.some((row) => this.insertRejectedByMockSchema(table, row))) {
       return {
         data: null,
@@ -459,6 +509,20 @@ class MockSupabaseClient {
       return {
         data: null,
         error: configuredFailure,
+      };
+    }
+
+    const missingColumn = Object.keys(payload).find((column) =>
+      this.missingColumns.has(`${table}.${column}`),
+    );
+
+    if (missingColumn) {
+      return {
+        data: null,
+        error: {
+          code: "PGRST204",
+          message: `Could not find the '${missingColumn}' column in the schema cache`,
+        },
       };
     }
 
@@ -716,6 +780,7 @@ function customerHeaders(overrides = {}) {
     "content-type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-invitation": customerInvitationToken,
     "x-prestige-customer-purpose": "customer-booking-request",
     ...overrides,
   };
@@ -808,8 +873,11 @@ function assertSixTableCreateMapping(mock) {
     dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     flight_no: null,
+    luggage_count: null,
+    parser_source_reference: null,
     passenger_name: "Safe Passenger",
     passenger_phone: "+65 9000 0002",
+    pax_count: null,
     pickup_at: "2030-06-08T10:30:00+08:00",
     pickup_location: "Safe Canonical Pickup",
     request_review_status: "pending_review",
@@ -973,6 +1041,7 @@ try {
       admin_internal_status: "approved_internally",
       booking_reference: "SAFE-ADM-001",
       customer_facing_status: "confirmed",
+      luggage_count: 4,
       pickup_location: "Updated Safe Pickup",
       route_summary: "Updated Safe Pickup > Updated Safe Dropoff",
       service_type: "Transfer",
@@ -1015,6 +1084,7 @@ try {
   assert.equal(updateResult.ok, true);
   assert.equal(updateResult.data.pickup_location, "Updated Safe Pickup");
   assert.equal(updateResult.data.admin_internal_status, "Ready for Confirmation");
+  assert.equal(updateResult.data.luggage_count, 4);
 
   const updateOperation = createMock.client.operations.find(
     (operation) => operation.action === "update" && operation.table === "bookings",
@@ -1024,6 +1094,7 @@ try {
   assert.equal(updateOperation.payload.service_type, "transfer");
   assert.equal(updateOperation.payload.admin_internal_status, "approved_internal");
   assert.equal(updateOperation.payload.customer_facing_status, "confirmed");
+  assert.equal(updateOperation.payload.luggage_count, 4);
   assert.equal(auditUpdates.at(-1).payload.action_type, "booking_updated");
   assert.equal(auditUpdates.at(-1).payload.safe_before.booking_reference, "SAFE-ADM-001");
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
@@ -1284,6 +1355,10 @@ try {
   const currentSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-CURRENT-001",
+      customer_special_request: "Meet-and-greet at the pickup desk.",
+      luggage_count: 2,
+      parser_source_reference:
+        "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
     },
   });
   const parsedCurrentSchemaPayload = persistence.parseAdminBookingPersistencePayload(currentSchemaPayload);
@@ -1299,6 +1374,126 @@ try {
 
   assert.equal(currentSchemaResult.ok, true);
   assert.equal(currentSchemaResult.data.booking_reference, "SAFE-CURRENT-001");
+  assert.equal(currentSchemaResult.data.luggage_count, 2);
+  assert.equal(
+    currentSchemaResult.data.customer_special_request,
+    "Meet-and-greet at the pickup desk.",
+  );
+  assert.equal(
+    currentSchemaResult.data.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+  );
+  assert.equal(
+    insertedOperation(currentSchemaMock.client, "bookings").payload.luggage_count,
+    2,
+  );
+  assert.equal(
+    insertedOperation(currentSchemaMock.client, "bookings").payload.customer_special_request,
+    "Meet-and-greet at the pickup desk.",
+  );
+  assert.equal(
+    insertedOperation(currentSchemaMock.client, "bookings").payload.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+    "Current-schema Email AI saves must retain their exact intake provenance.",
+  );
+  assert.match(
+    currentSchemaMock.client.selectHistory.at(-1).selectedColumns,
+    /luggage_count/,
+    "Preferred current booking reload must explicitly select luggage_count.",
+  );
+  assert.match(
+    currentSchemaMock.client.selectHistory.at(-1).selectedColumns,
+    /parser_source_reference/,
+    "Preferred current booking reload must explicitly select parser_source_reference.",
+  );
+
+  const currentSchemaUpdatePayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-CURRENT-001",
+      parser_source_reference: "Flight QR945",
+      pickup_location: "Updated Safe Current Pickup",
+    },
+  });
+  const parsedCurrentSchemaUpdate = persistence.parseAdminBookingUpdatePayload({
+    ...currentSchemaUpdatePayload,
+    target_booking_reference: "SAFE-CURRENT-001",
+  });
+
+  assert.equal(parsedCurrentSchemaUpdate.ok, true);
+
+  const currentSchemaUpdateResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedCurrentSchemaUpdate.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+  const currentSchemaUpdateOperation = currentSchemaMock.client.operations.findLast(
+    (operation) => operation.action === "update" && operation.table === "bookings",
+  );
+
+  assert.equal(currentSchemaUpdateResult.ok, true);
+  assert.equal(
+    currentSchemaUpdateResult.data.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+    "A later Update + Cal or amendment must preserve the exact saved Email AI provenance.",
+  );
+  assert.equal(
+    Object.hasOwn(currentSchemaUpdateOperation.payload, "parser_source_reference"),
+    false,
+    "Current-schema updates must leave immutable parser provenance untouched.",
+  );
+
+  const currentSchemaNullUpdatePayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-CURRENT-001",
+      parser_source_reference: null,
+      pickup_location: "Second Updated Safe Current Pickup",
+    },
+  });
+  const parsedCurrentSchemaNullUpdate = persistence.parseAdminBookingUpdatePayload({
+    ...currentSchemaNullUpdatePayload,
+    target_booking_reference: "SAFE-CURRENT-001",
+  });
+
+  assert.equal(parsedCurrentSchemaNullUpdate.ok, true);
+
+  const currentSchemaNullUpdateResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedCurrentSchemaNullUpdate.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+
+  assert.equal(currentSchemaNullUpdateResult.ok, true);
+  assert.equal(
+    currentSchemaNullUpdateResult.data.parser_source_reference,
+    "Email AI intake 00893af7-4586-49ff-8f09-d1798582db6c",
+    "A null manual update payload must not erase existing Email AI provenance.",
+  );
+
+  const currentSchemaManualMock = installMockClient({}, { schemaMode: "current" });
+  const currentSchemaManualPayload = persistence.parseAdminBookingPersistencePayload(
+    canonicalAdminPayload({
+      booking: {
+        booking_reference: "SAFE-CURRENT-MANUAL-001",
+        parser_source_reference: null,
+      },
+    }),
+  );
+
+  assert.equal(currentSchemaManualPayload.ok, true);
+
+  const currentSchemaManualResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    currentSchemaManualPayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(currentSchemaManualResult.ok, true);
+  assert.equal(currentSchemaManualResult.data.parser_source_reference, null);
+  assert.equal(
+    insertedOperation(currentSchemaManualMock.client, "bookings").payload.parser_source_reference,
+    null,
+    "Ordinary current-schema manual creates must retain nullable provenance without guessing.",
+  );
 
   for (const operation of currentSchemaMock.client.operations.filter((item) => item.action === "insert")) {
     assertNoUnsafeKeys(operation, "current-schema insert operation");
@@ -1328,12 +1523,132 @@ try {
     }
   }
 
+  const missingSpecialRequestSchemaPayload = canonicalAdminPayload({
+    booking: {
+      booking_reference: "SAFE-MISSING-SPECIAL-001",
+      customer_special_request: "Do not silently drop this request.",
+    },
+  });
+  const parsedMissingSpecialRequestSchemaPayload =
+    persistence.parseAdminBookingPersistencePayload(missingSpecialRequestSchemaPayload);
+
+  assert.equal(parsedMissingSpecialRequestSchemaPayload.ok, true);
+
+  const missingSpecialRequestWriteMock = installMockClient(
+    {},
+    {
+      missingColumns: ["bookings.customer_special_request"],
+      schemaMode: "current",
+    },
+  );
+  const missingSpecialRequestWriteResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      parsedMissingSpecialRequestSchemaPayload.data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(missingSpecialRequestWriteResult.ok, false);
+  assert.equal(missingSpecialRequestWriteResult.category, "column_missing");
+  assert.equal(
+    missingSpecialRequestWriteMock.client.operations.filter(
+      (operation) => operation.action === "insert" && operation.table === "bookings",
+    ).length,
+    0,
+    "A nonblank customer Special Request must never retry without the missing column.",
+  );
+
+  const missingSpecialRequestBlankMock = installMockClient(
+    {},
+    {
+      missingColumns: ["bookings.customer_special_request"],
+      schemaMode: "current",
+    },
+  );
+  const missingSpecialRequestBlankResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      persistence.parseAdminBookingPersistencePayload(
+        canonicalAdminPayload({
+          booking: {
+            booking_reference: "SAFE-MISSING-SPECIAL-BLANK-001",
+            customer_special_request: null,
+          },
+        }),
+      ).data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(missingSpecialRequestBlankResult.ok, true);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      insertedOperation(missingSpecialRequestBlankMock.client, "bookings").payload,
+      "customer_special_request",
+    ),
+    false,
+    "A blank request must keep ordinary booking writes compatible before schema rollout.",
+  );
+
+  const missingSpecialRequestReadMock = installMockClient(
+    {
+      bookings: [
+        {
+          admin_internal_status: "needs_review",
+          booking_reference: "SAFE-MISSING-SPECIAL-READ-001",
+          contact_phone: "+65 9000 0199",
+          customer_display_name: "Old Schema Customer",
+          customer_facing_status: "pending_review",
+          customer_id: 99,
+          dropoff_location: "Old Schema Dropoff",
+          id: 99,
+          pickup_at: "2030-06-08T10:30:00+08:00",
+          pickup_location: "Old Schema Pickup",
+          service_type: "TRF",
+          source_surface: "admin-dashboard",
+          updated_at: "2026-06-04T00:00:00.000Z",
+        },
+      ],
+    },
+    {
+      schemaMode: "current",
+      selectFailures: [
+        {
+          column: "customer_special_request",
+          error: {
+            code: "PGRST204",
+            message: "Could not find the 'customer_special_request' column in the schema cache",
+          },
+          table: "bookings",
+        },
+      ],
+    },
+  );
+  const missingSpecialRequestReadResult =
+    await adapter.loadAdminBookingByReferenceThroughSupabaseAdapter(
+      adminActor(),
+      "SAFE-MISSING-SPECIAL-READ-001",
+    );
+
+  assert.equal(missingSpecialRequestReadResult.ok, true);
+  assert.equal(missingSpecialRequestReadResult.data.customer_special_request, null);
+  assert.equal(missingSpecialRequestReadMock.client.selectHistory.length, 2);
+  assert.match(
+    missingSpecialRequestReadMock.client.selectHistory[0].selectedColumns,
+    /customer_special_request/,
+  );
+  assert.doesNotMatch(
+    missingSpecialRequestReadMock.client.selectHistory[1].selectedColumns,
+    /customer_special_request/,
+  );
+
   const foundationSchemaPayload = canonicalAdminPayload({
     booking: {
       booking_reference: "SAFE-FOUNDATION-CREATE-001",
+      customer_special_request: "Child seat required.",
       driver_contact: "+65 9000 0100",
       driver_name: "Foundation Safe Driver",
       driver_plate_number: "SFD100A",
+      luggage_count: 3,
     },
   });
   const parsedFoundationSchemaPayload =
@@ -1363,6 +1678,7 @@ try {
     customer_display_name: "Safe Ops Account",
     customer_facing_status: "pending_review",
     customer_id: 1,
+    customer_special_request: "Child seat required.",
     dropoff_datetime: null,
     dropoff_location: "Safe Canonical Dropoff",
     driver_contact: "+65 9000 0100",
@@ -1370,7 +1686,7 @@ try {
     driver_name: "Foundation Safe Driver",
     driver_plate_number: "SFD100A",
     flight_no: null,
-    luggage_count: null,
+    luggage_count: 3,
     parser_source_reference: null,
     pax_count: null,
     pickup_datetime: "2030-06-08T10:30:00+08:00",
@@ -1423,6 +1739,7 @@ try {
           customer_display_name: "Foundation Safe Customer",
           customer_facing_status: "pending_review",
           customer_id: 25,
+          customer_special_request: "Event timing\nGuest ready at 10:15.",
           dropoff_location: "Foundation Safe Dropoff",
           driver_contact: "+65 9000 0102",
           driver_name: "Foundation Read Driver",
@@ -1475,6 +1792,10 @@ try {
   assert.equal(foundationFallbackRoute.body.bookings[0].service_type, "transfer");
   assert.equal(foundationFallbackRoute.body.bookings[0].pax_count, 2);
   assert.equal(foundationFallbackRoute.body.bookings[0].luggage_count, 1);
+  assert.equal(
+    foundationFallbackRoute.body.bookings[0].customer_special_request,
+    "Event timing\nGuest ready at 10:15.",
+  );
   assert.deepEqual(
     foundationFallbackRoute.body.bookings[0].route_points.map((routePoint) => routePoint.location_text),
     ["Foundation Safe Pickup", "Foundation Safe Dropoff"],
@@ -1809,6 +2130,41 @@ try {
   });
   assertNoApiLeak(blockedCustomerRoute, "blocked customer route response should hide server internals");
 
+  const customerHeadersWithoutProof = customerHeaders();
+  delete customerHeadersWithoutProof["x-prestige-customer-booking-invitation"];
+  const customerMissingProofMock = installMockClient();
+  const customerMissingProofRoute = await readRouteResponse(
+    await customerRoute.POST(
+      jsonRequest(
+        "http://localhost/api/customer-booking-requests",
+        canonicalCustomerPayload(),
+        {
+          headers: customerHeadersWithoutProof,
+          method: "POST",
+        },
+      ),
+    ),
+  );
+
+  assert.equal(customerMissingProofRoute.status, 403);
+  assert.deepEqual(customerMissingProofRoute.body, {
+    error: "Phone verification is required for this public booking request.",
+    ok: false,
+  });
+  assert.equal(customerMissingProofMock.createdClients.length, 0);
+  assert.equal(customerMissingProofMock.client.selectHistory.length, 0);
+  assert.equal(customerMissingProofMock.client.operations.length, 0);
+  assertNoApiLeak(
+    customerMissingProofRoute,
+    "customer missing-proof response should hide server internals",
+  );
+
+  setEnv({
+    PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
+    SUPABASE_URL: supabaseUrlSentinel,
+  });
+
   const customerUnsafeRouteMock = installMockClient();
   const customerUnsafeRoute = await readRouteResponse(
     await customerRoute.POST(
@@ -1825,13 +2181,23 @@ try {
     ),
   );
 
-  assert.equal(customerUnsafeRoute.status, 400);
+  assert.equal(
+    customerUnsafeRoute.status,
+    400,
+    JSON.stringify({
+      body: customerUnsafeRoute.body,
+      createdClients: customerUnsafeRouteMock.createdClients.length,
+      selectHistory: customerUnsafeRouteMock.client.selectHistory,
+    }),
+  );
   assert.equal(customerUnsafeRoute.body.ok, false);
   assert.equal(
     customerUnsafeRoute.body.error,
     "Booking request includes fields outside the approved request scope.",
   );
-  assert.equal(customerUnsafeRouteMock.createdClients.length, 0);
+  assert.equal(customerUnsafeRouteMock.createdClients.length, 1);
+  assert.equal(customerUnsafeRouteMock.client.selectHistory.length, 1);
+  assert.equal(customerUnsafeRouteMock.client.selectHistory[0].table, "bookings");
   assert.equal(customerUnsafeRouteMock.client.operations.length, 0);
   assertNoUnsafeKeys(customerUnsafeRoute, "customer unsafe route response");
 
@@ -1855,9 +2221,9 @@ try {
     ),
   );
 
-  assert.equal(customerCreateRoute.status, 503);
+  assert.equal(customerCreateRoute.status, 500);
   assert.deepEqual(customerCreateRoute.body, {
-    error: "Booking request intake is not enabled or configured on this server.",
+    error: "Booking request failed safely.",
     ok: false,
   });
   assert.equal(customerCreateMock.createdClients.length, 0);

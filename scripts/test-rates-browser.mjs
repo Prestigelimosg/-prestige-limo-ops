@@ -204,6 +204,11 @@ function assertRatesState(state) {
     16,
     "Expected one customer override input for every service and vehicle combination",
   );
+  assert.equal(
+    state.travelerOverrideControlTag,
+    "SELECT",
+    "Expected Boss / Name to use the exact existing-Traveller selector",
+  );
   assert.ok(
     state.visibleText.includes("Rates loaded.") || state.visibleText.includes("Load failed:"),
     "Expected Load Rates to finish with a visible status message.",
@@ -262,6 +267,140 @@ async function runChromeTest() {
 
     await client.send("Runtime.enable");
     await client.send("Page.enable");
+    await client.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `(() => {
+        const fixtureSettings = {
+          child_seat_customer_surcharge: 15,
+          child_seat_driver_payout: 10,
+          customer_rates: {
+            DEP: { AVF: 75, S: 85, VVV: 95, Combi: 105 },
+            DSP: { AVF: 65, S: 75, VVV: 85, Combi: 95 },
+            MNG: { AVF: 85, S: 95, VVV: 105, Combi: 115 },
+            TRF: { AVF: 55, S: 65, VVV: 75, Combi: 85 },
+          },
+          driver_payout_rules: {
+            DEP: { max: 65, min: 65 },
+            DSP: { amount: 50, perHour: true },
+            MNG: { max: 75, min: 65 },
+            TRF: { max: 70, min: 70 },
+          },
+          extra_stop_payout: 10,
+          extra_stop_surcharge: 15,
+          midnight_payout: 10,
+          midnight_surcharge: 15,
+        };
+        const jsonResponse = (payload, status = 200) => new Response(JSON.stringify(payload), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+        const originalFetch = window.fetch.bind(window);
+        window.__prestigeSaveDefaultsBrowserStore = {
+          fixtureSettings: JSON.parse(JSON.stringify(fixtureSettings)),
+          legacyPatches: [],
+          legacyPosts: [],
+          overrideWrites: [],
+          scalarPosts: [],
+          unexpectedCalls: [],
+        };
+
+        window.fetch = async (...args) => {
+          const input = args[0];
+          const init = args[1] || {};
+          const url = String(input?.url || input);
+          const method = String(init.method || input?.method || "GET").toUpperCase();
+          const headers = new Headers(init.headers || input?.headers || {});
+          const store = window.__prestigeSaveDefaultsBrowserStore;
+
+          if (url.includes("/api/admin-load-bookings-typed-read") && method === "GET") {
+            return jsonResponse({ bookings: [], ok: true });
+          }
+
+          if (url.includes("/api/admin-saved-bookings") && method === "GET") {
+            return jsonResponse({ bookings: [], ok: true });
+          }
+
+          if (url.includes("/api/admin-customer-accounts") && method === "GET") {
+            return jsonResponse({ accounts: [], ok: true });
+          }
+
+          if (url.includes("/api/admin-rate-setup") && method === "GET") {
+            return jsonResponse({
+              companies: [],
+              ok: true,
+              settings: JSON.parse(JSON.stringify(store.fixtureSettings)),
+              travelers: [],
+              version: "test-save-defaults-browser-rate-setup",
+            });
+          }
+
+          if (url.includes("/api/admin-rate-settings-runtime-write-action") && method === "POST") {
+            const payload = JSON.parse(init.body || "{}");
+            store.scalarPosts.push({
+              headers: Object.fromEntries(headers.entries()),
+              method,
+              payload,
+              url,
+            });
+            return jsonResponse({
+              database_client_enabled: false,
+              env_gate_name: "PRESTIGE_RATE_SETTINGS_WRITE_ENABLED",
+              no_op: true,
+              ok: false,
+              reason: "write_gate_closed",
+              status: "blocked",
+              write_enabled: false,
+              write_gate_open: false,
+            }, 503);
+          }
+
+          if (url.includes("/api/admin-legacy-data/rest/v1/rate_settings")) {
+            const payload = JSON.parse(init.body || "{}");
+            const call = { method, payload, url };
+
+            if (method === "PATCH") {
+              store.legacyPatches.push(call);
+              store.fixtureSettings = {
+                ...store.fixtureSettings,
+                ...payload,
+              };
+              return jsonResponse({ id: "default" });
+            }
+
+            if (method === "POST") {
+              store.legacyPosts.push(call);
+              return jsonResponse({ message: "Legacy rate-settings POST is blocked in this guard" }, 500);
+            }
+          }
+
+          if (
+            method === "POST" &&
+            (url.includes("/api/admin-customer-rates-runtime-write-action") ||
+              url.includes("/api/admin-driver-payout-rules-runtime-write-action"))
+          ) {
+            store.overrideWrites.push({ method, url });
+            return jsonResponse({
+              database_client_enabled: false,
+              no_op: true,
+              ok: false,
+              reason: "write_gate_closed",
+              status: "blocked",
+              write_enabled: false,
+              write_gate_open: false,
+            }, 503);
+          }
+
+          if (
+            method !== "GET" &&
+            (url.includes("/rest/v1/companies") || url.includes("/rest/v1/travelers"))
+          ) {
+            store.overrideWrites.push({ method, url });
+            return jsonResponse({ message: "Unexpected unscoped override write" }, 500);
+          }
+
+          return originalFetch(...args);
+        };
+      })();`,
+    });
 
     const loadEvent = client.once("Page.loadEventFired");
     await client.send("Page.navigate", { url: appUrl });
@@ -372,12 +511,114 @@ async function runChromeTest() {
       customerOverrideInputCount: await evaluate(
         `document.querySelectorAll("[data-override-vehicle-customer-rates='true'] input[aria-label$='customer override']").length`,
       ),
+      travelerOverrideControlTag: await evaluate(
+        `document.querySelector("[data-rate-override-traveler-id='true']")?.tagName || ""`,
+      ),
       visibleText: await evaluate(`document.body.innerText`),
     };
     state.errors = [...browserErrors, ...(state.errors || [])];
     state.consoleErrors = [...browserConsoleErrors, ...(state.consoleErrors || [])];
 
     assertRatesState(state);
+
+    const clickedSaveDefaults = await evaluate(`(() => {
+      const saveDefaultsButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Defaults",
+      );
+
+      if (!saveDefaultsButton || saveDefaultsButton.disabled) {
+        return false;
+      }
+
+      saveDefaultsButton.scrollIntoView({ block: "center" });
+      saveDefaultsButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedSaveDefaults, true, "Expected controlled Save Defaults button to be clickable");
+
+    const saveDefaultsState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const store = window.__prestigeSaveDefaultsBrowserStore;
+          const statusPanels = [...document.querySelectorAll("[data-status-panel='global']")];
+          const successVisible = statusPanels.some((panel) =>
+            panel.textContent.includes("Default rates saved."),
+          );
+
+          return successVisible && store?.scalarPosts?.length === 1 && store?.legacyPatches?.length === 1
+            ? {
+                fixtureSettings: store.fixtureSettings,
+                legacyPatches: store.legacyPatches,
+                legacyPosts: store.legacyPosts,
+                overrideWrites: store.overrideWrites,
+                scalarPosts: store.scalarPosts,
+                unexpectedCalls: store.unexpectedCalls,
+              }
+            : false;
+        })()`),
+      10000,
+      "controlled Save Defaults success",
+    );
+    const expectedFixtureCustomerRates = {
+      DEP: { AVF: 75, S: 85, VVV: 95, Combi: 105 },
+      DSP: { AVF: 65, S: 75, VVV: 85, Combi: 95 },
+      MNG: { AVF: 85, S: 95, VVV: 105, Combi: 115 },
+      TRF: { AVF: 55, S: 65, VVV: 75, Combi: 85 },
+    };
+    const expectedFixtureDriverPayoutRules = {
+      DEP: { max: 65, min: 65 },
+      DSP: { amount: 50, perHour: true },
+      MNG: { max: 75, min: 65 },
+      TRF: { max: 70, min: 70 },
+    };
+    assert.equal(saveDefaultsState.scalarPosts.length, 1, "Expected one dedicated scalar POST");
+    assert.equal(
+      Object.hasOwn(saveDefaultsState.scalarPosts[0].headers, "x-prestige-admin-session-token"),
+      false,
+      "Save Defaults must not expose the private server-session token to browser JavaScript",
+    );
+    assert.equal(
+      saveDefaultsState.scalarPosts[0].headers["x-prestige-admin-purpose"],
+      "admin-booking-persistence",
+      "Save Defaults scalar POST must retain the exact admin purpose",
+    );
+    assert.deepEqual(
+      Object.keys(saveDefaultsState.scalarPosts[0].payload).sort(),
+      [
+        "child_seat_customer_surcharge",
+        "child_seat_driver_payout",
+        "extra_stop_payout",
+        "extra_stop_surcharge",
+        "id",
+        "midnight_payout",
+        "midnight_surcharge",
+      ],
+      "Dedicated scalar POST must remain scalar-only",
+    );
+    assert.equal(saveDefaultsState.legacyPatches.length, 1, "Expected one exact legacy default-row PATCH");
+    assert.equal(saveDefaultsState.legacyPatches[0].method, "PATCH");
+    assert.match(saveDefaultsState.legacyPatches[0].url, /\/rest\/v1\/rate_settings/);
+    assert.match(saveDefaultsState.legacyPatches[0].url, /id=eq(?:\.|%2E)default/);
+    assert.doesNotMatch(saveDefaultsState.legacyPatches[0].url, /upsert=1/);
+    assert.deepEqual(
+      saveDefaultsState.legacyPatches[0].payload.customer_rates,
+      expectedFixtureCustomerRates,
+      "Controlled customer-rate fixture must remain scoped and unchanged",
+    );
+    assert.deepEqual(
+      saveDefaultsState.legacyPatches[0].payload.driver_payout_rules,
+      expectedFixtureDriverPayoutRules,
+      "Controlled driver-payout fixture must remain scoped and unchanged",
+    );
+    assert.deepEqual(saveDefaultsState.fixtureSettings.customer_rates, expectedFixtureCustomerRates);
+    assert.deepEqual(saveDefaultsState.fixtureSettings.driver_payout_rules, expectedFixtureDriverPayoutRules);
+    assert.deepEqual(saveDefaultsState.legacyPosts, [], "Save Defaults must not use legacy POST/upsert");
+    assert.deepEqual(
+      saveDefaultsState.overrideWrites,
+      [],
+      "Save Defaults must not touch company or Traveller override writers",
+    );
+    assert.deepEqual(saveDefaultsState.unexpectedCalls, []);
 
     const clickedSaveOverride = await evaluate(`(() => {
       const saveOverrideButton = [...document.querySelectorAll("button")].find(
@@ -454,10 +695,11 @@ async function runChromeTest() {
     const preparedBlankOverride = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const setLabeledInput = (labelText, value) => {
-        const label = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-        );
-        const input = label?.querySelector("input");
+        const label = [...document.querySelectorAll("label")].find((candidate) => {
+          const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+          return candidateLabel === labelText || candidateLabel.startsWith(labelText + " (");
+        });
+        const input = label?.querySelector("input, select");
 
         if (!input) {
           return false;
@@ -555,10 +797,11 @@ async function runChromeTest() {
     const preparedNegativeOverride = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const setLabeledInput = (labelText, value) => {
-        const label = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-        );
-        const input = label?.querySelector("input");
+        const label = [...document.querySelectorAll("label")].find((candidate) => {
+          const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+          return candidateLabel === labelText || candidateLabel.startsWith(labelText + " (");
+        });
+        const input = label?.querySelector("input, select");
 
         if (!input) {
           return false;
@@ -738,10 +981,11 @@ async function runChromeTest() {
       const preparedDuplicateOverride = await evaluate(`(() => {
         const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
         const setLabeledInput = (labelText, value) => {
-          const label = [...document.querySelectorAll("label")].find(
-            (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-          );
-          const input = label?.querySelector("input");
+          const label = [...document.querySelectorAll("label")].find((candidate) => {
+            const candidateLabel = normalizeLabel(candidate.querySelector("span")?.textContent);
+            return candidateLabel === labelText || candidateLabel.startsWith(labelText + " (");
+          });
+          const input = label?.querySelector("input, select");
 
           if (!input) {
             return false;

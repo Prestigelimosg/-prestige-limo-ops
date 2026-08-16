@@ -75,21 +75,30 @@ const exactSave = sectionBetween(
   "function openPriceReview",
 );
 for (const fragment of [
-  "target_booking_reference: reference",
+  "customerFolderBookingPatchPayload(exactBooking, form, reference)",
   "adminBookingsApiPath",
   'method: "PATCH"',
   '"x-prestige-admin-purpose": "admin-booking-persistence"',
-  "route_points: inlineEditRoutePoints",
-  "service_items: inlineEditServiceItems",
-  "company_id: exactBooking.company_id",
-  "booker_id: exactBooking.booker_id",
-  "traveler_id: exactBooking.traveler_id",
 ]) {
   includes(exactSave, fragment, `existing exact booking PATCH ${fragment}`);
 }
-const exactSavePayload = sectionBetween(exactSave, "const payload = {", "\n    try {");
+const sharedExactSavePayload = sectionBetween(
+  folder,
+  "function customerFolderBookingPatchPayload",
+  "function customerFolderBillingReviewForBooking",
+);
+for (const fragment of [
+  "target_booking_reference: reference",
+  "route_points: inlineEditRoutePoints",
+  "service_items: inlineEditServiceItems",
+  "company_id: inlineEditIdentityId(form.companyId)",
+  "booker_id: inlineEditIdentityId(form.bookerId)",
+  "traveler_id: inlineEditIdentityId(form.travelerId)",
+]) {
+  includes(sharedExactSavePayload, fragment, `shared exact booking payload ${fragment}`);
+}
 assert.equal(
-  exactSavePayload.includes("public_booking_reference:"),
+  sharedExactSavePayload.includes("public_booking_reference:"),
   false,
   "inline editor must never write or replace the immutable public reference",
 );

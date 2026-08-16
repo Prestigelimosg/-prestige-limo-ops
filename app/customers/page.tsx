@@ -62,6 +62,7 @@ const adminDriverJobDspActualTimeSummariesApiPath =
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const customerFolderDispatchHandoffTab = "dispatch";
 const customerFolderDispatchHandoffReferenceParam = "booking_reference";
+const customerFolderPaidBookingReferenceParam = "paid_booking_reference";
 const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
 const approvedCustomerTestInvoiceArchiveTarget = {
   bookingReference: "ADM-20260702061357",
@@ -1800,6 +1801,16 @@ function selectedInvoiceBookingReferences(value: string) {
   ).slice(0, plainInvoiceMaxLineItems);
 }
 
+function selectedInvoicePaidBookingReference(value: string, selectedReferences: string[]) {
+  const paidBookingReference = cleanCustomerFolderText(value, 120);
+
+  return selectedReferences.length === 1 &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(paidBookingReference) &&
+    paidBookingReference === selectedReferences[0]
+    ? paidBookingReference
+    : "";
+}
+
 function selectedInvoicePriceReviews(value: string, selectedReferences: string[]) {
   const selectedReferenceSet = new Set(selectedReferences);
 
@@ -3193,6 +3204,16 @@ export default function MockCustomerDashboardPage() {
     };
 
     for (const customer of customerFolderIndexRows) {
+      const normalizedOverviewCustomerId = normalizeCustomerFolderMatch(customer.customerId);
+      const existingOverviewCustomerKey = normalizedOverviewCustomerId
+        ? accountKeyAliases.get(normalizedOverviewCustomerId)
+        : null;
+
+      if (existingOverviewCustomerKey) {
+        addAlias(customer.customerFolderKey, existingOverviewCustomerKey);
+        continue;
+      }
+
       folderRowsByKey.set(customer.customerFolderKey, {
         customerFolderKey: customer.customerFolderKey,
         customerId: customer.customerId,
@@ -5032,6 +5053,7 @@ export default function MockCustomerDashboardPage() {
     invoiceAction = "",
     selectedBookingReferences = "",
     selectedBookingPriceReviews = "",
+    selectedPaidBookingReference = "",
     guestAccountBillingEnabled = false,
   ) {
     customerFolderReturnHrefRef.current =
@@ -5067,6 +5089,10 @@ export default function MockCustomerDashboardPage() {
       );
       const savedBookings = result.savedBookings;
       const requestedInvoiceReferences = selectedInvoiceBookingReferences(selectedBookingReferences);
+      const requestedPaidBookingReference = selectedInvoicePaidBookingReference(
+        selectedPaidBookingReference,
+        requestedInvoiceReferences,
+      );
       const reviewedPricesByReference = selectedInvoicePriceReviews(
         selectedBookingPriceReviews,
         requestedInvoiceReferences,
@@ -5251,6 +5277,7 @@ export default function MockCustomerDashboardPage() {
                 amountCents: reviewedPricesByReference.get(reference) ?? null,
                 bookingReference: reference,
                 lineDescription: formatCustomerInvoiceLineDescription({
+                  dropoffLocation: booking.dropoff_location,
                   dspEndedAt: dspActualTimeSummary?.dsp_ended_at,
                   dspStartedAt:
                     dspActualTimeSummary?.billing_time_source === "admin_correction"
@@ -5330,6 +5357,7 @@ export default function MockCustomerDashboardPage() {
               crmCustomerId: exactCustomerId,
               crmCustomerName: exactCustomerName,
               guestAccountBillingEnabled,
+              isPaid: requestedPaidBookingReference === firstInvoiceRow.bookingReference,
               lineDescription: firstInvoiceRow.lineDescription,
               quantity: "1",
               recipientEmails: exactRecipientEmails,
@@ -5447,6 +5475,10 @@ export default function MockCustomerDashboardPage() {
     const selectedBookingPriceReviews = String(
       searchParams.get("selected_booking_price_reviews") ?? "",
     ).slice(0, 1000);
+    const selectedPaidBookingReference = cleanCustomerFolderText(
+      searchParams.get(customerFolderPaidBookingReferenceParam),
+      120,
+    );
     const requestedAction = searchParams.get("customer_job_action");
     const invoiceAction = cleanCustomerFolderText(searchParams.get("customer_invoice_action"), 40);
     const guestAccountBillingEnabled = searchParams.get("guest_account_billing") === "1";
@@ -5462,6 +5494,7 @@ export default function MockCustomerDashboardPage() {
       bookingReference,
       selectedBookingReferences,
       selectedBookingPriceReviews,
+      selectedPaidBookingReference,
       action,
       invoiceAction,
       guestAccountBillingEnabled ? "guest-account" : "traveller-account",
@@ -5480,6 +5513,7 @@ export default function MockCustomerDashboardPage() {
       invoiceAction,
       selectedBookingReferences,
       selectedBookingPriceReviews,
+      selectedPaidBookingReference,
       guestAccountBillingEnabled,
     );
     // URL handoff runs once so normal page interactions do not reload the selected customer.
@@ -7996,7 +8030,14 @@ export default function MockCustomerDashboardPage() {
     <main className="min-h-screen bg-stone-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <header className="border-b border-slate-200 pb-5">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prestige Limo Ops</p>
+          <Link
+            className="inline-flex min-h-9 items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
+            data-admin-customers-home-link="true"
+            href="/"
+          >
+            Home
+          </Link>
+          <p className="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Prestige Limo Ops</p>
           <div className="mt-3">
             <div>
               <h1 className="text-3xl font-bold tracking-normal text-slate-950">Customers & Invoices</h1>
@@ -9833,7 +9874,9 @@ export default function MockCustomerDashboardPage() {
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-xs font-semibold text-slate-600">
-                            Issuing creates an Unpaid invoice. Payment status is managed separately after receipt.
+                            {plainInvoiceForm.isPaid
+                              ? "Issuing creates a Paid invoice status. No payment transaction is created."
+                              : "Issuing creates an Unpaid invoice. Payment status is managed separately after receipt."}
                           </p>
                           <button
                             className="inline-flex h-8 items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-700"
@@ -9851,6 +9894,14 @@ export default function MockCustomerDashboardPage() {
                       className="mx-auto w-full max-w-4xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-800 shadow-sm sm:px-6"
                       data-selected-job-invoice-paper="true"
                     >
+                      {plainInvoiceSelectedJobReviewStatus === "Paid" ? (
+                        <p
+                          className="mb-2 w-fit rounded-md border-2 border-emerald-600 bg-emerald-50 px-3 py-1 text-sm font-black tracking-[0.18em] text-emerald-700"
+                          data-selected-job-invoice-paid-label="true"
+                        >
+                          PAID
+                        </p>
+                      ) : null}
                       <div className="flex items-start justify-between gap-4">
                         <div className="max-w-[55%]">
                           <Image

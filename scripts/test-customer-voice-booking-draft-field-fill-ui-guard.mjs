@@ -46,6 +46,7 @@ const approvedSubmittedFields = [
 
 const acceptedCustomerRequestFields = [
   ...approvedSubmittedFields,
+  "specialRequest",
   "travelerId",
 ];
 
@@ -157,14 +158,13 @@ assert.equal(
 assert.equal(
   countMatches(bookPage, 'data-customer-booking-portal-link="true"'),
   1,
-  "/book must keep exactly one Portal link.",
+  "/book must keep exactly one My Bookings link.",
 );
 assertFragmentOrder(
   bookPage,
   [
     'data-customer-booking-field="extraStops"',
     'data-customer-booking-return-trip-control="true"',
-    'data-customer-booking-field="specialRequest"',
   ],
   "/book customer trip details order",
 );
@@ -206,7 +206,7 @@ for (const fragment of [
   'data-customer-voice-booking-speak-button="true"',
   'data-customer-booking-portal-link="true"',
   'href="/my-bookings"',
-  "Portal",
+  "My Bookings",
 ]) {
   assertIncludes(headerActionBlock, fragment, `header action group fragment ${fragment}`);
 }
@@ -327,9 +327,18 @@ const persistenceFieldBlock =
 for (const field of approvedSubmittedFields) {
   assertIncludes(adapterBodyBlock, `${field}: input.${field}`, `customer request adapter submitted field ${field}`);
 }
+assertIncludes(
+  adapterBodyBlock,
+  "specialRequest: input.specialRequest",
+  "customer request adapter submitted specialRequest",
+);
+assertIncludes(
+  persistenceFieldBlock,
+  '"specialRequest"',
+  "customer booking persistence specialRequest allowlist",
+);
 
 for (const forbidden of [
-  "specialRequest",
   "voiceTranscript",
   "voice_transcript",
   "transcript",

@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 const root = process.cwd();
 const contractPath = path.join(root, "lib/admin-email-ai-intake-contract.ts");
 const runtimePath = path.join(root, "lib/admin-email-ai-intake.ts");
+const bookingParserPath = path.join(root, "lib/booking-parser.ts");
 const cronRoutePath = path.join(root, "app/api/cron/admin-email-ai-intake/route.ts");
 const adminRoutePath = path.join(root, "app/api/admin-email-ai-intake/route.ts");
 const pagePath = path.join(root, "app/page.tsx");
@@ -35,6 +36,7 @@ const groundBookerMigrationPath = groundBookerMigrationName
 for (const requiredPath of [
   contractPath,
   runtimePath,
+  bookingParserPath,
   cronRoutePath,
   adminRoutePath,
   pagePath,
@@ -49,6 +51,8 @@ for (const requiredPath of [
 
 const contract = await import(pathToFileURL(contractPath).href);
 const runtimeSource = fs.readFileSync(runtimePath, "utf8");
+const contractSource = fs.readFileSync(contractPath, "utf8");
+const bookingParserSource = fs.readFileSync(bookingParserPath, "utf8");
 const runtimeSourceWithoutEmailInstructions = runtimeSource.replace(
   /const emailAnalysisInstructions = `[\s\S]*?`;/,
   'const emailAnalysisInstructions = "";',
@@ -81,6 +85,44 @@ for (const classification of contract.adminEmailAiClassifications) {
     ["confirmed_booking", "amendment", "cancellation"].includes(
       classification,
     ),
+  );
+}
+
+assert.equal(
+  contract.adminEmailAiIntakeAppearsInApp({
+    classification: "enquiry",
+    senderAddress: "transzend@groundbooker.com",
+    subject:
+      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  }),
+  true,
+  "An exact verified GroundBooker order request must enter the existing Admin review lane even when AI honestly classifies the confirmation request as an enquiry.",
+);
+for (const blockedGroundBookerReviewInput of [
+  {
+    classification: "enquiry",
+    senderAddress: "info@prestigelimo.sg",
+    subject:
+      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  },
+  {
+    classification: "enquiry",
+    senderAddress: "transzend@groundbooker.com",
+    subject: "Can you quote an airport transfer?",
+  },
+  {
+    classification: "unrelated",
+    senderAddress: "transzend@groundbooker.com",
+    subject:
+      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
+  },
+]) {
+  assert.equal(
+    contract.adminEmailAiIntakeAppearsInApp(
+      blockedGroundBookerReviewInput,
+    ),
+    false,
+    "Only exact verified GroundBooker order-shaped enquiries may enter the existing review lane.",
   );
 }
 
@@ -176,6 +218,37 @@ assert.match(runtimeSource, /uncertain/);
 assert.match(runtimeSource, /Always return suggestedReply as an empty string/);
 assert.match(
   runtimeSource,
+  /Read the complete email before producing the structured booking result\./,
+);
+assert.match(runtimeSource, /passengerContact/);
+assert.match(runtimeSource, /bagCount/);
+assert.match(runtimeSource, /extraStopCount/);
+assert.match(runtimeSource, /A vehicle's passenger count is capacity and must never replace pax\./);
+assert.match(
+  runtimeSource,
+  /Return one coherent, complete structured booking whose supported facts agree with the whole source email\./,
+);
+assert.match(
+  runtimeSource,
+  /never omit it, contradict it, combine separate location roles, or substitute a vehicle capacity, organizer, or other nearby value\./,
+);
+assert.match(
+  runtimeSource,
+  /Prestige Transport is a legacy internal company name, not an external customer organisation/,
+);
+assert.match(
+  runtimeSource,
+  /This is source\/display text only: never classify customer type, choose a customer folder, or infer a CRM ID\./,
+);
+assert.match(
+  runtimeSource,
+  /Leave companyAccount empty when a separate explicit external organisation name is absent\./,
+);
+assert.match(runtimeSource, /never a generic label such as 1 waypoint/);
+assert.match(runtimeSource, /never invent a terminal/);
+assert.doesNotMatch(runtimeSource, /from "\.\/booking-parser"/);
+assert.match(
+  runtimeSource,
   /Content under a PAYMENT heading is payment metadata only\./,
 );
 assert.match(
@@ -183,13 +256,71 @@ assert.match(
   /Never copy Stripe or another payment method\/provider into booking pickup, drop-off, extraStopLocation, extraStops, route, or notes\./,
 );
 assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
-assert.match(runtimeSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(runtimeSource, /adminEmailAiIntakeAppearsInApp/);
 assert.match(runtimeSource, /email_confirmed_booking/);
 assert.match(runtimeSource, /email_booking_amendment/);
 assert.match(runtimeSource, /email_booking_cancellation/);
 assert.match(runtimeSource, /sendAdminDevicePushAlert/);
+assert.match(runtimeSource, /hyunsoostar@hotmail\.com/);
+assert.match(runtimeSource, /Kim Hyun Soo/);
+assert.match(runtimeSource, /\+65 98156017/);
+assert.match(runtimeSource, /enforcePrestigeTransportKnownBookerEmail/);
+assert.match(runtimeSource, /isResolvedKnownBookerReason/);
+assert.match(runtimeSource, /enforceResolvedStructuredReviewReasons/);
+assert.match(runtimeSource, /not\\s\+clearly/);
+assert.match(runtimeSource, /confirmation\|confirmed/);
+assert.match(runtimeSource, /extraStops:\s*booking\.extraStopLocation/);
+assert.match(runtimeSource, /enforceStructuredPickupSeparation/);
+assert.match(runtimeSource, /AI combined the primary pickup and extra stop/);
+assert.match(runtimeSource, /validateExplicitSourceFactsCompleteness/);
+assert.match(
+  runtimeSource,
+  /AI booking result is missing or conflicts with explicit source evidence; manual review required\./,
+);
+assert.match(runtimeSource, /directPassengerPhoneCandidates/);
+assert.match(runtimeSource, /explicitSourceBookingFacts/);
+assert.match(runtimeSource, /isPrestigeOwnCompanyEvidence/);
+assert.match(runtimeSource, /verifiedSenderCompanyAccount/);
+assert.match(
+  runtimeSource,
+  /const sourceFactsValidation\s*=\s*validateExplicitSourceFactsCompleteness\(\s*input,\s*analysis,\s*\)/,
+  "Explicit source-fact completeness validation must run after the established full-email AI analysis chain.",
+);
+const sourceFactsValidationSource = runtimeSource.match(
+  /function validateExplicitSourceFactsCompleteness\([\s\S]*?\n}\n\nfunction emailLocalPartLooksLikeAnotherPerson/,
+)?.[0] || "";
+assert.ok(sourceFactsValidationSource);
+assert.doesNotMatch(
+  sourceFactsValidationSource,
+  /bookingResult\s*:\s*\{|(?:bagCount|bookingType|companyAccount|extraStopCount|extraStopLocation|flightNumber|passengerContact|passengerName|pax|pickup|pickupDate|pickupTime|vehicle)\s*:/,
+  "The post-AI validator must accept or reject the provider result without populating structured booking fields from source evidence.",
+);
+assert.match(
+  runtimeSource,
+  /PICK UP LOCATION is the primary pickup only[\s\S]*ROUTE LOCATIONS[\s\S]*extraStopLocation/,
+);
+assert.match(runtimeSource, /hasSpecificStructuredExtraStop/);
+assert.doesNotMatch(
+  runtimeSourceWithoutEmailInstructions,
+  /6 Suffolk Walk|Prestige Transport 15787/,
+  "The post-AI repair must use general structured-field rules instead of booking-specific values.",
+);
+assert.match(
+  runtimeSource,
+  /New booking\\s\+\"Prestige Transport \\d\+\"\\s\+has been received/,
+);
+assert.match(
+  runtimeSource,
+  /enforcePrestigeTransportKnownBookerEmail\(\s*input,\s*enforcePrestigeTransportIdentityConsistency\(/,
+  "The exact known-Booker email mapping must receive the generic identity-consistency result.",
+);
+assert.doesNotMatch(contractSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
+assert.doesNotMatch(bookingParserSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
-assert.match(runtimeSource, /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/);
+assert.match(
+  runtimeSource,
+  /\.in\("classification", \[\s*\.\.\.adminEmailAiAppReviewClassifications,\s*"enquiry",\s*\]\)/,
+);
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
 assert.match(runtimeSource, /currentSingaporeMonthWindow/);
 assert.match(runtimeSource, /tokenUsageMaximumPages/);
@@ -201,7 +332,7 @@ assert.match(runtimeSource, /processing_status:\s*"reviewed"/);
 assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(
   runtimeSource,
-  /\.in\("classification", \[\.\.\.adminEmailAiAppReviewClassifications\]\)/,
+  /\.eq\("classification", classification\)/,
 );
 
 assert.doesNotMatch(runtimeSource, /admin-booking-(?:create|persistence)/);
@@ -261,7 +392,7 @@ assert.match(pageSource, /grid-cols-4/);
 assert.match(pageSource, /Email · booking@prestigelimo\.sg/);
 assert.match(pageSource, /Review in Dispatch/);
 assert.doesNotMatch(pageSource, /Review enquiry/);
-assert.match(pageSource, /adminEmailAiClassificationAppearsInApp/);
+assert.match(pageSource, /adminEmailAiIntakeAppearsInApp/);
 assert.match(pageSource, /adminEmailAiSenderAddressIsAllowed/);
 assert.match(pageSource, /From \{clean\(record\.sender_address\)\}/);
 assert.match(pageSource, /activeAdminEmailAiIntakeId/);
@@ -286,13 +417,27 @@ assert.match(
   browserTestSource,
   /00000000-0000-4000-8000-000000000102/,
 );
+assert.match(
+  browserTestSource,
+  /00000000-0000-4000-8000-000000000103/,
+);
+assert.match(
+  browserTestSource,
+  /order from Groundbooker Transzend \[INQ#817905\]/,
+);
+assert.match(browserTestSource, /Needs review/);
 assert.match(browserTestSource, /Expected enquiry email to remain outside the app review feed/);
 assert.match(browserTestSource, /Expected private email AI dashboard lane to remain read-only/);
 assert.match(browserTestSource, /compact monthly Email AI token usage/);
 assert.match(browserTestSource, /dashboardOverdueSingaporeMidnightMs/);
 assert.match(browserTestSource, /successful Save \+ CRM to close the exact Email AI intake/);
 assert.match(browserTestSource, /Email AI badge to update after successful Save \+ CRM/);
-assert.match(browserTestSource, /From transzend@groundbooker\\\.com/);
+assert.match(browserTestSource, /From info@prestigelimo\\\.sg/);
+assert.match(browserTestSource, /Prestige Transport 15787 canonical fields mapped into existing Booking Details/);
+assert.match(pageSource, /passenger_phone: clean\(bookingValue\.passengerContact\) \|\| null/);
+assert.match(pageSource, /bookingValue\.luggageCount/);
+assert.match(pageSource, /passengerContact: clean\(record\.passenger_phone\)/);
+assert.match(pageSource, /safeAdminBookingPersistenceCount\(record\.luggage_count\)/);
 
 assert.match(ledgerSource, /### Private Semantic Email AI Intake/);
 assert.match(ledgerSource, /booking@prestigelimo\.sg/);

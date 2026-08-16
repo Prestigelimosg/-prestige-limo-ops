@@ -20,11 +20,17 @@ assert.match(app, /company_id: adminDispatchVerifiedIdentityId\(bookingValue\.co
 assert.match(app, /booker_id: adminDispatchVerifiedIdentityId\(bookingValue\.bookerId\)/);
 assert.match(app, /traveler_id: adminDispatchVerifiedIdentityId\(bookingValue\.travelerId\)/);
 assert.match(app, /adminDispatchVerifiedCompanyOptions\.push/);
-assert.match(app, /adminDispatchVerifiedBookerOptions\.push/);
-assert.match(app, /adminDispatchVerifiedTravelerOptions\.push/);
+assert.match(
+  app,
+  /const adminDispatchCorporatePairOptions = rateTravelers[\s\S]{0,1200}bookerId: String\(traveler\.booker_id\),[\s\S]{0,300}companyId: String\(traveler\.company_id\),[\s\S]{0,300}id: String\(traveler\.id\),/,
+);
+assert.match(
+  app,
+  /const adminDispatchSelectedCorporatePair = adminDispatchCorporatePairOptions\.find\([\s\S]{0,300}pair\.id === booking\.travelerId && pair\.bookerId === booking\.bookerId[\s\S]{0,1800}bookerId: adminDispatchSingleCorporatePairBookerId,[\s\S]{0,300}travelerId: adminDispatchSingleCorporatePairTravelerId,/,
+);
 assert.match(app, /name: clean\(booking\.company\)/);
-assert.match(app, /name: clean\(booking\.booker\)/);
-assert.match(app, /traveler_name: clean\(booking\.name\)/);
+assert.match(app, /bookerName: clean\(traveler\.booker_name\) \|\| "Saved booker"/);
+assert.match(app, /travelerName: clean\(traveler\.traveler_name\) \|\| "Saved traveller"/);
 assert.doesNotMatch(app, /verifiedIdentityOptionAutoLoadKeyRef/);
 assert.doesNotMatch(app, /parseBookingMessageForState[\s\S]{0,1500}(companyId|bookerId|travelerId)/);
 

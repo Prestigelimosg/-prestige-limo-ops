@@ -4,6 +4,8 @@ export const adminEmailAiGroundBookerSenderAddress =
   "transzend@groundbooker.com";
 export const adminEmailAiGroundBookerRecipientAddress =
   "info@prestigelimo.sg";
+export const adminEmailAiGroundBookerCanonicalCompanyAccount =
+  "Transzend Groundbooker";
 export const adminEmailAiAllowedSenderAddresses = [
   adminEmailAiPrestigeSenderAddress,
   adminEmailAiGroundBookerSenderAddress,
@@ -37,6 +39,32 @@ export function adminEmailAiClassificationAppearsInApp(value: unknown) {
   return adminEmailAiAppReviewClassifications.some(
     (allowedClassification) =>
       allowedClassification === classification,
+  );
+}
+
+export function adminEmailAiIntakeAppearsInApp(input: {
+  classification?: unknown;
+  senderAddress?: unknown;
+  subject?: unknown;
+}) {
+  if (adminEmailAiClassificationAppearsInApp(input.classification)) {
+    return true;
+  }
+
+  const classification =
+    typeof input.classification === "string"
+      ? input.classification.trim().toLowerCase()
+      : "";
+  const subject =
+    typeof input.subject === "string" || typeof input.subject === "number"
+      ? String(input.subject).replace(/\s+/g, " ").trim()
+      : "";
+
+  return (
+    classification === "enquiry" &&
+    normalizeAdminEmailAiAddress(input.senderAddress) ===
+      adminEmailAiGroundBookerSenderAddress &&
+    /\border from groundbooker transzend\s*\[inq#\d+\]\s*$/i.test(subject)
   );
 }
 
@@ -93,6 +121,13 @@ export function adminEmailAiSenderAddressIsAllowed(
   return adminEmailAiAllowedSenderAddresses.some(
     (allowedAddress) => allowedAddress === normalized,
   );
+}
+
+export function adminEmailAiCanonicalCompanyAccountForSender(value: unknown) {
+  return normalizeAdminEmailAiAddress(value) ===
+    adminEmailAiGroundBookerSenderAddress
+    ? adminEmailAiGroundBookerCanonicalCompanyAccount
+    : null;
 }
 
 export function adminEmailAiRecipientIsAllowedForSender(

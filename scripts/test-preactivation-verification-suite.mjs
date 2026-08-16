@@ -330,6 +330,10 @@ const guardChecks = [
     script: "scripts/test-admin-load-bookings-crm-fallback-compact-guard.mjs",
   },
   {
+    label: "admin booking cross-device sync guard",
+    script: "scripts/test-admin-booking-cross-device-sync-guard.mjs",
+  },
+  {
     label: "Codex job-card correction preparer guard",
     script: "scripts/test-codex-job-card-correction-preparer.mjs",
   },
@@ -422,8 +426,24 @@ const guardChecks = [
     script: "scripts/test-driver-portal-session-jobs-guard.mjs",
   },
   {
+    label: "Driver acknowledged-link account and one-installation contract tests",
+    script: "scripts/test-driver-account-device-lock-contract.mjs",
+  },
+  {
+    label: "Driver account one-device and Face ID source guard",
+    script: "scripts/test-driver-account-device-lock-guard.mjs",
+  },
+  {
+    label: "selected Driver delete and Driver app account revoke guard",
+    script: "scripts/test-driver-delete-account-revoke-guard.mjs",
+  },
+  {
     label: "web app install manifest guard",
     script: "scripts/test-web-app-install-manifest-guard.mjs",
+  },
+  {
+    label: "admin and installed public app deployment commit marker guard",
+    script: "scripts/test-admin-deployment-commit-marker-guard.mjs",
   },
   {
     label: "public customer/driver visibility boundary guard",
@@ -486,6 +506,14 @@ const guardChecks = [
     script: "scripts/test-public-customer-form-surface-boundary-guard.mjs",
   },
   {
+    label: "customer booking luggage count guard",
+    script: "scripts/test-customer-booking-luggage-count-guard.mjs",
+  },
+  {
+    label: "customer booking Special Request guard",
+    script: "scripts/test-customer-booking-special-request-guard.mjs",
+  },
+  {
     label: "Customer Voice Booking Draft Input contract guard",
     script: "scripts/test-customer-voice-booking-draft-input-contract.mjs",
   },
@@ -500,6 +528,10 @@ const guardChecks = [
   {
     label: "Customer Voice Booking Speak button UI guard",
     script: "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs",
+  },
+  {
+    label: "admin customer Home and customer My Bookings navigation guard",
+    script: "scripts/test-admin-customer-home-and-booking-label-guard.mjs",
   },
   {
     label: "public customer portal saved-booking surface guard",
@@ -1133,6 +1165,22 @@ const guardChecks = [
   {
     label: "Driver Companion iPhone/Android background-location foundation guard",
     script: "scripts/test-driver-companion-background-location-foundation-guard.mjs",
+  },
+  {
+    label: "Driver Companion safe summary display guard",
+    script: "scripts/test-driver-companion-safe-summary-display-guard.mjs",
+  },
+  {
+    label: "Driver Companion complete embedded workflow guard",
+    script: "scripts/test-driver-companion-internal-ack-status-guard.mjs",
+  },
+  {
+    label: "Driver Companion iOS Universal Link association guard",
+    script: "scripts/test-driver-companion-ios-universal-link-association-guard.mjs",
+  },
+  {
+    label: "Driver Companion iOS release configuration guard",
+    script: "scripts/test-driver-companion-ios-release-config-guard.mjs",
   },
   {
     label: "Customer Live Location link readiness contract guard",

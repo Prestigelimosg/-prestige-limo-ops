@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
 type DriverPortalJob = {
@@ -12,7 +13,7 @@ type DriverPortalJob = {
 
 type DriverPortalReadState =
   | { kind: "loading" }
-  | { kind: "ready"; jobs: DriverPortalJob[] }
+  | { accountSession: boolean; kind: "ready"; jobs: DriverPortalJob[] }
   | { kind: "blocked"; reason: "not_configured" | "unauthorized" | "unavailable" };
 
 type DriverPortalAlertReadiness = {
@@ -27,6 +28,14 @@ type DriverPortalAlertState =
   | "enabling"
   | "unavailable";
 
+type DriverNativeWindow = Window & {
+  ReactNativeWebView?: { postMessage: (message: string) => void };
+  __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
+  __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
+};
+
+type DriverAccountSignInState = "idle" | "signing_in" | "failed";
+
 const driverAlertDatabaseName = "prestige-driver-device-alerts";
 const driverAlertDatabaseVersion = 1;
 const driverJobLinkStoreName = "driver-job-links";
@@ -37,6 +46,18 @@ function displayValue(value: string | null | undefined) {
 
 function pickupDisplay(job: SafeDriverJobPayload) {
   return [job.pickupDate, job.pickupTime].filter(Boolean).join(" · ") || "Schedule pending";
+}
+
+function currentNativeInstallationId() {
+  const nativeWindow = window as DriverNativeWindow;
+  const value = nativeWindow.__PRESTIGE_DRIVER_INSTALLATION_ID__;
+  return nativeWindow.__PRESTIGE_DRIVER_NATIVE_APP__ === true && typeof value === "string"
+    ? value
+    : "";
+}
+
+function subscribeToStaticNativeBridge() {
+  return () => undefined;
 }
 
 function driverDeviceAlertApplicationServerKey(value: string) {
@@ -113,14 +134,31 @@ export default function DriverPortalPage() {
   const [alertState, setAlertState] = useState<DriverPortalAlertState>("available");
   const [openingJobKey, setOpeningJobKey] = useState("");
   const [openFeedback, setOpenFeedback] = useState<Record<string, string>>({});
+  const installationId = useSyncExternalStore(
+    subscribeToStaticNativeBridge,
+    currentNativeInstallationId,
+    () => "",
+  );
+  const nativeBridgeReady = Boolean(
+    installationId &&
+    typeof (window as DriverNativeWindow).ReactNativeWebView?.postMessage === "function",
+  );
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
+  const [biometricFeedback, setBiometricFeedback] = useState("");
 
   const loadJobs = useCallback(async () => {
     try {
+      const nativeInstallationId = currentNativeInstallationId();
       const response = await fetch("/api/driver-portal/jobs", {
         cache: "no-store",
         credentials: "same-origin",
         headers: {
           "x-prestige-driver-purpose": "driver-portal-jobs-read",
+          ...(nativeInstallationId
+            ? { "x-prestige-driver-installation-id": nativeInstallationId }
+            : {}),
         },
       });
       const result = await response.json() as {
@@ -128,6 +166,7 @@ export default function DriverPortalPage() {
         jobs?: DriverPortalJob[];
         ok?: boolean;
         reason?: string;
+        session?: "account" | "link";
       };
       if (!response.ok || result.ok !== true) {
         setReadState({
@@ -149,7 +188,11 @@ export default function DriverPortalPage() {
         ready: result.device_alerts?.ready === true && Boolean(publicKey),
       });
       setAlertState(await readDriverPortalAlertState());
-      setReadState({ kind: "ready", jobs: Array.isArray(result.jobs) ? result.jobs : [] });
+      setReadState({
+        accountSession: result.session === "account",
+        kind: "ready",
+        jobs: Array.isArray(result.jobs) ? result.jobs : [],
+      });
     } catch {
       setReadState({ kind: "blocked", reason: "unavailable" });
     }
@@ -162,6 +205,60 @@ export default function DriverPortalPage() {
 
     return () => window.cancelAnimationFrame(animationFrame);
   }, [loadJobs]);
+
+  useEffect(() => {
+    function onBiometricResult(event: Event) {
+      const result = event as CustomEvent<{ ok?: boolean }>;
+      setBiometricFeedback(
+        result.detail?.ok === true
+          ? "Face ID is enabled for future app unlocks."
+          : "Face ID was not enabled. Your password sign-in remains active.",
+      );
+    }
+
+    window.addEventListener("prestige-driver-native-biometric-result", onBiometricResult);
+    return () => window.removeEventListener("prestige-driver-native-biometric-result", onBiometricResult);
+  }, []);
+
+  async function signInDriverAccount() {
+    if (!installationId) return;
+
+    setAccountSignInState("signing_in");
+    try {
+      const response = await fetch("/api/driver-auth/session", {
+        body: JSON.stringify({
+          email: accountEmail,
+          installation_id: installationId,
+          password: accountPassword,
+        }),
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          "x-prestige-driver-purpose": "driver-account-sign-in",
+        },
+        method: "POST",
+      });
+      const result = await response.json() as { ok?: boolean; reason?: string };
+      if (!response.ok || result.ok !== true) {
+        setAccountSignInState("failed");
+        return;
+      }
+
+      setAccountPassword("");
+      setAccountSignInState("idle");
+      await loadJobs();
+    } catch {
+      setAccountSignInState("failed");
+    }
+  }
+
+  function enableBiometricUnlock() {
+    setBiometricFeedback("");
+    (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
+      type: "native_biometrics_enable",
+    }));
+  }
 
   async function enableJobAlerts() {
     if (!alertReadiness.ready || !alertReadiness.publicKey) {
@@ -203,6 +300,9 @@ export default function DriverPortalPage() {
         headers: {
           "content-type": "application/json",
           "x-prestige-driver-purpose": "driver-portal-device-alert-registration",
+          ...(installationId
+            ? { "x-prestige-driver-installation-id": installationId }
+            : {}),
         },
         method: "POST",
       });
@@ -251,6 +351,7 @@ export default function DriverPortalPage() {
           <h1 className="mt-1 text-2xl font-bold" data-driver-portal-heading="true">
             Driver Portal
           </h1>
+          <PublicAppBuildMarker tone="dark" />
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">
             Your acknowledged upcoming and active jobs on this device.
           </p>
@@ -261,22 +362,81 @@ export default function DriverPortalPage() {
             <p className="text-sm font-semibold text-slate-700">Loading assigned jobs…</p>
           </section>
         ) : readState.kind === "blocked" ? (
-          <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-driver-portal-blocked={readState.reason}>
-            <h2 className="text-lg font-bold text-amber-950">Secure enrolment required</h2>
-            <p className="text-sm font-medium leading-6 text-amber-900">
-              Open your current private Driver Job link on this device, confirm your details, and use
-              Save &amp; Acknowledge Job. Then reopen Driver Portal.
-            </p>
-            <button
-              className="h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-              onClick={() => void loadJobs()}
-              type="button"
-            >
-              Try again
-            </button>
-          </section>
+          installationId ? (
+            <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
+              <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
+              <p className="text-sm font-medium leading-6 text-slate-700">
+                Sign in with the account created from your acknowledged private Job Link. The first
+                successful sign-in binds this account to this Prestige Driver installation.
+              </p>
+              <label className="block text-sm font-semibold text-slate-800">
+                Email
+                <input
+                  autoComplete="email"
+                  className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
+                  onChange={(event) => setAccountEmail(event.target.value)}
+                  type="email"
+                  value={accountEmail}
+                />
+              </label>
+              <label className="block text-sm font-semibold text-slate-800">
+                Password
+                <input
+                  autoComplete="current-password"
+                  className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
+                  onChange={(event) => setAccountPassword(event.target.value)}
+                  type="password"
+                  value={accountPassword}
+                />
+              </label>
+              <button
+                className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
+                disabled={accountSignInState === "signing_in"}
+                onClick={() => void signInDriverAccount()}
+                type="button"
+              >
+                {accountSignInState === "signing_in" ? "Signing in…" : "Sign in"}
+              </button>
+              {accountSignInState === "failed" ? (
+                <p className="text-sm font-semibold leading-6 text-amber-900">
+                  Sign-in could not be completed. Check your details or contact Prestige admin.
+                </p>
+              ) : null}
+            </section>
+          ) : (
+            <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-driver-installation-required="true" data-driver-portal-blocked={readState.reason}>
+              <h2 className="text-lg font-bold text-amber-950">Prestige Driver app required for account sign-in</h2>
+              <p className="text-sm font-medium leading-6 text-amber-900">
+                Account sign-in is available only inside the installed Prestige Driver app so one
+                approved account can be secured to one phone.
+              </p>
+              <p className="text-sm font-medium leading-6 text-amber-900">
+                The app is optional for reporting. You can still open the private Job Link from
+                WhatsApp in this browser, save and acknowledge the job, and submit all Driver Reports.
+              </p>
+            </section>
+          )
         ) : (
           <section className="space-y-3" data-driver-portal-job-count={readState.jobs.length}>
+            {nativeBridgeReady && readState.accountSession ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm" data-driver-portal-biometric-setup="true">
+                <h2 className="text-base font-bold text-emerald-950">Face ID app unlock</h2>
+                <p className="mt-1 text-sm font-medium leading-6 text-emerald-900">
+                  Enable after your approved account is signed in. Face ID unlocks this app only and
+                  never overrides account suspension or the one-phone lock.
+                </p>
+                <button
+                  className="mt-3 h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
+                  onClick={enableBiometricUnlock}
+                  type="button"
+                >
+                  Enable Face ID
+                </button>
+                {biometricFeedback ? (
+                  <p className="mt-2 text-xs font-semibold leading-5 text-emerald-900">{biometricFeedback}</p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm" data-driver-portal-alert-setup={alertState}>
               <h2 className="text-base font-bold text-sky-950">Job alerts</h2>
               <p className="mt-1 text-sm font-medium leading-6 text-sky-900">

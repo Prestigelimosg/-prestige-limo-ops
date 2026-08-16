@@ -470,6 +470,18 @@ function buildAuthorization(
     token,
     verifier,
   }), config.encryptionKey, oauthStateAad);
+
+  return {
+    authorizationUrl: googleAuthorizationUrl(config, state, challenge),
+    cookieValue: oauthCookieValue(state, config.encryptionKey),
+  };
+}
+
+function googleAuthorizationUrl(
+  config: DriverGoogleCalendarConfig,
+  state: string,
+  challenge: string,
+) {
   const url = new URL(googleAuthorizationUri);
 
   url.searchParams.set("access_type", "offline");
@@ -483,10 +495,7 @@ function buildAuthorization(
   url.searchParams.set("scope", driverGoogleCalendarScope);
   url.searchParams.set("state", state);
 
-  return {
-    authorizationUrl: url.toString(),
-    cookieValue: oauthCookieValue(state, config.encryptionKey),
-  };
+  return url.toString();
 }
 
 function buildAuthorizationResult(
@@ -592,6 +601,25 @@ function readOauthState(state: string, config: DriverGoogleCalendarConfig) {
   } catch {
     return null;
   }
+}
+
+export function readDriverGoogleCalendarNativeOauthStart(state: string) {
+  const config = readConfig();
+  const oauthState = config ? readOauthState(state, config) : null;
+
+  if (!config || !oauthState) {
+    return failure("invalid_oauth", 400);
+  }
+
+  const challenge = createHash("sha256")
+    .update(oauthState.verifier)
+    .digest("base64url");
+
+  return {
+    authorization_url: googleAuthorizationUrl(config, state, challenge),
+    cookie_value: oauthCookieValue(state, config.encryptionKey),
+    ok: true as const,
+  };
 }
 
 export async function completeDriverGoogleCalendarOauth(input: {

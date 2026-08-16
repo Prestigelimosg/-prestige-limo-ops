@@ -8,11 +8,13 @@ import {
 assert.deepEqual(allowedAiBookingTypes, ["MNG", "DEP", "TRF", "DSP"]);
 
 const bookingFields = [
+  "bagCount",
   "bookingType",
   "companyAccount",
   "bookerName",
   "bookerEmail",
   "bookerContact",
+  "passengerContact",
   "passengerName",
   "pax",
   "vehicle",
@@ -21,6 +23,7 @@ const bookingFields = [
   "flightNumber",
   "pickup",
   "dropoff",
+  "extraStopCount",
   "extraStopLocation",
   "extraStops",
   "customerPriceOverride",
@@ -61,11 +64,13 @@ const validResult = sanitizeAiParseResult({
   multipleBookingsDetected: false,
   bookings: [
     {
+      bagCount: " 2 ",
       bookingType: "mng",
       companyAccount: " Warburg Pincus ",
       bookerName: " Jill Van Cook ",
       bookerEmail: " jill@example.com ",
       bookerContact: " 917-734-5070 ",
+      passengerContact: " +65 9000 1111 ",
       passengerName: " Mark Colodny ",
       pax: 2,
       vehicle: " Sedan ",
@@ -74,6 +79,7 @@ const validResult = sanitizeAiParseResult({
       flightNumber: " SG 423 ",
       pickup: " Singapore Changi Airport ",
       dropoff: " The Ritz ",
+      extraStopCount: " 0 ",
       extraStopLocation: " ",
       extraStops: " 0 ",
       customerPriceOverride: " ",
@@ -89,11 +95,13 @@ assert.deepEqual(validResult, {
   multipleBookingsDetected: false,
   bookings: [
     {
+      bagCount: "2",
       bookingType: "MNG",
       companyAccount: "Warburg Pincus",
       bookerName: "Jill Van Cook",
       bookerEmail: "jill@example.com",
       bookerContact: "917-734-5070",
+      passengerContact: "+65 9000 1111",
       passengerName: "Mark Colodny",
       pax: "2",
       vehicle: "Sedan",
@@ -102,6 +110,7 @@ assert.deepEqual(validResult, {
       flightNumber: "SG423",
       pickup: "Singapore Changi Airport",
       dropoff: "The Ritz",
+      extraStopCount: "0",
       extraStopLocation: "",
       extraStops: "0",
       customerPriceOverride: "",
@@ -129,6 +138,29 @@ assert.equal(unclearFieldsResult.bookings[0].pickupTime, "");
 assert.equal(unclearFieldsResult.bookings[0].flightNumber, "");
 assert.equal(unclearFieldsResult.bookings[0].pickup, "");
 assert.equal(unclearFieldsResult.bookings[0].dropoff, "");
+
+const supplierDateResult = sanitizeAiParseResult({
+  bookings: [{ confidence: 0.5, pickupDate: "19-08-2026" }],
+});
+assert.equal(
+  supplierDateResult.bookings[0].pickupDate,
+  "2026-08-19",
+  "A valid supplier DD-MM-YYYY date must be normalized before canonical Dispatch mapping.",
+);
+
+const supplierSlashDateResult = sanitizeAiParseResult({
+  bookings: [{ confidence: 0.5, pickupDate: "7/8/2026" }],
+});
+assert.equal(supplierSlashDateResult.bookings[0].pickupDate, "2026-08-07");
+
+const invalidSupplierDateResult = sanitizeAiParseResult({
+  bookings: [{ confidence: 0.5, pickupDate: "31-02-2026" }],
+});
+assert.equal(
+  invalidSupplierDateResult.bookings[0].pickupDate,
+  "31-02-2026",
+  "An invalid date must remain visible for review instead of being silently changed.",
+);
 
 assert.equal(
   sanitizeAiParseResult({ bookings: [{ companyAccount: "gmail.com", confidence: 0.5 }] })

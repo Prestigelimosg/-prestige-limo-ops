@@ -139,7 +139,7 @@ const requiredFieldLabels: Record<keyof BookingRequestForm, string> = {
   serviceType: "Type of service",
   vehicleType: "Vehicle type",
   passengerCount: "Number of passengers",
-  luggage: "Luggage",
+  luggage: "Number of bags",
   extraStops: "Extra stops",
   specialRequest: "Special request / note",
 };
@@ -719,6 +719,44 @@ export default function CustomerBookingPage() {
       return;
     }
 
+    const luggageCount = form.luggage.trim();
+    const normalizedSpecialRequest = form.specialRequest.replace(/\r\n?/g, "\n").trim();
+
+    if (normalizedSpecialRequest.length > 500) {
+      setMissingFields(["specialRequest"]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Special request must be 500 characters or fewer.",
+      });
+      return;
+    }
+
+    if (/[\u0000-\u0009\u000b-\u001f\u007f]/.test(normalizedSpecialRequest)) {
+      setMissingFields(["specialRequest"]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Special request contains unsupported control characters.",
+      });
+      return;
+    }
+
+    if (
+      luggageCount &&
+      (!/^\d+$/.test(luggageCount) ||
+        !Number.isSafeInteger(Number(luggageCount)) ||
+        Number(luggageCount) > 2_147_483_647)
+    ) {
+      setMissingFields(["luggage"]);
+      setConfirmationStatus(null);
+      setFeedback({
+        tone: "error",
+        text: "Enter the number of bags as a whole number.",
+      });
+      return;
+    }
+
     if (!termsAccepted) {
       setMissingFields([]);
       setConfirmationStatus(null);
@@ -902,7 +940,7 @@ export default function CustomerBookingPage() {
                 data-customer-booking-portal-link="true"
                 href="/my-bookings"
               >
-                Portal
+                My Bookings
               </Link>
             </div>
           </div>
@@ -1361,14 +1399,18 @@ export default function CustomerBookingPage() {
                 </label>
 
                 <label className="text-xs font-semibold text-slate-800">
-                  Luggage
+                  Number of bags
                   <input
                     className={fieldClass()}
                     data-customer-booking-field="luggage"
+                    inputMode="numeric"
+                    max="2147483647"
+                    min="0"
                     name="luggage"
                     onChange={(event) => updateField("luggage", event.target.value)}
-                    placeholder="2 large bags, 1 cabin bag"
-                    type="text"
+                    placeholder="e.g. 3"
+                    step="1"
+                    type="number"
                     value={form.luggage}
                   />
                 </label>
@@ -1536,14 +1578,17 @@ export default function CustomerBookingPage() {
                 <label className="text-xs font-semibold text-slate-800 md:col-span-2 xl:col-span-2">
                   Special request / note
                   <textarea
-                    className={`${fieldClass()} min-h-20 resize-y`}
+                    aria-invalid={isMissing("specialRequest")}
+                    className={`${fieldClass(isMissing("specialRequest"))} min-h-20 resize-y`}
                     data-customer-booking-field="specialRequest"
+                    maxLength={500}
                     name="specialRequest"
                     onChange={(event) => updateField("specialRequest", event.target.value)}
-                    placeholder="Child seat, meet-and-greet, event timing, or other requests"
+                    placeholder="Number of vehicles, child seat, meet-and-greet, event timing, or other requests"
                     value={form.specialRequest}
                   />
                 </label>
+
               </div>
             </section>
 
@@ -1675,8 +1720,8 @@ export default function CustomerBookingPage() {
                     {confirmationStatus.detail}
                   </p>
                 </section>
-              ) : null}
-            </div>
+                ) : null}
+              </div>
           </div>
         </form>
       </div>

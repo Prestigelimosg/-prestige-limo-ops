@@ -117,6 +117,16 @@ const safeSaveError = "Admin booking persistence save failed safely.";
 const safeLoadError = "Admin booking persistence load failed safely.";
 const safeReloadError = "Saved booking could not be safely reloaded.";
 const safeUpdateError = "Admin booking persistence update failed safely.";
+const safeUpdateConflictError =
+  "Booking changed on another device. Reload the exact saved booking before updating.";
+const safeCustomerIdentityConflictError =
+  "Verified customer identity matches multiple customer accounts. Review the existing customer profiles before saving.";
+const safeAgencyFolderSelectionError =
+  "Select the exact Hotel / Tour Agency folder before saving this booking.";
+const safeAgencyFolderConflictError =
+  "This Hotel / Tour Agency relationship is ambiguous. Review the existing company and customer folder before saving.";
+const safeAgencyFolderCreateError =
+  "The first Hotel / Tour Agency folder could not be created safely. Reload CRM identities and review the exact agency name before saving.";
 const safeUpdateTargetMissingError = "Applied admin booking snapshot was not found.";
 const disabledPersistenceError = "Admin booking persistence is not enabled on this server.";
 const safeStagingReadinessError =
@@ -126,15 +136,15 @@ const safeEnableReadinessError =
 const defaultAdminBookingListLimit = 25;
 const maxAdminBookingListLimit = 200;
 const adminBookingCurrentLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, dropoff_datetime, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, customer_special_request, driver_id, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status, short_notice_review_status, request_review_status, change_review_status, cancellation_review_status, parser_source_reference, source_surface, created_at, updated_at, booking_route_points(point_type, sequence, location, notes), booking_service_items(item_type, quantity, notes)";
 const adminBookingCurrentLoadSelectWithoutPublicReference =
   adminBookingCurrentLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelect =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, driver_id, driver_name, driver_contact, driver_plate_number, pax_count, luggage_count, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutPublicReference =
   adminBookingFoundationLoadSelect.replace("public_booking_reference, ", "");
 const adminBookingFoundationLoadSelectWithoutDriver =
-  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
+  "id, booking_reference, public_booking_reference, customer_id, company_id, booker_id, traveler_id, source_channel, pickup_datetime, dropoff_datetime, pickup_location, dropoff_location, route_type, customer_display_name, contact_phone, contact_email, flight_no, pax_count, luggage_count, customer_special_request, vehicle_type_or_category, customer_facing_status, admin_internal_status, short_notice_review_status, parser_source_reference, created_at, updated_at, booking_route_points(point_type, sequence_number, location_text, timing_note), booking_service_items(service_item_type, quantity, blocks_count)";
 const adminBookingFoundationLoadSelectWithoutDriverOrPublicReference =
   adminBookingFoundationLoadSelectWithoutDriver.replace("public_booking_reference, ", "");
 
@@ -162,6 +172,22 @@ function textOrNull(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed.slice(0, maxTextLength) : null;
+}
+
+function bookingUpdatedAtMatches(leftValue: unknown, rightValue: unknown) {
+  const left = textOrNull(leftValue);
+  const right = textOrNull(rightValue);
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftTimestamp = Date.parse(left);
+  const rightTimestamp = Date.parse(right);
+
+  return Number.isFinite(leftTimestamp) && Number.isFinite(rightTimestamp)
+    ? leftTimestamp === rightTimestamp
+    : left === right;
 }
 
 function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
@@ -268,6 +294,13 @@ function safeAdapterFailure<T>(
 
 function isColumnMissingFailure(error: unknown) {
   return classifyAdapterDatabaseFailure(error) === "column_missing";
+}
+
+function isCustomerSpecialRequestColumnMissingFailure(error: unknown) {
+  return (
+    isColumnMissingFailure(error) &&
+    JSON.stringify(error).toLowerCase().includes("customer_special_request")
+  );
 }
 
 function adminBookingListLimit(value: AdminBookingListOptions["limit"]) {
@@ -521,6 +554,26 @@ function integerOrNull(value: unknown) {
   const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
 
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function luggageCountOrNull(value: unknown) {
+  const parsed = integerOrNull(value);
+
+  return parsed !== null && parsed <= 2_147_483_647 ? parsed : null;
+}
+
+function customerSpecialRequestOrNull(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+
+  return normalized &&
+    normalized.length <= 500 &&
+    !/[\u0000-\u0009\u000b-\u001f\u007f]/.test(normalized)
+    ? normalized
+    : null;
 }
 
 function positiveIntegerOrFallback(value: unknown, fallback = 1) {
@@ -898,11 +951,17 @@ function bookingToDbRow(
   booking: AdminBookingRecordInput,
   customerId: DbIdentifier | null,
   actor: AdminBookingPersistenceAdapterActor,
+  options: {
+    includeParserSourceReference?: boolean;
+  } = {},
 ) {
   const companyId = dbIdentifierOrNull(booking.company_id);
   const bookerId = dbIdentifierOrNull(booking.booker_id);
   const travelerId = dbIdentifierOrNull(booking.traveler_id);
   const driverId = integerOrNull(booking.driver_id);
+  const customerSpecialRequest = customerSpecialRequestOrNull(
+    booking.customer_special_request,
+  );
   const pickupAt = textOrNull(booking.pickup_at) || textOrNull(booking.pickup_datetime) || new Date().toISOString();
   const pickupLocation = textOrNull(booking.pickup_location) || "Pickup To Confirm";
   const dropoffLocation = textOrNull(booking.dropoff_location) || "Drop-off To Confirm";
@@ -933,6 +992,10 @@ function bookingToDbRow(
     driver_name: textOrNull(booking.driver_name),
     driver_plate_number: textOrNull(booking.driver_plate_number),
     pax_count: integerOrNull(booking.pax_count),
+    luggage_count: luggageCountOrNull(booking.luggage_count),
+    ...(customerSpecialRequest
+      ? { customer_special_request: customerSpecialRequest }
+      : {}),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     admin_internal_status: normalizeAdminInternalStatus(booking.admin_internal_status),
     customer_facing_status: normalizeCustomerFacingStatus(booking.customer_facing_status),
@@ -940,6 +1003,9 @@ function bookingToDbRow(
     request_review_status: normalizeRequestReviewStatus(booking.request_review_status),
     change_review_status: normalizeChangeReviewStatus(booking.change_review_status),
     cancellation_review_status: normalizeCancellationReviewStatus(booking.cancellation_review_status),
+    ...(options.includeParserSourceReference === false
+      ? {}
+      : { parser_source_reference: textOrNull(booking.parser_source_reference) }),
     source_surface: normalizeSourceSurface(
       textOrNull(booking.source_surface) || textOrNull(booking.source_channel),
       actor.source_surface,
@@ -991,7 +1057,10 @@ function bookingToFoundationDbRow(
     driver_name: currentRow.driver_name,
     driver_plate_number: currentRow.driver_plate_number,
     pax_count: integerOrNull(booking.pax_count),
-    luggage_count: integerOrNull(booking.luggage_count),
+    luggage_count: currentRow.luggage_count,
+    ...(currentRow.customer_special_request
+      ? { customer_special_request: currentRow.customer_special_request }
+      : {}),
     vehicle_type_or_category: textOrNull(booking.vehicle_type_or_category),
     customer_facing_status: currentRow.customer_facing_status,
     admin_internal_status: currentRow.admin_internal_status,
@@ -1026,16 +1095,33 @@ type AdminBookingSelectResult<T> = {
   error: unknown;
 };
 
+async function loadAdminBookingSelectWithCustomerSpecialRequestFallback<T>(
+  buildQuery: (selectedColumns: string) => PromiseLike<AdminBookingSelectResult<T>>,
+  selectedColumns: string,
+): Promise<AdminBookingSelectResult<T>> {
+  const result = await buildQuery(selectedColumns);
+
+  if (!isCustomerSpecialRequestColumnMissingFailure(result.error)) {
+    return result;
+  }
+
+  return buildQuery(selectedColumns.replace("customer_special_request, ", ""));
+}
+
 async function loadAdminBookingsWithFoundationFallback<T>(
   buildQuery: (selectedColumns: string) => PromiseLike<AdminBookingSelectResult<T>>,
 ): Promise<AdminBookingSelectResult<T>> {
-  const currentResult = await buildQuery(adminBookingCurrentLoadSelect);
+  const currentResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
+    adminBookingCurrentLoadSelect,
+  );
 
   if (!currentResult.error || !isColumnMissingFailure(currentResult.error)) {
     return currentResult;
   }
 
-  const currentWithoutPublicReferenceResult = await buildQuery(
+  const currentWithoutPublicReferenceResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
     adminBookingCurrentLoadSelectWithoutPublicReference,
   );
 
@@ -1046,13 +1132,17 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return currentWithoutPublicReferenceResult;
   }
 
-  const foundationResult = await buildQuery(adminBookingFoundationLoadSelect);
+  const foundationResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
+    adminBookingFoundationLoadSelect,
+  );
 
   if (!foundationResult.error || !isColumnMissingFailure(foundationResult.error)) {
     return foundationResult;
   }
 
-  const foundationWithoutPublicReferenceResult = await buildQuery(
+  const foundationWithoutPublicReferenceResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
     adminBookingFoundationLoadSelectWithoutPublicReference,
   );
 
@@ -1063,7 +1153,8 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return foundationWithoutPublicReferenceResult;
   }
 
-  const foundationWithoutDriverResult = await buildQuery(
+  const foundationWithoutDriverResult = await loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
     adminBookingFoundationLoadSelectWithoutDriver,
   );
 
@@ -1074,7 +1165,10 @@ async function loadAdminBookingsWithFoundationFallback<T>(
     return foundationWithoutDriverResult;
   }
 
-  return buildQuery(adminBookingFoundationLoadSelectWithoutDriverOrPublicReference);
+  return loadAdminBookingSelectWithCustomerSpecialRequestFallback(
+    buildQuery,
+    adminBookingFoundationLoadSelectWithoutDriverOrPublicReference,
+  );
 }
 
 function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
@@ -1140,7 +1234,10 @@ function toAdminBookingDto(row: UnknownRecord): AdminBookingPersistenceRecord {
     driver_name: textOrNull(row.driver_name),
     driver_plate_number: textOrNull(row.driver_plate_number),
     pax_count: integerOrNull(row.pax_count),
-    luggage_count: integerOrNull(row.luggage_count),
+    luggage_count: luggageCountOrNull(row.luggage_count),
+    customer_special_request: customerSpecialRequestOrNull(
+      row.customer_special_request,
+    ),
     vehicle_type_or_category: textOrNull(row.vehicle_type_or_category),
     customer_facing_status: customerStatusToUi(row.customer_facing_status),
     admin_internal_status: adminStatusToUi(row.admin_internal_status),
@@ -1318,10 +1415,314 @@ async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
   actor: AdminBookingPersistenceAdapterActor,
+  hotelAgencyFolderCreate: AdminBookingPersistenceInput["hotel_agency_folder_create"] = null,
 ): Promise<AdminBookingResult<DbIdentifier>> {
   const verifiedCustomerId = dbIdentifierOrNull(booking.customer_id);
   const verifiedCompanyId = dbIdentifierOrNull(booking.company_id);
   const verifiedBookerId = dbIdentifierOrNull(booking.booker_id);
+  const verifiedTravelerId = dbIdentifierOrNull(booking.traveler_id);
+
+  if (hotelAgencyFolderCreate) {
+    const requestedAgencyName = textOrNull(hotelAgencyFolderCreate.company_name);
+    const bookingAgencyName = textOrNull(booking.customer_display_name);
+    const normalizedRequestedAgencyName = requestedAgencyName?.toLocaleLowerCase() || "";
+    const normalizedBookingAgencyName = bookingAgencyName?.toLocaleLowerCase() || "";
+
+    if (
+      !isVerifiedAdminDispatcherActor(actor) ||
+      !verifiedCompanyId ||
+      verifiedCustomerId ||
+      verifiedBookerId ||
+      verifiedTravelerId ||
+      !requestedAgencyName ||
+      normalizedRequestedAgencyName !== normalizedBookingAgencyName
+    ) {
+      return {
+        error: safeAgencyFolderCreateError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const { data: companyRows, error: companyError } = await client
+      .from("companies")
+      .select("id, company_name")
+      .eq("id", verifiedCompanyId)
+      .limit(2);
+
+    if (companyError) {
+      return safeAdapterFailure(safeSaveError, 500, companyError, "customer_lookup");
+    }
+
+    const exactCompanyRows = asArray(companyRows).filter((row) => {
+      const company = asRecord(row);
+
+      return (
+        String(dbIdentifierOrNull(company.id) || "") === String(verifiedCompanyId) &&
+        textOrNull(company.company_name)?.toLocaleLowerCase() === normalizedRequestedAgencyName
+      );
+    });
+
+    if (exactCompanyRows.length !== 1) {
+      return {
+        error: safeAgencyFolderCreateError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const canonicalAgencyName =
+      textOrNull(asRecord(exactCompanyRows[0]).company_name) || requestedAgencyName;
+    const agencyRecoveryAccountCode = `HOTEL-COMPANY-${String(verifiedCompanyId)}`;
+    const loadRecoverableAgencyFolder = async (): Promise<AdminBookingResult<DbIdentifier | null>> => {
+      const { data: recoveryRows, error: recoveryError } = await client
+        .from("customers")
+        .select("id, account_code, display_name, customer_type, status, account_status")
+        .ilike("account_code", agencyRecoveryAccountCode)
+        .limit(2);
+
+      if (recoveryError) {
+        return safeAdapterFailure(safeSaveError, 500, recoveryError, "customer_lookup");
+      }
+
+      if (asArray(recoveryRows).length === 0) {
+        return { data: null, ok: true };
+      }
+
+      if (asArray(recoveryRows).length !== 1) {
+        return {
+          error: safeAgencyFolderConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      const recoveryFolder = asRecord(asArray(recoveryRows)[0]);
+      const recoveryFolderId = dbIdentifierOrNull(recoveryFolder.id);
+      const recoveryFolderStatuses = [
+        textOrNull(recoveryFolder.status)?.toLowerCase(),
+        textOrNull(recoveryFolder.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+
+      if (
+        !recoveryFolderId ||
+        textOrNull(recoveryFolder.account_code)?.toLowerCase() !==
+          agencyRecoveryAccountCode.toLowerCase() ||
+        textOrNull(recoveryFolder.display_name)?.toLowerCase() !==
+          canonicalAgencyName.toLowerCase() ||
+        textOrNull(recoveryFolder.customer_type)?.toLowerCase() !== "hotel" ||
+        recoveryFolderStatuses.length === 0 ||
+        !recoveryFolderStatuses.every((status) => status === "active")
+      ) {
+        return {
+          error: safeAgencyFolderCreateError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      const { data: recoveryBookingRows, error: recoveryBookingError } = await client
+        .from("bookings")
+        .select("company_id")
+        .eq("customer_id", recoveryFolderId);
+
+      if (recoveryBookingError) {
+        return safeAdapterFailure(safeSaveError, 500, recoveryBookingError, "customer_lookup");
+      }
+
+      const recoveryCompanyIds = new Map<string, DbIdentifier>();
+
+      for (const row of asArray(recoveryBookingRows)) {
+        const companyId = dbIdentifierOrNull(asRecord(row).company_id);
+
+        if (companyId) {
+          recoveryCompanyIds.set(String(companyId), companyId);
+        }
+      }
+
+      if (asArray(recoveryBookingRows).length === 0) {
+        return { data: recoveryFolderId, ok: true };
+      }
+
+      if (
+        recoveryCompanyIds.size === 1 &&
+        recoveryCompanyIds.has(String(verifiedCompanyId))
+      ) {
+        return {
+          error: safeAgencyFolderSelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return {
+        error: safeAgencyFolderConflictError,
+        ok: false,
+        status: 409,
+      };
+    };
+    const recoverableAgencyFolderResult = await loadRecoverableAgencyFolder();
+
+    if (!recoverableAgencyFolderResult.ok) {
+      return recoverableAgencyFolderResult;
+    }
+
+    if (recoverableAgencyFolderResult.data) {
+      return { data: recoverableAgencyFolderResult.data, ok: true };
+    }
+
+    const { data: existingCompanyBookingRows, error: existingCompanyBookingError } = await client
+      .from("bookings")
+      .select("customer_id")
+      .eq("company_id", verifiedCompanyId);
+
+    if (existingCompanyBookingError) {
+      return safeAdapterFailure(safeSaveError, 500, existingCompanyBookingError, "customer_lookup");
+    }
+
+    const existingCompanyCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const row of asArray(existingCompanyBookingRows)) {
+      const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
+
+      if (customerId) {
+        existingCompanyCustomerIds.set(String(customerId), customerId);
+      }
+    }
+
+    let existingCompanyHasOneSelectableAgency = existingCompanyCustomerIds.size === 1;
+
+    for (const customerId of existingCompanyCustomerIds.values()) {
+      const { data: existingCompanyCustomerRows, error: existingCompanyCustomerError } = await client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .eq("id", customerId)
+        .limit(1);
+
+      if (existingCompanyCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, existingCompanyCustomerError, "customer_lookup");
+      }
+
+      const existingCompanyCustomer = asRecord(asArray(existingCompanyCustomerRows)[0]);
+      const existingCompanyCustomerType = textOrNull(existingCompanyCustomer.customer_type)?.toLowerCase();
+      const existingCompanyCustomerStatuses = [
+        textOrNull(existingCompanyCustomer.status)?.toLowerCase(),
+        textOrNull(existingCompanyCustomer.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+
+      if (
+        existingCompanyCustomerType !== "hotel" ||
+        existingCompanyCustomerStatuses.length === 0 ||
+        !existingCompanyCustomerStatuses.every((status) => status === "active")
+      ) {
+        existingCompanyHasOneSelectableAgency = false;
+      }
+    }
+
+    if (existingCompanyCustomerIds.size > 0) {
+      return {
+        error: existingCompanyHasOneSelectableAgency
+          ? safeAgencyFolderSelectionError
+          : safeAgencyFolderConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const loadMatchingCustomerFolders = () =>
+      client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .ilike("display_name", canonicalAgencyName)
+        .limit(2);
+    const matchingCustomerFoldersResult = await loadMatchingCustomerFolders();
+
+    if (matchingCustomerFoldersResult.error) {
+      return safeAdapterFailure(
+        safeSaveError,
+        500,
+        matchingCustomerFoldersResult.error,
+        "customer_lookup",
+      );
+    }
+
+    if (asArray(matchingCustomerFoldersResult.data).length > 0) {
+      return {
+        error: safeAgencyFolderSelectionError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const finalMatchingCustomerFoldersResult = await loadMatchingCustomerFolders();
+
+    if (finalMatchingCustomerFoldersResult.error) {
+      return safeAdapterFailure(
+        safeSaveError,
+        500,
+        finalMatchingCustomerFoldersResult.error,
+        "customer_lookup",
+      );
+    }
+
+    if (asArray(finalMatchingCustomerFoldersResult.data).length > 0) {
+      return {
+        error: safeAgencyFolderSelectionError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const currentAgencyFolderInsertResult = await client
+      .from("customers")
+      .insert({
+        account_code: agencyRecoveryAccountCode,
+        customer_type: "hotel",
+        display_name: canonicalAgencyName,
+        status: "active",
+      })
+      .select("id")
+      .single();
+    const agencyFolderInsertResult =
+      currentAgencyFolderInsertResult.error &&
+      isColumnMissingFailure(currentAgencyFolderInsertResult.error)
+        ? await client
+            .from("customers")
+            .insert({
+              account_code: agencyRecoveryAccountCode,
+              account_status: "active",
+              customer_type: "hotel",
+              display_name: canonicalAgencyName,
+            })
+            .select("id")
+            .single()
+        : currentAgencyFolderInsertResult;
+    const insertedAgencyFolderId = dbIdentifierOrNull(asRecord(agencyFolderInsertResult.data).id);
+
+    if (agencyFolderInsertResult.error || !insertedAgencyFolderId) {
+      const recoveryResult = await loadRecoverableAgencyFolder();
+
+      if (!recoveryResult.ok) {
+        return recoveryResult;
+      }
+
+      if (recoveryResult.data) {
+        return { data: recoveryResult.data, ok: true };
+      }
+
+      return safeAdapterFailure(
+        safeSaveError,
+        500,
+        agencyFolderInsertResult.error,
+        "customer_lookup",
+      );
+    }
+
+    return {
+      data: insertedAgencyFolderId,
+      ok: true,
+    };
+  }
 
   if (
     actor.boundary_mode === "customer-booking-request-surface" &&
@@ -1335,6 +1736,225 @@ async function findOrCreateCustomerId(
       data: verifiedCustomerId,
       ok: true,
     };
+  }
+
+  const hasCompleteCorporateIdentity = Boolean(
+    verifiedCompanyId && verifiedBookerId && verifiedTravelerId,
+  );
+
+  if (hasCompleteCorporateIdentity) {
+    const { data: verifiedIdentityRows, error: verifiedIdentityError } = await client
+      .from("bookings")
+      .select("customer_id")
+      .eq("company_id", verifiedCompanyId)
+      .eq("booker_id", verifiedBookerId)
+      .eq("traveler_id", verifiedTravelerId);
+
+    if (verifiedIdentityError) {
+      return safeAdapterFailure(safeSaveError, 500, verifiedIdentityError, "customer_lookup");
+    }
+
+    const verifiedCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const row of asArray(verifiedIdentityRows)) {
+      const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
+
+      if (customerId) {
+        verifiedCustomerIds.set(String(customerId), customerId);
+      }
+    }
+
+    if (verifiedCustomerIds.size === 1) {
+      return {
+        data: Array.from(verifiedCustomerIds.values())[0],
+        ok: true,
+      };
+    }
+
+    if (verifiedCustomerIds.size > 1) {
+      return {
+        error: safeCustomerIdentityConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+  }
+
+  if (verifiedCustomerId && !verifiedCompanyId) {
+    return {
+      error: safeAgencyFolderSelectionError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  if (verifiedCompanyId && !verifiedBookerId && !verifiedTravelerId) {
+    const { data: companyBookingRows, error: companyBookingError } = await client
+      .from("bookings")
+      .select("customer_id")
+      .eq("company_id", verifiedCompanyId);
+
+    if (companyBookingError) {
+      return safeAdapterFailure(safeSaveError, 500, companyBookingError, "customer_lookup");
+    }
+
+    const companyCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const row of asArray(companyBookingRows)) {
+      const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
+
+      if (customerId) {
+        companyCustomerIds.set(String(customerId), customerId);
+      }
+    }
+
+    const activeAgencyCustomerIds = new Map<string, DbIdentifier>();
+
+    for (const companyCustomerId of companyCustomerIds.values()) {
+      const { data: companyCustomerRows, error: companyCustomerError } = await client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .eq("id", companyCustomerId)
+        .limit(1);
+
+      if (companyCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, companyCustomerError, "customer_lookup");
+      }
+
+      const companyCustomer = asRecord(asArray(companyCustomerRows)[0]);
+      const exactCompanyCustomerId = dbIdentifierOrNull(companyCustomer.id);
+      const companyCustomerType = textOrNull(companyCustomer.customer_type)?.toLowerCase();
+      const companyCustomerStatuses = [
+        textOrNull(companyCustomer.status)?.toLowerCase(),
+        textOrNull(companyCustomer.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+      const companyCustomerIsActive =
+        companyCustomerStatuses.length > 0 &&
+        companyCustomerStatuses.every((status) => status === "active");
+
+      if (
+        exactCompanyCustomerId &&
+        companyCustomerType === "hotel" &&
+        companyCustomerIsActive
+      ) {
+        activeAgencyCustomerIds.set(String(exactCompanyCustomerId), exactCompanyCustomerId);
+      }
+    }
+
+    if (activeAgencyCustomerIds.size > 1) {
+      return {
+        error: safeAgencyFolderConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    let agencyCustomerId = Array.from(activeAgencyCustomerIds.values())[0] || null;
+
+    if (verifiedCustomerId && !activeAgencyCustomerIds.has(String(verifiedCustomerId))) {
+      const { data: selectedCustomerRows, error: selectedCustomerError } = await client
+        .from("customers")
+        .select("id, customer_type, status, account_status")
+        .eq("id", verifiedCustomerId)
+        .limit(1);
+
+      if (selectedCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, selectedCustomerError, "customer_lookup");
+      }
+
+      const selectedCustomer = asRecord(asArray(selectedCustomerRows)[0]);
+      const exactSelectedCustomerId = dbIdentifierOrNull(selectedCustomer.id);
+      const selectedCustomerType = textOrNull(selectedCustomer.customer_type)?.toLowerCase();
+      const selectedCustomerStatuses = [
+        textOrNull(selectedCustomer.status)?.toLowerCase(),
+        textOrNull(selectedCustomer.account_status)?.toLowerCase(),
+      ].filter((status): status is string => Boolean(status));
+      const selectedCustomerIsActive =
+        selectedCustomerStatuses.length > 0 &&
+        selectedCustomerStatuses.every((status) => status === "active");
+
+      if (
+        !exactSelectedCustomerId ||
+        selectedCustomerType !== "hotel" ||
+        !selectedCustomerIsActive
+      ) {
+        return {
+          error: safeAgencyFolderSelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      if (agencyCustomerId && String(agencyCustomerId) !== String(exactSelectedCustomerId)) {
+        return {
+          error: safeAgencyFolderConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      agencyCustomerId = exactSelectedCustomerId;
+    }
+
+    if (agencyCustomerId) {
+      const { data: customerBookingRows, error: customerBookingError } = await client
+        .from("bookings")
+        .select("company_id")
+        .eq("customer_id", agencyCustomerId);
+
+      if (customerBookingError) {
+        return safeAdapterFailure(safeSaveError, 500, customerBookingError, "customer_lookup");
+      }
+
+      const customerCompanyIds = new Map<string, DbIdentifier>();
+
+      for (const row of asArray(customerBookingRows)) {
+        const companyId = dbIdentifierOrNull(asRecord(row).company_id);
+
+        if (companyId) {
+          customerCompanyIds.set(String(companyId), companyId);
+        }
+      }
+
+      if (
+        customerCompanyIds.size !== 1 ||
+        !customerCompanyIds.has(String(verifiedCompanyId))
+      ) {
+        return {
+          error: safeAgencyFolderConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return {
+        data: agencyCustomerId,
+        ok: true,
+      };
+    }
+
+    const companyDisplayName = textOrNull(booking.customer_display_name);
+
+    if (companyDisplayName) {
+      const { data: matchingAgencyRows, error: matchingAgencyError } = await client
+        .from("customers")
+        .select("id")
+        .eq("customer_type", "hotel")
+        .ilike("display_name", companyDisplayName)
+        .limit(2);
+
+      if (matchingAgencyError) {
+        return safeAdapterFailure(safeSaveError, 500, matchingAgencyError, "customer_lookup");
+      }
+
+      if (asArray(matchingAgencyRows).length > 0) {
+        return {
+          error: safeAgencyFolderSelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
+    }
   }
 
   const displayName = customerPortalScopedDisplayName(booking);
@@ -1637,7 +2257,12 @@ export async function createAdminBookingThroughSupabaseAdapter(
   }
 
   const client = clientResult.data;
-  const customerIdResult = await findOrCreateCustomerId(client, input.booking, actor);
+  const customerIdResult = await findOrCreateCustomerId(
+    client,
+    input.booking,
+    actor,
+    input.hotel_agency_folder_create,
+  );
 
   if (!customerIdResult.ok) {
     return customerIdResult;
@@ -1733,6 +2358,19 @@ export async function updateAdminBookingThroughSupabaseAdapter(
   }
 
   const existing = existingResult.data;
+  const expectedUpdatedAt = textOrNull(input.expected_updated_at);
+
+  if (
+    expectedUpdatedAt &&
+    !bookingUpdatedAtMatches(expectedUpdatedAt, existing.updated_at)
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error: safeUpdateConflictError,
+    };
+  }
+
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);
   const requestedCustomerId = dbIdentifierOrNull(input.booking.customer_id);
   let customerId = requestedCustomerId || existingCustomerId;
@@ -1746,24 +2384,51 @@ export async function updateAdminBookingThroughSupabaseAdapter(
 
     customerId = customerIdResult.data;
   }
-  const contactResult = await ensureCustomerContact(client, customerId, input.booking);
 
-  if (!contactResult.ok) {
-    return contactResult;
-  }
-
-  const bookingRow = bookingToDbRow(input.booking, customerId, actor);
-  const { error: bookingError } = await client
+  const bookingRow = bookingToDbRow(input.booking, customerId, actor, {
+    includeParserSourceReference: false,
+  });
+  const nextUpdatedAt = new Date().toISOString();
+  let bookingUpdateQuery = client
     .from("bookings")
     .update({
       ...bookingRow,
       booking_reference: input.target_booking_reference,
-      updated_at: new Date().toISOString(),
+      updated_at: nextUpdatedAt,
     })
     .eq("id", existing.id);
 
+  if (expectedUpdatedAt) {
+    bookingUpdateQuery = bookingUpdateQuery.eq("updated_at", existing.updated_at);
+  }
+
+  const { error: bookingError } = await bookingUpdateQuery;
+
   if (bookingError) {
     return safeAdapterFailure(safeUpdateError, 500, bookingError, "booking_row");
+  }
+
+  const versionReloadResult = await fetchAdminBookingById(client, existing.id);
+
+  if (!versionReloadResult.ok) {
+    return versionReloadResult;
+  }
+
+  if (
+    expectedUpdatedAt &&
+    !bookingUpdatedAtMatches(versionReloadResult.data.updated_at, nextUpdatedAt)
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error: safeUpdateConflictError,
+    };
+  }
+
+  const contactResult = await ensureCustomerContact(client, customerId, input.booking);
+
+  if (!contactResult.ok) {
+    return contactResult;
   }
 
   const { error: routeDeleteError } = await client

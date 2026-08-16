@@ -1,18 +1,50 @@
 {
   "expo": {
-    "name": "Prestige Driver Companion",
+    "name": "Prestige SG Driver",
     "slug": "prestige-driver-companion",
     "owner": "prestige-limo-ops",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "sg.prestigelimo.drivercompanion"
+      "version": "1.0.0",
+      "supportsTablet": true,
+      "bundleIdentifier": "sg.prestigelimo.drivercompanion",
+      "buildNumber": "8",
+      "icon": "./assets/icon.png",
+      "associatedDomains": [
+        "applinks:app.prestigelimo.sg",
+        "webcredentials:app.prestigelimo.sg"
+      ],
+      "infoPlist": {
+        "CFBundleDisplayName": "Prestige Driver",
+        "NSCameraUsageDescription": "Prestige uses the camera only when you choose to attach the required OTS proof photo.",
+        "NSPhotoLibraryUsageDescription": "Prestige accesses a photo only when you choose it for the required OTS proof."
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "sg.prestigelimo.drivercompanion",
       "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "host": "app.prestigelimo.sg",
+              "pathPrefix": "/driver-job/",
+              "scheme": "https"
+            }
+          ]
+        }
+      ],
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -33,7 +65,16 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-secure-store"
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Prestige Driver to use Face ID to unlock the approved Driver account."
+        }
+      ],
+      "expo-notifications",
+      "expo-secure-store",
+      "expo-web-browser",
+      "./plugins/with-driver-camera-query"
     ],
     "extra": {
       "eas": {

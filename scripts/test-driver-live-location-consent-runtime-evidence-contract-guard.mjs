@@ -102,29 +102,24 @@ for (const forbiddenPhrase of [
   assertExcludes(ledgerSection, forbiddenPhrase, "forbidden consent runtime evidence claim");
 }
 
-const driverLiveLocationUiStart = driverJobPage.indexOf(
-  "data-driver-live-location-consent-ui={driverLiveLocationUiState}",
-);
-assert.notEqual(driverLiveLocationUiStart, -1, "Driver live-location disabled UI must remain present.");
-const driverLiveLocationUiEnd = driverJobPage.indexOf("</section>", driverLiveLocationUiStart);
-assert.notEqual(driverLiveLocationUiEnd, -1, "Driver live-location disabled UI section must close.");
+const driverLiveLocationUiStart = driverJobPage.indexOf('data-driver-otw-live-location-control="true"');
+assert.notEqual(driverLiveLocationUiStart, -1, "Driver merged OTW/live-location control must remain present.");
+const driverLiveLocationUiEnd = driverJobPage.indexOf('data-driver-primary-step="report-issue"', driverLiveLocationUiStart);
+assert.notEqual(driverLiveLocationUiEnd, -1, "Driver merged OTW/live-location boundary must close.");
 const driverLiveLocationUi = driverJobPage.slice(driverLiveLocationUiStart, driverLiveLocationUiEnd);
 
 for (const fragment of [
-  "data-driver-live-location-share-button={driverLiveLocationUiState}",
-  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
-  "data-driver-live-location-sharing-state={driverLiveLocation.sharingState}",
-  "data-driver-live-location-permission-state={driverLiveLocation.permissionState}",
-  "data-driver-live-location-last-shared={driverLiveLocation.lastSharedAt ? \"shared\" : \"not_shared\"}",
-  "data-driver-live-location-stale-state={driverLiveLocation.staleState}",
-  "Share Location",
-  "Stop Sharing",
+  'data-driver-otw-live-location-control="true"',
+  'data-driver-live-location-feedback="true"',
 ]) {
-  assertIncludes(driverLiveLocationUi, fragment, `disabled driver consent UI fragment ${fragment}`);
+  assertIncludes(driverLiveLocationUi, fragment, `merged driver consent UI fragment ${fragment}`);
+}
+for (const label of ["Share Location Again", "Retry Share Location", "Stop Sharing", "Retry Stop Sharing"]) {
+  assertIncludes(driverJobPage, label, `merged driver consent UI label ${label}`);
 }
 
 for (const fragment of [
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "handleOtwLiveLocationControl",
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "startDriverLiveLocationBrowserWatch",
@@ -132,8 +127,7 @@ for (const fragment of [
   "navigator.geolocation.getCurrentPosition",
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",
-  "onClick={shareDriverLiveLocation}",
-  "onClick={stopDriverLiveLocation}",
+  "onClick={handleOtwLiveLocationControl}",
   "customerVisible !== false",
   "external_send !== false",
 ]) {
@@ -141,7 +135,7 @@ for (const fragment of [
 }
 
 for (const forbiddenPattern of [
-  /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,
+  /useEffect\(\(\) => \{\s*void\s+shareDriverLiveLocation\(/i,
   /setInterval|setTimeout|sendBeacon/i,
 ]) {
   assertExcludes(

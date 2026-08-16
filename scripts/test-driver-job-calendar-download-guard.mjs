@@ -7,19 +7,21 @@ const googleHelperPath = "lib/driver-google-calendar.ts";
 const persistencePath = "lib/admin-driver-job-link-persistence.ts";
 const routePath = "app/api/driver-job/[token]/calendar/route.ts";
 const callbackPath = "app/api/driver-google-calendar-oauth/callback/route.ts";
+const nativeStartPath = "app/api/driver-google-calendar-oauth/native-start/route.ts";
 const pagePath = "app/driver-job/[token]/page.tsx";
 const migrationPath = "supabase/migrations/20260719214500_driver_google_calendar_connection.sql";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardPath = "scripts/test-driver-job-calendar-download-guard.mjs";
 
-const [eventHelper, googleHelper, persistence, route, callback, page, migration, ledger, suite] =
+const [eventHelper, googleHelper, persistence, route, callback, nativeStart, page, migration, ledger, suite] =
   await Promise.all([
     readFile(eventHelperPath, "utf8"),
     readFile(googleHelperPath, "utf8"),
     readFile(persistencePath, "utf8"),
     readFile(routePath, "utf8"),
     readFile(callbackPath, "utf8"),
+    readFile(nativeStartPath, "utf8"),
     readFile(pagePath, "utf8"),
     readFile(migrationPath, "utf8"),
     readFile(ledgerPath, "utf8"),
@@ -134,6 +136,70 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "readDriverGoogleCalendarNativeOauthStart",
+  "driverGoogleCalendarOauthCookieName",
+  'searchParams.get("state")',
+  "httpOnly: true",
+  'sameSite: "lax"',
+  "const response =",
+]) {
+  assert.equal(nativeStart.includes(fragment), true, `Native OAuth start must include ${fragment}.`);
+}
+assert.doesNotMatch(nativeStart, /createClient|\.from\(|POST|PATCH|DELETE/);
+
+const nativeStartResponseConstructionStart = nativeStart.indexOf("  const response =");
+const nativeStartResponseConstructionEnd = nativeStart.indexOf(
+  "\n  return response;",
+  nativeStartResponseConstructionStart,
+);
+assert.notEqual(
+  nativeStartResponseConstructionStart,
+  -1,
+  "Native OAuth start must keep one bounded redirect response construction.",
+);
+assert.notEqual(
+  nativeStartResponseConstructionEnd,
+  -1,
+  "Native OAuth start must return its bounded redirect response.",
+);
+const nativeStartResponseConstruction = nativeStart.slice(
+  nativeStartResponseConstructionStart,
+  nativeStartResponseConstructionEnd + "\n  return response;".length,
+);
+const nativeStartResponseModule = { exports: {} };
+const nativeStartResponseJavascript = ts.transpileModule(
+  `export function executeNativeStartResponse(result: { authorization_url: string }) {\n${nativeStartResponseConstruction}\n}`,
+  {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  },
+).outputText;
+new Function("exports", "Response", nativeStartResponseJavascript)(
+  nativeStartResponseModule.exports,
+  Response,
+);
+let nativeStartResponse;
+assert.doesNotThrow(
+  () => {
+    nativeStartResponse = nativeStartResponseModule.exports.executeNativeStartResponse({
+      authorization_url: "https://accounts.google.com/o/oauth2/v2/auth",
+    });
+  },
+  "Native OAuth start must construct its 303 response without mutating immutable redirect headers.",
+);
+assert.equal(nativeStartResponse.status, 303);
+assert.equal(
+  nativeStartResponse.headers.get("location"),
+  "https://accounts.google.com/o/oauth2/v2/auth",
+);
+assert.equal(nativeStartResponse.headers.get("cache-control"), "private, no-store, max-age=0");
+assert.equal(nativeStartResponse.headers.get("referrer-policy"), "no-referrer");
+assert.doesNotMatch(
+  nativeStart,
+  /Response\.redirect|response\.headers\.set/,
+  "Native OAuth start must not mutate the immutable headers returned by Response.redirect().",
+);
+
+for (const fragment of [
   'data-driver-job-calendar-action="true"',
   'data-driver-job-calendar-source="current-driver-job-schedule"',
   'data-driver-job-calendar-saved="true"',
@@ -141,7 +207,9 @@ for (const fragment of [
   'method: "POST"',
   "safeGoogleConsentUrl",
   'url.hostname === "accounts.google.com"',
-  "window.location.assign(googleConsentUrl)",
+  "safeDriverNativeCalendarOauthStartUrl",
+  "embeddedDriverApp",
+  "window.location.assign(calendarNavigationUrl)",
   'searchParams.get("calendar")',
   'searchParams.delete("calendar")',
   "window.history.replaceState",

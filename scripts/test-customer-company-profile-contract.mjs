@@ -69,8 +69,86 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /setProfile\(blankCreateProfile\(customerName, guestAccountBillingEnabled\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{customerName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
+  /setProfile\(blankCreateProfile\(companyLookupName, guestAccountBillingEnabled\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{companyLookupName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
   "not-found lookup results must visibly open the create customer company profile form",
+);
+assert.match(
+  editorSource,
+  /function agencyCompanyProfileName\(customerName: string, guestAccountBillingEnabled: boolean\)/,
+  "the established profile editor must derive an agency company lookup name only after exact guest-account classification",
+);
+assert.match(
+  editorSource,
+  /if \(!guestAccountBillingEnabled\) \{\s+return normalized;\s+\}\s+return normalized\.replace\(\/\\s\+\\\[[^\n]+\\\]\\s\*\$\/, ""\)\.trim\(\) \|\| normalized;/,
+  "normal companies must retain their exact name while agency folders may remove one trailing passenger scope",
+);
+assert.match(
+  editorSource,
+  /const accountResponse = await fetch\(`\$\{adminCustomerAccountsApiPath\}\?\$\{accountParams\.toString\(\)\}`,[\s\S]+?const guestAccountBillingEnabled = account\.guest_account_billing_enabled === true;[\s\S]+?const exactCustomerFolderName = profileValue\(account\.customer_account\);[\s\S]+?const companyLookupName = agencyCompanyProfileName\(exactCustomerFolderName, guestAccountBillingEnabled\);[\s\S]+?await loadCompanyProfile\(companyLookupName\)/,
+  "the exact customer account classification must be loaded before choosing the company profile lookup name",
+);
+for (const fragment of [
+  "const verifiedCompanyId = positiveProfileId(account.verified_company_id);",
+  "if (verifiedCompanyId) {",
+  "await loadCompanyProfileById(verifiedCompanyId)",
+  "if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result))",
+  "if (verifiedCompanyId && Number(company.id) !== verifiedCompanyId)",
+]) {
+  assert.equal(
+    editorSource.includes(fragment),
+    true,
+    `verified company exact-ID profile flow must include ${fragment}`,
+  );
+}
+assert.match(
+  editorSource,
+  /params\.set\("id", String\(companyId\)\)/,
+  "verified company profile lookup must use the established exact-ID CRM read",
+);
+assert.match(
+  editorSource,
+  /if \(\s*!verifiedCompanyId &&\s*companyLookupName !== exactCustomerFolderName &&\s*isMissingCompanyProfileResult\(response, result\)\s*\) \{[\s\S]+?loadCompanyProfile\(exactCustomerFolderName\)/,
+  "an unverified agency base-name miss must safely fall back to the original folder name instead of creating a duplicate company",
+);
+assert.match(
+  editorSource,
+  /\{profile\.guest_account_billing_enabled \? \([\s\S]+?Agency guests stay on each booking\. No permanent Booker \/ PA or Traveller CRM profile is required\.[\s\S]+?\) : profile\.id \? \([\s\S]+?<CustomerVerifiedIdentitiesEditor/,
+  "hotel and tour agency profiles must keep guests on bookings and must not require permanent CRM traveller identities",
+);
+assert.match(
+  editorSource,
+  /const \[customerFolderName, setCustomerFolderName\] = useState\(customerName\.trim\(\)\);/,
+  "the established profile editor must keep one exact customer folder-name draft",
+);
+assert.match(
+  editorSource,
+  />\s*Customer folder name\s*<input[\s\S]+?data-customer-folder-name=/,
+  "the existing profile form must expose one clearly labelled customer folder-name field",
+);
+assert.match(
+  editorSource,
+  /\.\.\.\(customerFolderNameChanged \? \{ display_name: normalizedCustomerFolderName \} : \{\}\)/,
+  "profile save must send the changed folder name through the existing exact-customer PATCH only",
+);
+assert.match(
+  editorSource,
+  /nextUrl\.searchParams\.set\("name", savedCustomerFolderName\);[\s\S]+?router\.replace\(`\$\{nextUrl\.pathname\}\$\{nextUrl\.search\}`, \{ scroll: false \}\);/,
+  "a successful folder rename must refresh the same customer route and top banner",
+);
+assert.match(
+  editorSource,
+  /if \(guestAccountBillingChanged\) \{[\s\S]+?prestige:customer-guest-account-billing-updated[\s\S]+?\}\s+if \(customerFolderNameChanged\) \{/,
+  "a folder-only rename must not trigger the separate guest-account billing refresh lane",
+);
+assert.match(
+  editorSource,
+  /Controls only this customer folder label and top banner\. Passenger names stay on their bookings\./,
+  "the folder-name control must state its narrow booking-preserving scope",
+);
+assert.match(
+  editorSource,
+  /setMessage\(`Saved customer company profile for[\s\S]+?setStatus\("saved"\);\s+setProfile\(null\);/,
+  "a fully successful profile save must close the existing editor while retaining its saved feedback",
 );
 
 console.log("Customer company profile contact contract guard passed.");

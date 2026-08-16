@@ -55,7 +55,7 @@ const internalQaMockArchiveGroupLabels = [
   "Legacy close-cycle / DSP / receivables / accounting QA",
 ];
 const responsiveTabViewports = [
-  { height: 667, label: "mobile 375px", mobile: true, scale: 2, width: 375 },
+  { height: 844, label: "iPhone 13 / modern phone 390px", mobile: true, scale: 3, width: 390 },
   { height: 915, label: "mobile 412px", mobile: true, scale: 2.625, width: 412 },
   { height: 1024, label: "iPad/tablet 768px", mobile: true, scale: 2, width: 768 },
   { height: 1366, label: "Android tablet 1024px", mobile: false, scale: 1, width: 1024 },
@@ -1433,10 +1433,89 @@ async function runChromeTest() {
         "[data-admin-booking-persistence-panel]",
         "admin booking persistence panel",
       );
-      await evaluate(`(() => {
+      const initialAdminBookingFieldsSet = await evaluate(`(() => {
         window.__adminBookingPersistenceCalls = [];
         window.__adminBookingCalendarSyncCalls = [];
+        window.__adminCorporateIdentityCalls = [];
+        window.__adminCorporateIdentityConfirmMessages = [];
+        window.__adminCorporateRequestSequence = [];
+        window.__adminCorporateVerifiedTravelers = [];
+        window.__adminCorporateOriginalConfirm =
+          window.__adminCorporateOriginalConfirm || window.confirm.bind(window);
+        window.confirm = (message) => {
+          window.__adminCorporateIdentityConfirmMessages.push(String(message));
+          return true;
+        };
         window.__adminBookingPersistenceMockMode = "success";
+        window.__adminBookingPersistedUpdatedAtByReference = {
+          "LOADED-OPS-001": "2026-06-02T00:00:00.000Z",
+          "LOW-REQ-003": "2026-06-02T00:20:00.000Z",
+        };
+        window.__adminBookingOpenRequestFixture = {
+          "LOADED-OPS-001": {
+            booking_reference: "LOADED-OPS-001",
+            public_booking_reference: "91001",
+            source_channel: "customer-booking-request",
+            source_surface: "customer_booking_request",
+            customer_id: 9165,
+            company_id: 33,
+            booker_id: 17,
+            traveler_id: null,
+            pickup_datetime: "2026-06-02T08:15:00+08:00",
+            pickup_location: "Loaded Ops Pickup",
+            dropoff_location: "Loaded Ops Dropoff",
+            route_type: "MNG",
+            customer_display_name: "Loaded Ops Customer",
+            contact_display_name: "Loaded Ops Booker",
+            passenger_name: "Loaded Ops Passenger",
+            contact_phone: "+65 8000 1000",
+            contact_email: "loaded-ops@example.com",
+            pax_count: 2,
+            luggage_count: 3,
+            customer_special_request: "Child seat required\\nEvent starts at 10:00",
+            vehicle_type_or_category: "AVF",
+            customer_facing_status: "Received",
+            admin_internal_status: "Admin Review Required",
+            short_notice_review_status: "Admin Review Required",
+            request_review_status: "pending_review",
+            parser_source_reference: "Flight SQ001",
+            created_at: "2026-06-02T00:00:00.000Z",
+            updated_at: "2026-06-02T00:00:00.000Z",
+            route_points: [
+              {
+                point_type: "pickup",
+                sequence_number: 1,
+                location_text: "Loaded Ops Pickup",
+                timing_note: null,
+              },
+              {
+                point_type: "stop",
+                sequence_number: 2,
+                location_text: "Loaded Ops Stop",
+                timing_note: null,
+              },
+              {
+                point_type: "dropoff",
+                sequence_number: 3,
+                location_text: "Loaded Ops Dropoff",
+                timing_note: null,
+              },
+            ],
+            service_items: [
+              {
+                service_item_type: "child_seat",
+                quantity: 2,
+                blocks_count: null,
+              },
+              {
+                service_item_type: "extra_stop",
+                quantity: 1,
+                blocks_count: null,
+              },
+            ],
+          },
+        };
+        window.__adminBookingExactRecordsByReference = {};
         window.__adminMonthlyBillingGroupingCalls = [];
         window.__adminMonthlyBillingGroupingGroups = [
           {
@@ -1542,6 +1621,21 @@ async function runChromeTest() {
         window.__adminAppNotificationCalls = [];
         window.__adminAppNotifications = [
           {
+            booking_reference: "LOADED-OPS-001",
+            created_at: "2026-06-08T02:01:00.000Z",
+            id: "app-smoke-new-booking-request-one",
+            notification_status: "queued",
+            notification_type: "booking_request",
+            priority: "high",
+            safe_context: {
+              booking_reference: "LOADED-OPS-001",
+            },
+            safe_message: "A new customer booking request is ready for review.",
+            safe_title: "New booking request",
+            updated_at: "2026-06-08T02:01:00.000Z",
+            workflow_area: "new_booking_request",
+          },
+          {
             created_at: "2026-06-08T02:00:00.000Z",
             id: "app-smoke-admin-app-notification-one",
             notification_status: "queued",
@@ -1598,6 +1692,110 @@ async function runChromeTest() {
           const [target, options = {}] = args;
           const url = typeof target === "string" ? target : target?.url || "";
           const method = options?.method || target?.method || "GET";
+          window.__adminCorporateRequestSequence.push(method + " " + String(url));
+
+          if (String(url).includes("/api/admin-customer-accounts")) {
+            window.__adminCorporateIdentityCalls.push({ body: null, method, url: String(url) });
+            return new Response(
+              JSON.stringify({
+                accounts: [
+                  {
+                    account_scope_key: "customer_account",
+                    account_scope_label: null,
+                    completed_count: 0,
+                    customer_account: "Lower Priority Agency",
+                    customer_folder_active: true,
+                    customer_folder_key: "161::customer_account",
+                    customer_id: "161",
+                    guest_account_billing_enabled: true,
+                    latest_booking_reference: "LOW-REQ-003",
+                    latest_public_booking_reference: "91003",
+                    latest_pickup_at: "2030-06-05T14:45:00+08:00",
+                    latest_service_type: "DEP",
+                    saved_booking_count: 1,
+                    source: "admin_booking_persistence",
+                    upcoming_count: 1,
+                    verified_company_id: "44",
+                  },
+                ],
+                ok: true,
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
+          if (String(url).includes("/api/admin-bookers")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            window.__adminCorporateIdentityCalls.push({ body, method, url: String(url) });
+            return new Response(
+              JSON.stringify({
+                booker: {
+                  booker_name: "Loaded Ops Booker",
+                  company_id: 33,
+                  email: "loaded-ops@example.com",
+                  id: 17,
+                  phone: "+65 8000 1000",
+                },
+                ok: true,
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
+          if (String(url).includes("/api/admin-rate-setup")) {
+            window.__adminCorporateIdentityCalls.push({ body: null, method, url: String(url) });
+            return new Response(
+              JSON.stringify({
+                companies: [
+                  { company_name: "Loaded Ops Customer", domain: null, id: 33 },
+                  { company_name: "Lower Priority Agency", domain: null, id: 44 },
+                ],
+                ok: true,
+                settings: null,
+                travelers: window.__adminCorporateVerifiedTravelers || [],
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
+          if (String(url).includes("/api/admin-company-traveler-crm-runtime-write-action")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            window.__adminCorporateIdentityCalls.push({ body, method, url: String(url) });
+            const traveler = {
+              booker_contact: body?.booker_contact || null,
+              booker_email: body?.booker_email || null,
+              booker_id: null,
+              booker_name: body?.booker_name || null,
+              company_id: body?.company_id,
+              id: 30,
+              traveler_name: body?.traveler_name,
+            };
+            window.__adminCorporateVerifiedTravelers = [traveler];
+            return new Response(
+              JSON.stringify({
+                no_op: false,
+                ok: true,
+                reason: "saved",
+                record: traveler,
+                status: "saved",
+              }),
+              { headers: { "Content-Type": "application/json" }, status: 200 },
+            );
+          }
+
+          if (String(url).includes("/api/admin-legacy-data/rest/v1/travelers")) {
+            const body = options?.body ? JSON.parse(String(options.body)) : null;
+            window.__adminCorporateIdentityCalls.push({ body, method, url: String(url) });
+            const traveler = {
+              ...(window.__adminCorporateVerifiedTravelers || [])[0],
+              ...body,
+            };
+            window.__adminCorporateVerifiedTravelers = [traveler];
+            return new Response(JSON.stringify(traveler), {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            });
+          }
 
           if (String(url).includes("/api/admin-customer-driver-app-notifications")) {
             const body = options?.body ? JSON.parse(String(options.body)) : null;
@@ -2154,6 +2352,31 @@ async function runChromeTest() {
             const body = options?.body ? JSON.parse(String(options.body)) : null;
             window.__adminBookingPersistenceCalls.push({ body, method, url: String(url) });
 
+            const parsedAdminBookingUrl = new URL(String(url), window.location.origin);
+            const exactBookingReference =
+              parsedAdminBookingUrl.searchParams.get("booking_reference") || "";
+            const exactBookingRecord =
+              window.__adminBookingExactRecordsByReference?.[exactBookingReference] || null;
+            if (
+              method === "GET" &&
+              parsedAdminBookingUrl.pathname === "/api/admin-bookings" &&
+              exactBookingReference &&
+              (exactBookingRecord ||
+                window.__adminBookingPersistedUpdatedAtByReference[exactBookingReference])
+            ) {
+              return new Response(
+                JSON.stringify({
+                  ok: true,
+                  booking: exactBookingRecord || {
+                      booking_reference: exactBookingReference,
+                      updated_at:
+                        window.__adminBookingPersistedUpdatedAtByReference[exactBookingReference],
+                    },
+                }),
+                { headers: { "Content-Type": "application/json" }, status: 200 },
+              );
+            }
+
             if (method === "POST") {
               if (window.__adminBookingPersistenceMockMode === "save-failure") {
                 return new Response(
@@ -2211,6 +2434,8 @@ async function runChromeTest() {
                 );
               }
 
+              window.__adminBookingPersistedUpdatedAtByReference[body.target_booking_reference] =
+                "2026-06-02T01:00:00.000Z";
               return new Response(
                 JSON.stringify({
                   ok: true,
@@ -2338,12 +2563,17 @@ async function runChromeTest() {
                       booking_reference: "LOADED-OPS-001",
                       public_booking_reference: "91001",
                       source_channel: "admin-dashboard",
-                      customer_id: null,
+                      customer_id: 9165,
+                      company_id: 33,
+                      booker_id: 17,
+                      traveler_id: null,
                       pickup_datetime: "2026-06-02T08:15:00+08:00",
                       pickup_location: "Loaded Ops Pickup",
                       dropoff_location: "Loaded Ops Dropoff",
                       route_type: "MNG",
                       customer_display_name: "Loaded Ops Customer",
+                      contact_display_name: "Loaded Ops Booker",
+                      passenger_name: "Loaded Ops Passenger",
                       contact_phone: "+65 8000 1000",
                       contact_email: "loaded-ops@example.com",
                       pax_count: 2,
@@ -2427,12 +2657,17 @@ async function runChromeTest() {
                     booking_reference: "LOW-REQ-003",
                     public_booking_reference: "91003",
                     source_channel: "customer-booking-request",
-                    customer_id: null,
+                    customer_id: 161,
+                    company_id: 44,
+                    booker_id: null,
+                    traveler_id: null,
                     pickup_datetime: "2030-06-05T14:45:00+08:00",
                     pickup_location: "Lower Priority Pickup",
                     dropoff_location: "Lower Priority Dropoff",
                     route_type: "DEP",
-                    customer_display_name: "Lower Priority Customer",
+                    customer_display_name: "Lower Priority Agency",
+                    contact_display_name: "Agency Operations",
+                    passenger_name: "Agency Guest",
                     contact_phone: "+65 8000 3333",
                     contact_email: "lower-priority@example.com",
                     pax_count: 1,
@@ -2465,16 +2700,22 @@ async function runChromeTest() {
                     booking_reference: "LOADED-OPS-001",
                     public_booking_reference: "91001",
                     source_channel: "customer-booking-request",
-                    customer_id: null,
+                    customer_id: 9165,
+                    company_id: 33,
+                    booker_id: 17,
+                    traveler_id: null,
                     pickup_datetime: "2026-06-02T08:15:00+08:00",
                     pickup_location: "Loaded Ops Pickup",
                     dropoff_location: "Loaded Ops Dropoff",
                     route_type: "MNG",
                     customer_display_name: "Loaded Ops Customer",
+                    contact_display_name: "Loaded Ops Booker",
+                    passenger_name: "Loaded Ops Passenger",
                     contact_phone: "+65 8000 1000",
                     contact_email: "loaded-ops@example.com",
                     pax_count: 2,
-                    luggage_count: null,
+                    luggage_count: 3,
+                    customer_special_request: "Child seat required\\nEvent starts at 10:00",
                     vehicle_type_or_category: "AVF",
                     customer_facing_status: "Received",
                     admin_internal_status: "Admin Review Required",
@@ -2486,7 +2727,8 @@ async function runChromeTest() {
                     internal_admin_note: "DO-NOT-LEAK-OPS-NOTE",
                     payment_link: "https://payments.example.invalid/blocked",
                     created_at: "2026-06-02T00:00:00.000Z",
-                    updated_at: "2026-06-02T00:00:00.000Z",
+                    updated_at:
+                      window.__adminBookingPersistedUpdatedAtByReference["LOADED-OPS-001"],
                     route_points: [
                       {
                         point_type: "pickup",
@@ -2614,6 +2856,39 @@ async function runChromeTest() {
           setField("Pax", "2"),
         ].every(Boolean);
       })()`);
+      assert.equal(
+        initialAdminBookingFieldsSet,
+        true,
+        "Expected every initial Admin operational snapshot field to be found and updated",
+      );
+      await waitForCondition(
+        () =>
+          evaluate(`(async () => {
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const labels = [
+              ...document.querySelectorAll(
+                [
+                  "[data-dispatch-workflow-step='booking-details'] label",
+                  "[data-dispatch-workflow-step='pickup-dropoff-vehicle'] label",
+                  "[data-dispatch-workflow-step='trip-extras'] label",
+                ].join(","),
+              ),
+            ];
+            const valueFor = (labelText) => {
+              const label = labels.find(
+                (candidate) =>
+                  String(candidate.querySelector("span")?.textContent || "").trim().toLowerCase() ===
+                  labelText.toLowerCase(),
+              );
+              return label?.querySelector("input, textarea, select")?.value || "";
+            };
+            return valueFor("Pickup date") === ${JSON.stringify(nonShortNoticeAdminSnapshotPickupDateText)} &&
+              valueFor("Pickup time") === "1030" &&
+              valueFor("Pickup") === "Ops Test Pickup";
+          })()`),
+        10000,
+        "initial Admin operational snapshot fields settled before save",
+      );
 
       const saveClicked = await evaluate(`(() => {
         const button = document.querySelector("[data-admin-booking-persistence-save]");
@@ -2630,7 +2905,13 @@ async function runChromeTest() {
             const postCall = calls.find((call) => call.method === "POST");
             const body = postCall?.body;
             const loadButton = document.querySelector("[data-admin-booking-persistence-load]");
-            if (!feedback.includes("Operational booking saved") || !body || loadButton?.disabled) {
+            const saveSucceeded = feedback.includes("Operational booking saved");
+            const terminalFailure = Boolean(
+              feedback &&
+                !feedback.includes("Saving operational booking fields") &&
+                !feedback.includes("Syncing Google Calendar"),
+            );
+            if ((!saveSucceeded && !terminalFailure) || (!body && !terminalFailure) || loadButton?.disabled) {
               return false;
             }
 
@@ -2663,6 +2944,12 @@ async function runChromeTest() {
           })()`),
         10000,
         "admin booking persistence save feedback",
+      );
+
+      assert.match(
+        saveState.feedback,
+        /Operational booking saved/,
+        `Expected admin operational snapshot save success, received: ${saveState.feedback}`,
       );
 
       assert.deepEqual(
@@ -2852,7 +3139,7 @@ async function runChromeTest() {
         "Expected second loaded operational record preview",
       );
       assert.equal(
-        /Lower Priority Customer/.test(loadState.lowerPriorityRecordText),
+        /Lower Priority Agency/.test(loadState.lowerPriorityRecordText),
         true,
         "Expected lower-priority customer request preview",
       );
@@ -3329,6 +3616,13 @@ async function runChromeTest() {
               .querySelector("[data-admin-booking-persistence-duplicate-guidance]")
               ?.textContent.replace(/\\s+/g, " ")
               .trim() || "";
+            const customerSpecialRequestElement = document.querySelector(
+              "[data-admin-dispatch-customer-special-request='true']",
+            );
+            const customerSpecialRequest = {
+              heading: customerSpecialRequestElement?.querySelector("p:first-child")?.textContent.trim() || "",
+              value: customerSpecialRequestElement?.querySelector("p:last-child")?.textContent.trim() || "",
+            };
             const dispatchReleaseFeedback = document
               .querySelector("[data-admin-dispatch-release-feedback]")
               ?.textContent.replace(/\\s+/g, " ")
@@ -3400,6 +3694,7 @@ async function runChromeTest() {
                   dispatchReleaseFeedback,
                   driverAcknowledgementFeedback,
                   driverStatusCalls: window.__adminDriverJobStatusCalls || [],
+                  customerSpecialRequest,
                   duplicateGuidance,
                   feedback,
                   fields,
@@ -3428,8 +3723,8 @@ async function runChromeTest() {
       );
 
       assert.equal(appliedSnapshotState.fields.company, "Loaded Ops Customer");
-      assert.equal(appliedSnapshotState.fields.booker, "Loaded Ops Customer");
-      assert.equal(appliedSnapshotState.fields.name, "Loaded Ops Customer");
+      assert.equal(appliedSnapshotState.fields.booker, "Loaded Ops Booker");
+      assert.equal(appliedSnapshotState.fields.name, "Loaded Ops Passenger");
       assert.equal(appliedSnapshotState.fields.bookerContact, "+65 8000 1000");
       assert.equal(appliedSnapshotState.fields.bookerEmail, "loaded-ops@example.com");
       assert.equal(appliedSnapshotState.fields.bookingType, "MNG");
@@ -3443,6 +3738,14 @@ async function runChromeTest() {
       assert.equal(appliedSnapshotState.fields.dropoff, "Loaded Ops Dropoff");
       assert.equal(appliedSnapshotState.fields.pax, "2");
       assert.equal(appliedSnapshotState.fields.childSeatCount, "2");
+      assert.deepEqual(
+        appliedSnapshotState.customerSpecialRequest,
+        {
+          heading: "Customer special request",
+          value: "Child seat required\nEvent starts at 10:00",
+        },
+        "Expected the applied request to show its safe multiline note only in Admin Booking Details",
+      );
       assert.equal(appliedSnapshotState.fields.customerPriceOverride, "");
       assert.equal(appliedSnapshotState.fields.driverName, "");
       assert.equal(appliedSnapshotState.fields.manualExtraCharges, "");
@@ -3668,6 +3971,10 @@ async function runChromeTest() {
             const calendarSyncCalls = window.__adminBookingCalendarSyncCalls || [];
             const customerNotificationCalls =
               window.__adminCustomerDriverAppNotificationCalls || [];
+            const corporateIdentityCalls = window.__adminCorporateIdentityCalls || [];
+            const corporateIdentityConfirmMessages =
+              window.__adminCorporateIdentityConfirmMessages || [];
+            const corporateRequestSequence = window.__adminCorporateRequestSequence || [];
             const matchingPatchCalls = calls.filter(
               (call) => call.method === "PATCH" && call.body?.booking?.pickup_location === "Updated Ops Pickup",
             );
@@ -3705,6 +4012,9 @@ async function runChromeTest() {
               appliedReference,
               body,
               calendarSyncCalls,
+              corporateIdentityCalls,
+              corporateIdentityConfirmMessages,
+              corporateRequestSequence,
               customerNotificationCalls,
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
@@ -3729,17 +4039,101 @@ async function runChromeTest() {
         `Expected successful customer request acceptance feedback, received: ${updateState.feedback}`,
       );
       assert.equal(updateState.body.target_booking_reference, "LOADED-OPS-001");
+      assert.equal(
+        updateState.body.expected_updated_at,
+        "2026-06-02T00:00:00.000Z",
+        "Expected applied snapshot update to carry the exact loaded booking version",
+      );
       assert.equal(updateState.body.booking.booking_reference, "LOADED-OPS-001");
       assert.equal(updateState.body.booking.pickup_location, "Updated Ops Pickup");
       assert.equal(updateState.body.booking.dropoff_location, "Updated Ops Dropoff");
       assert.equal(updateState.body.booking.contact_phone, "+65 8000 2000");
       assert.equal(updateState.body.booking.contact_email, "updated-ops@example.com");
       assert.equal(updateState.body.booking.pax_count, 2);
+      assert.equal(
+        updateState.body.booking.luggage_count,
+        3,
+        "Expected applied customer request Save + CRM to preserve the exact bag count",
+      );
+      assert.equal(
+        updateState.body.booking.customer_special_request,
+        "Child seat required\nEvent starts at 10:00",
+        "Expected applied customer request Accept + Cal to preserve the exact customer special request",
+      );
       assert.equal(updateState.body.booking.source_channel, "customer-booking-request");
       assert.equal(updateState.body.booking.customer_facing_status, "confirmed");
       assert.equal(updateState.body.booking.admin_internal_status, "Ready for Confirmation");
       assert.equal(updateState.body.booking.request_review_status, "approved");
       assert.equal(updateState.body.booking.short_notice_review_status, "reviewed");
+      // visible public customer request Accept + Cal identity handoff
+      assert.equal(updateState.body.booking.company_id, 33);
+      assert.equal(updateState.body.booking.booker_id, 17);
+      assert.equal(
+        updateState.body.booking.traveler_id,
+        30,
+        `Expected public customer request Accept + Cal to carry the verified identity tuple. Calls: ${JSON.stringify(
+          updateState.corporateIdentityCalls,
+        )}`,
+      );
+      assert.equal(
+        updateState.corporateIdentityConfirmMessages.length,
+        1,
+        "Expected public customer request Accept + Cal to ask once before saving the new Traveller",
+      );
+      assert.match(
+        updateState.corporateIdentityConfirmMessages[0],
+        /Create or reuse this verified Booker \+ Traveller under Loaded Ops Customer/,
+      );
+      assert.equal(
+        updateState.corporateIdentityCalls.filter(
+          (call) => call.method === "GET" && /\/api\/admin-bookers\?id=17/.test(call.url),
+        ).length,
+        1,
+        "Expected public customer request Accept + Cal to reuse its verified Booker",
+      );
+      assert.equal(
+        updateState.corporateIdentityCalls.filter(
+          (call) => call.method === "POST" && call.body?.action_type === "traveler_create",
+        ).length,
+        1,
+        "Expected public customer request Accept + Cal to create only the missing Traveller",
+      );
+      assert.equal(
+        updateState.corporateIdentityCalls.filter(
+          (call) =>
+            call.method === "PATCH" &&
+            call.url.includes("/api/admin-legacy-data/rest/v1/travelers"),
+        ).length,
+        1,
+        "Expected public customer request Accept + Cal to link the exact Traveller once",
+      );
+      assert.equal(
+        updateState.corporateIdentityCalls.filter(
+          (call) => call.method === "POST" && call.url.includes("/api/admin-bookers"),
+        ).length,
+        0,
+        "Expected public customer request Accept + Cal not to duplicate its verified Booker",
+      );
+      assert.equal(
+        updateState.corporateIdentityCalls.some(
+          (call) => call.method === "GET" && call.url.includes("/api/admin-customer-accounts"),
+        ),
+        true,
+        "Expected public customer request Accept + Cal to freshly verify corporate versus agency shape",
+      );
+      const publicAcceptBookingPatchIndex = updateState.corporateRequestSequence.findIndex(
+        (call) => call === "PATCH /api/admin-bookings",
+      );
+      const publicAcceptRateReadIndexes = updateState.corporateRequestSequence
+        .map((call, index) => ({ call, index }))
+        .filter(({ call }) => call === "GET /api/admin-rate-setup")
+        .map(({ index }) => index);
+      assert.equal(
+        publicAcceptRateReadIndexes.length >= 2 &&
+          publicAcceptRateReadIndexes.at(-1) < publicAcceptBookingPatchIndex,
+        true,
+        "Expected the public customer request pair to reload before Accept + Cal PATCH",
+      );
       assert.equal(
         updateState.calendarSyncCalls.filter((call) => call.method === "POST").length,
         2,
@@ -3778,17 +4172,129 @@ async function runChromeTest() {
         false,
         "Expected the accepted customer request feedback to leave the pending-review state",
       );
+      assert.equal(updateState.appliedReference, "", "Expected successful update to clear edit identity");
+
+      const agencyAcceptBaseline = await evaluate(`(() => ({
+        calendarWrites: (window.__adminBookingCalendarSyncCalls || []).filter(
+          (call) => call.method === "POST",
+        ).length,
+        confirmCount: (window.__adminCorporateIdentityConfirmMessages || []).length,
+        identityWriterCount: (window.__adminCorporateIdentityCalls || []).filter(
+          (call) =>
+            (call.method === "POST" &&
+              (call.url.includes("/api/admin-bookers") ||
+                call.url.includes("/api/admin-company-traveler-crm-runtime-write-action"))) ||
+            (call.method === "PATCH" &&
+              call.url.includes("/api/admin-legacy-data/rest/v1/travelers")),
+        ).length,
+      }))()`);
+      const applyAgencyRequestClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='LOW-REQ-003']");
+        button?.click();
+        return Boolean(button);
+      })()`);
       assert.equal(
-        updateState.appliedReference.includes("LOADED-OPS-001"),
+        applyAgencyRequestClicked,
         true,
-        "Expected applied snapshot reference to remain the update target",
+        "Expected the public Hotel / Tour Agency request to be applicable",
       );
 
       await waitForCondition(
         () =>
           evaluate(`(() => {
             const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
-            return Boolean(button && !button.disabled);
+            const appliedReference = document
+              .querySelector("[data-admin-booking-persistence-applied-reference]")
+              ?.textContent.trim() || "";
+            return Boolean(button && !button.disabled && appliedReference.includes("LOW-REQ-003"));
+          })()`),
+        10000,
+        "public agency request Accept + Cal control ready",
+      );
+
+      const acceptAgencyRequestClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(
+        acceptAgencyRequestClicked,
+        true,
+        "Expected public Hotel / Tour Agency request Accept + Cal to run",
+      );
+
+      const agencyAcceptState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const feedback = document.querySelector("[data-admin-booking-persistence-feedback]")?.textContent.trim() || "";
+            const patch = [...(window.__adminBookingPersistenceCalls || [])]
+              .reverse()
+              .find(
+                (call) =>
+                  call.method === "PATCH" &&
+                  call.body?.target_booking_reference === "LOW-REQ-003",
+              );
+            if (!feedback.includes("Customer booking request accepted: LOW-REQ-003") || !patch) {
+              return false;
+            }
+            return {
+              booking: patch.body?.booking || null,
+              calendarWrites: (window.__adminBookingCalendarSyncCalls || []).filter(
+                (call) => call.method === "POST",
+              ).length,
+              confirmCount: (window.__adminCorporateIdentityConfirmMessages || []).length,
+              identityWriterCount: (window.__adminCorporateIdentityCalls || []).filter(
+                (call) =>
+                  (call.method === "POST" &&
+                    (call.url.includes("/api/admin-bookers") ||
+                      call.url.includes("/api/admin-company-traveler-crm-runtime-write-action"))) ||
+                  (call.method === "PATCH" &&
+                    call.url.includes("/api/admin-legacy-data/rest/v1/travelers")),
+              ).length,
+            };
+          })()`),
+        10000,
+        "public agency request accepted without identity writer",
+      );
+      assert.equal(agencyAcceptState.booking.customer_id, 161);
+      assert.equal(agencyAcceptState.booking.company_id, 44);
+      assert.equal(agencyAcceptState.booking.booker_id, null);
+      assert.equal(agencyAcceptState.booking.traveler_id, null);
+      assert.equal(
+        agencyAcceptState.identityWriterCount,
+        agencyAcceptBaseline.identityWriterCount,
+        "Expected public Hotel / Tour Agency Accept + Cal not to call a Booker or Traveller writer",
+      );
+      assert.equal(
+        agencyAcceptState.confirmCount,
+        agencyAcceptBaseline.confirmCount,
+        "Expected public Hotel / Tour Agency Accept + Cal not to ask for a corporate identity pair",
+      );
+      assert.equal(
+        agencyAcceptState.calendarWrites,
+        agencyAcceptBaseline.calendarWrites + 1,
+        "Expected public Hotel / Tour Agency Accept + Cal to keep the one unchanged Calendar sync",
+      );
+
+      const reapplyAfterSuccessfulUpdateClicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-admin-booking-persistence-apply='LOADED-OPS-001']");
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(
+        reapplyAfterSuccessfulUpdateClicked,
+        true,
+        "Expected exact booking reapply before mocked update failures",
+      );
+
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-admin-booking-persistence-update-applied]");
+            const appliedReference = document
+              .querySelector("[data-admin-booking-persistence-applied-reference]")
+              ?.textContent.trim() || "";
+            return Boolean(button && !button.disabled && appliedReference.includes("LOADED-OPS-001"));
           })()`),
         10000,
         "admin booking persistence update control ready for failure check",
@@ -4363,7 +4869,73 @@ async function runChromeTest() {
         "Expected admin booking persistence state not to be written to browser storage",
       );
 
-      await evaluate(`window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch`);
+      await evaluate(`(() => {
+        window.__adminBookingExactRecordsByReference =
+          window.__adminBookingOpenRequestFixture || {};
+      })()`);
+      await clickTab("Dashboard");
+      await waitForSelector(
+        evaluate,
+        "[data-dashboard-new-booking-request-notification-row='LOADED-OPS-001']",
+        "new booking request notification for exact-record reload",
+      );
+      const openExactRequestClicked = await evaluate(`(() => {
+        const row = document.querySelector(
+          "[data-dashboard-new-booking-request-notification-row='LOADED-OPS-001']",
+        );
+        const button = row?.querySelector(
+          "[data-admin-app-notification-review-new-booking-request='true']",
+        );
+        button?.click();
+        return Boolean(button);
+      })()`);
+      assert.equal(
+        openExactRequestClicked,
+        true,
+        "Expected Open request on the exact customer booking notification",
+      );
+      const openedExactRequestState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const specialRequest = document.querySelector(
+              "[data-admin-dispatch-customer-special-request='true']",
+            );
+            const exactRead = (window.__adminBookingPersistenceCalls || []).find((call) => {
+              const parsedUrl = new URL(call.url, window.location.origin);
+              return call.method === "GET" &&
+                parsedUrl.pathname === "/api/admin-bookings" &&
+                parsedUrl.searchParams.get("booking_reference") === "LOADED-OPS-001";
+            });
+            const activeDispatch = document.querySelector(
+              "[data-admin-booking-persistence-applied-identity]",
+            )?.textContent || "";
+
+            return specialRequest && exactRead && activeDispatch.includes("LOADED-OPS-001")
+              ? {
+                  heading: specialRequest.querySelector("p:first-child")?.textContent.trim() || "",
+                  value: specialRequest.querySelector("p:last-child")?.textContent.trim() || "",
+                }
+              : false;
+          })()`),
+        10000,
+        "Open request exact full-record Special Request display",
+      );
+      assert.deepEqual(
+        openedExactRequestState,
+        {
+          heading: "Customer special request",
+          value: "Child seat required\nEvent starts at 10:00",
+        },
+        "Expected Open request to render the persisted Special Request after one exact guarded read",
+      );
+      await evaluate(`(() => {
+        window.localStorage.removeItem("prestige-admin-handled-customer-booking-requests");
+      })()`);
+
+      await evaluate(`(() => {
+        window.fetch = window.__adminBookingPersistenceOriginalFetch || window.fetch;
+        window.confirm = window.__adminCorporateOriginalConfirm || window.confirm;
+      })()`);
 
       const validAdminBookingApiPayload = {
         booking: {
@@ -5019,7 +5591,7 @@ async function runChromeTest() {
       const customerUnknownResponse = await fetch(customerBookingRequestApiUrl, {
         body: JSON.stringify({
           ...validCustomerBookingRequestApiPayload,
-          specialRequest: "Do not accept unknown customer note fields in this intake stage",
+          vehicleCount: "2",
         }),
         headers: customerBookingRequestHeaders,
         method: "POST",
@@ -5350,10 +5922,21 @@ async function runChromeTest() {
 
       const tabStates = [];
       for (const label of tabLabels) {
+        if (viewport.width < 640) {
+          const tabPrepared = await evaluate(`(() => {
+            const tab = [...document.querySelectorAll("button[role='tab']")].find(
+              (button) => button.textContent.trim() === ${JSON.stringify(label)},
+            );
+            tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+            return Boolean(tab);
+          })()`);
+          assert.equal(tabPrepared, true, `${viewport.label}: expected ${label} tab in the phone scroller`);
+        }
         await clickTab(label);
         const tabState = await evaluate(`(() => {
           const doc = document.documentElement;
           const nav = document.querySelector("nav[role='tablist']");
+          const navRect = nav?.getBoundingClientRect();
           const buttons = [...document.querySelectorAll("button[role='tab']")].map((button) => {
             const rect = button.getBoundingClientRect();
 
@@ -5377,8 +5960,15 @@ async function runChromeTest() {
             docClientWidth: doc.clientWidth,
             docScrollWidth: doc.scrollWidth,
             expectedTextVisible: expectedText ? document.body.innerText.includes(expectedText) : true,
+            innerWidth: window.innerWidth,
+            mediaMax639: window.matchMedia("(max-width: 639px)").matches,
             navClientWidth: nav?.clientWidth || 0,
+            navLeft: Math.round(navRect?.left || 0),
+            navOverflowX: nav ? getComputedStyle(nav).overflowX : "",
+            navRight: Math.round(navRect?.right || 0),
             navScrollWidth: nav?.scrollWidth || 0,
+            selectedLeft: selected?.left || 0,
+            selectedRight: selected?.right || 0,
             tabButtons: buttons,
           };
         })()`);
@@ -5396,16 +5986,37 @@ async function runChromeTest() {
           true,
           `${viewport.label} ${label}: expected no document-level horizontal overflow`,
         );
-        assert.equal(
-          tabState.navScrollWidth <= tabState.navClientWidth + 2,
-          true,
-          `${viewport.label} ${label}: expected tabs not to require horizontal scrolling`,
-        );
-        assert.deepEqual(
-          offscreenTabs,
-          [],
-          `${viewport.label} ${label}: expected all tabs visible within viewport`,
-        );
+        if (viewport.width < 640) {
+          assert.equal(
+            ["auto", "scroll"].includes(tabState.navOverflowX),
+            true,
+            `${viewport.label} ${label}: expected the established phone tab row to remain swipeable (overflow=${tabState.navOverflowX}, innerWidth=${tabState.innerWidth}, mediaMax639=${tabState.mediaMax639})`,
+          );
+          assert.equal(
+            tabState.navScrollWidth > tabState.navClientWidth + 2,
+            true,
+            `${viewport.label} ${label}: expected the established phone tab row to retain scrollable content`,
+          );
+          assert.equal(
+            Boolean(
+              tabState.selectedLeft >= tabState.navLeft - 2 &&
+                tabState.selectedRight <= tabState.navRight + 2,
+            ),
+            true,
+            `${viewport.label} ${label}: expected the selected phone tab to scroll fully into view`,
+          );
+        } else {
+          assert.equal(
+            tabState.navScrollWidth <= tabState.navClientWidth + 2,
+            true,
+            `${viewport.label} ${label}: expected tablet/desktop tabs not to require horizontal scrolling`,
+          );
+          assert.deepEqual(
+            offscreenTabs,
+            [],
+            `${viewport.label} ${label}: expected all tablet/desktop tabs visible within viewport`,
+          );
+        }
         assert.deepEqual(
           smallTouchTargets,
           [],
@@ -32642,7 +33253,6 @@ async function runChromeTest() {
             }
 
             window.__customerBookingRequestCalls.push({ body, method, url });
-
             if (window.__customerBookingRequestMockMode === "disabled") {
               return new Response(
                 JSON.stringify({
@@ -32760,6 +33370,12 @@ async function runChromeTest() {
           evaluate,
           "[data-customer-booking-page]",
           `${viewport.label} customer-facing booking route`,
+        );
+        await waitForCondition(
+          () =>
+            evaluate(`document.querySelector("[data-customer-booking-submit]")?.textContent.trim() === "Submit Booking Request"`),
+          10000,
+          `${viewport.label} customer booking access resolution`,
         );
       } finally {
         await client.send("Page.removeScriptToEvaluateOnNewDocument", {
@@ -33391,6 +34007,8 @@ async function runChromeTest() {
           serviceOptionValues: [
             ...document.querySelectorAll("[data-customer-booking-field='serviceType'] option"),
           ].map((option) => option.value),
+          submitDisabled: Boolean(submit?.disabled),
+          submitText: submit?.textContent.trim() || "",
           submitVisible: Boolean(submitRect && submitRect.width > 0 && submitRect.height >= 44),
           text,
           vehicleOptionLabels: [
@@ -33423,10 +34041,10 @@ async function runChromeTest() {
         initialState.portalLink,
         {
           href: "/my-bookings",
-          text: "Portal",
+          text: "My Bookings",
           visible: true,
         },
-        "Expected /book to expose a compact Portal link to /my-bookings",
+        "Expected /book to expose a compact My Bookings link to /my-bookings",
       );
       assert.equal(initialState.confirmationStatus.visible, false, "Expected /book status panel to wait for submit");
       assert.equal(
@@ -33657,9 +34275,8 @@ async function runChromeTest() {
         "Type of service",
         "Vehicle type",
         "Number of passengers",
-        "Luggage",
+        "Number of bags",
         "Extra stops",
-        "Special request / note",
       ]) {
         assert.equal(initialState.text.includes(expectedField), true, `Expected /book field: ${expectedField}`);
       }
@@ -33988,6 +34605,10 @@ async function runChromeTest() {
       await setCustomerBookingField("passengerCount", "2");
       await setCustomerBookingField("luggage", "2");
       await setCustomerBookingField("extraStops", "Customer Test Stop");
+      await setCustomerBookingField(
+        "specialRequest",
+        "Child seat required\nEvent starts at 10:00",
+      );
       const requiredOnlyState = await readCustomerBookingPageState();
       assert.equal(requiredOnlyState.fieldState.pickupTime.value, "09:30", "Expected compact time input to set pickupTime");
       assert.equal(
@@ -34033,8 +34654,11 @@ async function runChromeTest() {
       const validState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText ===
-            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
+          return candidateState.customerBookingRequestCalls.length === 1 &&
+            candidateState.submitDisabled &&
+            candidateState.submitText === "Submitted" &&
+            candidateState.feedbackText ===
+              "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -34103,6 +34727,7 @@ async function runChromeTest() {
           "returnPickupTime",
           "returnTripRequested",
           "serviceType",
+          "specialRequest",
           "travelerId",
           "vehicleType",
         ],
@@ -34125,7 +34750,6 @@ async function runChromeTest() {
           "liveLocation",
           "proofPhoto",
           "parserLearning",
-          "specialRequest",
         ].filter((key) => Object.prototype.hasOwnProperty.call(validState.customerBookingRequestCalls[0].body, key)),
         [],
         "Expected /book not to send forbidden finance/customer/driver/private fields",
@@ -34152,6 +34776,7 @@ async function runChromeTest() {
           returnPickupTime: validState.customerBookingRequestCalls[0].body.returnPickupTime,
           returnTripRequested: validState.customerBookingRequestCalls[0].body.returnTripRequested,
           serviceType: validState.customerBookingRequestCalls[0].body.serviceType,
+          specialRequest: validState.customerBookingRequestCalls[0].body.specialRequest,
           travelerId: validState.customerBookingRequestCalls[0].body.travelerId,
           vehicleType: validState.customerBookingRequestCalls[0].body.vehicleType,
         },
@@ -34176,6 +34801,7 @@ async function runChromeTest() {
           returnPickupTime: "",
           returnTripRequested: "",
           serviceType: "Airport Arrival",
+          specialRequest: "Child seat required\nEvent starts at 10:00",
           travelerId: "",
           vehicleType: "Alphard / Vellfire",
         },
@@ -34199,13 +34825,62 @@ async function runChromeTest() {
         "Expected valid /book submit not to show same-date or same-time blocking",
       );
 
-      await setCustomerBookingField("luggage", "2 bags");
+      await setCustomerBookingField("specialRequest", "x".repeat(501));
+      await clickCustomerBookingSubmit("oversized customer special request");
+      const oversizedSpecialRequestState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText === "Special request must be 500 characters or fewer."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "oversized customer special request feedback",
+      );
+      assert.equal(
+        oversizedSpecialRequestState.feedbackTone,
+        "error",
+        "Expected oversized customer special request to fail visibly",
+      );
+      assert.equal(
+        oversizedSpecialRequestState.customerBookingRequestCalls.length,
+        1,
+        "Expected oversized customer special request not to submit another customer request",
+      );
+      await setCustomerBookingField(
+        "specialRequest",
+        "Child seat required\nEvent starts at 10:00",
+      );
+
+      await setCustomerBookingField("luggage", "2.5");
+      await clickCustomerBookingSubmit("invalid decimal luggage count");
+      const invalidLuggageState = await waitForCondition(
+        async () => {
+          const candidateState = await readCustomerBookingPageState();
+          return candidateState.feedbackText === "Enter the number of bags as a whole number."
+            ? candidateState
+            : false;
+        },
+        10000,
+        "invalid luggage count feedback",
+      );
+      assert.equal(invalidLuggageState.feedbackTone, "error", "Expected invalid luggage count to fail visibly");
+      assert.equal(
+        invalidLuggageState.customerBookingRequestCalls.length,
+        1,
+        "Expected invalid luggage count not to submit another customer request",
+      );
+
+      await setCustomerBookingField("luggage", "2");
       await clickCustomerBookingSubmit("second valid customer booking request for same pickup date/time after edit");
       const sameTimeRepeatState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText ===
-            "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
+          return candidateState.customerBookingRequestCalls.length === 2 &&
+            candidateState.submitDisabled &&
+            candidateState.submitText === "Submitted" &&
+            candidateState.feedbackText ===
+              "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
         },
@@ -34252,7 +34927,10 @@ async function runChromeTest() {
       const shortNoticeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText ===
+          return candidateState.customerBookingRequestCalls.length === 3 &&
+            candidateState.submitDisabled &&
+            candidateState.submitText === "Submitted" &&
+            candidateState.feedbackText ===
             "Booking request CUST-REQUEST-001 received. Receipt email sent to customer-test@example.com."
             ? candidateState
             : false;
@@ -34280,18 +34958,23 @@ async function runChromeTest() {
         customerBookingRequestRuntimeAllowedPattern,
       );
 
-      await setCustomerBookingField("luggage", "2 bags retry");
+      await setCustomerBookingField("luggage", "3");
       const failureClicked = await evaluate(`(() => {
         window.__customerBookingRequestMockMode = "disabled";
         const button = document.querySelector("[data-customer-booking-submit]");
-        button?.click();
-        return Boolean(button);
+        if (!button || button.disabled) {
+          return false;
+        }
+        button.click();
+        return true;
       })()`);
       assert.equal(failureClicked, true, "Expected /book submit button for disabled intake check");
       const disabledIntakeState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerBookingPageState();
-          return candidateState.feedbackText.includes("Booking request could not be submitted right now")
+          return candidateState.customerBookingRequestCalls.length === 4 &&
+            !candidateState.submitDisabled &&
+            candidateState.feedbackText.includes("Booking request could not be submitted right now")
             ? candidateState
             : false;
         },
@@ -34680,6 +35363,8 @@ async function runChromeTest() {
         return {
           activeSection: activeSection?.textContent.trim() || "",
           activeFilter: activeFilter?.textContent.trim() || "",
+          buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
+          buildMarkerText: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
           detailId: detail?.getAttribute("data-customer-portal-detail") || "",
           detailText: detail?.innerText || "",
           docClientWidth: document.documentElement.clientWidth,
@@ -35435,6 +36120,12 @@ async function runChromeTest() {
         "customer portal saved bookings API rows",
       );
       assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
+      assert.equal(initialState.buildMarkerCount, 1, "Expected /my-bookings to show one shared public build marker");
+      assert.match(
+        initialState.buildMarkerText,
+        /^Build (?:[a-f0-9]{8}|unavailable)$/,
+        "Expected /my-bookings to show only the safe short build marker",
+      );
       assert.equal(
         initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
         true,
@@ -35991,6 +36682,7 @@ async function runChromeTest() {
             const submitButton = document.querySelector("[data-customer-booking-submit]");
 
             return {
+              buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
               href: location.href,
               pathname: location.pathname,
               submitVisible: Boolean(submitButton),
@@ -36014,6 +36706,11 @@ async function runChromeTest() {
         routedBookingRequestState.text.includes("Booking Request"),
         true,
         "Expected /my-bookings New Booking Request to open the canonical /book form",
+      );
+      assert.equal(
+        routedBookingRequestState.buildMarkerCount,
+        0,
+        "Expected /book to stay outside the installed Customer Portal build marker scope",
       );
       assert.equal(
         routedBookingRequestState.text.includes("Verify your mobile for a first public booking") &&
@@ -36942,14 +37639,22 @@ async function runChromeTest() {
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
       }))()`);
 
-    const assertNoForbiddenDriverJobNetwork = (networkState, context) => {
+    const assertNoForbiddenDriverJobNetwork = (
+      networkState,
+      context,
+      allowedExactDriverJobPaths = [],
+    ) => {
       const calls = [
         ...networkState.fetchCalls,
         ...networkState.networkCalls,
         ...networkState.resourceCalls,
       ];
       assert.deepEqual(
-        calls.filter((call) => blockedDriverJobIntegrationPattern.test(call)),
+        calls.filter(
+          (call) =>
+            blockedDriverJobIntegrationPattern.test(call) &&
+            !allowedExactDriverJobPaths.some((path) => call.includes(path)),
+        ),
         [],
         `${context}: expected no Supabase, notification, WhatsApp, email, SMS, calendar, live-location, flight, file/photo, invoice, PDF, payment, or bank calls`,
       );
@@ -37313,6 +38018,7 @@ async function runChromeTest() {
     const checkDriverJobRoute = async (viewport) => {
       const driverJobEndpointPath = `/api/driver-job/${driverJobWorkflowToken}`;
       const statusEndpointPath = `/api/driver-job/${driverJobWorkflowToken}/status`;
+      const liveLocationEndpointPath = `/api/driver-job/${driverJobWorkflowToken}/live-location`;
       await setDriverJobViewportAndLoad(viewport);
 
       const initialState = await readDriverJobState();
@@ -37457,11 +38163,20 @@ async function runChromeTest() {
       assert.deepEqual(
         initialState.driverWorkflowHandoff.items,
         [
+          "Open the private link in Safari. Tap Save & Acknowledge Job.",
+          "Install Driver Portal from your browser for best results.",
+          "Add to Home Screen from this acknowledged page.",
+          "Open Driver Portal from your Home Screen.",
+          "Already installed before saving? Add it again from this acknowledged page.",
+          "Tap Enable Job Alerts. Allow notifications.",
+          "WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.",
+          "Tap OTW to save status and start sharing. Allow location.",
+          "Allow camera/photos only for OTS photo.",
           "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
-          "Confirm driver and vehicle details once, then use the status buttons only when ready.",
+          "Use the status buttons only when ready.",
           "Use Report Issue when admin needs an in-app alert.",
         ],
-        `${viewport.label}: expected driver handoff to explain review, confirm-details, status, and report issue steps`,
+        `${viewport.label}: expected driver handoff to explain onboarding, review, status, and report issue steps`,
       );
       assert.equal(
         initialState.driverWorkflowHandoff.boundary,
@@ -37659,10 +38374,19 @@ async function runChromeTest() {
         assert.equal(blockedState.currentStatus, expectedStatus);
         const afterNetwork = await readDriverJobNetworkState();
         assert.deepEqual(afterNetwork.fetchCalls, beforeNetwork.fetchCalls, `${viewport.label}: expected blocked ${label} to stay local`);
-        assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} blocked ${label}`);
+        assertNoForbiddenDriverJobNetwork(
+          afterNetwork,
+          `${viewport.label} blocked ${label}`,
+          [liveLocationEndpointPath],
+        );
       };
 
-      const clickValidDriverJobStatus = async (label, expectedStatus, expectedMessage) => {
+      const clickValidDriverJobStatus = async (
+        label,
+        expectedStatus,
+        expectedMessage,
+        allowedAdditionalEndpointPaths = [],
+      ) => {
         const beforeNetwork = await readDriverJobNetworkState();
         await clickDriverJobButton(
           `[data-driver-job-status="${label}"]`,
@@ -37692,7 +38416,11 @@ async function runChromeTest() {
         const afterNetwork = await readDriverJobNetworkState();
         const newFetchCalls = afterNetwork.fetchCalls.slice(beforeNetwork.fetchCalls.length);
         assert.deepEqual(
-          newFetchCalls.filter((call) => !call.includes(statusEndpointPath)),
+          newFetchCalls.filter(
+            (call) =>
+              !call.includes(statusEndpointPath) &&
+              !allowedAdditionalEndpointPaths.some((path) => call.includes(path)),
+          ),
           [],
           `${viewport.label}: expected ${label} to call only the protected driver job status endpoint`,
         );
@@ -37701,7 +38429,11 @@ async function runChromeTest() {
           1,
           `${viewport.label}: expected ${label} to call the protected driver job status endpoint once`,
         );
-        assertNoForbiddenDriverJobNetwork(afterNetwork, `${viewport.label} ${label}`);
+        assertNoForbiddenDriverJobNetwork(
+          afterNetwork,
+          `${viewport.label} ${label}`,
+          [liveLocationEndpointPath],
+        );
       };
 
       await clickBlockedDriverJobStatus("OTW", "Save & Acknowledge Job before updating status.", "Assigned");
@@ -37743,7 +38475,12 @@ async function runChromeTest() {
         `${viewport.label}: expected driver details save and acknowledgement to use the token-scoped driver job endpoint once`,
       );
 
-      await clickValidDriverJobStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+      await clickValidDriverJobStatus(
+        "OTW",
+        "I'm on the way",
+        "OTW is saved. Live location is not ready. Tap Retry Share Location.",
+        [liveLocationEndpointPath],
+      );
       await clickBlockedDriverJobStatus("POB", "Update OTS before POB.", "I'm on the way");
       await clickValidDriverJobStatus("OTS", "I've arrived", "Status updated to I've arrived.");
       await clickBlockedDriverJobStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
@@ -37751,16 +38488,30 @@ async function runChromeTest() {
       await clickValidDriverJobStatus("Job Completed", "Completed", "Status updated to Completed.");
 
       const finalNetwork = await readDriverJobNetworkState();
-      assertNoForbiddenDriverJobNetwork(finalNetwork, `${viewport.label} completed driver job link workflow`);
+      assertNoForbiddenDriverJobNetwork(
+        finalNetwork,
+        `${viewport.label} completed driver job link workflow`,
+        [liveLocationEndpointPath],
+      );
       assert.deepEqual(
         finalNetwork.fetchCalls.filter((call) => call.includes(statusEndpointPath)).length,
         4,
         `${viewport.label}: expected exactly four protected mock status API calls for OTW, OTS, POB, and Job Completed`,
       );
       assert.deepEqual(
-        finalNetwork.fetchCalls.filter((call) => call.includes(driverJobEndpointPath) && !call.includes(statusEndpointPath)),
+        finalNetwork.fetchCalls.filter(
+          (call) =>
+            call.includes(driverJobEndpointPath) &&
+            !call.includes(statusEndpointPath) &&
+            !call.includes(liveLocationEndpointPath),
+        ),
         [`PATCH ${driverJobEndpointPath}`],
         `${viewport.label}: expected exactly one token-scoped driver detail save call`,
+      );
+      assert.deepEqual(
+        finalNetwork.fetchCalls.filter((call) => call.includes(liveLocationEndpointPath)),
+        [`GET ${liveLocationEndpointPath}`],
+        `${viewport.label}: expected OTW to perform one token-scoped live-location readiness read only`,
       );
       const finalDriverJobState = await readDriverJobState();
       assert.deepEqual(
@@ -39866,6 +40617,23 @@ async function runChromeTest() {
         viewport: viewport.label,
       };
     };
+
+    if (process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-booking") {
+      reporter.step("focused customer booking route");
+      const customerBooking = await checkCustomerBookingRoute();
+      console.log(
+        JSON.stringify(
+          reporter.summary({
+            customerBooking,
+            ok: true,
+            scope: "customer-booking",
+          }),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
 
     await evaluate(`window.__prestigeErrors = [];
       window.__prestigeConsoleErrors = [];

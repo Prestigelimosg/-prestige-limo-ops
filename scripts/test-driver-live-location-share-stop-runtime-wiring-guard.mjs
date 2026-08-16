@@ -50,6 +50,14 @@ const ledgerSection = sectionBetween(
   ledger,
   "### Driver Live Location Share/Stop Runtime Wiring Guard Lock",
 );
+const mergedControlLedgerSection = sectionBetween(
+  ledger,
+  "### Merged Driver OTW And Live Location Control (2026-08-07)",
+);
+const guardScopeAlignmentLedgerSection = sectionBetween(
+  ledger,
+  "### Driver Live Location Guard Scope Alignment (2026-08-12)",
+);
 const liveLocationTypeStart = driverJobPage.indexOf("type DriverLiveLocationApiResponse");
 const liveLocationSafetyStart = driverJobPage.indexOf("function driverLiveLocationRoute");
 const liveLocationFunctionEnd = driverJobPage.indexOf("async function updateStatus");
@@ -60,7 +68,28 @@ const driverPageLiveLocationSafetySource = driverJobPage.slice(
   liveLocationSafetyStart,
   liveLocationFunctionEnd,
 );
-const appRuntimeSafetySource = `${driverPageLiveLocationSafetySource}\n${driverLiveLocationRoute}\n${runtimeHelper}`;
+const establishedDriverAppUpdatesRefreshPattern =
+  /const driverAppUpdatesRefreshInterval = window\.setInterval\(\s*refreshDriverAppUpdatesWhileVisible,\s*DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS,\s*\);/;
+const establishedDriverAppUpdatesCleanupPattern =
+  /window\.clearInterval\(driverAppUpdatesRefreshInterval\);/;
+assertMatches(
+  driverPageLiveLocationSafetySource,
+  establishedDriverAppUpdatesRefreshPattern,
+  "established visible Driver App Updates refresh must stay identifiable outside the GPS lane",
+);
+assertMatches(
+  driverPageLiveLocationSafetySource,
+  establishedDriverAppUpdatesCleanupPattern,
+  "established visible Driver App Updates refresh cleanup must stay identifiable outside the GPS lane",
+);
+const driverPageLiveLocationSafetySourceWithoutAppUpdatesRefresh =
+  driverPageLiveLocationSafetySource
+    .replace(
+      establishedDriverAppUpdatesRefreshPattern,
+      "/* established visible Driver App Updates refresh excluded from GPS safety scope */",
+    )
+    .replace(establishedDriverAppUpdatesCleanupPattern, "");
+const appRuntimeSafetySource = `${driverPageLiveLocationSafetySourceWithoutAppUpdatesRefresh}\n${driverLiveLocationRoute}\n${runtimeHelper}`;
 const appRuntimeSafetySourceWithoutDenylist = appRuntimeSafetySource.replace(
   /function hasForbiddenSafeText[\s\S]*?\n}\n\nfunction asRecord/,
   "function asRecord",
@@ -84,8 +113,38 @@ for (const phrase of [
 
 assertIncludes(preactivationSuite, guardScript, "preactivation share/stop guard registration");
 
+for (const phrase of [
+  "persists OTW through the unchanged token-scoped status lane and only then starts the existing live-location readiness",
+  "Later taps never repeat, undo, or append another OTW event.",
+  "One shared in-browser action lock prevents ordinary double taps",
+  "The former separate Live Location section, Share/Stop buttons, and visible Permission, Last shared, and State readouts are removed.",
+  "Reopening an OTW-or-later job performs only the existing readiness GET; it never requests GPS or restarts the browser watch automatically.",
+]) {
+  assertIncludes(mergedControlLedgerSection, phrase, `merged OTW/location ledger phrase ${phrase}`);
+}
+
+for (const phrase of [
+  "the only matched timer is the already-established visible `Driver App Updates` notification refresh",
+  "It calls only the token-scoped notification read while the page is visible",
+  "They still fail if any second interval, any timeout, any `sendBeacon`, or any timer appears elsewhere",
+  "No Driver Job page, Companion source, message refresh, API, route, runtime helper, GPS behavior, Production data, Apple credential, signed build, or TestFlight record changes",
+]) {
+  assertIncludes(
+    guardScopeAlignmentLedgerSection,
+    phrase,
+    `guard scope alignment ledger phrase ${phrase}`,
+  );
+}
+
 for (const fragment of [
-  'const driverLiveLocationUiState = pageState.kind === "ready" ? "runtime-check" : "disabled";',
+  "handleOtwLiveLocationControl",
+  'data-driver-otw-live-location-control="true"',
+  'data-driver-otw-live-location-feedback="true"',
+  '"Saving OTW…"',
+  '"Stop Sharing"',
+  '"Share Location Again"',
+  '"Retry Share Location"',
+  '"Retry Stop Sharing"',
   "checkDriverLiveLocationReadiness",
   "requestDriverLiveLocationPosition",
   "postDriverLiveLocationPosition",
@@ -96,15 +155,27 @@ for (const fragment of [
   "navigator.geolocation.getCurrentPosition",
   "navigator.geolocation.watchPosition",
   "navigator.geolocation.clearWatch",
-  "onClick={shareDriverLiveLocation}",
-  "onClick={stopDriverLiveLocation}",
+  "onClick={handleOtwLiveLocationControl}",
   "data-driver-live-location-feedback=\"true\"",
-  "data-driver-live-location-share-button={driverLiveLocationUiState}",
-  "data-driver-live-location-stop-button={driverLiveLocationUiState}",
   "customerVisible !== false",
   "external_send !== false",
 ]) {
   assertIncludes(driverJobPage, fragment, `driver page share/stop fragment ${fragment}`);
+}
+
+for (const removedFragment of [
+  'data-driver-primary-step="live-location-consent"',
+  'data-driver-live-location-share-button={driverLiveLocationUiState}',
+  'data-driver-live-location-stop-button={driverLiveLocationUiState}',
+  ">Permission<",
+  ">Last shared<",
+  ">State<",
+]) {
+  assert.equal(
+    driverJobPage.includes(removedFragment),
+    false,
+    `merged OTW control must remove ${removedFragment}`,
+  );
 }
 
 assertMatches(
@@ -131,6 +202,27 @@ assertMatches(
   driverJobPage,
   /async function stopDriverLiveLocation\(\)[\s\S]*?stopDriverLiveLocationBrowserWatch\(\);[\s\S]*?method: "DELETE"/,
   "Stop Sharing must clear the browser watch before the guarded stop route",
+);
+
+const mergedControlStart = driverJobPage.indexOf("async function handleOtwLiveLocationControl");
+const mergedControlEnd = driverJobPage.indexOf("const driverOtwRecorded", mergedControlStart);
+assert.notEqual(mergedControlStart, -1, "merged OTW/location handler must exist");
+assert.notEqual(mergedControlEnd, -1, "merged OTW/location handler boundary must exist");
+const mergedControlSource = driverJobPage.slice(mergedControlStart, mergedControlEnd);
+assertMatches(
+  mergedControlSource,
+  /const otwSaved = await updateStatus\("OTW", "OTW", "I'm on the way"\);[\s\S]*?if \(!otwSaved\) \{[\s\S]*?return;[\s\S]*?await shareDriverLiveLocation\(\);/,
+  "merged control must persist OTW before location start and stop when OTW fails",
+);
+assert.equal(
+  (mergedControlSource.match(/updateStatus\(/g) || []).length,
+  1,
+  "merged control must contain exactly one OTW status write path",
+);
+assertMatches(
+  mergedControlSource,
+  /driverLiveLocation\.retryAction === "stop"[\s\S]*?driverLiveLocation\.sharingState === "active"[\s\S]*?await stopDriverLiveLocation\(\);[\s\S]*?return;[\s\S]*?await shareDriverLiveLocation\(\);/,
+  "every post-OTW merged-control tap must use only the existing stop or share lane",
 );
 
 for (const fragment of [
@@ -167,6 +259,19 @@ for (const forbiddenPattern of [
 ]) {
   assertExcludes(appRuntimeSafetySource, forbiddenPattern, "driver live-location share/stop runtime wiring");
 }
+
+assert.equal(
+  (driverJobPage.match(/\bsetInterval\s*\(/g) || []).length,
+  1,
+  "the production Driver Job page may retain only the established visible App Updates refresh interval",
+);
+assertExcludes(
+  driverJobPage
+    .replace(establishedDriverAppUpdatesRefreshPattern, "")
+    .replace(establishedDriverAppUpdatesCleanupPattern, ""),
+  /setInterval|setTimeout|sendBeacon/i,
+  "production Driver Job page outside the established App Updates refresh",
+);
 
 assertExcludes(
   appRuntimeSafetySourceWithoutDenylist,

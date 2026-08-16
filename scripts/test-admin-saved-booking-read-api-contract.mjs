@@ -380,6 +380,7 @@ const seed = {
       flight_no: "SQ333",
       route: "Changi Airport T3 > Raffles Hotel Singapore",
       pax: 2,
+      luggage_count: 3,
       job_card: "AVF MNG\n27 May 2026, 1530hrs\nName: Contract Traveler",
       status: "assigned",
       driver_id: 51,
@@ -638,6 +639,7 @@ try {
   assert.equal(readResult.body.booking.travelers.traveler_name, "CONTRACT TRAVELER");
   assert.equal(readResult.body.booking.customer_price_amount, 88);
   assert.equal(readResult.body.booking.driver_payout_amount, 55);
+  assert.equal(readResult.body.booking.luggage_count, 3);
   assert.equal(readResult.body.booking.internal_admin_note, undefined);
   assert.equal(readResult.body.booking.parser_debug, undefined);
   assert.equal(validMock.createdClients.length, 1);
@@ -652,6 +654,7 @@ try {
   ]);
   assert.equal(validMock.client.selectHistory[0].limit, 1);
   assert.equal(validMock.client.selectHistory[0].selectedColumns.includes("bookings("), false);
+  assert.equal(validMock.client.selectHistory[0].selectedColumns.includes("luggage_count"), true);
   assert.equal(validMock.client.selectHistory[0].selectedColumns.includes("internal_admin_note"), false);
   assert.equal(validMock.client.selectHistory[0].selectedColumns.includes("parser_debug"), false);
   assertNoWrites(validMock, "valid read");
@@ -723,6 +726,7 @@ try {
   assert.equal(listResult.body.bookings[0].companies.company_name, "OTHER COMPANY");
   assert.equal(listResult.body.bookings[1].customer_price_amount, 88);
   assert.equal(listResult.body.bookings[1].driver_payout_amount, 55);
+  assert.equal(listResult.body.bookings[1].luggage_count, 3);
   assert.equal(listResult.body.bookings[1].internal_admin_note, undefined);
   assert.equal(listResult.body.bookings[1].parser_debug, undefined);
   assert.equal(listMock.createdClients.length, 1);
@@ -775,6 +779,13 @@ try {
           traveler_id: 22,
           updated_at: "2026-06-30T16:05:00.000Z",
           vehicle_type_or_category: "AVF",
+          booking_service_items: [
+            {
+              item_type: "extra_stop",
+              notes: null,
+              quantity: 1,
+            },
+          ],
           companies: {
             company_name: "CODEX CUSTOMER REBOOKING TEST",
             domain: "prestigelimo.sg",
@@ -832,6 +843,7 @@ try {
   assert.equal(currentFallbackResult.body.booking.driver_name, "Codex Driver");
   assert.equal(currentFallbackResult.body.booking.driver_contact, "+6598888888");
   assert.equal(currentFallbackResult.body.booking.driver_plate_number, "SCDX1T");
+  assert.equal(currentFallbackResult.body.booking.extra_stop_count, 1);
   assert.equal(currentFallbackResult.body.booking.status, "draft");
   assert.equal(currentFallbackResult.body.booking.internal_admin_note, undefined);
   assert.equal(currentFallbackResult.body.booking.parser_debug, undefined);
@@ -842,6 +854,12 @@ try {
   assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("travelers("), true);
   assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("contact_display_name"), true);
   assert.equal(currentFallbackMock.client.selectHistory[2].selectedColumns.includes("driver_plate_number"), true);
+  assert.equal(
+    currentFallbackMock.client.selectHistory[2].selectedColumns.includes(
+      "booking_service_items(item_type, quantity, notes)",
+    ),
+    true,
+  );
   assertNoWrites(currentFallbackMock, "current schema fallback read");
   assertNoUnsafeResponse(currentFallbackResult, "current schema fallback response");
 

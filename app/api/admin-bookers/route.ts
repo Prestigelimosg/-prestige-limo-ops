@@ -49,7 +49,9 @@ function safeFailureResponse() {
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
   const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
-    allowServerSessionRoleMethodsWithoutRequestToken: ["POST"],
+    additionalSameOriginRefererPathPrefixes: ["/customers/"],
+    additionalSameOriginRefererPathnames: ["/customers"],
+    allowServerSessionRoleMethodsWithoutRequestToken: ["POST", "PATCH"],
   });
 
   return boundary.ok

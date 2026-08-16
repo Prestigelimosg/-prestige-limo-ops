@@ -51,6 +51,7 @@ const safeSubmittedFieldFillTargets = [
 
 const safeAcceptedCustomerRequestFields = [
   ...safeSubmittedFieldFillTargets,
+  "specialRequest",
   "travelerId",
 ];
 
@@ -68,7 +69,7 @@ const excludedFieldFillFragments = [
   "`driver_payout_rules`",
   "internal/debug/secrets",
   "transcript/audio persistence",
-  "`specialRequest` submission unless separately approved",
+  "`specialRequest` voice field-fill",
 ];
 
 const forbiddenRuntimeFragments = [
@@ -171,7 +172,7 @@ for (const fragment of [
   "Current field-fill does not overwrite customer-entered fields.",
   "Current field-fill does not submit transcript or audio.",
   "Current field-fill does not call parser, API, speech-to-text, or provider routes.",
-  "`specialRequest` exists in `/book` UI state but is not forwarded by the adapter and is not allowed in customer booking request persistence.",
+  "The separate customer-entered `specialRequest` field is submitted through the booking-request lane, but the Speak helper does not populate it from a transcript.",
   "`/api/ai-parse` remains admin/parser-shaped and includes fields such as `customerPriceOverride`",
   "Existing WhatsApp transcript parsing and admin dispatcher intake draft-fill are not Customer Voice Booking Draft Field-Fill.",
   "Customer Voice Booking Draft Field-Fill is local input-helper-only inside the existing `/book` customer booking page/form.",
@@ -184,7 +185,7 @@ for (const fragment of [
   "Admin review remains required after submission.",
   "Existing submit path must remain `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.",
   "No transcript or audio may be submitted or stored unless separately approved.",
-  "`specialRequest` remains local-only and excluded from submitted field-fill scope unless separately approved.",
+  "`specialRequest` remains excluded from voice field-fill scope; customers may type it manually before submitting the booking request.",
   "`/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.",
   "Admin parser/draft-fill cannot be reused directly for public customer voice.",
   "If parsing is uncertain, leave fields unchanged and show the transcript for manual review.",
@@ -225,7 +226,7 @@ for (const fragment of [
   "Admin review remains required after submission.",
   "Existing `/book` submit path remains `submitCustomerBookingRequest(form)` to `POST /api/customer-booking-requests`.",
   "Transcript/audio must not be submitted or stored unless separately approved.",
-  "remains local-only and excluded from submitted field-fill scope until separately approved.",
+  "The separate customer-entered `specialRequest` field is submitted through the booking-request lane, but remains outside the browser-local voice transcript field-fill targets.",
   "`/api/ai-parse` cannot be used for customer voice field-fill without separate owner approval.",
   "Admin parser/draft-fill cannot be reused directly for public customer voice.",
   "If parsing is uncertain, leave fields unchanged and show the transcript for manual review; do not guess unsafe fields.",
@@ -255,7 +256,7 @@ for (const fragment of [
   "Local field-fill runs only from the existing browser `SpeechRecognition` transcript after local capture ends.",
   "Field-fill only fills empty approved fields and does not overwrite customer-entered values.",
   "Approved local field-fill targets are `passengerName`, `pickupDate`, `pickupTime`, `flightNumber`, `pickupLocation`, and `dropoffLocation`.",
-  "`specialRequest` remains local-only/excluded from submitted field-fill scope",
+  "`specialRequest` remains excluded from voice field-fill",
   "Date field-fill is conservative",
   "no-year phrases such as `2 June` remain unchanged",
   "`pickupTime` 10:00",
@@ -274,7 +275,7 @@ for (const fragment of [
   "approved local customer voice field-fill lane",
   "browser-local transcript helper",
   "empty safe existing customer request fields only",
-  "`specialRequest` local-only/excluded",
+  "separately typed `specialRequest` excluded from voice field-fill",
   "no `/api/ai-parse`, parser, audio storage, provider, DB, Save Booking, admin-saved-bookings, payment/pricing/payout/PDF, dispatch, auth/location/photo/calendar, or shim activation",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index field-fill fragment ${fragment}`);
@@ -356,8 +357,18 @@ const persistenceFieldBlock =
 for (const field of safeSubmittedFieldFillTargets) {
   assertIncludes(adapterBodyBlock, `${field}: input.${field}`, `customer request adapter submitted field ${field}`);
 }
+assertIncludes(
+  adapterBodyBlock,
+  "specialRequest: input.specialRequest",
+  "customer request adapter submitted specialRequest",
+);
+assertIncludes(
+  persistenceFieldBlock,
+  '"specialRequest"',
+  "customer booking persistence specialRequest allowlist",
+);
 
-for (const forbidden of ["specialRequest", "voiceTranscript", "voice_transcript", "transcript", "audio", "speech", "stt"]) {
+for (const forbidden of ["voiceTranscript", "voice_transcript", "transcript", "audio", "speech", "stt"]) {
   assertExcludes(adapterBodyBlock, forbidden, `customer request adapter body ${forbidden}`);
   assertExcludes(persistenceFieldBlock, forbidden, `customer booking persistence allowlist ${forbidden}`);
 }

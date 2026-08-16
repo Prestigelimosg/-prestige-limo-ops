@@ -1,11 +1,9 @@
 import "server-only";
 
-import type {
-  AdminBookingPersistenceRecord,
-  AdminBookingResult,
-} from "./admin-booking-persistence";
-import { listAdminBookings } from "./admin-booking-persistence";
+import type { AdminBookingResult } from "./admin-booking-persistence";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
+import type { AdminSavedBookingRecord } from "./admin-saved-booking-read";
+import { loadAdminSavedBookingList } from "./admin-saved-booking-read";
 
 export const adminCustomerSavedBookingsReadVersion =
   "admin-customer-saved-bookings-read-v1";
@@ -28,6 +26,7 @@ export type AdminCustomerSavedBookingSafeRecord = {
   customer_account: string | null;
   customer_id: string | null;
   company_id: number | null;
+  customer_price_label: string | null;
   traveler_id: number | null;
   vehicle_type_or_category: string | null;
   child_seat_count: number;
@@ -59,9 +58,11 @@ type UnknownRecord = Record<string, unknown>;
 
 const defaultLimit = 10;
 const customerFolderSavedBookingSourceReadLimit = 200;
+const customerFolderSavedBookingSourcePageSize = 100;
 const maxLimit = customerFolderSavedBookingSourceReadLimit;
 const maxSafeTextLength = 160;
 const malformedParamsError = "Admin customer saved bookings read parameters are malformed.";
+const safeSourceLoadError = "Admin booking persistence load failed safely.";
 const forbiddenParamsError =
   "Admin customer saved bookings read parameters include unsupported or unsafe fields.";
 const forbiddenSafeTextFragments = [
@@ -181,20 +182,25 @@ function safeStatus(value: unknown) {
   return safeText(value, 80);
 }
 
+function safeCustomerPriceLabel(value: unknown) {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+    return null;
+  }
+
+  return (Math.round(amount * 100) / 100).toFixed(2);
+}
+
 function safeServiceItemCount(
-  booking: AdminBookingPersistenceRecord,
+  booking: AdminSavedBookingRecord,
   expectedType: "child_seat" | "extra_stop",
 ) {
-  return (booking.service_items || []).reduce((total, item) => {
-    const itemType = normalizeToken(
-      textOrNull(item.service_item_type || item.item_type) || "",
-    );
-    const quantity = Number(item.quantity ?? item.blocks_count);
+  const count = expectedType === "child_seat"
+    ? booking.child_seat_count
+    : booking.extra_stop_count;
 
-    return itemType === expectedType && Number.isSafeInteger(quantity) && quantity > 0
-      ? total + quantity
-      : total;
-  }, 0);
+  return Number.isSafeInteger(count) && Number(count) > 0 ? Number(count) : 0;
 }
 
 function normalizeForMatch(value: unknown) {
@@ -205,7 +211,7 @@ function normalizeBookingReferenceForMatch(value: unknown) {
   return safeText(value, 120)?.toLowerCase() || "";
 }
 
-function accountScopeFromBooking(booking: AdminBookingPersistenceRecord) {
+function accountScopeFromBooking(booking: AdminSavedBookingRecord) {
   const bookerName = safeText(booking.contact_display_name, 80);
   const travellerName = safeText(booking.passenger_name, 80);
   const bookerKey = normalizeToken(bookerName || "");
@@ -222,7 +228,7 @@ function accountScopeFromBooking(booking: AdminBookingPersistenceRecord) {
 }
 
 function bookingMatchesCustomer(
-  booking: AdminBookingPersistenceRecord,
+  booking: AdminSavedBookingRecord,
   params: AdminCustomerSavedBookingsReadParams,
 ) {
   const customerId = normalizeForMatch(booking.customer_id);
@@ -250,7 +256,7 @@ function bookingMatchesCustomer(
 }
 
 function toSafeSavedBooking(
-  booking: AdminBookingPersistenceRecord,
+  booking: AdminSavedBookingRecord,
 ): AdminCustomerSavedBookingSafeRecord | null {
   const bookingReference = safeText(booking.booking_reference, 120);
 
@@ -264,17 +270,18 @@ function toSafeSavedBooking(
     booker_id: safeIdentityId(booking.booker_id),
     account_scope_key: accountScope.key,
     account_scope_label: accountScope.label,
-    admin_status: safeStatus(booking.admin_internal_status),
+    admin_status: safeStatus(booking.admin_internal_status || booking.status),
     booking_month: validBookingMonth(booking.pickup_at || booking.pickup_datetime),
     booking_reference: bookingReference,
     customer_account: safeText(booking.customer_display_name),
     customer_id: safeText(booking.customer_id, 120),
+    customer_price_label: safeCustomerPriceLabel(booking.customer_price_amount),
     company_id: safeIdentityId(booking.company_id),
     traveler_id: safeIdentityId(booking.traveler_id),
     vehicle_type_or_category: safeText(booking.vehicle_type_or_category, 80),
     child_seat_count: safeServiceItemCount(booking, "child_seat"),
     extra_stop_count: safeServiceItemCount(booking, "extra_stop"),
-    customer_status: safeStatus(booking.customer_facing_status),
+    customer_status: safeStatus(booking.customer_facing_status || booking.status),
     dropoff_location: safeText(booking.dropoff_location, 220),
     passenger_name: safeText(booking.passenger_name || booking.contact_display_name, 140),
     pickup_at: safeText(booking.pickup_at || booking.pickup_datetime, 80),
@@ -366,15 +373,41 @@ export async function loadAdminCustomerSavedBookings(
     return parsed;
   }
 
-  const bookingsResult = await listAdminBookings(actor, {
-    limit: customerFolderSavedBookingSourceReadLimit,
-  });
+  const bookingsResult = await loadAdminSavedBookingList({
+    limit: customerFolderSavedBookingSourcePageSize,
+    offset: 0,
+    scope: "all",
+  }, actor);
 
   if (!bookingsResult.ok) {
-    return bookingsResult;
+    return {
+      error: safeSourceLoadError,
+      ok: false,
+      status: bookingsResult.status,
+    };
   }
 
-  const matchedBookings = bookingsResult.data
+  let sourceBookings = bookingsResult.data.bookings;
+
+  if (sourceBookings.length === customerFolderSavedBookingSourcePageSize) {
+    const nextBookingsResult = await loadAdminSavedBookingList({
+      limit: customerFolderSavedBookingSourcePageSize,
+      offset: customerFolderSavedBookingSourcePageSize,
+      scope: "all",
+    }, actor);
+
+    if (!nextBookingsResult.ok) {
+      return {
+        error: safeSourceLoadError,
+        ok: false,
+        status: nextBookingsResult.status,
+      };
+    }
+
+    sourceBookings = sourceBookings.concat(nextBookingsResult.data.bookings);
+  }
+
+  const matchedBookings = sourceBookings
     .filter((booking) => bookingMatchesCustomer(booking, parsed.data))
     .map(toSafeSavedBooking)
     .filter((booking): booking is AdminCustomerSavedBookingSafeRecord => Boolean(booking))
@@ -390,7 +423,7 @@ export async function loadAdminCustomerSavedBookings(
       saved_bookings: savedBookings,
       summary: {
         matched_count: matchedBookings.length,
-        recent_read_count: bookingsResult.data.length,
+        recent_read_count: sourceBookings.length,
         returned_count: savedBookings.length,
       },
       version: adminCustomerSavedBookingsReadVersion,

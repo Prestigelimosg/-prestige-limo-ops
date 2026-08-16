@@ -220,7 +220,7 @@ for (const phrase of [
   "Customer booking request, booking memory, and portal saved-bookings client adapters must use `credentials: \"same-origin\"`, `cache: \"no-store\"`, and purpose headers while never manually attaching Cookie, Authorization, or customer session-token headers.",
   "Customer saved-bookings and booking-memory reads may accept a server-validated same-origin session cookie; ambiguous, wrong, unsafe, placeholder, or duplicate cookie values fail closed.",
   "Customer booking status stays on its explicit server session-token header contract and does not set cookies.",
-  "Driver public APIs remain cookie-free except the exact acknowledgement PATCH that issues the encrypted Driver Portal cookie and the read-only same-origin Driver Portal jobs route that validates it.",
+  "Driver public APIs remain cookie-free except the exact acknowledgement PATCH that issues the encrypted Driver Portal cookie and the read-only same-origin Driver Portal jobs route that validates it; that jobs route may set only the expired secure cookie when an inactive account fails revalidation, never issue or refresh a live session.",
   "Public API session/cache contracts must continue checking secure cookie attributes, no-store responses, no manual client auth headers, and cookie-backed fail-closed reads through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -240,6 +240,7 @@ assert.deepEqual(
     "app/api/customer-booking-requests/route.ts",
     "app/api/customer-portal-sessions/route.ts",
     "app/api/driver-job/[token]/route.ts",
+    "app/api/driver-portal/jobs/route.ts",
   ],
   "public API Set-Cookie routes",
 );
@@ -417,10 +418,13 @@ for (const fragment of [
   '"Cache-Control": "no-store"',
   'Vary: "Cookie"',
   '"driver-portal-jobs-read"',
+  "clearDriverPortalSessionCookie()",
+  "inactiveDriverAccountResponse",
+  'headers.set("Set-Cookie", cookie)',
 ]) {
   assertIncludes(driverPortalJobsRoute, fragment, `Driver Portal jobs session boundary ${fragment}`);
 }
-assertExcludes(driverPortalJobsRoute, /Set-Cookie|driver_id|token_hash/i, "Driver Portal jobs public response secrets");
+assertExcludes(driverPortalJobsRoute, /driver_id|token_hash/i, "Driver Portal jobs public response secrets");
 
 for (const { label, requiredFragments, script } of contractChecks) {
   const source = files[script];

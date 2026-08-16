@@ -25,8 +25,10 @@ const browserConsoleErrors = [];
 const nativeAppOnlyLanguagePattern =
   /\b(?:native\s+(?:mobile\s+)?app|ios\s+app|android\s+app|app\s+store|play\s+store)\b/i;
 
-function driverJobUrl(token) {
-  return new URL(`/driver-job/${token}`, appUrl).toString();
+function driverJobUrl(token, search = "") {
+  const url = new URL(`/driver-job/${token}`, appUrl);
+  url.search = search;
+  return url.toString();
 }
 
 function driverJobApiUrl(token) {
@@ -90,8 +92,8 @@ async function assertNoRealLocationImplementation() {
 
   assert.match(
     source,
-    /const driverLiveLocationUiState = pageState\.kind === "ready" \? "runtime-check" : "disabled";/,
-    "Driver live-location Share/Stop UI must stay behind the loaded job/runtime-check state.",
+    /data-driver-otw-live-location-control="true"/,
+    "Driver live location must use the single merged OTW control.",
   );
   assert.match(
     source,
@@ -101,7 +103,7 @@ async function assertNoRealLocationImplementation() {
   assert.match(
     source,
     /navigator\.geolocation\.getCurrentPosition/,
-    "Driver live-location must request the initial browser position only through the explicit gated Share click path.",
+    "Driver live-location must request the initial browser position only after the accepted OTW action or an explicit retry.",
   );
   assert.match(
     source,
@@ -113,11 +115,25 @@ async function assertNoRealLocationImplementation() {
     /navigator\.geolocation\.clearWatch/,
     "Driver live-location continuous sharing must be cleared by Stop Sharing and page cleanup.",
   );
-  assert.doesNotMatch(source, /setInterval|setTimeout|sendBeacon/i, "Driver pages must not add timer/sendBeacon GPS loops.");
   assert.doesNotMatch(
     source,
-    /void\s+shareDriverLiveLocation\(|shareDriverLiveLocation\(\);|shareDriverLiveLocation\(\)\.catch/i,
-    "Driver pages must not auto-start live location from page load or status changes.",
+    /(?:setInterval|setTimeout)\([\s\S]{0,500}(?:shareDriverLiveLocation|navigator\.geolocation)|sendBeacon/i,
+    "Driver pages must not add timer/sendBeacon GPS loops.",
+  );
+  assert.equal(
+    source.match(/window\.setInterval\(/g)?.length,
+    1,
+    "Driver pages may use only the one bounded visible Messages & Updates refresh interval.",
+  );
+  assert.match(
+    source,
+    /const otwSaved = await updateStatus\("OTW", "OTW", "I'm on the way"\);[\s\S]*?if \(!otwSaved\) \{[\s\S]*?return;[\s\S]*?await shareDriverLiveLocation\(\);/,
+    "The merged control must persist OTW before starting live location.",
+  );
+  assert.match(
+    source,
+    /checkDriverLiveLocationReadiness\(\{ reload: true \}\)/,
+    "Reopening an OTW job may read sharing readiness without requesting GPS.",
   );
   assert.doesNotMatch(source, /navigator\.mediaDevices|getUserMedia/i, "Driver pages must not call camera APIs.");
   assert.doesNotMatch(source, /localStorage|sessionStorage/i, "Driver pages must not add browser storage persistence.");
@@ -225,8 +241,31 @@ async function runChromeTest() {
       source: `
         window.__driverJobFetchCalls = [];
         window.__driverOtsPhotoUploadBodies = [];
+        window.__driverNativeBridgeMessages = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
+        const embeddedDriverHarness = new URLSearchParams(window.location.search).get("embedded") === "1";
+        if (embeddedDriverHarness) {
+          window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
+          window.ReactNativeWebView = {
+            postMessage: (rawMessage) => {
+              try {
+                window.__driverNativeBridgeMessages.push(JSON.parse(rawMessage));
+              } catch {
+                window.__driverNativeBridgeMessages.push({ invalid: true });
+              }
+            },
+          };
+        }
+        window.__driverAppUpdateTest = {
+          safeMessage: "Dispatch has a safe app update for this job.",
+          safeTitle: "Dispatch app update",
+          visibilityState: "visible",
+        };
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => window.__driverAppUpdateTest.visibilityState,
+        });
         const driverCalendarReturnState = new URLSearchParams(window.location.search).get("calendar");
         window.addEventListener("error", (event) => window.__prestigeErrors.push(event.message));
         window.addEventListener("unhandledrejection", (event) => window.__prestigeErrors.push(String(event.reason)));
@@ -253,7 +292,7 @@ async function runChromeTest() {
             keys: { auth: "browser-auth", p256dh: "browser-p256dh" },
           }),
         };
-        let driverPushSubscriptionState = window.name === "prestige-driver-push-subscribed"
+        let driverPushSubscriptionState = window.name.includes("prestige-driver-push-subscribed")
           ? driverPushSubscription
           : null;
         const driverPushRegistration = {
@@ -274,7 +313,7 @@ async function runChromeTest() {
           value: {
             get permission() {
               return location.pathname === "/driver-portal" &&
-                window.name === "prestige-driver-push-subscribed"
+                window.name.includes("prestige-driver-push-subscribed")
                 ? "granted"
                 : "default";
             },
@@ -302,12 +341,97 @@ async function runChromeTest() {
             },
           },
         });
+        window.__driverLiveLocationTest = {
+          active: window.name.includes("prestige-driver-live-active"),
+          clearWatchCalls: [],
+          permission: "granted",
+          positionRequests: 0,
+          stopShouldFail: false,
+          watchRequests: 0,
+        };
+        Object.defineProperty(navigator, "geolocation", {
+          configurable: true,
+          value: {
+            clearWatch: (watchId) => {
+              window.__driverLiveLocationTest.clearWatchCalls.push(watchId);
+            },
+            getCurrentPosition: (success, error) => {
+              window.__driverLiveLocationTest.positionRequests += 1;
+              if (window.__driverLiveLocationTest.permission !== "granted") {
+                error({ code: 1, message: "permission denied" });
+                return;
+              }
+              success({
+                coords: {
+                  accuracy: 8,
+                  heading: 90,
+                  latitude: 1.3521,
+                  longitude: 103.8198,
+                  speed: 4,
+                },
+                timestamp: Date.now(),
+              });
+            },
+            watchPosition: () => {
+              window.__driverLiveLocationTest.watchRequests += 1;
+              return 71;
+            },
+          },
+        });
         const originalFetch = window.fetch.bind(window);
         window.fetch = (...args) => {
           const target = args[0]?.url || args[0];
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (new URL(url, window.location.origin).pathname.endsWith("/live-location")) {
+            if (method === "DELETE") {
+              if (window.__driverLiveLocationTest.stopShouldFail) {
+                return Promise.resolve(new Response(JSON.stringify({ ok: false }), {
+                  status: 503,
+                  headers: { "content-type": "application/json" },
+                }));
+              }
+              window.__driverLiveLocationTest.active = false;
+              window.name = window.name.replace("|prestige-driver-live-active", "");
+              return Promise.resolve(new Response(JSON.stringify({
+                customerVisible: false,
+                external_send: false,
+                ok: true,
+                sharing_state: "stopped",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }));
+            }
+            if (method === "POST") {
+              window.__driverLiveLocationTest.active = true;
+              if (!window.name.includes("prestige-driver-live-active")) {
+                window.name += "|prestige-driver-live-active";
+              }
+              return Promise.resolve(new Response(JSON.stringify({
+                customerVisible: false,
+                external_send: false,
+                last_shared_at: new Date().toISOString(),
+                ok: true,
+                sharing_state: "active",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }));
+            }
+            return Promise.resolve(new Response(JSON.stringify({
+              customerVisible: false,
+              external_send: false,
+              last_shared_at: null,
+              ok: true,
+              sharing_state: window.__driverLiveLocationTest.active ? "active" : "inactive",
+            }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }));
+          }
 
           if (method === "POST" && url.endsWith("/ots-photo") && args[1]?.body instanceof FormData) {
             const photo = args[1].body.get("photo");
@@ -342,8 +466,8 @@ async function runChromeTest() {
                     id: "driver-app-update-safe-one",
                     notification_status: "queued",
                     priority: "normal",
-                    safe_message: "Dispatch has a safe app update for this job.",
-                    safe_title: "Dispatch app update",
+                    safe_message: window.__driverAppUpdateTest.safeMessage,
+                    safe_title: window.__driverAppUpdateTest.safeTitle,
                     updated_at: "2026-06-08T03:00:00.000Z",
                   },
                 ],
@@ -506,12 +630,27 @@ async function runChromeTest() {
         activityLogLabels: [...document.querySelectorAll("[data-driver-job-activity-log-label]")]
           .map((item) => item.textContent.trim()),
         buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
+        buildMarker: {
+          count: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
+          text: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
+        },
+        accountCreation: {
+          confirmedEmail: document.querySelector('[data-driver-account-confirmed-email="true"]')?.textContent?.trim() || "",
+          emailAutocomplete: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.autocomplete || "",
+          emailInputMode: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.inputMode || "",
+          emailName: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.name || "",
+          emailStepVisible: Boolean(document.querySelector('[data-driver-account-email-step="true"]')),
+          passwordAutocomplete: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.autocomplete || "",
+          passwordName: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.name || "",
+          passwordStepVisible: Boolean(document.querySelector('[data-driver-account-creation-form="true"]')),
+        },
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
         otsPhotoUploadBodies: window.__driverOtsPhotoUploadBodies || [],
         deviceAlerts: {
           helper: document.querySelector("[data-driver-job-device-alert-helper]")?.textContent?.trim() || "",
+          nativeBridgeMessages: window.__driverNativeBridgeMessages || [],
           permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
           registrations: window.__driverDeviceAlertTest?.registrations || [],
           rememberedLinks: window.__driverDeviceAlertTest?.rememberedLinks || [],
@@ -525,12 +664,18 @@ async function runChromeTest() {
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
           .map((input) => input.closest("label")?.innerText.trim() || input.outerHTML),
+        otsPhotoControl: {
+          compact: Boolean(document.querySelector('[data-driver-job-ots-photo-proof-control="true"]')),
+          standaloneButton: Boolean(document.querySelector('button[data-driver-job-ots-photo-proof-shoot="true"]')),
+          text: document.querySelector('[data-driver-job-ots-photo-proof-control="true"]')?.textContent?.trim() || "",
+        },
         resourceCalls: performance.getEntriesByType("resource").map((entry) => entry.name),
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         confirmDetails: {
           acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
           parseButtonText: document.querySelector("[data-driver-job-parse-details]")?.textContent.trim() || "",
           parseMessage: document.querySelector("[data-driver-job-parse-details-message]")?.textContent.trim() || "",
+          saveAcknowledgeDisabled: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")?.disabled),
           saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
           saveAcknowledgeVisible: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")),
           title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
@@ -544,12 +689,18 @@ async function runChromeTest() {
           vehicleModel: document.querySelector("[data-driver-job-detail-vehicle-model]")?.value || "",
         },
         layoutPositions: {
-          liveLocation: Math.round(document.querySelector("[data-driver-primary-step='live-location-consent']")?.getBoundingClientRect().top ?? -1),
           reportIssue: Math.round(document.querySelector("[data-driver-job-report-issue]")?.getBoundingClientRect().top ?? -1),
           saveAcknowledge: Math.round(document.querySelector("[data-driver-job-save-acknowledge]")?.getBoundingClientRect().top ?? -1),
           statusButtons: Math.round(document.querySelector("[data-driver-primary-step='status-buttons']")?.getBoundingClientRect().top ?? -1),
           statusHistory: Math.round(document.querySelector("[data-driver-job-saved-status-history]")?.getBoundingClientRect().top ?? -1),
         },
+        liveLocationControl: {
+          feedback: document.querySelector("[data-driver-otw-live-location-feedback]")?.textContent.trim() || "",
+          state: document.querySelector("[data-driver-otw-live-location-control]")?.getAttribute("data-driver-otw-live-location-state") || "",
+          text: document.querySelector("[data-driver-otw-live-location-control]")?.textContent.trim() || "",
+          visible: Boolean(document.querySelector("[data-driver-otw-live-location-control]")),
+        },
+        liveLocationTest: window.__driverLiveLocationTest || {},
         statusBoundary: {
           helper: document.querySelector("[data-driver-job-status-boundary-helper]")?.textContent.trim() || "",
           items: [...document.querySelectorAll("[data-driver-job-status-boundary-list] li")].map((item) =>
@@ -640,11 +791,11 @@ async function runChromeTest() {
         ),
       }))()`);
 
-    const navigateToDriverJob = async (token, expectedText) => {
+    const navigateToDriverJob = async (token, expectedText, search = "") => {
       await navigateAndWaitForBodyText(
         client,
         evaluate,
-        driverJobUrl(token),
+        driverJobUrl(token, search),
         expectedText,
         `driver job page text: ${expectedText}`,
       );
@@ -886,6 +1037,16 @@ async function runChromeTest() {
         "Expected public driver details Save & Acknowledge to persist through the tokenized driver job route.",
       );
       assert.equal(
+        afterSaveState.confirmDetails.saveAcknowledgeText,
+        "Saved & Acknowledged",
+        "Expected confirmed unchanged details to show the saved acknowledgement state.",
+      );
+      assert.equal(
+        afterSaveState.confirmDetails.saveAcknowledgeDisabled,
+        true,
+        "Expected confirmed unchanged details to prevent a duplicate acknowledgement save.",
+      );
+      assert.equal(
         afterSaveState.deviceAlerts.helper,
         "This same action enables Driver Job alerts on this device when supported and allowed.",
         "Expected the existing acknowledgement action to explain its bounded device-alert permission.",
@@ -923,6 +1084,70 @@ async function runChromeTest() {
         afterSaveState.activityLogLabels,
         [],
         "Expected Save & Acknowledge to keep driver activity log hidden.",
+      );
+      assert.deepEqual(
+        afterSaveState.accountCreation,
+        {
+          confirmedEmail: "",
+          emailAutocomplete: "email",
+          emailInputMode: "email",
+          emailName: "email",
+          emailStepVisible: true,
+          passwordAutocomplete: "",
+          passwordName: "",
+          passwordStepVisible: false,
+        },
+        "Expected the acknowledged Driver account controls to render only the iOS-safe Email step first.",
+      );
+
+      const accountEmailFocused = await evaluate(`(() => {
+        const input = document.querySelector('[data-driver-account-email-step="true"] input[type="email"]');
+        if (!input) return false;
+        input.focus();
+        return document.activeElement === input;
+      })()`);
+      assert.equal(
+        accountEmailFocused,
+        true,
+        "Expected Mac Chrome to focus the established Driver account Email field.",
+      );
+      await client.send("Input.insertText", { text: "driver.test@example.com" });
+      await waitForCondition(
+        () => evaluate(`document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.value === "driver.test@example.com"`),
+        5000,
+        "Driver account Email at-sign input",
+      );
+      const accountContinueClicked = await evaluate(`(() => {
+        const button = document.querySelector('[data-driver-account-email-step="true"] button[type="submit"]');
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(accountContinueClicked, true, "Expected the Email step Continue action to be available.");
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]'))`),
+        5000,
+        "Driver account Password stage",
+      );
+      const afterAccountContinueState = await pageState();
+      assert.deepEqual(
+        afterAccountContinueState.accountCreation,
+        {
+          confirmedEmail: "driver.test@example.com",
+          emailAutocomplete: "",
+          emailInputMode: "",
+          emailName: "",
+          emailStepVisible: false,
+          passwordAutocomplete: "new-password",
+          passwordName: "new-password",
+          passwordStepVisible: true,
+        },
+        "Expected Continue to replace the Email input with the same confirmed email and existing Password form.",
+      );
+      assert.deepEqual(
+        afterAccountContinueState.fetchCalls.filter((call) => call.includes("/account")),
+        afterSaveState.fetchCalls.filter((call) => call.includes("/account")),
+        "Email Continue must not create an account or add a second write path.",
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;
@@ -965,6 +1190,34 @@ async function runChromeTest() {
 
       assertNoSensitiveText(state);
       return state;
+    };
+
+    const clickOtwLocationControl = async (expectedButtonText, expectedFeedback) => {
+      const clicked = await evaluate(`(() => {
+        const button = document.querySelector("[data-driver-otw-live-location-control]");
+
+        if (!button || button.disabled) {
+          return false;
+        }
+
+        button.click();
+        return true;
+      })()`);
+
+      assert.equal(clicked, true, "Expected merged OTW/location control to be clickable.");
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector("[data-driver-otw-live-location-control]");
+            const feedback = document.querySelector("[data-driver-otw-live-location-feedback]");
+            return button?.textContent.trim() === ${JSON.stringify(expectedButtonText)} &&
+              feedback?.textContent.trim() === ${JSON.stringify(expectedFeedback)};
+          })()`),
+        10000,
+        `merged OTW/location state ${expectedButtonText}`,
+      );
+
+      return pageState();
     };
 
     const saveDriverJobGoogleCalendar = async () => {
@@ -1197,6 +1450,12 @@ async function runChromeTest() {
 
     await resetMockDriverJobData();
     const validState = await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Mock Workflow Pickup");
+    assert.equal(validState.buildMarker.count, 1, "Driver Job must show one shared public build marker.");
+    assert.match(
+      validState.buildMarker.text,
+      /^Build (?:[a-f0-9]{8}|unavailable)$/,
+      "Driver Job must show only the safe short build marker.",
+    );
     assert.ok(validState.visibleText.includes("Mock Workflow Dropoff"));
     assert.ok(validState.visibleText.includes("Mock Workflow Pickup > Mock Workflow Waypoint > Mock Workflow Dropoff"));
     assert.ok(validState.visibleText.includes("Mock Workflow Waypoint"));
@@ -1235,8 +1494,17 @@ async function runChromeTest() {
     assert.deepEqual(
       validState.workflowHandoff.items,
       [
+        "Open the private link in Safari. Tap Save & Acknowledge Job.",
+        "Install Driver Portal from your browser for best results.",
+        "Add to Home Screen from this acknowledged page.",
+        "Open Driver Portal from your Home Screen.",
+        "Already installed before saving? Add it again from this acknowledged page.",
+        "Tap Enable Job Alerts. Allow notifications.",
+        "WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.",
+        "Tap OTW to save status and start sharing. Allow location.",
+        "Allow camera/photos only for OTS photo.",
         "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
-        "Confirm driver and vehicle details once, then use the status buttons only when ready.",
+        "Use the status buttons only when ready.",
         "Use Report Issue when admin needs an in-app alert.",
       ],
       "Expected compact driver workflow handoff guidance.",
@@ -1271,17 +1539,16 @@ async function runChromeTest() {
       "Expected report issue boundary to block external sending and future-only features.",
     );
     assert.deepEqual(
-      validState.primaryStepOrder.slice(0, 7),
+      validState.primaryStepOrder.slice(0, 6),
       [
         "job-summary",
         "confirm-details",
         "save-acknowledge",
         "status-workflow",
         "status-buttons",
-        "live-location-consent",
         "report-issue",
       ],
-      "Expected job card, confirm-details, save acknowledgement, status controls, live location, and issue controls in order.",
+      "Expected job card, confirm-details, save acknowledgement, merged OTW/location control, and issue controls in order.",
     );
     assert.equal(validState.confirmDetails.visible, true, "Expected confirm driver and vehicle details card.");
     assert.equal(validState.confirmDetails.title, "Driver Details");
@@ -1356,6 +1623,67 @@ async function runChromeTest() {
       [],
       "Driver app updates feed should stay read-only in this stage.",
     );
+    const visiblePollMessage = "Fresh admin message while the page stays visible.";
+    const visiblePollBeforeState = await pageState();
+    await evaluate(`(() => {
+      window.__driverAppUpdateTest.safeMessage = ${JSON.stringify(visiblePollMessage)};
+    })()`);
+    const visiblePollState = await waitForCondition(
+      () => pageState().then((state) =>
+        state.appUpdates.rows[0]?.message === visiblePollMessage ? state : false,
+      ),
+      10000,
+      "driver app update refresh while the page remains visible",
+    );
+    assert.ok(
+      visiblePollState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length >
+        visiblePollBeforeState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length,
+      "Expected the visible page to refresh through the existing token-scoped notifications GET.",
+    );
+
+    const hiddenPollMessage = "Hidden pages must not poll for this message.";
+    await evaluate(`(() => {
+      window.__driverAppUpdateTest.visibilityState = "hidden";
+      window.__driverAppUpdateTest.safeMessage = ${JSON.stringify(hiddenPollMessage)};
+    })()`);
+    const hiddenPollBeforeState = await pageState();
+    await new Promise((resolve) => setTimeout(resolve, 5500));
+    const hiddenPollAfterState = await pageState();
+    assert.equal(
+      hiddenPollAfterState.appUpdates.rows[0]?.message,
+      visiblePollMessage,
+      "Hidden Driver Job pages must retain the last loaded message without polling.",
+    );
+    assert.equal(
+      hiddenPollAfterState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length,
+      hiddenPollBeforeState.fetchCalls.filter((call) => call.endsWith("/notifications?limit=5&page=1")).length,
+      "Hidden Driver Job pages must not poll the notifications route.",
+    );
+    await evaluate(`(() => {
+      window.__driverAppUpdateTest.visibilityState = "visible";
+    })()`);
+    for (const [eventTarget, eventName, safeMessage] of [
+      ["window", "focus", "Fresh admin message after focus."],
+      ["document", "visibilitychange", "Fresh admin message after returning."],
+      ["window", "pageshow", "Fresh admin message after page restore."],
+    ]) {
+      await evaluate(`(() => {
+        window.__driverAppUpdateTest.safeMessage = ${JSON.stringify(safeMessage)};
+        ${eventTarget}.dispatchEvent(new Event(${JSON.stringify(eventName)}));
+      })()`);
+      const refreshedMessageState = await waitForCondition(
+        () => pageState().then((state) =>
+          state.appUpdates.rows[0]?.message === safeMessage ? state : false,
+        ),
+        10000,
+        `driver app update refresh after ${eventName}`,
+      );
+      assert.equal(
+        refreshedMessageState.appUpdates.state,
+        "loaded",
+        `Expected ${eventName} refresh to preserve the loaded message state.`,
+      );
+    }
     assert.equal(validState.statusBoundary.visible, false, "Expected bulky driver status boundary help to be removed.");
     assert.equal(validState.visibleText.includes("Status Boundary"), false);
     assert.equal(validState.visibleText.includes("Current flow: OTW, OTS, POB, then Job Completed."), false);
@@ -1429,10 +1757,12 @@ async function runChromeTest() {
     assert.equal(validState.visibleText.includes("Exception reason"), false);
     assert.equal(validState.visibleText.includes("Status History"), false);
     assert.equal(validState.layoutPositions.statusHistory, -1);
-    assert.ok(
-      validState.layoutPositions.reportIssue > validState.layoutPositions.liveLocation,
-      "Expected Report Issue to sit below the Live Location section near the bottom of the driver page.",
-    );
+    assert.equal(validState.liveLocationControl.visible, true, "Expected one merged OTW/live-location control.");
+    assert.equal(validState.liveLocationControl.text, "OTW");
+    assert.equal(validState.visibleText.includes("Permission"), false);
+    assert.equal(validState.visibleText.includes("Last shared"), false);
+    assert.equal(validState.visibleText.includes("Live Location\n"), false);
+    assert.equal(validState.visibleText.includes("Messages & Updates"), true);
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
         ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"].includes(buttonLabel),
@@ -1467,6 +1797,74 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
+    const embeddedAcknowledgedReloadState = await navigateToDriverJob(
+      mockDriverJobTokens.workflowOrder,
+      "Saved & Acknowledged",
+      "?embedded=1",
+    );
+    assert.deepEqual(
+      embeddedAcknowledgedReloadState.deviceAlerts.nativeBridgeMessages,
+      [{ type: "native_notifications_register" }],
+      "An already-acknowledged job reopened inside Prestige Driver must request the existing native notification registration once.",
+    );
+    assert.equal(
+      embeddedAcknowledgedReloadState.deviceAlerts.permissionRequests,
+      0,
+      "Embedded acknowledged reload must not invoke the browser Notification permission API.",
+    );
+    assert.deepEqual(
+      embeddedAcknowledgedReloadState.deviceAlerts.registrations,
+      [],
+      "Embedded acknowledged reload must not register the browser service worker.",
+    );
+    assert.deepEqual(
+      embeddedAcknowledgedReloadState.fetchCalls.filter((call) =>
+        call === `PATCH /api/driver-job/${mockDriverJobTokens.workflowOrder}`
+      ),
+      [],
+      "Embedded notification enrollment must not repeat Save & Acknowledge or add another writer.",
+    );
+    assertNoSensitiveText(embeddedAcknowledgedReloadState);
+    await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
+    const acknowledgementEditReset = await evaluate(`(() => {
+      const input = document.querySelector("[data-driver-job-detail-vehicle-model]");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+      if (!input || !setter) {
+        return false;
+      }
+
+      setter.call(input, "Toyota Alphard Executive");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      const button = document.querySelector("[data-driver-job-save-acknowledge]");
+      return {
+        disabled: Boolean(button?.disabled),
+        savedDetailsVisible: Boolean(document.querySelector("[data-driver-job-saved-details]")),
+        text: button?.textContent.trim() || "",
+      };
+    })()`);
+    assert.deepEqual(
+      acknowledgementEditReset,
+      {
+        disabled: false,
+        savedDetailsVisible: false,
+        text: "Save & Acknowledge Job",
+      },
+      "Editing confirmed details must restore the save action and allow acknowledgement resave.",
+    );
+    const acknowledgementResaveClicked = await evaluate(`(() => {
+      const button = document.querySelector("[data-driver-job-save-acknowledge]");
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(acknowledgementResaveClicked, true, "Expected edited driver details to be resavable.");
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() === "Saved & Acknowledged"`),
+      10000,
+      "edited driver details acknowledgement resave",
+    );
     await saveDriverJobGoogleCalendar();
     await verifyDriverCalendarCallbackFeedback({
       expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
@@ -1481,10 +1879,98 @@ async function runChromeTest() {
     await clickBlockedStatus("OTS", "Update OTW before OTS.", startingStatusText);
     await clickBlockedStatus("POB", "Update OTW before POB.", startingStatusText);
     await clickBlockedStatus("Job Completed", "Update OTW before Job Completed.", startingStatusText);
-    await clickStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+    const beforeOtwLocationState = await pageState();
+    const otwSharingState = await clickStatus(
+      "OTW",
+      "I'm on the way",
+      "Sharing live location. Keep this app open.",
+    );
+    assert.equal(otwSharingState.liveLocationControl.text, "Stop Sharing");
+    assert.equal(otwSharingState.liveLocationTest.positionRequests, 1);
+    assert.equal(otwSharingState.liveLocationTest.watchRequests, 1);
+    assert.equal(
+      otwSharingState.fetchCalls.filter((call) => call.includes("/status")).length,
+      beforeOtwLocationState.fetchCalls.filter((call) => call.includes("/status")).length + 1,
+      "First merged tap must persist exactly one OTW status.",
+    );
+    assert.equal(
+      otwSharingState.fetchCalls.filter((call) => call.includes("/live-location") && call.startsWith("POST ")).length,
+      1,
+      "First merged tap must start location through one existing POST.",
+    );
+    const reopenedOtwState = await navigateToDriverJob(
+      mockDriverJobTokens.workflowOrder,
+      "I'm on the way",
+    );
+    assert.equal(reopenedOtwState.liveLocationControl.text, "Stop Sharing");
+    assert.equal(
+      reopenedOtwState.liveLocationControl.feedback,
+      "Previous location remains on the map. Tap Stop Sharing to clear it.",
+    );
+    assert.equal(reopenedOtwState.liveLocationTest.positionRequests, 0);
+    assert.equal(reopenedOtwState.liveLocationTest.watchRequests, 0);
+    assert.equal(
+      reopenedOtwState.fetchCalls.filter((call) => call.includes("/live-location") && call.startsWith("GET ")).length,
+      1,
+      "Reopening an OTW job must perform readiness GET only.",
+    );
+    await evaluate(`(() => {
+      window.__driverLiveLocationTest.stopShouldFail = true;
+      return true;
+    })()`);
+    const failedStopState = await clickOtwLocationControl(
+      "Retry Stop Sharing",
+      "Sharing stopped on this phone, but map cleanup failed. Tap Retry Stop Sharing.",
+    );
+    assert.equal(
+      failedStopState.fetchCalls.filter((call) => call.includes("/status")).length,
+      reopenedOtwState.fetchCalls.filter((call) => call.includes("/status")).length,
+      "A failed location stop must never repeat or undo OTW persistence.",
+    );
+    await evaluate(`(() => {
+      window.__driverLiveLocationTest.stopShouldFail = false;
+      return true;
+    })()`);
+    const stoppedLocationState = await clickOtwLocationControl(
+      "Share Location Again",
+      "Location sharing stopped. OTW remains saved.",
+    );
+    assert.equal(
+      stoppedLocationState.fetchCalls.filter((call) => call.includes("/status")).length,
+      reopenedOtwState.fetchCalls.filter((call) => call.includes("/status")).length,
+      "Stop Sharing must never repeat or undo OTW persistence.",
+    );
+    assert.equal(
+      stoppedLocationState.fetchCalls.filter((call) => call.includes("/live-location") && call.startsWith("DELETE ")).length,
+      2,
+      "Retry Stop Sharing must remain inside the existing location DELETE lane.",
+    );
+    await evaluate(`(() => {
+      window.__driverLiveLocationTest.permission = "denied";
+      return true;
+    })()`);
+    const deniedLocationState = await clickOtwLocationControl(
+      "Retry Share Location",
+      "OTW saved. Location not allowed. Enable Location, then tap Retry Share Location.",
+    );
+    assert.equal(
+      deniedLocationState.fetchCalls.filter((call) => call.includes("/status")).length,
+      stoppedLocationState.fetchCalls.filter((call) => call.includes("/status")).length,
+      "Permission retry must never append another OTW status.",
+    );
+    assert.equal(
+      deniedLocationState.fetchCalls.filter((call) => call.includes("/live-location") && call.startsWith("POST ")).length,
+      stoppedLocationState.fetchCalls.filter((call) => call.includes("/live-location") && call.startsWith("POST ")).length,
+      "Permission denial must not write a location.",
+    );
+    await evaluate(`(() => {
+      window.__driverLiveLocationTest.permission = "granted";
+      return true;
+    })()`);
     await clickBlockedStatus("POB", "Update OTS before POB.", "I'm on the way");
     await clickStatus("OTS", "I've arrived", "Status updated to I've arrived.");
-    await clickBlockedStatus("OTW", "OTW is already recorded. Continue with POB.", "I've arrived");
+    const afterOtsState = await pageState();
+    assert.equal(afterOtsState.liveLocationControl.text, "Retry Share Location");
     const depOtsState = await pageState();
     assert.equal(
       depOtsState.visibleText.includes("Add Mock OTS Photo Proof"),
@@ -1495,6 +1981,11 @@ async function runChromeTest() {
       depOtsState.visibleText.includes("OTS Photo to Admin"),
       true,
       "Expected approved OTS photo proof control after OTS.",
+    );
+    assert.deepEqual(
+      depOtsState.otsPhotoControl,
+      { compact: true, standaloneButton: false, text: "ShootNo photo selected." },
+      "Expected the compact rear-camera file control to retain its appearance with only the chooser wording changed to Shoot.",
     );
     assert.equal(depOtsState.fileInputs.length, 1, "Expected one approved OTS image input after OTS.");
     await uploadOtsPhotoProof();
@@ -1583,7 +2074,7 @@ async function runChromeTest() {
     assertNoSensitiveText(arrivalState);
 
     await saveAndAcknowledgeJob();
-    await clickStatus("OTW", "I'm on the way", "Status updated to I'm on the way.");
+    await clickStatus("OTW", "I'm on the way", "Sharing live location. Keep this app open.");
     await clickStatus("OTS", "I've arrived", "Status updated to I've arrived.");
     const arrivalOtsState = await pageState();
     assert.equal(arrivalOtsState.visibleText.includes("Mock OTS Photo Proof"), false);
@@ -1621,6 +2112,8 @@ async function runChromeTest() {
               portalSubscriptionBodies: window.__driverDeviceAlertTest?.portalSubscriptionBodies || [],
               jobReferences: jobs.map((job) => job.getAttribute("data-driver-portal-job")),
               jobStates: jobs.map((job) => job.querySelector("[data-driver-portal-job-state]")?.textContent.trim()),
+              buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
+              buildMarkerText: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
               text: document.body?.innerText || "",
             }
           : false;
@@ -1633,6 +2126,12 @@ async function runChromeTest() {
       "MOCK-DRIVER-PORTAL-B",
     ]);
     assert.deepEqual(portalState.jobStates, ["On site", "Assigned · Awaiting OTW"]);
+    assert.equal(portalState.buildMarkerCount, 1, "Driver Portal must show one shared public build marker.");
+    assert.match(
+      portalState.buildMarkerText,
+      /^Build (?:[a-f0-9]{8}|unavailable)$/,
+      "Driver Portal must show only the safe short build marker.",
+    );
     assert.equal(
       portalState.fetchCalls.includes("GET /api/driver-portal/jobs"),
       true,

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
+import { CustomerVerifiedIdentitiesEditor } from "./customer-verified-identities-editor";
 
 const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
 const adminCompanyProfileWriteApiPath = "/api/admin-company-traveler-crm-runtime-write-action";
@@ -66,6 +68,22 @@ function profileValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function positiveProfileId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function agencyCompanyProfileName(customerName: string, guestAccountBillingEnabled: boolean) {
+  const normalized = customerName.trim();
+
+  if (!guestAccountBillingEnabled) {
+    return normalized;
+  }
+
+  return normalized.replace(/\s+\[[^\[\]]+\]\s*$/, "").trim() || normalized;
+}
+
 function blankCreateProfile(customerName: string, guestAccountBillingEnabled: boolean): CompanyProfile {
   return {
     accounts_email: "",
@@ -88,6 +106,34 @@ function isMissingCompanyProfileResult(response: Response, result: unknown) {
   const message = typeof record.error === "string" ? record.error.toLowerCase() : "";
 
   return response.status === 404 || /not found|no company/.test(message);
+}
+
+async function loadCompanyProfile(companyName: string) {
+  const params = new URLSearchParams({ company_name: companyName });
+  const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+    headers: {
+      "x-prestige-admin-purpose": "admin-booking-persistence",
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  return { response, result };
+}
+
+async function loadCompanyProfileById(companyId: number) {
+  const params = new URLSearchParams();
+  params.set("id", String(companyId));
+  const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      "x-prestige-admin-purpose": "admin-booking-persistence",
+    },
+    method: "GET",
+  });
+  const result = await response.json().catch(() => null);
+
+  return { response, result };
 }
 
 function profilePayload(profile: CompanyProfile, isCreate: boolean) {
@@ -114,37 +160,29 @@ export function CustomerCompanyProfileEditor({
   customerId,
   customerName,
 }: CustomerCompanyProfileEditorProps) {
+  const router = useRouter();
   const [status, setStatus] = useState<EditorStatus>("idle");
   const [message, setMessage] = useState("");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
   const [loadedGuestAccountBillingEnabled, setLoadedGuestAccountBillingEnabled] = useState(false);
+  const [customerFolderName, setCustomerFolderName] = useState(customerName.trim());
+  const [loadedCustomerFolderName, setLoadedCustomerFolderName] = useState(customerName.trim());
 
   async function openProfileEditor() {
     setStatus("loading");
     setMessage("Loading customer company profile...");
 
     try {
-      const params = new URLSearchParams({ company_name: customerName });
       const accountParams = new URLSearchParams({ customer_id: customerId, limit: "1" });
-      const [response, accountResponse] = await Promise.all([
-        fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
-          headers: {
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "GET",
-        }),
-        fetch(`${adminCustomerAccountsApiPath}?${accountParams.toString()}`, {
-          cache: "no-store",
-          headers: {
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "GET",
-        }),
-      ]);
-      const result = await response.json().catch(() => null);
+      const accountResponse = await fetch(`${adminCustomerAccountsApiPath}?${accountParams.toString()}`, {
+        cache: "no-store",
+        headers: {
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "GET",
+      });
       const accountResult = await accountResponse.json().catch(() => null);
-      const company = result?.company;
       const account = Array.isArray(accountResult?.accounts) ? accountResult.accounts[0] : null;
 
       if (!accountResponse.ok || !accountResult?.ok || String(account?.customer_id || "") !== customerId) {
@@ -152,13 +190,45 @@ export function CustomerCompanyProfileEditor({
       }
 
       const guestAccountBillingEnabled = account.guest_account_billing_enabled === true;
+      const exactCustomerFolderName = profileValue(account.customer_account);
+
+      if (!exactCustomerFolderName) {
+        throw new Error("Exact customer folder name could not be loaded safely.");
+      }
+
       setLoadedGuestAccountBillingEnabled(guestAccountBillingEnabled);
+      setCustomerFolderName(exactCustomerFolderName);
+      setLoadedCustomerFolderName(exactCustomerFolderName);
+      const companyLookupName = agencyCompanyProfileName(exactCustomerFolderName, guestAccountBillingEnabled);
+      const verifiedCompanyId = positiveProfileId(account.verified_company_id);
+      let response: Response;
+      let result: {
+        company?: Record<string, unknown> | null;
+        error?: string;
+        ok?: boolean;
+      } | null;
+
+      if (verifiedCompanyId) {
+        ({ response, result } = await loadCompanyProfileById(verifiedCompanyId));
+      } else {
+        ({ response, result } = await loadCompanyProfile(companyLookupName));
+      }
+
+      if (
+        !verifiedCompanyId &&
+        companyLookupName !== exactCustomerFolderName &&
+        isMissingCompanyProfileResult(response, result)
+      ) {
+        ({ response, result } = await loadCompanyProfile(exactCustomerFolderName));
+      }
+
+      const company = result?.company;
 
       if (!response.ok || !result?.ok) {
-        if (isMissingCompanyProfileResult(response, result)) {
-          setProfile(blankCreateProfile(customerName, guestAccountBillingEnabled));
+        if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result)) {
+          setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
           setProfileMode("create");
-          setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
+          setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
           setStatus("ready");
           return;
         }
@@ -167,15 +237,23 @@ export function CustomerCompanyProfileEditor({
       }
 
       if (!company) {
-        setProfile(blankCreateProfile(customerName, guestAccountBillingEnabled));
+        if (verifiedCompanyId) {
+          throw new Error("Verified company CRM profile could not be loaded safely.");
+        }
+
+        setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
         setProfileMode("create");
-        setMessage(`No company CRM profile exists for ${customerName}. Review the name, then create it deliberately.`);
+        setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
         setStatus("ready");
         return;
       }
 
       if (!Number.isSafeInteger(Number(company.id)) || Number(company.id) <= 0) {
         throw new Error("Customer company profile returned an invalid record id.");
+      }
+
+      if (verifiedCompanyId && Number(company.id) !== verifiedCompanyId) {
+        throw new Error("Verified company CRM profile identity did not match safely.");
       }
 
       setProfile({
@@ -208,7 +286,9 @@ export function CustomerCompanyProfileEditor({
 
     const companyName = profile.company_name.trim();
     const domain = profile.domain.trim().toLowerCase();
+    const normalizedCustomerFolderName = customerFolderName.replace(/\s+/g, " ").trim();
     const isCreate = profileMode === "create";
+    const customerFolderNameChanged = normalizedCustomerFolderName !== loadedCustomerFolderName;
     const guestAccountBillingChanged =
       profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled;
 
@@ -218,9 +298,15 @@ export function CustomerCompanyProfileEditor({
       return;
     }
 
+    if (!normalizedCustomerFolderName || normalizedCustomerFolderName.length > 120) {
+      setMessage("Customer folder name is required and must be 120 characters or fewer.");
+      setStatus("error");
+      return;
+    }
+
     if (
       !window.confirm(
-        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${guestAccountBillingChanged ? ` and ${profile.guest_account_billing_enabled ? "enables" : "disables"} Hotel / Tour Agency guest-account billing for this exact customer` : ""}. It does not change jobs, invoice records, payments, or send any message.`,
+        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${customerFolderNameChanged ? `, renames the customer folder to ${normalizedCustomerFolderName}` : ""}${guestAccountBillingChanged ? ` and ${profile.guest_account_billing_enabled ? "enables" : "disables"} Hotel / Tour Agency guest-account billing for this exact customer` : ""}. It does not change jobs, passenger names, invoice records, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -264,11 +350,14 @@ export function CustomerCompanyProfileEditor({
       setProfile(nextProfile);
       setProfileMode("edit");
 
-      if (profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled) {
+      if (customerFolderNameChanged || guestAccountBillingChanged) {
         const accountResponse = await fetch(adminCustomerAccountsApiPath, {
           body: JSON.stringify({
             customer_id: customerId,
-            guest_account_billing_enabled: profile.guest_account_billing_enabled,
+            ...(customerFolderNameChanged ? { display_name: normalizedCustomerFolderName } : {}),
+            ...(guestAccountBillingChanged
+              ? { guest_account_billing_enabled: profile.guest_account_billing_enabled }
+              : {}),
           }),
           headers: {
             "Content-Type": "application/json",
@@ -277,28 +366,44 @@ export function CustomerCompanyProfileEditor({
           method: "PATCH",
         });
         const accountResult = await accountResponse.json().catch(() => null);
+        const savedCustomerFolderName = profileValue(accountResult?.account?.customer_account);
 
-        if (!accountResponse.ok || !accountResult?.ok) {
+        if (
+          !accountResponse.ok ||
+          !accountResult?.ok ||
+          (customerFolderNameChanged && savedCustomerFolderName !== normalizedCustomerFolderName)
+        ) {
           setMessage(
-            `Saved the company contact profile for ${String(savedProfile.company_name || companyName).trim()}, but the Hotel / Tour Agency setting was not saved. Reload before trying again.`,
+            `Saved the company contact profile for ${String(savedProfile.company_name || companyName).trim()}, but the customer folder settings were not saved. Reload before trying again.`,
           );
           setStatus("error");
           return;
         }
 
-        setLoadedGuestAccountBillingEnabled(profile.guest_account_billing_enabled);
-        window.dispatchEvent(
-          new CustomEvent("prestige:customer-guest-account-billing-updated", {
-            detail: {
-              customerId,
-              enabled: profile.guest_account_billing_enabled,
-            },
-          }),
-        );
+        if (guestAccountBillingChanged) {
+          setLoadedGuestAccountBillingEnabled(profile.guest_account_billing_enabled);
+          window.dispatchEvent(
+            new CustomEvent("prestige:customer-guest-account-billing-updated", {
+              detail: {
+                customerId,
+                enabled: profile.guest_account_billing_enabled,
+              },
+            }),
+          );
+        }
+
+        if (customerFolderNameChanged) {
+          setCustomerFolderName(savedCustomerFolderName);
+          setLoadedCustomerFolderName(savedCustomerFolderName);
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("name", savedCustomerFolderName);
+          router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
+        }
       }
 
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
       setStatus("saved");
+      setProfile(null);
     } catch (error) {
       setMessage(safeErrorMessage(error));
       setStatus("error");
@@ -387,6 +492,19 @@ export function CustomerCompanyProfileEditor({
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+          Customer folder name
+          <input
+            className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+            data-customer-folder-name={customerId}
+            maxLength={120}
+            onChange={(event) => setCustomerFolderName(event.target.value)}
+            value={customerFolderName}
+          />
+          <span className="font-semibold text-slate-500">
+            Controls only this customer folder label and top banner. Passenger names stay on their bookings.
+          </span>
+        </label>
         <label className="grid gap-1 text-xs font-bold text-slate-700">
           Company name
           <input
@@ -473,6 +591,20 @@ export function CustomerCompanyProfileEditor({
           />
         </label>
       </div>
+
+      {profile.guest_account_billing_enabled ? (
+        <p
+          className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
+          data-customer-agency-guest-guidance={customerId}
+        >
+          Agency guests stay on each booking. No permanent Booker / PA or Traveller CRM profile is required.
+        </p>
+      ) : profile.id ? (
+        <CustomerVerifiedIdentitiesEditor
+          companyId={profile.id}
+          companyName={profile.company_name}
+        />
+      ) : null}
 
       <p className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${feedbackClass(status)}`}>
         {message}

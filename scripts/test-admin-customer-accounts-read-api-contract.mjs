@@ -313,6 +313,7 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "UBS-SAFE-002",
+      company_id: 38,
       public_booking_reference: "UBS-00002",
       contact_display_name: "PA Lee",
       contact_email: "private@example.test",
@@ -331,6 +332,7 @@ const seed = {
     {
       admin_internal_status: "confirmed",
       booking_reference: "UBS-SAFE-001",
+      company_id: 38,
       public_booking_reference: "UBS-00001",
       contact_display_name: "PA Lee",
       contact_phone: "+65 7777 0000",
@@ -344,6 +346,7 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "RITZ-SAFE-001",
+      company_id: 55,
       public_booking_reference: "RITZ-00001",
       customer_display_name: "Ritz Carlton",
       customer_facing_status: "completed",
@@ -390,6 +393,14 @@ try {
     },
     ok: true,
   });
+  assert.deepEqual(reader.parseAdminCustomerAccountsReadParams({ limit: "1000" }), {
+    data: {
+      customerId: null,
+      limit: 1000,
+      search: null,
+    },
+    ok: true,
+  });
   assert.deepEqual(reader.parseAdminCustomerAccountsReadParams({ limit: "10", search: "ri" }), {
     data: {
       customerId: null,
@@ -400,7 +411,7 @@ try {
   });
 
   for (const [label, params] of [
-    ["bad limit", { limit: "999" }],
+    ["bad limit", { limit: "1001" }],
     ["unsafe param", { invoice: "INV-1" }],
     ["unsafe search", { search: "invoice" }],
   ]) {
@@ -445,7 +456,7 @@ try {
   const invalidParamsMock = installMockClient(seed);
   const invalidParamsResult = await readRouteResponse(
     await route.GET(
-      new Request("http://localhost/api/admin-customer-accounts?limit=99", {
+      new Request("http://localhost/api/admin-customer-accounts?limit=1001", {
         headers: sessionHeaders(),
       }),
     ),
@@ -481,6 +492,7 @@ try {
       completed_count: 1,
       customer_account: "UBS",
       customer_folder_key: "101::boss_alpha",
+      customer_folder_active: true,
       customer_id: "101",
       guest_account_billing_enabled: false,
       latest_booking_reference: "UBS-SAFE-002",
@@ -490,6 +502,7 @@ try {
       saved_booking_count: 1,
       source: "admin_booking_persistence",
       upcoming_count: 0,
+      verified_company_id: "38",
     },
     {
       account_scope_key: "booker_traveller_not_set",
@@ -497,6 +510,7 @@ try {
       completed_count: 1,
       customer_account: "Ritz Carlton",
       customer_folder_key: "102::booker_traveller_not_set",
+      customer_folder_active: true,
       customer_id: "102",
       guest_account_billing_enabled: true,
       latest_booking_reference: "RITZ-SAFE-001",
@@ -506,6 +520,7 @@ try {
       saved_booking_count: 1,
       source: "admin_booking_persistence",
       upcoming_count: 0,
+      verified_company_id: "55",
     },
     {
       account_scope_key: "boss_beta",
@@ -513,6 +528,7 @@ try {
       completed_count: 0,
       customer_account: "UBS",
       customer_folder_key: "101::boss_beta",
+      customer_folder_active: true,
       customer_id: "101",
       guest_account_billing_enabled: false,
       latest_booking_reference: "UBS-SAFE-001",
@@ -522,6 +538,7 @@ try {
       saved_booking_count: 1,
       source: "admin_booking_persistence",
       upcoming_count: 1,
+      verified_company_id: "38",
     },
     {
       account_scope_key: "customer_account",
@@ -529,6 +546,7 @@ try {
       completed_count: 0,
       customer_account: "Directory Only Customer",
       customer_folder_key: "103::customer_account",
+      customer_folder_active: true,
       customer_id: "103",
       guest_account_billing_enabled: false,
       latest_booking_reference: null,
@@ -538,15 +556,85 @@ try {
       saved_booking_count: 0,
       source: "customer_directory",
       upcoming_count: 0,
+      verified_company_id: null,
     },
   ]);
   assert.equal(readMock.client.operations.length, 0);
-  assert.equal(readMock.client.selectHistory.length, 2);
+  assert.equal(readMock.client.selectHistory.length, 3);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
   assert.equal(readMock.client.selectHistory[0].limit, 200);
   assert.equal(readMock.client.selectHistory[1].table, "customers");
-  assert.equal(readMock.client.selectHistory[1].limit, 200);
+  assert.equal(readMock.client.selectHistory[1].limit, 1000);
+  assert.equal(readMock.client.selectHistory[2].table, "bookings");
+  assert.equal(readMock.client.selectHistory[2].selectedColumns, "customer_id, company_id");
+  assert.equal(readMock.client.selectHistory[2].limit, 1000);
   assertNoLeaks(readResult, "customer accounts read response should stay safe");
+
+  setEnv(enabledEnv());
+
+  const olderAgencyMock = installMockClient({
+    bookings: [
+      {
+        booking_reference: "OLDER-AGENCY-RELATIONSHIP",
+        company_id: 66,
+        customer_id: "104",
+      },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "hotel",
+        display_name: "Older Linked Agency",
+        id: 104,
+        status: "active",
+      },
+    ],
+  });
+  const olderAgencyResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?limit=1000", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(olderAgencyResult.status, 200);
+  assert.equal(olderAgencyResult.body.accounts.length, 1);
+  assert.equal(olderAgencyResult.body.accounts[0].customer_id, "104");
+  assert.equal(olderAgencyResult.body.accounts[0].customer_folder_active, true);
+  assert.equal(olderAgencyResult.body.accounts[0].guest_account_billing_enabled, true);
+  assert.equal(olderAgencyResult.body.accounts[0].verified_company_id, "66");
+  assert.equal(olderAgencyMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const ambiguousOlderAgencyMock = installMockClient({
+    bookings: [
+      { booking_reference: "OLDER-AGENCY-FIRST", company_id: 66, customer_id: "104" },
+      { booking_reference: "OLDER-AGENCY-SECOND", company_id: 67, customer_id: "104" },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "hotel",
+        display_name: "Ambiguous Older Agency",
+        id: 104,
+        status: "active",
+      },
+    ],
+  });
+  const ambiguousOlderAgencyResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?limit=1000", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(ambiguousOlderAgencyResult.status, 200);
+  assert.equal(ambiguousOlderAgencyResult.body.accounts.length, 1);
+  assert.equal(ambiguousOlderAgencyResult.body.accounts[0].verified_company_id, null);
+  assert.equal(ambiguousOlderAgencyMock.client.operations.length, 0);
 
   setEnv(enabledEnv());
 
@@ -571,7 +659,7 @@ try {
     "Directory Only Customer",
   ]);
   assert.equal(searchMock.client.operations.length, 0);
-  assert.equal(searchMock.client.selectHistory.length, 2);
+  assert.equal(searchMock.client.selectHistory.length, 3);
   assert.equal(searchMock.client.selectHistory[0].limit, 200);
   assertNoLeaks(searchResult, "searched customer accounts response should stay safe");
 
@@ -589,7 +677,7 @@ try {
   assert.equal(tokenReadResult.status, 200);
   assert.equal(tokenReadResult.body.ok, true);
   assert.equal(tokenReadMock.client.operations.length, 0);
-  assert.equal(tokenReadMock.client.selectHistory.length, 2);
+  assert.equal(tokenReadMock.client.selectHistory.length, 3);
   assertNoLeaks(tokenReadResult, "customer accounts token read response should stay safe");
 
   setEnv(enabledEnv());
@@ -608,7 +696,7 @@ try {
   assert.equal(limitedResult.body.accounts[0].customer_account, "UBS");
   assert.equal(limitedResult.body.accounts[0].account_scope_key, "boss_alpha");
   assert.equal(limitedMock.client.operations.length, 0);
-  assert.equal(limitedMock.client.selectHistory.length, 2);
+  assert.equal(limitedMock.client.selectHistory.length, 3);
   assertNoLeaks(limitedResult, "limited customer accounts response should stay safe");
 
   setEnv(enabledEnv());
@@ -630,6 +718,32 @@ try {
   assert.equal(exactResult.body.accounts[0].customer_id, "102");
   assert.equal(exactResult.body.accounts[0].guest_account_billing_enabled, true);
   assert.equal(exactMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const agencyDirectorySeed = clone(seed);
+  agencyDirectorySeed.customers = agencyDirectorySeed.customers.map((customer) =>
+    customer.id === 102
+      ? { ...customer, display_name: "Ritz Carlton Agency" }
+      : customer,
+  );
+  const agencyDirectoryMock = installMockClient(agencyDirectorySeed);
+  const agencyDirectoryResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=102&limit=1", {
+        headers: sessionHeaders({
+          referer: "http://localhost/customers/102",
+          "x-prestige-admin-session-token": undefined,
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(agencyDirectoryResult.status, 200);
+  assert.equal(agencyDirectoryResult.body.accounts.length, 1);
+  assert.equal(agencyDirectoryResult.body.accounts[0].customer_account, "Ritz Carlton Agency");
+  assert.equal(agencyDirectoryResult.body.accounts[0].guest_account_billing_enabled, true);
+  assert.equal(agencyDirectoryMock.client.operations.length, 0);
 
   setEnv(enabledEnv());
 
@@ -655,15 +769,99 @@ try {
 
   assert.equal(updateResult.status, 200);
   assert.equal(updateResult.body.account.customer_id, "101");
+  assert.equal(updateResult.body.account.customer_folder_active, true);
   assert.equal(updateResult.body.account.guest_account_billing_enabled, true);
   assert.deepEqual(updateMock.client.operations, [{
     filters: [{ column: "id", type: "eq", value: "101" }],
     payload: { customer_type: "hotel" },
-    selectedColumns: "id, display_name, customer_type",
+    selectedColumns: "id, display_name, customer_type, account_status, status",
     singleResult: true,
     table: "customers",
     type: "update",
   }]);
+
+  setEnv(enabledEnv());
+
+  const renameMock = installMockClient(seed);
+  const renameResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({
+          customer_id: "101",
+          display_name: "Transzend Groundbooker",
+        }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(renameResult.status, 200);
+  assert.equal(renameResult.body.account.customer_id, "101");
+  assert.equal(renameResult.body.account.customer_account, "Transzend Groundbooker");
+  assert.equal(renameResult.body.account.guest_account_billing_enabled, false);
+  assert.deepEqual(renameMock.client.operations, [{
+    filters: [{ column: "id", type: "eq", value: "101" }],
+    payload: { display_name: "Transzend Groundbooker" },
+    selectedColumns: "id, display_name, customer_type, account_status, status",
+    singleResult: true,
+    table: "customers",
+    type: "update",
+  }]);
+
+  setEnv(enabledEnv());
+
+  const blankRenameMock = installMockClient(seed);
+  const blankRenameResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({ customer_id: "101", display_name: "   " }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(blankRenameResult.status, 400);
+  assertNoSupabaseTouched(blankRenameMock, "blank customer folder rename");
+
+  setEnv(enabledEnv());
+
+  const travellerWriteMock = installMockClient(seed);
+  const travellerWriteResult = await readRouteResponse(
+    await route.PATCH(
+      new Request("http://localhost/api/admin-customer-accounts", {
+        body: JSON.stringify({
+          customer_id: "101",
+          display_name: "Transzend Groundbooker",
+          traveller_name: "Mr David Kelly",
+        }),
+        headers: {
+          ...sessionHeaders({
+            referer: "http://localhost/customers/101",
+            "x-prestige-admin-session-token": undefined,
+          }),
+          "content-type": "application/json",
+        },
+        method: "PATCH",
+      }),
+    ),
+  );
+
+  assert.equal(travellerWriteResult.status, 400);
+  assertNoSupabaseTouched(travellerWriteMock, "customer folder rename with traveller profile field");
 
   setEnv(enabledEnv());
 

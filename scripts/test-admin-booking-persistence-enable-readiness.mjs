@@ -17,6 +17,8 @@ const serviceRoleSentinel =
   "SUPABASE_SERVICE_ROLE_ENABLE_READINESS_SENTINEL_DO_NOT_LEAK";
 const supabaseUrlSentinel = "https://enable-readiness.supabase.co";
 const serverSessionToken = "mock-enable-readiness-admin-session-token";
+const customerPhoneProof = "enable-readiness-customer-phone-proof";
+const customerPhoneBookingReference = "CUST-20300608103000-READINESS";
 const safeResponseLeakPattern =
   /SUPABASE_SERVICE_ROLE_ENABLE_READINESS_SENTINEL|mock-enable-readiness-admin-session-token|enable-readiness\.supabase\.co|PRESTIGE_ADMIN|service_role|server-only|server_only|stack|sql|supabase internals|createClient|secret|key|token/i;
 const unsafeResponseLeakPattern =
@@ -169,6 +171,27 @@ async function writeMockModules(tempDir, options = {}) {
       "  return { ok: false, reason: 'gate_closed', status: 'blocked' };",
       "}",
       "module.exports = { sendCustomerBookingReceiptEmail };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-invitation.js"),
+    [
+      "function verifyCustomerBookingInvitationToken() {",
+      "  return { error: 'Customer booking invitation is invalid.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { verifyCustomerBookingInvitationToken };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-phone-otp.js"),
+    [
+      "function verifyCustomerBookingPhoneOtpProof(proof, phone) {",
+      `  if (proof !== ${JSON.stringify(customerPhoneProof)} || phone !== '+65 9000 3202') {`,
+      "    return { error: 'Customer phone verification is invalid.', ok: false, status: 403 };",
+      "  }",
+      `  return { data: { booking_reference: ${JSON.stringify(customerPhoneBookingReference)} }, ok: true };`,
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
     ].join("\n"),
   );
   await writeFile(
@@ -374,6 +397,7 @@ function customerHeaders(overrides = {}) {
     "content-type": "application/json",
     origin: "http://localhost",
     referer: "http://localhost/book",
+    "x-prestige-customer-booking-phone-proof": customerPhoneProof,
     "x-prestige-customer-purpose": "customer-booking-request",
     ...overrides,
   };
@@ -825,7 +849,7 @@ try {
   assert.deepEqual(customerRouteMock.client.operations, [
     {
       action: "from",
-      table: "customers",
+      table: "bookings",
     },
   ]);
 

@@ -111,7 +111,7 @@ for (const fragment of [
   'data-customer-voice-booking-speak-button="true"',
   'data-customer-booking-portal-link="true"',
   'href="/my-bookings"',
-  "Portal",
+  "My Bookings",
 ]) {
   assertIncludes(headerActionBlock, fragment, `header action group fragment ${fragment}`);
 }
@@ -119,9 +119,9 @@ for (const fragment of [
 assert.equal(
   countMatches(bookPage, 'data-customer-booking-portal-link="true"'),
   1,
-  "Existing Portal link must remain exactly once.",
+  "Existing My Bookings link must remain exactly once.",
 );
-assertIncludes(bookPage, 'href="/my-bookings"', "Portal href remains unchanged");
+assertIncludes(bookPage, 'href="/my-bookings"', "My Bookings href remains unchanged");
 
 for (const fragment of [
   "getCustomerBookingSpeechRecognitionConstructor",

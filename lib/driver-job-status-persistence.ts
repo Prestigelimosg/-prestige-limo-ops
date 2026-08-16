@@ -19,6 +19,7 @@ export const driverJobStatusPersistenceVersion =
   "stage-driver-job-status-production-adapter-v1";
 
 export type DriverJobPersistenceBlockedReason =
+  | "acknowledgement_required"
   | "already_completed"
   | "expired"
   | "invalid_details"
@@ -27,6 +28,10 @@ export type DriverJobPersistenceBlockedReason =
   | "out_of_order"
   | "revoked"
   | "unauthorized";
+
+export type DriverJobDetailsBlockedReason =
+  | DriverJobPersistenceBlockedReason
+  | "already_acknowledged";
 
 export type DriverJobProductionPayloadResult =
   | {
@@ -39,7 +44,11 @@ export type DriverJobProductionPayloadResult =
       payload: null;
       reason: Exclude<
         DriverJobPersistenceBlockedReason,
-        "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+        | "acknowledgement_required"
+        | "already_completed"
+        | "invalid_details"
+        | "invalid_status"
+        | "out_of_order"
       >;
     };
 
@@ -69,7 +78,7 @@ export type DriverJobProductionDetailsUpdateResult =
   | {
       ok: false;
       payload: null;
-      reason: DriverJobPersistenceBlockedReason;
+      reason: DriverJobDetailsBlockedReason;
     };
 
 export type DriverJobStatusPersistenceClient = Pick<SupabaseClient, "from">;
@@ -127,7 +136,11 @@ type LinkResolveResult =
       ok: false;
     reason: Exclude<
       DriverJobPersistenceBlockedReason,
-      "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+      | "acknowledgement_required"
+      | "already_completed"
+      | "invalid_details"
+      | "invalid_status"
+      | "out_of_order"
     >;
   };
 
@@ -432,6 +445,22 @@ function safeDriverDetailsFromInput(input: SaveDriverJobDetailsPersistenceInput)
   };
 }
 
+function lockedAcknowledgedDriverDetailsMatch(
+  link: DriverJobLinkPersistenceRow,
+  nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
+) {
+  const saved = safePayloadRecordFromLink(link);
+
+  return Boolean(
+    saved.driver_acknowledged_at &&
+    link.driver_id &&
+    saved.driver_contact === nextDetails.contact &&
+    saved.driver_name === nextDetails.name &&
+    saved.driver_plate_number === nextDetails.plate &&
+    saved.driver_vehicle_model === nextDetails.vehicleModel,
+  );
+}
+
 function safeDateTextFromDb(value: unknown) {
   const cleaned = cleanText(value);
 
@@ -480,7 +509,11 @@ function safeWaypointList(value: unknown) {
 function linkBlockedResult(
   reason: Exclude<
     DriverJobPersistenceBlockedReason,
-    "already_completed" | "invalid_details" | "invalid_status" | "out_of_order"
+    | "acknowledgement_required"
+    | "already_completed"
+    | "invalid_details"
+    | "invalid_status"
+    | "out_of_order"
   >,
 ): DriverJobProductionPayloadResult {
   return {
@@ -491,7 +524,7 @@ function linkBlockedResult(
 }
 
 function detailsBlockedResult(
-  reason: DriverJobPersistenceBlockedReason,
+  reason: DriverJobDetailsBlockedReason,
 ): DriverJobProductionDetailsUpdateResult {
   return {
     ok: false,
@@ -1280,6 +1313,36 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     return detailsBlockedResult(statusHistory.reason);
   }
 
+  const alreadyAcknowledged = Boolean(
+    safeTextFromDb(
+      asRecord(resolvedLink.link.safe_link_context).driver_acknowledged_at,
+      80,
+    ),
+  );
+
+  if (alreadyAcknowledged) {
+    if (!lockedAcknowledgedDriverDetailsMatch(resolvedLink.link, nextDetails)) {
+      return detailsBlockedResult("already_acknowledged");
+    }
+
+    const currentSafeSchedule = await loadCurrentSafeBookingSchedule(
+      input.client,
+      resolvedLink.link,
+    );
+
+    return {
+      booking_reference: resolvedLink.link.booking_reference,
+      ok: true,
+      payload: payloadForLink(
+        resolvedLink.link,
+        statusHistory.statuses[0]?.status_value || null,
+        statusHistory.statuses,
+        currentSafeSchedule,
+      ),
+      reason: "updated",
+    };
+  }
+
   const identity = await resolveAcknowledgedDriverIdentity(
     input.client,
     resolvedLink.link,
@@ -1420,14 +1483,20 @@ export async function saveDriverJobStatusThroughStatusPersistence(
   }
 
   const transitionGuard = guardDriverJobStatusTransition({
-    acknowledged: true,
+    acknowledged: Boolean(
+      safeTextFromDb(
+        asRecord(resolvedLink.link.safe_link_context).driver_acknowledged_at,
+        80,
+      ),
+    ),
     currentStatus: statusHistory.statuses[0]?.status_value || "",
     nextStatus,
   });
 
   if (!transitionGuard.ok) {
     return statusBlockedResult(
-      transitionGuard.reason === "already_completed" ||
+      transitionGuard.reason === "acknowledgement_required" ||
+        transitionGuard.reason === "already_completed" ||
         transitionGuard.reason === "out_of_order"
         ? transitionGuard.reason
         : "invalid_status",

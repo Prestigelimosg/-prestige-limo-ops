@@ -11,8 +11,10 @@ export type ParsedBooking = {
   booker?: string;
   bookerContact?: string;
   bookerEmail?: string;
+  passengerContact?: string;
   name?: string;
   pax?: string;
+  luggageCount?: string;
   childSeatRequired?: string;
   childSeatCount?: string;
   childSeatType?: string;
@@ -22,6 +24,7 @@ export type ParsedBooking = {
   customerPriceOverrideReason?: string;
   driverName?: string;
   driverContact?: string;
+  driverNotes?: string;
   standbyUntil?: string;
   returnDestination?: string;
   cleanedLines?: string[];
@@ -397,6 +400,47 @@ function detectAllFlights(text: string) {
   return Array.from(flights);
 }
 
+function sentenceCase(value: string) {
+  const sentence = clean(value).replace(/[.,;]+$/g, "");
+
+  return sentence ? `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}` : "";
+}
+
+function detectSecondaryFamilyFlightContext(text: string, primaryFlight = detectFlight(text)) {
+  const familyFlightMatch = text.match(
+    /\b((?:his|her|their)\s+(?:son|daughter)\s+[A-Za-z][A-Za-z.'-]*\s+is\s+taking\s+(?:flight\s+)?([A-Z]{2}\s?\d{1,4})\s*,?\s*which\s+departs?\s+from\s+(?:t|terminal\s*)([1-4])\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/i,
+  );
+  const secondaryFlight = normalizeFlightCode(familyFlightMatch?.[2]);
+  const driverInstruction = firstMatch(text, [
+    /\b((?:please\s+)?ask\s+(?:the\s+)?driver\s+to\s+check\s+with\s+[A-Za-z0-9.' -]{1,40}?\s+(?:that\s+morning\s+)?on\s+which\s+terminal\s+to\s+drop\s+off)\b/i,
+  ]);
+  const boundedSingleBookingContext =
+    /\bpick\s*up\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\s+from\b/i.test(text) &&
+    /\btotal\s+pax\s+is\s+\d{1,2}\b/i.test(text) &&
+    Boolean(detectAlternativeTerminal(text)) &&
+    Boolean(driverInstruction);
+
+  if (
+    !familyFlightMatch?.[1] ||
+    !secondaryFlight ||
+    secondaryFlight === primaryFlight ||
+    !boundedSingleBookingContext
+  ) {
+    return null;
+  }
+
+  const familyFlightContext = sentenceCase(familyFlightMatch[1]);
+  const normalizedInstruction = sentenceCase(driverInstruction);
+
+  return {
+    driverNotes: [familyFlightContext, normalizedInstruction]
+      .filter(Boolean)
+      .map((sentence) => `${sentence}.`)
+      .join(" "),
+    flight: secondaryFlight,
+  };
+}
+
 function extractNamedPassengerLine(line: string) {
   const cleanedLine = clean(line.replace(/^[-*•]\s*/, ""));
   const labeledPassenger = firstMatch(cleanedLine, [
@@ -444,6 +488,14 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
     ? cleanedLines.filter(isAddOnTripSectionLine)
     : [];
   const flights = detectAllFlights(text);
+  const primaryFlight = detectFlight(text);
+  const secondaryFamilyFlightContext = detectSecondaryFamilyFlightContext(text, primaryFlight);
+  const hasMultipleOperationalFlights = flights.length > 1 && !(
+    flights.length === 2 &&
+    secondaryFamilyFlightContext &&
+    flights.includes(primaryFlight) &&
+    flights.includes(secondaryFamilyFlightContext.flight)
+  );
   const namedPassengers = Array.from(new Set(
     cleanedLines
       .map((line) => extractNamedPassengerLine(line))
@@ -462,7 +514,7 @@ function detectMultipleBookings(text: string, cleanedLines: string[]) {
     addOnTripSections.length > 1 ||
     pickupAddressSections.length > 1 ||
     listItems.length > 1 ||
-    flights.length > 1 ||
+    hasMultipleOperationalFlights ||
     namedPassengers.length > 1 ||
     multiLegAirportStandby;
 }
@@ -837,7 +889,10 @@ function normalizeParenthesizedAddress(value: string) {
 
 function detectSharedTransferRequestContext(text: string) {
   const email = firstMatch(text, [/\b([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i]);
-  const company = cleanCompanyAccount(lineValue(text, ["company", "client", "account"])) || getEmailDomain(email);
+  const company =
+    cleanCompanyAccount(
+      lineValue(text, ["company/account", "company", "client", "account"]),
+    ) || getEmailDomain(email);
   const passenger = detectName(text, "") || cleanDetectedName(lineValue(text, ["passenger", "passenger name"]));
   const booker = detectBookerValue(text, { booker: "", company }) || detectSignatureBooker(text);
   const vehicle = cleanVehicle(lineValue(text, ["vehicle type", "vehicle", "car", "vehicle name"])) || detectVehicle(text);
@@ -2275,7 +2330,7 @@ function detectExtraStopDetails(text: string) {
     "route location",
     "route locations",
   ]);
-  const labeledExtraStop = cleanLocation(lineValue(text, [
+  const labeledExtraStop = clean(lineValue(text, [
     "extra stop",
     "extra stops",
     "extra stop location",
@@ -2294,6 +2349,7 @@ function detectExtraStopDetails(text: string) {
     : 0;
   const explicitCount = firstMatch(text, [
     /\b(\d{1,2})[ \t]+extra[ \t]+stops?\b/i,
+    /\bextra[ \t]+stop[ \t]+count[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
     /\bextra[ \t]+stops?[ \t]*[:=-][ \t]*(\d{1,2})\b/i,
     /\b(\d{1,2})\s*x\s+waypoints?\b/i,
   ]);
@@ -2414,7 +2470,7 @@ function detectAdultChildPax(text: string) {
 
 function detectExplicitPax(text: string) {
   return detectAdultChildPax(text) || firstMatch(text, [
-    /\b(?:pax|passengers?|passangers|persons?|people)\s*(?:[:=-]|\t)?\s*(\d{1,2})\b/i,
+    /\b(?:pax|passengers?|passangers|persons?|people)\s*(?:[:=-]|\t)?\s*(?:is\s+)?(\d{1,2})\b/i,
     /\b(\d{1,2})\s*(?:pax|passengers?|passangers|persons?|people)\b/i,
   ]) ||
     (detectCoupleCompanion(text) ? "2" : "");
@@ -2571,7 +2627,10 @@ function detectStandaloneHonorificNameLine(text: string) {
 
 function detectTripOrganizerDetails(text: string) {
   const match = text.match(/\btrip\s+organizer\s*[:=-]\s*([^\n(]+?)(?:\s*\(([^)]*)\))?(?=\n|$)/i);
-  const rawBooker = clean(match?.[1] ?? "");
+  const rawBooker = clean(match?.[1] ?? "").replace(
+    /\s*;\s*(?:bag\s+count|bags?|passenger\s+capacity|vehicle\s+capacity)\s*:.+$/i,
+    "",
+  );
   const contactText = match?.[2] || match?.[0] || "";
   const contact = firstMatch(contactText, [new RegExp(String.raw`(${phoneNumberPatternSource})`)]);
   const contactIndex = contact ? rawBooker.indexOf(contact) : -1;
@@ -2772,7 +2831,25 @@ function normalizeLocationName(value: string) {
   return cleanedValue;
 }
 
+function detectAlternativeTerminal(text: string) {
+  const alternativeTerminalMatch = text.match(
+    /(?:>|->|=>)\s*\**\s*(?:t|terminal\s*)([1-4])\**\s*(?:or|\/)\s*\**\s*(?:t|terminal\s*)([1-4])\b/i,
+  );
+
+  if (alternativeTerminalMatch?.[1] && alternativeTerminalMatch[2]) {
+    return `Changi Airport T${alternativeTerminalMatch[1]} or T${alternativeTerminalMatch[2]}`;
+  }
+
+  return "";
+}
+
 function detectTerminal(text: string) {
+  const alternativeTerminal = detectAlternativeTerminal(text);
+
+  if (alternativeTerminal) {
+    return alternativeTerminal;
+  }
+
   const terminalMatch = text.match(/\b(?:terminal|term|t)\s*[:=-]?\s*([1-4])\b/i);
 
   return terminalMatch?.[1] ? `Changi Airport T${terminalMatch[1]}` : "";
@@ -3365,8 +3442,16 @@ function detectRoute(text: string, flight = "") {
   if (routeMatch?.[1] && routeMatch?.[2]) {
     const routePickup = clean(routeMatch[1].split("\n").pop() || "").replace(/^.*?\b\d{3,4}\s*(?:hrs?)?\s+/, "");
     const routeDropoff = clean(routeMatch[2].split("\n")[0] || "");
+    const alternativeTerminal = detectAlternativeTerminal(text);
     const leftFlight = normalizeFlightCode(routePickup);
     const rightFlight = normalizeFlightCode(routeDropoff);
+
+    if (flight && alternativeTerminal) {
+      return {
+        pickup: cleanLocation(routePickup),
+        dropoff: alternativeTerminal,
+      };
+    }
 
     if (flight && leftFlight === flight) {
       return {
@@ -3594,9 +3679,11 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const domain = getEmailDomain(email);
   const bookerCompanyContext = detectBookerCompanyContext(operationalText);
   const tripOrganizerDetails = detectTripOrganizerDetails(operationalText);
+  const detectedBooker = detectBookerValue(operationalText, bookerCompanyContext);
   const dateText = lineValue(operationalText, ["date", "pickup date", "p/u date", "pu date"]);
   const multiStopItinerary = detectMultiStopItinerary(operationalText);
   const flight = multiStopItinerary ? "" : detectFlight(operationalText);
+  const secondaryFamilyFlightContext = detectSecondaryFamilyFlightContext(operationalText, flight);
   const terminalFlightDetails = detectTerminalFlightLineDetails(operationalText, flight);
   const sharedArrivalDropoff = terminalFlightDetails ? detectSharedArrivalDropoff(operationalText) : "";
   const detectedRouteValues = multiStopItinerary
@@ -3636,6 +3723,14 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const childSeatType = detectChildSeatType(operationalText);
   const childSeatCount = detectChildSeatCount(operationalText);
   const extraStopDetails = multiStopItinerary || detectExtraStopDetails(operationalText);
+  const passengerContact = lineValue(operationalText, [
+    "passenger contact",
+    "passenger phone",
+  ]);
+  const luggageCount = firstMatch(
+    lineValue(operationalText, ["bags", "bag count", "luggage count"]),
+    [/\b(\d{1,2})\b/],
+  );
   const bookingType =
     lineValue(operationalText, ["booking type", "type", "job type"]) ||
     (multiStopItinerary ? "DSP" : detectBookingType(operationalText, flight, routeValues));
@@ -3643,7 +3738,9 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const parsedBooking: ParsedBooking = {
     success: true,
     company:
-      cleanCompanyAccount(lineValue(operationalText, ["company", "client", "account"])) ||
+      cleanCompanyAccount(
+        lineValue(operationalText, ["company/account", "company", "client", "account"]),
+      ) ||
       cleanCompanyAccount(bookerCompanyContext.company) ||
       cleanCompanyAccount(whatsappTranscript.senderCompany) ||
       domain,
@@ -3658,20 +3755,26 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     pickup: routeValues.pickup,
     dropoff: routeValues.dropoff,
     booker:
+      (tripOrganizerDetails.contact ? tripOrganizerDetails.booker : "") ||
+      detectedBooker ||
       tripOrganizerDetails.booker ||
-      detectBookerValue(operationalText, bookerCompanyContext) ||
       whatsappTranscript.senderName ||
       (paxNameAndNumber ? structuredClientName : "") ||
       getEmailBooker(email),
     bookerEmail: email,
     name,
     pax: terminalFlightDetails?.pax || detectPax(operationalText),
+    ...(passengerContact ? { passengerContact } : {}),
+    ...(luggageCount ? { luggageCount } : {}),
     driverName: lineValue(operationalText, ["driver", "driver name", "chauffeur"]) || standbyDriver,
     driverContact: lineValue(operationalText, [
       "driver contact",
       "driver phone",
       "chauffeur contact",
     ]),
+    ...(secondaryFamilyFlightContext?.driverNotes
+      ? { driverNotes: secondaryFamilyFlightContext.driverNotes }
+      : {}),
     ...(quotedCustomerPrice.customerPriceOverride
       ? {
           customerPriceOverride: quotedCustomerPrice.customerPriceOverride,

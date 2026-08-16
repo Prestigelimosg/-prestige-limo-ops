@@ -36,6 +36,7 @@ export type AdminBookingRecordInput = {
   driver_plate_number?: string | null;
   pax_count?: number | null;
   luggage_count?: number | null;
+  customer_special_request?: string | null;
   vehicle_type_or_category?: string | null;
   customer_facing_status?: string | null;
   admin_internal_status?: string | null;
@@ -46,6 +47,10 @@ export type AdminBookingRecordInput = {
   parser_source_reference?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type AdminHotelAgencyFolderCreateIntent = {
+  company_name: string;
 };
 
 export type AdminBookingRoutePointInput = {
@@ -68,11 +73,13 @@ export type AdminBookingServiceItemInput = {
 
 export type AdminBookingPersistenceInput = {
   booking: AdminBookingRecordInput;
+  hotel_agency_folder_create?: AdminHotelAgencyFolderCreateIntent | null;
   route_points: AdminBookingRoutePointInput[];
   service_items: AdminBookingServiceItemInput[];
 };
 
 export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
+  expected_updated_at?: string | null;
   target_booking_reference: string;
 };
 
@@ -98,6 +105,7 @@ export type CustomerBookingRequestInput = {
   passengerCount?: string | number | null;
   luggage?: string | number | null;
   extraStops?: string | null;
+  specialRequest?: string | null;
 };
 
 export type AdminBookingPersistenceRecord = Required<
@@ -162,8 +170,14 @@ const maxServiceItems = 12;
 export const adminBookingPersistenceContractVersion =
   "stage-4a-376-admin-only-safe-operational-adapter-v1";
 
-const createPayloadTopLevelFields = new Set(["booking", "route_points", "service_items"]);
+const createPayloadTopLevelFields = new Set([
+  "booking",
+  "hotel_agency_folder_create",
+  "route_points",
+  "service_items",
+]);
 const updatePayloadTopLevelFields = new Set([
+  "expected_updated_at",
   "target_booking_reference",
   "booking",
   "route_points",
@@ -192,6 +206,7 @@ const customerBookingRequestFields = new Set([
   "passengerCount",
   "luggage",
   "extraStops",
+  "specialRequest",
 ]);
 
 const bookingFields = new Set([
@@ -223,6 +238,7 @@ const bookingFields = new Set([
   "driver_plate_number",
   "pax_count",
   "luggage_count",
+  "customer_special_request",
   "vehicle_type_or_category",
   "customer_facing_status",
   "admin_internal_status",
@@ -234,6 +250,7 @@ const bookingFields = new Set([
   "created_at",
   "updated_at",
 ]);
+const hotelAgencyFolderCreateFields = new Set(["company_name"]);
 
 const routePointFields = new Set([
   "point_type",
@@ -415,6 +432,55 @@ function integerOrNull(value: unknown) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function customerBookingLuggageCount(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const normalized = typeof value === "string" ? value.trim() : value;
+
+  if (normalized === "") {
+    return null;
+  }
+
+  let parsed = Number.NaN;
+
+  if (typeof normalized === "number") {
+    parsed = normalized;
+  } else if (typeof normalized === "string" && /^\d+$/.test(normalized)) {
+    parsed = Number(normalized);
+  }
+
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 2_147_483_647
+    ? parsed
+    : null;
+}
+
+function customerBookingSpecialRequest(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.length > 500 ||
+    /[\u0000-\u0009\u000b-\u001f\u007f]/.test(normalized)
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 function pickupIsUnderTwentyFourHours(value: string | null | undefined) {
   const pickupMs = value ? new Date(value).getTime() : Number.NaN;
 
@@ -509,6 +575,8 @@ function sanitizeBooking(record: UnknownRecord): AdminBookingRecordInput {
     driver_plate_number: textOrNull(record.driver_plate_number),
     pax_count: integerOrNull(record.pax_count),
     luggage_count: integerOrNull(record.luggage_count),
+    customer_special_request:
+      customerBookingSpecialRequest(record.customer_special_request) ?? null,
     vehicle_type_or_category: textOrNull(record.vehicle_type_or_category),
     customer_facing_status: textOrNull(record.customer_facing_status),
     admin_internal_status: textOrNull(record.admin_internal_status),
@@ -752,10 +820,19 @@ function parseAdminBookingOperationalPayload(
 
   const unknownTopLevelKeys = Object.keys(body).filter((key) => !allowedTopLevelFields.has(key));
   const bookingRecord = asRecord(body.booking);
+  const hasHotelAgencyFolderCreate = hasOwn(body, "hotel_agency_folder_create");
+  const hotelAgencyFolderCreateRecord = asRecord(body.hotel_agency_folder_create);
   const routePointRecords = asArray(body.route_points).map(asRecord);
   const serviceItemRecords = asArray(body.service_items).map(asRecord);
   const unknownNestedKeys = [
     ...findUnknownKeys(bookingRecord, bookingFields, "booking"),
+    ...(hasHotelAgencyFolderCreate
+      ? findUnknownKeys(
+          hotelAgencyFolderCreateRecord,
+          hotelAgencyFolderCreateFields,
+          "hotel_agency_folder_create",
+        )
+      : []),
     ...routePointRecords.flatMap((record, index) =>
       findUnknownKeys(record, routePointFields, `route_points[${index}]`),
     ),
@@ -789,6 +866,42 @@ function parseAdminBookingOperationalPayload(
     };
   }
 
+  if (
+    hasOwn(bookingRecord, "customer_special_request") &&
+    customerBookingSpecialRequest(bookingRecord.customer_special_request) === undefined
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed admin booking customer special request rejected.",
+    };
+  }
+
+  if (
+    hasHotelAgencyFolderCreate &&
+    (body.hotel_agency_folder_create === null ||
+      typeof body.hotel_agency_folder_create !== "object" ||
+      Array.isArray(body.hotel_agency_folder_create))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed Hotel / Tour Agency folder creation request rejected.",
+    };
+  }
+
+  const hotelAgencyFolderCreateCompanyName = hasHotelAgencyFolderCreate
+    ? textOrNull(hotelAgencyFolderCreateRecord.company_name)
+    : null;
+
+  if (hasHotelAgencyFolderCreate && !hotelAgencyFolderCreateCompanyName) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Hotel / Tour Agency name is required before creating its first folder.",
+    };
+  }
+
   const booking = sanitizeBooking(bookingRecord);
   const requiredBookingResult = validateRequiredBookingFields(booking);
 
@@ -818,6 +931,13 @@ function parseAdminBookingOperationalPayload(
     ok: true,
     data: {
       booking,
+      ...(hotelAgencyFolderCreateCompanyName
+        ? {
+            hotel_agency_folder_create: {
+              company_name: hotelAgencyFolderCreateCompanyName,
+            },
+          }
+        : {}),
       route_points: routePointsResult.data,
       service_items: serviceItemsResult.data,
     },
@@ -863,6 +983,18 @@ export function parseAdminBookingUpdatePayload(
   }
 
   const targetBookingReference = validTargetBookingReference(body.target_booking_reference as string | null);
+  const expectedUpdatedAt = textOrNull(body.expected_updated_at);
+
+  if (
+    Object.prototype.hasOwnProperty.call(body, "expected_updated_at") &&
+    (!expectedUpdatedAt || !validDateTime(expectedUpdatedAt))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Missing or malformed expected booking update timestamp.",
+    };
+  }
 
   if (!targetBookingReference) {
     return {
@@ -884,6 +1016,7 @@ export function parseAdminBookingUpdatePayload(
     ok: true,
     data: {
       ...parsed.data,
+      ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
       target_booking_reference: targetBookingReference,
     },
   };
@@ -932,6 +1065,7 @@ function buildCustomerBookingRequestPayloadForLeg({
   passengerName,
   pickupDateTime,
   pickupLocation,
+  customerSpecialRequest,
 }: {
   body: UnknownRecord;
   bookingReference: string;
@@ -943,6 +1077,7 @@ function buildCustomerBookingRequestPayloadForLeg({
   passengerName: string;
   pickupDateTime: string;
   pickupLocation: string;
+  customerSpecialRequest: string | null;
 }): AdminBookingResult<AdminBookingPersistenceInput> {
   const companyName = textOrNull(body.companyName);
   const contactNo = textOrNull(body.contactNo);
@@ -1004,7 +1139,8 @@ function buildCustomerBookingRequestPayloadForLeg({
       passenger_name: passengerName,
       flight_no: flightNumber,
       pax_count: integerOrNull(body.passengerCount),
-      luggage_count: integerOrNull(body.luggage),
+      luggage_count: customerBookingLuggageCount(body.luggage),
+      customer_special_request: customerSpecialRequest,
       vehicle_type_or_category: textOrNull(body.vehicleType),
       customer_facing_status: "Request Received",
       admin_internal_status: adminReviewRequiredStatus,
@@ -1101,6 +1237,28 @@ export function parseCustomerBookingRequestPayloads(
 
   const returnTripRequested = isCustomerReturnTripRequested(body.returnTripRequested);
   const flightNumber = textOrNull(body.flightNumber);
+
+  if (
+    body.luggage !== null &&
+    body.luggage !== undefined &&
+    String(body.luggage).trim() !== "" &&
+    customerBookingLuggageCount(body.luggage) === null
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request luggage count rejected.",
+    };
+  }
+  const customerSpecialRequest = customerBookingSpecialRequest(body.specialRequest);
+
+  if (customerSpecialRequest === undefined) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer booking request special request rejected.",
+    };
+  }
   const groupReference =
     groupReferenceOverride || createCustomerBookingRequestReference();
   const outbound = buildCustomerBookingRequestPayloadForLeg({
@@ -1114,6 +1272,7 @@ export function parseCustomerBookingRequestPayloads(
     passengerName: passengerName || "",
     pickupDateTime,
     pickupLocation: pickupLocation || "",
+    customerSpecialRequest,
   });
 
   if (!outbound.ok) {
@@ -1164,6 +1323,7 @@ export function parseCustomerBookingRequestPayloads(
       passengerName: passengerName || "",
       pickupDateTime: returnPickupDateTime,
       pickupLocation: returnPickupLocation || "",
+      customerSpecialRequest,
     });
 
     if (!returnPayload.ok) {

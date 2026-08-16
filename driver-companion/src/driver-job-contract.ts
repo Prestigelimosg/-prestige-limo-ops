@@ -17,6 +17,31 @@ export type DriverJobSummary = {
 
 type UnknownRecord = Record<string, unknown>;
 
+const driverSafeStatusLabels: Readonly<Record<string, string>> = {
+  assigned: "Assigned",
+  completed: "Completed",
+  confirmed: "Confirmed",
+  driver_otw: "I'm on the way",
+  ots: "I've arrived",
+  pending: "Pending",
+  pob: "Passenger on board",
+};
+
+const pickupMonthLabels = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
 export type NativeLocationCapture = {
   coords: {
     accuracy: number | null;
@@ -48,6 +73,51 @@ function asRecord(value: unknown): UnknownRecord {
 
 function cleanText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+export function driverSafeStatusLabel(value: unknown) {
+  const status = cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return driverSafeStatusLabels[status] || "Pending dispatch confirmation";
+}
+
+export function formatDriverPickupDateTime(value: unknown) {
+  const pickupDateTime = cleanText(value);
+
+  if (!pickupDateTime) {
+    return "Pickup time TBC";
+  }
+
+  const canonicalMatch = pickupDateTime.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/,
+  );
+
+  if (!canonicalMatch) {
+    return pickupDateTime;
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText] = canonicalMatch;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const validationDate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+  if (
+    validationDate.getUTCFullYear() !== year ||
+    validationDate.getUTCMonth() !== month - 1 ||
+    validationDate.getUTCDate() !== day ||
+    validationDate.getUTCHours() !== hour ||
+    validationDate.getUTCMinutes() !== minute
+  ) {
+    return "Pickup time TBC";
+  }
+
+  return `${day} ${pickupMonthLabels[month - 1]} ${year}, ${hourText}${minuteText}hrs SGT`;
 }
 
 function terminalStatus(status: number) {
@@ -87,14 +157,21 @@ export function parseDriverJobUrl(value: string): ActiveDriverJob {
 
   const match = parsed.pathname.match(/^\/driver-job\/([A-Za-z0-9_-]{20,})\/?$/);
 
-  if (!match || parsed.search || parsed.hash) {
+  const calendarReturnState = parsed.searchParams.get("calendar");
+  const hasSafeCalendarReturn =
+    parsed.searchParams.size === 1 &&
+    (calendarReturnState === "saved" || calendarReturnState === "error");
+
+  if (!match || parsed.hash || (parsed.search && !hasSafeCalendarReturn)) {
     throw new Error("This is not a valid private Driver Job URL.");
   }
 
   const token = match[1];
 
   return {
-    jobUrl: `${productionOrigin}/driver-job/${encodeURIComponent(token)}`,
+    jobUrl: `${productionOrigin}/driver-job/${encodeURIComponent(token)}${
+      hasSafeCalendarReturn ? `?calendar=${calendarReturnState}` : ""
+    }`,
     origin: productionOrigin,
     token,
   };
@@ -112,15 +189,80 @@ export async function loadDriverJobSummary(job: ActiveDriverJob) {
   }
 
   const payload = asRecord(body.payload);
+  const status = cleanText(payload.status, "assigned");
 
   return {
     passengerName: cleanText(payload.passengerName, "Passenger TBC"),
-    pickupDateTime: cleanText(payload.pickupDateTime, "Pickup time TBC"),
+    pickupDateTime: formatDriverPickupDateTime(payload.pickupDateTime),
     reference: cleanText(payload.reference, "Reference unavailable"),
     route: cleanText(payload.route, "Route TBC"),
-    status: cleanText(payload.status, "assigned"),
-    statusLabel: cleanText(payload.statusLabel, "Assigned"),
+    status,
+    statusLabel: driverSafeStatusLabel(status),
   } satisfies DriverJobSummary;
+}
+
+export async function registerNativeDriverNotifications(
+  job: ActiveDriverJob,
+  expoPushToken: string,
+) {
+  const response = await fetch(
+    `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
+    {
+      body: JSON.stringify({
+        native_device_alert_action: "register",
+        native_push_token: expoPushToken,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "PATCH",
+    },
+  );
+  const body = await responseBody(response);
+  const nativeDeviceAlerts = asRecord(body.native_device_alerts);
+  const jobKey = cleanText(nativeDeviceAlerts.job_key);
+
+  if (
+    !response.ok ||
+    body.ok !== true ||
+    nativeDeviceAlerts.registered !== true ||
+    !/^[0-9a-f]{64}$/.test(jobKey)
+  ) {
+    throw requestError(response, body);
+  }
+
+  return { jobKey };
+}
+
+export async function unregisterNativeDriverNotifications(
+  job: ActiveDriverJob,
+  expoPushToken: string,
+) {
+  const response = await fetch(
+    `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
+    {
+      body: JSON.stringify({
+        native_device_alert_action: "unregister",
+        native_push_token: expoPushToken,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "PATCH",
+    },
+  );
+  const body = await responseBody(response);
+  const nativeDeviceAlerts = asRecord(body.native_device_alerts);
+
+  if (
+    !response.ok ||
+    body.ok !== true ||
+    nativeDeviceAlerts.unregistered !== true
+  ) {
+    throw requestError(response, body);
+  }
 }
 
 async function liveLocationRequest(

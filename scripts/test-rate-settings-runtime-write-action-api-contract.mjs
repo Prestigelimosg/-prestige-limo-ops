@@ -20,6 +20,7 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const routePathFragment = "/api/admin-rate-settings-runtime-write-action";
 const guardScript = "scripts/test-rate-settings-runtime-write-action-api-contract.mjs";
 const gateEnvName = "PRESTIGE_RATE_SETTINGS_WRITE_ENABLED";
+const serverSessionToken = "rate-settings-runtime-test-session";
 
 const forbiddenRuntimeWiringPattern =
   /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data|legacy_shim|shim\s*\(/i;
@@ -136,6 +137,19 @@ function adminHeaders(extra = {}) {
     origin: "http://localhost",
     referer: "http://localhost/",
     ...extra,
+  };
+}
+
+function productionServerSessionEnv(overrides = {}) {
+  return {
+    [gateEnvName]: undefined,
+    PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: "true",
+    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: "server-session-token",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "admin",
+    PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
+    SUPABASE_SERVICE_ROLE_KEY: undefined,
+    SUPABASE_URL: undefined,
+    ...overrides,
   };
 }
 
@@ -379,6 +393,11 @@ for (const phrase of [
 assertIncludes(routeSource, "export async function POST", "Rate settings runtime route POST");
 assertIncludes(routeSource, "resolveAdminDispatcherBoundary", "Rate settings runtime route boundary");
 assertIncludes(routeSource, "adminBookingPersistencePurpose", "Rate settings runtime route purpose");
+assertIncludes(
+  routeSource,
+  'allowServerSessionRoleMethodsWithoutRequestToken: ["POST"]',
+  "Rate settings runtime route exact server-session POST allowance",
+);
 assertIncludes(routeSource, "adminDispatcherBoundaryToPersistenceAdapterActor", "Rate settings runtime route actor");
 assertIncludes(routeSource, "executeAdminRateSettingsRuntimeWriteAction", "Rate settings runtime route helper");
 for (const method of ["GET", "PUT", "PATCH", "DELETE"]) {
@@ -488,6 +507,83 @@ try {
     "Closed rate settings runtime route must not create a Supabase client.",
   );
 
+  setEnv(productionServerSessionEnv());
+  const productionClosedResponse = await route.POST(
+    new Request(routeUrl(), {
+      body: JSON.stringify(safeInput()),
+      headers: adminHeaders(),
+      method: "POST",
+    }),
+  );
+  const productionClosed = await responseJson(productionClosedResponse);
+
+  assert.equal(
+    productionClosedResponse.status,
+    503,
+    "Same-origin root Production server-session POST without a browser token must reach the closed scalar gate.",
+  );
+  assertClosedGate(productionClosed, "Production server-session closed rate settings route");
+  assert.equal(
+    globalThis.__prestigeRateSettingsRuntimeWriteMock.createdClients,
+    0,
+    "Production closed rate settings runtime route must not create a Supabase client.",
+  );
+
+  for (const [label, headers, env] of [
+    [
+      "cross-origin Production scalar POST",
+      adminHeaders({ origin: "https://outside.example" }),
+      productionServerSessionEnv(),
+    ],
+    [
+      "wrong-referer Production scalar POST",
+      adminHeaders({ referer: "http://localhost/customers/177" }),
+      productionServerSessionEnv(),
+    ],
+    [
+      "wrong-purpose Production scalar POST",
+      adminHeaders({ "x-prestige-admin-purpose": "customer-booking-request" }),
+      productionServerSessionEnv(),
+    ],
+    [
+      "missing-role Production scalar POST",
+      adminHeaders(),
+      productionServerSessionEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: undefined }),
+    ],
+    [
+      "missing-server-token Production scalar POST",
+      adminHeaders(),
+      productionServerSessionEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: undefined }),
+    ],
+  ]) {
+    setEnv(env);
+    const blockedResponse = await route.POST(
+      new Request(routeUrl(), {
+        body: JSON.stringify(safeInput()),
+        headers,
+        method: "POST",
+      }),
+    );
+    const blocked = await responseJson(blockedResponse);
+
+    assert.equal(blockedResponse.status, 403, `${label} must remain blocked.`);
+    assert.equal(blocked.ok, false, `${label} must not save.`);
+    assert.equal(blocked.no_op, true, `${label} must remain a no-op.`);
+    assert.equal(
+      globalThis.__prestigeRateSettingsRuntimeWriteMock.createdClients,
+      0,
+      `${label} must not create a Supabase client.`,
+    );
+    assertNoForbiddenOutput(blocked, label);
+  }
+
+  setEnv({
+    [gateEnvName]: undefined,
+    PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED: undefined,
+    PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE: undefined,
+    SUPABASE_SERVICE_ROLE_KEY: undefined,
+    SUPABASE_URL: undefined,
+  });
   const forbiddenResponse = await route.POST(
     new Request(routeUrl(), {
       body: JSON.stringify(forbiddenInput()),

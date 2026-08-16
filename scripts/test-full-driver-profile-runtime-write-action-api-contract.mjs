@@ -416,7 +416,7 @@ assertIncludes(helperSource, "driver_payout_rules", "Forbidden driver payout rul
 assertIncludes(helperSource, "airport_permit_notes", "Forbidden airport permit notes rejection");
 assertIncludes(helperSource, "preferred_areas", "Forbidden preferred areas rejection");
 
-const saveDriverProfile = sliceBetween(appPage, "async function saveDriverProfile()", "async function deactivateDriverProfile");
+const saveDriverProfile = sliceBetween(appPage, "async function saveDriverProfile()", "function clearDeletedDriverIdFromBookingState");
 const deleteDriverProfile = sliceBetween(appPage, "async function deleteDriverProfile", "async function saveBooking");
 assertIncludes(saveDriverProfile, ".from(adminLegacyTables.drivers)", "Existing full driver profile save fallback");
 assertIncludes(deleteDriverProfile, ".from(adminLegacyTables.drivers).delete()", "Existing full driver profile delete fallback");

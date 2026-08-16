@@ -150,7 +150,7 @@ assertExcludes(fullDriverRuntimeDeletePayload, forbiddenRuntimePayloadPattern, "
 const saveDriverProfile = sliceBetween(
   appPage,
   "async function saveDriverProfile()",
-  "async function deactivateDriverProfile",
+  "function clearDeletedDriverIdFromBookingState",
 );
 assertIncludes(saveDriverProfile, "saveFullDriverProfileRuntime", "Driver profile save runtime call");
 assertIncludes(saveDriverProfile, "buildFullDriverProfileRuntimeSavePayload", "Driver profile save runtime payload");

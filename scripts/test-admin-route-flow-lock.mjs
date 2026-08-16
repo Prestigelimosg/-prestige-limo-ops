@@ -227,7 +227,7 @@ const fullDriverProfileLoadBlock = sliceBetween(
 const saveDriverProfileBlock = sliceBetween(
   appPage,
   "async function saveDriverProfile",
-  "async function deactivateDriverProfile",
+  "function clearDeletedDriverIdFromBookingState",
 );
 const deleteDriverProfileBlock = sliceBetween(
   appPage,

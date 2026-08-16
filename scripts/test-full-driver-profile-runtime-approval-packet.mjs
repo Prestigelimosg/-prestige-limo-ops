@@ -91,7 +91,7 @@ for (const phrase of [
   "Approval status: pending future runtime-wiring approval.",
   "This is a docs/test-only approval packet guarded by `scripts/test-full-driver-profile-runtime-approval-packet.mjs`.",
   "Full driver profile display/read is typed through `GET /api/admin-driver-assignment-display`.",
-  "Driver availability/deactivation is typed through `/api/admin-driver-availability`.",
+  "The backend availability-only PATCH remains typed through `/api/admin-driver-availability`; the Admin page no longer exposes a separate Deactivate control or client write path.",
   "Full driver profile save/delete runtime remains parked.",
   "`loadDrivers`, `saveDriverProfile`, and `deleteDriverProfile` still use the legacy `drivers` shim path for full profile surfaces.",
   "Disabled full driver profile action setup, audit payload setup, and no-live guard already exist.",
@@ -159,7 +159,7 @@ const loadDriversSource = sliceBetween(
 const saveDriverProfileSource = sliceBetween(
   appPage,
   "async function saveDriverProfile()",
-  "async function deactivateDriverProfile",
+  "function clearDeletedDriverIdFromBookingState",
 );
 const deleteDriverProfileSource = sliceBetween(
   appPage,

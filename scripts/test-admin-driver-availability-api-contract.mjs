@@ -231,25 +231,19 @@ const appPageSource = await readFile(appPagePath, "utf8");
 
 assert.equal(helperSource.includes('from("drivers")'), true, "Helper must target drivers.");
 assert.equal(routeSource.includes("/api/admin-legacy-data/rest/v1"), false, "Route must not proxy legacy data.");
-assert.equal(appPageSource.includes("/api/admin-driver-availability"), true, "App must use typed availability API.");
+assert.equal(
+  appPageSource.includes("/api/admin-driver-availability"),
+  false,
+  "Admin page must not retain a separate driver deactivation write path.",
+);
 assert.equal(/customer_rates|driver_payout_rules|payout_preferences/.test(helperSource), false, "Helper must not expose rate/payout fields.");
 assert.equal(helperSource.includes("id, availability_status, updated_at"), true, "Helper must select only availability fields.");
 assert.equal(/\.(delete|insert|upsert|rpc)\s*\(/.test(helperSource), false, "Helper must not expose delete/insert/upsert/rpc.");
 
-const deactivateDriverProfileStart = appPageSource.indexOf("async function deactivateDriverProfile");
-const deactivateDriverProfileEnd = appPageSource.indexOf("function clearDeletedDriverIdFromBookingState");
-assert.notEqual(deactivateDriverProfileStart, -1, "App page must keep driver deactivation handler.");
-assert.notEqual(deactivateDriverProfileEnd, -1, "App page must keep driver deactivation boundary.");
-const deactivateDriverProfileSource = appPageSource.slice(deactivateDriverProfileStart, deactivateDriverProfileEnd);
 assert.equal(
-  deactivateDriverProfileSource.includes("updateAdminDriverAvailability(payload)"),
-  true,
-  "Driver deactivation must use typed availability API.",
-);
-assert.equal(
-  /adminLegacyDataClient|adminLegacyTables|\/api\/admin-legacy-data/.test(deactivateDriverProfileSource),
+  /deactivateDriverProfile|data-driver-deactivate-button|Deactivate driver/.test(appPageSource),
   false,
-  "Driver deactivation must not depend on the legacy data shim.",
+  "Admin page must keep the existing row Delete control as the only Driver lifecycle button.",
 );
 
 const harness = await loadHarness();

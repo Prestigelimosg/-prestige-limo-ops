@@ -76,7 +76,7 @@ for (const phrase of [
   "Full driver profile legacy path still exposes `GET`, `POST`, `PATCH`, and `DELETE` through the admin legacy data route.",
   "Loaded/saved legacy driver fields include `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, `availability_status`, `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.",
   "Safe driver display/read is already typed through `GET /api/admin-driver-assignment-display`.",
-  "Driver availability/deactivation is already typed through `/api/admin-driver-availability`.",
+  "The backend availability-only PATCH remains typed through `/api/admin-driver-availability`; the Admin page no longer exposes a separate Deactivate control or client write path.",
   "Full driver profile save/delete remains parked.",
   "Future safe shape must be disabled/no-write first.",
   "Allowed future safe fields only: `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`.",
@@ -94,7 +94,7 @@ const loadDriversBlock = sliceBetween(
 const saveDriverProfileBlock = sliceBetween(
   appPage,
   "async function saveDriverProfile",
-  "async function deactivateDriverProfile",
+  "function clearDeletedDriverIdFromBookingState",
 );
 const deleteDriverProfileBlock = sliceBetween(
   appPage,

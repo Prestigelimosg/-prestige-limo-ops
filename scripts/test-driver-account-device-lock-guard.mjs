@@ -55,6 +55,7 @@ for (const fragment of [
   "verifyDriverAccountSession",
   "PRESTIGE_DRIVER_ACCOUNT_AUTH_ENABLED",
   "PRESTIGE_DRIVER_ACCOUNT_DEVICE_SECRET",
+  "SUPABASE_PUBLISHABLE_KEY",
   ".eq(\"driver_job_link_id\", linkId)",
   ".eq(\"active_device_id_hash\", input.deviceIdHash)",
   ".is(\"active_device_id_hash\", null)",
@@ -65,6 +66,11 @@ for (const fragment of [
 }
 excludes("account", /signUp\s*\(/, "public Supabase sign-up");
 excludes("account", /user_metadata/i, "user-editable metadata authorization");
+excludes(
+  "account",
+  /NEXT_PUBLIC_SUPABASE_(?:URL|ANON_KEY)/,
+  "browser-exposed Supabase configuration in the server-only Driver account helper",
+);
 
 includes("accountRoute", "createDriverAccountForAcknowledgedLink", "Job Link account creation route");
 includes("accountRoute", '"driver-account-create"', "exact account creation purpose");

@@ -124,8 +124,8 @@ function serviceClient(env: Env) {
 }
 
 function passwordAuth(env: Env) {
-  const url = configuredValue(env, "SUPABASE_URL") || configuredValue(env, "NEXT_PUBLIC_SUPABASE_URL");
-  const key = configuredValue(env, "NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  const url = configuredValue(env, "SUPABASE_URL");
+  const key = configuredValue(env, "SUPABASE_PUBLISHABLE_KEY");
   if (!url || !key) return null;
 
   try {

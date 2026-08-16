@@ -681,6 +681,8 @@ async function runChromeTest() {
         statusText: document.querySelector("[data-driver-job-current-status='true']")?.textContent?.trim() || "",
         confirmDetails: {
           acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
+          editorOpen: Boolean(document.querySelector("[data-driver-job-details-editor]")?.open),
+          editorSummary: document.querySelector("[data-driver-job-details-editor-summary]")?.textContent.trim() || "",
           parseButtonText: document.querySelector("[data-driver-job-parse-details]")?.textContent.trim() || "",
           parseMessage: document.querySelector("[data-driver-job-parse-details-message]")?.textContent.trim() || "",
           saveAcknowledgeDisabled: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")?.disabled),
@@ -800,11 +802,14 @@ async function runChromeTest() {
       }))()`);
 
     const navigateToDriverJob = async (token, expectedText, search = "") => {
+      const visibleExpectedText = expectedText === "Saved & Acknowledged"
+        ? "Confirmed driver details"
+        : expectedText;
       await navigateAndWaitForBodyText(
         client,
         evaluate,
         driverJobUrl(token, search),
-        expectedText,
+        visibleExpectedText,
         `driver job page text: ${expectedText}`,
       );
 
@@ -1053,6 +1058,16 @@ async function runChromeTest() {
         afterSaveState.confirmDetails.saveAcknowledgeDisabled,
         true,
         "Expected confirmed unchanged details to prevent a duplicate acknowledgement save.",
+      );
+      assert.equal(
+        afterSaveState.confirmDetails.editorOpen,
+        false,
+        "Expected the established Driver Details editor to collapse after successful Save & Acknowledge.",
+      );
+      assert.match(
+        afterSaveState.confirmDetails.editorSummary,
+        /Confirmed driver details.*Edit/,
+        "Expected one slim confirmed-details summary to retain the existing edit path.",
       );
       assert.equal(
         afterSaveState.deviceAlerts.helper,
@@ -1614,6 +1629,7 @@ async function runChromeTest() {
     );
     assert.equal(validState.confirmDetails.visible, true, "Expected confirm driver and vehicle details card.");
     assert.equal(validState.confirmDetails.title, "Driver Details");
+    assert.equal(validState.confirmDetails.editorOpen, true, "Expected Driver Details open before acknowledgement.");
     assert.equal(validState.confirmDetails.rawDetailsVisible, true, "Expected compact paste driver details box.");
     assert.equal(validState.confirmDetails.parseButtonText, "Parse Driver Details");
     assert.equal(validState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
@@ -1902,6 +1918,7 @@ async function runChromeTest() {
       const button = document.querySelector("[data-driver-job-save-acknowledge]");
       return {
         disabled: Boolean(button?.disabled),
+        editorOpen: Boolean(document.querySelector("[data-driver-job-details-editor]")?.open),
         savedDetailsVisible: Boolean(document.querySelector("[data-driver-job-saved-details]")),
         text: button?.textContent.trim() || "",
       };
@@ -1910,6 +1927,7 @@ async function runChromeTest() {
       acknowledgementEditReset,
       {
         disabled: false,
+        editorOpen: true,
         savedDetailsVisible: false,
         text: "Save & Acknowledge Job",
       },

@@ -994,6 +994,7 @@ export default function DriverJobPage() {
   const [parseDetailsFeedback, setParseDetailsFeedback] = useState<ControlFeedback | null>(null);
   const [savingDriverDetails, setSavingDriverDetails] = useState(false);
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
+  const [driverDetailsEditorOpen, setDriverDetailsEditorOpen] = useState(false);
   const [, setActivityLog] = useState<ActivityLogEvent[]>([]);
   const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
   const [reportingDriverIssue, setReportingDriverIssue] = useState(false);
@@ -1724,6 +1725,7 @@ export default function DriverJobPage() {
 
       setDriverDetails(confirmedDetails);
       setSavedDriverDetails(confirmedDetails);
+      setDriverDetailsEditorOpen(false);
       setAcknowledged(true);
       setDriverCalendar(emptyDriverCalendarState);
       setStatusFeedback(null);
@@ -2868,6 +2870,22 @@ export default function DriverJobPage() {
                 >
                   {acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
                 </p>
+                <details
+                  className="group"
+                  data-driver-job-details-editor="true"
+                  onToggle={(event) => setDriverDetailsEditorOpen(event.currentTarget.open)}
+                  open={driverDetailsEditorOpen || !driverDetailsSavedAndUnchanged}
+                >
+                  <summary
+                    className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2 text-sm font-semibold text-slate-900 ring-1 ring-slate-200"
+                    data-driver-job-details-editor-summary="true"
+                  >
+                    <span>{driverDetailsSavedAndUnchanged ? "Confirmed driver details" : "Enter driver details"}</span>
+                    <span className="shrink-0 text-xs font-bold text-slate-600">
+                      {driverDetailsSavedAndUnchanged ? "Edit" : acknowledged ? "Review" : "Required"}
+                    </span>
+                  </summary>
+                  <div className="mt-2.5 space-y-2.5">
                 <div className="grid gap-2">
                   <label className="block space-y-1 text-sm font-semibold text-slate-700">
                     <span>Paste Driver Details</span>
@@ -2987,6 +3005,8 @@ export default function DriverJobPage() {
                     </>
                   )}
                 </div>
+                  </div>
+                </details>
                 {savedDriverDetails ? (
                   <div
                     className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900"

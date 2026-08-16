@@ -240,6 +240,7 @@ async function runChromeTest() {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: `
         window.__driverJobFetchCalls = [];
+        window.__driverAccountCreationBodies = [];
         window.__driverOtsPhotoUploadBodies = [];
         window.__driverNativeBridgeMessages = [];
         window.__prestigeErrors = [];
@@ -457,6 +458,18 @@ async function runChromeTest() {
             );
           }
 
+          if (method === "POST" && url.includes("/api/driver-job/") && url.endsWith("/account")) {
+            try {
+              window.__driverAccountCreationBodies.push(JSON.parse(args[1]?.body || "{}"));
+            } catch {}
+            return Promise.resolve(
+              new Response(JSON.stringify({ account_created: true, ok: true }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }
+
           if (method === "GET" && url.includes("/api/driver-job/") && url.includes("/notifications")) {
             return Promise.resolve(
               new Response(JSON.stringify({
@@ -635,6 +648,7 @@ async function runChromeTest() {
           text: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
         },
         accountCreation: {
+          collapsed: document.querySelector('[data-driver-account-setup="true"]')?.getAttribute("data-driver-account-collapsed") === "true",
           confirmedEmail: document.querySelector('[data-driver-account-confirmed-email="true"]')?.textContent?.trim() || "",
           emailAutocomplete: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.autocomplete || "",
           emailInputMode: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.inputMode || "",
@@ -651,10 +665,12 @@ async function runChromeTest() {
           passwordPattern: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.pattern || "",
           passwordReadyVisible: Boolean(document.querySelector('[data-driver-account-password-ready="true"]')),
           passwordStepVisible: Boolean(document.querySelector('[data-driver-account-creation-form="true"]')),
+          successSummaryVisible: Boolean(document.querySelector('[data-driver-account-success-summary="true"]')),
         },
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
+        accountCreationBodies: window.__driverAccountCreationBodies || [],
         otsPhotoUploadBodies: window.__driverOtsPhotoUploadBodies || [],
         deviceAlerts: {
           helper: document.querySelector("[data-driver-job-device-alert-helper]")?.textContent?.trim() || "",
@@ -666,8 +682,11 @@ async function runChromeTest() {
           subscriptionBodies: window.__driverDeviceAlertTest?.subscriptionBodies || [],
         },
         calendarImport: {
+          collapsed: document.querySelector("[data-driver-job-calendar-panel]")?.getAttribute("data-driver-job-calendar-collapsed") === "true",
           feedback: document.querySelector("[data-driver-job-calendar-feedback]")?.textContent?.trim() || "",
+          policyLinksVisible: Boolean(document.querySelector('[data-driver-job-calendar-policy-links="true"]')),
           saved: Boolean(document.querySelector("[data-driver-job-calendar-saved='true']")),
+          successSummaryVisible: Boolean(document.querySelector('[data-driver-job-calendar-success-summary="true"]')),
           visible: Boolean(document.querySelector("[data-driver-job-calendar-action='true']")),
         },
         fileInputs: [...document.querySelectorAll("input[type='file'], input[capture], input[accept*='image'], input[accept*='photo']")]
@@ -1139,6 +1158,7 @@ async function runChromeTest() {
       assert.deepEqual(
         afterSaveState.accountCreation,
         {
+          collapsed: false,
           confirmedEmail: "",
           emailAutocomplete: "email",
           emailInputMode: "email",
@@ -1155,6 +1175,7 @@ async function runChromeTest() {
           passwordPattern: "",
           passwordReadyVisible: false,
           passwordStepVisible: false,
+          successSummaryVisible: false,
         },
         "Expected the acknowledged Driver account controls to render only the iOS-safe Email step first.",
       );
@@ -1192,6 +1213,7 @@ async function runChromeTest() {
       assert.deepEqual(
         afterAccountContinueState.accountCreation,
         {
+          collapsed: false,
           confirmedEmail: "driver.test@example.com",
           emailAutocomplete: "",
           emailInputMode: "",
@@ -1208,6 +1230,7 @@ async function runChromeTest() {
           passwordPattern: "[0-9]{6}",
           passwordReadyVisible: false,
           passwordStepVisible: true,
+          successSummaryVisible: false,
         },
         "Expected Continue to replace the Email input with the same confirmed email and existing Password form.",
       );
@@ -1254,8 +1277,36 @@ async function runChromeTest() {
         afterSaveState.fetchCalls.filter((call) => call.includes("/account")),
         "Password readiness checks must not create an account or add a second write path.",
       );
-      assertNoSensitiveText(afterSaveState);
-      return afterSaveState;
+      const accountCreateClicked = await evaluate(`(() => {
+        const button = document.querySelector('[data-driver-account-creation-form="true"] button[type="submit"]');
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(accountCreateClicked, true, "Expected the ready Driver account form to use its existing submit action.");
+      const accountCreatedState = await waitForCondition(
+        () => pageState().then((state) => state.accountCreation.collapsed ? state : false),
+        10000,
+        "Driver account success collapse",
+      );
+      assert.deepEqual(
+        accountCreatedState.fetchCalls.filter((call) => call.includes("/account")),
+        [`POST ${expectedDriverJobPatchPath}/account`],
+        "Driver account creation must post once to the established token-scoped account route.",
+      );
+      assert.deepEqual(
+        accountCreatedState.accountCreationBodies,
+        [{ email: "driver.test@example.com", password: "482951" }],
+        "Driver account success coverage must exercise only the existing account payload.",
+      );
+      assert.equal(accountCreatedState.accountCreation.emailStepVisible, false);
+      assert.equal(accountCreatedState.accountCreation.passwordStepVisible, false);
+      assert.equal(accountCreatedState.accountCreation.passwordGuideVisible, false);
+      assert.equal(accountCreatedState.accountCreation.successSummaryVisible, true);
+      assert.equal(accountCreatedState.calendarImport.collapsed, false);
+      assert.equal(accountCreatedState.calendarImport.visible, true);
+      assertNoSensitiveText(accountCreatedState);
+      return accountCreatedState;
     };
 
     const clickStatus = async (
@@ -1360,7 +1411,11 @@ async function runChromeTest() {
         `POST ${expectedCalendarPath}`,
         "Driver Google Calendar save must post only to the existing same-job calendar route.",
       );
+      assert.equal(afterState.calendarImport.collapsed, true);
       assert.equal(afterState.calendarImport.saved, true);
+      assert.equal(afterState.calendarImport.successSummaryVisible, true);
+      assert.equal(afterState.calendarImport.visible, false);
+      assert.equal(afterState.calendarImport.policyLinksVisible, false);
       assert.match(afterState.calendarImport.feedback, /Calendar saved/);
       assertNoSensitiveText({
         fetchCalls: afterState.fetchCalls,
@@ -1392,6 +1447,10 @@ async function runChromeTest() {
 
       assert.equal(state.calendarImport.feedback, expectedFeedback);
       assert.equal(state.calendarImport.saved, expectedSaved);
+      assert.equal(state.calendarImport.collapsed, expectedSaved);
+      assert.equal(state.calendarImport.successSummaryVisible, expectedSaved);
+      assert.equal(state.calendarImport.visible, !expectedSaved);
+      assert.equal(state.calendarImport.policyLinksVisible, !expectedSaved);
       assert.equal(
         locationState.search.includes("calendar="),
         false,

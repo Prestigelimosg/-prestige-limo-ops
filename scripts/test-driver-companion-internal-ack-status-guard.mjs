@@ -132,6 +132,9 @@ assert.deepEqual(parseDriverBridgeMessage('{"type":"tracking_stop"}'), {
 assert.deepEqual(parseDriverBridgeMessage('{"type":"tracking_terminal"}'), {
   type: "tracking_terminal",
 });
+assert.deepEqual(parseDriverBridgeMessage('{"type":"native_biometrics_enable"}'), {
+  type: "native_biometrics_enable",
+});
 for (const unsafeMessage of [
   "not-json",
   '{"type":"tracking_start","token":"secret"}',
@@ -158,9 +161,16 @@ assert.equal(
   shouldAllowDriverWebViewNavigation(`${baseJobUrl}?calendar=saved`, baseJobUrl),
   true,
 );
+assert.equal(
+  shouldAllowDriverWebViewNavigation("https://app.prestigelimo.sg/driver-portal", baseJobUrl),
+  true,
+);
+assert.equal(
+  shouldAllowDriverWebViewNavigation(baseJobUrl, "https://app.prestigelimo.sg/driver-portal"),
+  true,
+);
 for (const blockedNavigation of [
   "https://accounts.google.com/o/oauth2/v2/auth",
-  "https://app.prestigelimo.sg/driver-portal",
   "https://app.prestigelimo.sg/customers",
   `https://app.prestigelimo.sg/driver-job/${"e".repeat(32)}`,
 ]) {
@@ -169,12 +179,16 @@ for (const blockedNavigation of [
     false,
   );
 }
-assert.match(embeddedDriverBridgeBootstrap, /__PRESTIGE_DRIVER_NATIVE_APP__/);
+const installationId = "123e4567-e89b-42d3-a456-426614174000";
+const bridgeBootstrap = embeddedDriverBridgeBootstrap(installationId);
+assert.match(bridgeBootstrap, /__PRESTIGE_DRIVER_NATIVE_APP__/);
 assert.match(
-  embeddedDriverBridgeBootstrap,
+  bridgeBootstrap,
   /Object\.defineProperty\(navigator, "geolocation"/,
 );
-assert.doesNotMatch(embeddedDriverBridgeBootstrap, /token|jobUrl|console\./i);
+assert.match(bridgeBootstrap, /__PRESTIGE_DRIVER_INSTALLATION_ID__/);
+assert.doesNotMatch(bridgeBootstrap, /token|jobUrl|console\./i);
+assert.throws(() => embeddedDriverBridgeBootstrap("not-an-installation"));
 
 for (const fragment of [
   "isVerifiedEmbeddedDriverApp",

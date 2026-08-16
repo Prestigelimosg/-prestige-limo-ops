@@ -11,6 +11,7 @@ export type DriverTrackingBridgeMessage = {
 
 export type DriverBridgeMessage =
   | DriverTrackingBridgeMessage
+  | { type: "native_biometrics_enable" }
   | { type: "native_notifications_register" };
 
 export type DriverTrackingResult = {
@@ -27,6 +28,9 @@ const allowedReadOnlyPaths = new Set([
   "/privacy",
   "/terms",
 ]);
+const driverPortalPath = "/driver-portal";
+const installationIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -44,6 +48,7 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
       keys[0] !== "type" ||
       ![
         "native_notifications_register",
+        "native_biometrics_enable",
         "tracking_start",
         "tracking_stop",
         "tracking_terminal",
@@ -102,37 +107,58 @@ export function parseNativeCalendarOauthStartUrl(value: string) {
 
 export function shouldAllowDriverWebViewNavigation(
   requestedUrl: string,
-  currentJobUrl: string,
+  currentUrl: string,
 ) {
-  let currentJob;
+  const requested = parseSameOriginUrl(requestedUrl);
+  const current = parseSameOriginUrl(currentUrl);
+  if (!requested || !current) return false;
 
-  try {
-    currentJob = parseDriverJobUrl(currentJobUrl);
-  } catch {
-    return false;
+  if (
+    requested.pathname === driverPortalPath &&
+    !requested.search &&
+    !requested.hash
+  ) {
+    return true;
+  }
+
+  if (
+    allowedReadOnlyPaths.has(requested.pathname) &&
+    !requested.search &&
+    !requested.hash
+  ) {
+    return true;
   }
 
   try {
     const requestedJob = parseDriverJobUrl(requestedUrl);
+    if (current.pathname === driverPortalPath && !current.search && !current.hash) {
+      return Boolean(requestedJob.token);
+    }
+
+    const currentJob = parseDriverJobUrl(currentUrl);
     return requestedJob.token === currentJob.token;
   } catch {
-    const requested = parseSameOriginUrl(requestedUrl);
-
-    return Boolean(
-      requested &&
-        allowedReadOnlyPaths.has(requested.pathname) &&
-        !requested.search &&
-        !requested.hash,
-    );
+    return false;
   }
 }
 
-export const embeddedDriverBridgeBootstrap = `
+export function embeddedDriverBridgeBootstrap(installationId: string) {
+  if (!installationIdPattern.test(installationId)) {
+    throw new Error("A valid native Driver installation is required.");
+  }
+
+  return `
 (function () {
   Object.defineProperty(window, "__PRESTIGE_DRIVER_NATIVE_APP__", {
     configurable: false,
     enumerable: false,
     value: true,
+    writable: false
+  });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_INSTALLATION_ID__", {
+    configurable: false,
+    enumerable: false,
+    value: ${JSON.stringify(installationId.toLowerCase())},
     writable: false
   });
   try {
@@ -145,6 +171,7 @@ export const embeddedDriverBridgeBootstrap = `
 })();
 true;
 `;
+}
 
 export function driverTrackingResultScript(result: DriverTrackingResult) {
   const safeResult = {
@@ -171,4 +198,10 @@ export function driverNativeNotificationResultScript(result: {
   return `window.dispatchEvent(new CustomEvent("prestige-driver-native-notification-result", { detail: ${JSON.stringify(
     safeResult,
   )} })); true;`;
+}
+
+export function driverNativeBiometricResultScript(result: { ok: boolean }) {
+  return `window.dispatchEvent(new CustomEvent("prestige-driver-native-biometric-result", { detail: ${JSON.stringify({
+    ok: result.ok === true,
+  })} })); true;`;
 }

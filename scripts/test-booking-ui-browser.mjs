@@ -15569,7 +15569,7 @@ async function runChromeTest() {
     assert.match(alsonDeleteCancelState.rowText, /Assigned jobs:\s*1/);
     assert.match(
       alsonDeleteCancelState.confirmMessages[0] || "",
-      /This driver has 1 assigned job\. Delete this driver from the Driver Database\? Existing bookings will keep their saved driver details\. This cannot be undone\./,
+      /This driver has 1 assigned job\. Delete this driver from the Driver Database and permanently revoke this selected driver's Driver app account\? Existing bookings will keep their saved driver details\. Private Driver Job Links remain separately controlled\. This cannot be undone\./,
     );
     assert.deepEqual(
       alsonDeleteCancelState.deleteRequests,
@@ -15619,7 +15619,11 @@ async function runChromeTest() {
             ["Alson Toh", "Alison Toh"].includes(driver.driver_name),
           );
 
-          if (deletedRow || feedback?.textContent.trim() !== "Driver deleted.") {
+          if (
+            deletedRow ||
+            feedback?.textContent.trim() !==
+              "Driver deleted. No Driver app account was present to revoke."
+          ) {
             return false;
           }
 
@@ -15666,7 +15670,10 @@ async function runChromeTest() {
       `Expected driver delete to call only drivers REST endpoints, typed display read, and the closed full-driver runtime gate, got ${deletedDriverState.fetchCalls.join(", ")}`,
     );
     assert.equal(deletedDriverState.bookingRequestCount, 0, "Expected driver delete not to update booking rows");
-    assert.equal(deletedDriverState.feedbackText, "Driver deleted.");
+    assert.equal(
+      deletedDriverState.feedbackText,
+      "Driver deleted. No Driver app account was present to revoke.",
+    );
     assert.equal(
       deletedDriverState.feedbackInsideScrollList,
       true,

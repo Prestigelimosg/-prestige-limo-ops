@@ -230,6 +230,11 @@ assertIncludes(
   "Full driver profile safe select",
 );
 assertIncludes(helperSource, "writeGateOpen()", "Full driver profile runtime gate helper");
+assertIncludes(
+  helperSource,
+  "driverAccountRevokeGateOpen()",
+  "Driver account revoke runtime gate helper",
+);
 assertIncludes(helperSource, "validateActor(actor)", "Full driver profile runtime actor guard");
 assertIncludes(helperSource, "boundary_mode === \"server-session-role-surface\"", "Full driver profile server-session boundary");
 assertIncludes(helperSource, "allowedActorRoles.has(actor.actor_role)", "Full driver profile admin/dispatcher roles");
@@ -251,7 +256,12 @@ const executeBlock = sliceFrom(
   helperSource,
   "export async function executeAdminFullDriverProfileRuntimeWriteAction",
 );
-assertBefore(executeBlock, "if (!writeGateOpen())", "if (!validateActor(actor))", "Full driver profile gate before actor check");
+assertBefore(
+  executeBlock,
+  "if (!selectedWriteGateOpen)",
+  "if (!validateActor(actor))",
+  "Selected full driver profile or Driver account gate before actor check",
+);
 assertBefore(executeBlock, "if (!validateActor(actor))", "const clientResult = getRuntimeClient(options)", "Full driver profile actor before DB client");
 assertBefore(executeBlock, "const clientResult = getRuntimeClient(options)", "await saveRuntimeRecord", "Full driver profile DB client before save");
 assertBefore(executeBlock, "const clientResult = getRuntimeClient(options)", "await deleteRuntimeRecord", "Full driver profile DB client before delete");

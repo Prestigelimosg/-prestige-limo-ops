@@ -736,7 +736,9 @@ try {
 
   {
     const client = createSeededClient({
+      acknowledgedAt: "",
       bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
+      latestStatus: "",
     });
     const result = await saveDriverJobDetailsThroughStatusPersistence({
       client,
@@ -762,6 +764,27 @@ try {
     assert.equal(client.tables.driver_job_links[0].driver_id, 1);
     assert.ok(client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at);
     assertNoDriverJobLeaks(result);
+
+    const operationsAfterAcknowledgement = client.operations.length;
+    const replayByAnotherDriver = await saveDriverJobDetailsThroughStatusPersistence({
+      client,
+      driverContact: "+65 8999 0000",
+      driverName: "Different Driver",
+      driverPlateNumber: "SZZ9999Z",
+      driverVehicleModel: "Different Vehicle",
+      now,
+      token: validToken,
+    });
+    assert.deepEqual(replayByAnotherDriver, {
+      ok: false,
+      payload: null,
+      reason: "already_acknowledged",
+    });
+    assert.equal(
+      client.operations.length,
+      operationsAfterAcknowledgement,
+      "A different driver must not mutate an already acknowledged Job Link.",
+    );
   }
 
   {
@@ -769,6 +792,7 @@ try {
     const replacementDriverLinkId = "91c9d972-6fa5-4f3b-b157-bb56a9366c7c";
     const sameDriverReissueLinkId = "32222222-2222-4222-8222-222222222222";
     const client = createSeededClient({
+      acknowledgedAt: "",
       bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: 202 }],
       drivers: [
         {
@@ -939,6 +963,7 @@ try {
 
   {
     const client = createSeededClient({
+      acknowledgedAt: "",
       bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
       drivers: [{
         availability_status: "available",
@@ -948,6 +973,7 @@ try {
         plate_number: "SLA1234X",
         vehicle_type: "Mercedes V Class",
       }],
+      latestStatus: "",
     });
     const result = await saveDriverJobDetailsThroughStatusPersistence({
       client,

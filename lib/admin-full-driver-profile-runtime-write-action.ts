@@ -9,8 +9,10 @@ export const adminFullDriverProfileRuntimeWriteActionVersion =
   "admin-full-driver-profile-runtime-write-action-v1";
 export const adminFullDriverProfileRuntimeWriteActionEnvGateName =
   "PRESTIGE_FULL_DRIVER_PROFILE_WRITE_ENABLED";
+export const adminFullDriverProfileDriverAccountRevokeEnvGateName =
+  "PRESTIGE_DRIVER_ACCOUNT_AUTH_ENABLED";
 
-type RuntimeWriteClient = Pick<SupabaseClient, "from">;
+type RuntimeWriteClient = Pick<SupabaseClient, "from" | "rpc">;
 type RuntimeStatus = "blocked" | "deleted" | "rejected" | "saved";
 type RuntimeReason =
   | "admin_session_required"
@@ -43,6 +45,8 @@ export type AdminFullDriverProfileRuntimeWriteActionResult = {
   category?: SafeFailureCategory;
   database_client_enabled: boolean;
   delivery_surface: "admin_full_driver_profile_runtime_write_action";
+  driver_account_revoke_gate_open: boolean;
+  driver_account_revoked: boolean;
   driver_profile_fields: AdminFullDriverProfileRuntimeFields;
   env_gate_name: typeof adminFullDriverProfileRuntimeWriteActionEnvGateName;
   error?: string;
@@ -211,6 +215,10 @@ function validServerCredential(value: string | null) {
 
 function writeGateOpen() {
   return process.env[adminFullDriverProfileRuntimeWriteActionEnvGateName] === "true";
+}
+
+function driverAccountRevokeGateOpen() {
+  return process.env[adminFullDriverProfileDriverAccountRevokeEnvGateName] === "true";
 }
 
 function canonicalFieldName(key: string) {
@@ -396,6 +404,8 @@ function resultBase(
     action_type: input.actionType,
     database_client_enabled: false,
     delivery_surface: "admin_full_driver_profile_runtime_write_action",
+    driver_account_revoke_gate_open: false,
+    driver_account_revoked: false,
     driver_profile_fields: input.fields,
     env_gate_name: adminFullDriverProfileRuntimeWriteActionEnvGateName,
     forbidden_fields_present: input.forbiddenFields ?? [],
@@ -555,6 +565,30 @@ async function deleteRuntimeRecord(client: RuntimeWriteClient, id: number) {
   return client.from("drivers").delete().eq("id", id).select(fullDriverProfileWriteSelect).single();
 }
 
+async function deleteRuntimeRecordWithAccountRevocation(
+  client: RuntimeWriteClient,
+  id: number,
+  actor: AdminBookingPersistenceAdapterActor,
+) {
+  return client.rpc("admin_revoke_driver_account_and_delete_profile", {
+    p_actor_label: actor.actor_label,
+    p_actor_role: actor.actor_role,
+    p_driver_id: id,
+  });
+}
+
+function accountRevokingDeleteResult(value: unknown) {
+  const source = asRecord(Array.isArray(value) ? value[0] : value);
+  const record = toRuntimeRecord(source.record);
+
+  return record
+    ? {
+        accountRevoked: source.account_revoked === true,
+        record,
+      }
+    : null;
+}
+
 export async function executeAdminFullDriverProfileRuntimeWriteAction(
   input: unknown,
   actor: AdminBookingPersistenceAdapterActor,
@@ -606,12 +640,18 @@ export async function executeAdminFullDriverProfileRuntimeWriteAction(
     );
   }
 
-  if (!writeGateOpen()) {
+  const accountRevokeGateOpen =
+    normalizedInput.actionType === "full_driver_profile_delete" &&
+    driverAccountRevokeGateOpen();
+  const selectedWriteGateOpen = writeGateOpen() || accountRevokeGateOpen;
+
+  if (!selectedWriteGateOpen) {
     return blockedResult(base, "write_gate_closed");
   }
 
   const openGateBase = {
     ...base,
+    driver_account_revoke_gate_open: accountRevokeGateOpen,
     write_gate_open: true,
   };
 
@@ -626,6 +666,38 @@ export async function executeAdminFullDriverProfileRuntimeWriteAction(
   }
 
   try {
+    if (
+      normalizedInput.actionType === "full_driver_profile_delete" &&
+      accountRevokeGateOpen
+    ) {
+      const databaseResult = await deleteRuntimeRecordWithAccountRevocation(
+        clientResult.client,
+        normalizedInput.id as number,
+        actor,
+      );
+
+      if (databaseResult.error) {
+        return safeAdapterFailure(openGateBase, databaseResult.error);
+      }
+
+      const deleted = accountRevokingDeleteResult(databaseResult.data);
+      if (!deleted) {
+        return safeAdapterFailure(openGateBase, { code: "invalid_revoke_delete_result" });
+      }
+
+      return {
+        ...openGateBase,
+        database_client_enabled: true,
+        driver_account_revoked: deleted.accountRevoked,
+        no_op: false,
+        ok: true,
+        reason: "deleted",
+        record: deleted.record,
+        status: "deleted",
+        write_enabled: true,
+      };
+    }
+
     const databaseResult =
       normalizedInput.actionType === "full_driver_profile_delete"
         ? await deleteRuntimeRecord(clientResult.client, normalizedInput.id as number)

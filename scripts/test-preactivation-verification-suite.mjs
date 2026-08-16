@@ -426,6 +426,18 @@ const guardChecks = [
     script: "scripts/test-driver-portal-session-jobs-guard.mjs",
   },
   {
+    label: "Driver acknowledged-link account and one-installation contract tests",
+    script: "scripts/test-driver-account-device-lock-contract.mjs",
+  },
+  {
+    label: "Driver account one-device and Face ID source guard",
+    script: "scripts/test-driver-account-device-lock-guard.mjs",
+  },
+  {
+    label: "selected Driver delete and Driver app account revoke guard",
+    script: "scripts/test-driver-delete-account-revoke-guard.mjs",
+  },
+  {
     label: "web app install manifest guard",
     script: "scripts/test-web-app-install-manifest-guard.mjs",
   },

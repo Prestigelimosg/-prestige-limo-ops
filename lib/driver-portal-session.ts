@@ -29,6 +29,8 @@ type DriverPortalSessionEnv = Record<string, string | undefined>;
 type UnknownRecord = Record<string, unknown>;
 
 export type DriverPortalSessionClaims = {
+  accountId?: string;
+  deviceIdHash?: string;
   driverId: number;
   expiresAt: number;
   issuedAt: number;
@@ -123,6 +125,8 @@ function encryptClaims(claims: DriverPortalSessionClaims, secret: string) {
   cipher.setAAD(sessionAad);
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify({
+      ...(claims.accountId ? { account_id: claims.accountId } : {}),
+      ...(claims.deviceIdHash ? { device_id_hash: claims.deviceIdHash } : {}),
       driver_id: claims.driverId,
       expires_at: claims.expiresAt,
       issued_at: claims.issuedAt,
@@ -155,6 +159,8 @@ function decryptClaims(value: string, secret: string, nowMs: number): DriverPort
       decipher.final(),
     ]).toString("utf8")));
     const driverId = positiveInteger(payload.driver_id);
+    const accountId = typeof payload.account_id === "string" ? payload.account_id : "";
+    const deviceIdHash = typeof payload.device_id_hash === "string" ? payload.device_id_hash : "";
     const issuedAt = Number(payload.issued_at);
     const expiresAt = Number(payload.expires_at);
 
@@ -170,7 +176,20 @@ function decryptClaims(value: string, secret: string, nowMs: number): DriverPort
       return null;
     }
 
-    return { driverId, expiresAt, issuedAt };
+    const accountBacked = Boolean(accountId || deviceIdHash);
+    if (
+      accountBacked &&
+      (!uuidPattern.test(accountId) || !/^[0-9a-f]{64}$/.test(deviceIdHash))
+    ) {
+      return null;
+    }
+
+    return {
+      ...(accountBacked ? { accountId, deviceIdHash } : {}),
+      driverId,
+      expiresAt,
+      issuedAt,
+    };
   } catch {
     return null;
   }
@@ -186,6 +205,55 @@ function serializeSessionCookie(value: string) {
     "SameSite=Lax",
     "Priority=High",
   ].join("; ");
+}
+
+export function clearDriverPortalSessionCookie() {
+  return [
+    `${driverPortalSessionCookieName}=`,
+    "Path=/",
+    "Max-Age=0",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+    "Priority=High",
+  ].join("; ");
+}
+
+export function issueDriverPortalAccountSession({
+  accountId,
+  deviceIdHash,
+  driverId,
+  env = process.env,
+  now = new Date(),
+}: {
+  accountId: string;
+  deviceIdHash: string;
+  driverId: number;
+  env?: DriverPortalSessionEnv;
+  now?: Date | string | number;
+}) {
+  const secret = configuredSecret(env);
+  const nowDate = new Date(now);
+  if (
+    !secret ||
+    Number.isNaN(nowDate.getTime()) ||
+    !uuidPattern.test(accountId) ||
+    !/^[0-9a-f]{64}$/.test(deviceIdHash) ||
+    !positiveInteger(driverId)
+  ) {
+    return null;
+  }
+
+  const issuedAt = nowDate.getTime();
+  const value = encryptClaims({
+    accountId,
+    deviceIdHash,
+    driverId,
+    expiresAt: issuedAt + driverPortalSessionMaxAgeSeconds * 1000,
+    issuedAt,
+  }, secret);
+
+  return serializeSessionCookie(value);
 }
 
 export function resolveDriverPortalSession(

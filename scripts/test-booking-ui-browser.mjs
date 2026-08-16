@@ -13081,8 +13081,6 @@ async function runChromeTest() {
     }
 
     reporter.step("checking driver database workflows");
-    await clickTab("Drivers", "Driver Database");
-
 	    await evaluate(`(() => {
 	      const savedDriver = ${JSON.stringify(reusableDriverProfileFixture)};
 	      const scrollDriverFixtures = Array.from({ length: 29 }, (_, index) => ({
@@ -13416,6 +13414,87 @@ async function runChromeTest() {
         return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
       };
     })()`);
+
+    await clickTab("Drivers", "Driver Database");
+    const driverDatabaseTabRefreshState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const loadButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Load Driver Database",
+          );
+          const typedDisplayCalls = (window.__prestigeFetchCalls || []).filter(
+            (call) => call.includes("GET /api/admin-driver-assignment-display?limit=200"),
+          );
+          const driverReads = (window.__prestigeFetchCalls || []).filter(
+            (call) => call.includes("GET") && call.includes("/rest/v1/drivers"),
+          );
+          const bodyText = document.body.textContent || "";
+
+          return loadButton && !loadButton.disabled && bodyText.includes("REUSABLE PROFILE TEST DRIVER")
+            ? {
+                driverReads,
+                typedDisplayCalls,
+                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+              }
+            : false;
+        })()`),
+      10000,
+      "Driver Database automatic tab refresh",
+    );
+    assert.equal(
+      driverDatabaseTabRefreshState.driverReads.length >= 1,
+      true,
+      `Expected opening Drivers to reuse the existing full-profile read, got ${driverDatabaseTabRefreshState.driverReads.join(", ")}`,
+    );
+    assert.equal(
+      driverDatabaseTabRefreshState.typedDisplayCalls.length >= 1,
+      true,
+      `Expected opening Drivers to include the established typed display read, got ${driverDatabaseTabRefreshState.typedDisplayCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      driverDatabaseTabRefreshState.unhandledSupabaseCalls,
+      [],
+      `Expected Drivers-tab refresh calls to stay inside established mocks, got ${driverDatabaseTabRefreshState.unhandledSupabaseCalls.join(", ")}`,
+    );
+
+    const resetDriverProfileCreatePrecondition = await evaluate(`(() => {
+      const savedDriverId = window.__prestigeSavedDriver?.id;
+      window.__prestigeDriverList = (window.__prestigeDriverList || []).filter(
+        (driver) => String(driver.id) !== String(savedDriverId),
+      );
+      window.__prestigeSavedDriver = null;
+      window.__prestigeFetchCalls = [];
+      window.__prestigeDriverProfileRequestBodies = [];
+      window.__prestigeUnhandledSupabaseCalls = [];
+      const loadButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Load Driver Database",
+      );
+
+      if (!loadButton || loadButton.disabled) {
+        return false;
+      }
+
+      loadButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      resetDriverProfileCreatePrecondition,
+      true,
+      "Expected the existing Load Driver Database control to restore the new-profile test precondition.",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const count = document.querySelector("[data-driver-search-count='true']")?.textContent.trim();
+          const loadButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Load Driver Database",
+          );
+
+          return count === "Showing 29 of 29 drivers." && loadButton && !loadButton.disabled;
+        })()`),
+      10000,
+      "Driver Database new-profile test precondition",
+    );
 
     const driverProfileValidationCases = [
       {
@@ -15461,24 +15540,20 @@ async function runChromeTest() {
       "Dashboard assigned-booking fixture refresh before driver delete cleanup",
     );
     await clickTab("Drivers", "Driver Database");
-
-    const clickedReloadDriversForDelete = await evaluate(`(() => {
-      const loadButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Load Driver Database",
-      );
-
-      if (!loadButton || loadButton.disabled) {
-        return false;
-      }
-
-      loadButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedReloadDriversForDelete, true, "Expected Driver Database reload before delete test");
     await waitForCondition(
-      () => evaluate(`document.body.innerText.includes("Driver database loaded.")`),
+      () =>
+        evaluate(`(() => {
+          const bodyText = document.body.innerText;
+          const loadButton = [...document.querySelectorAll("button")].find(
+            (button) => button.textContent.trim() === "Load Driver Database",
+          );
+
+          return bodyText.includes("Driver database refreshed.") &&
+            loadButton &&
+            !loadButton.disabled;
+        })()`),
       10000,
-      "driver database reload before delete",
+      "automatic Driver Database refresh before delete",
     );
 
     await setInputValue("[data-driver-search-input='true']", "TEST99", "Driver delete assigned-job search");

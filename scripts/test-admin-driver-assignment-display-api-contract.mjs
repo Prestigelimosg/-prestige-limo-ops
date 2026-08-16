@@ -483,6 +483,23 @@ try {
     true,
     "Driver Database load must store typed display rows separately from full profile rows.",
   );
+  const appTabSelectionSource = appPageSource.slice(
+    appPageSource.indexOf("function selectAppTab"),
+    appPageSource.indexOf("function openCompletedHistoryForBookingsDate"),
+  );
+  assert.equal(
+    appTabSelectionSource.includes('nextTab === "drivers"') &&
+      appTabSelectionSource.includes("void loadDrivers("),
+    true,
+    "Opening the established Drivers tab must refresh the existing Driver Database read lane.",
+  );
+  assert.equal(
+    appTabSelectionSource.includes("setInterval") ||
+      appTabSelectionSource.includes("setTimeout") ||
+      appTabSelectionSource.includes("/api/admin-driver-assignment-display"),
+    false,
+    "Drivers-tab refresh must reuse the existing loader without polling or a duplicate API lane.",
+  );
   const applyDriverSource = appPageSource.slice(
     appPageSource.indexOf("function applyDriverToBooking"),
     appPageSource.indexOf("function updateDriverProfilePayout"),

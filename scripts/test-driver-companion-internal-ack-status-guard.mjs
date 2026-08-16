@@ -135,11 +135,22 @@ assert.deepEqual(parseDriverBridgeMessage('{"type":"tracking_terminal"}'), {
 assert.deepEqual(parseDriverBridgeMessage('{"type":"native_biometrics_enable"}'), {
   type: "native_biometrics_enable",
 });
+assert.deepEqual(
+  parseDriverBridgeMessage(`{"job_key":"${"a".repeat(64)}","type":"native_job_open"}`),
+  { jobKey: "a".repeat(64), type: "native_job_open" },
+);
+assert.deepEqual(
+  parseDriverBridgeMessage(`{"job_key":"${"b".repeat(64)}","type":"native_job_remember"}`),
+  { jobKey: "b".repeat(64), type: "native_job_remember" },
+);
 for (const unsafeMessage of [
   "not-json",
   '{"type":"tracking_start","token":"secret"}',
   '{"type":"tracking_stop","jobUrl":"https://example.com"}',
   '{"type":"status","status":"OTW"}',
+  '{"job_key":"invalid","type":"native_job_open"}',
+  '{"job_key":"invalid","type":"native_job_remember"}',
+  `{"job_key":"${"a".repeat(64)}","token":"secret","type":"native_job_open"}`,
 ]) {
   assert.equal(parseDriverBridgeMessage(unsafeMessage), null);
 }

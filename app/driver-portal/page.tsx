@@ -228,6 +228,24 @@ export default function DriverPortalPage() {
     return () => window.removeEventListener("prestige-driver-native-biometric-result", onBiometricResult);
   }, []);
 
+  useEffect(() => {
+    function onNativeJobOpenResult(event: Event) {
+      const result = event as CustomEvent<{ jobKey?: string; ok?: boolean }>;
+      const jobKey = result.detail?.jobKey || "";
+      if (result.detail?.ok !== false || !/^[0-9a-f]{64}$/.test(jobKey)) {
+        return;
+      }
+      setOpenFeedback((current) => ({
+        ...current,
+        [jobKey]: "This private job is not saved in Prestige Driver yet. Open the latest link from dispatch once.",
+      }));
+      setOpeningJobKey((current) => current === jobKey ? "" : current);
+    }
+
+    window.addEventListener("prestige-driver-native-job-open-result", onNativeJobOpenResult);
+    return () => window.removeEventListener("prestige-driver-native-job-open-result", onNativeJobOpenResult);
+  }, []);
+
   async function signInDriverAccount() {
     if (!installationId) return;
 
@@ -332,6 +350,17 @@ export default function DriverPortalPage() {
     setOpeningJobKey(job.job_key);
     setOpenFeedback((current) => ({ ...current, [job.job_key]: "" }));
     try {
+      if (installationId) {
+        const nativeBridge = (window as DriverNativeWindow).ReactNativeWebView;
+        if (!nativeBridge) {
+          throw new Error("Native Driver bridge unavailable");
+        }
+        nativeBridge.postMessage(JSON.stringify({
+          job_key: job.job_key,
+          type: "native_job_open",
+        }));
+        return;
+      }
       const url = await storedDriverJobUrl(job.job_key);
       if (!url) {
         setOpenFeedback((current) => ({

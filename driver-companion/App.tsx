@@ -31,6 +31,7 @@ import {
 } from "./src/driver-job-contract";
 import {
   driverNativeBiometricResultScript,
+  driverNativeJobOpenResultScript,
   driverNativeNotificationResultScript,
   driverTrackingResultScript,
   embeddedDriverBridgeBootstrap,
@@ -351,12 +352,39 @@ export default function App() {
     [],
   );
 
+  const sendNativeJobOpenResult = useCallback(
+    (result: { jobKey: string; ok: boolean }) => {
+      webViewRef.current?.injectJavaScript(
+        driverNativeJobOpenResultScript(result),
+      );
+    },
+    [],
+  );
+
   const handleBridgeMessage = useCallback(
     async (event: WebViewMessageEvent) => {
       const request = parseDriverBridgeMessage(event.nativeEvent.data);
       const currentWebViewUrl = currentWebViewUrlRef.current;
 
       if (!request || !currentWebViewUrl) {
+        return;
+      }
+
+      if (
+        request.type === "native_job_open" &&
+        currentWebViewUrl !== `${productionOrigin}/driver-portal`
+      ) {
+        sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
+        return;
+      }
+
+      if (request.type === "native_job_remember") {
+        try {
+          const currentJob = parseDriverJobUrl(currentWebViewUrl);
+          await rememberNativeDriverJob(request.jobKey, currentJob);
+        } catch {
+          // The exact private-page enrollment is best effort and never exposes its URL.
+        }
         return;
       }
 
@@ -367,6 +395,8 @@ export default function App() {
           );
         } else if (request.type === "native_notifications_register") {
           sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else if (request.type === "native_job_open") {
+          sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
         } else {
           sendTrackingResult(request.type, {
             active: screen.active,
@@ -380,6 +410,16 @@ export default function App() {
       bridgeBusyRef.current = true;
 
       try {
+        if (request.type === "native_job_open") {
+          const storedJob = await loadNativeDriverJob(request.jobKey);
+          if (!storedJob) {
+            sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
+            return;
+          }
+          await receiveDriverJobUrl(storedJob.jobUrl);
+          return;
+        }
+
         if (request.type === "native_biometrics_enable") {
           biometricPromptBusyRef.current = true;
           const enabled = await enableDriverBiometricUnlock();
@@ -481,6 +521,8 @@ export default function App() {
           );
         } else if (request.type === "native_notifications_register") {
           sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else if (request.type === "native_job_open") {
+          sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
         } else {
           sendTrackingResult(request.type, {
             active: trackingState.active,
@@ -492,7 +534,13 @@ export default function App() {
         bridgeBusyRef.current = false;
       }
     },
-    [screen.active, sendNativeNotificationResult, sendTrackingResult],
+    [
+      receiveDriverJobUrl,
+      screen.active,
+      sendNativeJobOpenResult,
+      sendNativeNotificationResult,
+      sendTrackingResult,
+    ],
   );
 
   const openCalendarAuthorization = useCallback(

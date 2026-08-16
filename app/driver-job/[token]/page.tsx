@@ -820,13 +820,15 @@ function isVerifiedEmbeddedDriverApp() {
 }
 
 function postEmbeddedDriverBridgeMessage(
-  message: {
-    type:
-      | "native_notifications_register"
-      | "tracking_start"
-      | "tracking_stop"
-      | "tracking_terminal";
-  },
+  message:
+    | {
+        type:
+          | "native_notifications_register"
+          | "tracking_start"
+          | "tracking_stop"
+          | "tracking_terminal";
+      }
+    | { job_key: string; type: "native_job_remember" },
 ) {
   if (!isVerifiedEmbeddedDriverApp()) {
     return false;
@@ -1365,6 +1367,17 @@ export default function DriverJobPage() {
         if (!response.ok) {
           setPageState({ kind: "blocked", reason: "unavailable" });
           return;
+        }
+
+        if (
+          isVerifiedEmbeddedDriverApp() &&
+          typeof result.driver_portal?.link_key === "string" &&
+          /^[0-9a-f]{64}$/.test(result.driver_portal.link_key)
+        ) {
+          postEmbeddedDriverBridgeMessage({
+            job_key: result.driver_portal.link_key,
+            type: "native_job_remember",
+          });
         }
 
         const loadedDriverDetails = {

@@ -12,6 +12,8 @@ export type DriverTrackingBridgeMessage = {
 export type DriverBridgeMessage =
   | DriverTrackingBridgeMessage
   | { type: "native_biometrics_enable" }
+  | { jobKey: string; type: "native_job_open" }
+  | { jobKey: string; type: "native_job_remember" }
   | { type: "native_notifications_register" };
 
 export type DriverTrackingResult = {
@@ -44,6 +46,20 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
     const keys = Object.keys(parsed);
 
     if (
+      ["native_job_open", "native_job_remember"].includes(String(parsed.type)) &&
+      keys.length === 2 &&
+      keys.includes("job_key") &&
+      keys.includes("type") &&
+      typeof parsed.job_key === "string" &&
+      /^[0-9a-f]{64}$/.test(parsed.job_key)
+    ) {
+      return {
+        jobKey: parsed.job_key,
+        type: parsed.type as "native_job_open" | "native_job_remember",
+      };
+    }
+
+    if (
       keys.length !== 1 ||
       keys[0] !== "type" ||
       ![
@@ -59,7 +75,12 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
       return null;
     }
 
-    return { type: parsed.type as DriverBridgeMessage["type"] };
+    return {
+      type: parsed.type as
+        | DriverTrackingBridgeMessage["type"]
+        | "native_biometrics_enable"
+        | "native_notifications_register",
+    };
   } catch {
     return null;
   }
@@ -204,4 +225,18 @@ export function driverNativeBiometricResultScript(result: { ok: boolean }) {
   return `window.dispatchEvent(new CustomEvent("prestige-driver-native-biometric-result", { detail: ${JSON.stringify({
     ok: result.ok === true,
   })} })); true;`;
+}
+
+export function driverNativeJobOpenResultScript(result: {
+  jobKey: string;
+  ok: boolean;
+}) {
+  const safeResult = {
+    jobKey: /^[0-9a-f]{64}$/.test(result.jobKey) ? result.jobKey : "",
+    ok: result.ok === true,
+  };
+
+  return `window.dispatchEvent(new CustomEvent("prestige-driver-native-job-open-result", { detail: ${JSON.stringify(
+    safeResult,
+  )} })); true;`;
 }

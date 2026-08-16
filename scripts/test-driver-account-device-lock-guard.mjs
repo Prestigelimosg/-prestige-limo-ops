@@ -9,6 +9,8 @@ const files = {
   config: "driver-companion/app.json",
   installation: "driver-companion/src/driver-installation.ts",
   jobPage: "app/driver-job/[token]/page.tsx",
+  leastPrivilegeMigration:
+    "supabase/migrations/20260816064957_driver_account_enrollments_service_role_least_privilege.sql",
   migration: "supabase/migrations/20260816040725_driver_account_device_lock.sql",
   nativeApp: "driver-companion/App.tsx",
   nativePackage: "driver-companion/package.json",
@@ -46,6 +48,17 @@ for (const fragment of [
   "revoke all on table public.driver_account_enrollments from anon, authenticated",
 ]) {
   includes("migration", fragment, `device-lock migration ${fragment}`);
+}
+
+for (const fragment of [
+  "revoke all on table public.driver_account_enrollments from service_role",
+  "grant select, insert, update on table public.driver_account_enrollments to service_role",
+]) {
+  includes(
+    "leastPrivilegeMigration",
+    fragment,
+    `Driver account enrollment least-privilege migration ${fragment}`,
+  );
 }
 
 for (const fragment of [

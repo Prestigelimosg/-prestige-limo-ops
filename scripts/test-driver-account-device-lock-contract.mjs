@@ -21,6 +21,7 @@ async function loadHarness() {
   for (const relativePath of [
     "lib/driver-job-status-workflow.ts",
     "lib/driver-job-link.ts",
+    "lib/driver-account-password.ts",
     "lib/driver-account-device-lock.ts",
   ]) {
     const sourcePath = path.join(process.cwd(), relativePath);
@@ -151,7 +152,7 @@ try {
     PRESTIGE_DRIVER_ACCOUNT_AUTH_ENABLED: "true",
     PRESTIGE_DRIVER_ACCOUNT_DEVICE_SECRET: "driver-installation-pepper-longer-than-thirty-two-characters",
   };
-  const password = "ApprovedDriver#2026";
+  const password = "482951";
   const authUserId = "55555555-5555-4555-8555-555555555555";
   const authAdmin = {
     createUser: async (input) => ({
@@ -160,6 +161,22 @@ try {
     }),
     deleteUser: async () => ({ error: null }),
   };
+
+  for (const weakPassword of ["12345", "123456", "654321", "111111", "12a456"]) {
+    assert.deepEqual(
+      await harness.account.createDriverAccountForAcknowledgedLink({
+        authorizedDriverId: 7,
+        authAdmin,
+        client,
+        email: "driver@example.com",
+        env,
+        password: weakPassword,
+        token,
+      }),
+      { ok: false, reason: "invalid_input" },
+      `Weak Driver password ${weakPassword} must fail before any account write.`,
+    );
+  }
 
   assert.deepEqual(
     await harness.account.createDriverAccountForAcknowledgedLink({

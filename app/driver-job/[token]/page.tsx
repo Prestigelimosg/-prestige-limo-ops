@@ -20,6 +20,7 @@ import {
   driverSafeStatusLabel,
   formatDriverPickupDateTime,
 } from "../../../driver-companion/src/driver-job-contract";
+import { driverAccountPasswordIsReady } from "../../../lib/driver-account-password";
 
 type DriverJobApiBlockedReason =
   | "acknowledgement_required"
@@ -1013,6 +1014,7 @@ export default function DriverJobPage() {
     useState<DriverCalendarState>(emptyDriverCalendarState);
   const [driverAccountSetup, setDriverAccountSetup] =
     useState<DriverAccountSetupState>(emptyDriverAccountSetupState);
+  const driverAccountPasswordReady = driverAccountPasswordIsReady(driverAccountSetup.password);
   const [statusFeedback, setStatusFeedback] = useState<StatusFeedback | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState("assigned");
   const [updatingStatus, setUpdatingStatus] = useState("");
@@ -1792,7 +1794,8 @@ export default function DriverJobPage() {
       !acknowledged ||
       !token ||
       driverAccountSetup.saving ||
-      driverAccountSetup.stage !== "password"
+      driverAccountSetup.stage !== "password" ||
+      !driverAccountPasswordReady
     ) return;
 
     setDriverAccountSetup((current) => ({ ...current, feedback: null, saving: true }));
@@ -1818,7 +1821,7 @@ export default function DriverJobPage() {
         const message = result?.reason === "account_exists"
           ? "A Driver account already exists for this driver or Job Link. Sign in from Prestige Driver."
           : result?.reason === "invalid_input"
-            ? "Use a valid email and a password of at least 12 characters with uppercase, lowercase, number and symbol."
+            ? "Use a valid email and exactly 6 password digits. Repeated or sequential numbers are not allowed."
             : result?.reason === "not_configured"
               ? "Driver account creation is not enabled yet. Continue reporting with this Job Link."
               : "Driver account could not be created. Continue reporting with this Job Link and contact Admin.";
@@ -3086,6 +3089,23 @@ export default function DriverJobPage() {
                                 </button>
                               </div>
                             </div>
+                            <div
+                              className="flex items-center justify-between gap-2 text-[11px] font-medium leading-tight text-violet-800"
+                              data-driver-account-password-guide="true"
+                            >
+                              <p
+                                data-driver-account-password-instruction="true"
+                              >
+                                6 digits only. No repeated or sequential numbers.
+                              </p>
+                              {driverAccountPasswordReady ? (
+                                <span
+                                  aria-live="polite"
+                                  className="shrink-0 font-bold text-emerald-800"
+                                  data-driver-account-password-ready="true"
+                                >Ready</span>
+                              ) : null}
+                            </div>
                             <form
                               className="space-y-2"
                               data-driver-account-creation-form="true"
@@ -3099,19 +3119,24 @@ export default function DriverJobPage() {
                                 <input
                                   autoComplete="new-password"
                                   className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                                  inputMode="numeric"
+                                  maxLength={6}
+                                  minLength={6}
                                   name="new-password"
                                   onChange={(event) => setDriverAccountSetup((current) => ({
                                     ...current,
                                     feedback: null,
-                                    password: event.target.value,
+                                    password: event.target.value.replace(/\D/g, "").slice(0, 6),
                                   }))}
+                                  pattern="[0-9]{6}"
+                                  required
                                   type="password"
                                   value={driverAccountSetup.password}
                                 />
                               </label>
                               <button
                                 className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
-                                disabled={driverAccountSetup.saving}
+                                disabled={driverAccountSetup.saving || !driverAccountPasswordReady}
                                 type="submit"
                               >
                                 {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}

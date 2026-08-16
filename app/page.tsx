@@ -104,7 +104,6 @@ const adminBookersApiPath = "/api/admin-bookers";
 const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 const adminCompanyTravelerCrmRuntimeWriteActionApiPath =
   "/api/admin-company-traveler-crm-runtime-write-action";
-const adminDriverAvailabilityApiPath = "/api/admin-driver-availability";
 const adminDriverAssignmentDisplayApiPath = "/api/admin-driver-assignment-display";
 const adminRateSetupApiPath = "/api/admin-rate-setup";
 const adminRateSettingsRuntimeWriteActionApiPath =
@@ -425,42 +424,6 @@ function createAdminLegacyDataClient() {
 
 const adminLegacyDataClient = createAdminLegacyDataClient();
 
-function adminDriverAvailabilityError(message: string): AdminLegacyDataResult<DriverAvailabilityRecord> {
-  return {
-    data: null,
-    error: {
-      message,
-    },
-  };
-}
-
-async function updateAdminDriverAvailability(
-  body: Record<string, unknown>,
-): Promise<AdminLegacyDataResult<DriverAvailabilityRecord>> {
-  try {
-    const response = await fetch(adminDriverAvailabilityApiPath, {
-      body: JSON.stringify(body),
-      headers: {
-        "Content-Type": "application/json",
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "PATCH",
-    });
-    const responseBody = (await response.json().catch(() => null)) as AdminDriverAvailabilityApiResponse | null;
-
-    if (!response.ok || responseBody?.ok !== true) {
-      return adminDriverAvailabilityError(responseBody?.error || "Admin driver availability request failed.");
-    }
-
-    return {
-      data: responseBody.driver || null,
-      error: null,
-    };
-  } catch {
-    return adminDriverAvailabilityError("Admin driver availability request failed.");
-  }
-}
-
 type BookingForm = {
   company: string;
   companyId: string;
@@ -615,13 +578,6 @@ type AdminRateSetupReadResponse = {
   version?: string;
 };
 
-type AdminDriverAvailabilityApiResponse = {
-  driver?: DriverAvailabilityRecord | null;
-  error?: string;
-  ok?: boolean;
-  version?: string;
-};
-
 type AdminSavedBookingReadResponse = {
   booking?: BookingRecord | null;
   bookings?: BookingRecord[];
@@ -716,12 +672,6 @@ type DriverAssignmentDisplayRecord = {
   id: number;
   plate_number: string | null;
   vehicle_type: string | null;
-};
-
-type DriverAvailabilityRecord = {
-  availability_status: string | null;
-  id: number;
-  updated_at?: string | null;
 };
 
 type NameMemory = {
@@ -14581,7 +14531,6 @@ export default function Home() {
   const [loadingDrivers, setLoadingDrivers] = useState(false);
   const [loadingDriverAssignmentDisplay, setLoadingDriverAssignmentDisplay] = useState(false);
   const [savingDriverProfile, setSavingDriverProfile] = useState(false);
-  const [deactivatingDriverProfile, setDeactivatingDriverProfile] = useState(false);
   const [deletingDriverId, setDeletingDriverId] = useState<string | null>(null);
   const [driverDeleteMessage, setDriverDeleteMessage] = useState<DriverDeleteMessage | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
@@ -21514,76 +21463,6 @@ export default function Home() {
       setMessage({ tone: "error", text: `Save driver failed: ${errorMessage}` });
     } finally {
       setSavingDriverProfile(false);
-    }
-  }
-
-  async function deactivateDriverProfile() {
-    const driverId = clean(driverProfileDraft.driverId);
-
-    if (!driverId) {
-      setMessage({ tone: "error", text: "Select an existing driver before deactivating." });
-      return;
-    }
-
-    setDeactivatingDriverProfile(true);
-    setMessage({ tone: "info", text: "Deactivating driver..." });
-
-    try {
-      const payload = {
-        availability_status: "inactive",
-        id: driverId,
-        updated_at: new Date().toISOString(),
-      };
-      const result = await updateAdminDriverAvailability(payload);
-
-      if (result.error) {
-        throw new Error(result.error.message);
-      }
-
-      setDrivers((current) =>
-        current.map((driver) =>
-          String(driver.id) === driverId
-            ? {
-                ...driver,
-                availability_status: "inactive",
-              }
-            : driver,
-        ),
-      );
-      setDriverProfileDisplayDrivers((current) =>
-        current.map((driver) =>
-          String(driver.id) === driverId
-            ? {
-                ...driver,
-                availability_status: "inactive",
-              }
-            : driver,
-        ),
-      );
-      setDriverAssignmentDisplayDrivers((current) =>
-        current.map((driver) =>
-          String(driver.id) === driverId
-            ? {
-                ...driver,
-                availability_status: "inactive",
-              }
-            : driver,
-        ),
-      );
-      setDriverProfileDraft((current) =>
-        current.driverId === driverId
-          ? {
-              ...current,
-              availabilityStatus: "inactive",
-            }
-          : current,
-      );
-      setMessage({ tone: "success", text: "Driver deactivated." });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown driver deactivate error.";
-      setMessage({ tone: "error", text: `Deactivate driver failed: ${errorMessage}` });
-    } finally {
-      setDeactivatingDriverProfile(false);
     }
   }
 
@@ -46656,17 +46535,6 @@ export default function Home() {
 		              >
 		                {savingDriverProfile ? "Saving..." : "Save Driver Profile"}
 		              </button>
-                  {driverProfileDraft.driverId ? (
-                    <button
-                      className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                      data-driver-deactivate-button="true"
-                      disabled={savingDriverProfile || deactivatingDriverProfile}
-                      onClick={deactivateDriverProfile}
-                      type="button"
-                    >
-                      {deactivatingDriverProfile ? "Deactivating..." : "Deactivate driver"}
-                    </button>
-                  ) : null}
 		            </div>
 		          </div>
             {statusPanel}

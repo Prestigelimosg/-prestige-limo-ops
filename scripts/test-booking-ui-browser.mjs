@@ -15242,7 +15242,7 @@ async function runChromeTest() {
     assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DSP?.amount, 55);
     assert.equal(renamedDriverProfileSaveState.updateRequest?.body?.driver_payout_rules?.DSP?.perHour, true);
 
-    const clickedRenamedDriverForDeactivate = await evaluate(`(() => {
+    const clickedRenamedDriverForInactiveSave = await evaluate(`(() => {
       const driverButton = [...document.querySelectorAll("button")].find(
         (button) =>
           button.innerText.includes("RENAMED REUSABLE PROFILE TEST DRIVER") &&
@@ -15256,7 +15256,22 @@ async function runChromeTest() {
       driverButton.click();
       return true;
     })()`);
-    assert.equal(clickedRenamedDriverForDeactivate, true, "Expected renamed driver profile to be selectable for deactivation");
+    assert.equal(
+      clickedRenamedDriverForInactiveSave,
+      true,
+      "Expected renamed driver profile to be selectable for an availability edit",
+    );
+
+    const separateDeactivateButtonCount = await evaluate(`(() =>
+      [...document.querySelectorAll("button")].filter(
+        (button) => button.textContent.trim() === "Deactivate driver",
+      ).length
+    )()`);
+    assert.equal(
+      separateDeactivateButtonCount,
+      0,
+      "Expected the Driver Database to use the existing row Delete control without a separate Deactivate button",
+    );
 
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
@@ -15264,57 +15279,54 @@ async function runChromeTest() {
       window.__prestigeUnhandledSupabaseCalls = [];
     })()`);
 
-    const clickedDeactivateDriver = await evaluate(`(() => {
-      const deactivateButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Deactivate driver",
+    const changedAvailabilityToInactive = await evaluate(`(() => {
+      const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
+      const availabilityLabel = [...document.querySelectorAll("label")].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Availability",
       );
+      const availabilitySelect = availabilityLabel?.querySelector("select");
 
-      if (!deactivateButton || deactivateButton.disabled) {
+      if (!availabilitySelect) {
         return false;
       }
 
-      deactivateButton.click();
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLSelectElement.prototype,
+        "value",
+      )?.set;
+      valueSetter?.call(availabilitySelect, "inactive");
+      availabilitySelect.dispatchEvent(new Event("change", { bubbles: true }));
+      availabilitySelect.dispatchEvent(new Event("input", { bubbles: true }));
       return true;
     })()`);
-    assert.equal(clickedDeactivateDriver, true, "Expected Deactivate driver button to be clickable");
+    assert.equal(changedAvailabilityToInactive, true, "Expected selected Driver availability to be editable");
+    await sleep(150);
 
-    const deactivatedDriverProfileState = await waitForCondition(
+    const clickedSaveInactiveDriver = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent.trim() === "Save Driver Profile",
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(clickedSaveInactiveDriver, true, "Expected Save Driver Profile to persist inactive availability");
+
+    const inactiveDriverProfileSaveState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
-          const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
-          const labels = [...document.querySelectorAll("label")];
-          const fieldValue = (labelText) => {
-            const label = labels.find(
-              (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
-            );
-            const control = label?.querySelector("input, select, textarea");
-
-            if (!control) {
-              return "";
-            }
-        if (control.getAttribute("data-admin-booking-field")) {
-          return control.value || "";
-        }
-
-        if (control.tagName === "SELECT") {
-          return control.options[control.selectedIndex]?.textContent.trim() || control.value || "";
-        }
-
-            return control.value || "";
-          };
           const statusPanel = document.querySelector("[data-status-panel='global']");
-          const deactivateButton = [...document.querySelectorAll("button")].find(
-            (button) => button.textContent.trim() === "Deactivate driver",
-          );
           const driverButton = [...document.querySelectorAll("button")].find(
             (button) =>
               button.innerText.includes("RENAMED REUSABLE PROFILE TEST DRIVER") &&
               button.innerText.includes("SLR902R"),
           );
-          const deactivateButtonRect = deactivateButton?.getBoundingClientRect();
-          const statusRect = statusPanel?.getBoundingClientRect();
-          const deactivateRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
-            (entry) => entry.method === "PATCH" && String(entry.url).includes("/api/admin-driver-availability"),
+          const updateRequest = (window.__prestigeDriverProfileRequestBodies || []).find(
+            (entry) => entry.method === "PATCH" && String(entry.url).includes("/rest/v1/drivers"),
           );
           const bookingRequests = (window.__prestigeDriverProfileRequestBodies || []).filter((entry) =>
             String(entry.url).includes("/rest/v1/bookings"),
@@ -15324,65 +15336,49 @@ async function runChromeTest() {
             driverButtonText: driverButton?.innerText || "",
             fetchCalls: window.__prestigeFetchCalls || [],
             bookingRequestCount: bookingRequests.length,
-            requestBodies: window.__prestigeDriverProfileRequestBodies || [],
             statusText: statusPanel?.textContent.trim() || "",
-            statusDistanceFromDeactivateButton:
-              deactivateButtonRect && statusRect ? Math.abs(statusRect.top - deactivateButtonRect.bottom) : null,
-            deactivateRequest: deactivateRequest ? { url: deactivateRequest.url, body: deactivateRequest.body } : null,
+            updateRequest: updateRequest ? { url: updateRequest.url, body: updateRequest.body } : null,
             unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
-            fields: {
-              driverName: fieldValue("Driver name"),
-              availability: fieldValue("Availability"),
-            },
           };
         })()`);
 
-        return candidateState?.statusText === "Driver deactivated." &&
-          candidateState?.driverButtonText?.includes("Inactive")
+        return candidateState?.statusText === "Driver profile saved." &&
+          candidateState?.driverButtonText?.includes("Inactive") &&
+          candidateState?.updateRequest?.body?.availability_status === "inactive"
           ? candidateState
           : false;
       },
       10000,
-      "driver profile deactivate success state",
+      "driver inactive availability save success state",
     );
 
     assert.deepEqual(
-      deactivatedDriverProfileState.unhandledSupabaseCalls,
+      inactiveDriverProfileSaveState.unhandledSupabaseCalls,
       [],
-      `Expected driver deactivation Supabase calls to be mocked, got ${deactivatedDriverProfileState.unhandledSupabaseCalls.join(", ")}`,
+      `Expected Driver availability-save Supabase calls to be mocked, got ${inactiveDriverProfileSaveState.unhandledSupabaseCalls.join(", ")}`,
     );
     assert.ok(
-      deactivatedDriverProfileState.fetchCalls.every(
-        (call) => call.includes("/api/admin-driver-availability") || call.includes("/rest/v1/drivers"),
+      inactiveDriverProfileSaveState.fetchCalls.every(
+        (call) =>
+          call.includes("/api/admin-full-driver-profile-runtime-write-action") ||
+          call.includes("/api/admin-driver-assignment-display") ||
+          call.includes("/rest/v1/drivers"),
       ),
-      `Expected driver deactivation to call only driver endpoints, got ${deactivatedDriverProfileState.fetchCalls.join(", ")}`,
+      `Expected Driver availability save to use only established profile endpoints, got ${inactiveDriverProfileSaveState.fetchCalls.join(", ")}`,
     );
     assert.equal(
-      deactivatedDriverProfileState.bookingRequestCount,
+      inactiveDriverProfileSaveState.bookingRequestCount,
       0,
-      "Expected driver deactivation not to update booking rows",
+      "Expected Driver availability save not to update booking rows",
     );
     assert.match(
-      deactivatedDriverProfileState.deactivateRequest?.url || "",
-      /\/api\/admin-driver-availability/,
+      inactiveDriverProfileSaveState.updateRequest?.url || "",
+      /\/rest\/v1\/drivers.*id=eq\.901/,
     );
-    assert.equal(deactivatedDriverProfileState.deactivateRequest?.body?.id, "901");
-    assert.equal(deactivatedDriverProfileState.deactivateRequest?.body?.availability_status, "inactive");
-    assert.ok(
-      typeof deactivatedDriverProfileState.deactivateRequest?.body?.updated_at === "string" &&
-        deactivatedDriverProfileState.deactivateRequest.body.updated_at.length > 0,
-      "Expected driver deactivation to update updated_at timestamp",
-    );
-    assert.match(deactivatedDriverProfileState.driverButtonText, /RENAMED REUSABLE PROFILE TEST DRIVER/);
-    assert.match(deactivatedDriverProfileState.driverButtonText, /inactive/);
-    assert.match(deactivatedDriverProfileState.driverButtonText, /Inactive/);
-    assert.equal(deactivatedDriverProfileState.fields.driverName, "RENAMED REUSABLE PROFILE TEST DRIVER");
-    assert.equal(deactivatedDriverProfileState.fields.availability, "Inactive");
-    assert.ok(
-      deactivatedDriverProfileState.statusDistanceFromDeactivateButton !== null &&
-        deactivatedDriverProfileState.statusDistanceFromDeactivateButton <= 120,
-      `Expected Driver deactivated status near Deactivate driver button, got ${deactivatedDriverProfileState.statusDistanceFromDeactivateButton}px`,
-    );
+    assert.equal(inactiveDriverProfileSaveState.updateRequest?.body?.availability_status, "inactive");
+    assert.match(inactiveDriverProfileSaveState.driverButtonText, /RENAMED REUSABLE PROFILE TEST DRIVER/);
+    assert.match(inactiveDriverProfileSaveState.driverButtonText, /inactive/);
+    assert.match(inactiveDriverProfileSaveState.driverButtonText, /Inactive/);
 
     await evaluate(`(() => {
       const alsonDuplicate = {

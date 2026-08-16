@@ -178,7 +178,7 @@ assertExcludes(saveBookingSource, auditSetupApiName, "Save Booking + CRM");
 const saveDriverProfileSource = sectionBetween(
   appPage,
   "async function saveDriverProfile()",
-  "async function deactivateDriverProfile()",
+  "function clearDeletedDriverIdFromBookingState",
 );
 const deleteDriverProfileSource = sectionBetween(
   appPage,

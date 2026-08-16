@@ -357,7 +357,7 @@ for (const fragment of [
 assertIncludes(fullDriverRuntimeDeletePayload, "action_type: \"full_driver_profile_delete\"", "Full driver runtime delete action");
 assertIncludes(fullDriverRuntimeDeletePayload, "id", "Full driver runtime delete id");
 
-const saveDriverProfile = sliceBetween(appPage, "async function saveDriverProfile()", "async function deactivateDriverProfile");
+const saveDriverProfile = sliceBetween(appPage, "async function saveDriverProfile()", "function clearDeletedDriverIdFromBookingState");
 const deleteDriverProfile = sliceBetween(appPage, "async function deleteDriverProfile", "async function saveBooking");
 assertBefore(saveDriverProfile, "const fullDriverProfileRuntime", "const result = existingDriverId", "Full driver runtime save before legacy fallback");
 assertBefore(deleteDriverProfile, "const fullDriverProfileRuntimePayload", "const result = await adminLegacyDataClient.from(adminLegacyTables.drivers).delete()", "Full driver runtime delete before legacy fallback");

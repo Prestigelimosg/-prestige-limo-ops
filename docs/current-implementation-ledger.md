@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Delete Enrollment Foreign-Key Repair (2026-08-16)
+
+- The owner-approved read-only complete-path inspection of the existing Driver Database `Delete` control proved one exact Production blocker before any account was created: `driver_account_enrollments.driver_id` used `ON DELETE RESTRICT`. Every successfully created Driver account retains one consumed enrollment row, so the established atomic `admin_revoke_driver_account_and_delete_profile` function would revoke the access account and then fail while deleting the selected `drivers` row; the transaction would roll back both changes.
+- The narrow repair adds no UI, API, helper, account path, deletion path, or broad data erasure. Migration `20260816102009_driver_account_enrollment_delete_cascade.sql` replaces only that exact enrollment-to-Driver foreign key with `ON DELETE CASCADE`, using bounded lock and statement timeouts. Deleting the exact Driver profile now removes only its server-only one-time enrollment claim so the same atomic function can finish. The enrollment-to-Job-Link restriction, revoked `driver_access_accounts` tombstone, Supabase Auth identity, audit event, existing bookings, private Driver Job Links, Driver Reports, Calendar separation, messages, notifications, GPS, customer, invoice, payment, payout, PayNow, provider, finance, and every unrelated lane remain unchanged.
+- The existing red row `Delete` button remains the only Driver lifecycle control. Complete-path inspection found an older header `Deactivate driver` control from commit `60cd11e7`; it only changed availability to `inactive`, did not revoke the Driver app account, and conflicted with the owner-locked single-control workflow. That separate button, handler, and state are removed. The verified Admin/Dispatcher Delete route, exact selected-Driver confirmation, account status `revoked`, phone-binding clear, safe audit event, profile deletion, generic app-session rejection, and preserved historical booking/report evidence remain unchanged.
+- Fail-first protection extends `scripts/test-driver-delete-account-revoke-guard.mjs`: it reproduced both the empty migration and the older separate Deactivate control before repair. It now requires the exact constraint replacement, rejects any change to `driver_job_link_id` or `driver_access_accounts`, and prevents a second Deactivate, Suspend, or Revoke control from returning. Production migration, commit/push/PR/merge, deployment, and physical account-backed Delete acceptance remain pending until the bounded checks pass.
+
 ### Driver iOS Email-First Password AutoFill Repair (2026-08-16)
 
 - Physical light-mode Build 8 acceptance proved the earlier single-form credential semantics did not repair direct `@` entry: the same acknowledged Production Job Link still invoked Apple Password AutoFill Face ID instead of inserting `@` inside Prestige Driver. The owner reproduced the same failure on iPhone Safari and iPhone Chrome, while a visible test of that exact private link on Mac Chrome inserted `@` separately and retained `mac.test@example.com` without submitting the form. This cross-surface evidence narrows the defect to iOS Password AutoFill classification of the simultaneously mounted Email and Password controls rather than Prestige Driver's native biometric bridge, the account payload, React state, or the email value itself.
@@ -8169,7 +8176,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Full driver profile legacy path still exposes `GET`, `POST`, `PATCH`, and `DELETE` through the admin legacy data route.
 - Loaded/saved legacy driver fields include `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, `availability_status`, `payout_preferences`, `driver_payout_rules`, `notes`, `preferred_areas`, and `airport_permit_notes`.
 - Safe driver display/read is already typed through `GET /api/admin-driver-assignment-display`.
-- Driver availability/deactivation is already typed through `/api/admin-driver-availability`.
+- The backend availability-only PATCH remains typed through `/api/admin-driver-availability`; the Admin page no longer exposes a separate Deactivate control or client write path.
 - Full driver profile save/delete remains parked.
 - Future safe shape must be disabled/no-write first.
 - Allowed future safe fields only: `driver_name`, `contact_number`, `vehicle_type`, `plate_number`, and `availability_status`.
@@ -8229,7 +8236,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Approval status: pending future runtime-wiring approval.
 - This is a docs/test-only approval packet guarded by `scripts/test-full-driver-profile-runtime-approval-packet.mjs`.
 - Full driver profile display/read is typed through `GET /api/admin-driver-assignment-display`.
-- Driver availability/deactivation is typed through `/api/admin-driver-availability`.
+- The backend availability-only PATCH remains typed through `/api/admin-driver-availability`; the Admin page no longer exposes a separate Deactivate control or client write path.
 - Full driver profile save/delete runtime remains parked.
 - `loadDrivers`, `saveDriverProfile`, and `deleteDriverProfile` still use the legacy `drivers` shim path for full profile surfaces.
 - Disabled full driver profile action setup, audit payload setup, and no-live guard already exist.

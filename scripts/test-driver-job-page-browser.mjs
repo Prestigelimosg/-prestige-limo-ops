@@ -248,6 +248,7 @@ async function runChromeTest() {
         const embeddedDriverHarness = new URLSearchParams(window.location.search).get("embedded") === "1";
         if (embeddedDriverHarness) {
           window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
+          window.__PRESTIGE_DRIVER_INSTALLATION_ID__ = "77777777-7777-4777-8777-777777777777";
           window.ReactNativeWebView = {
             postMessage: (rawMessage) => {
               try {
@@ -2270,6 +2271,40 @@ async function runChromeTest() {
     assert.deepEqual(arrivalCompletedState.activityLogLabels, [], "Expected Arrival public driver activity log to stay hidden.");
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=1", appUrl).toString(),
+      "Driver sign in",
+      "installed Driver Portal link-only session sign-in",
+    );
+    const installedLinkSessionState = await evaluate(`(() => ({
+      alertSetupCount: document.querySelectorAll("[data-driver-portal-alert-setup]").length,
+      jobCount: document.querySelectorAll("[data-driver-portal-job]").length,
+      signInCount: document.querySelectorAll("[data-driver-portal-sign-in]").length,
+      text: document.body?.innerText || "",
+    }))()`);
+    assert.equal(
+      installedLinkSessionState.signInCount,
+      1,
+      "A link-only session inside the installed Driver app must expose the one existing account sign-in panel.",
+    );
+    assert.equal(
+      installedLinkSessionState.jobCount,
+      0,
+      "A link-only session must not bypass installed-app account sign-in by rendering the account job list.",
+    );
+    assert.equal(
+      installedLinkSessionState.alertSetupCount,
+      0,
+      "Device alerts must remain behind the installed-app account sign-in boundary.",
+    );
+    assertNoSensitiveText({
+      fetchCalls: [],
+      resourceCalls: [],
+      visibleText: installedLinkSessionState.text,
+    });
 
     await evaluate("window.__driverDeviceAlertTest.clearPortalSubscription()");
     await navigateAndWaitForBodyText(

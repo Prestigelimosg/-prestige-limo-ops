@@ -12,6 +12,12 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Driver Account And Calendar Bottom Placement (2026-08-16)
+
+- Light-mode inspection and a fail-first Driver Job browser assertion reproduced the exact presentation issue: after acknowledgement, the one established Create Driver Account block and one established personal Google Calendar action were nested inside Driver Details before the complete Job Status workflow instead of appearing at the bottom above Report Issue.
+- The narrow repair physically relocates those same two JSX blocks into one post-acknowledgement presentation wrapper after the complete Job Status section and immediately before the existing Report Issue section. It keeps the exact acknowledgement gate, Account state and one-time creation handler, six-digit password rules, Calendar state/action/OAuth/event path and policy links, and Report Issue action. No second component, button, route, API, writer, persistence lane, credential, event identity, message, status, GPS, photo, customer/Admin data, invoice, payment, payout, PayNow, schema, migration, environment, or provider change is introduced.
+- `scripts/test-driver-job-page-browser.mjs` now requires both sections absent before acknowledgement and, after the existing acknowledgement PATCH, exactly one Account block and one Calendar action after Job Status and before Report Issue. The complete browser suite plus the established Account, Calendar, Operations Calendar sync, Driver details sync, status persistence, Driver Job privacy, and public privacy guards pass locally. The separately requested Calendar-after-save and Account-after-created collapse behaviors are not included in this placement-only repair. Commit, protected merge, Production deployment, and visible Production Mac Chrome acceptance remain pending.
+
 ### Driver Details Post-Acknowledgement Collapse (2026-08-16)
 
 - Visible light-mode Production Mac Chrome inspection of the owner's acknowledged Job Link reproduced the exact presentation issue before repair: the `Paste Driver Details` parser, four established safe Driver fields, and disabled `Saved & Acknowledged` control remained fully expanded above the already-confirmed Driver summary, account setup, Calendar, and Job Status controls.

@@ -22674,6 +22674,10 @@ export default function Home() {
   function selectAppTab(nextTab: AppTab) {
     setActiveTab(nextTab);
 
+    if (nextTab === "drivers" && !loadingDrivers) {
+      void loadDrivers("Driver database refreshed.", "Refreshing driver database...");
+    }
+
     if (
       (nextTab === "bookings" || nextTab === "dashboard" || nextTab === "dispatch") &&
       bookings.length === 0 &&

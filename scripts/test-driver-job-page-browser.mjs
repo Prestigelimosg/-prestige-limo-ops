@@ -640,8 +640,16 @@ async function runChromeTest() {
           emailInputMode: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.inputMode || "",
           emailName: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.name || "",
           emailStepVisible: Boolean(document.querySelector('[data-driver-account-email-step="true"]')),
+          passwordCreateDisabled: document.querySelector('[data-driver-account-creation-form="true"] button[type="submit"]')?.disabled ?? null,
           passwordAutocomplete: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.autocomplete || "",
+          passwordGuideInstruction: document.querySelector('[data-driver-account-password-instruction="true"]')?.textContent?.trim() || "",
+          passwordGuideVisible: Boolean(document.querySelector('[data-driver-account-password-guide="true"]')),
+          passwordInputMode: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.inputMode || "",
+          passwordMaxLength: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.maxLength ?? null,
+          passwordMinLength: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.minLength ?? null,
           passwordName: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.name || "",
+          passwordPattern: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.pattern || "",
+          passwordReadyVisible: Boolean(document.querySelector('[data-driver-account-password-ready="true"]')),
           passwordStepVisible: Boolean(document.querySelector('[data-driver-account-creation-form="true"]')),
         },
         consoleErrors: window.__prestigeConsoleErrors || [],
@@ -1093,8 +1101,16 @@ async function runChromeTest() {
           emailInputMode: "email",
           emailName: "email",
           emailStepVisible: true,
+          passwordCreateDisabled: null,
           passwordAutocomplete: "",
+          passwordGuideInstruction: "",
+          passwordGuideVisible: false,
+          passwordInputMode: "",
+          passwordMaxLength: null,
+          passwordMinLength: null,
           passwordName: "",
+          passwordPattern: "",
+          passwordReadyVisible: false,
           passwordStepVisible: false,
         },
         "Expected the acknowledged Driver account controls to render only the iOS-safe Email step first.",
@@ -1138,8 +1154,16 @@ async function runChromeTest() {
           emailInputMode: "",
           emailName: "",
           emailStepVisible: false,
+          passwordCreateDisabled: true,
           passwordAutocomplete: "new-password",
+          passwordGuideInstruction: "6 digits only. No repeated or sequential numbers.",
+          passwordGuideVisible: true,
+          passwordInputMode: "numeric",
+          passwordMaxLength: 6,
+          passwordMinLength: 6,
           passwordName: "new-password",
+          passwordPattern: "[0-9]{6}",
+          passwordReadyVisible: false,
           passwordStepVisible: true,
         },
         "Expected Continue to replace the Email input with the same confirmed email and existing Password form.",
@@ -1148,6 +1172,44 @@ async function runChromeTest() {
         afterAccountContinueState.fetchCalls.filter((call) => call.includes("/account")),
         afterSaveState.fetchCalls.filter((call) => call.includes("/account")),
         "Email Continue must not create an account or add a second write path.",
+      );
+      const accountPasswordFocused = await evaluate(`(() => {
+        const input = document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]');
+        if (!input) return false;
+        input.focus();
+        return document.activeElement === input;
+      })()`);
+      assert.equal(accountPasswordFocused, true, "Expected Mac Chrome to focus the Driver password field.");
+      await client.send("Input.insertText", { text: "123456" });
+      await waitForCondition(
+        () => evaluate(`document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.value === "123456"`),
+        5000,
+        "Rejected sequential Driver password",
+      );
+      const sequentialPasswordState = await pageState();
+      assert.equal(sequentialPasswordState.accountCreation.passwordReadyVisible, false);
+      assert.equal(sequentialPasswordState.accountCreation.passwordCreateDisabled, true);
+
+      const accountPasswordSelected = await evaluate(`(() => {
+        const input = document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]');
+        if (!input) return false;
+        input.select();
+        return true;
+      })()`);
+      assert.equal(accountPasswordSelected, true, "Expected the rejected Driver password to remain editable.");
+      await client.send("Input.insertText", { text: "482951" });
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector('[data-driver-account-password-ready="true"]'))`),
+        5000,
+        "Ready six-digit Driver password",
+      );
+      const readyPasswordState = await pageState();
+      assert.equal(readyPasswordState.accountCreation.passwordReadyVisible, true);
+      assert.equal(readyPasswordState.accountCreation.passwordCreateDisabled, false);
+      assert.deepEqual(
+        readyPasswordState.fetchCalls.filter((call) => call.includes("/account")),
+        afterSaveState.fetchCalls.filter((call) => call.includes("/account")),
+        "Password readiness checks must not create an account or add a second write path.",
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;

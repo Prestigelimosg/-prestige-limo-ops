@@ -14,6 +14,7 @@ const files = {
   migration: "supabase/migrations/20260816040725_driver_account_device_lock.sql",
   nativeApp: "driver-companion/App.tsx",
   nativePackage: "driver-companion/package.json",
+  password: "lib/driver-account-password.ts",
   portalPage: "app/driver-portal/page.tsx",
   portalRoute: "app/api/driver-portal/jobs/route.ts",
   session: "lib/driver-portal-session.ts",
@@ -94,6 +95,15 @@ includes("authRoute", "clearDriverPortalSessionCookie", "account logout cookie c
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
 for (const fragment of [
+  "driverAccountPasswordLength = 6",
+  "/^\\d{6}$/",
+  "/^(\\d)\\1{5}$/",
+  "step === 1 || step === -1",
+]) {
+  includes("password", fragment, `shared six-digit Driver password rule ${fragment}`);
+}
+includes("account", "driverAccountPasswordIsReady(input.password)", "server six-digit Driver password enforcement");
+for (const fragment of [
   'stage: "email" | "password"',
   'stage: "email"',
   'data-driver-account-email-step="true"',
@@ -108,10 +118,27 @@ for (const fragment of [
   'spellCheck={false}',
   'autoComplete="new-password"',
   'name="new-password"',
+  'data-driver-account-password-guide="true"',
+  '6 digits only. No repeated or sequential numbers.',
+  'data-driver-account-password-ready="true"',
+  '>Ready</span>',
+  'inputMode="numeric"',
+  'minLength={6}',
+  'maxLength={6}',
+  'pattern="[0-9]{6}"',
+  'driverAccountSetup.saving || !driverAccountPasswordReady',
 ]) {
   includes("jobPage", fragment, `iOS-safe email-first Driver account form ${fragment}`);
 }
 excludes("jobPage", /autoComplete="username"/, "iOS Password AutoFill username classification on the acknowledged Job Link");
+excludes("jobPage", />Password guide</, "unrequested visible Password guide heading");
+excludes(
+  "jobPage",
+  /className="rounded-md border border-violet-200 bg-violet-50[^"]*"[\s\S]{0,120}data-driver-account-password-guide="true"/,
+  "unrequested large password instruction card",
+);
+excludes("jobPage", /Not ready/, "unrequested negative password readiness wording");
+excludes("jobPage", /at least 12 characters with uppercase, lowercase, number and symbol/, "superseded complex password guidance");
 includes("portalPage", "Driver sign in", "Driver Portal sign-in form");
 includes("portalPage", "driver-installation-required", "native installation requirement");
 includes("portalPage", "nativeBridgeReady && readState.accountSession", "Face ID after account session only");

@@ -141,6 +141,12 @@ excludes("jobPage", /Not ready/, "unrequested negative password readiness wordin
 excludes("jobPage", /at least 12 characters with uppercase, lowercase, number and symbol/, "superseded complex password guidance");
 includes("portalPage", "Driver sign in", "Driver Portal sign-in form");
 includes("portalPage", "driver-installation-required", "native installation requirement");
+includes("portalPage", "installedAccountSignInRequired", "single installed-app sign-in render boundary");
+includes(
+  "portalPage",
+  'readState.kind === "ready" && !readState.accountSession',
+  "link-only installed-app session cannot bypass account sign-in",
+);
 includes("portalPage", "nativeBridgeReady && readState.accountSession", "Face ID after account session only");
 includes("portalPage", "x-prestige-driver-installation-id", "native installation request proof");
 includes("portalRoute", "verifyDriverAccountSession", "server account revalidation");

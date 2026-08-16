@@ -147,6 +147,13 @@ export default function DriverPortalPage() {
   const [accountPassword, setAccountPassword] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
+  const installedAccountSignInRequired = Boolean(
+    installationId &&
+    (
+      readState.kind === "blocked" ||
+      (readState.kind === "ready" && !readState.accountSession)
+    ),
+  );
 
   const loadJobs = useCallback(async () => {
     try {
@@ -361,61 +368,59 @@ export default function DriverPortalPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-loading="true">
             <p className="text-sm font-semibold text-slate-700">Loading assigned jobs…</p>
           </section>
+        ) : installedAccountSignInRequired ? (
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
+            <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
+            <p className="text-sm font-medium leading-6 text-slate-700">
+              Sign in with the account created from your acknowledged private Job Link. The first
+              successful sign-in binds this account to this Prestige Driver installation.
+            </p>
+            <label className="block text-sm font-semibold text-slate-800">
+              Email
+              <input
+                autoComplete="email"
+                className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
+                onChange={(event) => setAccountEmail(event.target.value)}
+                type="email"
+                value={accountEmail}
+              />
+            </label>
+            <label className="block text-sm font-semibold text-slate-800">
+              Password
+              <input
+                autoComplete="current-password"
+                className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
+                onChange={(event) => setAccountPassword(event.target.value)}
+                type="password"
+                value={accountPassword}
+              />
+            </label>
+            <button
+              className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
+              disabled={accountSignInState === "signing_in"}
+              onClick={() => void signInDriverAccount()}
+              type="button"
+            >
+              {accountSignInState === "signing_in" ? "Signing in…" : "Sign in"}
+            </button>
+            {accountSignInState === "failed" ? (
+              <p className="text-sm font-semibold leading-6 text-amber-900">
+                Sign-in could not be completed. Check your details or contact Prestige admin.
+              </p>
+            ) : null}
+          </section>
         ) : readState.kind === "blocked" ? (
-          installationId ? (
-            <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
-              <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
-              <p className="text-sm font-medium leading-6 text-slate-700">
-                Sign in with the account created from your acknowledged private Job Link. The first
-                successful sign-in binds this account to this Prestige Driver installation.
-              </p>
-              <label className="block text-sm font-semibold text-slate-800">
-                Email
-                <input
-                  autoComplete="email"
-                  className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
-                  onChange={(event) => setAccountEmail(event.target.value)}
-                  type="email"
-                  value={accountEmail}
-                />
-              </label>
-              <label className="block text-sm font-semibold text-slate-800">
-                Password
-                <input
-                  autoComplete="current-password"
-                  className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
-                  onChange={(event) => setAccountPassword(event.target.value)}
-                  type="password"
-                  value={accountPassword}
-                />
-              </label>
-              <button
-                className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
-                disabled={accountSignInState === "signing_in"}
-                onClick={() => void signInDriverAccount()}
-                type="button"
-              >
-                {accountSignInState === "signing_in" ? "Signing in…" : "Sign in"}
-              </button>
-              {accountSignInState === "failed" ? (
-                <p className="text-sm font-semibold leading-6 text-amber-900">
-                  Sign-in could not be completed. Check your details or contact Prestige admin.
-                </p>
-              ) : null}
-            </section>
-          ) : (
-            <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-driver-installation-required="true" data-driver-portal-blocked={readState.reason}>
-              <h2 className="text-lg font-bold text-amber-950">Prestige Driver app required for account sign-in</h2>
-              <p className="text-sm font-medium leading-6 text-amber-900">
-                Account sign-in is available only inside the installed Prestige Driver app so one
-                approved account can be secured to one phone.
-              </p>
-              <p className="text-sm font-medium leading-6 text-amber-900">
-                The app is optional for reporting. You can still open the private Job Link from
-                WhatsApp in this browser, save and acknowledge the job, and submit all Driver Reports.
-              </p>
-            </section>
-          )
+          <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-driver-installation-required="true" data-driver-portal-blocked={readState.reason}>
+            <h2 className="text-lg font-bold text-amber-950">Prestige Driver app required for account sign-in</h2>
+            <p className="text-sm font-medium leading-6 text-amber-900">
+              Account sign-in is available only inside the installed Prestige Driver app so one
+              approved account can be secured to one phone.
+            </p>
+            <p className="text-sm font-medium leading-6 text-amber-900">
+              The app is optional for reporting. You can still open the private Job Link from
+              WhatsApp in this browser, save and acknowledge the job, and submit all Driver Reports.
+            </p>
+          </section>
         ) : (
           <section className="space-y-3" data-driver-portal-job-count={readState.jobs.length}>
             {nativeBridgeReady && readState.accountSession ? (

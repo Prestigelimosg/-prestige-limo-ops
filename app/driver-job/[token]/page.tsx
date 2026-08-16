@@ -3014,17 +3014,29 @@ export default function DriverJobPage() {
                       reporting action in this browser without installing Prestige Driver.
                     </p>
                     {driverAccountSetup.status !== "created" ? (
-                      <>
+                      <form
+                        className="space-y-2"
+                        data-driver-account-creation-form="true"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void createDriverAccount();
+                        }}
+                      >
                         <label className="block space-y-1 text-sm font-semibold text-violet-950">
                           <span>Email</span>
                           <input
-                            autoComplete="email"
+                            autoCapitalize="none"
+                            autoComplete="username"
+                            autoCorrect="off"
                             className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                            inputMode="email"
+                            name="username"
                             onChange={(event) => setDriverAccountSetup((current) => ({
                               ...current,
                               email: event.target.value,
                               feedback: null,
                             }))}
+                            spellCheck={false}
                             type="email"
                             value={driverAccountSetup.email}
                           />
@@ -3034,6 +3046,7 @@ export default function DriverJobPage() {
                           <input
                             autoComplete="new-password"
                             className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                            name="new-password"
                             onChange={(event) => setDriverAccountSetup((current) => ({
                               ...current,
                               feedback: null,
@@ -3046,12 +3059,11 @@ export default function DriverJobPage() {
                         <button
                           className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
                           disabled={driverAccountSetup.saving}
-                          onClick={() => void createDriverAccount()}
-                          type="button"
+                          type="submit"
                         >
                           {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
                         </button>
-                      </>
+                      </form>
                     ) : null}
                     {driverAccountSetup.feedback ? (
                       <p

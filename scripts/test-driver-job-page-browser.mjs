@@ -634,6 +634,14 @@ async function runChromeTest() {
           count: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
           text: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
         },
+        accountCreation: {
+          emailAutocomplete: document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.autocomplete || "",
+          emailInputMode: document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.inputMode || "",
+          emailName: document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.name || "",
+          passwordAutocomplete: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.autocomplete || "",
+          passwordName: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.name || "",
+          visible: Boolean(document.querySelector('[data-driver-account-creation-form="true"]')),
+        },
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
         fetchCalls: window.__driverJobFetchCalls || [],
@@ -1074,6 +1082,36 @@ async function runChromeTest() {
         afterSaveState.activityLogLabels,
         [],
         "Expected Save & Acknowledge to keep driver activity log hidden.",
+      );
+      assert.deepEqual(
+        afterSaveState.accountCreation,
+        {
+          emailAutocomplete: "username",
+          emailInputMode: "email",
+          emailName: "username",
+          passwordAutocomplete: "new-password",
+          passwordName: "new-password",
+          visible: true,
+        },
+        "Expected the acknowledged Driver account controls to use one Apple-compatible credential form.",
+      );
+
+      const accountEmailFocused = await evaluate(`(() => {
+        const input = document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]');
+        if (!input) return false;
+        input.focus();
+        return document.activeElement === input;
+      })()`);
+      assert.equal(
+        accountEmailFocused,
+        true,
+        "Expected Mac Chrome to focus the established Driver account Email field.",
+      );
+      await client.send("Input.insertText", { text: "driver.test@example.com" });
+      await waitForCondition(
+        () => evaluate(`document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.value === "driver.test@example.com"`),
+        5000,
+        "Driver account Email at-sign input",
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;

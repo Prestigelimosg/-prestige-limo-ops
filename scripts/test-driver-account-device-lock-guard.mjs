@@ -93,6 +93,17 @@ includes("authRoute", "clearDriverPortalSessionCookie", "account logout cookie c
 
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
+for (const fragment of [
+  'data-driver-account-creation-form="true"',
+  'autoComplete="username"',
+  'autoCapitalize="none"',
+  'name="username"',
+  'spellCheck={false}',
+  'autoComplete="new-password"',
+  'name="new-password"',
+]) {
+  includes("jobPage", fragment, `Apple-compatible Driver account form ${fragment}`);
+}
 includes("portalPage", "Driver sign in", "Driver Portal sign-in form");
 includes("portalPage", "driver-installation-required", "native installation requirement");
 includes("portalPage", "nativeBridgeReady && readState.accountSession", "Face ID after account session only");

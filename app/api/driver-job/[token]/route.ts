@@ -130,6 +130,10 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
     if (result.ok) {
       return Response.json({
         device_alerts: publicDriverDeviceAlertReadiness(),
+        driver_portal: publicDriverPortalEnrollment({
+          jobKey: result.jobKey,
+          ok: true,
+        }),
         ok: true,
         mode: "production",
         payload: result.payload,
@@ -164,6 +168,10 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
   // Mock-backed route skeleton only. No Supabase reads, no Driver Database reads, no production token table yet.
   return Response.json({
     device_alerts: publicDriverDeviceAlertReadiness(),
+    driver_portal: {
+      enrolled: false,
+      link_key: null,
+    },
     ok: true,
     mode: "mock",
     payload: result.payload,

@@ -14,6 +14,7 @@ import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
 } from "./driver-job-status-workflow.ts";
+import { opaqueDriverJobLinkKey } from "./driver-device-push-notification.ts";
 
 export const driverJobStatusPersistenceVersion =
   "stage-driver-job-status-production-adapter-v1";
@@ -35,6 +36,7 @@ export type DriverJobDetailsBlockedReason =
 
 export type DriverJobProductionPayloadResult =
   | {
+      jobKey: string;
       ok: true;
       payload: SafeDriverJobPayload;
       reason: "ok";
@@ -1278,6 +1280,7 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
   }
 
   return {
+    jobKey: opaqueDriverJobLinkKey(String(resolvedLink.link.id || "")),
     ok: true,
     payload: payloadForLink(
       resolvedLink.link,

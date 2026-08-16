@@ -6,6 +6,7 @@ import ts from "typescript";
 
 const helperPath = "lib/driver-device-push-notification.ts";
 const productionPath = "lib/driver-job-link-production.ts";
+const statusPersistencePath = "lib/driver-job-status-persistence.ts";
 const notificationPath = "lib/customer-driver-app-notification-persistence.ts";
 const routePath = "app/api/driver-job/[token]/route.ts";
 const pagePath = "app/driver-job/[token]/page.tsx";
@@ -54,6 +55,7 @@ function transpileTypescript(source, filename) {
 const [
   helperSource,
   productionSource,
+  statusPersistenceSource,
   notificationSource,
   routeSource,
   pageSource,
@@ -75,6 +77,7 @@ const [
   [
     helperPath,
     productionPath,
+    statusPersistencePath,
     notificationPath,
     routePath,
     pagePath,
@@ -107,8 +110,8 @@ assertIncludes(
 );
 assertIncludes(
   nativeBridgeSource,
-  ['"native_notifications_register"'],
-  "parameterless native notification bridge",
+  ['"native_notifications_register"', '"native_job_open"', '"native_job_remember"', "job_key"],
+  "bounded native notification and stored-job bridge",
 );
 assertIncludes(
   pageSource,
@@ -136,8 +139,52 @@ assertIncludes(
     "rememberNativeDriverJob",
     "loadNativeDriverJob",
     'request.type === "native_notifications_register"',
+    'request.type === "native_job_open"',
+    'request.type === "native_job_remember"',
+    'currentWebViewUrl !== `${productionOrigin}/driver-portal`',
+    "await rememberNativeDriverJob(request.jobKey, currentJob)",
+    "await receiveDriverJobUrl(storedJob.jobUrl)",
   ],
-  "native iOS notification registration and tap handling",
+  "native iOS notification registration, direct-link memory, and portal reopening",
+);
+assert.equal(
+  nativeAppSource.indexOf('if (request.type === "native_job_remember")') <
+    nativeAppSource.indexOf("if (bridgeBusyRef.current)"),
+  true,
+  "private-link enrollment must not be dropped behind an unrelated busy bridge action",
+);
+assertIncludes(
+  portalPageSource,
+  [
+    'type: "native_job_open"',
+    "job_key: job.job_key",
+    "ReactNativeWebView?.postMessage",
+  ],
+  "installed Driver Portal stored-job bridge",
+);
+assertIncludes(
+  pageSource,
+  [
+    'type: "native_job_remember"',
+    "job_key: result.driver_portal.link_key",
+  ],
+  "private Driver Job exact server-key memory bridge",
+);
+assertIncludes(
+  routeSource,
+  [
+    "driver_portal: publicDriverPortalEnrollment({",
+    "jobKey: result.jobKey",
+  ],
+  "private Driver Job server-issued opaque portal key",
+);
+assertIncludes(
+  statusPersistenceSource,
+  [
+    'import { opaqueDriverJobLinkKey } from "./driver-device-push-notification.ts"',
+    'jobKey: opaqueDriverJobLinkKey(String(resolvedLink.link.id || ""))',
+  ],
+  "same exact link-record key as the established portal job list",
 );
 const nativeLocalRegistrationFinalization = nativeAppSource.slice(
   nativeAppSource.indexOf("const registration = await registerNativeDriverNotifications"),

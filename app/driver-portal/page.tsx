@@ -144,6 +144,7 @@ export default function DriverPortalPage() {
     typeof (window as DriverNativeWindow).ReactNativeWebView?.postMessage === "function",
   );
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
   const [accountPassword, setAccountPassword] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
@@ -375,39 +376,98 @@ export default function DriverPortalPage() {
               Sign in with the account created from your acknowledged private Job Link. The first
               successful sign-in binds this account to this Prestige Driver installation.
             </p>
-            <label className="block text-sm font-semibold text-slate-800">
-              Email
-              <input
-                autoComplete="email"
-                className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
-                onChange={(event) => setAccountEmail(event.target.value)}
-                type="email"
-                value={accountEmail}
-              />
-            </label>
-            <label className="block text-sm font-semibold text-slate-800">
-              Password
-              <input
-                autoComplete="current-password"
-                className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
-                onChange={(event) => setAccountPassword(event.target.value)}
-                type="password"
-                value={accountPassword}
-              />
-            </label>
-            <button
-              className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
-              disabled={accountSignInState === "signing_in"}
-              onClick={() => void signInDriverAccount()}
-              type="button"
-            >
-              {accountSignInState === "signing_in" ? "Signing in…" : "Sign in"}
-            </button>
-            {accountSignInState === "failed" ? (
-              <p className="text-sm font-semibold leading-6 text-amber-900">
-                Sign-in could not be completed. Check your details or contact Prestige admin.
-              </p>
-            ) : null}
+            {!accountEmailConfirmed ? (
+              <form
+                className="space-y-3"
+                data-driver-portal-email-step="true"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setAccountEmail(accountEmail.trim());
+                  setAccountEmailConfirmed(true);
+                  setAccountSignInState("idle");
+                }}
+              >
+                <label className="block text-sm font-semibold text-slate-800">
+                  Email
+                  <input
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    autoCorrect="off"
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
+                    inputMode="email"
+                    name="email"
+                    onChange={(event) => setAccountEmail(event.target.value)}
+                    required
+                    spellCheck={false}
+                    type="email"
+                    value={accountEmail}
+                  />
+                </label>
+                <button
+                  className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
+                  disabled={!accountEmail.trim()}
+                  type="submit"
+                >Continue</button>
+              </form>
+            ) : (
+              <form
+                className="space-y-3"
+                data-driver-portal-password-form="true"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void signInDriverAccount();
+                }}
+              >
+                <div
+                  className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+                  data-driver-portal-confirmed-email="true"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Email</p>
+                    <p className="truncate text-sm font-semibold text-slate-900">{accountEmail}</p>
+                  </div>
+                  <button
+                    className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+                    data-driver-portal-change-email="true"
+                    onClick={() => {
+                      setAccountEmailConfirmed(false);
+                      setAccountPassword("");
+                      setAccountSignInState("idle");
+                    }}
+                    type="button"
+                  >
+                    Change email
+                  </button>
+                </div>
+                <label className="block text-sm font-semibold text-slate-800">
+                  Password
+                  <input
+                    autoComplete="current-password"
+                    className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"
+                    inputMode="numeric"
+                    maxLength={6}
+                    name="password"
+                    onChange={(event) => setAccountPassword(event.target.value)}
+                    pattern="[0-9]{6}"
+                    required
+                    type="password"
+                    value={accountPassword}
+                  />
+                </label>
+                <button
+                  className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
+                  disabled={accountSignInState === "signing_in"}
+                  type="submit"
+                >
+                  {accountSignInState === "signing_in" ? "Signing in…" : "Sign in"}
+                </button>
+                {accountSignInState === "failed" ? (
+                  <p className="text-sm font-semibold leading-6 text-amber-900">
+                    Sign-in could not be completed. Check your details or contact Prestige admin.
+                  </p>
+                ) : null}
+              </form>
+            )}
           </section>
         ) : readState.kind === "blocked" ? (
           <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-driver-installation-required="true" data-driver-portal-blocked={readState.reason}>

@@ -2300,6 +2300,69 @@ async function runChromeTest() {
       0,
       "Device alerts must remain behind the installed-app account sign-in boundary.",
     );
+    const installedSignInEmailState = await evaluate(`(() => ({
+      autocomplete: document.querySelector('[data-driver-portal-email-step="true"] input[type="email"]')?.autocomplete || "",
+      emailStepCount: document.querySelectorAll('[data-driver-portal-email-step="true"]').length,
+      passwordCount: document.querySelectorAll('[data-driver-portal-sign-in] input[type="password"]').length,
+      signInPosts: (window.__driverJobFetchCalls || []).filter((value) => value === "POST /api/driver-auth/session").length,
+    }))()`);
+    assert.deepEqual(
+      installedSignInEmailState,
+      {
+        autocomplete: "email",
+        emailStepCount: 1,
+        passwordCount: 0,
+        signInPosts: 0,
+      },
+      "Installed Driver sign-in must mount only the iOS-safe Email step before Continue.",
+    );
+    const installedSignInEmailFocused = await evaluate(`(() => {
+      const input = document.querySelector('[data-driver-portal-email-step="true"] input[type="email"]');
+      if (!input) return false;
+      input.focus();
+      return document.activeElement === input;
+    })()`);
+    assert.equal(installedSignInEmailFocused, true, "Expected Mac Chrome to focus the installed Driver Email field.");
+    await client.send("Input.insertText", { text: "driver.portal@example.com" });
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-portal-email-step="true"] input[type="email"]')?.value === "driver.portal@example.com"`),
+      5000,
+      "installed Driver sign-in Email at-sign input",
+    );
+    const installedSignInContinueClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-email-step="true"] button[type="submit"]');
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(installedSignInContinueClicked, true, "Expected installed Driver Email Continue to be available.");
+    const installedSignInPasswordState = await waitForCondition(
+      () => evaluate(`(() => {
+        const password = document.querySelector('[data-driver-portal-password-form="true"] input[type="password"]');
+        const confirmedEmail = document.querySelector('[data-driver-portal-confirmed-email="true"] p:last-child');
+        if (!password) return false;
+        return {
+          confirmedEmail: confirmedEmail?.textContent.trim() || "",
+          emailInputCount: document.querySelectorAll('[data-driver-portal-sign-in] input[type="email"]').length,
+          passwordAutocomplete: password.autocomplete,
+          passwordInputMode: password.inputMode,
+          signInPosts: (window.__driverJobFetchCalls || []).filter((value) => value === "POST /api/driver-auth/session").length,
+        };
+      })()`),
+      5000,
+      "installed Driver sign-in Password stage",
+    );
+    assert.deepEqual(
+      installedSignInPasswordState,
+      {
+        confirmedEmail: "driver.portal@example.com",
+        emailInputCount: 0,
+        passwordAutocomplete: "current-password",
+        passwordInputMode: "numeric",
+        signInPosts: 0,
+      },
+      "Installed Driver Continue must make no request and replace Email with the existing Password sign-in stage.",
+    );
     assertNoSensitiveText({
       fetchCalls: [],
       resourceCalls: [],

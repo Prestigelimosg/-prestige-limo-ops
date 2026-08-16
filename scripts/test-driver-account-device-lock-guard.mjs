@@ -178,6 +178,30 @@ includes("config", "use Face ID to unlock the approved Driver account", "Face ID
 includes("bridge", "__PRESTIGE_DRIVER_INSTALLATION_ID__", "native installation bridge marker");
 includes("nativeApp", "readOrCreateDriverInstallationId", "native installation binding");
 includes("nativeApp", "authenticateDriverAppUnlock", "native biometric gate");
+for (const fragment of [
+  "const biometricResumePendingRef = useRef(false);",
+  'nextState !== "active" && biometricPromptBusyRef.current',
+  "biometricResumePendingRef.current = true;",
+  "if (biometricResumePendingRef.current) {",
+  "biometricResumePendingRef.current = false;",
+]) {
+  includes(
+    "nativeApp",
+    fragment,
+    `Face ID prompt foreground-loop suppression ${fragment}`,
+  );
+}
+includes(
+  "nativeApp",
+  "if (enabled) void unlockDriverApp();",
+  "genuine later foreground Face ID unlock",
+);
+assert.equal(
+  sources.nativeApp.indexOf("if (biometricResumePendingRef.current) {") <
+    sources.nativeApp.indexOf("if (enabled) void unlockDriverApp();"),
+  true,
+  "Face ID prompt resume must be consumed before a genuine foreground unlock is started.",
+);
 
 for (const sourceKey of ["account", "accountRoute", "authRoute", "installation"]) {
   excludes(

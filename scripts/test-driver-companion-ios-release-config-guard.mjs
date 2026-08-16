@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "8",
-  "The approved eighth TestFlight build number must be explicit",
+  "9",
+  "The approved ninth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -117,6 +117,8 @@ for (const phrase of [
   "`ios.buildNumber` is explicitly `7`",
   "Driver iOS TestFlight Build 8 (2026-08-16)",
   "`ios.buildNumber` is explicitly `8`",
+  "Driver iOS TestFlight Build 9 (2026-08-16)",
+  "`ios.buildNumber` is explicitly `9`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

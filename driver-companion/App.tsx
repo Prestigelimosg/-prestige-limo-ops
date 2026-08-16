@@ -110,6 +110,7 @@ export default function App() {
   const [installationId, setInstallationId] = useState("");
   const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
   const biometricPromptBusyRef = useRef(false);
+  const biometricResumePendingRef = useRef(false);
   const bridgeBusyRef = useRef(false);
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
   const pendingOauthTokenRef = useRef("");
@@ -161,7 +162,15 @@ export default function App() {
     const subscription = AppState.addEventListener("change", (nextState) => {
       const returningToForeground = previousState !== "active" && nextState === "active";
       previousState = nextState;
-      if (!returningToForeground || biometricPromptBusyRef.current) return;
+      if (nextState !== "active" && biometricPromptBusyRef.current) {
+        biometricResumePendingRef.current = true;
+      }
+      if (!returningToForeground) return;
+      if (biometricResumePendingRef.current) {
+        biometricResumePendingRef.current = false;
+        return;
+      }
+      if (biometricPromptBusyRef.current) return;
 
       void isDriverBiometricUnlockEnabled().then((enabled) => {
         if (enabled) void unlockDriverApp();

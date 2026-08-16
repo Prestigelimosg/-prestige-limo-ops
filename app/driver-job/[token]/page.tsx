@@ -80,6 +80,7 @@ type DriverAccountSetupState = {
   feedback: ControlFeedback | null;
   password: string;
   saving: boolean;
+  stage: "email" | "password";
   status: "idle" | "created";
 };
 
@@ -374,6 +375,7 @@ const emptyDriverAccountSetupState: DriverAccountSetupState = {
   feedback: null,
   password: "",
   saving: false,
+  stage: "email",
   status: "idle",
 };
 const driverLiveLocationContinuousShareMinMs = 5000;
@@ -1786,7 +1788,12 @@ export default function DriverJobPage() {
   }
 
   async function createDriverAccount() {
-    if (!acknowledged || !token || driverAccountSetup.saving) return;
+    if (
+      !acknowledged ||
+      !token ||
+      driverAccountSetup.saving ||
+      driverAccountSetup.stage !== "password"
+    ) return;
 
     setDriverAccountSetup((current) => ({ ...current, feedback: null, saving: true }));
     try {
@@ -3014,56 +3021,105 @@ export default function DriverJobPage() {
                       reporting action in this browser without installing Prestige Driver.
                     </p>
                     {driverAccountSetup.status !== "created" ? (
-                      <form
-                        className="space-y-2"
-                        data-driver-account-creation-form="true"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          void createDriverAccount();
-                        }}
-                      >
-                        <label className="block space-y-1 text-sm font-semibold text-violet-950">
-                          <span>Email</span>
-                          <input
-                            autoCapitalize="none"
-                            autoComplete="username"
-                            autoCorrect="off"
-                            className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
-                            inputMode="email"
-                            name="username"
-                            onChange={(event) => setDriverAccountSetup((current) => ({
-                              ...current,
-                              email: event.target.value,
-                              feedback: null,
-                            }))}
-                            spellCheck={false}
-                            type="email"
-                            value={driverAccountSetup.email}
-                          />
-                        </label>
-                        <label className="block space-y-1 text-sm font-semibold text-violet-950">
-                          <span>Password</span>
-                          <input
-                            autoComplete="new-password"
-                            className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
-                            name="new-password"
-                            onChange={(event) => setDriverAccountSetup((current) => ({
-                              ...current,
-                              feedback: null,
-                              password: event.target.value,
-                            }))}
-                            type="password"
-                            value={driverAccountSetup.password}
-                          />
-                        </label>
-                        <button
-                          className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
-                          disabled={driverAccountSetup.saving}
-                          type="submit"
-                        >
-                          {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
-                        </button>
-                      </form>
+                      <>
+                        {driverAccountSetup.stage === "email" ? (
+                          <form
+                            className="space-y-2"
+                            data-driver-account-email-step="true"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              setDriverAccountSetup((current) => ({
+                                ...current,
+                                feedback: null,
+                                stage: "password",
+                              }));
+                            }}
+                          >
+                            <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                              <span>Email</span>
+                              <input
+                                autoCapitalize="none"
+                                autoComplete="email"
+                                autoCorrect="off"
+                                className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                                inputMode="email"
+                                name="email"
+                                onChange={(event) => setDriverAccountSetup((current) => ({
+                                  ...current,
+                                  email: event.target.value,
+                                  feedback: null,
+                                }))}
+                                required
+                                spellCheck={false}
+                                type="email"
+                                value={driverAccountSetup.email}
+                              />
+                            </label>
+                            <button
+                              className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white"
+                              type="submit"
+                            >Continue</button>
+                          </form>
+                        ) : null}
+                        {driverAccountSetup.stage === "password" ? (
+                          <div className="space-y-2">
+                            <div className="rounded-md border border-violet-200 bg-white px-3 py-2 text-sm text-violet-950">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Email</p>
+                              <div className="flex items-center justify-between gap-2">
+                                <p
+                                  className="min-w-0 break-all font-semibold"
+                                  data-driver-account-confirmed-email="true"
+                                >
+                                  {driverAccountSetup.email}
+                                </p>
+                                <button
+                                  className="shrink-0 rounded-md border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-950"
+                                  onClick={() => setDriverAccountSetup((current) => ({
+                                    ...current,
+                                    feedback: null,
+                                    password: "",
+                                    stage: "email",
+                                  }))}
+                                  type="button"
+                                >
+                                  Change email
+                                </button>
+                              </div>
+                            </div>
+                            <form
+                              className="space-y-2"
+                              data-driver-account-creation-form="true"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void createDriverAccount();
+                              }}
+                            >
+                              <label className="block space-y-1 text-sm font-semibold text-violet-950">
+                                <span>Password</span>
+                                <input
+                                  autoComplete="new-password"
+                                  className="h-11 w-full rounded-md border border-violet-300 bg-white px-3 text-sm text-slate-950"
+                                  name="new-password"
+                                  onChange={(event) => setDriverAccountSetup((current) => ({
+                                    ...current,
+                                    feedback: null,
+                                    password: event.target.value,
+                                  }))}
+                                  type="password"
+                                  value={driverAccountSetup.password}
+                                />
+                              </label>
+                              <button
+                                className="h-11 w-full rounded-md bg-violet-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400"
+                                disabled={driverAccountSetup.saving}
+                                type="submit"
+                              >
+                                {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
+                              </button>
+                            </form>
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
                     {driverAccountSetup.feedback ? (
                       <p

@@ -635,12 +635,14 @@ async function runChromeTest() {
           text: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
         },
         accountCreation: {
-          emailAutocomplete: document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.autocomplete || "",
-          emailInputMode: document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.inputMode || "",
-          emailName: document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.name || "",
+          confirmedEmail: document.querySelector('[data-driver-account-confirmed-email="true"]')?.textContent?.trim() || "",
+          emailAutocomplete: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.autocomplete || "",
+          emailInputMode: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.inputMode || "",
+          emailName: document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.name || "",
+          emailStepVisible: Boolean(document.querySelector('[data-driver-account-email-step="true"]')),
           passwordAutocomplete: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.autocomplete || "",
           passwordName: document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]')?.name || "",
-          visible: Boolean(document.querySelector('[data-driver-account-creation-form="true"]')),
+          passwordStepVisible: Boolean(document.querySelector('[data-driver-account-creation-form="true"]')),
         },
         consoleErrors: window.__prestigeConsoleErrors || [],
         errors: window.__prestigeErrors || [],
@@ -1086,18 +1088,20 @@ async function runChromeTest() {
       assert.deepEqual(
         afterSaveState.accountCreation,
         {
-          emailAutocomplete: "username",
+          confirmedEmail: "",
+          emailAutocomplete: "email",
           emailInputMode: "email",
-          emailName: "username",
-          passwordAutocomplete: "new-password",
-          passwordName: "new-password",
-          visible: true,
+          emailName: "email",
+          emailStepVisible: true,
+          passwordAutocomplete: "",
+          passwordName: "",
+          passwordStepVisible: false,
         },
-        "Expected the acknowledged Driver account controls to use one Apple-compatible credential form.",
+        "Expected the acknowledged Driver account controls to render only the iOS-safe Email step first.",
       );
 
       const accountEmailFocused = await evaluate(`(() => {
-        const input = document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]');
+        const input = document.querySelector('[data-driver-account-email-step="true"] input[type="email"]');
         if (!input) return false;
         input.focus();
         return document.activeElement === input;
@@ -1109,9 +1113,41 @@ async function runChromeTest() {
       );
       await client.send("Input.insertText", { text: "driver.test@example.com" });
       await waitForCondition(
-        () => evaluate(`document.querySelector('[data-driver-account-creation-form="true"] input[type="email"]')?.value === "driver.test@example.com"`),
+        () => evaluate(`document.querySelector('[data-driver-account-email-step="true"] input[type="email"]')?.value === "driver.test@example.com"`),
         5000,
         "Driver account Email at-sign input",
+      );
+      const accountContinueClicked = await evaluate(`(() => {
+        const button = document.querySelector('[data-driver-account-email-step="true"] button[type="submit"]');
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(accountContinueClicked, true, "Expected the Email step Continue action to be available.");
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector('[data-driver-account-creation-form="true"] input[type="password"]'))`),
+        5000,
+        "Driver account Password stage",
+      );
+      const afterAccountContinueState = await pageState();
+      assert.deepEqual(
+        afterAccountContinueState.accountCreation,
+        {
+          confirmedEmail: "driver.test@example.com",
+          emailAutocomplete: "",
+          emailInputMode: "",
+          emailName: "",
+          emailStepVisible: false,
+          passwordAutocomplete: "new-password",
+          passwordName: "new-password",
+          passwordStepVisible: true,
+        },
+        "Expected Continue to replace the Email input with the same confirmed email and existing Password form.",
+      );
+      assert.deepEqual(
+        afterAccountContinueState.fetchCalls.filter((call) => call.includes("/account")),
+        afterSaveState.fetchCalls.filter((call) => call.includes("/account")),
+        "Email Continue must not create an account or add a second write path.",
       );
       assertNoSensitiveText(afterSaveState);
       return afterSaveState;

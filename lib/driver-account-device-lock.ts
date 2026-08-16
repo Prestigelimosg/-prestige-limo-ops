@@ -8,6 +8,7 @@ import {
   isDriverJobLinkExpired,
   isDriverJobLinkExpiryOutsideAllowedWindow,
 } from "./driver-job-link.ts";
+import { driverAccountPasswordIsReady } from "./driver-account-password.ts";
 
 export const driverAccountDeviceLockVersion = "driver-account-device-lock-v1";
 
@@ -94,13 +95,6 @@ function normalizedEmail(value: unknown) {
   return email.length <= 254 && emailPattern.test(email) ? email : "";
 }
 
-function validPassword(value: unknown) {
-  const password = typeof value === "string" ? value : "";
-  return password.length >= 12 && password.length <= 128 &&
-    /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password) &&
-    /[^A-Za-z0-9]/.test(password);
-}
-
 function deviceIdHashFor(value: unknown, env: Env) {
   const installationId = text(value).toLowerCase();
   const secret = deviceSecret(env);
@@ -151,7 +145,7 @@ export async function createDriverAccountForAcknowledgedLink(input: {
   const env = input.env ?? process.env;
   const email = normalizedEmail(input.email);
   const authorizedDriverId = positiveInteger(input.authorizedDriverId);
-  if (!email || !validPassword(input.password)) return failure("invalid_input");
+  if (!email || !driverAccountPasswordIsReady(input.password)) return failure("invalid_input");
   if (!authorizedDriverId) return failure("invalid_link");
   if (!runtimeEnabled(env)) return failure("not_configured");
 
@@ -321,7 +315,7 @@ export async function signInDriverAccountForInstallation(input: {
   const env = input.env ?? process.env;
   const email = normalizedEmail(input.email);
   const deviceIdHash = deviceIdHashFor(input.installationId, env);
-  if (!email || !validPassword(input.password)) return failure("invalid_credentials");
+  if (!email || !driverAccountPasswordIsReady(input.password)) return failure("invalid_credentials");
   if (!deviceIdHash) return failure("not_native_app");
   if (!runtimeEnabled(env)) return failure("not_configured");
 

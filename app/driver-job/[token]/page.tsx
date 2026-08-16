@@ -3254,16 +3254,33 @@ export default function DriverJobPage() {
             {acknowledged ? (
               <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">
                 <div
-                  className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
+                  className={`rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 ${
+                    driverAccountSetup.status === "created" ? "" : "space-y-2"
+                  }`}
+                  data-driver-account-collapsed={driverAccountSetup.status === "created" ? "true" : "false"}
                   data-driver-account-setup="true"
                 >
-                  <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
-                  <p className="text-xs font-medium leading-5 text-violet-900">
-                    Optional. This acknowledged Job Link can create one account only. You may continue every
-                    reporting action in this browser without installing Prestige Driver.
-                  </p>
-                  {driverAccountSetup.status !== "created" ? (
+                  {driverAccountSetup.status === "created" ? (
+                    <div className="space-y-1" data-driver-account-success-summary="true">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                        <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
+                          Account created
+                        </span>
+                      </div>
+                      {driverAccountSetup.feedback ? (
+                        <p aria-live="polite" className="text-xs font-semibold leading-5 text-emerald-800">
+                          {driverAccountSetup.feedback.text}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
                     <>
+                      <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                      <p className="text-xs font-medium leading-5 text-violet-900">
+                        Optional. This acknowledged Job Link can create one account only. You may continue every
+                        reporting action in this browser without installing Prestige Driver.
+                      </p>
                       {driverAccountSetup.stage === "email" ? (
                         <form
                           className="space-y-2"
@@ -3381,18 +3398,22 @@ export default function DriverJobPage() {
                           </form>
                         </div>
                       ) : null}
+                      {driverAccountSetup.feedback ? (
+                        <p
+                          aria-live="polite"
+                          className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverAccountSetup.feedback.tone)}`}
+                        >
+                          {driverAccountSetup.feedback.text}
+                        </p>
+                      ) : null}
                     </>
-                  ) : null}
-                  {driverAccountSetup.feedback ? (
-                    <p
-                      aria-live="polite"
-                      className={`rounded-md border px-2.5 py-2 text-sm font-semibold ${feedbackClassName(driverAccountSetup.feedback.tone)}`}
-                    >
-                      {driverAccountSetup.feedback.text}
-                    </p>
-                  ) : null}
+                  )}
                 </div>
-                <div className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2">
+                <div
+                  className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2"
+                  data-driver-job-calendar-collapsed={driverCalendar.status === "cal_saved" ? "true" : "false"}
+                  data-driver-job-calendar-panel="true"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-sky-950">Google Calendar</p>
                     {driverCalendar.status === "cal_saved" ? (
@@ -3408,45 +3429,60 @@ export default function DriverJobPage() {
                       </span>
                     ) : null}
                   </div>
-                  <button
-                    className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
-                    data-driver-job-calendar-action="true"
-                    data-driver-job-calendar-source="current-driver-job-schedule"
-                    disabled={driverCalendar.action === "saving"}
-                    onClick={openDriverJobCalendar}
-                    type="button"
-                  >
-                    {driverCalendar.action === "saving" ? "Saving Calendar..." : "Add / Update Calendar"}
-                  </button>
-                  <p className="text-xs font-medium leading-5 text-sky-900">
-                    First use connects your Google account. The same action updates this one event after an
-                    amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
-                    Job Completed reporting. Do not share the calendar event.
-                  </p>
-                  <div
-                    className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
-                    data-driver-job-calendar-policy-links="true"
-                  >
-                    <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
-                      Calendar data use
-                    </Link>
-                    <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
-                      Privacy Policy
-                    </Link>
-                    <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
-                      Terms of Service
-                    </Link>
-                  </div>
-                  {driverCalendar.feedback ? (
-                    <p
-                      className={`text-xs font-semibold leading-5 ${
-                        driverCalendar.feedback.tone === "success" ? "text-emerald-800" : "text-red-700"
-                      }`}
-                      data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
-                    >
-                      {driverCalendar.feedback.text}
-                    </p>
-                  ) : null}
+                  {driverCalendar.status === "cal_saved" ? (
+                    <div data-driver-job-calendar-success-summary="true">
+                      {driverCalendar.feedback ? (
+                        <p
+                          className="text-xs font-semibold leading-5 text-emerald-800"
+                          data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
+                        >
+                          {driverCalendar.feedback.text}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        className="flex h-11 w-full items-center justify-center rounded-md border border-sky-700 bg-white px-3 text-sm font-semibold text-sky-950 transition hover:bg-sky-100"
+                        data-driver-job-calendar-action="true"
+                        data-driver-job-calendar-source="current-driver-job-schedule"
+                        disabled={driverCalendar.action === "saving"}
+                        onClick={openDriverJobCalendar}
+                        type="button"
+                      >
+                        {driverCalendar.action === "saving" ? "Saving Calendar..." : "Add / Update Calendar"}
+                      </button>
+                      <p className="text-xs font-medium leading-5 text-sky-900">
+                        First use connects your Google account. The same action updates this one event after an
+                        amendment—no file download. Open the event and tap Open Driver Job for OTW, OTS, POB and
+                        Job Completed reporting. Do not share the calendar event.
+                      </p>
+                      <div
+                        className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold"
+                        data-driver-job-calendar-policy-links="true"
+                      >
+                        <Link className="text-sky-800 underline" href="/google-calendar" rel="noreferrer">
+                          Calendar data use
+                        </Link>
+                        <Link className="text-sky-800 underline" href="/privacy" rel="noreferrer">
+                          Privacy Policy
+                        </Link>
+                        <Link className="text-sky-800 underline" href="/terms" rel="noreferrer">
+                          Terms of Service
+                        </Link>
+                      </div>
+                      {driverCalendar.feedback ? (
+                        <p
+                          className={`text-xs font-semibold leading-5 ${
+                            driverCalendar.feedback.tone === "success" ? "text-emerald-800" : "text-red-700"
+                          }`}
+                          data-driver-job-calendar-feedback={driverCalendar.feedback.tone}
+                        >
+                          {driverCalendar.feedback.text}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </section>
             ) : null}

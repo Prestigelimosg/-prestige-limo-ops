@@ -140,6 +140,22 @@ excludes(
 excludes("jobPage", /Not ready/, "unrequested negative password readiness wording");
 excludes("jobPage", /at least 12 characters with uppercase, lowercase, number and symbol/, "superseded complex password guidance");
 includes("portalPage", "Driver sign in", "Driver Portal sign-in form");
+for (const fragment of [
+  'data-driver-portal-email-step="true"',
+  'autoComplete="email"',
+  '>Continue</button>',
+  'data-driver-portal-confirmed-email="true"',
+  'data-driver-portal-change-email="true"',
+  'data-driver-portal-password-form="true"',
+  'autoComplete="current-password"',
+]) {
+  includes("portalPage", fragment, `iOS-safe email-first Driver Portal sign-in ${fragment}`);
+}
+excludes(
+  "portalPage",
+  /data-driver-portal-email-step="true"[\s\S]{0,1600}autoComplete="current-password"/,
+  "simultaneously mounted installed-app Email and Password controls",
+);
 includes("portalPage", "driver-installation-required", "native installation requirement");
 includes("portalPage", "installedAccountSignInRequired", "single installed-app sign-in render boundary");
 includes(

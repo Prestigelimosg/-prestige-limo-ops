@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { GET } from "../app/api/driver-job/[token]/route.ts";
-import { PATCH } from "../app/api/driver-job/[token]/status/route.ts";
-import {
+import "./test-next-server-only-hook.mjs";
+
+const [driverJobRoute, statusRoute, driverJobLinkMode, mockStore] = await Promise.all([
+  import("../app/api/driver-job/[token]/route.ts"),
+  import("../app/api/driver-job/[token]/status/route.ts"),
+  import("../lib/driver-job-link-mode.ts"),
+  import("../lib/driver-job-link-mock-store.ts"),
+]);
+const { GET } = driverJobRoute;
+const { PATCH } = statusRoute;
+const {
   productionDriverJobLinksConfigured,
   productionDriverJobLinksDisabledResult,
   resolveDriverJobLinkMode,
-} from "../lib/driver-job-link-mode.ts";
-import {
-  mockDriverJobTokens,
-  resetMockDriverJobLinkDataForTests,
-} from "../lib/driver-job-link-mock-store.ts";
+} = driverJobLinkMode;
+const { mockDriverJobTokens, resetMockDriverJobLinkDataForTests } = mockStore;
 
 const checklistPath = new URL("../docs/driver-job-link-production-checklist.md", import.meta.url);
 const originalDriverMode = process.env.DRIVER_JOB_LINK_MODE;

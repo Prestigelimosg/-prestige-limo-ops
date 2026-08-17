@@ -306,6 +306,8 @@ for (const fragment of [
   "safeDriverDetailsFromInput(input)",
   "resolveLinkForToken(input)",
   "resolveAcknowledgedDriverIdentity(",
+  "verifiedAccountDriverId",
+  "syncVerifiedAccountDriverProfile(",
   '.from("driver_job_links")',
   "driver_id: verifiedDriverId",
   "safe_link_context: nextSafeContext",
@@ -320,6 +322,65 @@ for (const fragment of [
   "payloadForLink(",
 ]) {
   assertIncludes(detailsPersistenceBlock, fragment, `Driver details persistence fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "loadVerifiedDriverProfileForJobThroughStatusPersistence",
+  "verifiedAccountDriverId",
+  '.from("drivers")',
+  'select("id, driver_name, contact_number, plate_number, vehicle_type")',
+]) {
+  assertIncludes(
+    driverStatusPersistence,
+    fragment,
+    `Verified Driver account profile read fragment ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  "verifyDriverAccountSession",
+  "resolveDriverPortalSession",
+  "getProductionVerifiedDriverJobProfile",
+  "driverInstallationId",
+  "verifiedAccountDriverId",
+]) {
+  assertIncludes(
+    driverJobProduction,
+    fragment,
+    `Production verified Driver account handoff fragment ${fragment}`,
+  );
+}
+
+for (const fragment of [
+  'request.headers.get("x-prestige-driver-installation-id")',
+  'request.headers.get("cookie")',
+  "getProductionVerifiedDriverJobProfile",
+  "driver_account_profile",
+  "driverInstallationId:",
+]) {
+  assertIncludes(driverJobRoute, fragment, `Driver Job route account profile fragment ${fragment}`);
+}
+
+for (const fragment of [
+  "__PRESTIGE_DRIVER_INSTALLATION_ID__?: string",
+  "currentEmbeddedDriverInstallationId()",
+  '"x-prestige-driver-installation-id": nativeInstallationId',
+  "result.driver_account_profile",
+  "result.payload.acknowledged",
+]) {
+  assertIncludes(driverJobPage, fragment, `Driver Job page account prefill fragment ${fragment}`);
+}
+
+for (const forbiddenPublicIdentity of [
+  "driver_account_profile: { driver_id",
+  "driver_account_profile: { account_id",
+  "driver_account_profile: { device_id_hash",
+]) {
+  assertExcludes(
+    driverJobRoute.toLowerCase(),
+    forbiddenPublicIdentity,
+    `Driver Job public account profile forbidden identity ${forbiddenPublicIdentity}`,
+  );
 }
 
 assertIncludes(

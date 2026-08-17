@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
-import {
+import "./test-next-server-only-hook.mjs";
+
+const [driverJobLinkMode, driverJobRoute, statusRoute, mockStore] = await Promise.all([
+  import("../lib/driver-job-link-mode.ts"),
+  import("../app/api/driver-job/[token]/route.ts"),
+  import("../app/api/driver-job/[token]/status/route.ts"),
+  import("../lib/driver-job-link-mock-store.ts"),
+]);
+const {
   isProductionDriverJobLinkMode,
   productionDriverJobLinksConfigured,
   productionDriverJobLinksDisabledResult,
   resolveDriverJobLinkMode,
-} from "../lib/driver-job-link-mode.ts";
-import { GET } from "../app/api/driver-job/[token]/route.ts";
-import { PATCH } from "../app/api/driver-job/[token]/status/route.ts";
-import {
-  mockDriverJobTokens,
-  resetMockDriverJobLinkDataForTests,
-} from "../lib/driver-job-link-mock-store.ts";
+} = driverJobLinkMode;
+const { GET } = driverJobRoute;
+const { PATCH } = statusRoute;
+const { mockDriverJobTokens, resetMockDriverJobLinkDataForTests } = mockStore;
 
 function routeContext(token) {
   return {

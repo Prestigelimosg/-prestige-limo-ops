@@ -164,6 +164,26 @@ includes(
   "link-only installed-app session cannot bypass account sign-in",
 );
 includes("portalPage", "nativeBridgeReady && readState.accountSession", "Face ID after account session only");
+includes(
+  "portalPage",
+  "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__",
+  "persisted native Face ID setup marker",
+);
+includes(
+  "portalPage",
+  "nativeBiometricEnabled || biometricEnabledThisSession",
+  "persisted or immediate Face ID setup state",
+);
+includes(
+  "portalPage",
+  "!biometricSetupEnabled",
+  "Face ID setup panel only while disabled",
+);
+includes(
+  "portalPage",
+  "setBiometricEnabledThisSession(true)",
+  "successful Face ID setup panel dismissal",
+);
 includes("portalPage", "x-prestige-driver-installation-id", "native installation request proof");
 includes("portalRoute", "verifyDriverAccountSession", "server account revalidation");
 includes("portalRoute", "x-prestige-driver-installation-id", "server installation proof check");
@@ -178,6 +198,26 @@ includes("config", "use Face ID to unlock the approved Driver account", "Face ID
 includes("bridge", "__PRESTIGE_DRIVER_INSTALLATION_ID__", "native installation bridge marker");
 includes("nativeApp", "readOrCreateDriverInstallationId", "native installation binding");
 includes("nativeApp", "authenticateDriverAppUnlock", "native biometric gate");
+includes(
+  "bridge",
+  "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__",
+  "immutable native Face ID bootstrap marker",
+);
+includes(
+  "nativeApp",
+  "setBiometricEnabled(biometricEnabled)",
+  "native Face ID setup state initialization",
+);
+includes(
+  "nativeApp",
+  "if (enabled) setBiometricEnabled(true)",
+  "successful Face ID setup state update",
+);
+excludes(
+  "portalPage",
+  /localStorage|sessionStorage|document\.cookie/,
+  "duplicate browser Face ID setup storage",
+);
 for (const fragment of [
   "const biometricResumePendingRef = useRef(false);",
   'nextState !== "active" && biometricPromptBusyRef.current',

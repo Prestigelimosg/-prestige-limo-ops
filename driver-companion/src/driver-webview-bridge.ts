@@ -163,7 +163,10 @@ export function shouldAllowDriverWebViewNavigation(
   }
 }
 
-export function embeddedDriverBridgeBootstrap(installationId: string) {
+export function embeddedDriverBridgeBootstrap(
+  installationId: string,
+  biometricEnabled: boolean,
+) {
   if (!installationIdPattern.test(installationId)) {
     throw new Error("A valid native Driver installation is required.");
   }
@@ -180,6 +183,12 @@ export function embeddedDriverBridgeBootstrap(installationId: string) {
     configurable: false,
     enumerable: false,
     value: ${JSON.stringify(installationId.toLowerCase())},
+    writable: false
+  });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__", {
+    configurable: false,
+    enumerable: false,
+    value: ${biometricEnabled === true},
     writable: false
   });
   try {

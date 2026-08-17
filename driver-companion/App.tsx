@@ -109,6 +109,7 @@ export default function App() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
   const [installationId, setInstallationId] = useState("");
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
   const biometricPromptBusyRef = useRef(false);
   const biometricResumePendingRef = useRef(false);
@@ -138,6 +139,7 @@ export default function App() {
         const biometricEnabled = await isDriverBiometricUnlockEnabled();
         if (!mounted) return;
 
+        setBiometricEnabled(biometricEnabled);
         setInstallationId(nextInstallationId);
         if (!biometricEnabled) {
           setUnlockState("ready");
@@ -424,6 +426,7 @@ export default function App() {
           biometricPromptBusyRef.current = true;
           const enabled = await enableDriverBiometricUnlock();
           biometricPromptBusyRef.current = false;
+          if (enabled) setBiometricEnabled(true);
           webViewRef.current?.injectJavaScript(
             driverNativeBiometricResultScript({ ok: enabled }),
           );
@@ -656,7 +659,10 @@ export default function App() {
             allowFileAccess
             allowsBackForwardNavigationGestures
             geolocationEnabled={false}
-            injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(installationId)}
+            injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(
+              installationId,
+              biometricEnabled,
+            )}
             javaScriptCanOpenWindowsAutomatically={false}
             mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
             onMessage={handleBridgeMessage}

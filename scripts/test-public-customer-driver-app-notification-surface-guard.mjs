@@ -144,7 +144,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
-      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -576,7 +576,7 @@ assertIncludes(
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "driver page safe notification GET caller",
 );
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 12, "driver page fetch count must not grow beyond approved callers");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 13, "driver page fetch count must not grow beyond approved callers");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
   10,
@@ -587,6 +587,22 @@ assertIncludes(
   "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
   "driver page approved fixed-template customer quick-reply caller",
 );
+assertIncludes(
+  files[driverPagePath],
+  "fetch(`/api/driver-job/${encodeURIComponent(token)}/account`",
+  "driver page approved acknowledged account-create caller",
+);
+for (const fragment of [
+  "email: driverAccountSetup.email",
+  "password: driverAccountSetup.password",
+  '"x-prestige-driver-purpose": "driver-account-create"',
+]) {
+  assertIncludes(
+    files[driverPagePath],
+    fragment,
+    `driver page bounded account-create caller ${fragment}`,
+  );
+}
 assertIncludes(
   files[driverPagePath],
   "body: JSON.stringify({ template_key: templateKey })",

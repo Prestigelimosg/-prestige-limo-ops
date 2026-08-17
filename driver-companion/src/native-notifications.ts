@@ -14,13 +14,21 @@ function validJobKey(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
-export function nativeNotificationJobKey(value: unknown) {
+export function nativeNotificationOpenRequest(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
-  const jobKey = (value as Record<string, unknown>).job_key;
-  return validJobKey(jobKey) ? jobKey : null;
+  const notification = value as Record<string, unknown>;
+  const jobKey = notification.job_key;
+  if (!validJobKey(jobKey)) {
+    return null;
+  }
+
+  return {
+    jobKey,
+    openTarget: notification.open_target === "messages" ? ("messages" as const) : null,
+  };
 }
 
 export async function rememberNativeDriverJob(

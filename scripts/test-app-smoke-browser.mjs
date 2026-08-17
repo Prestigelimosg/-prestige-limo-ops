@@ -38447,20 +38447,21 @@ async function runChromeTest() {
       const savedDetailsState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const message = document.querySelector("[data-driver-job-details-message]");
             const savedDetails = document.querySelector("[data-driver-job-saved-details]");
             const acknowledged = document.querySelector("[data-driver-job-acknowledged-state]");
+            const detailsEditor = document.querySelector("[data-driver-job-details-editor]");
+            const saveButton = document.querySelector("[data-driver-job-save-acknowledge]");
 
-            return message?.textContent.trim() === "Driver details saved and job acknowledged." &&
-              acknowledged?.textContent.trim() === "Acknowledged" &&
+            return acknowledged?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Smoke Driver") &&
               savedDetails?.innerText.includes("+65 9000 2222") &&
               savedDetails?.innerText.includes("SMK1234Z") &&
               savedDetails?.innerText.includes("Mercedes V Class") &&
-              !savedDetails?.innerText.toLowerCase().includes("paynow")
+              !savedDetails?.innerText.toLowerCase().includes("paynow") &&
+              !detailsEditor &&
+              !saveButton
               ? {
                   fetchCalls: window.__driverJobFetchCalls || [],
-                  messageText: message.textContent.trim(),
                   savedDetailsText: savedDetails.innerText,
                 }
               : false;

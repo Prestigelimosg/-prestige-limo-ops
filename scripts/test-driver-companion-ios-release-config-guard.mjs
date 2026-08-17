@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "12",
-  "The approved twelfth TestFlight build number must be explicit",
+  "13",
+  "The approved thirteenth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -125,6 +125,10 @@ for (const phrase of [
   "`ios.buildNumber` is explicitly `11`",
   "Driver iOS TestFlight Build 12 (2026-08-17)",
   "`ios.buildNumber` is explicitly `12`",
+  "Driver iOS TestFlight Build 13 (2026-08-17)",
+  "`ios.buildNumber` is explicitly `13`",
+  "94e64ea215a39acfd2a04e3281bd899919494392",
+  "one-hour-before-pickup reminder keep opening the normal exact job",
   "ad86ccd7-5b8f-4435-85aa-4ea15d5fbe31",
   "b97e106196b76ca5ba30e1811fa3e3baa7053bd8f7403ae6b2eb650cb9ee8fe6",
   "d2ccdb5d-298f-44e6-b244-2fca96e83ab9",

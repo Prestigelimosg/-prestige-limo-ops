@@ -190,7 +190,7 @@ async function runChromeTest() {
   const chrome = spawn(
     chromeBinary,
     [
-      "--headless=new",
+      ...(process.env.PRESTIGE_VISIBLE_CHROME === "1" ? [] : ["--headless=new"]),
       "--disable-gpu",
       "--disable-background-networking",
       "--disable-component-update",
@@ -245,10 +245,17 @@ async function runChromeTest() {
         window.__driverNativeBridgeMessages = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
-        const embeddedDriverHarness = new URLSearchParams(window.location.search).get("embedded") === "1";
+        const embeddedDriverMode = new URLSearchParams(window.location.search).get("embedded") || "";
+        const embeddedDriverHarness = ["1", "faceid-off", "faceid-on"].includes(embeddedDriverMode);
         if (embeddedDriverHarness) {
           window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
           window.__PRESTIGE_DRIVER_INSTALLATION_ID__ = "77777777-7777-4777-8777-777777777777";
+          Object.defineProperty(window, "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__", {
+            configurable: false,
+            enumerable: false,
+            value: embeddedDriverMode === "faceid-on",
+            writable: false,
+          });
           window.ReactNativeWebView = {
             postMessage: (rawMessage) => {
               try {
@@ -571,6 +578,7 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
+                session: embeddedDriverMode.startsWith("faceid-") ? "account" : "link",
                 version: "driver-portal-browser-mock",
               }), {
                 status: 200,
@@ -2368,6 +2376,49 @@ async function runChromeTest() {
       resourceCalls: [],
       visibleText: installedLinkSessionState.text,
     });
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=faceid-off", appUrl).toString(),
+      "Face ID app unlock",
+      "installed Driver Portal Face ID setup before enable",
+    );
+    const faceIdSetupBeforeEnable = await evaluate(`(() => ({
+      jobCount: document.querySelectorAll("[data-driver-portal-job]").length,
+      setupCount: document.querySelectorAll("[data-driver-portal-biometric-setup]").length,
+    }))()`);
+    assert.deepEqual(
+      faceIdSetupBeforeEnable,
+      { jobCount: 2, setupCount: 1 },
+      "A signed-in installed Driver account must show the existing Face ID setup panel only before Face ID is enabled.",
+    );
+    await evaluate(`window.dispatchEvent(new CustomEvent("prestige-driver-native-biometric-result", {
+      detail: { ok: true },
+    }))`);
+    await waitForCondition(
+      () => evaluate(`document.querySelectorAll("[data-driver-portal-biometric-setup]").length === 0`),
+      5000,
+      "immediate Face ID setup panel dismissal",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=faceid-on", appUrl).toString(),
+      "Upcoming & active jobs",
+      "installed Driver Portal persisted Face ID setup",
+    );
+    const faceIdSetupAfterReload = await evaluate(`(() => ({
+      jobCount: document.querySelectorAll("[data-driver-portal-job]").length,
+      setupCount: document.querySelectorAll("[data-driver-portal-biometric-setup]").length,
+      signInCount: document.querySelectorAll("[data-driver-portal-sign-in]").length,
+    }))()`);
+    assert.deepEqual(
+      faceIdSetupAfterReload,
+      { jobCount: 2, setupCount: 0, signInCount: 0 },
+      "A signed-in installed Driver account with persisted Face ID enabled must keep the setup panel absent after reload.",
+    );
 
     await evaluate("window.__driverDeviceAlertTest.clearPortalSubscription()");
     await navigateAndWaitForBodyText(

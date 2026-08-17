@@ -191,15 +191,24 @@ for (const blockedNavigation of [
   );
 }
 const installationId = "123e4567-e89b-42d3-a456-426614174000";
-const bridgeBootstrap = embeddedDriverBridgeBootstrap(installationId);
-assert.match(bridgeBootstrap, /__PRESTIGE_DRIVER_NATIVE_APP__/);
+const bridgeBootstrapEnabled = embeddedDriverBridgeBootstrap(installationId, true);
+const bridgeBootstrapDisabled = embeddedDriverBridgeBootstrap(installationId, false);
+assert.match(bridgeBootstrapEnabled, /__PRESTIGE_DRIVER_NATIVE_APP__/);
 assert.match(
-  bridgeBootstrap,
+  bridgeBootstrapEnabled,
   /Object\.defineProperty\(navigator, "geolocation"/,
 );
-assert.match(bridgeBootstrap, /__PRESTIGE_DRIVER_INSTALLATION_ID__/);
-assert.doesNotMatch(bridgeBootstrap, /token|jobUrl|console\./i);
-assert.throws(() => embeddedDriverBridgeBootstrap("not-an-installation"));
+assert.match(bridgeBootstrapEnabled, /__PRESTIGE_DRIVER_INSTALLATION_ID__/);
+assert.match(
+  bridgeBootstrapEnabled,
+  /__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__[\s\S]*?value: true/,
+);
+assert.match(
+  bridgeBootstrapDisabled,
+  /__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__[\s\S]*?value: false/,
+);
+assert.doesNotMatch(bridgeBootstrapEnabled, /token|jobUrl|console\./i);
+assert.throws(() => embeddedDriverBridgeBootstrap("not-an-installation", false));
 
 for (const fragment of [
   "isVerifiedEmbeddedDriverApp",

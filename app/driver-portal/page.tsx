@@ -30,6 +30,7 @@ type DriverPortalAlertState =
 
 type DriverNativeWindow = Window & {
   ReactNativeWebView?: { postMessage: (message: string) => void };
+  __PRESTIGE_DRIVER_BIOMETRIC_ENABLED__?: boolean;
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
 };
@@ -54,6 +55,10 @@ function currentNativeInstallationId() {
   return nativeWindow.__PRESTIGE_DRIVER_NATIVE_APP__ === true && typeof value === "string"
     ? value
     : "";
+}
+
+function currentNativeBiometricEnabled() {
+  return (window as DriverNativeWindow).__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__ === true;
 }
 
 function subscribeToStaticNativeBridge() {
@@ -139,6 +144,11 @@ export default function DriverPortalPage() {
     currentNativeInstallationId,
     () => "",
   );
+  const nativeBiometricEnabled = useSyncExternalStore(
+    subscribeToStaticNativeBridge,
+    currentNativeBiometricEnabled,
+    () => false,
+  );
   const nativeBridgeReady = Boolean(
     installationId &&
     typeof (window as DriverNativeWindow).ReactNativeWebView?.postMessage === "function",
@@ -148,6 +158,8 @@ export default function DriverPortalPage() {
   const [accountPassword, setAccountPassword] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
+  const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
+  const biometricSetupEnabled = nativeBiometricEnabled || biometricEnabledThisSession;
   const installedAccountSignInRequired = Boolean(
     installationId &&
     (
@@ -217,6 +229,9 @@ export default function DriverPortalPage() {
   useEffect(() => {
     function onBiometricResult(event: Event) {
       const result = event as CustomEvent<{ ok?: boolean }>;
+      if (result.detail?.ok === true) {
+        setBiometricEnabledThisSession(true);
+      }
       setBiometricFeedback(
         result.detail?.ok === true
           ? "Face ID is enabled for future app unlocks."
@@ -512,7 +527,7 @@ export default function DriverPortalPage() {
           </section>
         ) : (
           <section className="space-y-3" data-driver-portal-job-count={readState.jobs.length}>
-            {nativeBridgeReady && readState.accountSession ? (
+            {nativeBridgeReady && readState.accountSession && !biometricSetupEnabled ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm" data-driver-portal-biometric-setup="true">
                 <h2 className="text-base font-bold text-emerald-950">Face ID app unlock</h2>
                 <p className="mt-1 text-sm font-medium leading-6 text-emerald-900">

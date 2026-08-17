@@ -1034,6 +1034,7 @@ export default function DriverJobPage() {
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [driverCalendar, setDriverCalendar] =
     useState<DriverCalendarState>(emptyDriverCalendarState);
+  const [hasVerifiedDriverAccount, setHasVerifiedDriverAccount] = useState(false);
   const [driverAccountSetup, setDriverAccountSetup] =
     useState<DriverAccountSetupState>(emptyDriverAccountSetupState);
   const driverAccountPasswordReady = driverAccountPasswordIsReady(driverAccountSetup.password);
@@ -1362,6 +1363,7 @@ export default function DriverJobPage() {
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
       setDriverCalendar(emptyDriverCalendarState);
+      setHasVerifiedDriverAccount(false);
       setDriverAccountSetup(emptyDriverAccountSetupState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
@@ -1418,6 +1420,7 @@ export default function DriverJobPage() {
             };
 
         setDriverDetails(loadedDriverDetails);
+        setHasVerifiedDriverAccount(Boolean(result.driver_account_profile));
         setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
         setAcknowledged(result.payload.acknowledged);
         setDriverDeviceAlertReadiness(
@@ -2917,6 +2920,7 @@ export default function DriverJobPage() {
                 >
                   {acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
                 </p>
+                {!acknowledged ? (
                 <details
                   className="group"
                   data-driver-job-details-editor="true"
@@ -3054,6 +3058,7 @@ export default function DriverJobPage() {
                 </div>
                   </div>
                 </details>
+                ) : null}
                 {savedDriverDetails ? (
                   <div
                     className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900"
@@ -3300,15 +3305,16 @@ export default function DriverJobPage() {
 
             {acknowledged ? (
               <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">
-                <div
-                  className={`rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 ${
-                    driverAccountSetup.status === "created" ? "" : "space-y-2"
-                  }`}
-                  data-driver-account-collapsed={driverAccountSetup.status === "created" ? "true" : "false"}
-                  data-driver-account-setup="true"
-                >
-                  {driverAccountSetup.status === "created" ? (
-                    <div className="space-y-1" data-driver-account-success-summary="true">
+                {!hasVerifiedDriverAccount ? (
+                  <div
+                    className={`rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 ${
+                      driverAccountSetup.status === "created" ? "" : "space-y-2"
+                    }`}
+                    data-driver-account-collapsed={driverAccountSetup.status === "created" ? "true" : "false"}
+                    data-driver-account-setup="true"
+                  >
+                    {driverAccountSetup.status === "created" ? (
+                      <div className="space-y-1" data-driver-account-success-summary="true">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
                         <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
@@ -3320,9 +3326,9 @@ export default function DriverJobPage() {
                           {driverAccountSetup.feedback.text}
                         </p>
                       ) : null}
-                    </div>
-                  ) : (
-                    <>
+                      </div>
+                    ) : (
+                      <>
                       <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
                       <p className="text-xs font-medium leading-5 text-violet-900">
                         Optional. This acknowledged Job Link can create one account only. You may continue every
@@ -3453,9 +3459,10 @@ export default function DriverJobPage() {
                           {driverAccountSetup.feedback.text}
                         </p>
                       ) : null}
-                    </>
-                  )}
-                </div>
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 <div
                   className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2"
                   data-driver-job-calendar-collapsed={driverCalendar.status === "cal_saved" ? "true" : "false"}

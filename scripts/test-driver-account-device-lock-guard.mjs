@@ -95,6 +95,18 @@ includes("authRoute", "clearDriverPortalSessionCookie", "account logout cookie c
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
 for (const fragment of [
+  "hasVerifiedDriverAccount",
+  "setHasVerifiedDriverAccount(Boolean(result.driver_account_profile))",
+  "!hasVerifiedDriverAccount",
+  "!acknowledged ? (",
+]) {
+  includes(
+    "jobPage",
+    fragment,
+    `existing verified Driver account setup visibility ${fragment}`,
+  );
+}
+for (const fragment of [
   "driverAccountPasswordLength = 6",
   "/^\\d{6}$/",
   "/^(\\d)\\1{5}$/",

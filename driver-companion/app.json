@@ -10,7 +10,7 @@
       "version": "1.0.0",
       "supportsTablet": true,
       "bundleIdentifier": "sg.prestigelimo.drivercompanion",
-      "buildNumber": "12",
+      "buildNumber": "13",
       "icon": "./assets/icon.png",
       "associatedDomains": [
         "applinks:app.prestigelimo.sg",

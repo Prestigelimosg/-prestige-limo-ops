@@ -369,6 +369,7 @@ export async function issueDriverPortalSessionForAcknowledgedToken({
   if (existingCookie.state === "invalid") {
     return blockedEnrollment("invalid_existing_session");
   }
+  let existingAccountClaims: Pick<DriverPortalSessionClaims, "accountId" | "deviceIdHash"> | null = null;
   if (existingCookie.state === "present" && existingCookie.value) {
     const existingClaims = decryptClaims(existingCookie.value, secret, nowDate.getTime());
     if (!existingClaims) {
@@ -377,10 +378,17 @@ export async function issueDriverPortalSessionForAcknowledgedToken({
     if (existingClaims.driverId !== linkDriverId) {
       return blockedEnrollment("driver_mismatch");
     }
+    if (existingClaims.accountId && existingClaims.deviceIdHash) {
+      existingAccountClaims = {
+        accountId: existingClaims.accountId,
+        deviceIdHash: existingClaims.deviceIdHash,
+      };
+    }
   }
 
   const issuedAt = nowDate.getTime();
   const value = encryptClaims({
+    ...(existingAccountClaims ?? {}),
     driverId: linkDriverId,
     expiresAt: issuedAt + driverPortalSessionMaxAgeSeconds * 1000,
     issuedAt,

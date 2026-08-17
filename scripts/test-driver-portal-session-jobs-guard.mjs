@@ -288,6 +288,25 @@ try {
   });
   assert.match(harness.session.clearDriverPortalSessionCookie(), /Max-Age=0/);
 
+  const accountBackedEnrollment = await harness.session.issueDriverPortalSessionForAcknowledgedToken({
+    client,
+    cookieHeader: cookiePair(accountCookie),
+    env,
+    now,
+    token: tokenA,
+  });
+  assert.equal(accountBackedEnrollment.ok, true);
+  const preservedAccountSession = harness.session.resolveDriverPortalSession(
+    cookiePair(accountBackedEnrollment.cookie),
+    { env, now },
+  );
+  assert.equal(preservedAccountSession.ok, true);
+  assert.deepEqual(
+    preservedAccountSession.claims,
+    accountSession.claims,
+    "Acknowledging a job while signed in must preserve the verified Driver account and device session.",
+  );
+
   const wrongDriverEnrollment = await harness.session.issueDriverPortalSessionForAcknowledgedToken({
     client,
     cookieHeader: cookiePair(enrolled.cookie),

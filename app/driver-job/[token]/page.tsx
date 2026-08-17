@@ -272,6 +272,7 @@ type EmbeddedDriverWindow = Window & {
   };
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
+  __PRESTIGE_DRIVER_OPEN_TARGET__?: "messages";
 };
 
 type DriverOtsPhotoProofState = {
@@ -838,6 +839,16 @@ function currentEmbeddedDriverInstallationId() {
     : "";
 }
 
+function currentEmbeddedDriverOpenTarget() {
+  if (!isVerifiedEmbeddedDriverApp()) {
+    return null;
+  }
+
+  return (window as EmbeddedDriverWindow).__PRESTIGE_DRIVER_OPEN_TARGET__ === "messages"
+    ? "messages" as const
+    : null;
+}
+
 function postEmbeddedDriverBridgeMessage(
   message:
     | {
@@ -1043,6 +1054,7 @@ export default function DriverJobPage() {
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverAppUpdatesAbortControllerRef = useRef<AbortController | null>(null);
   const driverAppUpdatesRequestSequenceRef = useRef(0);
+  const driverAppUpdatesOpenTargetHandledRef = useRef(false);
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
   const driverLiveLocationPostInFlightRef = useRef(false);
@@ -1071,6 +1083,31 @@ export default function DriverJobPage() {
 
     return () => window.cancelAnimationFrame(embeddedDetectionFrame);
   }, []);
+
+  useEffect(() => {
+    if (
+      pageState.kind !== "ready" ||
+      !embeddedDriverApp ||
+      currentEmbeddedDriverOpenTarget() !== "messages" ||
+      driverAppUpdatesOpenTargetHandledRef.current
+    ) {
+      return;
+    }
+
+    const updatesSection = document.querySelector<HTMLElement>(
+      '[data-driver-job-app-updates="true"]',
+    );
+    if (!updatesSection) {
+      return;
+    }
+
+    driverAppUpdatesOpenTargetHandledRef.current = true;
+    const scrollFrame = window.requestAnimationFrame(() => {
+      updatesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(scrollFrame);
+  }, [embeddedDriverApp, pageState.kind]);
 
   const requestEmbeddedNativeNotificationsOnce = useCallback(() => {
     if (

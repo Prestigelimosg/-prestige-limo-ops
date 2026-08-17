@@ -186,10 +186,36 @@ for (const forbiddenPattern of [
   assertExcludes(closedLiveLocationSource, forbiddenPattern, "closed live-location scaffold");
 }
 
+const establishedDriverAppUpdatesRefreshPattern =
+  /const driverAppUpdatesRefreshInterval = window\.setInterval\(\s*refreshDriverAppUpdatesWhileVisible,\s*DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS,\s*\);/;
+const establishedDriverAppUpdatesCleanupPattern =
+  /window\.clearInterval\(driverAppUpdatesRefreshInterval\);/;
+assert.equal(
+  establishedDriverAppUpdatesRefreshPattern.test(driverJobPage),
+  true,
+  "the established visible Driver App Updates refresh must stay identifiable outside the GPS lane",
+);
+assert.equal(
+  establishedDriverAppUpdatesCleanupPattern.test(driverJobPage),
+  true,
+  "the established visible Driver App Updates refresh cleanup must stay identifiable outside the GPS lane",
+);
+const driverJobPageWithoutAppUpdatesRefresh = driverJobPage
+  .replace(
+    establishedDriverAppUpdatesRefreshPattern,
+    "/* established visible Driver App Updates refresh excluded from GPS safety scope */",
+  )
+  .replace(establishedDriverAppUpdatesCleanupPattern, "");
+
 assertExcludes(
-  driverJobPage,
+  driverJobPageWithoutAppUpdatesRefresh,
   /setInterval|setTimeout|sendBeacon/i,
   "production driver job page timer/sendBeacon GPS loop",
+);
+assert.equal(
+  (driverJobPage.match(/\bsetInterval\s*\(/g) || []).length,
+  1,
+  "the production Driver Job page may retain only the established visible App Updates refresh interval",
 );
 for (const fragment of [
   'data-driver-otw-live-location-control="true"',

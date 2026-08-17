@@ -50,7 +50,7 @@ import {
 import {
   forgetNativeNotificationToken,
   loadNativeDriverJob,
-  nativeNotificationJobKey,
+  nativeNotificationOpenRequest,
   readNativeNotificationToken,
   rememberNativeDriverJob,
   rememberNativeNotificationToken,
@@ -67,6 +67,7 @@ type ScreenState = {
   jobUrl: string | null;
   message: string;
   navigationKey: number;
+  openTarget: "messages" | null;
 };
 
 const initialScreenState: ScreenState = {
@@ -74,6 +75,7 @@ const initialScreenState: ScreenState = {
   jobUrl: `${productionOrigin}/driver-portal`,
   message: "Driver Portal is ready.",
   navigationKey: 0,
+  openTarget: null,
 };
 
 Notifications.setNotificationHandler({
@@ -188,7 +190,10 @@ export default function App() {
     return () => subscription.remove();
   }, [unlockDriverApp]);
 
-  const receiveDriverJobUrl = useCallback(async (incomingUrl: string) => {
+  const receiveDriverJobUrl = useCallback(async (
+    incomingUrl: string,
+    openTarget: ScreenState["openTarget"] = null,
+  ) => {
     try {
       const incomingJob = parseDriverJobUrl(incomingUrl);
       const trackingState = await readTrackingState();
@@ -203,6 +208,7 @@ export default function App() {
           jobUrl: trackingState.job!.jobUrl,
           message: "Stop the current trip before opening another job.",
           navigationKey: current.navigationKey + 1,
+          openTarget: null,
         }));
         return;
       }
@@ -222,11 +228,13 @@ export default function App() {
             ? "Trip tracking is active."
             : "Private Driver Job opened securely in Prestige Driver.",
         navigationKey: current.navigationKey + 1,
+        openTarget,
       }));
     } catch (error) {
       setScreen((current) => ({
         ...current,
         message: readableFailure(error),
+        openTarget: null,
       }));
     }
   }, []);
@@ -269,6 +277,7 @@ export default function App() {
           jobUrl: trackingState.job!.jobUrl,
           message: "Trip tracking is active.",
           navigationKey: current.navigationKey + 1,
+          openTarget: null,
         }));
       }
     }
@@ -287,16 +296,16 @@ export default function App() {
     const openNotificationJob = async (
       response: Notifications.NotificationResponse | null,
     ) => {
-      const jobKey = nativeNotificationJobKey(
+      const request = nativeNotificationOpenRequest(
         response?.notification.request.content.data,
       );
-      if (!jobKey) {
+      if (!request) {
         return;
       }
 
-      const job = await loadNativeDriverJob(jobKey);
+      const job = await loadNativeDriverJob(request.jobKey);
       if (mounted && job) {
-        await receiveDriverJobUrl(job.jobUrl);
+        await receiveDriverJobUrl(job.jobUrl, request.openTarget);
       }
     };
 
@@ -684,6 +693,7 @@ export default function App() {
               installationId,
               biometricEnabled,
               notificationEnabled,
+              screen.openTarget,
             )}
             javaScriptCanOpenWindowsAutomatically={false}
             mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"

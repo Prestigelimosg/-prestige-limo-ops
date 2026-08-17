@@ -172,6 +172,7 @@ export function embeddedDriverBridgeBootstrap(
   installationId: string,
   biometricEnabled: boolean,
   notificationsEnabled = false,
+  openTarget: "messages" | null = null,
 ) {
   if (!installationIdPattern.test(installationId)) {
     throw new Error("A valid native Driver installation is required.");
@@ -201,6 +202,12 @@ export function embeddedDriverBridgeBootstrap(
     configurable: false,
     enumerable: false,
     value: ${notificationsEnabled === true},
+    writable: false
+  });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_OPEN_TARGET__", {
+    configurable: false,
+    enumerable: false,
+    value: ${openTarget === "messages" ? '"messages"' : "null"},
     writable: false
   });
   try {

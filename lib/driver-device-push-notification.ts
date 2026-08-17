@@ -118,7 +118,10 @@ type DriverDevicePushAlertInput = {
   booking_reference: string | null;
   delivery_surface: string | null;
   driver_job_link_id: string | null;
+  workflow_area?: string | null;
 };
+
+type DriverNativePushOpenTarget = "messages";
 
 type DriverDevicePushPayload = {
   body:
@@ -140,6 +143,7 @@ export type DriverDevicePushSender = (
 export type DriverNativePushSender = (
   expoPushToken: string,
   jobKey: string,
+  openTarget: DriverNativePushOpenTarget | null,
 ) => Promise<void>;
 
 type DriverDevicePushAlertOptions = {
@@ -725,6 +729,7 @@ async function sendWebPush(
 async function sendNativePush(
   expoPushToken: string,
   jobKey: string,
+  openTarget: DriverNativePushOpenTarget | null,
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
   const controller = new AbortController();
@@ -734,7 +739,10 @@ async function sendNativePush(
     const response = await fetcher(expoPushEndpoint, {
       body: JSON.stringify({
         body: "Job update available",
-        data: { job_key: jobKey },
+        data: {
+          job_key: jobKey,
+          ...(openTarget ? { open_target: openTarget } : {}),
+        },
         priority: "high",
         sound: "default",
         title: "Prestige Driver",
@@ -832,6 +840,7 @@ async function sendPayloadToDriverSubscriptions(
   payload: DriverDevicePushPayload,
   config: DriverDevicePushProviderConfig,
   options: DriverDevicePushAlertOptions,
+  nativeOpenTarget: DriverNativePushOpenTarget | null = null,
 ): Promise<DriverDevicePushAlertResult> {
   const loaded = await loadActiveDriverSubscriptions(client, driverId);
   if (!loaded.ok) {
@@ -855,10 +864,15 @@ async function sendPayloadToDriverSubscriptions(
     eligibleSubscriptions.map((subscription) =>
       subscription.channel === "native_ios"
         ? options.nativePushSender
-          ? options.nativePushSender(subscription.endpoint, payload.job_key)
+          ? options.nativePushSender(
+              subscription.endpoint,
+              payload.job_key,
+              nativeOpenTarget,
+            )
           : sendNativePush(
               subscription.endpoint,
               payload.job_key,
+              nativeOpenTarget,
               options.nativeFetch,
             )
         : sender(subscription.webSubscription!, payload),
@@ -958,7 +972,17 @@ export async function sendDriverDevicePushAlertForAppUpdate(
   }
 
   const payload = safePayload(linkId);
-  return sendPayloadToDriverSubscriptions(client, driverId, payload, config, options);
+  const nativeOpenTarget = input.workflow_area === "admin_driver_job_messages"
+    ? "messages"
+    : null;
+  return sendPayloadToDriverSubscriptions(
+    client,
+    driverId,
+    payload,
+    config,
+    options,
+    nativeOpenTarget,
+  );
 }
 
 export async function sendDriverDevicePushAlertForPickupReminder(

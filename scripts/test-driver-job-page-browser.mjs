@@ -246,7 +246,14 @@ async function runChromeTest() {
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
         const embeddedDriverMode = new URLSearchParams(window.location.search).get("embedded") || "";
-        const embeddedDriverHarness = ["1", "account-profile", "faceid-off", "faceid-on"].includes(embeddedDriverMode);
+        const embeddedDriverHarness = [
+          "1",
+          "account-profile",
+          "alerts-off",
+          "alerts-on",
+          "faceid-off",
+          "faceid-on",
+        ].includes(embeddedDriverMode);
         if (embeddedDriverHarness) {
           window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
           window.__PRESTIGE_DRIVER_INSTALLATION_ID__ = "77777777-7777-4777-8777-777777777777";
@@ -254,6 +261,12 @@ async function runChromeTest() {
             configurable: false,
             enumerable: false,
             value: embeddedDriverMode === "faceid-on",
+            writable: false,
+          });
+          Object.defineProperty(window, "__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__", {
+            configurable: false,
+            enumerable: false,
+            value: embeddedDriverMode === "alerts-on",
             writable: false,
           });
           window.ReactNativeWebView = {
@@ -578,7 +591,9 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
-                session: embeddedDriverMode.startsWith("faceid-") ? "account" : "link",
+                session: embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-")
+                  ? "account"
+                  : "link",
                 version: "driver-portal-browser-mock",
               }), {
                 status: 200,
@@ -2412,6 +2427,86 @@ async function runChromeTest() {
       faceIdSetupAfterReload,
       { jobCount: 2, setupCount: 0, signInCount: 0 },
       "A signed-in installed Driver account with persisted Face ID enabled must keep the setup panel absent after reload.",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=alerts-off", appUrl).toString(),
+      "Enable Job Alerts",
+      "installed Driver Portal native alert setup before enable",
+    );
+    const nativeAlertButtonClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-enable-alerts="true"]');
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(nativeAlertButtonClicked, true, "Installed Driver Portal must expose the native alert action.");
+    const nativeAlertRequestState = await waitForCondition(
+      () => evaluate(`(() => {
+        const messages = window.__driverNativeBridgeMessages || [];
+        const request = messages.find((message) => message.type === "native_notifications_register");
+        return request
+          ? {
+              fetchCalls: window.__driverJobFetchCalls || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              request,
+            }
+          : false;
+      })()`),
+      5000,
+      "installed Driver Portal native alert bridge request",
+    );
+    assert.deepEqual(
+      nativeAlertRequestState.request,
+      {
+        job_key: "a".repeat(64),
+        type: "native_notifications_register",
+      },
+      "Installed alert setup must send only the exact opaque stored-job key through the existing native bridge.",
+    );
+    assert.equal(
+      nativeAlertRequestState.permissionRequests,
+      0,
+      "Installed alert setup must not invoke the browser Notification permission API.",
+    );
+    assert.equal(
+      nativeAlertRequestState.fetchCalls.includes("POST /api/driver-portal/jobs"),
+      false,
+      "Installed alert setup must not use the browser push-subscription writer.",
+    );
+    await evaluate(`window.dispatchEvent(new CustomEvent("prestige-driver-native-notification-result", {
+      detail: { ok: true, state: "enabled" },
+    }))`);
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-portal-alert-setup]')?.getAttribute("data-driver-portal-alert-setup") === "enabled"`),
+      5000,
+      "immediate installed Driver alert enabled state",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=alerts-on", appUrl).toString(),
+      "Job Alerts Enabled",
+      "installed Driver Portal persisted native alert state",
+    );
+    const persistedNativeAlertState = await evaluate(`(() => ({
+      buttonDisabled: document.querySelector('[data-driver-portal-enable-alerts="true"]')?.disabled === true,
+      bridgeMessages: window.__driverNativeBridgeMessages || [],
+      permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+      setupState: document.querySelector('[data-driver-portal-alert-setup]')?.getAttribute("data-driver-portal-alert-setup") || "",
+    }))()`);
+    assert.deepEqual(
+      persistedNativeAlertState,
+      {
+        buttonDisabled: true,
+        bridgeMessages: [],
+        permissionRequests: 0,
+        setupState: "enabled",
+      },
+      "Persisted native alert state must stay enabled after reload without another prompt or bridge request.",
     );
 
     await evaluate("window.__driverDeviceAlertTest.clearPortalSubscription()");

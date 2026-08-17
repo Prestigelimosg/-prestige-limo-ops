@@ -14,7 +14,7 @@ export type DriverBridgeMessage =
   | { type: "native_biometrics_enable" }
   | { jobKey: string; type: "native_job_open" }
   | { jobKey: string; type: "native_job_remember" }
-  | { type: "native_notifications_register" };
+  | { jobKey?: string; type: "native_notifications_register" };
 
 export type DriverTrackingResult = {
   active: boolean;
@@ -46,7 +46,9 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
     const keys = Object.keys(parsed);
 
     if (
-      ["native_job_open", "native_job_remember"].includes(String(parsed.type)) &&
+      ["native_job_open", "native_job_remember", "native_notifications_register"].includes(
+        String(parsed.type),
+      ) &&
       keys.length === 2 &&
       keys.includes("job_key") &&
       keys.includes("type") &&
@@ -55,7 +57,10 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
     ) {
       return {
         jobKey: parsed.job_key,
-        type: parsed.type as "native_job_open" | "native_job_remember",
+        type: parsed.type as
+          | "native_job_open"
+          | "native_job_remember"
+          | "native_notifications_register",
       };
     }
 
@@ -166,6 +171,7 @@ export function shouldAllowDriverWebViewNavigation(
 export function embeddedDriverBridgeBootstrap(
   installationId: string,
   biometricEnabled: boolean,
+  notificationsEnabled = false,
 ) {
   if (!installationIdPattern.test(installationId)) {
     throw new Error("A valid native Driver installation is required.");
@@ -189,6 +195,12 @@ export function embeddedDriverBridgeBootstrap(
     configurable: false,
     enumerable: false,
     value: ${biometricEnabled === true},
+    writable: false
+  });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__", {
+    configurable: false,
+    enumerable: false,
+    value: ${notificationsEnabled === true},
     writable: false
   });
   try {

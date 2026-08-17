@@ -110,6 +110,7 @@ export default function App() {
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
   const [installationId, setInstallationId] = useState("");
   const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
   const biometricPromptBusyRef = useRef(false);
   const biometricResumePendingRef = useRef(false);
@@ -136,10 +137,14 @@ export default function App() {
     async function prepareInstallation() {
       try {
         const nextInstallationId = await readOrCreateDriverInstallationId();
-        const biometricEnabled = await isDriverBiometricUnlockEnabled();
+        const [biometricEnabled, notificationToken] = await Promise.all([
+          isDriverBiometricUnlockEnabled(),
+          readNativeNotificationToken(),
+        ]);
         if (!mounted) return;
 
         setBiometricEnabled(biometricEnabled);
+        setNotificationEnabled(Boolean(notificationToken));
         setInstallationId(nextInstallationId);
         if (!biometricEnabled) {
           setUnlockState("ready");
@@ -380,6 +385,14 @@ export default function App() {
         return;
       }
 
+      if (request.type === "native_notifications_register") {
+        const requestedFromPortal = currentWebViewUrl === `${productionOrigin}/driver-portal`;
+        if (requestedFromPortal !== Boolean(request.jobKey)) {
+          sendNativeNotificationResult({ ok: false, state: "failed" });
+          return;
+        }
+      }
+
       if (request.type === "native_job_remember") {
         try {
           const currentJob = parseDriverJobUrl(currentWebViewUrl);
@@ -434,7 +447,13 @@ export default function App() {
         }
 
         if (request.type === "native_notifications_register") {
-          const job = parseDriverJobUrl(currentWebViewUrl);
+          const job = request.jobKey
+            ? await loadNativeDriverJob(request.jobKey)
+            : parseDriverJobUrl(currentWebViewUrl);
+          if (!job) {
+            sendNativeNotificationResult({ ok: false, state: "failed" });
+            return;
+          }
           const existingToken = await readNativeNotificationToken();
           const permission = await Notifications.requestPermissionsAsync();
 
@@ -443,6 +462,7 @@ export default function App() {
               await unregisterNativeDriverNotifications(job, existingToken);
               await forgetNativeNotificationToken();
             }
+            setNotificationEnabled(false);
             sendNativeNotificationResult({ ok: false, state: "denied" });
             return;
           }
@@ -475,6 +495,7 @@ export default function App() {
             );
             throw error;
           }
+          setNotificationEnabled(true);
           sendNativeNotificationResult({ ok: true, state: "enabled" });
           return;
         }
@@ -662,6 +683,7 @@ export default function App() {
             injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(
               installationId,
               biometricEnabled,
+              notificationEnabled,
             )}
             javaScriptCanOpenWindowsAutomatically={false}
             mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"

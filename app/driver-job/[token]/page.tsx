@@ -41,6 +41,12 @@ type DriverJobApiResponse =
         enrolled: boolean;
         link_key: string | null;
       };
+      driver_account_profile?: {
+        contact: string;
+        name: string;
+        plate: string;
+        vehicle_model: string;
+      } | null;
       ok: true;
       mode: "mock" | "production";
       payload: SafeDriverJobPayload;
@@ -265,6 +271,7 @@ type EmbeddedDriverWindow = Window & {
     postMessage: (message: string) => void;
   };
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
+  __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
 };
 
 type DriverOtsPhotoProofState = {
@@ -819,6 +826,18 @@ function isVerifiedEmbeddedDriverApp() {
     typeof embeddedWindow.ReactNativeWebView?.postMessage === "function";
 }
 
+function currentEmbeddedDriverInstallationId() {
+  if (!isVerifiedEmbeddedDriverApp()) {
+    return "";
+  }
+
+  const installationId = (window as EmbeddedDriverWindow).__PRESTIGE_DRIVER_INSTALLATION_ID__;
+  return typeof installationId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(installationId)
+    ? installationId
+    : "";
+}
+
 function postEmbeddedDriverBridgeMessage(
   message:
     | {
@@ -1349,9 +1368,13 @@ export default function DriverJobPage() {
       setWorkflowStatus("assigned");
 
       try {
+        const nativeInstallationId = currentEmbeddedDriverInstallationId();
         // Mock-backed until William approves the secure Supabase driver_job_links table and RLS/API policy.
         const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
           cache: "no-store",
+          headers: nativeInstallationId
+            ? { "x-prestige-driver-installation-id": nativeInstallationId }
+            : undefined,
         });
         const result = await response.json() as DriverJobApiResponse;
 
@@ -1380,12 +1403,19 @@ export default function DriverJobPage() {
           });
         }
 
-        const loadedDriverDetails = {
-          contact: result.payload.assignedDriver.contact,
-          name: result.payload.assignedDriver.name,
-          plate: result.payload.assignedDriver.plate,
-          vehicleModel: result.payload.assignedDriver.vehicleModel,
-        };
+        const loadedDriverDetails = result.payload.acknowledged || !result.driver_account_profile
+          ? {
+              contact: result.payload.assignedDriver.contact,
+              name: result.payload.assignedDriver.name,
+              plate: result.payload.assignedDriver.plate,
+              vehicleModel: result.payload.assignedDriver.vehicleModel,
+            }
+          : {
+              contact: result.driver_account_profile.contact,
+              name: result.driver_account_profile.name,
+              plate: result.driver_account_profile.plate,
+              vehicleModel: result.driver_account_profile.vehicle_model,
+            };
 
         setDriverDetails(loadedDriverDetails);
         setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
@@ -1703,6 +1733,7 @@ export default function DriverJobPage() {
       : await prepareDriverDeviceAlert(driverDeviceAlertReadiness);
 
     try {
+      const nativeInstallationId = currentEmbeddedDriverInstallationId();
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
         body: JSON.stringify({
           driver_contact: nextDetails.contact,
@@ -1713,6 +1744,9 @@ export default function DriverJobPage() {
         }),
         headers: {
           "Content-Type": "application/json",
+          ...(nativeInstallationId
+            ? { "x-prestige-driver-installation-id": nativeInstallationId }
+            : {}),
         },
         method: "PATCH",
       });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import "./test-next-server-only-hook.mjs";
 
 if (!process.execArgv.includes("--conditions=react-server")) {
   const result = spawnSync(

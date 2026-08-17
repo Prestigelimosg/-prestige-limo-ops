@@ -6,13 +6,16 @@ import {
 import {
   getDriverJobStatusPersistenceClientForProduction,
   loadDriverJobPayloadThroughStatusPersistence,
+  loadVerifiedDriverProfileForJobThroughStatusPersistence,
   saveDriverJobDetailsThroughStatusPersistence,
   saveDriverJobStatusThroughStatusPersistence,
   type DriverJobProductionDetailsUpdateResult,
   type DriverJobProductionPayloadResult,
   type DriverJobProductionStatusUpdateResult,
   type DriverJobStatusPersistenceClient,
+  type VerifiedDriverJobAccountProfile,
 } from "./driver-job-status-persistence.ts";
+import { verifyDriverAccountSession } from "./driver-account-device-lock.ts";
 import {
   registerDriverNativeDevicePushSubscriptionForAcknowledgedLink,
   registerDriverDevicePushSubscriptionForAcknowledgedLink,
@@ -22,11 +25,13 @@ import {
 } from "./driver-device-push-notification.ts";
 import {
   issueDriverPortalSessionForAcknowledgedToken,
+  resolveDriverPortalSession,
   type DriverPortalEnrollmentResult,
 } from "./driver-portal-session.ts";
 
 export type ProductionDriverJobDetailsUpdateInput = {
   devicePushSubscription?: unknown;
+  driverInstallationId?: unknown;
   driverPortalCookieHeader?: string | null;
   driverContact?: unknown;
   driverName?: unknown;
@@ -74,6 +79,61 @@ export async function applyProductionDriverNativeDeviceAlertUpdate(input: {
         expoPushToken: input.expoPushToken,
         token: input.token,
       });
+}
+
+async function resolveVerifiedAccountDriverId({
+  client,
+  cookieHeader,
+  driverInstallationId,
+}: {
+  client: DriverJobStatusPersistenceClient;
+  cookieHeader: string | null;
+  driverInstallationId: unknown;
+}) {
+  const session = resolveDriverPortalSession(cookieHeader);
+  if (!session.ok || !session.claims.accountId || !session.claims.deviceIdHash) {
+    return null;
+  }
+
+  const activeAccount = await verifyDriverAccountSession({
+    accountId: session.claims.accountId,
+    client,
+    deviceIdHash: session.claims.deviceIdHash,
+    driverId: session.claims.driverId,
+    installationId: driverInstallationId,
+  });
+
+  return activeAccount ? session.claims.driverId : null;
+}
+
+export async function getProductionVerifiedDriverJobProfile({
+  cookieHeader,
+  driverInstallationId,
+  token,
+}: {
+  cookieHeader: string | null;
+  driverInstallationId: unknown;
+  token: string;
+}): Promise<VerifiedDriverJobAccountProfile | null> {
+  const clientResult = resolveProductionClient();
+  if (!clientResult.ok) {
+    return null;
+  }
+
+  const verifiedAccountDriverId = await resolveVerifiedAccountDriverId({
+    client: clientResult.client,
+    cookieHeader,
+    driverInstallationId,
+  });
+  if (!verifiedAccountDriverId) {
+    return null;
+  }
+
+  return loadVerifiedDriverProfileForJobThroughStatusPersistence({
+    client: clientResult.client,
+    token,
+    verifiedAccountDriverId,
+  });
 }
 
 const adminDevicePushEventForDriverStatus = {
@@ -139,6 +199,7 @@ export async function getProductionDriverJobPayloadForToken(
 // billing fields, and it does not send customer/provider messages.
 export async function applyProductionDriverJobDetailsUpdate({
   devicePushSubscription,
+  driverInstallationId,
   driverPortalCookieHeader,
   driverContact,
   driverName,
@@ -152,6 +213,12 @@ export async function applyProductionDriverJobDetailsUpdate({
     return clientResult;
   }
 
+  const verifiedAccountDriverId = await resolveVerifiedAccountDriverId({
+    client: clientResult.client,
+    cookieHeader: driverPortalCookieHeader ?? null,
+    driverInstallationId,
+  });
+
   const detailsResult = await saveDriverJobDetailsThroughStatusPersistence({
     client: clientResult.client,
     driverContact,
@@ -159,6 +226,7 @@ export async function applyProductionDriverJobDetailsUpdate({
     driverPlateNumber,
     driverVehicleModel,
     token,
+    verifiedAccountDriverId,
   });
 
   if (!detailsResult.ok) {

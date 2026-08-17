@@ -85,6 +85,13 @@ export type DriverJobProductionDetailsUpdateResult =
 
 export type DriverJobStatusPersistenceClient = Pick<SupabaseClient, "from">;
 
+export type VerifiedDriverJobAccountProfile = {
+  contact: string;
+  name: string;
+  plate: string;
+  vehicleModel: string;
+};
+
 type UnknownRecord = Record<string, unknown>;
 
 type DriverJobLinkPersistenceRow = {
@@ -127,6 +134,7 @@ type SaveDriverJobDetailsPersistenceInput = LoadDriverJobPersistenceInput & {
   driverName?: unknown;
   driverPlateNumber?: unknown;
   driverVehicleModel?: unknown;
+  verifiedAccountDriverId?: unknown;
 };
 
 type LinkResolveResult =
@@ -447,6 +455,18 @@ function safeDriverDetailsFromInput(input: SaveDriverJobDetailsPersistenceInput)
   };
 }
 
+function normalizedDriverContact(value: unknown) {
+  return safeTextFromDb(value, 120).replace(/[^\d+]/g, "");
+}
+
+function normalizedDriverName(value: unknown) {
+  return safeTextFromDb(value, 120).toLowerCase();
+}
+
+function normalizedDriverPlate(value: unknown) {
+  return safeTextFromDb(value, 80).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function lockedAcknowledgedDriverDetailsMatch(
   link: DriverJobLinkPersistenceRow,
   nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
@@ -649,6 +669,7 @@ async function resolveAcknowledgedDriverIdentity(
   client: DriverJobStatusPersistenceClient,
   link: DriverJobLinkPersistenceRow,
   nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
+  verifiedAccountDriverId: number | null,
 ): Promise<
   | { driverId: number; ok: true }
   | { ok: false; reason: "invalid_details" | "not_configured" }
@@ -674,7 +695,15 @@ async function resolveAcknowledgedDriverIdentity(
   }
 
   if (bookingDriverId) {
+    if (verifiedAccountDriverId && verifiedAccountDriverId !== bookingDriverId) {
+      return { ok: false, reason: "invalid_details" };
+    }
+
     return { driverId: bookingDriverId, ok: true };
+  }
+
+  if (verifiedAccountDriverId) {
+    return { driverId: verifiedAccountDriverId, ok: true };
   }
 
   if (!nextDetails.contact) {
@@ -721,6 +750,68 @@ async function resolveAcknowledgedDriverIdentity(
   }
 
   return { driverId: insertedDriverId, ok: true };
+}
+
+async function syncVerifiedAccountDriverProfile(
+  client: DriverJobStatusPersistenceClient,
+  verifiedAccountDriverId: number,
+  nextDetails: ReturnType<typeof safeDriverDetailsFromInput>,
+): Promise<{ ok: true } | { ok: false; reason: "invalid_details" | "not_configured" }> {
+  const { data: driverRows, error: driversError } = await client
+    .from("drivers")
+    .select("id, driver_name, contact_number, plate_number");
+
+  if (driversError) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  const normalizedContact = normalizedDriverContact(nextDetails.contact);
+  const normalizedName = normalizedDriverName(nextDetails.name);
+  const normalizedPlate = normalizedDriverPlate(nextDetails.plate);
+  let exactDriverFound = false;
+
+  for (const row of asArray(driverRows)) {
+    const record = asRecord(row);
+    const driverId = positiveIntegerFromDb(record.id);
+
+    if (driverId === verifiedAccountDriverId) {
+      exactDriverFound = true;
+      continue;
+    }
+
+    if (
+      (normalizedContact && normalizedDriverContact(record.contact_number) === normalizedContact) ||
+      (normalizedName && normalizedDriverName(record.driver_name) === normalizedName) ||
+      (normalizedPlate && normalizedDriverPlate(record.plate_number) === normalizedPlate)
+    ) {
+      return { ok: false, reason: "invalid_details" };
+    }
+  }
+
+  if (!exactDriverFound) {
+    return { ok: false, reason: "invalid_details" };
+  }
+
+  const { data: updatedDriver, error: updateError } = await client
+    .from("drivers")
+    .update({
+      contact_number: nextDetails.contact || null,
+      driver_name: nextDetails.name,
+      plate_number: nextDetails.plate || null,
+      vehicle_type: nextDetails.vehicleModel || null,
+    })
+    .eq("id", verifiedAccountDriverId)
+    .select("id")
+    .single();
+
+  if (
+    updateError ||
+    positiveIntegerFromDb(asRecord(updatedDriver).id) !== verifiedAccountDriverId
+  ) {
+    return { ok: false, reason: "not_configured" };
+  }
+
+  return { ok: true };
 }
 
 function toStatusEventRow(row: UnknownRecord): DriverJobStatusEventRow | null {
@@ -1292,6 +1383,59 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
   };
 }
 
+export async function loadVerifiedDriverProfileForJobThroughStatusPersistence({
+  client,
+  now,
+  token,
+  verifiedAccountDriverId,
+}: LoadDriverJobPersistenceInput & {
+  verifiedAccountDriverId: unknown;
+}): Promise<VerifiedDriverJobAccountProfile | null> {
+  const exactDriverId = positiveIntegerFromDb(verifiedAccountDriverId);
+  if (!exactDriverId) {
+    return null;
+  }
+
+  const resolvedLink = await resolveLinkForToken({ client, now, token });
+  if (!resolvedLink.ok) {
+    return null;
+  }
+
+  const { data: bookingData, error: bookingError } = await client
+    .from("bookings")
+    .select("driver_id")
+    .eq("booking_reference", resolvedLink.link.booking_reference)
+    .maybeSingle();
+  const bookingDriverId = positiveIntegerFromDb(asRecord(bookingData).driver_id);
+
+  if (
+    bookingError ||
+    (resolvedLink.link.driver_id && bookingDriverId && resolvedLink.link.driver_id !== bookingDriverId) ||
+    (resolvedLink.link.driver_id && !bookingDriverId) ||
+    (bookingDriverId && bookingDriverId !== exactDriverId)
+  ) {
+    return null;
+  }
+
+  const { data: driverData, error: driverError } = await client
+    .from("drivers")
+    .select("id, driver_name, contact_number, plate_number, vehicle_type")
+    .eq("id", exactDriverId)
+    .maybeSingle();
+  const driver = asRecord(driverData);
+
+  if (driverError || positiveIntegerFromDb(driver.id) !== exactDriverId) {
+    return null;
+  }
+
+  return {
+    contact: safeTextFromDb(driver.contact_number, 120),
+    name: safeTextFromDb(driver.driver_name, 120),
+    plate: safeTextFromDb(driver.plate_number, 80),
+    vehicleModel: safeTextFromDb(driver.vehicle_type, 160),
+  };
+}
+
 export async function saveDriverJobDetailsThroughStatusPersistence(
   input: SaveDriverJobDetailsPersistenceInput,
 ): Promise<DriverJobProductionDetailsUpdateResult> {
@@ -1350,6 +1494,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     input.client,
     resolvedLink.link,
     nextDetails,
+    positiveIntegerFromDb(input.verifiedAccountDriverId),
   );
 
   if (!identity.ok) {
@@ -1357,6 +1502,19 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
   }
 
   const verifiedDriverId = identity.driverId;
+  const verifiedAccountDriverId = positiveIntegerFromDb(input.verifiedAccountDriverId);
+
+  if (verifiedAccountDriverId) {
+    const profileSync = await syncVerifiedAccountDriverProfile(
+      input.client,
+      verifiedAccountDriverId,
+      nextDetails,
+    );
+
+    if (!profileSync.ok) {
+      return detailsBlockedResult(profileSync.reason);
+    }
+  }
 
   const safeContext = asRecord(resolvedLink.link.safe_link_context);
   const currentPayload = asRecord(safeContext.driver_job_payload);

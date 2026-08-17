@@ -33,6 +33,7 @@ type DriverNativeWindow = Window & {
   __PRESTIGE_DRIVER_BIOMETRIC_ENABLED__?: boolean;
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
+  __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
 };
 
 type DriverAccountSignInState = "idle" | "signing_in" | "failed";
@@ -59,6 +60,10 @@ function currentNativeInstallationId() {
 
 function currentNativeBiometricEnabled() {
   return (window as DriverNativeWindow).__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__ === true;
+}
+
+function currentNativeNotificationsEnabled() {
+  return (window as DriverNativeWindow).__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__ === true;
 }
 
 function subscribeToStaticNativeBridge() {
@@ -207,7 +212,13 @@ export default function DriverPortalPage() {
         publicKey,
         ready: result.device_alerts?.ready === true && Boolean(publicKey),
       });
-      setAlertState(await readDriverPortalAlertState());
+      setAlertState(
+        nativeInstallationId
+          ? currentNativeNotificationsEnabled()
+            ? "enabled"
+            : "available"
+          : await readDriverPortalAlertState(),
+      );
       setReadState({
         accountSession: result.session === "account",
         kind: "ready",
@@ -241,6 +252,31 @@ export default function DriverPortalPage() {
 
     window.addEventListener("prestige-driver-native-biometric-result", onBiometricResult);
     return () => window.removeEventListener("prestige-driver-native-biometric-result", onBiometricResult);
+  }, []);
+
+  useEffect(() => {
+    function onNativeNotificationResult(event: Event) {
+      const result = event as CustomEvent<{
+        ok?: boolean;
+        state?: "denied" | "enabled" | "failed";
+      }>;
+      setAlertState(
+        result.detail?.ok === true && result.detail.state === "enabled"
+          ? "enabled"
+          : result.detail?.state === "denied"
+            ? "blocked"
+            : "unavailable",
+      );
+    }
+
+    window.addEventListener(
+      "prestige-driver-native-notification-result",
+      onNativeNotificationResult,
+    );
+    return () => window.removeEventListener(
+      "prestige-driver-native-notification-result",
+      onNativeNotificationResult,
+    );
   }, []);
 
   useEffect(() => {
@@ -302,6 +338,21 @@ export default function DriverPortalPage() {
   }
 
   async function enableJobAlerts() {
+    if (nativeBridgeReady) {
+      const notificationJob = readState.kind === "ready" ? readState.jobs[0] : null;
+      if (!notificationJob) {
+        setAlertState("unavailable");
+        return;
+      }
+
+      setAlertState("enabling");
+      (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
+        job_key: notificationJob.job_key,
+        type: "native_notifications_register",
+      }));
+      return;
+    }
+
     if (!alertReadiness.ready || !alertReadiness.publicKey) {
       setAlertState("unavailable");
       return;
@@ -571,8 +622,9 @@ export default function DriverPortalPage() {
                 </p>
               ) : alertState === "unavailable" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
-                  Job alerts are unavailable. Open this installed Driver Portal from your device&apos;s
-                  Home Screen and try again.
+                  {nativeBridgeReady
+                    ? "Job alerts could not be enabled. Open the latest acknowledged private Job Link in Prestige Driver once, then try again."
+                    : "Job alerts are unavailable. Open this installed Driver Portal from your device's Home Screen and try again."}
                 </p>
               ) : alertState === "enabled" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-emerald-800">

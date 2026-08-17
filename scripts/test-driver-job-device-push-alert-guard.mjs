@@ -110,7 +110,13 @@ assertIncludes(
 );
 assertIncludes(
   nativeBridgeSource,
-  ['"native_notifications_register"', '"native_job_open"', '"native_job_remember"', "job_key"],
+  [
+    '"native_notifications_register"',
+    '"native_job_open"',
+    '"native_job_remember"',
+    "job_key",
+    '"__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__"',
+  ],
   "bounded native notification and stored-job bridge",
 );
 assertIncludes(
@@ -139,6 +145,9 @@ assertIncludes(
     "rememberNativeDriverJob",
     "loadNativeDriverJob",
     'request.type === "native_notifications_register"',
+    "setNotificationEnabled",
+    "request.jobKey",
+    "await loadNativeDriverJob(request.jobKey)",
     'request.type === "native_job_open"',
     'request.type === "native_job_remember"',
     'currentWebViewUrl !== `${productionOrigin}/driver-portal`',
@@ -344,6 +353,11 @@ assert.equal(
 assertIncludes(
   portalPageSource,
   [
+    '"prestige-driver-native-notification-result"',
+    "currentNativeNotificationsEnabled",
+    "nativeBridgeReady",
+    'type: "native_notifications_register"',
+    "job_key: notificationJob.job_key",
     "Enable Job Alerts",
     "Job Alerts Enabled",
     "Enable once on this device",
@@ -448,6 +462,10 @@ const tempNativeStoragePath = path.join(
   tempDir,
   "driver-companion/src/native-notifications.js",
 );
+const tempNativeBridgePath = path.join(
+  tempDir,
+  "driver-companion/src/driver-webview-bridge.js",
+);
 const tempNativeContractPath = path.join(
   tempDir,
   "driver-companion/src/driver-job-contract.js",
@@ -476,14 +494,25 @@ await writeFile(
   transpileTypescript(
     nativeNotificationStorageSource,
     path.join(process.cwd(), nativeNotificationStoragePath),
-  ).replace(
+  ).replaceAll(
+    'require("./driver-job-contract.ts")',
+    'require("./driver-job-contract.js")',
+  ),
+);
+await writeFile(
+  tempNativeBridgePath,
+  transpileTypescript(
+    nativeBridgeSource,
+    path.join(process.cwd(), nativeBridgePath),
+  ).replaceAll(
     'require("./driver-job-contract.ts")',
     'require("./driver-job-contract.js")',
   ),
 );
 await writeFile(
   tempNativeContractPath,
-  `exports.parseDriverJobUrl = (value) => {
+  `exports.productionOrigin = "https://app.prestigelimo.sg";
+exports.parseDriverJobUrl = (value) => {
   const parsed = new URL(value);
   const match = parsed.pathname.match(/^\\/driver-job\\/([A-Za-z0-9_-]{20,})$/);
   if (parsed.origin !== "https://app.prestigelimo.sg" || !match) throw new Error("invalid job");
@@ -506,6 +535,50 @@ exports.deleteItemAsync = async (key) => { validKey(key); values.delete(key); };
 exports.getItemAsync = async (key) => { validKey(key); return values.get(key) ?? null; };
 exports.setItemAsync = async (key, value) => { validKey(key); values.set(key, value); };
 `,
+);
+
+const nativeBridge = createRequire(import.meta.url)(tempNativeBridgePath);
+const nativeNotificationJobKey = "a".repeat(64);
+assert.deepEqual(
+  nativeBridge.parseDriverBridgeMessage(JSON.stringify({
+    job_key: nativeNotificationJobKey,
+    type: "native_notifications_register",
+  })),
+  {
+    jobKey: nativeNotificationJobKey,
+    type: "native_notifications_register",
+  },
+  "installed Driver Portal must hand one opaque stored-job key to the existing native notification lane",
+);
+assert.equal(
+  nativeBridge.parseDriverBridgeMessage(JSON.stringify({
+    job_key: "not-a-safe-job-key",
+    type: "native_notifications_register",
+  })),
+  null,
+  "native notification bridge must reject an invalid stored-job key",
+);
+const notificationBootstrap = nativeBridge.embeddedDriverBridgeBootstrap(
+  "11111111-1111-4111-8111-111111111111",
+  false,
+  true,
+);
+assert.equal(
+  notificationBootstrap.includes(
+    'Object.defineProperty(window, "__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__"',
+  ),
+  true,
+  "native notification enabled state must be injected immutably from SecureStore",
+);
+assert.equal(
+  notificationBootstrap.includes("value: true"),
+  true,
+  "native notification bootstrap must carry the persisted enabled state",
+);
+assert.equal(
+  /localStorage|sessionStorage|document\.cookie/i.test(notificationBootstrap),
+  false,
+  "native notification enabled state must not be duplicated into browser storage",
 );
 
 class QueryBuilder {

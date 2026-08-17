@@ -123,6 +123,11 @@ for (const phrase of [
   "`ios.buildNumber` is explicitly `10`",
   "Driver iOS TestFlight Build 11 (2026-08-17)",
   "`ios.buildNumber` is explicitly `11`",
+  "ad86ccd7-5b8f-4435-85aa-4ea15d5fbe31",
+  "b97e106196b76ca5ba30e1811fa3e3baa7053bd8f7403ae6b2eb650cb9ee8fe6",
+  "d2ccdb5d-298f-44e6-b244-2fca96e83ab9",
+  "Apple successfully processed `1.0.0 - 11`",
+  "live GPS continued while the phone was locked and that Pickup Risk worked on that iPhone",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

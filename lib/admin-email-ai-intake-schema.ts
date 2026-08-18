@@ -8,6 +8,32 @@ import {
   type AdminEmailAiClassification,
 } from "./admin-email-ai-intake-contract";
 
+const adminEmailAiBookingResultJsonSchema = {
+  ...aiParseJsonSchema,
+  properties: {
+    ...aiParseJsonSchema.properties,
+    bookings: {
+      ...aiParseJsonSchema.properties.bookings,
+      items: {
+        ...aiParseJsonSchema.properties.bookings.items,
+        properties: {
+          ...aiParseJsonSchema.properties.bookings.items.properties,
+          companyAccount: {
+            type: "string",
+            description:
+              "Use only a separate explicitly labelled external Company, Company name, Agency, or Agency name value. Prestige Transport branding and passenger role, employer, or affiliation text are never a customer company. Never infer a company from a title, reference, sender, or email domain. Otherwise return an empty string.",
+          },
+          dropoff: {
+            type: "string",
+            description:
+              "Preserve the explicit destination. For an exact Airport Departure with a Singapore street pickup and flight number but no named airport or terminal, return Changi Airport without a terminal. An explicitly named different airport always wins. Never invent a terminal.",
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 export type AdminEmailAiAnalysis = {
   bookingResult: AiParseResult;
   classification: AdminEmailAiClassification;
@@ -50,7 +76,7 @@ export const adminEmailAiAnalysisJsonSchema = {
         type: "string",
       },
     },
-    bookingResult: aiParseJsonSchema,
+    bookingResult: adminEmailAiBookingResultJsonSchema,
   },
 } as const;
 

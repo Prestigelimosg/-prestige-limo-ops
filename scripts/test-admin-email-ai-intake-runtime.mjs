@@ -350,6 +350,34 @@ const syntheticPrestigeTransportIdentityConflictSource = Buffer.from(
     "Payment Stripe",
   ].join("\r\n"),
 );
+const syntheticPrestigeTransportDepartureRoleTextSource = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-prestige-transport-19001@example.test>",
+    "Date: Mon, 17 Aug 2026 05:01:26 +0000",
+    'Subject: New booking "Prestige Transport 19001" has been received',
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "General",
+    "Title Prestige Transport 19001 Status Pending (new) Service type Airport transfer Transfer type One Way Pickup date and time 19-08-2026 19:00",
+    "Order total amount S$95.00 Taxes S$0.00 (0%) Comment",
+    "Passenger: Mr. Test Guest (Regional Head, Example Group) Passenger mobile: +819000000001 English-speaking driver preferred.",
+    "Route",
+    "Route name Airport Departure",
+    "Route locations",
+    "Pick Up Location 1. 9 Example Rd, Singapore 238459",
+    "Vehicle",
+    "Vehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4",
+    "Client details",
+    "First name Test Last name Guest E-mail address requester.person@example.com Phone number +819000000001 Passangers 1 Flight No. JL36",
+    "Payment",
+    "Payment Stripe",
+  ].join("\r\n"),
+);
 const syntheticPrestigeTransport15784Source = Buffer.from(
   [
     "Return-Path: <info@prestigelimo.sg>",
@@ -524,6 +552,36 @@ class FakeOpenAI {
       const isPrestigeTransport15787 = body.input.includes(
         'New booking "Prestige Transport 15787" has been received',
       );
+      const isPrestigeTransportDepartureRoleText = body.input.includes(
+        'New booking "Prestige Transport 19001" has been received',
+      );
+      const companyAccountDescription =
+        body.text?.format?.schema?.properties?.bookingResult?.properties
+          ?.bookings?.items?.properties?.companyAccount?.description || "";
+      const dropoffDescription =
+        body.text?.format?.schema?.properties?.bookingResult?.properties
+          ?.bookings?.items?.properties?.dropoff?.description || "";
+      const supportsExplicitDepartureAndPassengerRoleContract =
+        body.instructions.includes(
+          "An exact labelled Route name Airport Departure always maps to DEP",
+        ) &&
+        body.instructions.includes(
+          "Passenger role, title, employer, or affiliation text inside or beside the labelled Passenger value is passenger context only.",
+        ) &&
+        body.instructions.includes("Approved Job Card Format memory:") &&
+        body.instructions.includes(
+          "Memory examples are interpretation rules only; never copy a historical passenger, contact, company, place, flight, price, or note into the current email result.",
+        ) &&
+        body.instructions.includes(
+          "The Email AI result is the richer app booking needed for CRM review, not the short driver-facing WhatsApp Job Card.",
+        ) &&
+        body.instructions.includes(
+          "When an exact Airport Departure supplies a Singapore street pickup and flight number but no named airport or terminal, complete the structured app booking with dropoff Changi Airport and no terminal.",
+        ) &&
+        companyAccountDescription.includes(
+          "Prestige Transport branding and passenger role, employer, or affiliation text are never a customer company",
+        ) &&
+        dropoffDescription.includes("return Changi Airport without a terminal");
       const supportsCompleteSemanticBookingContract =
         body.instructions.includes(
           "Read the complete email before producing the structured booking result.",
@@ -537,7 +595,48 @@ class FakeOpenAI {
       const isGroundBookerOrderRequest = body.input.includes(
         "order from Groundbooker Transzend [INQ#817905]",
       );
-      const analysis = isPrestigeTransport15787
+      const analysis = isPrestigeTransportDepartureRoleText
+        ? {
+            bookingResult: {
+              bookings: [
+                {
+                  bagCount: "3",
+                  bookerContact: "+819000000001",
+                  bookerEmail: "requester.person@example.com",
+                  bookerName: "Test Guest",
+                  bookingType: supportsExplicitDepartureAndPassengerRoleContract
+                    ? "DEP"
+                    : "TRF",
+                  companyAccount: supportsExplicitDepartureAndPassengerRoleContract
+                    ? ""
+                    : "Example Group",
+                  confidence: 0.98,
+                  customerPriceOverride: "",
+                  dropoff: "Changi Airport",
+                  extraStopLocation: "",
+                  extraStops: "",
+                  flightNumber: "JL36",
+                  needsReviewReasons: [],
+                  notes: "English-speaking driver preferred.",
+                  passengerContact: "+819000000001",
+                  passengerName: "Mr. Test Guest",
+                  pax: "1",
+                  pickup: "9 Example Rd, Singapore 238459",
+                  pickupDate: "2026-08-19",
+                  pickupTime: "19:00",
+                  vehicle: "Toyota Alphard 2.5",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.98,
+            reviewReasons: [],
+            suggestedReply: "",
+            summary: "Confirmed airport booking for a synthetic passenger.",
+          }
+        : isPrestigeTransport15787
         ? supportsCompleteSemanticBookingContract
           ? {
               bookingResult: {
@@ -1578,13 +1677,60 @@ try {
     "An honestly classified GroundBooker confirmation request must not emit a misleading confirmed-booking push.",
   );
 
+  fakeMailbox.uidNext = 110;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticPrestigeTransportDepartureRoleTextSource.length,
+    source: syntheticPrestigeTransportDepartureRoleTextSource,
+    uid: 109,
+  });
+
+  const prestigeTransportDepartureRoleTextParsed =
+    await runtime.runAdminEmailAiIntake();
+  assert.equal(prestigeTransportDepartureRoleTextParsed.ok, true);
+  assert.equal(prestigeTransportDepartureRoleTextParsed.parsed, 1);
+  assert.equal(prestigeTransportDepartureRoleTextParsed.skipped, 0);
+  assert.equal(providerRequestBodies.length, 9);
+  assert.equal(downloadCalls, 9);
+  assert.equal(intakeRows.length, 9);
+  assert.equal(
+    intakeRows[8].processing_status,
+    "queued",
+    "The repaired AI instruction contract must keep an explicit Airport Departure automatically reviewable without inferring a company from passenger role text.",
+  );
+  assert.equal(intakeRows[8].classification, "confirmed_booking");
+  assert.equal(
+    intakeRows[8].booking_parse_result.bookings[0].bookingType,
+    "DEP",
+  );
+  assert.equal(
+    intakeRows[8].booking_parse_result.bookings[0].companyAccount,
+    "",
+  );
+  assert.equal(
+    intakeRows[8].booking_parse_result.bookings[0].passengerContact,
+    "+819000000001",
+  );
+  assert.equal(intakeRows[8].booking_parse_result.bookings[0].pax, "1");
+  assert.equal(intakeRows[8].booking_parse_result.bookings[0].bagCount, "3");
+  assert.equal(intakeRows[8].booking_parse_result.bookings[0].bookerName, "");
+  assert.match(
+    intakeRows[8].review_reasons.join("\n"),
+    /Booker name conflicts with the labelled client email; confirm the Booker before Save \+ CRM\./,
+  );
+  assert.equal(adminDevicePushEvents.at(-1), "email_confirmed_booking");
+  assert.equal(adminDevicePushEvents.length, 7);
+
   const blockedSource = Buffer.from(
     syntheticAllowedSource
       .toString()
       .replaceAll("info@prestigelimo.sg", "other@example.test")
       .replace("synthetic-booking-1", "synthetic-booking-2"),
   );
-  fakeMailbox.uidNext = 110;
+  fakeMailbox.uidNext = 111;
   fakeMailbox.messages.push({
     envelope: {
       from: [{ address: "other@example.test" }],
@@ -1592,20 +1738,20 @@ try {
     },
     size: blockedSource.length,
     source: blockedSource,
-    uid: 109,
+    uid: 110,
   });
 
   const skipped = await runtime.runAdminEmailAiIntake();
   assert.equal(skipped.ok, true);
   assert.equal(skipped.parsed, 0);
   assert.equal(skipped.skipped, 1);
-  assert.equal(providerRequestBodies.length, 8);
-  assert.equal(downloadCalls, 8, "blocked sender body must not be fetched");
-  assert.equal(intakeRows.length, 8);
+  assert.equal(providerRequestBodies.length, 9);
+  assert.equal(downloadCalls, 9, "blocked sender body must not be fetched");
+  assert.equal(intakeRows.length, 9);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 7);
+  assert.equal(loaded.data.records.length, 8);
   assert.equal(
     loaded.data.records.some(
       (record) => record.id === intakeRows[1].id,
@@ -1627,10 +1773,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 800,
+    input_tokens: 900,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 640,
-    total_tokens: 1440,
+    output_tokens: 720,
+    total_tokens: 1620,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -1661,8 +1807,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 7);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 1440);
+  assert.equal(allowedReadBody.records.length, 8);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 1620);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -1778,7 +1924,7 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 5);
+  assert.equal(afterReviewRecords.length, 6);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",
@@ -1822,7 +1968,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 8);
+  assert.equal(providerRequestBodies.length, 9);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

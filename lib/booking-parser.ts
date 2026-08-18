@@ -2772,7 +2772,7 @@ function detectName(text: string, flight: string) {
     return cleanDetectedName(inlineName);
   }
 
-  if (!flight) {
+  if (!flight || isCompactJobCardWithArrowRoute(text)) {
     return "";
   }
 
@@ -3325,6 +3325,45 @@ function detectDatedAddressAirportDepartureShorthand(text: string) {
   };
 }
 
+function isCompactJobCardWithArrowRoute(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+
+  return (
+    /^(?:E\s*\/\s*)?(?:AVF|VVV|COMBI|E\s*-?\s*CLASS|S\s*-?\s*CLASS)\s*-\s*(?:MNG|DEP|TRF|DSP)\s*$/i.test(
+      lines[0] || "",
+    ) && lines.slice(1).some((line) => /\s(?:>|->|=>)\s/.test(line))
+  );
+}
+
+function detectCompactJobCardDriverNotes(text: string) {
+  if (!isCompactJobCardWithArrowRoute(text)) {
+    return "";
+  }
+
+  const lines = text
+    .split(/\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean);
+  const routeIndex = lines.findIndex((line) => /\s(?:>|->|=>)\s/.test(line));
+  const paxIndex = lines.findIndex(
+    (line, index) => index > routeIndex && /^(?:\d{1,2}\s*)?(?:pax|passengers?)\b/i.test(line),
+  );
+  const noteStartIndex = paxIndex >= 0 ? paxIndex + 1 : routeIndex + 1;
+
+  return lines
+    .slice(noteStartIndex)
+    .filter(
+      (line) =>
+        !/(?:S\$|SGD|\$\s*\d)|\b(?:customer\s+price|driver\s+payout|PayNow|billing|invoice)\b/i.test(
+          line,
+        ),
+    )
+    .join("\n");
+}
+
 function detectRoute(text: string, flight = "") {
   const compactAirportArrival = detectCompactAirportArrivalContext(text);
 
@@ -3344,7 +3383,8 @@ function detectRoute(text: string, flight = "") {
     };
   }
 
-  const rawPickup = lineValue(text, [
+  const compactJobCardHasArrowRoute = isCompactJobCardWithArrowRoute(text);
+  const rawPickup = compactJobCardHasArrowRoute ? "" : lineValue(text, [
     "pickup",
     "pickup address",
     "pickup location",
@@ -3363,7 +3403,7 @@ function detectRoute(text: string, flight = "") {
     "origin",
     "origin address",
   ]);
-  const rawDropoff = lineValue(text, [
+  const rawDropoff = compactJobCardHasArrowRoute ? "" : lineValue(text, [
     "dropoff",
     "dropoff address",
     "dropoff location",
@@ -3684,6 +3724,7 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
   const multiStopItinerary = detectMultiStopItinerary(operationalText);
   const flight = multiStopItinerary ? "" : detectFlight(operationalText);
   const secondaryFamilyFlightContext = detectSecondaryFamilyFlightContext(operationalText, flight);
+  const compactJobCardDriverNotes = detectCompactJobCardDriverNotes(operationalText);
   const terminalFlightDetails = detectTerminalFlightLineDetails(operationalText, flight);
   const sharedArrivalDropoff = terminalFlightDetails ? detectSharedArrivalDropoff(operationalText) : "";
   const detectedRouteValues = multiStopItinerary
@@ -3774,7 +3815,9 @@ export function parseBookingMessage(text: string, options: ParseBookingOptions =
     ]),
     ...(secondaryFamilyFlightContext?.driverNotes
       ? { driverNotes: secondaryFamilyFlightContext.driverNotes }
-      : {}),
+      : compactJobCardDriverNotes
+        ? { driverNotes: compactJobCardDriverNotes }
+        : {}),
     ...(quotedCustomerPrice.customerPriceOverride
       ? {
           customerPriceOverride: quotedCustomerPrice.customerPriceOverride,

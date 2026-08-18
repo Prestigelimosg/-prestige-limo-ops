@@ -7,8 +7,8 @@ const packagePath = "customer-companion/package.json";
 const appPath = "customer-companion/App.tsx";
 const navigationPath = "customer-companion/src/customer-navigation.ts";
 const installationPath = "customer-companion/src/customer-installation.ts";
-const iconPath = "customer-companion/assets/icon.png";
-const approvedIconPath = "driver-companion/assets/icon.png";
+const appStoreIconPath = "customer-companion/assets/app-icon.png";
+const headerIconPath = "customer-companion/assets/icon.png";
 const rootTsconfigPath = "tsconfig.json";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationPath = "scripts/test-preactivation-verification-suite.mjs";
@@ -19,8 +19,8 @@ const [
   appSource,
   navigationSource,
   installationSource,
-  iconBytes,
-  approvedIconBytes,
+  appStoreIconBytes,
+  headerIconBytes,
   rootTsconfigSource,
   ledgerSource,
   preactivationSource,
@@ -30,8 +30,8 @@ const [
   readFile(appPath, "utf8"),
   readFile(navigationPath, "utf8"),
   readFile(installationPath, "utf8"),
-  readFile(iconPath),
-  readFile(approvedIconPath),
+  readFile(appStoreIconPath),
+  readFile(headerIconPath),
   readFile(rootTsconfigPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationPath, "utf8"),
@@ -50,6 +50,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
+assert.equal(config.ios.buildNumber, "1");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.equal(
@@ -57,7 +58,8 @@ assert.equal(
   false,
   "Universal Links must wait for a separately approved domain-association change",
 );
-assert.equal(config.ios.icon, "./assets/icon.png");
+assert.equal(config.icon, "./assets/app-icon.png");
+assert.equal(config.ios.icon, "./assets/app-icon.png");
 assert.equal(
   rootTsconfig.exclude.includes("customer-companion"),
   true,
@@ -74,9 +76,27 @@ for (const dependency of [
 }
 
 assert.deepEqual(
-  createHash("sha256").update(iconBytes).digest("hex"),
-  createHash("sha256").update(approvedIconBytes).digest("hex"),
-  "The Customer app must retain the exact current approved Prestige icon",
+  [...appStoreIconBytes.subarray(0, 8)],
+  [137, 80, 78, 71, 13, 10, 26, 10],
+  "The Customer App Store icon must be a PNG",
+);
+assert.equal(appStoreIconBytes.readUInt32BE(16), 1024, "The Customer App Store icon must be 1024 pixels wide");
+assert.equal(appStoreIconBytes.readUInt32BE(20), 1024, "The Customer App Store icon must be 1024 pixels high");
+assert.equal(appStoreIconBytes[25], 2, "The Customer App Store icon must be RGB without an alpha channel");
+assert.equal(
+  createHash("sha256").update(appStoreIconBytes).digest("hex"),
+  "722d9df4d237a42fedf03bffa3f48078b148d796714ff17d18467b2b320f4f0e",
+  "The Customer app must retain the exact owner-approved Customer artwork",
+);
+assert.equal(
+  createHash("sha256").update(headerIconBytes).digest("hex"),
+  "b55f726603fbae4bf0c101fee8dc23e782089f6fcb7f963c2542c9fc297cb670",
+  "The Customer native header must retain its established artwork",
+);
+assert.equal(
+  appSource.includes('import prestigeIcon from "./assets/icon.png"'),
+  true,
+  "The Customer native header must keep using its established header artwork",
 );
 
 for (const phrase of [
@@ -144,6 +164,12 @@ for (const phrase of [
   "does not modify `/book` or `/my-bookings`",
   "does not prove App Store acceptance",
   "Universal Link association remains unmodified",
+  "Customer iOS Store Icon And TestFlight Preparation (2026-08-18)",
+  "`ios.buildNumber` remains explicitly `1`",
+  "`722d9df4d237a42fedf03bffa3f48078b148d796714ff17d18467b2b320f4f0e`",
+  "`b55f726603fbae4bf0c101fee8dc23e782089f6fcb7f963c2542c9fc297cb670`",
+  "`customer-companion/assets/app-icon.png`",
+  "No Apple App ID, App Store Connect record, EAS project, signing credential, build, submission, TestFlight assignment, external testing, App Review submission, or public release is created by this local checkpoint",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

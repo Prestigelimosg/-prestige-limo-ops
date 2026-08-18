@@ -25136,6 +25136,7 @@ export default function Home() {
     const customerAccountReference = customerDriverDetailsPortalAccountReference;
     const companyId = customerDriverDetailsPortalCompanyId;
     const bookerId = customerDriverDetailsPortalBookerId;
+    const agencyCustomerAccount = customerDriverDetailsPortalAgencyAccount;
 
     if (!bookingReference) {
       throw new Error("Load a saved booking before copying the customer app link.");
@@ -25149,12 +25150,13 @@ export default function Home() {
       throw new Error("Customer app link requires a saved CRM customer account. Use Save + CRM or load the saved booking first.");
     }
 
-    if (!companyId || !bookerId) {
+    if (!companyId || (!bookerId && !agencyCustomerAccount)) {
       throw new Error("Customer app link requires a verified CRM company and booker. Select both and save the booking first.");
     }
 
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
       body: JSON.stringify({
+        agencyCustomerAccount: customerDriverDetailsPortalAgencyAccount,
         bookerId,
         companyId,
         customerAccountReference,
@@ -27844,6 +27846,16 @@ export default function Home() {
     adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.booker_id) ||
     adminDispatchVerifiedIdentityId(dispatchReleaseLoadedBookingRecord?.booker_id) ||
     adminDispatchVerifiedIdentityId(customerDriverDetailsPortalLastSavedRecord?.booker_id);
+  const customerDriverDetailsPortalAgencyAccount = Boolean(
+    customerDriverDetailsPortalAccountReference &&
+      customerDriverDetailsPortalCompanyId &&
+      !customerDriverDetailsPortalBookerId &&
+      adminDispatchAgencyFolderOptions.some(
+        (account) =>
+          account.id === customerDriverDetailsPortalAccountReference &&
+          adminDispatchVerifiedIdentityId(account.companyId) === customerDriverDetailsPortalCompanyId,
+      ),
+  );
   const customerLiveLocationHelperText = customerDriverDetailsPortalAccountReference
     ? customerLiveLocation.helperText
     : "Save + CRM or load the saved booking first.";
@@ -34092,7 +34104,7 @@ export default function Home() {
       (!customerDriverDetailsPortalLinkCopyReady ||
         !customerDriverDetailsPortalAccountReference ||
         !customerDriverDetailsPortalCompanyId ||
-        !customerDriverDetailsPortalBookerId));
+        (!customerDriverDetailsPortalBookerId && !customerDriverDetailsPortalAgencyAccount)));
   const driverDispatchCopied =
     driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
   const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
@@ -45693,7 +45705,8 @@ export default function Home() {
                           ? "Complete the saved trip details first. Driver assignment and live location are not required for the app link."
                           : !customerDriverDetailsPortalAccountReference
                             ? "Save + CRM or load the saved booking before copying a customer app link."
-                            : !customerDriverDetailsPortalCompanyId || !customerDriverDetailsPortalBookerId
+                            : !customerDriverDetailsPortalCompanyId ||
+                                (!customerDriverDetailsPortalBookerId && !customerDriverDetailsPortalAgencyAccount)
                               ? "Select and save the verified CRM company and booker before copying a customer app link."
                             : "Copy customer-safe driver details with a customer app link. Live location appears only when ready; no provider message is sent."
                       }

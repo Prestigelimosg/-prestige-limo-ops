@@ -171,6 +171,11 @@ for (const fragment of [
   "customer_access_accounts",
   "assertActiveCustomerPortalAccessAccount",
   "ensureAdminCustomerPortalAccessAccount",
+  "agencyCustomerAccount?: unknown",
+  "verifyAgencyCustomerAccountRelationship",
+  '.from("customers")',
+  '.eq("customer_type", "hotel")',
+  '.from("bookings")',
   "revokeAdminCustomerPortalAccessAccount",
   ".eq(\"customer_account_reference\", customerAccountReference)",
   ".eq(\"account_status\", \"active\")",
@@ -208,6 +213,7 @@ assert.equal(
 assert.deepEqual(exportedMethods(adminRoute), ["DELETE", "GET", "PATCH", "POST", "PUT"], "admin portal access route methods");
 assertIncludes(adminRoute, "resolveAdminCustomerInvoiceBoundary(request)", "admin portal access route boundary");
 assertIncludes(adminRoute, "ensureAdminCustomerPortalAccessAccount", "admin portal access route invite activation");
+assertIncludes(adminRoute, "agencyCustomerAccount: body.agencyCustomerAccount", "admin portal access route agency intent");
 assertIncludes(adminRoute, "revokeAdminCustomerPortalAccessAccount", "admin portal access route revoke action");
 assertIncludes(adminRoute, "createCustomerPortalAccessLinkToken(account.data.customer_account_reference", "admin portal access route account-scoped link creation");
 assertIncludes(adminRoute, 'scope: "portal_account"', "admin portal access route portal-account scoped token");
@@ -250,6 +256,7 @@ assertExcludes(publicAccessRoute, forbiddenCustomerPortalAccessSurfacePattern, "
 for (const fragment of [
   "adminCustomerPortalAccessLinksApiPath",
   "const customerDriverDetailsPortalAccountReference =",
+  "const customerDriverDetailsPortalAgencyAccount =",
   "cleanReferenceText(appliedAdminBookingSnapshot?.customer_id)",
   "cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id)",
   "cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id)",
@@ -271,6 +278,7 @@ for (const fragment of [
   "fetch(adminCustomerPortalAccessLinksApiPath",
   "publicBookingReference: dispatchPublicBookingReference,",
   "customerAccountReference,",
+  "agencyCustomerAccount: customerDriverDetailsPortalAgencyAccount,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   "navigator.clipboard.writeText(",
@@ -292,6 +300,11 @@ assertExcludes(
   appPage,
   'data-admin-customer-driver-details-copy-with-portal-link-url="true"',
   "customer app link copy feedback must not visibly render the raw portal URL",
+);
+assertIncludes(
+  appPage,
+  "(!customerDriverDetailsPortalBookerId && !customerDriverDetailsPortalAgencyAccount)",
+  "dispatch customer app link permits only a verified agency account to omit the permanent booker",
 );
 assertExcludes(
   customerFinderSection,

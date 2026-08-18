@@ -1472,6 +1472,49 @@ assert.equal(
 assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.customerPriceOverride ?? '', '');
 assert.equal(parsedExactPastedPickupWaypointAirportDepartureJobCard.customerPriceOverrideReason ?? '', '');
 
+const jobCardFormatDepartureWithPickupInstruction = `AVF - DEP
+
+19 Aug (Wed), 1900hrs
+
+9 Example Rd > JL36
+
+1 pax
+
+Pickup: Level 2 Lobby
+English-speaking driver
+Hold placard: Test Guest`;
+const parsedJobCardFormatDepartureWithPickupInstruction =
+  parseJobCardBookingMessage(jobCardFormatDepartureWithPickupInstruction, {
+    referenceDate: new Date('2026-08-18T00:00:00+08:00'),
+  }) ?? {};
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.bookingType, 'DEP');
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.vehicle, 'AVF');
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.date, '2026-08-19');
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.time, '1900hrs');
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.flight, 'JL36');
+assert.equal(
+  parsedJobCardFormatDepartureWithPickupInstruction.pickup,
+  '9 Example Rd',
+  'A trailing Job Card pickup instruction must not replace the route pickup.',
+);
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.dropoff, 'Changi Airport');
+assert.equal(parsedJobCardFormatDepartureWithPickupInstruction.pax, '1');
+assert.equal(
+  parsedJobCardFormatDepartureWithPickupInstruction.name ?? '',
+  '',
+  'A Job Card driver-language instruction must not become the passenger name.',
+);
+assert.equal(
+  parsedJobCardFormatDepartureWithPickupInstruction.booker ?? '',
+  '',
+  'A Job Card driver-language instruction must not become the Booker.',
+);
+assert.equal(
+  parsedJobCardFormatDepartureWithPickupInstruction.driverNotes,
+  'Pickup: Level 2 Lobby\nEnglish-speaking driver\nHold placard: Test Guest',
+  'Supported trailing Job Card instructions must stay in the richer app booking.',
+);
+
 const exactPastedWaypointAirportDepartureFormMessage = `Pickup date and time	06-05-2026 8:00
 Order total amount	S$110.00
 Taxes	S$0.00 (0%)

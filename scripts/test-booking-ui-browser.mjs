@@ -256,6 +256,31 @@ const dashboardEmailAiEnquiryFixture = {
     "Thank you for your enquiry. We are checking availability and will confirm shortly.",
   summary: "Customer asks for airport pickup availability.",
 };
+const dashboardEmailAiFailedCapacityFixture = {
+  booking_parse_result: {
+    bookings: [],
+    multipleBookingsDetected: false,
+    rawWarnings: [],
+  },
+  canonical_booking_text: "",
+  classification: "uncertain",
+  confidence: 0,
+  created_at: "2026-08-17T05:02:05.000Z",
+  id: "00000000-0000-4000-8000-000000000104",
+  mailbox_address: "booking@prestigelimo.sg",
+  normalized_text:
+    "GENERAL\nTitle Synthetic Transport 90001\nService type Airport transfer\nTransfer type One Way\nPickup date and time 19-08-2026 19:00\nPICK UP LOCATION\n1 Test Road\nVEHICLE\nVehicle name Toyota Alphard 2.5\nBag count 3\nPassengers count 4\nCLIENT DETAILS\nFirst name Alex\nLast name Example\nPhone number +6500000001\nPassangers 1\nFlight No. ZZ900",
+  processing_status: "failed",
+  received_at: "2026-08-17T05:01:26.000Z",
+  review_reasons: [
+    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
+  ],
+  sender_address: "info@prestigelimo.sg",
+  subject: 'New booking "Synthetic Transport 90001" has been received',
+  suggested_reply: "",
+  summary:
+    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
+};
 const dashboardEmailAiGroundBookerOrderRequestFixture = {
   booking_parse_result: {
     bookings: [
@@ -6817,7 +6842,7 @@ async function runChromeTest() {
                 external_send: false,
                 ok: true,
                 records: (window.__prestigeAdminEmailAiIntake || []).filter(
-                  (record) => record.processing_status === "queued",
+                  (record) => ["queued", "failed"].includes(record.processing_status),
                 ),
                 token_usage: window.__prestigeAdminEmailAiTokenUsage,
                 version: "browser-private-email-ai-intake-mock",
@@ -8692,6 +8717,7 @@ async function runChromeTest() {
         ${JSON.stringify(dashboardEmailAiConfirmedBookingFixture)},
         ${JSON.stringify(dashboardEmailAiEnquiryFixture)},
         ${JSON.stringify(dashboardEmailAiGroundBookerOrderRequestFixture)},
+        ${JSON.stringify(dashboardEmailAiFailedCapacityFixture)},
       ];
       const refreshButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "Refresh Dashboard",
@@ -8709,7 +8735,7 @@ async function runChromeTest() {
             '[data-bookings-new-request-badge="true"]',
           );
 
-          return rows.length === 2 && count?.textContent.trim() === "2 email"
+          return rows.length === 3 && count?.textContent.trim() === "3 email"
             ? {
                 countAttribute: count.getAttribute("data-dashboard-email-ai-intake-count"),
                 dashboardBadgeText: dashboardBadge?.textContent.trim() || "",
@@ -8727,10 +8753,10 @@ async function runChromeTest() {
       10000,
       "private email AI rows inside existing Booking Requests",
     );
-    assert.equal(emailAiDashboardState.countAttribute, "2");
-    assert.equal(emailAiDashboardState.dashboardBadgeText, "2 new");
-    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "2");
-    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "2");
+    assert.equal(emailAiDashboardState.countAttribute, "3");
+    assert.equal(emailAiDashboardState.dashboardBadgeText, "3 new");
+    assert.equal(emailAiDashboardState.dashboardNewRequestCount, "3");
+    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "3");
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),
       true,
@@ -8761,6 +8787,43 @@ async function runChromeTest() {
       emailAiDashboardState.rowTexts.join(" "),
       /AI review only · no reply sent · no booking saved/,
     );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /Synthetic Transport 90001/,
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /Manual review required/,
+    );
+    assert.match(
+      emailAiDashboardState.rowTexts.join(" "),
+      /17 Aug 2026, 1301hrs SGT/,
+    );
+    const failedEmailAiState = await evaluate(`(() => {
+      const row = document.querySelector(
+        '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000104"]',
+      );
+      const buttons = [...(row?.querySelectorAll("button") || [])].map(
+        (button) => button.textContent.trim(),
+      );
+      const disclosure = row?.querySelector(
+        '[data-dashboard-email-ai-failure-source="true"]',
+      );
+
+      if (!row || !disclosure) {
+        return false;
+      }
+
+      disclosure.open = true;
+      return {
+        buttons,
+        sourceText: disclosure.textContent.replace(/\\s+/g, " ").trim(),
+      };
+    })()`);
+    assert.deepEqual(failedEmailAiState.buttons, []);
+    assert.match(failedEmailAiState.sourceText, /View original email/);
+    assert.match(failedEmailAiState.sourceText, /1 Test Road/);
+    assert.match(failedEmailAiState.sourceText, /Flight No\. ZZ900/);
 
     const openedEmailBookingReview = await evaluate(`(() => {
       const row = document.querySelector(

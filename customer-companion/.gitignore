@@ -1,0 +1,5 @@
+.expo/
+ios/
+node_modules/
+dist/
+*.log

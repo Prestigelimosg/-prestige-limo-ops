@@ -6,6 +6,7 @@ import {
   applyProductionDriverNativeDeviceAlertUpdate,
   applyProductionDriverJobDetailsUpdate,
   getProductionDriverJobPayloadForToken,
+  getProductionVerifiedDriverJobProfile,
 } from "../../../../lib/driver-job-link-production.ts";
 import {
   isProductionDriverJobLinkMode,
@@ -128,11 +129,29 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
     const result = await getProductionDriverJobPayloadForToken(token);
 
     if (result.ok) {
+      const driverAccountProfile = await getProductionVerifiedDriverJobProfile({
+        cookieHeader: request.headers.get("cookie"),
+        driverInstallationId: request.headers.get("x-prestige-driver-installation-id"),
+        token,
+      });
+
       return Response.json({
         device_alerts: publicDriverDeviceAlertReadiness(),
+        driver_portal: publicDriverPortalEnrollment({
+          jobKey: result.jobKey,
+          ok: true,
+        }),
         ok: true,
         mode: "production",
         payload: result.payload,
+        driver_account_profile: driverAccountProfile
+          ? {
+              contact: driverAccountProfile.contact,
+              name: driverAccountProfile.name,
+              plate: driverAccountProfile.plate,
+              vehicle_model: driverAccountProfile.vehicleModel,
+            }
+          : null,
       });
     }
 
@@ -164,6 +183,10 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
   // Mock-backed route skeleton only. No Supabase reads, no Driver Database reads, no production token table yet.
   return Response.json({
     device_alerts: publicDriverDeviceAlertReadiness(),
+    driver_portal: {
+      enrolled: false,
+      link_key: null,
+    },
     ok: true,
     mode: "mock",
     payload: result.payload,
@@ -204,6 +227,7 @@ export async function PATCH(request: Request, context: DriverJobRouteContext) {
     }
 
     const result = await applyProductionDriverJobDetailsUpdate({
+      driverInstallationId: request.headers.get("x-prestige-driver-installation-id"),
       driverPortalCookieHeader: request.headers.get("cookie"),
       token,
       ...details,

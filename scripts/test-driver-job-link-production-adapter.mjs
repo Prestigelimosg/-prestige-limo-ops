@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { GET } from "../app/api/driver-job/[token]/route.ts";
-import { PATCH } from "../app/api/driver-job/[token]/status/route.ts";
-import {
-  applyProductionDriverJobStatusUpdate,
-  getProductionDriverJobPayloadForToken,
-} from "../lib/driver-job-link-production.ts";
-import {
-  mockDriverJobTokens,
-  resetMockDriverJobLinkDataForTests,
-} from "../lib/driver-job-link-mock-store.ts";
+import "./test-next-server-only-hook.mjs";
+
+const [driverJobRoute, statusRoute, production, mockStore] = await Promise.all([
+  import("../app/api/driver-job/[token]/route.ts"),
+  import("../app/api/driver-job/[token]/status/route.ts"),
+  import("../lib/driver-job-link-production.ts"),
+  import("../lib/driver-job-link-mock-store.ts"),
+]);
+const { GET } = driverJobRoute;
+const { PATCH } = statusRoute;
+const { applyProductionDriverJobStatusUpdate, getProductionDriverJobPayloadForToken } = production;
+const { mockDriverJobTokens, resetMockDriverJobLinkDataForTests } = mockStore;
 
 const originalDriverMode = process.env.DRIVER_JOB_LINK_MODE;
 const originalPublicDriverMode = process.env.NEXT_PUBLIC_DRIVER_JOB_LINK_MODE;

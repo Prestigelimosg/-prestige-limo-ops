@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 const root = process.cwd();
 const contractPath = path.join(root, "lib/admin-email-ai-intake-contract.ts");
 const runtimePath = path.join(root, "lib/admin-email-ai-intake.ts");
+const schemaPath = path.join(root, "lib/admin-email-ai-intake-schema.ts");
 const bookingParserPath = path.join(root, "lib/booking-parser.ts");
 const cronRoutePath = path.join(root, "app/api/cron/admin-email-ai-intake/route.ts");
 const adminRoutePath = path.join(root, "app/api/admin-email-ai-intake/route.ts");
@@ -36,6 +37,7 @@ const groundBookerMigrationPath = groundBookerMigrationName
 for (const requiredPath of [
   contractPath,
   runtimePath,
+  schemaPath,
   bookingParserPath,
   cronRoutePath,
   adminRoutePath,
@@ -51,6 +53,7 @@ for (const requiredPath of [
 
 const contract = await import(pathToFileURL(contractPath).href);
 const runtimeSource = fs.readFileSync(runtimePath, "utf8");
+const schemaSource = fs.readFileSync(schemaPath, "utf8");
 const contractSource = fs.readFileSync(contractPath, "utf8");
 const bookingParserSource = fs.readFileSync(bookingParserPath, "utf8");
 const runtimeSourceWithoutEmailInstructions = runtimeSource.replace(
@@ -253,6 +256,44 @@ assert.match(
 );
 assert.match(
   runtimeSource,
+  /Passenger role, title, employer, or affiliation text inside or beside the labelled Passenger value is passenger context only\./,
+);
+assert.match(runtimeSource, /Approved Job Card Format memory:/);
+assert.match(
+  runtimeSource,
+  /Memory examples are interpretation rules only; never copy a historical passenger, contact, company, place, flight, price, or note into the current email result\./,
+);
+assert.match(
+  runtimeSource,
+  /The Email AI result is the richer app booking needed for CRM review, not the short driver-facing WhatsApp Job Card\./,
+);
+assert.match(runtimeSource, /Never invent a CRM identity or ID\./);
+assert.match(
+  runtimeSource,
+  /Dollar amounts shown in historical Job Card examples are not source facts for a new email and must never populate customerPriceOverride, companyAccount, billing, payout, or PayNow fields\./,
+);
+assert.match(
+  runtimeSource,
+  /An exact labelled Route name Airport Departure always maps to DEP/,
+);
+assert.match(
+  runtimeSource,
+  /generic Service type Airport transfer, Transfer type One Way, or similar wording must never override that explicit route label\./,
+);
+assert.match(
+  schemaSource,
+  /Prestige Transport branding and passenger role, employer, or affiliation text are never a customer company\./,
+);
+assert.match(
+  runtimeSource,
+  /When an exact Airport Departure supplies a Singapore street pickup and flight number but no named airport or terminal, complete the structured app booking with dropoff Changi Airport and no terminal\./,
+);
+assert.match(
+  schemaSource,
+  /For an exact Airport Departure with a Singapore street pickup and flight number but no named airport or terminal, return Changi Airport without a terminal\./,
+);
+assert.match(
+  runtimeSource,
   /Never copy Stripe or another payment method\/provider into booking pickup, drop-off, extraStopLocation, extraStops, route, or notes\./,
 );
 assert.match(runtimeSource, /adminEmailAiAppReviewClassifications/);
@@ -294,6 +335,11 @@ assert.doesNotMatch(
   sourceFactsValidationSource,
   /bookingResult\s*:\s*\{|(?:bagCount|bookingType|companyAccount|extraStopCount|extraStopLocation|flightNumber|passengerContact|passengerName|pax|pickup|pickupDate|pickupTime|vehicle)\s*:/,
   "The post-AI validator must accept or reject the provider result without populating structured booking fields from source evidence.",
+);
+assert.doesNotMatch(
+  runtimeSource,
+  /reconcileExplicitRouteAndUnsupportedCompanyAccount/,
+  "Email AI must understand the complete source; do not replace it with a raw-email field repair path.",
 );
 assert.match(
   runtimeSource,

@@ -31,6 +31,7 @@ import {
 } from "./src/driver-job-contract";
 import {
   driverNativeBiometricResultScript,
+  driverNativeJobOpenResultScript,
   driverNativeNotificationResultScript,
   driverTrackingResultScript,
   embeddedDriverBridgeBootstrap,
@@ -49,7 +50,7 @@ import {
 import {
   forgetNativeNotificationToken,
   loadNativeDriverJob,
-  nativeNotificationJobKey,
+  nativeNotificationOpenRequest,
   readNativeNotificationToken,
   rememberNativeDriverJob,
   rememberNativeNotificationToken,
@@ -66,6 +67,7 @@ type ScreenState = {
   jobUrl: string | null;
   message: string;
   navigationKey: number;
+  openTarget: "messages" | null;
 };
 
 const initialScreenState: ScreenState = {
@@ -73,6 +75,7 @@ const initialScreenState: ScreenState = {
   jobUrl: `${productionOrigin}/driver-portal`,
   message: "Driver Portal is ready.",
   navigationKey: 0,
+  openTarget: null,
 };
 
 Notifications.setNotificationHandler({
@@ -108,8 +111,11 @@ export default function App() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
   const [installationId, setInstallationId] = useState("");
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
   const biometricPromptBusyRef = useRef(false);
+  const biometricResumePendingRef = useRef(false);
   const bridgeBusyRef = useRef(false);
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
   const pendingOauthTokenRef = useRef("");
@@ -133,9 +139,14 @@ export default function App() {
     async function prepareInstallation() {
       try {
         const nextInstallationId = await readOrCreateDriverInstallationId();
-        const biometricEnabled = await isDriverBiometricUnlockEnabled();
+        const [biometricEnabled, notificationToken] = await Promise.all([
+          isDriverBiometricUnlockEnabled(),
+          readNativeNotificationToken(),
+        ]);
         if (!mounted) return;
 
+        setBiometricEnabled(biometricEnabled);
+        setNotificationEnabled(Boolean(notificationToken));
         setInstallationId(nextInstallationId);
         if (!biometricEnabled) {
           setUnlockState("ready");
@@ -161,7 +172,15 @@ export default function App() {
     const subscription = AppState.addEventListener("change", (nextState) => {
       const returningToForeground = previousState !== "active" && nextState === "active";
       previousState = nextState;
-      if (!returningToForeground || biometricPromptBusyRef.current) return;
+      if (nextState !== "active" && biometricPromptBusyRef.current) {
+        biometricResumePendingRef.current = true;
+      }
+      if (!returningToForeground) return;
+      if (biometricResumePendingRef.current) {
+        biometricResumePendingRef.current = false;
+        return;
+      }
+      if (biometricPromptBusyRef.current) return;
 
       void isDriverBiometricUnlockEnabled().then((enabled) => {
         if (enabled) void unlockDriverApp();
@@ -171,7 +190,10 @@ export default function App() {
     return () => subscription.remove();
   }, [unlockDriverApp]);
 
-  const receiveDriverJobUrl = useCallback(async (incomingUrl: string) => {
+  const receiveDriverJobUrl = useCallback(async (
+    incomingUrl: string,
+    openTarget: ScreenState["openTarget"] = null,
+  ) => {
     try {
       const incomingJob = parseDriverJobUrl(incomingUrl);
       const trackingState = await readTrackingState();
@@ -186,6 +208,7 @@ export default function App() {
           jobUrl: trackingState.job!.jobUrl,
           message: "Stop the current trip before opening another job.",
           navigationKey: current.navigationKey + 1,
+          openTarget: null,
         }));
         return;
       }
@@ -205,11 +228,13 @@ export default function App() {
             ? "Trip tracking is active."
             : "Private Driver Job opened securely in Prestige Driver.",
         navigationKey: current.navigationKey + 1,
+        openTarget,
       }));
     } catch (error) {
       setScreen((current) => ({
         ...current,
         message: readableFailure(error),
+        openTarget: null,
       }));
     }
   }, []);
@@ -252,6 +277,7 @@ export default function App() {
           jobUrl: trackingState.job!.jobUrl,
           message: "Trip tracking is active.",
           navigationKey: current.navigationKey + 1,
+          openTarget: null,
         }));
       }
     }
@@ -270,16 +296,16 @@ export default function App() {
     const openNotificationJob = async (
       response: Notifications.NotificationResponse | null,
     ) => {
-      const jobKey = nativeNotificationJobKey(
+      const request = nativeNotificationOpenRequest(
         response?.notification.request.content.data,
       );
-      if (!jobKey) {
+      if (!request) {
         return;
       }
 
-      const job = await loadNativeDriverJob(jobKey);
+      const job = await loadNativeDriverJob(request.jobKey);
       if (mounted && job) {
-        await receiveDriverJobUrl(job.jobUrl);
+        await receiveDriverJobUrl(job.jobUrl, request.openTarget);
       }
     };
 
@@ -342,12 +368,47 @@ export default function App() {
     [],
   );
 
+  const sendNativeJobOpenResult = useCallback(
+    (result: { jobKey: string; ok: boolean }) => {
+      webViewRef.current?.injectJavaScript(
+        driverNativeJobOpenResultScript(result),
+      );
+    },
+    [],
+  );
+
   const handleBridgeMessage = useCallback(
     async (event: WebViewMessageEvent) => {
       const request = parseDriverBridgeMessage(event.nativeEvent.data);
       const currentWebViewUrl = currentWebViewUrlRef.current;
 
       if (!request || !currentWebViewUrl) {
+        return;
+      }
+
+      if (
+        request.type === "native_job_open" &&
+        currentWebViewUrl !== `${productionOrigin}/driver-portal`
+      ) {
+        sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
+        return;
+      }
+
+      if (request.type === "native_notifications_register") {
+        const requestedFromPortal = currentWebViewUrl === `${productionOrigin}/driver-portal`;
+        if (requestedFromPortal !== Boolean(request.jobKey)) {
+          sendNativeNotificationResult({ ok: false, state: "failed" });
+          return;
+        }
+      }
+
+      if (request.type === "native_job_remember") {
+        try {
+          const currentJob = parseDriverJobUrl(currentWebViewUrl);
+          await rememberNativeDriverJob(request.jobKey, currentJob);
+        } catch {
+          // The exact private-page enrollment is best effort and never exposes its URL.
+        }
         return;
       }
 
@@ -358,6 +419,8 @@ export default function App() {
           );
         } else if (request.type === "native_notifications_register") {
           sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else if (request.type === "native_job_open") {
+          sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
         } else {
           sendTrackingResult(request.type, {
             active: screen.active,
@@ -371,10 +434,21 @@ export default function App() {
       bridgeBusyRef.current = true;
 
       try {
+        if (request.type === "native_job_open") {
+          const storedJob = await loadNativeDriverJob(request.jobKey);
+          if (!storedJob) {
+            sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
+            return;
+          }
+          await receiveDriverJobUrl(storedJob.jobUrl);
+          return;
+        }
+
         if (request.type === "native_biometrics_enable") {
           biometricPromptBusyRef.current = true;
           const enabled = await enableDriverBiometricUnlock();
           biometricPromptBusyRef.current = false;
+          if (enabled) setBiometricEnabled(true);
           webViewRef.current?.injectJavaScript(
             driverNativeBiometricResultScript({ ok: enabled }),
           );
@@ -382,7 +456,13 @@ export default function App() {
         }
 
         if (request.type === "native_notifications_register") {
-          const job = parseDriverJobUrl(currentWebViewUrl);
+          const job = request.jobKey
+            ? await loadNativeDriverJob(request.jobKey)
+            : parseDriverJobUrl(currentWebViewUrl);
+          if (!job) {
+            sendNativeNotificationResult({ ok: false, state: "failed" });
+            return;
+          }
           const existingToken = await readNativeNotificationToken();
           const permission = await Notifications.requestPermissionsAsync();
 
@@ -391,6 +471,7 @@ export default function App() {
               await unregisterNativeDriverNotifications(job, existingToken);
               await forgetNativeNotificationToken();
             }
+            setNotificationEnabled(false);
             sendNativeNotificationResult({ ok: false, state: "denied" });
             return;
           }
@@ -423,6 +504,7 @@ export default function App() {
             );
             throw error;
           }
+          setNotificationEnabled(true);
           sendNativeNotificationResult({ ok: true, state: "enabled" });
           return;
         }
@@ -472,6 +554,8 @@ export default function App() {
           );
         } else if (request.type === "native_notifications_register") {
           sendNativeNotificationResult({ ok: false, state: "failed" });
+        } else if (request.type === "native_job_open") {
+          sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
         } else {
           sendTrackingResult(request.type, {
             active: trackingState.active,
@@ -483,7 +567,13 @@ export default function App() {
         bridgeBusyRef.current = false;
       }
     },
-    [screen.active, sendNativeNotificationResult, sendTrackingResult],
+    [
+      receiveDriverJobUrl,
+      screen.active,
+      sendNativeJobOpenResult,
+      sendNativeNotificationResult,
+      sendTrackingResult,
+    ],
   );
 
   const openCalendarAuthorization = useCallback(
@@ -599,7 +689,12 @@ export default function App() {
             allowFileAccess
             allowsBackForwardNavigationGestures
             geolocationEnabled={false}
-            injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(installationId)}
+            injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(
+              installationId,
+              biometricEnabled,
+              notificationEnabled,
+              screen.openTarget,
+            )}
             javaScriptCanOpenWindowsAutomatically={false}
             mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
             onMessage={handleBridgeMessage}

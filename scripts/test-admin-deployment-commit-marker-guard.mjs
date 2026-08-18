@@ -61,7 +61,6 @@ assert.equal(
 );
 
 for (const [label, source] of [
-  ["customer portal", customerPage],
   ["driver job", driverPage],
   ["driver portal", driverPortalPage],
 ]) {
@@ -81,13 +80,19 @@ for (const [label, source] of [
 }
 
 assert.equal(
+  /PublicAppBuildMarker|data-public-app-build-marker/.test(customerPage),
+  false,
+  "compact customer My Bookings header must not render a build marker",
+);
+
+assert.equal(
   /PublicAppBuildMarker|PRESTIGE_(?:PUBLIC_)?BUILD_COMMIT|data-(?:admin-deployment-commit|public-app-build)-marker/.test(customerBookingPage),
   false,
   "public booking request page must stay outside the installed customer app build marker scope",
 );
 
 assert.ok(
-  ledger.includes("The installed Customer and Driver app surfaces show only the validated eight-character public build marker"),
+  ledger.includes("The installed Driver app surfaces show only the validated eight-character public build marker"),
   "implementation ledger missing installed public app deployment marker lock",
 );
 assert.ok(

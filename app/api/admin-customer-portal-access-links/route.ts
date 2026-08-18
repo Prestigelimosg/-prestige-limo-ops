@@ -57,6 +57,7 @@ export async function POST(request: Request) {
     );
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
+        agencyCustomerAccount: body.agencyCustomerAccount,
         bookerId: body.bookerId,
         companyId: body.companyId,
         customerAccountReference: body.customerAccountReference,

@@ -6,6 +6,7 @@ import ts from "typescript";
 
 const helperPath = "lib/driver-device-push-notification.ts";
 const productionPath = "lib/driver-job-link-production.ts";
+const statusPersistencePath = "lib/driver-job-status-persistence.ts";
 const notificationPath = "lib/customer-driver-app-notification-persistence.ts";
 const routePath = "app/api/driver-job/[token]/route.ts";
 const pagePath = "app/driver-job/[token]/page.tsx";
@@ -54,6 +55,7 @@ function transpileTypescript(source, filename) {
 const [
   helperSource,
   productionSource,
+  statusPersistenceSource,
   notificationSource,
   routeSource,
   pageSource,
@@ -75,6 +77,7 @@ const [
   [
     helperPath,
     productionPath,
+    statusPersistencePath,
     notificationPath,
     routePath,
     pagePath,
@@ -107,8 +110,16 @@ assertIncludes(
 );
 assertIncludes(
   nativeBridgeSource,
-  ['"native_notifications_register"'],
-  "parameterless native notification bridge",
+  [
+    '"native_notifications_register"',
+    '"native_job_open"',
+    '"native_job_remember"',
+    "job_key",
+    '"__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__"',
+    '"__PRESTIGE_DRIVER_OPEN_TARGET__"',
+    '"messages"',
+  ],
+  "bounded native notification target and stored-job bridge",
 );
 assertIncludes(
   pageSource,
@@ -121,8 +132,11 @@ assertIncludes(
     '"prestige-driver-native-notification-result"',
     "Job alerts are enabled in Prestige Driver.",
     "Job alerts are not enabled; check Messages & Updates in this job.",
+    'data-driver-job-app-updates="true"',
+    'scrollIntoView({ behavior: "smooth", block: "start" })',
+    '__PRESTIGE_DRIVER_OPEN_TARGET__ === "messages"',
   ],
-  "embedded acknowledgement and acknowledged-reload native notification handoff",
+  "embedded acknowledgement, acknowledged-reload, and message-target handoff",
 );
 assertIncludes(
   nativeAppSource,
@@ -135,9 +149,58 @@ assertIncludes(
     "registerNativeDriverNotifications",
     "rememberNativeDriverJob",
     "loadNativeDriverJob",
+    "nativeNotificationOpenRequest",
     'request.type === "native_notifications_register"',
+    "setNotificationEnabled",
+    "request.jobKey",
+    "await loadNativeDriverJob(request.jobKey)",
+    'request.type === "native_job_open"',
+    'request.type === "native_job_remember"',
+    'currentWebViewUrl !== `${productionOrigin}/driver-portal`',
+    "await rememberNativeDriverJob(request.jobKey, currentJob)",
+    "await receiveDriverJobUrl(storedJob.jobUrl)",
+    "await receiveDriverJobUrl(job.jobUrl, request.openTarget)",
   ],
-  "native iOS notification registration and tap handling",
+  "native iOS notification registration, safe target handoff, direct-link memory, and portal reopening",
+);
+assert.equal(
+  nativeAppSource.indexOf('if (request.type === "native_job_remember")') <
+    nativeAppSource.indexOf("if (bridgeBusyRef.current)"),
+  true,
+  "private-link enrollment must not be dropped behind an unrelated busy bridge action",
+);
+assertIncludes(
+  portalPageSource,
+  [
+    'type: "native_job_open"',
+    "job_key: job.job_key",
+    "ReactNativeWebView?.postMessage",
+  ],
+  "installed Driver Portal stored-job bridge",
+);
+assertIncludes(
+  pageSource,
+  [
+    'type: "native_job_remember"',
+    "job_key: result.driver_portal.link_key",
+  ],
+  "private Driver Job exact server-key memory bridge",
+);
+assertIncludes(
+  routeSource,
+  [
+    "driver_portal: publicDriverPortalEnrollment({",
+    "jobKey: result.jobKey",
+  ],
+  "private Driver Job server-issued opaque portal key",
+);
+assertIncludes(
+  statusPersistenceSource,
+  [
+    'import { opaqueDriverJobLinkKey } from "./driver-device-push-notification.ts"',
+    'jobKey: opaqueDriverJobLinkKey(String(resolvedLink.link.id || ""))',
+  ],
+  "same exact link-record key as the established portal job list",
 );
 const nativeLocalRegistrationFinalization = nativeAppSource.slice(
   nativeAppSource.indexOf("const registration = await registerNativeDriverNotifications"),
@@ -171,13 +234,14 @@ assertIncludes(
   nativeNotificationStorageSource,
   [
     'from "expo-secure-store"',
-    "nativeNotificationJobKey",
+    "nativeNotificationOpenRequest",
+    'open_target === "messages"',
     "rememberNativeDriverJob",
     "loadNativeDriverJob",
     "parseDriverJobUrl",
     "/^[0-9a-f]{64}$/",
   ],
-  "device-local opaque job mapping",
+  "device-local opaque job mapping and fixed safe notification target",
 );
 assertExcludes(
   nativeNotificationStorageSource,
@@ -297,6 +361,11 @@ assert.equal(
 assertIncludes(
   portalPageSource,
   [
+    '"prestige-driver-native-notification-result"',
+    "currentNativeNotificationsEnabled",
+    "nativeBridgeReady",
+    'type: "native_notifications_register"',
+    "job_key: notificationJob.job_key",
     "Enable Job Alerts",
     "Job Alerts Enabled",
     "Enable once on this device",
@@ -401,6 +470,10 @@ const tempNativeStoragePath = path.join(
   tempDir,
   "driver-companion/src/native-notifications.js",
 );
+const tempNativeBridgePath = path.join(
+  tempDir,
+  "driver-companion/src/driver-webview-bridge.js",
+);
 const tempNativeContractPath = path.join(
   tempDir,
   "driver-companion/src/driver-job-contract.js",
@@ -429,14 +502,25 @@ await writeFile(
   transpileTypescript(
     nativeNotificationStorageSource,
     path.join(process.cwd(), nativeNotificationStoragePath),
-  ).replace(
+  ).replaceAll(
+    'require("./driver-job-contract.ts")',
+    'require("./driver-job-contract.js")',
+  ),
+);
+await writeFile(
+  tempNativeBridgePath,
+  transpileTypescript(
+    nativeBridgeSource,
+    path.join(process.cwd(), nativeBridgePath),
+  ).replaceAll(
     'require("./driver-job-contract.ts")',
     'require("./driver-job-contract.js")',
   ),
 );
 await writeFile(
   tempNativeContractPath,
-  `exports.parseDriverJobUrl = (value) => {
+  `exports.productionOrigin = "https://app.prestigelimo.sg";
+exports.parseDriverJobUrl = (value) => {
   const parsed = new URL(value);
   const match = parsed.pathname.match(/^\\/driver-job\\/([A-Za-z0-9_-]{20,})$/);
   if (parsed.origin !== "https://app.prestigelimo.sg" || !match) throw new Error("invalid job");
@@ -459,6 +543,63 @@ exports.deleteItemAsync = async (key) => { validKey(key); values.delete(key); };
 exports.getItemAsync = async (key) => { validKey(key); return values.get(key) ?? null; };
 exports.setItemAsync = async (key, value) => { validKey(key); values.set(key, value); };
 `,
+);
+
+const nativeBridge = createRequire(import.meta.url)(tempNativeBridgePath);
+const nativeNotificationJobKey = "a".repeat(64);
+assert.deepEqual(
+  nativeBridge.parseDriverBridgeMessage(JSON.stringify({
+    job_key: nativeNotificationJobKey,
+    type: "native_notifications_register",
+  })),
+  {
+    jobKey: nativeNotificationJobKey,
+    type: "native_notifications_register",
+  },
+  "installed Driver Portal must hand one opaque stored-job key to the existing native notification lane",
+);
+assert.equal(
+  nativeBridge.parseDriverBridgeMessage(JSON.stringify({
+    job_key: "not-a-safe-job-key",
+    type: "native_notifications_register",
+  })),
+  null,
+  "native notification bridge must reject an invalid stored-job key",
+);
+const notificationBootstrap = nativeBridge.embeddedDriverBridgeBootstrap(
+  "11111111-1111-4111-8111-111111111111",
+  false,
+  true,
+  "messages",
+);
+assert.equal(
+  notificationBootstrap.includes(
+    'Object.defineProperty(window, "__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__"',
+  ),
+  true,
+  "native notification enabled state must be injected immutably from SecureStore",
+);
+assert.equal(
+  notificationBootstrap.includes("value: true"),
+  true,
+  "native notification bootstrap must carry the persisted enabled state",
+);
+assert.equal(
+  /localStorage|sessionStorage|document\.cookie/i.test(notificationBootstrap),
+  false,
+  "native notification enabled state must not be duplicated into browser storage",
+);
+assert.equal(
+  notificationBootstrap.includes(
+    'Object.defineProperty(window, "__PRESTIGE_DRIVER_OPEN_TARGET__"',
+  ),
+  true,
+  "native message target must be injected immutably for the exact WebView load",
+);
+assert.equal(
+  notificationBootstrap.includes('value: "messages"'),
+  true,
+  "native message notification must carry only the fixed messages target",
 );
 
 class QueryBuilder {
@@ -537,6 +678,27 @@ try {
     token: "b".repeat(32),
   };
   await nativeStorage.rememberNativeDriverJob(nativeJobKey, nativeJob);
+  assert.deepEqual(
+    nativeStorage.nativeNotificationOpenRequest({
+      job_key: nativeJobKey,
+      open_target: "messages",
+    }),
+    { jobKey: nativeJobKey, openTarget: "messages" },
+    "native message notification must resolve one opaque job key and fixed messages target",
+  );
+  assert.deepEqual(
+    nativeStorage.nativeNotificationOpenRequest({ job_key: nativeJobKey }),
+    { jobKey: nativeJobKey, openTarget: null },
+    "ordinary native job alerts must continue opening the job without a scroll target",
+  );
+  assert.deepEqual(
+    nativeStorage.nativeNotificationOpenRequest({
+      job_key: nativeJobKey,
+      open_target: "unknown",
+    }),
+    { jobKey: nativeJobKey, openTarget: null },
+    "unknown native targets must be ignored while preserving the safe job open",
+  );
   assert.deepEqual(
     await nativeStorage.loadNativeDriverJob(nativeJobKey),
     nativeJob,
@@ -716,6 +878,7 @@ try {
       booking_reference: "PRIVATE-BOOKING-REFERENCE",
       delivery_surface: "driver_app",
       driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      workflow_area: null,
     },
     {
       env: configuredEnv,
@@ -759,6 +922,7 @@ try {
       booking_reference: "PRIVATE-BOOKING-REFERENCE",
       delivery_surface: "driver_app",
       driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      workflow_area: "admin_driver_job_messages",
     },
     {
       env: configuredEnv,
@@ -789,6 +953,7 @@ try {
   assert.equal(nativeProviderRequest.body.body, "Job update available");
   assert.equal(nativeProviderRequest.body.to, nativeExpoPushToken);
   assert.match(nativeProviderRequest.body.data.job_key, /^[0-9a-f]{64}$/);
+  assert.equal(nativeProviderRequest.body.data.open_target, "messages");
   assertExcludes(
     JSON.stringify({ ...nativeProviderRequest.body, to: "" }),
     [
@@ -935,6 +1100,40 @@ try {
       "paynow",
     ],
     "one-hour pickup push visible-data privacy",
+  );
+
+  let nativePickupProviderRequest = null;
+  const nativePickupReminderAlert = await helper.sendDriverDevicePushAlertForPickupReminder(
+    nativeAlertClient,
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_id: 8,
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      notification_id: "22222222-2222-4222-8222-222222222222",
+    },
+    {
+      env: configuredEnv,
+      nativeFetch: async (url, init) => {
+        nativePickupProviderRequest = {
+          body: JSON.parse(init.body),
+          url,
+        };
+        return new Response(JSON.stringify({ data: { status: "ok" } }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      },
+    },
+  );
+  assert.equal(nativePickupReminderAlert.ok, true);
+  assert.equal(nativePickupReminderAlert.provider_request_count, 1);
+  assert.equal(nativePickupProviderRequest.url, "https://exp.host/--/api/v2/push/send");
+  assert.match(nativePickupProviderRequest.body.data.job_key, /^[0-9a-f]{64}$/);
+  assert.equal(
+    Object.hasOwn(nativePickupProviderRequest.body.data, "open_target"),
+    false,
+    "the one-hour pickup reminder must keep opening the normal job and never target Messages",
   );
   const mismatchedPickupDriver = await helper.sendDriverDevicePushAlertForPickupReminder(
     issuedJobClient,

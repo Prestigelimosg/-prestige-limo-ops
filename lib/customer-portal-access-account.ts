@@ -131,6 +131,14 @@ function verifiedIdentityId(value: unknown) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function activeCustomerDirectoryRow(row: Record<string, unknown>) {
+  const statuses = [textOrNull(row.account_status, 40), textOrNull(row.status, 40)]
+    .map((status) => status?.toLowerCase() || "")
+    .filter(Boolean);
+
+  return statuses.length > 0 && statuses.every((status) => status === "active");
+}
+
 function safeLinkRevision(value: unknown) {
   const cleaned = textOrNull(value, 80);
   const timestamp = cleaned ? Date.parse(cleaned) : Number.NaN;
@@ -241,6 +249,64 @@ function safeFailure<T>(error: string, status: number): AdminBookingResult<T> {
   };
 }
 
+async function verifyAgencyCustomerAccountRelationship(
+  customerAccountReference: string,
+  companyId: number,
+  client: CustomerPortalAccessAccountClient,
+): Promise<AdminBookingResult<null>> {
+  const customerId = verifiedIdentityId(customerAccountReference);
+
+  if (!customerId) {
+    return safeFailure(safeValidationError, 400);
+  }
+
+  const { data: customerRows, error: customerError } = await client
+    .from("customers")
+    .select("id, customer_type, account_status, status")
+    .eq("id", customerId)
+    .eq("customer_type", "hotel")
+    .limit(2);
+  const customers = Array.isArray(customerRows) ? customerRows : [];
+  const customer =
+    customers.length === 1 && customers[0] && typeof customers[0] === "object"
+      ? (customers[0] as Record<string, unknown>)
+      : null;
+
+  if (
+    customerError ||
+    !customer ||
+    verifiedIdentityId(customer.id) !== customerId ||
+    textOrNull(customer.customer_type, 40)?.toLowerCase() !== "hotel" ||
+    !activeCustomerDirectoryRow(customer)
+  ) {
+    return safeFailure(safeValidationError, 409);
+  }
+
+  const { data: bookingRows, error: bookingError } = await client
+    .from("bookings")
+    .select("company_id")
+    .eq("customer_id", customerId)
+    .limit(1000);
+
+  if (bookingError || !Array.isArray(bookingRows)) {
+    return safeFailure(safeMutationError, 500);
+  }
+
+  const linkedCompanyIds = new Set(
+    bookingRows
+      .map((row) =>
+        row && typeof row === "object" && !Array.isArray(row)
+          ? verifiedIdentityId((row as Record<string, unknown>).company_id)
+          : null,
+      )
+      .filter((value): value is number => Boolean(value)),
+  );
+
+  return linkedCompanyIds.size === 1 && linkedCompanyIds.has(companyId)
+    ? { data: null, ok: true }
+    : safeFailure(safeValidationError, 409);
+}
+
 export async function assertActiveCustomerPortalAccessAccount(
   customerAccountReferenceInput: unknown,
   clientInput?: CustomerPortalAccessAccountClient,
@@ -304,6 +370,7 @@ export async function assertActiveCustomerPortalAccessAccount(
 
 export async function ensureAdminCustomerPortalAccessAccount(
   input: {
+    agencyCustomerAccount?: unknown;
     bookerId: unknown;
     companyId: unknown;
     customerAccountReference: unknown;
@@ -321,10 +388,15 @@ export async function ensureAdminCustomerPortalAccessAccount(
   const customerAccountReference = safeCustomerPortalAccessAccountReference(
     input.customerAccountReference,
   );
+  const agencyCustomerAccount = input.agencyCustomerAccount === true;
   const companyId = verifiedIdentityId(input.companyId);
   const bookerId = verifiedIdentityId(input.bookerId);
 
-  if (!customerAccountReference || !companyId || !bookerId) {
+  if (
+    !customerAccountReference ||
+    !companyId ||
+    (agencyCustomerAccount ? Boolean(bookerId) : !bookerId)
+  ) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -334,6 +406,18 @@ export async function ensureAdminCustomerPortalAccessAccount(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  if (agencyCustomerAccount) {
+    const agencyRelationship = await verifyAgencyCustomerAccountRelationship(
+      customerAccountReference,
+      companyId,
+      clientResult.data,
+    );
+
+    if (!agencyRelationship.ok) {
+      return agencyRelationship;
+    }
   }
 
   const { data: referenceRows, error: referenceError } = await clientResult.data
@@ -354,15 +438,19 @@ export async function ensureAdminCustomerPortalAccessAccount(
 
   if (
     referenceRecord &&
-    ((referenceRecord.company_id && referenceRecord.company_id !== companyId) ||
-      (referenceRecord.booker_id && referenceRecord.booker_id !== bookerId))
+    (agencyCustomerAccount
+      ? Boolean(referenceRecord.company_id || referenceRecord.booker_id)
+      : (referenceRecord.company_id && referenceRecord.company_id !== companyId) ||
+        (referenceRecord.booker_id && referenceRecord.booker_id !== bookerId))
   ) {
     return safeFailure(safeValidationError, 409);
   }
 
-  let resolvedAccountReference = referenceRecord?.customer_account_reference || null;
+  let resolvedAccountReference =
+    referenceRecord?.customer_account_reference ||
+    (agencyCustomerAccount ? customerAccountReference : null);
 
-  if (!resolvedAccountReference) {
+  if (!resolvedAccountReference && !agencyCustomerAccount) {
     const { data: bookerRows, error: bookerError } = await clientResult.data
       .from(customerPortalAccessAccountTable)
       .select(customerPortalAccessAccountSelect)
@@ -386,13 +474,17 @@ export async function ensureAdminCustomerPortalAccessAccount(
     resolvedAccountReference = bookerRecord?.customer_account_reference || customerAccountReference;
   }
 
+  if (!resolvedAccountReference) {
+    return safeFailure(safeMutationError, 500);
+  }
+
   const now = new Date(Math.ceil((Date.now() + 1) / 1000) * 1000).toISOString();
   const payload = {
     account_status: "active",
     auth_provider: "supabase_auth",
     auth_user_id: deterministicPortalAuthUserId(resolvedAccountReference),
-    booker_id: bookerId,
-    company_id: companyId,
+    booker_id: agencyCustomerAccount ? null : bookerId,
+    company_id: agencyCustomerAccount ? null : companyId,
     customer_account_reference: resolvedAccountReference,
     safe_display_label: safeDisplayLabel(input.safeDisplayLabel, resolvedAccountReference),
     source_surface: "admin_api",

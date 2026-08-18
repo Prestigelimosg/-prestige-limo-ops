@@ -410,6 +410,10 @@ const guardChecks = [
     script: "scripts/test-customer-device-push-notification-guard.mjs",
   },
   {
+    label: "Customer thirty-minute pickup app reminder guard",
+    script: "scripts/test-customer-thirty-minute-pickup-reminder-guard.mjs",
+  },
+  {
     label: "customer booking status device alert guard",
     script: "scripts/test-customer-booking-status-device-alert-guard.mjs",
   },
@@ -440,6 +444,10 @@ const guardChecks = [
   {
     label: "web app install manifest guard",
     script: "scripts/test-web-app-install-manifest-guard.mjs",
+  },
+  {
+    label: "Customer iPhone companion foundation guard",
+    script: "scripts/test-customer-companion-foundation-guard.mjs",
   },
   {
     label: "admin and installed public app deployment commit marker guard",

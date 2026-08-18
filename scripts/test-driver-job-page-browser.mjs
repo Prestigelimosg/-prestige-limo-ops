@@ -190,7 +190,7 @@ async function runChromeTest() {
   const chrome = spawn(
     chromeBinary,
     [
-      "--headless=new",
+      ...(process.env.PRESTIGE_VISIBLE_CHROME === "1" ? [] : ["--headless=new"]),
       "--disable-gpu",
       "--disable-background-networking",
       "--disable-component-update",
@@ -245,10 +245,30 @@ async function runChromeTest() {
         window.__driverNativeBridgeMessages = [];
         window.__prestigeErrors = [];
         window.__prestigeConsoleErrors = [];
-        const embeddedDriverHarness = new URLSearchParams(window.location.search).get("embedded") === "1";
+        const embeddedDriverMode = new URLSearchParams(window.location.search).get("embedded") || "";
+        const embeddedDriverHarness = [
+          "1",
+          "account-profile",
+          "alerts-off",
+          "alerts-on",
+          "faceid-off",
+          "faceid-on",
+        ].includes(embeddedDriverMode);
         if (embeddedDriverHarness) {
           window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
           window.__PRESTIGE_DRIVER_INSTALLATION_ID__ = "77777777-7777-4777-8777-777777777777";
+          Object.defineProperty(window, "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__", {
+            configurable: false,
+            enumerable: false,
+            value: embeddedDriverMode === "faceid-on",
+            writable: false,
+          });
+          Object.defineProperty(window, "__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__", {
+            configurable: false,
+            enumerable: false,
+            value: embeddedDriverMode === "alerts-on",
+            writable: false,
+          });
           window.ReactNativeWebView = {
             postMessage: (rawMessage) => {
               try {
@@ -571,6 +591,9 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
+                session: embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-")
+                  ? "account"
+                  : "link",
                 version: "driver-portal-browser-mock",
               }), {
                 status: 200,
@@ -595,6 +618,14 @@ async function runChromeTest() {
             return originalFetch(...args).then(async (response) => {
               const result = await response.json();
               if (result.ok) {
+                if (method === "GET" && embeddedDriverMode === "account-profile") {
+                  result.driver_account_profile = {
+                    contact: "+65 9123 4567",
+                    name: "Mock Local Driver A",
+                    plate: "SLM1234A",
+                    vehicle_model: "Toyota Alphard",
+                  };
+                }
                 result.device_alerts = method === "PATCH"
                   ? {
                       enabled: true,
@@ -720,11 +751,13 @@ async function runChromeTest() {
           acknowledgedState: document.querySelector("[data-driver-job-acknowledged-state]")?.textContent.trim() || "",
           editorOpen: Boolean(document.querySelector("[data-driver-job-details-editor]")?.open),
           editorSummary: document.querySelector("[data-driver-job-details-editor-summary]")?.textContent.trim() || "",
+          editorVisible: Boolean(document.querySelector("[data-driver-job-details-editor]")),
           parseButtonText: document.querySelector("[data-driver-job-parse-details]")?.textContent.trim() || "",
           parseMessage: document.querySelector("[data-driver-job-parse-details-message]")?.textContent.trim() || "",
           saveAcknowledgeDisabled: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")?.disabled),
           saveAcknowledgeText: document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() || "",
           saveAcknowledgeVisible: Boolean(document.querySelector("[data-driver-job-save-acknowledge]")),
+          savedDetailsVisible: Boolean(document.querySelector("[data-driver-job-saved-details]")),
           title: document.querySelector("#driver-details-heading")?.textContent.trim() || "",
           rawDetailsVisible: Boolean(document.querySelector("[data-driver-job-details-raw]")),
           visible: Boolean(document.querySelector("[data-driver-primary-step='confirm-details']")),
@@ -840,7 +873,7 @@ async function runChromeTest() {
 
     const navigateToDriverJob = async (token, expectedText, search = "") => {
       const visibleExpectedText = expectedText === "Saved & Acknowledged"
-        ? "Confirmed driver details"
+        ? "Confirmed driver and vehicle details"
         : expectedText;
       await navigateAndWaitForBodyText(
         client,
@@ -1049,23 +1082,16 @@ async function runChromeTest() {
       const savedState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-save-acknowledge]");
-            const message = document.querySelector("[data-driver-job-details-message]");
             const savedDetails = document.querySelector("[data-driver-job-saved-details]");
             const acknowledgedState = document.querySelector("[data-driver-job-acknowledged-state]");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
 
-            return message?.textContent.trim() === "Driver details saved and job acknowledged. Driver Portal is ready on this device. Device alerts are enabled on this device." &&
-              acknowledgedState?.textContent.trim() === "Acknowledged" &&
+            return acknowledgedState?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Mock Local Driver A") &&
               savedDetails?.innerText.includes("+65 9123 4567") &&
               savedDetails?.innerText.includes("SLM1234A") &&
               savedDetails?.innerText.includes("Toyota Alphard") &&
               !savedDetails?.innerText.toLowerCase().includes("paynow")
               ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
                   savedText: savedDetails.innerText,
                 }
               : false;
@@ -1075,7 +1101,7 @@ async function runChromeTest() {
       );
 
       const afterSaveState = await pageState();
-      assert.equal(savedState.distance <= 16, true, "Expected driver details feedback near Save & Acknowledge button.");
+      assert.ok(savedState.savedText.includes("Confirmed driver and vehicle details"));
       assert.equal(
         afterSaveState.fetchCalls.length,
         beforeSaveState.fetchCalls.length + 1,
@@ -1088,13 +1114,13 @@ async function runChromeTest() {
       );
       assert.equal(
         afterSaveState.confirmDetails.saveAcknowledgeText,
-        "Saved & Acknowledged",
-        "Expected confirmed unchanged details to show the saved acknowledgement state.",
+        "",
+        "An acknowledged Job Link must remove the Save & Acknowledge control with its editor.",
       );
       assert.equal(
-        afterSaveState.confirmDetails.saveAcknowledgeDisabled,
-        true,
-        "Expected confirmed unchanged details to prevent a duplicate acknowledgement save.",
+        afterSaveState.confirmDetails.saveAcknowledgeVisible,
+        false,
+        "An acknowledged Job Link must not expose a duplicate acknowledgement save.",
       );
       assert.deepEqual(
         afterSaveState.postAcknowledgementTools,
@@ -1108,19 +1134,24 @@ async function runChromeTest() {
         "Expected one established Account block and one Calendar action after Job Status and before Report Issue.",
       );
       assert.equal(
-        afterSaveState.confirmDetails.editorOpen,
+        afterSaveState.confirmDetails.editorVisible,
         false,
-        "Expected the established Driver Details editor to collapse after successful Save & Acknowledge.",
+        "An acknowledged Job Link must not retain a misleading Driver Details editor.",
       );
-      assert.match(
+      assert.equal(
         afterSaveState.confirmDetails.editorSummary,
-        /Confirmed driver details.*Edit/,
-        "Expected one slim confirmed-details summary to retain the existing edit path.",
+        "",
+        "An acknowledged Job Link must not show an Edit or Review summary.",
+      );
+      assert.equal(
+        afterSaveState.confirmDetails.savedDetailsVisible,
+        true,
+        "Acknowledged Driver Details must remain visible as read-only confirmation.",
       );
       assert.equal(
         afterSaveState.deviceAlerts.helper,
-        "This same action enables Driver Job alerts on this device when supported and allowed.",
-        "Expected the existing acknowledgement action to explain its bounded device-alert permission.",
+        "",
+        "The pre-acknowledgement device-alert helper must leave with the completed editor.",
       );
       assert.equal(
         afterSaveState.deviceAlerts.permissionRequests,
@@ -1718,6 +1749,7 @@ async function runChromeTest() {
     assert.equal(validState.confirmDetails.visible, true, "Expected confirm driver and vehicle details card.");
     assert.equal(validState.confirmDetails.title, "Driver Details");
     assert.equal(validState.confirmDetails.editorOpen, true, "Expected Driver Details open before acknowledgement.");
+    assert.equal(validState.confirmDetails.editorVisible, true, "Expected Driver Details editor before acknowledgement.");
     assert.equal(validState.confirmDetails.rawDetailsVisible, true, "Expected compact paste driver details box.");
     assert.equal(validState.confirmDetails.parseButtonText, "Parse Driver Details");
     assert.equal(validState.confirmDetails.saveAcknowledgeText, "Save & Acknowledge Job");
@@ -1974,6 +2006,32 @@ async function runChromeTest() {
 
     await clickBlockedStatus("OTW", "Save & Acknowledge Job before updating status.", startingStatusText);
     await saveAndAcknowledgeJob();
+    const installedAccountJobState = await navigateToDriverJob(
+      mockDriverJobTokens.workflowOrder,
+      "Saved & Acknowledged",
+      "?embedded=account-profile",
+    );
+    assert.deepEqual(
+      installedAccountJobState.postAcknowledgementTools,
+      {
+        accountCount: 0,
+        afterStatus: true,
+        beforeReportIssue: true,
+        calendarActionCount: 1,
+        visible: true,
+      },
+      "A verified signed-in installed Driver must not see the new-driver account setup block.",
+    );
+    assert.equal(
+      installedAccountJobState.confirmDetails.editorVisible,
+      false,
+      "A verified signed-in Driver must see acknowledged details as read-only without an Edit control.",
+    );
+    assert.equal(
+      installedAccountJobState.confirmDetails.savedDetailsVisible,
+      true,
+      "The verified signed-in Driver must retain the confirmed details summary.",
+    );
     const embeddedAcknowledgedReloadState = await navigateToDriverJob(
       mockDriverJobTokens.workflowOrder,
       "Saved & Acknowledged",
@@ -2003,47 +2061,6 @@ async function runChromeTest() {
     );
     assertNoSensitiveText(embeddedAcknowledgedReloadState);
     await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
-    const acknowledgementEditReset = await evaluate(`(() => {
-      const input = document.querySelector("[data-driver-job-detail-vehicle-model]");
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-
-      if (!input || !setter) {
-        return false;
-      }
-
-      setter.call(input, "Toyota Alphard Executive");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      const button = document.querySelector("[data-driver-job-save-acknowledge]");
-      return {
-        disabled: Boolean(button?.disabled),
-        editorOpen: Boolean(document.querySelector("[data-driver-job-details-editor]")?.open),
-        savedDetailsVisible: Boolean(document.querySelector("[data-driver-job-saved-details]")),
-        text: button?.textContent.trim() || "",
-      };
-    })()`);
-    assert.deepEqual(
-      acknowledgementEditReset,
-      {
-        disabled: false,
-        editorOpen: true,
-        savedDetailsVisible: false,
-        text: "Save & Acknowledge Job",
-      },
-      "Editing confirmed details must restore the save action and allow acknowledgement resave.",
-    );
-    const acknowledgementResaveClicked = await evaluate(`(() => {
-      const button = document.querySelector("[data-driver-job-save-acknowledge]");
-      if (!button || button.disabled) return false;
-      button.click();
-      return true;
-    })()`);
-    assert.equal(acknowledgementResaveClicked, true, "Expected edited driver details to be resavable.");
-    await waitForCondition(
-      () => evaluate(`document.querySelector("[data-driver-job-save-acknowledge]")?.textContent.trim() === "Saved & Acknowledged"`),
-      10000,
-      "edited driver details acknowledgement resave",
-    );
     await saveDriverJobGoogleCalendar();
     await verifyDriverCalendarCallbackFeedback({
       expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
@@ -2368,6 +2385,129 @@ async function runChromeTest() {
       resourceCalls: [],
       visibleText: installedLinkSessionState.text,
     });
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=faceid-off", appUrl).toString(),
+      "Face ID app unlock",
+      "installed Driver Portal Face ID setup before enable",
+    );
+    const faceIdSetupBeforeEnable = await evaluate(`(() => ({
+      jobCount: document.querySelectorAll("[data-driver-portal-job]").length,
+      setupCount: document.querySelectorAll("[data-driver-portal-biometric-setup]").length,
+    }))()`);
+    assert.deepEqual(
+      faceIdSetupBeforeEnable,
+      { jobCount: 2, setupCount: 1 },
+      "A signed-in installed Driver account must show the existing Face ID setup panel only before Face ID is enabled.",
+    );
+    await evaluate(`window.dispatchEvent(new CustomEvent("prestige-driver-native-biometric-result", {
+      detail: { ok: true },
+    }))`);
+    await waitForCondition(
+      () => evaluate(`document.querySelectorAll("[data-driver-portal-biometric-setup]").length === 0`),
+      5000,
+      "immediate Face ID setup panel dismissal",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=faceid-on", appUrl).toString(),
+      "Upcoming & active jobs",
+      "installed Driver Portal persisted Face ID setup",
+    );
+    const faceIdSetupAfterReload = await evaluate(`(() => ({
+      jobCount: document.querySelectorAll("[data-driver-portal-job]").length,
+      setupCount: document.querySelectorAll("[data-driver-portal-biometric-setup]").length,
+      signInCount: document.querySelectorAll("[data-driver-portal-sign-in]").length,
+    }))()`);
+    assert.deepEqual(
+      faceIdSetupAfterReload,
+      { jobCount: 2, setupCount: 0, signInCount: 0 },
+      "A signed-in installed Driver account with persisted Face ID enabled must keep the setup panel absent after reload.",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=alerts-off", appUrl).toString(),
+      "Enable Job Alerts",
+      "installed Driver Portal native alert setup before enable",
+    );
+    const nativeAlertButtonClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-portal-enable-alerts="true"]');
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(nativeAlertButtonClicked, true, "Installed Driver Portal must expose the native alert action.");
+    const nativeAlertRequestState = await waitForCondition(
+      () => evaluate(`(() => {
+        const messages = window.__driverNativeBridgeMessages || [];
+        const request = messages.find((message) => message.type === "native_notifications_register");
+        return request
+          ? {
+              fetchCalls: window.__driverJobFetchCalls || [],
+              permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+              request,
+            }
+          : false;
+      })()`),
+      5000,
+      "installed Driver Portal native alert bridge request",
+    );
+    assert.deepEqual(
+      nativeAlertRequestState.request,
+      {
+        job_key: "a".repeat(64),
+        type: "native_notifications_register",
+      },
+      "Installed alert setup must send only the exact opaque stored-job key through the existing native bridge.",
+    );
+    assert.equal(
+      nativeAlertRequestState.permissionRequests,
+      0,
+      "Installed alert setup must not invoke the browser Notification permission API.",
+    );
+    assert.equal(
+      nativeAlertRequestState.fetchCalls.includes("POST /api/driver-portal/jobs"),
+      false,
+      "Installed alert setup must not use the browser push-subscription writer.",
+    );
+    await evaluate(`window.dispatchEvent(new CustomEvent("prestige-driver-native-notification-result", {
+      detail: { ok: true, state: "enabled" },
+    }))`);
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-portal-alert-setup]')?.getAttribute("data-driver-portal-alert-setup") === "enabled"`),
+      5000,
+      "immediate installed Driver alert enabled state",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=alerts-on", appUrl).toString(),
+      "Job Alerts Enabled",
+      "installed Driver Portal persisted native alert state",
+    );
+    const persistedNativeAlertState = await evaluate(`(() => ({
+      buttonDisabled: document.querySelector('[data-driver-portal-enable-alerts="true"]')?.disabled === true,
+      bridgeMessages: window.__driverNativeBridgeMessages || [],
+      permissionRequests: window.__driverDeviceAlertTest?.permissionRequests || 0,
+      setupState: document.querySelector('[data-driver-portal-alert-setup]')?.getAttribute("data-driver-portal-alert-setup") || "",
+    }))()`);
+    assert.deepEqual(
+      persistedNativeAlertState,
+      {
+        buttonDisabled: true,
+        bridgeMessages: [],
+        permissionRequests: 0,
+        setupState: "enabled",
+      },
+      "Persisted native alert state must stay enabled after reload without another prompt or bridge request.",
+    );
 
     await evaluate("window.__driverDeviceAlertTest.clearPortalSubscription()");
     await navigateAndWaitForBodyText(

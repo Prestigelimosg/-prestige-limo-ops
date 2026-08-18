@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "8",
-  "The approved eighth TestFlight build number must be explicit",
+  "13",
+  "The approved thirteenth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -117,6 +117,31 @@ for (const phrase of [
   "`ios.buildNumber` is explicitly `7`",
   "Driver iOS TestFlight Build 8 (2026-08-16)",
   "`ios.buildNumber` is explicitly `8`",
+  "Driver iOS TestFlight Build 9 (2026-08-16)",
+  "`ios.buildNumber` is explicitly `9`",
+  "Driver iOS TestFlight Build 10 (2026-08-17)",
+  "`ios.buildNumber` is explicitly `10`",
+  "Driver iOS TestFlight Build 11 (2026-08-17)",
+  "`ios.buildNumber` is explicitly `11`",
+  "Driver iOS TestFlight Build 12 (2026-08-17)",
+  "`ios.buildNumber` is explicitly `12`",
+  "Driver iOS TestFlight Build 13 (2026-08-17)",
+  "`ios.buildNumber` is explicitly `13`",
+  "94e64ea215a39acfd2a04e3281bd899919494392",
+  "one-hour-before-pickup reminder keep opening the normal exact job",
+  "13d2598347057b719c516a93453d9f2b8b4edc57",
+  "857ea362-40ca-4891-acae-f74cac5eec28",
+  "ad80844dd958208ba99ce3f76eca889c63a3b2cae5b08bb50c60c16c7ebeaa0f",
+  "0ab0561e-c0b7-4c75-847b-e30ac6b36788",
+  "195386d2-621a-460c-9ab8-02bf895c364a",
+  "Apple processed exact Build 13",
+  "only that Build 13 was assigned to the existing internal `Owner Testing` group",
+  "independent EAS/App Store status read reported `IN_BETA_TESTING`",
+  "ad86ccd7-5b8f-4435-85aa-4ea15d5fbe31",
+  "b97e106196b76ca5ba30e1811fa3e3baa7053bd8f7403ae6b2eb650cb9ee8fe6",
+  "d2ccdb5d-298f-44e6-b244-2fca96e83ab9",
+  "Apple successfully processed `1.0.0 - 11`",
+  "live GPS continued while the phone was locked and that Pickup Risk worked on that iPhone",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

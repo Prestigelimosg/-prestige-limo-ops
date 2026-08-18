@@ -962,6 +962,7 @@ async function terminateChromeProcess(chrome) {
 async function runChromeTest() {
   const reporter = createBrowserTestReporter("app-smoke-browser");
   const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
+  const headfulChrome = process.env.PRESTIGE_APP_SMOKE_HEADFUL === "true";
 
   assertCustomerNavigationRscPrefetchBoundary();
 
@@ -973,7 +974,7 @@ async function runChromeTest() {
   const chrome = spawn(
     chromeBinary,
     [
-      "--headless=new",
+      ...(headfulChrome ? ["--window-size=430,932"] : ["--headless=new"]),
       "--disable-gpu",
       "--disable-background-networking",
       "--disable-component-update",
@@ -1039,6 +1040,7 @@ async function runChromeTest() {
         const devicePushPattern = /\\/api\\/customer-device-push-subscriptions(?:[/?#]|$)/i;
         const tripUpdatesPattern = /\\/api\\/customer-app-notifications(?:[/?#]|$)/i;
         const quickRepliesPattern = /\\/api\\/customer-driver-quick-replies(?:[/?#]|$)/i;
+        const liveLocationPattern = new RegExp("/api/customer-live-location-map(?:[/?#]|$)", "i");
         const isCustomerPortalPage = () => window.location.pathname === "/my-bookings";
         const originalFetch = window.fetch.bind(window);
 
@@ -1064,6 +1066,15 @@ async function runChromeTest() {
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               ),
+            );
+          }
+
+          if (isCustomerPortalPage() && method === "GET" && liveLocationPattern.test(url)) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ customerVisible: false, ok: false }), {
+                headers: { "Content-Type": "application/json" },
+                status: 403,
+              }),
             );
           }
 
@@ -34188,42 +34199,14 @@ async function runChromeTest() {
         [],
         "Expected /book customer step cards to be removed",
       );
-      assert.equal(initialState.preSubmitReview.visible, true, "Expected /book pre-submit review clarity");
+      assert.equal(initialState.preSubmitReview.visible, false, "Expected /book pre-submit review box to be removed");
+      assert.equal(initialState.preSubmitReview.height, 0, "Expected removed /book pre-submit review to have no height");
+      assert.equal(initialState.preSubmitReview.title, "", "Expected removed /book pre-submit review to have no title");
+      assert.deepEqual(initialState.preSubmitReview.items, [], "Expected removed /book pre-submit review to have no items");
       assert.equal(
-        initialState.preSubmitReview.title,
-        "Review before submitting",
-        "Expected /book pre-submit review heading",
-      );
-      assert.equal(
-        initialState.preSubmitReview.height <= 230,
-        true,
-        `Expected /book pre-submit review to stay compact, got ${initialState.preSubmitReview.height}px`,
-      );
-      assert.deepEqual(
-        initialState.preSubmitReview.items,
-        [
-          {
-            key: "request-only",
-            text: "This is a booking request only, not a confirmed booking yet.",
-          },
-          {
-            key: "team-review",
-            text: "Our team will review and confirm availability before your booking is confirmed.",
-          },
-          {
-            key: "short-notice",
-            text: "Short-notice bookings under 24 hours require team review before confirmation.",
-          },
-          {
-            key: "no-finance-file",
-            text: "No price, payment, invoice, PDF, or billing file is created here.",
-          },
-          {
-            key: "urgent-help",
-            text: "For urgent or same-day help, contact our team directly.",
-          },
-        ],
-        "Expected /book pre-submit request-only and no-finance clarity",
+        initialState.feedbackText,
+        "",
+        "Expected /book not to show an informational feedback box before any customer action",
       );
       assert.equal(
         initialState.text.includes(
@@ -35007,24 +34990,9 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
       assert.equal(mobileState.nextSteps.visible, false, "Expected /book mobile step-card guidance to stay removed");
-      assert.equal(mobileState.preSubmitReview.visible, true, "Expected /book mobile pre-submit clarity");
-      assert.equal(
-        mobileState.preSubmitReview.text.includes(
-          "Short-notice bookings under 24 hours require team review before confirmation.",
-        ),
-        true,
-        "Expected /book mobile pre-submit clarity to explain short-notice review",
-      );
-      assert.equal(
-        mobileState.preSubmitReview.text.includes("This is a booking request only, not a confirmed booking yet."),
-        true,
-        "Expected /book mobile pre-submit clarity to stay request-only",
-      );
-      assert.equal(
-        mobileState.preSubmitReview.text.includes("No price, payment, invoice, PDF, or billing file is created here."),
-        true,
-        "Expected /book mobile pre-submit clarity to show no finance-file boundary",
-      );
+      assert.equal(mobileState.preSubmitReview.visible, false, "Expected /book mobile pre-submit review box to stay removed");
+      assert.equal(mobileState.preSubmitReview.height, 0, "Expected removed mobile pre-submit review to have no height");
+      assert.equal(mobileState.preSubmitReview.text, "", "Expected removed mobile pre-submit review to have no text");
       assert.equal(
         mobileState.customerIntakeHandoffVisible,
         false,
@@ -35284,6 +35252,7 @@ async function runChromeTest() {
         const search = document.querySelector("[data-customer-portal-search]");
         const searchRect = search?.getBoundingClientRect();
         const activeSection = document.querySelector("[data-customer-portal-section][data-active='true']");
+        const bookingList = document.querySelector("[data-customer-portal-list]");
         const rows = [...document.querySelectorAll("[data-customer-portal-row]")];
         const firstRowRect = rows[0]?.getBoundingClientRect();
         const activeFilter = document.querySelector("[data-customer-portal-filter][data-active='true']");
@@ -35327,7 +35296,9 @@ async function runChromeTest() {
         const documentHistoryRows = [...document.querySelectorAll("[data-customer-booking-document-history-row]")];
         const visibleLeakText = (documentHistory?.innerText ? text.replace(documentHistory.innerText, "") : text)
           .replace("Our team will review and confirm your booking shortly. Thank you", "");
-        const lowerVisibleLeakText = visibleLeakText.toLowerCase();
+        const lowerVisibleLeakText = visibleLeakText
+          .replaceAll("Driver / Admin alerts", "")
+          .toLowerCase();
         const help = document.querySelector("[data-customer-portal-help]");
         const helpRect = help?.getBoundingClientRect();
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
@@ -35363,6 +35334,23 @@ async function runChromeTest() {
         return {
           activeSection: activeSection?.textContent.trim() || "",
           activeFilter: activeFilter?.textContent.trim() || "",
+          bookingRowPresentation: {
+            listGap: bookingList ? Number.parseFloat(getComputedStyle(bookingList).rowGap || "0") : 0,
+            rows: rows.map((row) => {
+              const rect = row.getBoundingClientRect();
+              const style = getComputedStyle(row);
+
+              return {
+                borderBottomWidth: style.borderBottomWidth,
+                borderLeftWidth: style.borderLeftWidth,
+                borderRightWidth: style.borderRightWidth,
+                borderTopWidth: style.borderTopWidth,
+                boxShadow: style.boxShadow,
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+              };
+            }),
+          },
           buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
           buildMarkerText: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
           detailId: detail?.getAttribute("data-customer-portal-detail") || "",
@@ -36085,6 +36073,21 @@ async function runChromeTest() {
     const checkCustomerPortalRoute = async () => {
       const desktopViewport = { height: 900, label: "desktop customer portal", mobile: false, scale: 1, width: 1440 };
       const mobileViewport = { height: 812, label: "mobile customer portal", mobile: true, scale: 3, width: 375 };
+      const bookingRowDeviceViewports = [
+        { height: 568, label: "iPhone small 320px", mobile: true, scale: 2, width: 320 },
+        { height: 882, label: "Galaxy Fold cover 344px", mobile: true, scale: 3, width: 344 },
+        { height: 800, label: "Samsung Galaxy 360px", mobile: true, scale: 3, width: 360 },
+        { height: 812, label: "iPhone standard 375px", mobile: true, scale: 3, width: 375 },
+        { height: 854, label: "Samsung Galaxy 384px", mobile: true, scale: 3, width: 384 },
+        { height: 844, label: "iPhone modern 390px", mobile: true, scale: 3, width: 390 },
+        { height: 915, label: "Pixel modern Android 412px", mobile: true, scale: 2.625, width: 412 },
+        { height: 932, label: "iPhone large 430px", mobile: true, scale: 3, width: 430 },
+        { height: 1024, label: "tablet 768px", mobile: true, scale: 2, width: 768 },
+        { height: 1180, label: "iPad portrait 820px", mobile: true, scale: 2, width: 820 },
+        { height: 701, label: "Galaxy Fold unfolded 841px", mobile: true, scale: 1, width: 841 },
+        { height: 1366, label: "tablet landscape 1024px", mobile: false, scale: 1, width: 1024 },
+        { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
+      ];
 
       await setCustomerPortalViewportAndLoad(
         desktopViewport,
@@ -36120,16 +36123,29 @@ async function runChromeTest() {
         "customer portal saved bookings API rows",
       );
       assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
-      assert.equal(initialState.buildMarkerCount, 1, "Expected /my-bookings to show one shared public build marker");
-      assert.match(
-        initialState.buildMarkerText,
-        /^Build (?:[a-f0-9]{8}|unavailable)$/,
-        "Expected /my-bookings to show only the safe short build marker",
+      assert.equal(
+        initialState.bookingRowPresentation.listGap >= 8,
+        true,
+        "Expected each customer booking to have a visible gap from the next booking",
       );
       assert.equal(
-        initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
+        initialState.bookingRowPresentation.rows.every(
+          (row) =>
+            row.borderTopWidth === "1px" &&
+            row.borderRightWidth === "1px" &&
+            row.borderBottomWidth === "1px" &&
+            row.borderLeftWidth === "1px" &&
+            row.boxShadow === "none",
+        ),
         true,
-        "Expected /my-bookings customer-safe explanation",
+        "Expected every customer booking to use one thin border without a shadow",
+      );
+      assert.equal(initialState.buildMarkerCount, 0, "Expected compact /my-bookings header to hide the build marker");
+      assert.equal(initialState.text.includes("Driver / Admin alerts"), true);
+      assert.equal(
+        initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
+        false,
+        "Expected /my-bookings generic explanation to be removed",
       );
       assert.equal(initialState.guidance.visible, false, "Expected /my-bookings compact customer guidance to be removed");
       assert.equal(
@@ -36809,6 +36825,85 @@ async function runChromeTest() {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
 
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: mobileViewport.scale,
+        height: mobileViewport.height,
+        mobile: mobileViewport.mobile,
+        width: mobileViewport.width,
+      });
+      const lockedTrackingClicked = await evaluate(`(() => {
+        const button = document.querySelector(
+          "[data-customer-portal-driver-tracking-toggle='saved-booking-001']",
+        );
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(lockedTrackingClicked, true, "Expected the existing Track driver control to open");
+      const lockedTrackingState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const panel = document.querySelector(
+              "[data-customer-portal-driver-tracking-panel='saved-booking-001']",
+            );
+            if (!panel || panel.dataset.customerPortalDriverTrackingState !== "Locked") return false;
+            const panelRect = panel.getBoundingClientRect();
+            const message = panel.querySelector("p.break-words");
+            const messageRect = message?.getBoundingClientRect();
+            const lockedMessage = "Live location appears after the driver presses OTW and shares location.";
+            return {
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              hasMap: Boolean(panel.querySelector("[data-customer-portal-driver-tracking-map]")),
+              hasPlaceholder: Boolean(
+                panel.querySelector("[data-customer-portal-driver-tracking-placeholder]"),
+              ),
+              messageCount: panel.innerText.split(lockedMessage).length - 1,
+              messageInsidePanel: Boolean(
+                messageRect &&
+                  messageRect.left >= panelRect.left - 1 &&
+                  messageRect.right <= panelRect.right + 1
+              ),
+              messageText: message?.textContent.trim() || "",
+              panelHeight: panelRect.height,
+              panelOverflow: panel.scrollWidth > panel.clientWidth + 1,
+            };
+          })()`),
+        10000,
+        "customer portal compact locked tracking panel",
+      );
+      assert.equal(lockedTrackingState.hasMap, false, "Expected no map before live location is ready");
+      assert.equal(
+        lockedTrackingState.hasPlaceholder,
+        false,
+        "Expected no giant empty map placeholder while tracking is locked",
+      );
+      assert.ok(lockedTrackingState.messageCount <= 1, "Expected no duplicated locked tracking message");
+      assert.notEqual(lockedTrackingState.messageText, "", "Expected one compact safe tracking status");
+      assert.equal(lockedTrackingState.messageInsidePanel, true, "Expected locked tracking text inside the panel");
+      assert.equal(lockedTrackingState.panelOverflow, false, "Expected no locked tracking panel overflow");
+      assert.ok(lockedTrackingState.panelHeight < 180, `Expected compact locked panel, got ${lockedTrackingState.panelHeight}px`);
+      assert.ok(
+        lockedTrackingState.docScrollWidth <= lockedTrackingState.docClientWidth + 2,
+        "Expected the locked customer tracking view not to overflow the mobile viewport",
+      );
+      const visibleHoldMs = Math.min(
+        Math.max(Number(process.env.PRESTIGE_APP_SMOKE_VISIBLE_HOLD_MS || 0), 0),
+        15000,
+      );
+      if (visibleHoldMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, visibleHoldMs));
+      }
+      await evaluate(`document.querySelector(
+        "[data-customer-portal-driver-tracking-toggle='saved-booking-001']",
+      )?.click()`);
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: desktopViewport.scale,
+        height: desktopViewport.height,
+        mobile: desktopViewport.mobile,
+        width: desktopViewport.width,
+      });
+
       const driverDetailsAcknowledgementReadyState = await waitForCondition(
         () =>
           evaluate(`(() => {
@@ -37317,6 +37412,13 @@ async function runChromeTest() {
         mobileState.docScrollWidth <= mobileState.docClientWidth + 2,
         `Expected /my-bookings mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
       );
+      assert.equal(
+        mobileState.bookingRowPresentation.rows.every(
+          (row) => row.left >= 0 && row.right <= mobileState.docClientWidth,
+        ),
+        true,
+        "Expected every thin-bordered customer booking to remain inside the mobile viewport",
+      );
       assert.equal(mobileState.guidance.visible, false, "Expected /my-bookings mobile guidance to be removed");
       assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
       assert.deepEqual(
@@ -37502,8 +37604,94 @@ async function runChromeTest() {
       );
       await checkTelegramBoundary("/my-bookings mobile");
 
+      const bookingRowDeviceResults = [];
+
+      for (const viewport of bookingRowDeviceViewports) {
+        await setCustomerPortalViewportAndLoad(viewport);
+        const state = await readCustomerPortalState();
+        const detailScrollBefore = await evaluate("window.scrollY");
+        await clickCustomerPortalDetail("saved-booking-001");
+        let previousDetailScrollY = detailScrollBefore;
+        let detailScrollStableReads = 0;
+        const detailScrollAfter = await waitForCondition(
+          async () => {
+            const candidate = await evaluate(`(() => {
+              const detail = document.querySelector('[data-customer-portal-detail="saved-booking-001"]');
+              const detailRect = detail?.getBoundingClientRect();
+              const headingRect = detail?.querySelector("h2")?.getBoundingClientRect();
+
+              return {
+                detailTop: detailRect?.top ?? null,
+                headingBottom: headingRect?.bottom ?? null,
+                headingTop: headingRect?.top ?? null,
+                innerHeight: window.innerHeight,
+                scrollY: window.scrollY,
+              };
+            })()`);
+
+            if (Math.abs(candidate.scrollY - previousDetailScrollY) < 0.5) {
+              detailScrollStableReads += 1;
+            } else {
+              previousDetailScrollY = candidate.scrollY;
+              detailScrollStableReads = 0;
+            }
+
+            return candidate.scrollY > detailScrollBefore &&
+              candidate.detailTop !== null &&
+              candidate.headingBottom !== null &&
+              candidate.headingTop !== null &&
+              detailScrollStableReads >= 2 &&
+              candidate.headingBottom > 0 &&
+              candidate.headingTop < candidate.innerHeight
+              ? candidate
+              : false;
+          },
+          10000,
+          `${viewport.label} customer portal View details scroll`,
+        );
+        const borderIsThinAndShadowFree = state.bookingRowPresentation.rows.every(
+          (row) =>
+            row.borderTopWidth === "1px" &&
+            row.borderRightWidth === "1px" &&
+            row.borderBottomWidth === "1px" &&
+            row.borderLeftWidth === "1px" &&
+            row.boxShadow === "none",
+        );
+        const rowsStayContained = state.bookingRowPresentation.rows.every(
+          (row) => row.left >= 0 && row.right <= state.docClientWidth,
+        );
+
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected /my-bookings not to overflow horizontally`,
+        );
+        assert.equal(state.bookingRowPresentation.listGap >= 8, true, `${viewport.label}: expected booking-row gap`);
+        assert.equal(
+          state.bookingRowPresentation.rows.length > 0,
+          true,
+          `${viewport.label}: expected visible customer booking rows`,
+        );
+        assert.equal(
+          borderIsThinAndShadowFree,
+          true,
+          `${viewport.label}: expected one thin border and no shadow on every booking row`,
+        );
+        assert.equal(rowsStayContained, true, `${viewport.label}: expected every booking row inside the viewport`);
+
+        bookingRowDeviceResults.push({
+          detailScrollY: detailScrollAfter.scrollY,
+          detailTop: detailScrollAfter.detailTop,
+          docClientWidth: state.docClientWidth,
+          docScrollWidth: state.docScrollWidth,
+          label: viewport.label,
+          rowCount: state.bookingRowPresentation.rows.length,
+        });
+      }
+
       return {
         activeFilter: initialState.activeFilter,
+        bookingRowDeviceResults,
         forbiddenVisibleText: initialState.forbiddenVisibleText,
         mobile: {
           docClientWidth: mobileState.docClientWidth,
@@ -38447,20 +38635,21 @@ async function runChromeTest() {
       const savedDetailsState = await waitForCondition(
         () =>
           evaluate(`(() => {
-            const message = document.querySelector("[data-driver-job-details-message]");
             const savedDetails = document.querySelector("[data-driver-job-saved-details]");
             const acknowledged = document.querySelector("[data-driver-job-acknowledged-state]");
+            const detailsEditor = document.querySelector("[data-driver-job-details-editor]");
+            const saveButton = document.querySelector("[data-driver-job-save-acknowledge]");
 
-            return message?.textContent.trim() === "Driver details saved and job acknowledged." &&
-              acknowledged?.textContent.trim() === "Acknowledged" &&
+            return acknowledged?.textContent.trim() === "Acknowledged" &&
               savedDetails?.innerText.includes("Smoke Driver") &&
               savedDetails?.innerText.includes("+65 9000 2222") &&
               savedDetails?.innerText.includes("SMK1234Z") &&
               savedDetails?.innerText.includes("Mercedes V Class") &&
-              !savedDetails?.innerText.toLowerCase().includes("paynow")
+              !savedDetails?.innerText.toLowerCase().includes("paynow") &&
+              !detailsEditor &&
+              !saveButton
               ? {
                   fetchCalls: window.__driverJobFetchCalls || [],
-                  messageText: message.textContent.trim(),
                   savedDetailsText: savedDetails.innerText,
                 }
               : false;
@@ -40618,6 +40807,23 @@ async function runChromeTest() {
       };
     };
 
+    if (process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-portal") {
+      reporter.step("focused customer portal route");
+      const customerPortal = await checkCustomerPortalRoute();
+      console.log(
+        JSON.stringify(
+          reporter.summary({
+            customerPortal,
+            ok: true,
+            scope: "customer-portal",
+          }),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+
     if (process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-booking") {
       reporter.step("focused customer booking route");
       const customerBooking = await checkCustomerBookingRoute();
@@ -41353,8 +41559,8 @@ async function runChromeTest() {
       });
       assert.equal(
         customerBookingPreSubmitReviewVisible,
-        route.context === "/book",
-        `Expected customer booking pre-submit review visibility boundary for ${route.context}`,
+        false,
+        `Expected customer booking pre-submit review to stay removed for ${route.context}`,
       );
       const customerBookingDocumentHistoryVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-booking-document-history]"))`,

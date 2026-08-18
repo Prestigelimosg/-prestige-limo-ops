@@ -3,7 +3,6 @@
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 
 import {
   loadCustomerPortalSavedBookings,
@@ -347,7 +346,7 @@ function customerDevicePushFailureMessage(error: unknown) {
     error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
 
   if (/home screen|iphone app/.test(message)) {
-    return "On iPhone, use Share → Add to Home Screen, open My Bookings, then tap Alerts OFF once.";
+    return "Alerts are unavailable on this device.";
   }
 
   if (/permission|denied|blocked/.test(message)) {
@@ -441,8 +440,7 @@ export default function CustomerPortalPage() {
 
     if (!customerDevicePushIsSupported()) {
       setCustomerDevicePushState({
-        message:
-          "On iPhone, use Share → Add to Home Screen, open My Bookings, then tap Alerts OFF once.",
+        message: "Alerts are unavailable on this device.",
         publicKey: null,
         status: "unsupported",
         supported: false,
@@ -1377,7 +1375,7 @@ export default function CustomerPortalPage() {
       data-customer-portal-page="true"
     >
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
-        <header className="border-b border-slate-200 px-1 pb-3 pt-1">
+        <header className="border-b border-slate-200 px-1 pb-2 pt-1">
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div
               className="flex min-w-0 items-center gap-2"
@@ -1393,59 +1391,49 @@ export default function CustomerPortalPage() {
               ) : null}
               <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
             </div>
-            <button
-              aria-checked={customerDevicePushState.status === "enabled"}
-              className={`h-7 shrink-0 rounded-full border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
-                customerDevicePushState.status === "enabled"
-                  ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              }`}
-              data-customer-device-push-toggle="true"
-              disabled={
-                customerDevicePushAction !== null ||
-                !customerDevicePushState.supported ||
-                (customerDevicePushState.status !== "enabled" &&
-                  !customerDevicePushState.publicKey)
-              }
-              onClick={
-                customerDevicePushState.status === "enabled"
-                  ? handleCustomerDevicePushDisable
-                  : handleCustomerDevicePushEnable
-              }
-              role="switch"
-              title={customerDevicePushState.message}
-              type="button"
-            >
-              {customerDevicePushAction
-                ? customerDevicePushAction === "enable"
-                  ? "Turning ON..."
-                  : "Turning OFF..."
-                : customerDevicePushState.status === "enabled"
-                  ? "Alerts ON"
-                  : "Alerts OFF"}
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5" data-customer-alerts-control="true">
+              <span className="text-[11px] font-semibold text-slate-600">Driver / Admin alerts</span>
+              <button
+                aria-checked={customerDevicePushState.status === "enabled"}
+                aria-label={`Driver and Admin alerts ${customerDevicePushState.status === "enabled" ? "ON" : "OFF"}`}
+                className={`h-7 shrink-0 rounded-full border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
+                  customerDevicePushState.status === "enabled"
+                    ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+                data-customer-device-push-toggle="true"
+                disabled={
+                  customerDevicePushAction !== null ||
+                  !customerDevicePushState.supported ||
+                  (customerDevicePushState.status !== "enabled" &&
+                    !customerDevicePushState.publicKey)
+                }
+                onClick={
+                  customerDevicePushState.status === "enabled"
+                    ? handleCustomerDevicePushDisable
+                    : handleCustomerDevicePushEnable
+                }
+                role="switch"
+                title={customerDevicePushState.message}
+                type="button"
+              >
+                {customerDevicePushAction
+                  ? customerDevicePushAction === "enable"
+                    ? "Turning ON..."
+                    : "Turning OFF..."
+                  : customerDevicePushState.status === "enabled"
+                    ? "ON"
+                    : "OFF"}
+              </button>
+            </div>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">My Bookings</h1>
-          <PublicAppBuildMarker />
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">
-            Customers can view booking requests and booking history here after staff confirmation.
-          </p>
+          <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
           {companyContactLines.length > 0 ? (
             <p
-              className="mt-1 text-xs leading-5 text-slate-600"
+              className="text-xs leading-5 text-slate-600"
               data-customer-company-profile-contact="true"
             >
               {companyContactLines.join(" | ")}
-            </p>
-          ) : null}
-          {customerDevicePushState.status === "unsupported" ||
-          customerDevicePushState.status === "error" ? (
-            <p
-              aria-live="polite"
-              className="mt-1 text-xs leading-5 text-slate-600"
-              data-customer-device-push-feedback="true"
-            >
-              {customerDevicePushState.message}
             </p>
           ) : null}
         </header>
@@ -1650,6 +1638,7 @@ export default function CustomerPortalPage() {
           </section>
         ) : (
           <>
+            {portalBookingsLoadState === "ready" ? (
             <section
               aria-labelledby="booking-search-title"
               className="rounded-md border border-slate-200 bg-white p-3"
@@ -1763,6 +1752,7 @@ export default function CustomerPortalPage() {
                 </div>
               </div>
             </section>
+            ) : null}
 
             <section
               aria-labelledby="customer-portal-results-title"
@@ -1781,7 +1771,7 @@ export default function CustomerPortalPage() {
                   {emptyBookingsMessage}
                 </div>
               ) : (
-                <ul className="flex flex-col divide-y divide-slate-200" data-customer-portal-list="true">
+                <ul className="flex flex-col gap-2" data-customer-portal-list="true">
                   {visibleBookings.map((booking) => {
                     const canRequestReview = canRequestBookingReview(booking);
                     const isExpanded = expandedBooking?.id === booking.id;
@@ -1792,7 +1782,7 @@ export default function CustomerPortalPage() {
 
                     return (
                       <li
-                        className="flex flex-col gap-2 py-2"
+                        className="flex flex-col gap-2 rounded-md border border-slate-300 p-2"
                         data-customer-portal-row={booking.id}
                         data-customer-portal-status={booking.status}
                         key={booking.id}
@@ -1865,6 +1855,11 @@ export default function CustomerPortalPage() {
 
                                 if (!isExpanded) {
                                   void loadTripUpdatesForBooking(booking);
+                                  window.setTimeout(() => {
+                                    document
+                                      .querySelector(`[data-customer-portal-detail="${booking.id}"]`)
+                                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 0);
                                 } else if (activeTrackingBookingId === booking.id) {
                                   setActiveTrackingBookingId("");
                                 }
@@ -2341,7 +2336,7 @@ export default function CustomerPortalPage() {
                           >
                             <div className="flex flex-col gap-2 border-b border-sky-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-950">
+                                <p className="break-words text-sm font-semibold text-slate-950">
                                   {latestTripUpdate?.title || safeDriverTracking?.message || "Driver status to confirm"}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-600">
@@ -2363,37 +2358,31 @@ export default function CustomerPortalPage() {
                                 {trackingStatusLabel}
                               </span>
                             </div>
-                            <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
-                              {trackingReady && safeDriverTracking?.mapEmbedUrl ? (
-                                <iframe
-                                  className="h-full w-full border-0"
-                                  data-customer-portal-driver-tracking-map={expandedBooking.id}
-                                  loading="lazy"
-                                  referrerPolicy="no-referrer-when-downgrade"
-                                  src={safeDriverTracking.mapEmbedUrl}
-                                  title="Driver live map"
-                                />
-                              ) : (
-                                <div
-                                  className="flex h-full min-h-72 items-center justify-center px-5 text-center text-sm font-semibold text-slate-700"
-                                  data-customer-portal-driver-tracking-placeholder={expandedBooking.id}
-                                >
-                                  {safeDriverTracking?.message ||
-                                    "Tracking appears after the driver presses OTW and shares location."}
+                            {trackingReady && safeDriverTracking?.mapEmbedUrl ? (
+                              <>
+                                <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
+                                  <iframe
+                                    className="h-full w-full border-0"
+                                    data-customer-portal-driver-tracking-map={expandedBooking.id}
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer-when-downgrade"
+                                    src={safeDriverTracking.mapEmbedUrl}
+                                    title="Driver live map"
+                                  />
                                 </div>
-                              )}
-                            </div>
-                            <div className="grid gap-2 border-t border-sky-100 px-3 py-2 text-xs font-semibold text-slate-700 sm:grid-cols-3">
-                              <span data-customer-portal-driver-tracking-route={expandedBooking.id}>
-                                {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
-                              </span>
-                              <span data-customer-portal-driver-tracking-updated={expandedBooking.id}>
-                                {safeDriverTracking?.updatedAt ? `Updated ${safeDriverTracking.updatedAt}` : "Update pending"}
-                              </span>
-                              <span data-customer-portal-driver-tracking-accuracy={expandedBooking.id}>
-                                {safeDriverTracking?.accuracyLabel || "Location accuracy pending"}
-                              </span>
-                            </div>
+                                <div className="grid gap-2 border-t border-sky-100 px-3 py-2 text-xs font-semibold text-slate-700 sm:grid-cols-3">
+                                  <span data-customer-portal-driver-tracking-route={expandedBooking.id}>
+                                    {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
+                                  </span>
+                                  <span data-customer-portal-driver-tracking-updated={expandedBooking.id}>
+                                    {safeDriverTracking.updatedAt ? `Updated ${safeDriverTracking.updatedAt}` : "Update pending"}
+                                  </span>
+                                  <span data-customer-portal-driver-tracking-accuracy={expandedBooking.id}>
+                                    {safeDriverTracking.accuracyLabel || "Location accuracy pending"}
+                                  </span>
+                                </div>
+                              </>
+                            ) : null}
                           </div>
                         ) : null}
 

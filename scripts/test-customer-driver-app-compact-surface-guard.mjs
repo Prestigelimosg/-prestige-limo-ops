@@ -65,12 +65,30 @@ for (const fragment of [
   'data-customer-portal-sections="true"',
   'data-customer-portal-book-request-link="true"',
   'className="mx-auto flex w-full max-w-5xl flex-col gap-3"',
-  'className="border-b border-slate-200 px-1 pb-3 pt-1"',
+  'className="border-b border-slate-200 px-1 pb-2 pt-1"',
   'className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2"',
   '"min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition"',
   'className="rounded-md border border-slate-200 bg-white p-3"',
 ]) {
   assertIncludes(customerPortalPage, fragment, `/my-bookings compact UI fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'data-customer-alerts-control="true"',
+  "Driver / Admin alerts",
+  'className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl"',
+  'portalBookingsLoadState === "ready"',
+]) {
+  assertIncludes(customerPortalPage, fragment, `/my-bookings compact approved header ${fragment}`);
+}
+
+for (const removedFragment of [
+  "Customers can view booking requests and booking history here after staff confirmation.",
+  "On iPhone, use Share → Add to Home Screen",
+  "<PublicAppBuildMarker />",
+  'data-customer-device-push-feedback="true"',
+]) {
+  assertExcludes(customerPortalPage, removedFragment, `/my-bookings removed header guidance ${removedFragment}`);
 }
 
 for (const removedFragment of [
@@ -91,7 +109,7 @@ for (const fragment of [
   'className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6"',
   'className="space-y-1 border-b border-stone-200 pb-3"',
   'className="order-3 flex flex-col gap-2 pb-4"',
-  'className="order-[92] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"',
+  'className="order-[93] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"',
   'className="order-1 grid gap-2 md:grid-cols-4"',
   'className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 transition active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"',
   'className="h-11 w-full rounded-md border border-sky-400 bg-sky-50 px-3 text-sm font-semibold text-sky-950 transition active:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"',
@@ -123,6 +141,17 @@ for (const forbiddenFragment of [
 
 const customerRenderedSurface = customerPortalPage.slice(customerPortalPage.indexOf("<main"));
 const driverRenderedSurface = driverJobPage.slice(driverJobPage.indexOf("<main"));
+const approvedDriverDispatchExplanation =
+  "WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.";
+assertIncludes(
+  driverRenderedSurface,
+  approvedDriverDispatchExplanation,
+  "driver app bounded WhatsApp dispatch-context explanation",
+);
+const driverRenderedSurfaceWithoutDispatchExplanation = driverRenderedSurface.replace(
+  approvedDriverDispatchExplanation,
+  "",
+);
 
 for (const forbiddenPattern of [
   /driver_payout_rules|customer_rates|PayNow payout|payout comparisons|mock QA|dev archive/i,
@@ -135,9 +164,13 @@ for (const forbiddenPattern of [
 for (const forbiddenPattern of [
   /driver_payout_rules|customer_rates|PayNow|payout comparisons|mock QA|dev archive/i,
   /customer price|billing|invoice|payment|PDF|internal finance notes|internal admin notes/i,
-  /api\.telegram\.org|whatsapp|twilio|sendMail|new\s+Resend|maps\.googleapis|onemap/i,
 ]) {
   assertExcludes(driverRenderedSurface, forbiddenPattern, "driver app compact public surface");
 }
+assertExcludes(
+  driverRenderedSurfaceWithoutDispatchExplanation,
+  /api\.telegram\.org|whatsapp|twilio|sendMail|new\s+Resend|maps\.googleapis|onemap/i,
+  "driver app compact public provider surface outside approved dispatch explanation",
+);
 
 console.log("Customer/Driver app compact surface guard passed");

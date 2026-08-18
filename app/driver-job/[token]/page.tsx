@@ -41,6 +41,12 @@ type DriverJobApiResponse =
         enrolled: boolean;
         link_key: string | null;
       };
+      driver_account_profile?: {
+        contact: string;
+        name: string;
+        plate: string;
+        vehicle_model: string;
+      } | null;
       ok: true;
       mode: "mock" | "production";
       payload: SafeDriverJobPayload;
@@ -265,6 +271,8 @@ type EmbeddedDriverWindow = Window & {
     postMessage: (message: string) => void;
   };
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
+  __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
+  __PRESTIGE_DRIVER_OPEN_TARGET__?: "messages";
 };
 
 type DriverOtsPhotoProofState = {
@@ -819,14 +827,38 @@ function isVerifiedEmbeddedDriverApp() {
     typeof embeddedWindow.ReactNativeWebView?.postMessage === "function";
 }
 
+function currentEmbeddedDriverInstallationId() {
+  if (!isVerifiedEmbeddedDriverApp()) {
+    return "";
+  }
+
+  const installationId = (window as EmbeddedDriverWindow).__PRESTIGE_DRIVER_INSTALLATION_ID__;
+  return typeof installationId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(installationId)
+    ? installationId
+    : "";
+}
+
+function currentEmbeddedDriverOpenTarget() {
+  if (!isVerifiedEmbeddedDriverApp()) {
+    return null;
+  }
+
+  return (window as EmbeddedDriverWindow).__PRESTIGE_DRIVER_OPEN_TARGET__ === "messages"
+    ? "messages" as const
+    : null;
+}
+
 function postEmbeddedDriverBridgeMessage(
-  message: {
-    type:
-      | "native_notifications_register"
-      | "tracking_start"
-      | "tracking_stop"
-      | "tracking_terminal";
-  },
+  message:
+    | {
+        type:
+          | "native_notifications_register"
+          | "tracking_start"
+          | "tracking_stop"
+          | "tracking_terminal";
+      }
+    | { job_key: string; type: "native_job_remember" },
 ) {
   if (!isVerifiedEmbeddedDriverApp()) {
     return false;
@@ -1013,6 +1045,7 @@ export default function DriverJobPage() {
     useState<DriverOtsPhotoProofState>(emptyDriverOtsPhotoProofState);
   const [driverCalendar, setDriverCalendar] =
     useState<DriverCalendarState>(emptyDriverCalendarState);
+  const [hasVerifiedDriverAccount, setHasVerifiedDriverAccount] = useState(false);
   const [driverAccountSetup, setDriverAccountSetup] =
     useState<DriverAccountSetupState>(emptyDriverAccountSetupState);
   const driverAccountPasswordReady = driverAccountPasswordIsReady(driverAccountSetup.password);
@@ -1021,6 +1054,7 @@ export default function DriverJobPage() {
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverAppUpdatesAbortControllerRef = useRef<AbortController | null>(null);
   const driverAppUpdatesRequestSequenceRef = useRef(0);
+  const driverAppUpdatesOpenTargetHandledRef = useRef(false);
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
   const driverLiveLocationPostInFlightRef = useRef(false);
@@ -1049,6 +1083,31 @@ export default function DriverJobPage() {
 
     return () => window.cancelAnimationFrame(embeddedDetectionFrame);
   }, []);
+
+  useEffect(() => {
+    if (
+      pageState.kind !== "ready" ||
+      !embeddedDriverApp ||
+      currentEmbeddedDriverOpenTarget() !== "messages" ||
+      driverAppUpdatesOpenTargetHandledRef.current
+    ) {
+      return;
+    }
+
+    const updatesSection = document.querySelector<HTMLElement>(
+      '[data-driver-job-app-updates="true"]',
+    );
+    if (!updatesSection) {
+      return;
+    }
+
+    driverAppUpdatesOpenTargetHandledRef.current = true;
+    const scrollFrame = window.requestAnimationFrame(() => {
+      updatesSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(scrollFrame);
+  }, [embeddedDriverApp, pageState.kind]);
 
   const requestEmbeddedNativeNotificationsOnce = useCallback(() => {
     if (
@@ -1341,15 +1400,20 @@ export default function DriverJobPage() {
       setDriverLiveLocation(emptyDriverLiveLocationState);
       setDriverOtsPhotoProof(emptyDriverOtsPhotoProofState);
       setDriverCalendar(emptyDriverCalendarState);
+      setHasVerifiedDriverAccount(false);
       setDriverAccountSetup(emptyDriverAccountSetupState);
       setSavedDriverDetails(null);
       setStatusFeedback(null);
       setWorkflowStatus("assigned");
 
       try {
+        const nativeInstallationId = currentEmbeddedDriverInstallationId();
         // Mock-backed until William approves the secure Supabase driver_job_links table and RLS/API policy.
         const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
           cache: "no-store",
+          headers: nativeInstallationId
+            ? { "x-prestige-driver-installation-id": nativeInstallationId }
+            : undefined,
         });
         const result = await response.json() as DriverJobApiResponse;
 
@@ -1367,14 +1431,33 @@ export default function DriverJobPage() {
           return;
         }
 
-        const loadedDriverDetails = {
-          contact: result.payload.assignedDriver.contact,
-          name: result.payload.assignedDriver.name,
-          plate: result.payload.assignedDriver.plate,
-          vehicleModel: result.payload.assignedDriver.vehicleModel,
-        };
+        if (
+          isVerifiedEmbeddedDriverApp() &&
+          typeof result.driver_portal?.link_key === "string" &&
+          /^[0-9a-f]{64}$/.test(result.driver_portal.link_key)
+        ) {
+          postEmbeddedDriverBridgeMessage({
+            job_key: result.driver_portal.link_key,
+            type: "native_job_remember",
+          });
+        }
+
+        const loadedDriverDetails = result.payload.acknowledged || !result.driver_account_profile
+          ? {
+              contact: result.payload.assignedDriver.contact,
+              name: result.payload.assignedDriver.name,
+              plate: result.payload.assignedDriver.plate,
+              vehicleModel: result.payload.assignedDriver.vehicleModel,
+            }
+          : {
+              contact: result.driver_account_profile.contact,
+              name: result.driver_account_profile.name,
+              plate: result.driver_account_profile.plate,
+              vehicleModel: result.driver_account_profile.vehicle_model,
+            };
 
         setDriverDetails(loadedDriverDetails);
+        setHasVerifiedDriverAccount(Boolean(result.driver_account_profile));
         setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
         setAcknowledged(result.payload.acknowledged);
         setDriverDeviceAlertReadiness(
@@ -1690,6 +1773,7 @@ export default function DriverJobPage() {
       : await prepareDriverDeviceAlert(driverDeviceAlertReadiness);
 
     try {
+      const nativeInstallationId = currentEmbeddedDriverInstallationId();
       const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
         body: JSON.stringify({
           driver_contact: nextDetails.contact,
@@ -1700,6 +1784,9 @@ export default function DriverJobPage() {
         }),
         headers: {
           "Content-Type": "application/json",
+          ...(nativeInstallationId
+            ? { "x-prestige-driver-installation-id": nativeInstallationId }
+            : {}),
         },
         method: "PATCH",
       });
@@ -2870,6 +2957,7 @@ export default function DriverJobPage() {
                 >
                   {acknowledged ? "Acknowledged" : "Paste or confirm driver details once before starting the job."}
                 </p>
+                {!acknowledged ? (
                 <details
                   className="group"
                   data-driver-job-details-editor="true"
@@ -3007,6 +3095,7 @@ export default function DriverJobPage() {
                 </div>
                   </div>
                 </details>
+                ) : null}
                 {savedDriverDetails ? (
                   <div
                     className="space-y-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-sm text-emerald-900"
@@ -3253,15 +3342,16 @@ export default function DriverJobPage() {
 
             {acknowledged ? (
               <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">
-                <div
-                  className={`rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 ${
-                    driverAccountSetup.status === "created" ? "" : "space-y-2"
-                  }`}
-                  data-driver-account-collapsed={driverAccountSetup.status === "created" ? "true" : "false"}
-                  data-driver-account-setup="true"
-                >
-                  {driverAccountSetup.status === "created" ? (
-                    <div className="space-y-1" data-driver-account-success-summary="true">
+                {!hasVerifiedDriverAccount ? (
+                  <div
+                    className={`rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 ${
+                      driverAccountSetup.status === "created" ? "" : "space-y-2"
+                    }`}
+                    data-driver-account-collapsed={driverAccountSetup.status === "created" ? "true" : "false"}
+                    data-driver-account-setup="true"
+                  >
+                    {driverAccountSetup.status === "created" ? (
+                      <div className="space-y-1" data-driver-account-success-summary="true">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
                         <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
@@ -3273,9 +3363,9 @@ export default function DriverJobPage() {
                           {driverAccountSetup.feedback.text}
                         </p>
                       ) : null}
-                    </div>
-                  ) : (
-                    <>
+                      </div>
+                    ) : (
+                      <>
                       <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
                       <p className="text-xs font-medium leading-5 text-violet-900">
                         Optional. This acknowledged Job Link can create one account only. You may continue every
@@ -3406,9 +3496,10 @@ export default function DriverJobPage() {
                           {driverAccountSetup.feedback.text}
                         </p>
                       ) : null}
-                    </>
-                  )}
-                </div>
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 <div
                   className="space-y-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-2"
                   data-driver-job-calendar-collapsed={driverCalendar.status === "cal_saved" ? "true" : "false"}

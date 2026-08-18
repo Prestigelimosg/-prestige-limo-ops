@@ -30,8 +30,10 @@ type DriverPortalAlertState =
 
 type DriverNativeWindow = Window & {
   ReactNativeWebView?: { postMessage: (message: string) => void };
+  __PRESTIGE_DRIVER_BIOMETRIC_ENABLED__?: boolean;
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
+  __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
 };
 
 type DriverAccountSignInState = "idle" | "signing_in" | "failed";
@@ -54,6 +56,14 @@ function currentNativeInstallationId() {
   return nativeWindow.__PRESTIGE_DRIVER_NATIVE_APP__ === true && typeof value === "string"
     ? value
     : "";
+}
+
+function currentNativeBiometricEnabled() {
+  return (window as DriverNativeWindow).__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__ === true;
+}
+
+function currentNativeNotificationsEnabled() {
+  return (window as DriverNativeWindow).__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__ === true;
 }
 
 function subscribeToStaticNativeBridge() {
@@ -139,6 +149,11 @@ export default function DriverPortalPage() {
     currentNativeInstallationId,
     () => "",
   );
+  const nativeBiometricEnabled = useSyncExternalStore(
+    subscribeToStaticNativeBridge,
+    currentNativeBiometricEnabled,
+    () => false,
+  );
   const nativeBridgeReady = Boolean(
     installationId &&
     typeof (window as DriverNativeWindow).ReactNativeWebView?.postMessage === "function",
@@ -148,6 +163,8 @@ export default function DriverPortalPage() {
   const [accountPassword, setAccountPassword] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
+  const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
+  const biometricSetupEnabled = nativeBiometricEnabled || biometricEnabledThisSession;
   const installedAccountSignInRequired = Boolean(
     installationId &&
     (
@@ -195,7 +212,13 @@ export default function DriverPortalPage() {
         publicKey,
         ready: result.device_alerts?.ready === true && Boolean(publicKey),
       });
-      setAlertState(await readDriverPortalAlertState());
+      setAlertState(
+        nativeInstallationId
+          ? currentNativeNotificationsEnabled()
+            ? "enabled"
+            : "available"
+          : await readDriverPortalAlertState(),
+      );
       setReadState({
         accountSession: result.session === "account",
         kind: "ready",
@@ -217,6 +240,9 @@ export default function DriverPortalPage() {
   useEffect(() => {
     function onBiometricResult(event: Event) {
       const result = event as CustomEvent<{ ok?: boolean }>;
+      if (result.detail?.ok === true) {
+        setBiometricEnabledThisSession(true);
+      }
       setBiometricFeedback(
         result.detail?.ok === true
           ? "Face ID is enabled for future app unlocks."
@@ -226,6 +252,49 @@ export default function DriverPortalPage() {
 
     window.addEventListener("prestige-driver-native-biometric-result", onBiometricResult);
     return () => window.removeEventListener("prestige-driver-native-biometric-result", onBiometricResult);
+  }, []);
+
+  useEffect(() => {
+    function onNativeNotificationResult(event: Event) {
+      const result = event as CustomEvent<{
+        ok?: boolean;
+        state?: "denied" | "enabled" | "failed";
+      }>;
+      setAlertState(
+        result.detail?.ok === true && result.detail.state === "enabled"
+          ? "enabled"
+          : result.detail?.state === "denied"
+            ? "blocked"
+            : "unavailable",
+      );
+    }
+
+    window.addEventListener(
+      "prestige-driver-native-notification-result",
+      onNativeNotificationResult,
+    );
+    return () => window.removeEventListener(
+      "prestige-driver-native-notification-result",
+      onNativeNotificationResult,
+    );
+  }, []);
+
+  useEffect(() => {
+    function onNativeJobOpenResult(event: Event) {
+      const result = event as CustomEvent<{ jobKey?: string; ok?: boolean }>;
+      const jobKey = result.detail?.jobKey || "";
+      if (result.detail?.ok !== false || !/^[0-9a-f]{64}$/.test(jobKey)) {
+        return;
+      }
+      setOpenFeedback((current) => ({
+        ...current,
+        [jobKey]: "This private job is not saved in Prestige Driver yet. Open the latest link from dispatch once.",
+      }));
+      setOpeningJobKey((current) => current === jobKey ? "" : current);
+    }
+
+    window.addEventListener("prestige-driver-native-job-open-result", onNativeJobOpenResult);
+    return () => window.removeEventListener("prestige-driver-native-job-open-result", onNativeJobOpenResult);
   }, []);
 
   async function signInDriverAccount() {
@@ -269,6 +338,21 @@ export default function DriverPortalPage() {
   }
 
   async function enableJobAlerts() {
+    if (nativeBridgeReady) {
+      const notificationJob = readState.kind === "ready" ? readState.jobs[0] : null;
+      if (!notificationJob) {
+        setAlertState("unavailable");
+        return;
+      }
+
+      setAlertState("enabling");
+      (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
+        job_key: notificationJob.job_key,
+        type: "native_notifications_register",
+      }));
+      return;
+    }
+
     if (!alertReadiness.ready || !alertReadiness.publicKey) {
       setAlertState("unavailable");
       return;
@@ -332,6 +416,17 @@ export default function DriverPortalPage() {
     setOpeningJobKey(job.job_key);
     setOpenFeedback((current) => ({ ...current, [job.job_key]: "" }));
     try {
+      if (installationId) {
+        const nativeBridge = (window as DriverNativeWindow).ReactNativeWebView;
+        if (!nativeBridge) {
+          throw new Error("Native Driver bridge unavailable");
+        }
+        nativeBridge.postMessage(JSON.stringify({
+          job_key: job.job_key,
+          type: "native_job_open",
+        }));
+        return;
+      }
       const url = await storedDriverJobUrl(job.job_key);
       if (!url) {
         setOpenFeedback((current) => ({
@@ -483,7 +578,7 @@ export default function DriverPortalPage() {
           </section>
         ) : (
           <section className="space-y-3" data-driver-portal-job-count={readState.jobs.length}>
-            {nativeBridgeReady && readState.accountSession ? (
+            {nativeBridgeReady && readState.accountSession && !biometricSetupEnabled ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm" data-driver-portal-biometric-setup="true">
                 <h2 className="text-base font-bold text-emerald-950">Face ID app unlock</h2>
                 <p className="mt-1 text-sm font-medium leading-6 text-emerald-900">
@@ -527,8 +622,9 @@ export default function DriverPortalPage() {
                 </p>
               ) : alertState === "unavailable" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
-                  Job alerts are unavailable. Open this installed Driver Portal from your device&apos;s
-                  Home Screen and try again.
+                  {nativeBridgeReady
+                    ? "Job alerts could not be enabled. Open the latest acknowledged private Job Link in Prestige Driver once, then try again."
+                    : "Job alerts are unavailable. Open this installed Driver Portal from your device's Home Screen and try again."}
                 </p>
               ) : alertState === "enabled" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-emerald-800">

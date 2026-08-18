@@ -95,6 +95,18 @@ includes("authRoute", "clearDriverPortalSessionCookie", "account logout cookie c
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
 for (const fragment of [
+  "hasVerifiedDriverAccount",
+  "setHasVerifiedDriverAccount(Boolean(result.driver_account_profile))",
+  "!hasVerifiedDriverAccount",
+  "!acknowledged ? (",
+]) {
+  includes(
+    "jobPage",
+    fragment,
+    `existing verified Driver account setup visibility ${fragment}`,
+  );
+}
+for (const fragment of [
   "driverAccountPasswordLength = 6",
   "/^\\d{6}$/",
   "/^(\\d)\\1{5}$/",
@@ -164,6 +176,26 @@ includes(
   "link-only installed-app session cannot bypass account sign-in",
 );
 includes("portalPage", "nativeBridgeReady && readState.accountSession", "Face ID after account session only");
+includes(
+  "portalPage",
+  "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__",
+  "persisted native Face ID setup marker",
+);
+includes(
+  "portalPage",
+  "nativeBiometricEnabled || biometricEnabledThisSession",
+  "persisted or immediate Face ID setup state",
+);
+includes(
+  "portalPage",
+  "!biometricSetupEnabled",
+  "Face ID setup panel only while disabled",
+);
+includes(
+  "portalPage",
+  "setBiometricEnabledThisSession(true)",
+  "successful Face ID setup panel dismissal",
+);
 includes("portalPage", "x-prestige-driver-installation-id", "native installation request proof");
 includes("portalRoute", "verifyDriverAccountSession", "server account revalidation");
 includes("portalRoute", "x-prestige-driver-installation-id", "server installation proof check");
@@ -178,6 +210,50 @@ includes("config", "use Face ID to unlock the approved Driver account", "Face ID
 includes("bridge", "__PRESTIGE_DRIVER_INSTALLATION_ID__", "native installation bridge marker");
 includes("nativeApp", "readOrCreateDriverInstallationId", "native installation binding");
 includes("nativeApp", "authenticateDriverAppUnlock", "native biometric gate");
+includes(
+  "bridge",
+  "__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__",
+  "immutable native Face ID bootstrap marker",
+);
+includes(
+  "nativeApp",
+  "setBiometricEnabled(biometricEnabled)",
+  "native Face ID setup state initialization",
+);
+includes(
+  "nativeApp",
+  "if (enabled) setBiometricEnabled(true)",
+  "successful Face ID setup state update",
+);
+excludes(
+  "portalPage",
+  /localStorage|sessionStorage|document\.cookie/,
+  "duplicate browser Face ID setup storage",
+);
+for (const fragment of [
+  "const biometricResumePendingRef = useRef(false);",
+  'nextState !== "active" && biometricPromptBusyRef.current',
+  "biometricResumePendingRef.current = true;",
+  "if (biometricResumePendingRef.current) {",
+  "biometricResumePendingRef.current = false;",
+]) {
+  includes(
+    "nativeApp",
+    fragment,
+    `Face ID prompt foreground-loop suppression ${fragment}`,
+  );
+}
+includes(
+  "nativeApp",
+  "if (enabled) void unlockDriverApp();",
+  "genuine later foreground Face ID unlock",
+);
+assert.equal(
+  sources.nativeApp.indexOf("if (biometricResumePendingRef.current) {") <
+    sources.nativeApp.indexOf("if (enabled) void unlockDriverApp();"),
+  true,
+  "Face ID prompt resume must be consumed before a genuine foreground unlock is started.",
+);
 
 for (const sourceKey of ["account", "accountRoute", "authRoute", "installation"]) {
   excludes(

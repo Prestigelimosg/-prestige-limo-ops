@@ -12,6 +12,8 @@ const sourceFiles = [
   "lib/driver-job-link-mock-tokens.ts",
   "lib/driver-job-link-mock-store.ts",
   "lib/driver-job-link-mode.ts",
+  "lib/driver-account-password.ts",
+  "lib/driver-account-device-lock.ts",
   "lib/driver-job-status-persistence.ts",
   "lib/driver-device-push-notification.ts",
   "lib/driver-portal-session.ts",
@@ -784,6 +786,155 @@ try {
       client.operations.length,
       operationsAfterAcknowledgement,
       "A different driver must not mutate an already acknowledged Job Link.",
+    );
+  }
+
+  {
+    const client = createSeededClient({
+      acknowledgedAt: "",
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
+      drivers: [
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 1111",
+          driver_name: "Same Human Name",
+          id: 45,
+          plate_number: "OLD45",
+          vehicle_type: "Old Vehicle",
+        },
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 9999",
+          driver_name: "Another Driver",
+          id: 99,
+          plate_number: "OTHER99",
+          vehicle_type: "Other Vehicle",
+        },
+      ],
+      latestStatus: "",
+    });
+    const result = await saveDriverJobDetailsThroughStatusPersistence({
+      client,
+      driverContact: "+65 8111 4545",
+      driverName: "Same Human Name",
+      driverPlateNumber: "NEW45",
+      driverVehicleModel: "New Vehicle",
+      now,
+      token: validToken,
+      verifiedAccountDriverId: 45,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      client.tables.drivers.length,
+      2,
+      "A verified signed-in Driver must reuse the exact account profile instead of inserting a same-name duplicate.",
+    );
+    assert.deepEqual(
+      client.tables.drivers.find((driver) => driver.id === 45),
+      {
+        availability_status: "available",
+        contact_number: "+65 8111 4545",
+        driver_name: "Same Human Name",
+        id: 45,
+        plate_number: "NEW45",
+        vehicle_type: "New Vehicle",
+      },
+      "Verified edited safe details must sync to the exact account-backed Driver Database row.",
+    );
+    assert.equal(client.tables.bookings[0].driver_id, 45);
+    assert.equal(client.tables.driver_job_links[0].driver_id, 45);
+    assertNoDriverJobLeaks(result);
+  }
+
+  {
+    const client = createSeededClient({
+      acknowledgedAt: "",
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: 99 }],
+      drivers: [
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 4545",
+          driver_name: "Signed In Driver",
+          id: 45,
+          plate_number: "SIGNED45",
+          vehicle_type: "Signed Vehicle",
+        },
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 9999",
+          driver_name: "Assigned Driver",
+          id: 99,
+          plate_number: "ASSIGNED99",
+          vehicle_type: "Assigned Vehicle",
+        },
+      ],
+      latestStatus: "",
+    });
+    client.tables.driver_job_links[0].driver_id = 99;
+    const result = await saveDriverJobDetailsThroughStatusPersistence({
+      client,
+      driverContact: "+65 8111 4545",
+      driverName: "Signed In Driver",
+      driverPlateNumber: "SIGNED45",
+      driverVehicleModel: "Signed Vehicle",
+      now,
+      token: validToken,
+      verifiedAccountDriverId: 45,
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      payload: null,
+      reason: "invalid_details",
+    });
+    assert.equal(client.operations.length, 0, "A different signed-in account must not take an assigned job.");
+  }
+
+  {
+    const client = createSeededClient({
+      acknowledgedAt: "",
+      bookings: [{ booking_reference: "DRV-JOB-API-001", driver_id: null }],
+      drivers: [
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 4545",
+          driver_name: "Signed In Driver",
+          id: 45,
+          plate_number: "SIGNED45",
+          vehicle_type: "Signed Vehicle",
+        },
+        {
+          availability_status: "available",
+          contact_number: "+65 8000 9999",
+          driver_name: "Another Driver",
+          id: 99,
+          plate_number: "OTHER99",
+          vehicle_type: "Other Vehicle",
+        },
+      ],
+      latestStatus: "",
+    });
+    const result = await saveDriverJobDetailsThroughStatusPersistence({
+      client,
+      driverContact: "+65 8000 9999",
+      driverName: "Signed In Driver",
+      driverPlateNumber: "OTHER99",
+      driverVehicleModel: "Signed Vehicle",
+      now,
+      token: validToken,
+      verifiedAccountDriverId: 45,
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      payload: null,
+      reason: "invalid_details",
+    });
+    assert.equal(
+      client.operations.length,
+      0,
+      "A signed-in Driver must not claim another Driver profile's contact or plate.",
     );
   }
 

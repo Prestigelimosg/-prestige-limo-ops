@@ -9,6 +9,7 @@ const navigationPath = "customer-companion/src/customer-navigation.ts";
 const installationPath = "customer-companion/src/customer-installation.ts";
 const iconPath = "customer-companion/assets/icon.png";
 const approvedIconPath = "driver-companion/assets/icon.png";
+const rootTsconfigPath = "tsconfig.json";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationPath = "scripts/test-preactivation-verification-suite.mjs";
 
@@ -20,6 +21,7 @@ const [
   installationSource,
   iconBytes,
   approvedIconBytes,
+  rootTsconfigSource,
   ledgerSource,
   preactivationSource,
 ] = await Promise.all([
@@ -30,12 +32,14 @@ const [
   readFile(installationPath, "utf8"),
   readFile(iconPath),
   readFile(approvedIconPath),
+  readFile(rootTsconfigPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationPath, "utf8"),
 ]);
 
 const config = JSON.parse(configSource).expo;
 const packageJson = JSON.parse(packageSource);
+const rootTsconfig = JSON.parse(rootTsconfigSource);
 const normalizedApp = appSource.replace(/\s+/g, " ");
 const normalizedNavigation = navigationSource.replace(/\s+/g, " ");
 
@@ -54,6 +58,11 @@ assert.equal(
   "Universal Links must wait for a separately approved domain-association change",
 );
 assert.equal(config.ios.icon, "./assets/icon.png");
+assert.equal(
+  rootTsconfig.exclude.includes("customer-companion"),
+  true,
+  "The root Next.js type check must exclude the isolated Customer native project",
+);
 
 for (const dependency of [
   "expo-local-authentication",

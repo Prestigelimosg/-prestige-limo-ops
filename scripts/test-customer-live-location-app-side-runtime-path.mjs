@@ -79,8 +79,14 @@ function createQueryClient({
   bookingRows = [],
   latestRows = [],
   settingRow = null,
+  statusRows = null,
 } = {}) {
   const calls = [];
+  const effectiveStatusRows = statusRows ?? bookingRows.map((booking) => ({
+    booking_reference: booking.booking_reference,
+    occurred_at: "2026-06-25T10:00:00.000Z",
+    status_value: "driver_otw",
+  }));
 
   function filteredRows(rows, filters) {
     return rows.filter((row) =>
@@ -131,6 +137,13 @@ function createQueryClient({
               .slice(0, count);
 
             return Promise.resolve({ data: rows, error: null });
+          }
+
+          if (table === "driver_job_status_events") {
+            return Promise.resolve({
+              data: filteredRows(effectiveStatusRows, query.filters).slice(0, count),
+              error: null,
+            });
           }
 
           return Promise.resolve({ data: [], error: null });
@@ -445,6 +458,101 @@ try {
   assert.equal(customerReadWithoutCapture.body.ok, true);
   assert.equal(customerReadWithoutCapture.body.marker_count, 1);
   assert.equal(customerReadWithoutCapture.body.customerVisible, true);
+
+  const preOtwClient = createQueryClient({
+    accessRows: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: accountReference,
+      },
+    ],
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        route_type: "TRF",
+        service_type: "Transfer",
+      },
+    ],
+    latestRows: [safeLatestPosition],
+    settingRow: baseSetting({ bookingReference }),
+    statusRows: [],
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(preOtwClient);
+  const preOtw = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: baseEnv({ accountReference, authUserId, sessionToken }),
+    request: customerRequest({ bookingReference, origin, sessionToken }),
+  });
+  assert.equal(preOtw.status, 403);
+  assert.equal(preOtw.body.reason, "customer_live_location_map_waiting_for_otw");
+  assert.equal(preOtw.body.customerVisible, false);
+
+  const pobClient = createQueryClient({
+    accessRows: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: accountReference,
+      },
+    ],
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        route_type: "DSP",
+        service_type: "Hourly",
+      },
+    ],
+    latestRows: [safeLatestPosition],
+    settingRow: baseSetting({ bookingReference }),
+    statusRows: [
+      {
+        booking_reference: bookingReference,
+        occurred_at: "2026-06-25T10:30:00.000Z",
+        status_value: "pob",
+      },
+    ],
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(pobClient);
+  const afterPob = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: baseEnv({ accountReference, authUserId, sessionToken }),
+    request: customerRequest({ bookingReference, origin, sessionToken }),
+  });
+  assert.equal(afterPob.status, 403);
+  assert.equal(afterPob.body.reason, "customer_live_location_map_trip_tracking_closed");
+  assert.equal(afterPob.body.customerVisible, false);
+
+  const staleClient = createQueryClient({
+    accessRows: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: accountReference,
+      },
+    ],
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        route_type: "DEP",
+        service_type: "Departure",
+      },
+    ],
+    latestRows: [{ ...safeLatestPosition, stale_after: "2026-06-25T09:59:00.000Z" }],
+    settingRow: baseSetting({ bookingReference }),
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(staleClient);
+  const stale = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: baseEnv({ accountReference, authUserId, sessionToken }),
+    request: customerRequest({ bookingReference, origin, sessionToken }),
+  });
+  assert.equal(stale.status, 200);
+  assert.equal(stale.body.marker_count, 0);
+  assert.equal(stale.body.active_driver_marker, null);
 
   setCustomerLiveLocationMapRuntimeClientForTests(client);
   const defaultClosed = await handleCustomerLiveLocationMapRuntimeRequest({

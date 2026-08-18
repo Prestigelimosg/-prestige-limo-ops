@@ -7,7 +7,14 @@ const stagedFiles = explicitFilesIndex === -1
   ? execSync(stagedDiffCommand, { encoding: "utf8" }).trim().split("\n").filter(Boolean)
   : process.argv.slice(explicitFilesIndex + 1);
 
-const applicationPrefixes = ["app/", "components/", "driver-companion/", "lib/", "public/"];
+const applicationPrefixes = [
+  "app/",
+  "components/",
+  "customer-companion/",
+  "driver-companion/",
+  "lib/",
+  "public/",
+];
 const applicationFiles = new Set(["middleware.ts", "next.config.ts", "next.config.mjs"]);
 const changesApplication = stagedFiles.some(
   (file) => applicationFiles.has(file) || applicationPrefixes.some((prefix) => file.startsWith(prefix)),

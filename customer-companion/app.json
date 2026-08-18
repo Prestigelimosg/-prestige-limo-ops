@@ -4,7 +4,7 @@
     "slug": "prestige-customer",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "scheme": "prestige-customer",
     "platforms": [
@@ -14,7 +14,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "sg.prestigelimo.customer",
       "buildNumber": "1",
-      "icon": "./assets/icon.png",
+      "icon": "./assets/app-icon.png",
       "config": {
         "usesNonExemptEncryption": false
       },

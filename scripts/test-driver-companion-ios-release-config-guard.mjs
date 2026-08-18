@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "13",
-  "The approved thirteenth TestFlight build number must be explicit",
+  "14",
+  "The approved fourteenth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -71,7 +71,7 @@ assert.equal(iconBytes.readUInt32BE(20), 1024, "The App Store icon must be 1024 
 assert.equal(iconBytes[25], 2, "The App Store icon must be RGB without an alpha channel");
 assert.equal(
   createHash("sha256").update(iconBytes).digest("hex"),
-  "b55f726603fbae4bf0c101fee8dc23e782089f6fcb7f963c2542c9fc297cb670",
+  "bf866745d1f7a59791eea43204df17083a857a0943d7365ac3adf0161e008552",
   "The App Store icon must remain the exact owner-supplied Prestige artwork",
 );
 
@@ -127,6 +127,10 @@ for (const phrase of [
   "`ios.buildNumber` is explicitly `12`",
   "Driver iOS TestFlight Build 13 (2026-08-17)",
   "`ios.buildNumber` is explicitly `13`",
+  "Driver iOS TestFlight Build 14 Logo Replacement (2026-08-18)",
+  "`ios.buildNumber` is explicitly `14`",
+  "`bf866745d1f7a59791eea43204df17083a857a0943d7365ac3adf0161e008552`",
+  "No commit, push, pull request, merge, EAS build, Apple upload, TestFlight assignment, external testing, App Review submission, or public release is included in this local checkpoint",
   "94e64ea215a39acfd2a04e3281bd899919494392",
   "one-hour-before-pickup reminder keep opening the normal exact job",
   "13d2598347057b719c516a93453d9f2b8b4edc57",

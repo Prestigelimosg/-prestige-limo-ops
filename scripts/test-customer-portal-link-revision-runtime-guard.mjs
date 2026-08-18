@@ -67,10 +67,27 @@ function readClient(row) {
   };
 }
 
-function ensureClient(existingRow) {
+function ensureClient(existingRow, options = {}) {
   const state = { upserts: [] };
   const client = {
     from(table) {
+      if (table === "customers" || table === "bookings") {
+        const rows = table === "customers" ? options.customerRows ?? [] : options.bookingRows ?? [];
+        const query = {
+          eq() {
+            return query;
+          },
+          limit() {
+            return Promise.resolve({ data: rows, error: null });
+          },
+          select() {
+            return query;
+          },
+        };
+
+        return query;
+      }
+
       assert.equal(table, "customer_access_accounts");
       return {
         select() {
@@ -258,6 +275,73 @@ try {
   assert.equal(identityConversion.state.upserts.length, 1);
   assert.equal(identityConversion.state.upserts[0].options.onConflict, "customer_account_reference");
   assert.equal(identityConversion.state.upserts[0].payload.customer_account_reference, accountReference);
+
+  const agencyAccountReference = "150";
+  const agencyAccountClient = ensureClient(null, {
+    bookingRows: [{ company_id: 7 }, { company_id: 7 }],
+    customerRows: [
+      {
+        account_status: "active",
+        customer_type: "hotel",
+        id: 150,
+        status: "active",
+      },
+    ],
+  });
+  const agencyAccount = await harness.accessAccount.ensureAdminCustomerPortalAccessAccount(
+    {
+      agencyCustomerAccount: true,
+      bookerId: null,
+      companyId: 7,
+      customerAccountReference: agencyAccountReference,
+      safeDisplayLabel: "Kim Hyun Soo",
+    },
+    {
+      actor_label: "Admin Dispatch",
+      actor_role: "admin",
+      source_surface: "admin_api",
+    },
+    agencyAccountClient.client,
+  );
+
+  assert.equal(agencyAccount.ok, true);
+  assert.equal(agencyAccount.data.customer_account_reference, agencyAccountReference);
+  assert.equal(agencyAccount.data.company_id, null);
+  assert.equal(agencyAccount.data.booker_id, null);
+  assert.equal(agencyAccountClient.state.upserts.length, 1);
+  assert.equal(agencyAccountClient.state.upserts[0].payload.company_id, null);
+  assert.equal(agencyAccountClient.state.upserts[0].payload.booker_id, null);
+
+  const ambiguousAgencyClient = ensureClient(null, {
+    bookingRows: [{ company_id: 7 }, { company_id: 8 }],
+    customerRows: [
+      {
+        account_status: "active",
+        customer_type: "hotel",
+        id: 150,
+        status: "active",
+      },
+    ],
+  });
+  const ambiguousAgency = await harness.accessAccount.ensureAdminCustomerPortalAccessAccount(
+    {
+      agencyCustomerAccount: true,
+      bookerId: null,
+      companyId: 7,
+      customerAccountReference: agencyAccountReference,
+      safeDisplayLabel: "Kim Hyun Soo",
+    },
+    {
+      actor_label: "Admin Dispatch",
+      actor_role: "admin",
+      source_surface: "admin_api",
+    },
+    ambiguousAgencyClient.client,
+  );
+
+  assert.equal(ambiguousAgency.ok, false);
+  assert.equal(ambiguousAgency.status, 409);
+  assert.equal(ambiguousAgencyClient.state.upserts.length, 0);
 } finally {
   process.env = originalEnv;
   await harness.cleanup();

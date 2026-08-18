@@ -45,6 +45,12 @@ const normalizedNavigation = navigationSource.replace(/\s+/g, " ");
 
 assert.equal(config.name, "Prestige SG");
 assert.equal(config.slug, "prestige-customer");
+assert.equal(config.owner, "prestige-limo-ops");
+assert.equal(
+  config.extra?.eas?.projectId,
+  "ce71ff91-7f71-4297-bcef-edf420f94316",
+  "The Customer app must remain linked only to its exact EAS project",
+);
 assert.equal(config.scheme, "prestige-customer");
 assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
@@ -85,7 +91,7 @@ assert.equal(appStoreIconBytes.readUInt32BE(20), 1024, "The Customer App Store i
 assert.equal(appStoreIconBytes[25], 2, "The Customer App Store icon must be RGB without an alpha channel");
 assert.equal(
   createHash("sha256").update(appStoreIconBytes).digest("hex"),
-  "722d9df4d237a42fedf03bffa3f48078b148d796714ff17d18467b2b320f4f0e",
+  "f04038c4b341131cc36d182943da0a1b661c6b30420f20fe4ff2db14a36f6c9e",
   "The Customer app must retain the exact owner-approved Customer artwork",
 );
 assert.equal(
@@ -170,6 +176,11 @@ for (const phrase of [
   "`b55f726603fbae4bf0c101fee8dc23e782089f6fcb7f963c2542c9fc297cb670`",
   "`customer-companion/assets/app-icon.png`",
   "No Apple App ID, App Store Connect record, EAS project, signing credential, build, submission, TestFlight assignment, external testing, App Review submission, or public release is created by this local checkpoint",
+  "Customer App Store Icon Clarity And SG Approval (2026-08-18)",
+  "`f04038c4b341131cc36d182943da0a1b661c6b30420f20fe4ff2db14a36f6c9e`",
+  "the exact centered gold text `SG`",
+  "`@prestige-limo-ops/prestige-customer`",
+  "`ce71ff91-7f71-4297-bcef-edf420f94316`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

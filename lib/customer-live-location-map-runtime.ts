@@ -32,6 +32,7 @@ const runtimeSettingsTable = "driver_live_location_runtime_settings";
 const runtimeSettingName = "driver_live_location_runtime";
 const customerAccessAccountsTable = "customer_access_accounts";
 const bookingsTable = "bookings";
+const driverJobStatusEventsTable = "driver_job_status_events";
 const allowedRuntimeModes = new Set(["evidence", "runtime"]);
 const eligibleServiceFamilies = new Set([
   "arr",
@@ -703,6 +704,51 @@ function serviceEligible(row: UnknownRecord) {
   return eligibleServiceFamilies.has(family);
 }
 
+async function verifyCustomerTrackingStatus({
+  bookingReference,
+  client,
+}: {
+  bookingReference: string;
+  client: CustomerLiveLocationMapClient;
+}) {
+  const { data, error } = await client
+    .from(driverJobStatusEventsTable)
+    .select("booking_reference, status_value, occurred_at")
+    .eq("booking_reference", bookingReference)
+    .order("occurred_at", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_driver_status_not_ready",
+      status: 503,
+    } as const;
+  }
+
+  const latestStatus = cleanText(asRecord(Array.isArray(data) ? data[0] : null).status_value, 80)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (latestStatus === "pob" || latestStatus === "completed" || latestStatus === "job_completed") {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_trip_tracking_closed",
+      status: 403,
+    } as const;
+  }
+
+  if (latestStatus !== "driver_otw" && latestStatus !== "otw" && latestStatus !== "ots") {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_waiting_for_otw",
+      status: 403,
+    } as const;
+  }
+
+  return { ok: true } as const;
+}
+
 async function verifyCustomerBookingScope({
   accountReference,
   bookingReference,
@@ -817,6 +863,15 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
     return blockedResult(policy.reason, policy.status);
   }
 
+  const trackingStatus = await verifyCustomerTrackingStatus({
+    bookingReference,
+    client: clientResult.client,
+  });
+
+  if (!trackingStatus.ok) {
+    return blockedResult(trackingStatus.reason, trackingStatus.status);
+  }
+
   const staleAfterSeconds = policy.policy.staleAfterSeconds;
   const { data, error } = await clientResult.client
     .from(latestPositionsTable)
@@ -832,9 +887,12 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
     return blockedResult("customer_live_location_map_runtime_config_not_ready", 503);
   }
 
-  const marker = Array.isArray(data)
+  const markerCandidate = Array.isArray(data)
     ? data.map(asRecord).map(normalizeLatestPosition).filter(isNormalizedLatestPosition)[0] ||
       null
+    : null;
+  const marker = markerCandidate?.driver_location_status === "live" && !markerCandidate.is_stale
+    ? markerCandidate
     : null;
 
   if (!marker) {
@@ -883,6 +941,7 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
 export const customerLiveLocationMapRuntimeContract = {
   bookingsTable,
   customerAccessAccountsTable,
+  driverJobStatusEventsTable,
   latestPositionsTable,
   runtimeVersion: customerLiveLocationMapRuntimeVersion,
   runtimeSettingsTable,

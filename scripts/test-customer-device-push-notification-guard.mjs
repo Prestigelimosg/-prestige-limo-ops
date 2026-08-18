@@ -151,8 +151,8 @@ assertIncludes(
     "Notification.requestPermission",
     'data-customer-device-push-toggle="true"',
     'role="switch"',
-    "Alerts ON",
-    "Alerts OFF",
+    "Driver / Admin alerts",
+    'data-customer-alerts-control="true"',
     "handleCustomerDevicePushEnable",
     "handleCustomerDevicePushDisable",
   ],
@@ -260,6 +260,7 @@ assertIncludes(
   ledgerSource,
   [
     "Customer App Lock-Screen Alerts",
+    "Customer Thirty-Minute Pickup App Reminder",
     "PRESTIGE_CUSTOMER_DEVICE_PUSH_ENABLED",
     "one compact `Alerts ON` / `Alerts OFF` switch",
     "existing `customer_app` notification persistence lane",

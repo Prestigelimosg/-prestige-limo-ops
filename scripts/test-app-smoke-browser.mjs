@@ -35284,7 +35284,9 @@ async function runChromeTest() {
         const documentHistoryRows = [...document.querySelectorAll("[data-customer-booking-document-history-row]")];
         const visibleLeakText = (documentHistory?.innerText ? text.replace(documentHistory.innerText, "") : text)
           .replace("Our team will review and confirm your booking shortly. Thank you", "");
-        const lowerVisibleLeakText = visibleLeakText.toLowerCase();
+        const lowerVisibleLeakText = visibleLeakText
+          .replaceAll("Driver / Admin alerts", "")
+          .toLowerCase();
         const help = document.querySelector("[data-customer-portal-help]");
         const helpRect = help?.getBoundingClientRect();
         const changeIntake = document.querySelector("[data-customer-change-request-intake]");
@@ -36077,16 +36079,12 @@ async function runChromeTest() {
         "customer portal saved bookings API rows",
       );
       assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
-      assert.equal(initialState.buildMarkerCount, 1, "Expected /my-bookings to show one shared public build marker");
-      assert.match(
-        initialState.buildMarkerText,
-        /^Build (?:[a-f0-9]{8}|unavailable)$/,
-        "Expected /my-bookings to show only the safe short build marker",
-      );
+      assert.equal(initialState.buildMarkerCount, 0, "Expected compact /my-bookings header to hide the build marker");
+      assert.equal(initialState.text.includes("Driver / Admin alerts"), true);
       assert.equal(
         initialState.text.includes("Customers can view booking requests and booking history here after staff confirmation."),
-        true,
-        "Expected /my-bookings customer-safe explanation",
+        false,
+        "Expected /my-bookings generic explanation to be removed",
       );
       assert.equal(initialState.guidance.visible, false, "Expected /my-bookings compact customer guidance to be removed");
       assert.equal(

@@ -58,6 +58,7 @@ type CustomerDevicePushNotificationRecord = {
   actor_role: "admin" | "customer" | "dispatcher" | "driver" | "system";
   booking_reference: string | null;
   delivery_surface: "customer_app" | "driver_app";
+  workflow_area?: string | null;
 };
 
 type CustomerDevicePushPayload = {
@@ -434,7 +435,21 @@ export async function revokeCustomerDevicePushSubscription(
   };
 }
 
-function safePayload(): CustomerDevicePushPayload {
+function safePayload(notification: CustomerDevicePushNotificationRecord): CustomerDevicePushPayload {
+  if (
+    notification.actor_role === "system" &&
+    notification.delivery_surface === "customer_app" &&
+    notification.workflow_area === "customer_pickup_reminder_30m"
+  ) {
+    return {
+      body: "Your pickup is in 30 minutes. Open My Bookings to track your driver and view trip updates.",
+      tag: "prestige-customer-pickup-reminder",
+      title: "Pickup in 30 minutes",
+      url: "/my-bookings",
+      version: customerDevicePushNotificationVersion,
+    };
+  }
+
   return {
     body: "A Prestige Limo booking update is ready. Open My Bookings to review.",
     tag: "prestige-customer-booking-update",
@@ -608,7 +623,7 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
     return blockedAlert("unauthorized");
   }
 
-  const payload = safePayload();
+  const payload = safePayload(notification);
 
   if (!payloadIsSafe(payload)) {
     return blockedAlert("provider_failure");

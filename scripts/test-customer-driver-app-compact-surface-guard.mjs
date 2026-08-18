@@ -65,12 +65,30 @@ for (const fragment of [
   'data-customer-portal-sections="true"',
   'data-customer-portal-book-request-link="true"',
   'className="mx-auto flex w-full max-w-5xl flex-col gap-3"',
-  'className="border-b border-slate-200 px-1 pb-3 pt-1"',
+  'className="border-b border-slate-200 px-1 pb-2 pt-1"',
   'className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2"',
   '"min-h-9 rounded-md border px-2.5 py-1.5 text-sm font-semibold transition"',
   'className="rounded-md border border-slate-200 bg-white p-3"',
 ]) {
   assertIncludes(customerPortalPage, fragment, `/my-bookings compact UI fragment ${fragment}`);
+}
+
+for (const fragment of [
+  'data-customer-alerts-control="true"',
+  "Driver / Admin alerts",
+  'className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl"',
+  'portalBookingsLoadState === "ready"',
+]) {
+  assertIncludes(customerPortalPage, fragment, `/my-bookings compact approved header ${fragment}`);
+}
+
+for (const removedFragment of [
+  "Customers can view booking requests and booking history here after staff confirmation.",
+  "On iPhone, use Share → Add to Home Screen",
+  "<PublicAppBuildMarker />",
+  'data-customer-device-push-feedback="true"',
+]) {
+  assertExcludes(customerPortalPage, removedFragment, `/my-bookings removed header guidance ${removedFragment}`);
 }
 
 for (const removedFragment of [

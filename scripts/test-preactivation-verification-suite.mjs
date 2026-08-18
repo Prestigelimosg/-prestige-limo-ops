@@ -442,6 +442,10 @@ const guardChecks = [
     script: "scripts/test-web-app-install-manifest-guard.mjs",
   },
   {
+    label: "Customer iPhone companion foundation guard",
+    script: "scripts/test-customer-companion-foundation-guard.mjs",
+  },
+  {
     label: "admin and installed public app deployment commit marker guard",
     script: "scripts/test-admin-deployment-commit-marker-guard.mjs",
   },

@@ -219,6 +219,10 @@ const portalPage = files[portalPagePath];
 const portalAdapter = files[portalAdapterPath];
 const portalChangeRequestAdapter = files[portalChangeRequestAdapterPath];
 const savedBookingsRead = files[savedBookingsReadPath];
+const bookingRowBordersLedgerSection = sectionBetween(
+  ledger,
+  "### Customer Portal Distinct Booking Row Borders (2026-08-18)",
+);
 const presentationLedgerSection = sectionBetween(
   ledger,
   "### Customer PWA Locked Tracking Presentation Repair (2026-08-18)",
@@ -227,6 +231,20 @@ const ledgerSection = sectionBetween(
   ledger,
   "### Public Customer Portal Saved-Booking Surface Guard Lock",
 );
+
+for (const phrase of [
+  "each existing row one neutral 1 px border and an 8 px gap from the next row",
+  "There is no shadow, coloured status edge, new label, new card component, duplicate list, or status meaning.",
+  "Expanded details remain inside the exact booking row.",
+  "Booking content, row order, filters, search, pagination, PDF disabled state, Edit, Cancel, View details, Driver Details, customer/driver messages, Driver Tracking, Trip Updates",
+  "320, 344, 360, 375, 384, 390, 412, 430, 768, 820, 841, 1024, and 1440 px",
+]) {
+  assertIncludes(
+    bookingRowBordersLedgerSection,
+    phrase,
+    `Customer portal distinct booking-row borders ledger phrase: ${phrase}`,
+  );
+}
 
 for (const phrase of [
   "renders its map frame and route/update/accuracy footer only when the existing customer-safe adapter returns `status = available` with a valid map URL",
@@ -278,6 +296,26 @@ assertExcludes(
   'statusBarStyle: "black-translucent"',
   "/my-bookings installed PWA must not render customer content beneath the iPhone status bar",
 );
+assertIncludes(
+  portalPage,
+  '<ul className="flex flex-col gap-2" data-customer-portal-list="true">',
+  "/my-bookings booking list must separate existing rows with a small gap",
+);
+assertIncludes(
+  portalPage,
+  'className="flex flex-col gap-2 rounded-md border border-slate-300 p-2"',
+  "/my-bookings each existing booking row must have one thin neutral border",
+);
+const bookingListBlock = blockBetween(
+  portalPage,
+  '<ul className="flex flex-col gap-2" data-customer-portal-list="true">',
+  "</ul>",
+);
+assertExcludes(
+  bookingListBlock,
+  /divide-y|shadow(?:-|\b)|border-[24](?:\s|\")/,
+  "/my-bookings booking-row separation must remain thin and shadow-free",
+);
 for (const fragment of [
   'process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-portal"',
   'panel.querySelector("[data-customer-portal-driver-tracking-placeholder]")',
@@ -289,6 +327,30 @@ for (const fragment of [
     browserSmoke,
     fragment,
     `/my-bookings compact locked tracking browser regression ${fragment}`,
+  );
+}
+for (const fragment of [
+  "initialState.bookingRowPresentation.listGap >= 8",
+  'row.borderTopWidth === "1px"',
+  'row.borderRightWidth === "1px"',
+  'row.borderBottomWidth === "1px"',
+  'row.borderLeftWidth === "1px"',
+  'row.boxShadow === "none"',
+  "row.left >= 0 && row.right <= mobileState.docClientWidth",
+  'label: "iPhone small 320px"',
+  'label: "Galaxy Fold cover 344px"',
+  'label: "Samsung Galaxy 360px"',
+  'label: "Samsung Galaxy 384px"',
+  'label: "Pixel modern Android 412px"',
+  'label: "iPhone large 430px"',
+  'label: "Galaxy Fold unfolded 841px"',
+  "borderIsThinAndShadowFree",
+  "rowsStayContained",
+]) {
+  assertIncludes(
+    browserSmoke,
+    fragment,
+    `/my-bookings thin booking-row border browser regression ${fragment}`,
   );
 }
 

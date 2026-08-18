@@ -12,6 +12,13 @@ a5832c4e Merge PR #118: Record customer folder DSP Production acceptance
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Portal Distinct Booking Row Borders (2026-08-18)
+
+- Physical light-mode iPhone PWA evidence proved that adjacent `/my-bookings` records were difficult to distinguish because every booking shared one white results container and only a thin full-list divider marked the boundary between rows.
+- The existing booking list now gives each existing row one neutral 1 px border and an 8 px gap from the next row. There is no shadow, coloured status edge, new label, new card component, duplicate list, or status meaning. Expanded details remain inside the exact booking row.
+- Booking content, row order, filters, search, pagination, PDF disabled state, Edit, Cancel, View details, Driver Details, customer/driver messages, Driver Tracking, Trip Updates, alerts, access/session scope, adapters, APIs, persistence, CRM, Calendar, invoice, billing, payment, payout, PayNow, GPS, provider, schema, environment, and Production data remain unchanged.
+- The extended `scripts/test-public-customer-portal-saved-booking-surface-guard.mjs` locks the thin shadow-free in-place row classes. The existing focused customer-portal browser regression checks the computed 1 px border, spacing, and containment at 320, 344, 360, 375, 384, 390, 412, 430, 768, 820, 841, 1024, and 1440 px without changing a real customer booking.
+
 ### Customer PWA Locked Tracking Presentation Repair (2026-08-18)
 
 - Physical light-mode iPhone PWA evidence on customer booking `10876` proved the established Driver Tracking read correctly remained `Locked` before any assigned Driver OTW or shared location, but opening that state rendered the real map frame's `aspect-[4/3] min-h-72` dimensions as a giant empty sector. The same safe blocked message appeared in the panel header and again inside the empty map placeholder, the placeholder text reached the mobile edge, and the My Bookings `black-translucent` Apple status-bar mode allowed customer content beneath the iPhone status indicators.

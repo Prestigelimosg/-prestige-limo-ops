@@ -1771,7 +1771,7 @@ export default function CustomerPortalPage() {
                   {emptyBookingsMessage}
                 </div>
               ) : (
-                <ul className="flex flex-col divide-y divide-slate-200" data-customer-portal-list="true">
+                <ul className="flex flex-col gap-2" data-customer-portal-list="true">
                   {visibleBookings.map((booking) => {
                     const canRequestReview = canRequestBookingReview(booking);
                     const isExpanded = expandedBooking?.id === booking.id;
@@ -1782,7 +1782,7 @@ export default function CustomerPortalPage() {
 
                     return (
                       <li
-                        className="flex flex-col gap-2 py-2"
+                        className="flex flex-col gap-2 rounded-md border border-slate-300 p-2"
                         data-customer-portal-row={booking.id}
                         data-customer-portal-status={booking.status}
                         key={booking.id}

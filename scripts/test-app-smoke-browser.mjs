@@ -35252,6 +35252,7 @@ async function runChromeTest() {
         const search = document.querySelector("[data-customer-portal-search]");
         const searchRect = search?.getBoundingClientRect();
         const activeSection = document.querySelector("[data-customer-portal-section][data-active='true']");
+        const bookingList = document.querySelector("[data-customer-portal-list]");
         const rows = [...document.querySelectorAll("[data-customer-portal-row]")];
         const firstRowRect = rows[0]?.getBoundingClientRect();
         const activeFilter = document.querySelector("[data-customer-portal-filter][data-active='true']");
@@ -35333,6 +35334,23 @@ async function runChromeTest() {
         return {
           activeSection: activeSection?.textContent.trim() || "",
           activeFilter: activeFilter?.textContent.trim() || "",
+          bookingRowPresentation: {
+            listGap: bookingList ? Number.parseFloat(getComputedStyle(bookingList).rowGap || "0") : 0,
+            rows: rows.map((row) => {
+              const rect = row.getBoundingClientRect();
+              const style = getComputedStyle(row);
+
+              return {
+                borderBottomWidth: style.borderBottomWidth,
+                borderLeftWidth: style.borderLeftWidth,
+                borderRightWidth: style.borderRightWidth,
+                borderTopWidth: style.borderTopWidth,
+                boxShadow: style.boxShadow,
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+              };
+            }),
+          },
           buildMarkerCount: document.querySelectorAll('[data-public-app-build-marker="true"]').length,
           buildMarkerText: document.querySelector('[data-public-app-build-marker="true"]')?.textContent.trim() || "",
           detailId: detail?.getAttribute("data-customer-portal-detail") || "",
@@ -36055,6 +36073,21 @@ async function runChromeTest() {
     const checkCustomerPortalRoute = async () => {
       const desktopViewport = { height: 900, label: "desktop customer portal", mobile: false, scale: 1, width: 1440 };
       const mobileViewport = { height: 812, label: "mobile customer portal", mobile: true, scale: 3, width: 375 };
+      const bookingRowDeviceViewports = [
+        { height: 568, label: "iPhone small 320px", mobile: true, scale: 2, width: 320 },
+        { height: 882, label: "Galaxy Fold cover 344px", mobile: true, scale: 3, width: 344 },
+        { height: 800, label: "Samsung Galaxy 360px", mobile: true, scale: 3, width: 360 },
+        { height: 812, label: "iPhone standard 375px", mobile: true, scale: 3, width: 375 },
+        { height: 854, label: "Samsung Galaxy 384px", mobile: true, scale: 3, width: 384 },
+        { height: 844, label: "iPhone modern 390px", mobile: true, scale: 3, width: 390 },
+        { height: 915, label: "Pixel modern Android 412px", mobile: true, scale: 2.625, width: 412 },
+        { height: 932, label: "iPhone large 430px", mobile: true, scale: 3, width: 430 },
+        { height: 1024, label: "tablet 768px", mobile: true, scale: 2, width: 768 },
+        { height: 1180, label: "iPad portrait 820px", mobile: true, scale: 2, width: 820 },
+        { height: 701, label: "Galaxy Fold unfolded 841px", mobile: true, scale: 1, width: 841 },
+        { height: 1366, label: "tablet landscape 1024px", mobile: false, scale: 1, width: 1024 },
+        { height: 900, label: "desktop 1440px", mobile: false, scale: 1, width: 1440 },
+      ];
 
       await setCustomerPortalViewportAndLoad(
         desktopViewport,
@@ -36090,6 +36123,23 @@ async function runChromeTest() {
         "customer portal saved bookings API rows",
       );
       assert.equal(initialState.text.includes("My Bookings"), true, "Expected /my-bookings page title");
+      assert.equal(
+        initialState.bookingRowPresentation.listGap >= 8,
+        true,
+        "Expected each customer booking to have a visible gap from the next booking",
+      );
+      assert.equal(
+        initialState.bookingRowPresentation.rows.every(
+          (row) =>
+            row.borderTopWidth === "1px" &&
+            row.borderRightWidth === "1px" &&
+            row.borderBottomWidth === "1px" &&
+            row.borderLeftWidth === "1px" &&
+            row.boxShadow === "none",
+        ),
+        true,
+        "Expected every customer booking to use one thin border without a shadow",
+      );
       assert.equal(initialState.buildMarkerCount, 0, "Expected compact /my-bookings header to hide the build marker");
       assert.equal(initialState.text.includes("Driver / Admin alerts"), true);
       assert.equal(
@@ -37362,6 +37412,13 @@ async function runChromeTest() {
         mobileState.docScrollWidth <= mobileState.docClientWidth + 2,
         `Expected /my-bookings mobile page not to overflow horizontally: ${mobileState.docScrollWidth} > ${mobileState.docClientWidth}`,
       );
+      assert.equal(
+        mobileState.bookingRowPresentation.rows.every(
+          (row) => row.left >= 0 && row.right <= mobileState.docClientWidth,
+        ),
+        true,
+        "Expected every thin-bordered customer booking to remain inside the mobile viewport",
+      );
       assert.equal(mobileState.guidance.visible, false, "Expected /my-bookings mobile guidance to be removed");
       assert.equal(mobileState.searchVisible, true, "Expected /my-bookings search to remain touch-friendly on mobile");
       assert.deepEqual(
@@ -37547,8 +37604,52 @@ async function runChromeTest() {
       );
       await checkTelegramBoundary("/my-bookings mobile");
 
+      const bookingRowDeviceResults = [];
+
+      for (const viewport of bookingRowDeviceViewports) {
+        await setCustomerPortalViewportAndLoad(viewport);
+        const state = await readCustomerPortalState();
+        const borderIsThinAndShadowFree = state.bookingRowPresentation.rows.every(
+          (row) =>
+            row.borderTopWidth === "1px" &&
+            row.borderRightWidth === "1px" &&
+            row.borderBottomWidth === "1px" &&
+            row.borderLeftWidth === "1px" &&
+            row.boxShadow === "none",
+        );
+        const rowsStayContained = state.bookingRowPresentation.rows.every(
+          (row) => row.left >= 0 && row.right <= state.docClientWidth,
+        );
+
+        assert.equal(
+          state.docScrollWidth <= state.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected /my-bookings not to overflow horizontally`,
+        );
+        assert.equal(state.bookingRowPresentation.listGap >= 8, true, `${viewport.label}: expected booking-row gap`);
+        assert.equal(
+          state.bookingRowPresentation.rows.length > 0,
+          true,
+          `${viewport.label}: expected visible customer booking rows`,
+        );
+        assert.equal(
+          borderIsThinAndShadowFree,
+          true,
+          `${viewport.label}: expected one thin border and no shadow on every booking row`,
+        );
+        assert.equal(rowsStayContained, true, `${viewport.label}: expected every booking row inside the viewport`);
+
+        bookingRowDeviceResults.push({
+          docClientWidth: state.docClientWidth,
+          docScrollWidth: state.docScrollWidth,
+          label: viewport.label,
+          rowCount: state.bookingRowPresentation.rows.length,
+        });
+      }
+
       return {
         activeFilter: initialState.activeFilter,
+        bookingRowDeviceResults,
         forbiddenVisibleText: initialState.forbiddenVisibleText,
         mobile: {
           docClientWidth: mobileState.docClientWidth,

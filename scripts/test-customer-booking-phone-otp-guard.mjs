@@ -112,6 +112,14 @@ for (const fragment of [
 }
 
 assert.equal(
+  /const showPublicPhoneVerification\s*=\s*[\s\S]*?!hasPortalBookingAccess\s*&&\s*!phoneOtpVerified\s*;/.test(
+    bookingPageSource,
+  ),
+  true,
+  "The public phone-verification sector must disappear immediately after the exact contact phone is verified.",
+);
+
+assert.equal(
   bookingPageSource.match(/resetCustomerBookingPhoneOtpState\(\)/g)?.length >=
     4,
   true,

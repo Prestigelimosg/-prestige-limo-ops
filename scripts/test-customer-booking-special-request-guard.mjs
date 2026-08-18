@@ -44,16 +44,16 @@ for (const fragment of [
 
 const extraStopsFieldIndex = bookPage.indexOf('data-customer-booking-field="extraStops"');
 const specialRequestFieldIndex = bookPage.indexOf('data-customer-booking-field="specialRequest"');
-const preSubmitReviewIndex = bookPage.indexOf('data-customer-booking-pre-submit-review="true"');
+const termsSummaryIndex = bookPage.indexOf('data-customer-booking-terms-summary="true"');
 assert.equal(
   specialRequestFieldIndex,
   bookPage.lastIndexOf('data-customer-booking-field="specialRequest"'),
   "/book must render exactly one Special Request field.",
 );
 assert.equal(
-  extraStopsFieldIndex < specialRequestFieldIndex && specialRequestFieldIndex < preSubmitReviewIndex,
+  extraStopsFieldIndex < specialRequestFieldIndex && specialRequestFieldIndex < termsSummaryIndex,
   true,
-  "/book Special Request must remain in Trip Details below Extra stops and before review/terms/submit.",
+  "/book Special Request must remain in Trip Details below Extra stops and before terms/submit.",
 );
 
 for (const fragment of [

@@ -34188,42 +34188,14 @@ async function runChromeTest() {
         [],
         "Expected /book customer step cards to be removed",
       );
-      assert.equal(initialState.preSubmitReview.visible, true, "Expected /book pre-submit review clarity");
+      assert.equal(initialState.preSubmitReview.visible, false, "Expected /book pre-submit review box to be removed");
+      assert.equal(initialState.preSubmitReview.height, 0, "Expected removed /book pre-submit review to have no height");
+      assert.equal(initialState.preSubmitReview.title, "", "Expected removed /book pre-submit review to have no title");
+      assert.deepEqual(initialState.preSubmitReview.items, [], "Expected removed /book pre-submit review to have no items");
       assert.equal(
-        initialState.preSubmitReview.title,
-        "Review before submitting",
-        "Expected /book pre-submit review heading",
-      );
-      assert.equal(
-        initialState.preSubmitReview.height <= 230,
-        true,
-        `Expected /book pre-submit review to stay compact, got ${initialState.preSubmitReview.height}px`,
-      );
-      assert.deepEqual(
-        initialState.preSubmitReview.items,
-        [
-          {
-            key: "request-only",
-            text: "This is a booking request only, not a confirmed booking yet.",
-          },
-          {
-            key: "team-review",
-            text: "Our team will review and confirm availability before your booking is confirmed.",
-          },
-          {
-            key: "short-notice",
-            text: "Short-notice bookings under 24 hours require team review before confirmation.",
-          },
-          {
-            key: "no-finance-file",
-            text: "No price, payment, invoice, PDF, or billing file is created here.",
-          },
-          {
-            key: "urgent-help",
-            text: "For urgent or same-day help, contact our team directly.",
-          },
-        ],
-        "Expected /book pre-submit request-only and no-finance clarity",
+        initialState.feedbackText,
+        "",
+        "Expected /book not to show an informational feedback box before any customer action",
       );
       assert.equal(
         initialState.text.includes(
@@ -35007,24 +34979,9 @@ async function runChromeTest() {
       );
       assert.equal(mobileState.submitVisible, true, "Expected /book submit button to remain touch-friendly on mobile");
       assert.equal(mobileState.nextSteps.visible, false, "Expected /book mobile step-card guidance to stay removed");
-      assert.equal(mobileState.preSubmitReview.visible, true, "Expected /book mobile pre-submit clarity");
-      assert.equal(
-        mobileState.preSubmitReview.text.includes(
-          "Short-notice bookings under 24 hours require team review before confirmation.",
-        ),
-        true,
-        "Expected /book mobile pre-submit clarity to explain short-notice review",
-      );
-      assert.equal(
-        mobileState.preSubmitReview.text.includes("This is a booking request only, not a confirmed booking yet."),
-        true,
-        "Expected /book mobile pre-submit clarity to stay request-only",
-      );
-      assert.equal(
-        mobileState.preSubmitReview.text.includes("No price, payment, invoice, PDF, or billing file is created here."),
-        true,
-        "Expected /book mobile pre-submit clarity to show no finance-file boundary",
-      );
+      assert.equal(mobileState.preSubmitReview.visible, false, "Expected /book mobile pre-submit review box to stay removed");
+      assert.equal(mobileState.preSubmitReview.height, 0, "Expected removed mobile pre-submit review to have no height");
+      assert.equal(mobileState.preSubmitReview.text, "", "Expected removed mobile pre-submit review to have no text");
       assert.equal(
         mobileState.customerIntakeHandoffVisible,
         false,
@@ -41354,8 +41311,8 @@ async function runChromeTest() {
       });
       assert.equal(
         customerBookingPreSubmitReviewVisible,
-        route.context === "/book",
-        `Expected customer booking pre-submit review visibility boundary for ${route.context}`,
+        false,
+        `Expected customer booking pre-submit review to stay removed for ${route.context}`,
       );
       const customerBookingDocumentHistoryVisible = await evaluate(
         `Boolean(document.querySelector("[data-customer-booking-document-history]"))`,

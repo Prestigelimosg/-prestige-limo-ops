@@ -353,9 +353,8 @@ for (const fragment of [
   "submitCustomerBookingRequest(form, {",
   "data-customer-booking-form=\"true\"",
   "Our team will review and confirm your booking shortly. Thank you",
-  "This is a booking request only, not a confirmed booking yet.",
-  "No price, payment, invoice, PDF, or billing file is created here.",
-  "Our team will review and confirm availability before your booking is confirmed.",
+  "useState<Feedback | null>(null)",
+  "data-customer-booking-feedback=\"true\"",
   "Type of service",
   "Please select service type",
   "Vehicle type",
@@ -369,6 +368,14 @@ for (const removedFragment of [
   "Trip type",
   "Preferred vehicle",
   "Please select trip type",
+  "Send a request and our staff will review the details before confirming availability.",
+  "data-customer-booking-pre-submit-review=\"true\"",
+  "data-customer-booking-pre-submit-review-title=\"true\"",
+  "This is a booking request only, not a confirmed booking yet.",
+  "Our team will review and confirm availability before your booking is confirmed.",
+  "Short-notice bookings under 24 hours require team review before confirmation.",
+  "No price, payment, invoice, PDF, or billing file is created here.",
+  "For urgent or same-day help, contact our team directly.",
 ]) {
   assertExcludes(bookPage, removedFragment, `/book removed request notice ${removedFragment}`);
 }

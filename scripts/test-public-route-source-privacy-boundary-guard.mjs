@@ -103,15 +103,17 @@ for (const source of [customerBookingPage, customerPortalPage]) {
   }
 }
 
-assertIncludes(
-  customerBookingPage,
+for (const removedBookingNotice of [
+  'data-customer-booking-pre-submit-review="true"',
   "This is a booking request only, not a confirmed booking yet.",
-  "customer booking request-only copy",
-);
+  "No price, payment, invoice, PDF, or billing file is created here.",
+]) {
+  assertExcludes(customerBookingPage, removedBookingNotice, "customer booking removed review notice");
+}
 assertIncludes(
   customerBookingPage,
-  "No price, payment, invoice, PDF, or billing file is created here.",
-  "customer booking no-finance-file copy",
+  'data-customer-booking-feedback="true"',
+  "customer booking action feedback boundary",
 );
 assertIncludes(
   customerPortalPage,

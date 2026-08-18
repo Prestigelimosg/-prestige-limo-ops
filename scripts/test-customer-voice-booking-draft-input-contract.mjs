@@ -39,6 +39,7 @@ const safeCustomerBookingFields = [
   "passengerCount",
   "luggage",
   "extraStops",
+  "specialRequest",
   "travelerId",
 ];
 
@@ -259,8 +260,8 @@ for (const fragment of [
   "getCustomerBookingSpeechRecognitionConstructor()",
   "Voice dictation is not supported in this browser. Type the trip details manually.",
   "submitCustomerBookingRequest(form, {",
-  "This is a booking request only, not a confirmed booking yet.",
-  "Our team will review and confirm availability before your booking is confirmed.",
+  "After you submit,",
+  "will review the request and reply with the next step.",
 ]) {
   assertIncludes(bookPage, fragment, `/book evidence ${fragment}`);
 }

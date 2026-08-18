@@ -194,12 +194,8 @@ type AdminEmailAiProviderResult =
       outputTokens: number;
     }
   | {
-      diagnosticFields?: AdminEmailAiSourceFactDiagnosticField[];
       error: string;
-      inputTokens?: number;
-      model?: string;
       ok: false;
-      outputTokens?: number;
       reviewReason?: string;
     };
 
@@ -620,7 +616,11 @@ export async function loadAdminEmailAiIntake(
     .select(
       "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
     )
-    .in("processing_status", ["queued", "failed"])
+    .eq("processing_status", "queued")
+    .in("classification", [
+      ...adminEmailAiAppReviewClassifications,
+      "enquiry",
+    ])
     .order("created_at", { ascending: false })
     .limit(25);
 
@@ -642,12 +642,11 @@ export async function loadAdminEmailAiIntake(
         .filter(
           (record): record is AdminEmailAiIntakeRecord =>
             record !== null &&
-            (record.processing_status === "failed" ||
-              adminEmailAiIntakeAppearsInApp({
-                classification: record.classification,
-                senderAddress: record.sender_address,
-                subject: record.subject,
-              })),
+            adminEmailAiIntakeAppearsInApp({
+              classification: record.classification,
+              senderAddress: record.sender_address,
+              subject: record.subject,
+            }),
         )
     : [];
   let inputTokens = 0;
@@ -874,56 +873,6 @@ function samePersonIdentity(left: unknown, right: unknown) {
 
 const explicitSourceFactsValidationReviewReason =
   "AI booking result is missing or conflicts with explicit source evidence; manual review required.";
-
-const adminEmailAiSourceFactDiagnosticMessages = {
-  ambiguous_source_evidence:
-    "AI source check: The original email contains ambiguous booking evidence.",
-  bag_count:
-    "AI source check: Bag count differs from the original email.",
-  booked_passenger_count:
-    "AI source check: Booked passenger count differs from the original email.",
-  booking_type:
-    "AI source check: Service type differs from the original email.",
-  company_account:
-    "AI source check: Company or account differs from the original email.",
-  extra_stop_count:
-    "AI source check: Extra-stop count differs from the original email.",
-  extra_stop_location:
-    "AI source check: Extra-stop location differs from the original email.",
-  flight_number:
-    "AI source check: Flight number differs from the original email.",
-  passenger_name:
-    "AI source check: Passenger name differs from the original email.",
-  passenger_phone:
-    "AI source check: Passenger phone differs from the original email.",
-  pickup_date:
-    "AI source check: Pickup date differs from the original email.",
-  pickup_extra_stop_role_mixing:
-    "AI source check: Primary pickup and extra-stop roles were mixed.",
-  pickup_location:
-    "AI source check: Primary pickup differs from the original email.",
-  pickup_time:
-    "AI source check: Pickup time differs from the original email.",
-  structured_booking_count:
-    "AI source check: The structured booking count conflicts with the original email.",
-  unsupported_customer_price_override:
-    "AI source check: The AI supplied an unsupported customer-price override.",
-  vehicle:
-    "AI source check: Vehicle differs from the original email.",
-  vehicle_capacity_used_as_pax:
-    "AI source check: Vehicle capacity was used as the booked passenger count.",
-} as const;
-
-type AdminEmailAiSourceFactDiagnosticField =
-  keyof typeof adminEmailAiSourceFactDiagnosticMessages;
-
-function adminEmailAiSourceFactDiagnosticReasons(
-  fields: AdminEmailAiSourceFactDiagnosticField[] | undefined,
-) {
-  return Array.from(new Set(fields || []))
-    .map((field) => adminEmailAiSourceFactDiagnosticMessages[field])
-    .filter(Boolean);
-}
 
 type ExplicitSourceBookingFacts = {
   bagCount?: string;
@@ -1249,123 +1198,30 @@ function validateExplicitSourceFactsCompleteness(
     analysis.bookingResult.bookings.some((candidate) =>
       Boolean(cleanText(candidate.customerPriceOverride, 80)),
     );
-  const diagnosticFields: AdminEmailAiSourceFactDiagnosticField[] = [];
-  const recordDiagnostic = (
-    condition: unknown,
-    field: AdminEmailAiSourceFactDiagnosticField,
-  ) => {
-    if (condition && !diagnosticFields.includes(field)) {
-      diagnosticFields.push(field);
-    }
-  };
 
-  recordDiagnostic(
-    invalidStructuredResult,
-    "unsupported_customer_price_override",
-  );
-  recordDiagnostic(sourceEvidence.ambiguous, "ambiguous_source_evidence");
-  recordDiagnostic(
-    sourceEvidence.hasEvidence && !hasOneStructuredBooking,
-    "structured_booking_count",
-  );
-  recordDiagnostic(
-    facts.bookingType && booking?.bookingType !== facts.bookingType,
-    "booking_type",
-  );
-  recordDiagnostic(
-    (facts.companyAccount &&
-      normalizedEvidenceText(structuredCompanyAccount) !==
-        normalizedEvidenceText(facts.companyAccount)) ||
-      (!facts.companyAccount &&
-        structuredCompanyAccount &&
-        normalizedEvidenceText(structuredCompanyAccount) !==
-          normalizedEvidenceText(verifiedSenderCompanyAccount)),
-    "company_account",
-  );
-  recordDiagnostic(
-    facts.pickupDate &&
-      normalizedEvidenceDate(booking?.pickupDate) !== facts.pickupDate,
-    "pickup_date",
-  );
-  recordDiagnostic(
-    facts.pickupTime &&
-      normalizedEvidenceTime(booking?.pickupTime) !== facts.pickupTime,
-    "pickup_time",
-  );
-  recordDiagnostic(
-    facts.pickup &&
-      !locationContainsExplicitEvidence(booking?.pickup, facts.pickup),
-    "pickup_location",
-  );
-  recordDiagnostic(
-    facts.extraStopCount &&
-      normalizedEvidenceCount(booking?.extraStopCount) !==
-        facts.extraStopCount,
-    "extra_stop_count",
-  );
-  recordDiagnostic(
-    facts.extraStopLocation &&
-      !locationContainsExplicitEvidence(
-        booking?.extraStopLocation,
-        facts.extraStopLocation,
-      ),
-    "extra_stop_location",
-  );
-  recordDiagnostic(
-    facts.pickup &&
-      facts.extraStopLocation &&
-      (locationContainsExplicitEvidence(
-        booking?.pickup,
-        facts.extraStopLocation,
-      ) ||
-        locationContainsExplicitEvidence(
-          booking?.extraStopLocation,
-          facts.pickup,
-        )),
-    "pickup_extra_stop_role_mixing",
-  );
-  recordDiagnostic(
-    facts.passengerName &&
-      !samePersonIdentity(booking?.passengerName, facts.passengerName),
-    "passenger_name",
-  );
-  recordDiagnostic(
-    facts.passengerContact &&
-      normalizedExplicitPassengerPhone(booking?.passengerContact) !==
-        facts.passengerContact,
-    "passenger_phone",
-  );
-  recordDiagnostic(
-    facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax,
-    "booked_passenger_count",
-  );
-  recordDiagnostic(
-    facts.bagCount &&
-      normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount,
-    "bag_count",
-  );
-  recordDiagnostic(
-    facts.vehicle &&
-      normalizedEvidenceText(booking?.vehicle) !==
-        normalizedEvidenceText(facts.vehicle),
-    "vehicle",
-  );
-  recordDiagnostic(
-    facts.flightNumber &&
-      normalizedEvidenceFlight(booking?.flightNumber) !== facts.flightNumber,
-    "flight_number",
-  );
-  recordDiagnostic(
-    facts.pax &&
-      facts.vehicleCapacity &&
-      facts.pax !== facts.vehicleCapacity &&
-      normalizedEvidenceCount(booking?.pax) === facts.vehicleCapacity,
-    "vehicle_capacity_used_as_pax",
-  );
-
-  if (diagnosticFields.length > 0) {
+  if (
+    invalidStructuredResult ||
+    sourceEvidence.ambiguous ||
+    (sourceEvidence.hasEvidence && !hasOneStructuredBooking) ||
+    (facts.bookingType && booking?.bookingType !== facts.bookingType) ||
+    (facts.companyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(facts.companyAccount)) ||
+    (!facts.companyAccount && structuredCompanyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(verifiedSenderCompanyAccount)) ||
+    (facts.pickupDate && normalizedEvidenceDate(booking?.pickupDate) !== facts.pickupDate) ||
+    (facts.pickupTime && normalizedEvidenceTime(booking?.pickupTime) !== facts.pickupTime) ||
+    (facts.pickup && !locationContainsExplicitEvidence(booking?.pickup, facts.pickup)) ||
+    (facts.extraStopCount && normalizedEvidenceCount(booking?.extraStopCount) !== facts.extraStopCount) ||
+    (facts.extraStopLocation && !locationContainsExplicitEvidence(booking?.extraStopLocation, facts.extraStopLocation)) ||
+    (facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation)) ||
+    (facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.extraStopLocation, facts.pickup)) ||
+    (facts.passengerName && !samePersonIdentity(booking?.passengerName, facts.passengerName)) ||
+    (facts.passengerContact && normalizedExplicitPassengerPhone(booking?.passengerContact) !== facts.passengerContact) ||
+    (facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax) ||
+    (facts.bagCount && normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount) ||
+    (facts.vehicle && normalizedEvidenceText(booking?.vehicle) !== normalizedEvidenceText(facts.vehicle)) ||
+    (facts.flightNumber && normalizedEvidenceFlight(booking?.flightNumber) !== facts.flightNumber) ||
+    (facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity && normalizedEvidenceCount(booking?.pax) === facts.vehicleCapacity)
+  ) {
     return {
-      diagnosticFields,
       error: explicitSourceFactsValidationReviewReason,
       ok: false as const,
     };
@@ -1777,12 +1633,8 @@ async function analyseAllowedEmail(input: {
 
     if (!sourceFactsValidation.ok) {
       return {
-        diagnosticFields: sourceFactsValidation.diagnosticFields,
         error: sourceFactsValidation.error,
-        inputTokens: cleanPositiveInteger(response.usage?.input_tokens),
-        model: cleanModel(response.model || model),
         ok: false,
-        outputTokens: cleanPositiveInteger(response.usage?.output_tokens),
         reviewReason: sourceFactsValidation.error,
       };
     }
@@ -1924,25 +1776,14 @@ async function updateProcessedIntake(
   },
 ) {
   if (!providerResult.ok) {
-    const diagnosticReasons = adminEmailAiSourceFactDiagnosticReasons(
-      providerResult.diagnosticFields,
-    );
     const failedResult = await client
       .from(intakeTable)
       .update({
-        ...(providerResult.model
-          ? {
-              model: providerResult.model,
-              openai_input_tokens: providerResult.inputTokens,
-              openai_output_tokens: providerResult.outputTokens,
-            }
-          : {}),
         processing_status: "failed",
-        review_reasons: cleanReviewReasons([
+        review_reasons: [
           providerResult.reviewReason ||
             "AI review was unavailable; manual review required.",
-          ...diagnosticReasons,
-        ]),
+        ],
         summary: providerResult.error,
         updated_at: new Date().toISOString(),
       })

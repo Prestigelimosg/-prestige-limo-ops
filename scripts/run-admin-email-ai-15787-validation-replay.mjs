@@ -280,7 +280,7 @@ function runGitBytes(args, code, message) {
   }
 }
 
-async function bindRuntimeSourceToExpectedBuild(options = {}) {
+async function bindRuntimeSourceToExpectedBuild() {
   const localGitHead = runGitText(
     ["rev-parse", "--verify", "HEAD^{commit}"],
     "local_git_head_unavailable",
@@ -318,13 +318,11 @@ async function bindRuntimeSourceToExpectedBuild(options = {}) {
       "A required runtime source file is unavailable in the expected build.",
     );
     const currentDigest = sha256(currentBytes);
-    if (options.allowCurrentRuntimeSourceForSandboxSelfTest !== true) {
-      requireReplay(
-        currentDigest === sha256(expectedBytes),
-        "runtime_source_mismatch",
-        "The local Email AI runtime source does not match the expected Production build.",
-      );
-    }
+    requireReplay(
+      currentDigest === sha256(expectedBytes),
+      "runtime_source_mismatch",
+      "The local Email AI runtime source does not match the expected Production build.",
+    );
     runtimeSourceSha256[relativePath] = currentDigest;
     runtimeSources[name] = currentBytes.toString("utf8");
   }
@@ -460,10 +458,7 @@ try {
     `Invalid ${expectedBuildEnvName}.`,
   );
 
-  const sourceBinding = await bindRuntimeSourceToExpectedBuild({
-    allowCurrentRuntimeSourceForSandboxSelfTest:
-      selfTest === "runtime-sandbox-call",
-  });
+  const sourceBinding = await bindRuntimeSourceToExpectedBuild();
   evidence = {
     ...evidence,
     expected_build_commit: sourceBinding.expectedBuildCommit,

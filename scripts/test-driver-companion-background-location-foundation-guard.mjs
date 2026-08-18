@@ -131,7 +131,12 @@ includes("app", "parseDriverJobUrl(incomingUrl)");
 includes("app", "Driver Portal is ready.");
 includes("app", "trackingState.active && trackingState.job");
 includes("readme", "Expo Go cannot prove the complete embedded workflow or background location.");
-includes("rootTsconfig", '"exclude": ["node_modules", "driver-companion"]');
+const rootTsconfig = JSON.parse(source.rootTsconfig);
+assert.equal(
+  rootTsconfig.exclude.includes("driver-companion"),
+  true,
+  "The root Next.js type check must exclude the isolated Driver native project",
+);
 includes("preactivation", "scripts/test-driver-companion-background-location-foundation-guard.mjs");
 
 const combinedNativeSource = [

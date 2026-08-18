@@ -152,20 +152,6 @@ const headRun = spawnSync("git", ["rev-parse", "HEAD"], {
 assert.equal(headRun.status, 0, headRun.stderr);
 const localGitHead = headRun.stdout.trim();
 assert.match(localGitHead, /^[0-9a-f]{40}$/);
-const runtimeSourcesMatchHead = spawnSync(
-  "git",
-  [
-    "diff",
-    "--quiet",
-    "HEAD",
-    "--",
-    "lib/admin-email-ai-intake.ts",
-    "lib/admin-email-ai-intake-contract.ts",
-    "lib/admin-email-ai-intake-schema.ts",
-    "lib/ai-parser-schema.ts",
-  ],
-  { cwd: root, encoding: "utf8" },
-).status === 0;
 
 let unresolvableBuild = "";
 for (const candidate of ["00000000", "ffffffff", "11111111", "22222222"]) {
@@ -303,29 +289,16 @@ try {
   );
   assert.equal(
     bindingEvidence.acceptance_error?.code,
-    runtimeSourcesMatchHead
-      ? "self_test_source_binding_complete"
-      : "runtime_source_mismatch",
+    "self_test_source_binding_complete",
   );
-  assert.equal(
-    bindingEvidence.expected_build_commit,
-    runtimeSourcesMatchHead ? localGitHead : "",
-  );
-  assert.equal(
-    bindingEvidence.local_git_head,
-    runtimeSourcesMatchHead ? localGitHead : "",
-  );
+  assert.equal(bindingEvidence.expected_build_commit, localGitHead);
+  assert.equal(bindingEvidence.local_git_head, localGitHead);
   assert.equal(bindingEvidence.provider_calls, 0);
-  if (runtimeSourcesMatchHead) {
-    assert.equal(Object.keys(bindingEvidence.runtime_source_sha256 || {}).length, 4);
-    for (const digest of Object.values(bindingEvidence.runtime_source_sha256)) {
-      assert.match(digest, /^[0-9a-f]{64}$/);
-    }
-    assert.match(bindingEvidence.runner_sha256, /^[0-9a-f]{64}$/);
-  } else {
-    assert.deepEqual(bindingEvidence.runtime_source_sha256, {});
-    assert.equal(bindingEvidence.runner_sha256, "");
+  assert.equal(Object.keys(bindingEvidence.runtime_source_sha256 || {}).length, 4);
+  for (const digest of Object.values(bindingEvidence.runtime_source_sha256)) {
+    assert.match(digest, /^[0-9a-f]{64}$/);
   }
+  assert.match(bindingEvidence.runner_sha256, /^[0-9a-f]{64}$/);
 
   const invalidBuildEvidence = await readEvidence(
     runRunner("invalid-build", {

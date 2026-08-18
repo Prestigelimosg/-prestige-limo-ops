@@ -11784,12 +11784,11 @@ async function loadAdminEmailAiIntakeRead() {
     enabled: result.enabled === true,
     records: Array.isArray(result.records)
       ? (result.records as AdminEmailAiIntakeRecord[]).filter((record) =>
-          clean(record.processing_status).toLowerCase() === "failed" ||
           adminEmailAiIntakeAppearsInApp({
-              classification: record.classification,
-              senderAddress: record.sender_address,
-              subject: record.subject,
-            }),
+            classification: record.classification,
+            senderAddress: record.sender_address,
+            subject: record.subject,
+          }),
         )
       : [],
     tokenUsage:
@@ -20169,7 +20168,6 @@ export default function Home() {
     const classification = clean(record.classification).toLowerCase();
 
     if (
-      clean(record.processing_status).toLowerCase() !== "queued" ||
       !adminEmailAiIntakeAppearsInApp({
         classification,
         senderAddress: record.sender_address,
@@ -47931,12 +47929,8 @@ export default function Home() {
                 {adminEmailAiIntakeRecords.map((record) => {
                   const intakeId = clean(record.id);
                   const classification = clean(record.classification).toLowerCase();
-                  const processingStatus = clean(record.processing_status).toLowerCase();
-                  const failed = processingStatus === "failed";
                   const classificationLabel =
-                    failed
-                      ? "Manual review required"
-                      : classification === "confirmed_booking"
+                    classification === "confirmed_booking"
                       ? "Confirmed booking"
                       : classification === "amendment"
                           ? "Amendment"
@@ -47946,41 +47940,20 @@ export default function Home() {
                   const confidence = Math.round(
                     Math.min(1, Math.max(0, Number(record.confidence) || 0)) * 100,
                   );
-                  const receivedAt = formatBookingTimestampSgt(record.received_at);
-                  const reviewReasons = Array.isArray(record.review_reasons)
-                    ? record.review_reasons.map((reason) => clean(reason)).filter(Boolean)
-                    : [];
-                  const sourceDiagnostics = reviewReasons.filter((reason) =>
-                    reason.startsWith("AI source check:"),
-                  );
-                  const originalEmailText =
-                    typeof record.normalized_text === "string"
-                      ? record.normalized_text.trim()
-                      : "";
 
                   return (
                     <article
-                      className={`rounded-md border bg-white px-3 py-2 text-sm shadow-sm ${
-                        failed ? "border-amber-300" : "border-indigo-200"
-                      }`}
+                      className="rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm shadow-sm"
                       data-dashboard-email-ai-intake-row={intakeId || "email-review"}
                       key={`email-ai-intake-${intakeId || clean(record.created_at)}`}
                     >
                       <div className="grid gap-2 md:grid-cols-[minmax(12rem,0.9fr)_minmax(12rem,1fr)_auto] md:items-center">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
-                              failed
-                                ? "bg-amber-100 text-amber-950 ring-amber-300"
-                                : "bg-indigo-100 text-indigo-900 ring-indigo-200"
-                            }`}>
+                            <span className="inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-900 ring-1 ring-indigo-200">
                               Email · booking@prestigelimo.sg
                             </span>
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
-                              failed
-                                ? "bg-amber-50 text-amber-950 ring-amber-300"
-                                : "bg-white text-slate-700 ring-slate-200"
-                            }`}>
+                            <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
                               {classificationLabel}
                             </span>
                           </div>
@@ -47988,56 +47961,26 @@ export default function Home() {
                             {clean(record.subject) || "No subject"}
                           </p>
                           <p className="truncate text-xs text-slate-500">
-                            From {clean(record.sender_address)}
-                            {receivedAt ? ` · Received ${receivedAt}` : ""}
-                            {!failed ? ` · ${confidence}% confidence` : ""}
+                            From {clean(record.sender_address)} · {confidence}% confidence
                           </p>
                         </div>
                         <div className="min-w-0">
-                          {failed ? (
-                            <>
-                              <p className="font-semibold text-amber-950">
-                                {sourceDiagnostics.length > 0
-                                  ? sourceDiagnostics.join(" ")
-                                  : "The precise field was not retained for this earlier failure."}
-                              </p>
-                              <p className="mt-1 text-xs font-medium text-slate-600">
-                                Read-only manual review · no Dispatch import · no reply sent · no booking saved
-                              </p>
-                              <details
-                                className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1"
-                                data-dashboard-email-ai-failure-source="true"
-                              >
-                                <summary className="cursor-pointer text-xs font-semibold text-amber-950">
-                                  View original email
-                                </summary>
-                                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-800">
-                                  {originalEmailText || "Original email text unavailable."}
-                                </pre>
-                              </details>
-                            </>
-                          ) : (
-                            <>
-                              <p className="line-clamp-2 text-slate-800">
-                                {clean(record.summary) || "Manual review required."}
-                              </p>
-                              <p className="mt-1 text-xs font-medium text-slate-500">
-                                AI review only · no reply sent · no booking saved
-                              </p>
-                            </>
-                          )}
+                          <p className="line-clamp-2 text-slate-800">
+                            {clean(record.summary) || "Manual review required."}
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-slate-500">
+                            AI review only · no reply sent · no booking saved
+                          </p>
                         </div>
-                        {failed ? null : (
-                          <div className="flex md:justify-end">
-                            <button
-                              className="h-8 rounded-md border border-indigo-300 bg-indigo-800 px-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
-                              onClick={() => openAdminEmailAiIntakeReview(record)}
-                              type="button"
-                            >
-                              Review in Dispatch
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex md:justify-end">
+                          <button
+                            className="h-8 rounded-md border border-indigo-300 bg-indigo-800 px-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                            onClick={() => openAdminEmailAiIntakeReview(record)}
+                            type="button"
+                          >
+                            Review in Dispatch
+                          </button>
+                        </div>
                       </div>
                     </article>
                   );

@@ -316,15 +316,11 @@ assert.match(
 );
 assert.doesNotMatch(contractSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.doesNotMatch(bookingParserSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
+assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
 assert.match(
   runtimeSource,
-  /\.in\("processing_status", \["queued", "failed"\]\)/,
-  "The existing Admin read must include failed Email AI rows for read-only manual review.",
+  /\.in\("classification", \[\s*\.\.\.adminEmailAiAppReviewClassifications,\s*"enquiry",\s*\]\)/,
 );
-assert.match(runtimeSource, /adminEmailAiSourceFactDiagnosticMessages/);
-assert.match(runtimeSource, /vehicle_capacity_used_as_pax/);
-assert.match(runtimeSource, /openai_input_tokens:\s*providerResult\.inputTokens/);
-assert.match(runtimeSource, /openai_output_tokens:\s*providerResult\.outputTokens/);
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
 assert.match(runtimeSource, /currentSingaporeMonthWindow/);
 assert.match(runtimeSource, /tokenUsageMaximumPages/);
@@ -424,19 +420,6 @@ assert.match(
 assert.match(
   browserTestSource,
   /00000000-0000-4000-8000-000000000103/,
-);
-assert.match(
-  browserTestSource,
-  /00000000-0000-4000-8000-000000000104/,
-);
-assert.match(browserTestSource, /Synthetic Transport 90001/);
-assert.match(browserTestSource, /View original email/);
-assert.match(pageSource, /data-dashboard-email-ai-failure-source="true"/);
-assert.match(pageSource, /The precise field was not retained for this earlier failure\./);
-assert.match(
-  pageSource,
-  /clean\(record\.processing_status\)\.toLowerCase\(\) !== "queued"/,
-  "A failed Email AI row must never open the established Dispatch import path.",
 );
 assert.match(
   browserTestSource,

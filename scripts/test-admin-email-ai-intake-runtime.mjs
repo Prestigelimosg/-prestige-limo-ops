@@ -428,6 +428,35 @@ const syntheticPrestigeTransport15787Body = syntheticPrestigeTransport15787Sourc
   .toString()
   .split("\r\n\r\n")[1]
   .replaceAll("\r\n", "\n");
+const syntheticCapacityMismatchSource = Buffer.from(
+  [
+    "Return-Path: <info@prestigelimo.sg>",
+    "Delivered-To: booking@prestigelimo.sg",
+    "From: Prestige Transport <info@prestigelimo.sg>",
+    "To: booking@prestigelimo.sg",
+    "Message-ID: <synthetic-capacity-mismatch@example.test>",
+    "Date: Mon, 17 Aug 2026 05:01:26 +0000",
+    'Subject: New booking "Synthetic Transport 90001" has been received',
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    "GENERAL",
+    "Title Synthetic Transport 90001 Service type Airport transfer Transfer type One Way Pickup date and time 19-08-2026 19:00",
+    "Comment Synthetic booking request",
+    "ROUTE",
+    "Route name Airport Departure",
+    "PICK UP LOCATION",
+    "1 Test Road",
+    "VEHICLE",
+    "Vehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4",
+    "CLIENT DETAILS",
+    "First name Alex Last name Example E-mail address synthetic@example.test Phone number +6500000001 Passangers 1 Flight No. ZZ900",
+  ].join("\r\n"),
+);
+const syntheticCapacityMismatchBody = syntheticCapacityMismatchSource
+  .toString()
+  .split("\r\n\r\n")[1]
+  .replaceAll("\r\n", "\n");
 
 const fakeMailbox = {
   messages: [],
@@ -524,6 +553,9 @@ class FakeOpenAI {
       const isPrestigeTransport15787 = body.input.includes(
         'New booking "Prestige Transport 15787" has been received',
       );
+      const isSyntheticCapacityMismatch = body.input.includes(
+        'New booking "Synthetic Transport 90001" has been received',
+      );
       const supportsCompleteSemanticBookingContract =
         body.instructions.includes(
           "Read the complete email before producing the structured booking result.",
@@ -537,7 +569,45 @@ class FakeOpenAI {
       const isGroundBookerOrderRequest = body.input.includes(
         "order from Groundbooker Transzend [INQ#817905]",
       );
-      const analysis = isPrestigeTransport15787
+      const analysis = isSyntheticCapacityMismatch
+        ? {
+            bookingResult: {
+              bookings: [
+                {
+                  bagCount: "3",
+                  bookerContact: "",
+                  bookerEmail: "synthetic@example.test",
+                  bookerName: "",
+                  bookingType: "DEP",
+                  companyAccount: "",
+                  confidence: 0.91,
+                  customerPriceOverride: "",
+                  dropoff: "Changi Airport",
+                  extraStopCount: "",
+                  extraStopLocation: "",
+                  extraStops: "",
+                  flightNumber: "ZZ900",
+                  needsReviewReasons: [],
+                  notes: "",
+                  passengerContact: "+6500000001",
+                  passengerName: "Alex Example",
+                  pax: "4",
+                  pickup: "1 Test Road",
+                  pickupDate: "2026-08-19",
+                  pickupTime: "19:00",
+                  vehicle: "Toyota Alphard 2.5",
+                },
+              ],
+              multipleBookingsDetected: false,
+              rawWarnings: [],
+            },
+            classification: "confirmed_booking",
+            confidence: 0.91,
+            reviewReasons: [],
+            suggestedReply: "",
+            summary: "Synthetic airport departure capacity mismatch.",
+          }
+        : isPrestigeTransport15787
         ? supportsCompleteSemanticBookingContract
           ? {
               bookingResult: {
@@ -1039,44 +1109,50 @@ try {
   );
 
   const incompleteOrConflictingExplicitSourceFacts = [
-    ["missing service meaning", { bookingType: "" }],
-    ["conflicting service meaning", { bookingType: "MNG" }],
-    ["missing pickup date", { pickupDate: "" }],
-    ["conflicting pickup date", { pickupDate: "2026-08-20" }],
-    ["missing pickup time", { pickupTime: "" }],
-    ["conflicting pickup time", { pickupTime: "11:00" }],
-    ["missing primary pickup", { pickup: "" }],
+    ["missing service meaning", { bookingType: "" }, "booking_type"],
+    ["conflicting service meaning", { bookingType: "MNG" }, "booking_type"],
+    ["missing pickup date", { pickupDate: "" }, "pickup_date"],
+    ["conflicting pickup date", { pickupDate: "2026-08-20" }, "pickup_date"],
+    ["missing pickup time", { pickupTime: "" }, "pickup_time"],
+    ["conflicting pickup time", { pickupTime: "11:00" }, "pickup_time"],
+    ["missing primary pickup", { pickup: "" }, "pickup_location"],
     [
       "combined primary pickup and waypoint",
       {
         pickup:
           "26 Newton Rd, Singapore 307957; 6 Suffolk Walk, Singapore 307464",
       },
+      "pickup_extra_stop_role_mixing",
     ],
-    ["missing waypoint count", { extraStopCount: "" }],
-    ["conflicting waypoint count", { extraStopCount: "2" }],
-    ["missing waypoint location", { extraStopLocation: "" }],
+    ["missing waypoint count", { extraStopCount: "" }, "extra_stop_count"],
+    ["conflicting waypoint count", { extraStopCount: "2" }, "extra_stop_count"],
+    ["missing waypoint location", { extraStopLocation: "" }, "extra_stop_location"],
     [
       "primary pickup substituted for waypoint",
       { extraStopLocation: "26 Newton Rd, Singapore 307957" },
+      "extra_stop_location",
     ],
-    ["missing passenger name", { passengerName: "" }],
-    ["conflicting passenger name", { passengerName: "Kim Hyun Soo" }],
-    ["missing passenger phone", { passengerContact: "" }],
-    ["conflicting passenger phone", { passengerContact: "+6591111111" }],
-    ["missing booked passenger count", { pax: "" }],
-    ["vehicle capacity substituted for booked passengers", { pax: "4" }],
-    ["missing bag count", { bagCount: "" }],
-    ["conflicting bag count", { bagCount: "4" }],
-    ["missing vehicle", { vehicle: "" }],
-    ["conflicting vehicle", { vehicle: "Mercedes Benz Viano" }],
-    ["missing flight", { flightNumber: "" }],
-    ["conflicting flight", { flightNumber: "SQ959" }],
-    ["unsupported override", { customerPriceOverride: "unexpected" }],
-    ["invented company without explicit evidence", { companyAccount: "Invented Agency" }],
+    ["missing passenger name", { passengerName: "" }, "passenger_name"],
+    ["conflicting passenger name", { passengerName: "Kim Hyun Soo" }, "passenger_name"],
+    ["missing passenger phone", { passengerContact: "" }, "passenger_phone"],
+    ["conflicting passenger phone", { passengerContact: "+6591111111" }, "passenger_phone"],
+    ["missing booked passenger count", { pax: "" }, "booked_passenger_count"],
+    [
+      "vehicle capacity substituted for booked passengers",
+      { pax: "4" },
+      "vehicle_capacity_used_as_pax",
+    ],
+    ["missing bag count", { bagCount: "" }, "bag_count"],
+    ["conflicting bag count", { bagCount: "4" }, "bag_count"],
+    ["missing vehicle", { vehicle: "" }, "vehicle"],
+    ["conflicting vehicle", { vehicle: "Mercedes Benz Viano" }, "vehicle"],
+    ["missing flight", { flightNumber: "" }, "flight_number"],
+    ["conflicting flight", { flightNumber: "SQ959" }, "flight_number"],
+    ["unsupported override", { customerPriceOverride: "unexpected" }, "unsupported_customer_price_override"],
+    ["invented company without explicit evidence", { companyAccount: "Invented Agency" }, "company_account"],
   ];
 
-  for (const [label, bookingPatch] of incompleteOrConflictingExplicitSourceFacts) {
+  for (const [label, bookingPatch, expectedDiagnosticField] of incompleteOrConflictingExplicitSourceFacts) {
     const result = runtime.testValidateExplicitSourceFactsCompleteness(
       { body: syntheticPrestigeTransport15787Body },
       {
@@ -1098,6 +1174,11 @@ try {
       /AI booking result is missing or conflicts with explicit source evidence; manual review required\./,
       `${label} must return the bounded source-consistency reason`,
     );
+    assert.equal(
+      result.diagnosticFields.includes(expectedDiagnosticField),
+      true,
+      `${label} must retain its precise admin-only diagnostic field`,
+    );
   }
 
   const ambiguousExplicitSourceFacts = runtime.testValidateExplicitSourceFactsCompleteness(
@@ -1107,6 +1188,9 @@ try {
     completeExplicitSourceFactsAnalysis,
   );
   assert.equal(ambiguousExplicitSourceFacts.ok, false);
+  assert.deepEqual(ambiguousExplicitSourceFacts.diagnosticFields, [
+    "ambiguous_source_evidence",
+  ]);
 
   const multipleBookingExplicitSourceFacts = runtime.testValidateExplicitSourceFactsCompleteness(
     { body: syntheticPrestigeTransport15787Body },
@@ -1126,6 +1210,52 @@ try {
   assert.match(
     multipleBookingExplicitSourceFacts.error,
     /AI booking result is missing or conflicts with explicit source evidence; manual review required\./,
+  );
+  assert.equal(
+    multipleBookingExplicitSourceFacts.diagnosticFields.includes(
+      "structured_booking_count",
+    ),
+    true,
+  );
+
+  const syntheticCapacityMismatch =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: syntheticCapacityMismatchBody },
+      {
+        bookingResult: {
+          bookings: [
+            {
+              bagCount: "3",
+              bookingType: "DEP",
+              companyAccount: "",
+              customerPriceOverride: "",
+              extraStopCount: "",
+              extraStopLocation: "",
+              flightNumber: "ZZ900",
+              passengerContact: "+6500000001",
+              passengerName: "Alex Example",
+              pax: "4",
+              pickup: "1 Test Road",
+              pickupDate: "2026-08-19",
+              pickupTime: "19:00",
+              vehicle: "Toyota Alphard 2.5",
+            },
+          ],
+          multipleBookingsDetected: false,
+          rawWarnings: [],
+        },
+        classification: "confirmed_booking",
+        confidence: 0.91,
+        reviewReasons: [],
+        suggestedReply: "",
+        summary: "Synthetic capacity-mismatch diagnostic fixture.",
+      },
+    );
+  assert.equal(syntheticCapacityMismatch.ok, false);
+  assert.deepEqual(
+    syntheticCapacityMismatch.diagnosticFields,
+    ["booked_passenger_count", "vehicle_capacity_used_as_pax"],
+    "The anonymized Production-shaped fixture must identify the exact failed fields without accepting or repairing the AI result.",
   );
 
   const explicitOrganisationBody = `${syntheticPrestigeTransport15787Body}\nAgency name Atlas Travel Partners`;
@@ -1603,9 +1733,56 @@ try {
   assert.equal(downloadCalls, 8, "blocked sender body must not be fetched");
   assert.equal(intakeRows.length, 8);
 
+  fakeMailbox.uidNext = 112;
+  fakeMailbox.messages.push({
+    envelope: {
+      from: [{ address: "info@prestigelimo.sg" }],
+      to: [{ address: "booking@prestigelimo.sg" }],
+    },
+    size: syntheticCapacityMismatchSource.length,
+    source: syntheticCapacityMismatchSource,
+    uid: 111,
+  });
+
+  const syntheticCapacityMismatchFailed = await runtime.runAdminEmailAiIntake();
+  assert.equal(syntheticCapacityMismatchFailed.ok, true);
+  assert.equal(syntheticCapacityMismatchFailed.parsed, 0);
+  assert.equal(syntheticCapacityMismatchFailed.skipped, 0);
+  assert.equal(providerRequestBodies.length, 9);
+  assert.equal(downloadCalls, 9);
+  assert.equal(intakeRows.length, 9);
+  assert.equal(intakeRows[8].processing_status, "failed");
+  assert.equal(intakeRows[8].classification, "uncertain");
+  assert.equal(intakeRows[8].canonical_booking_text, "");
+  assert.deepEqual(intakeRows[8].booking_parse_result, {
+    bookings: [],
+    multipleBookingsDetected: false,
+    rawWarnings: [],
+  });
+  assert.deepEqual(intakeRows[8].review_reasons, [
+    "AI booking result is missing or conflicts with explicit source evidence; manual review required.",
+    "AI source check: Booked passenger count differs from the original email.",
+    "AI source check: Vehicle capacity was used as the booked passenger count.",
+  ]);
+  assert.equal(intakeRows[8].model, "gpt-5.6-luna");
+  assert.equal(intakeRows[8].openai_input_tokens, 100);
+  assert.equal(intakeRows[8].openai_output_tokens, 80);
+  assert.deepEqual(
+    adminDevicePushEvents,
+    [
+      "email_confirmed_booking",
+      "email_confirmed_booking",
+      "email_confirmed_booking",
+      "email_confirmed_booking",
+      "email_confirmed_booking",
+      "email_confirmed_booking",
+    ],
+    "A failed source-fact review must not emit an Admin device push.",
+  );
+
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);
-  assert.equal(loaded.data.records.length, 7);
+  assert.equal(loaded.data.records.length, 8);
   assert.equal(
     loaded.data.records.some(
       (record) => record.id === intakeRows[1].id,
@@ -1620,6 +1797,19 @@ try {
     true,
     "The exact verified GroundBooker order-shaped enquiry must survive the guarded server read.",
   );
+  const loadedCapacityMismatch = loaded.data.records.find(
+    (record) => record.id === intakeRows[8].id,
+  );
+  assert.equal(loadedCapacityMismatch?.processing_status, "failed");
+  assert.equal(
+    loadedCapacityMismatch?.subject,
+    'New booking "Synthetic Transport 90001" has been received',
+  );
+  assert.match(
+    loadedCapacityMismatch?.normalized_text || "",
+    /1 Test Road/,
+    "The existing Admin-only read must retain the original failed email for manual review.",
+  );
   assert.equal(loaded.data.records[0].classification, "confirmed_booking");
   assert.equal(
     loaded.data.records[1].sender_address,
@@ -1627,10 +1817,10 @@ try {
   );
   assert.deepEqual(loaded.data.token_usage, {
     available: true,
-    input_tokens: 800,
+    input_tokens: 900,
     month_key: loaded.data.token_usage.month_key,
-    output_tokens: 640,
-    total_tokens: 1440,
+    output_tokens: 720,
+    total_tokens: 1620,
   });
 
   const route = createRequire(import.meta.url)(targetPaths.route);
@@ -1661,8 +1851,8 @@ try {
   assert.equal(allowedReadBody.ok, true);
   assert.equal(allowedReadBody.external_send, false);
   assert.equal(allowedReadBody.write_action, false);
-  assert.equal(allowedReadBody.records.length, 7);
-  assert.equal(allowedReadBody.token_usage.total_tokens, 1440);
+  assert.equal(allowedReadBody.records.length, 8);
+  assert.equal(allowedReadBody.token_usage.total_tokens, 1620);
 
   const actionableIntakeId = allowedReadBody.records[0].id;
   const blockedReview = await route.PATCH(
@@ -1778,12 +1968,22 @@ try {
   );
   assert.equal(afterReviewRead.status, 200);
   const afterReviewRecords = (await afterReviewRead.json()).records;
-  assert.equal(afterReviewRecords.length, 5);
+  assert.equal(afterReviewRecords.length, 6);
   assert.equal(
     afterReviewRecords[0].sender_address,
     "transzend@groundbooker.com",
   );
   assert.equal(afterReviewRecords[0].processing_status, "queued");
+  assert.equal(
+    afterReviewRecords.some(
+      (record) =>
+        record.subject ===
+          'New booking "Synthetic Transport 90001" has been received' &&
+        record.processing_status === "failed",
+    ),
+    true,
+    "Reviewing queued records must not remove the read-only failed-email evidence.",
+  );
 
   const cronRoute = createRequire(import.meta.url)(targetPaths.cronRoute);
   delete process.env.PRESTIGE_EMAIL_AI_CRON_SECRET;
@@ -1822,7 +2022,7 @@ try {
   const wrongMailbox = await runtime.runAdminEmailAiIntake();
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
-  assert.equal(providerRequestBodies.length, 8);
+  assert.equal(providerRequestBodies.length, 9);
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

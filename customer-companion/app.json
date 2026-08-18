@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Prestige SG",
+    "slug": "prestige-customer",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "prestige-customer",
+    "platforms": [
+      "ios"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "sg.prestigelimo.customer",
+      "buildNumber": "1",
+      "icon": "./assets/icon.png",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "CFBundleDisplayName": "Prestige SG",
+        "NSFaceIDUsageDescription": "Allow Prestige SG to use Face ID to protect your booking information."
+      }
+    },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Prestige SG to use Face ID to protect your booking information."
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}

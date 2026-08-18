@@ -3,9 +3,11 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
+const browserSmokePath = "scripts/test-app-smoke-browser.mjs";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-public-customer-portal-saved-booking-surface-guard.mjs";
 
+const portalLayoutPath = "app/my-bookings/layout.tsx";
 const portalPagePath = "app/my-bookings/page.tsx";
 const portalAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts";
 const portalChangeRequestAdapterPath = "lib/customer-portal-booking-change-request-adapter.ts";
@@ -195,7 +197,9 @@ function runContractCheck({ label, script, stripTypes }) {
 
 const allPaths = [
   ledgerPath,
+  browserSmokePath,
   preactivationSuitePath,
+  portalLayoutPath,
   portalPagePath,
   portalAdapterPath,
   portalChangeRequestAdapterPath,
@@ -208,15 +212,34 @@ const fileEntries = await Promise.all(
 const files = Object.fromEntries(fileEntries);
 
 const ledger = files[ledgerPath];
+const browserSmoke = files[browserSmokePath];
 const preactivationSuite = files[preactivationSuitePath];
+const portalLayout = files[portalLayoutPath];
 const portalPage = files[portalPagePath];
 const portalAdapter = files[portalAdapterPath];
 const portalChangeRequestAdapter = files[portalChangeRequestAdapterPath];
 const savedBookingsRead = files[savedBookingsReadPath];
+const presentationLedgerSection = sectionBetween(
+  ledger,
+  "### Customer PWA Locked Tracking Presentation Repair (2026-08-18)",
+);
 const ledgerSection = sectionBetween(
   ledger,
   "### Public Customer Portal Saved-Booking Surface Guard Lock",
 );
+
+for (const phrase of [
+  "renders its map frame and route/update/accuracy footer only when the existing customer-safe adapter returns `status = available` with a valid map URL",
+  "`Locked`, `Waiting`, and post-POB/completed blocked states remain inside the same panel as one compact wrapped status header",
+  "Only the My Bookings installed-PWA metadata changes from `black-translucent` to `default`",
+  "GPS/location eligibility, Driver OTW/OTS/POB/Job Completed, live-position storage/cleanup, Driver Reports, Admin Live Dispatch map",
+]) {
+  assertIncludes(
+    presentationLedgerSection,
+    phrase,
+    `Customer PWA locked tracking presentation ledger phrase: ${phrase}`,
+  );
+}
 
 for (const phrase of [
   "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
@@ -244,6 +267,30 @@ assertIncludes(
   guardScript,
   "preactivation public customer portal saved-booking surface guard registration",
 );
+
+assertIncludes(
+  portalLayout,
+  'statusBarStyle: "default"',
+  "/my-bookings installed PWA must reserve the iPhone status-bar area",
+);
+assertExcludes(
+  portalLayout,
+  'statusBarStyle: "black-translucent"',
+  "/my-bookings installed PWA must not render customer content beneath the iPhone status bar",
+);
+for (const fragment of [
+  'process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-portal"',
+  'panel.querySelector("[data-customer-portal-driver-tracking-placeholder]")',
+  "lockedTrackingState.messageCount <= 1",
+  "lockedTrackingState.panelHeight < 180",
+  "lockedTrackingState.docScrollWidth <= lockedTrackingState.docClientWidth + 2",
+]) {
+  assertIncludes(
+    browserSmoke,
+    fragment,
+    `/my-bookings compact locked tracking browser regression ${fragment}`,
+  );
+}
 
 assert.equal(portalPage.split("fetch(").length - 1, 1, "/my-bookings exact direct fetch count");
 const customerQuickReplyBlock = blockBetween(
@@ -415,6 +462,22 @@ for (const fragment of [
 ]) {
   assertIncludes(detailBlock, fragment, `/my-bookings safe detail binding ${fragment}`);
 }
+assertExcludes(
+  detailBlock,
+  "data-customer-portal-driver-tracking-placeholder",
+  "/my-bookings locked or waiting tracking state must not render a giant empty map placeholder",
+);
+assertIncludes(
+  detailBlock,
+  'className="break-words text-sm font-semibold text-slate-950"',
+  "/my-bookings locked or waiting tracking message must wrap inside the existing panel",
+);
+assert.equal(
+  detailBlock.indexOf("{trackingReady && safeDriverTracking?.mapEmbedUrl ? (") <
+    detailBlock.indexOf('className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]"'),
+  true,
+  "/my-bookings real map frame must render only after customer-visible tracking is ready",
+);
 
 const bookingResultsBlock = blockBetween(
   portalPage,

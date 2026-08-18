@@ -2331,7 +2331,7 @@ export default function CustomerPortalPage() {
                           >
                             <div className="flex flex-col gap-2 border-b border-sky-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-950">
+                                <p className="break-words text-sm font-semibold text-slate-950">
                                   {latestTripUpdate?.title || safeDriverTracking?.message || "Driver status to confirm"}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-600">
@@ -2353,37 +2353,31 @@ export default function CustomerPortalPage() {
                                 {trackingStatusLabel}
                               </span>
                             </div>
-                            <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
-                              {trackingReady && safeDriverTracking?.mapEmbedUrl ? (
-                                <iframe
-                                  className="h-full w-full border-0"
-                                  data-customer-portal-driver-tracking-map={expandedBooking.id}
-                                  loading="lazy"
-                                  referrerPolicy="no-referrer-when-downgrade"
-                                  src={safeDriverTracking.mapEmbedUrl}
-                                  title="Driver live map"
-                                />
-                              ) : (
-                                <div
-                                  className="flex h-full min-h-72 items-center justify-center px-5 text-center text-sm font-semibold text-slate-700"
-                                  data-customer-portal-driver-tracking-placeholder={expandedBooking.id}
-                                >
-                                  {safeDriverTracking?.message ||
-                                    "Tracking appears after the driver presses OTW and shares location."}
+                            {trackingReady && safeDriverTracking?.mapEmbedUrl ? (
+                              <>
+                                <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
+                                  <iframe
+                                    className="h-full w-full border-0"
+                                    data-customer-portal-driver-tracking-map={expandedBooking.id}
+                                    loading="lazy"
+                                    referrerPolicy="no-referrer-when-downgrade"
+                                    src={safeDriverTracking.mapEmbedUrl}
+                                    title="Driver live map"
+                                  />
                                 </div>
-                              )}
-                            </div>
-                            <div className="grid gap-2 border-t border-sky-100 px-3 py-2 text-xs font-semibold text-slate-700 sm:grid-cols-3">
-                              <span data-customer-portal-driver-tracking-route={expandedBooking.id}>
-                                {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
-                              </span>
-                              <span data-customer-portal-driver-tracking-updated={expandedBooking.id}>
-                                {safeDriverTracking?.updatedAt ? `Updated ${safeDriverTracking.updatedAt}` : "Update pending"}
-                              </span>
-                              <span data-customer-portal-driver-tracking-accuracy={expandedBooking.id}>
-                                {safeDriverTracking?.accuracyLabel || "Location accuracy pending"}
-                              </span>
-                            </div>
+                                <div className="grid gap-2 border-t border-sky-100 px-3 py-2 text-xs font-semibold text-slate-700 sm:grid-cols-3">
+                                  <span data-customer-portal-driver-tracking-route={expandedBooking.id}>
+                                    {expandedBooking.pickupLocation} to {expandedBooking.dropoffLocation}
+                                  </span>
+                                  <span data-customer-portal-driver-tracking-updated={expandedBooking.id}>
+                                    {safeDriverTracking.updatedAt ? `Updated ${safeDriverTracking.updatedAt}` : "Update pending"}
+                                  </span>
+                                  <span data-customer-portal-driver-tracking-accuracy={expandedBooking.id}>
+                                    {safeDriverTracking.accuracyLabel || "Location accuracy pending"}
+                                  </span>
+                                </div>
+                              </>
+                            ) : null}
                           </div>
                         ) : null}
 

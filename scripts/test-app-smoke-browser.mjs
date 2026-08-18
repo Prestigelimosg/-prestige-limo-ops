@@ -962,6 +962,7 @@ async function terminateChromeProcess(chrome) {
 async function runChromeTest() {
   const reporter = createBrowserTestReporter("app-smoke-browser");
   const chromeDebugPort = configuredChromeDebugPort ?? (await getAvailableTcpPort());
+  const headfulChrome = process.env.PRESTIGE_APP_SMOKE_HEADFUL === "true";
 
   assertCustomerNavigationRscPrefetchBoundary();
 
@@ -973,7 +974,7 @@ async function runChromeTest() {
   const chrome = spawn(
     chromeBinary,
     [
-      "--headless=new",
+      ...(headfulChrome ? ["--window-size=430,932"] : ["--headless=new"]),
       "--disable-gpu",
       "--disable-background-networking",
       "--disable-component-update",
@@ -1039,6 +1040,7 @@ async function runChromeTest() {
         const devicePushPattern = /\\/api\\/customer-device-push-subscriptions(?:[/?#]|$)/i;
         const tripUpdatesPattern = /\\/api\\/customer-app-notifications(?:[/?#]|$)/i;
         const quickRepliesPattern = /\\/api\\/customer-driver-quick-replies(?:[/?#]|$)/i;
+        const liveLocationPattern = new RegExp("/api/customer-live-location-map(?:[/?#]|$)", "i");
         const isCustomerPortalPage = () => window.location.pathname === "/my-bookings";
         const originalFetch = window.fetch.bind(window);
 
@@ -1064,6 +1066,15 @@ async function runChromeTest() {
                 }),
                 { headers: { "Content-Type": "application/json" }, status: 200 },
               ),
+            );
+          }
+
+          if (isCustomerPortalPage() && method === "GET" && liveLocationPattern.test(url)) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ customerVisible: false, ok: false }), {
+                headers: { "Content-Type": "application/json" },
+                status: 403,
+              }),
             );
           }
 
@@ -36764,6 +36775,85 @@ async function runChromeTest() {
         assert.equal(detailState.detailText.includes(expectedDetail), true, `Expected /my-bookings detail: ${expectedDetail}`);
       }
 
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: mobileViewport.scale,
+        height: mobileViewport.height,
+        mobile: mobileViewport.mobile,
+        width: mobileViewport.width,
+      });
+      const lockedTrackingClicked = await evaluate(`(() => {
+        const button = document.querySelector(
+          "[data-customer-portal-driver-tracking-toggle='saved-booking-001']",
+        );
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(lockedTrackingClicked, true, "Expected the existing Track driver control to open");
+      const lockedTrackingState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const panel = document.querySelector(
+              "[data-customer-portal-driver-tracking-panel='saved-booking-001']",
+            );
+            if (!panel || panel.dataset.customerPortalDriverTrackingState !== "Locked") return false;
+            const panelRect = panel.getBoundingClientRect();
+            const message = panel.querySelector("p.break-words");
+            const messageRect = message?.getBoundingClientRect();
+            const lockedMessage = "Live location appears after the driver presses OTW and shares location.";
+            return {
+              docClientWidth: document.documentElement.clientWidth,
+              docScrollWidth: document.documentElement.scrollWidth,
+              hasMap: Boolean(panel.querySelector("[data-customer-portal-driver-tracking-map]")),
+              hasPlaceholder: Boolean(
+                panel.querySelector("[data-customer-portal-driver-tracking-placeholder]"),
+              ),
+              messageCount: panel.innerText.split(lockedMessage).length - 1,
+              messageInsidePanel: Boolean(
+                messageRect &&
+                  messageRect.left >= panelRect.left - 1 &&
+                  messageRect.right <= panelRect.right + 1
+              ),
+              messageText: message?.textContent.trim() || "",
+              panelHeight: panelRect.height,
+              panelOverflow: panel.scrollWidth > panel.clientWidth + 1,
+            };
+          })()`),
+        10000,
+        "customer portal compact locked tracking panel",
+      );
+      assert.equal(lockedTrackingState.hasMap, false, "Expected no map before live location is ready");
+      assert.equal(
+        lockedTrackingState.hasPlaceholder,
+        false,
+        "Expected no giant empty map placeholder while tracking is locked",
+      );
+      assert.ok(lockedTrackingState.messageCount <= 1, "Expected no duplicated locked tracking message");
+      assert.notEqual(lockedTrackingState.messageText, "", "Expected one compact safe tracking status");
+      assert.equal(lockedTrackingState.messageInsidePanel, true, "Expected locked tracking text inside the panel");
+      assert.equal(lockedTrackingState.panelOverflow, false, "Expected no locked tracking panel overflow");
+      assert.ok(lockedTrackingState.panelHeight < 180, `Expected compact locked panel, got ${lockedTrackingState.panelHeight}px`);
+      assert.ok(
+        lockedTrackingState.docScrollWidth <= lockedTrackingState.docClientWidth + 2,
+        "Expected the locked customer tracking view not to overflow the mobile viewport",
+      );
+      const visibleHoldMs = Math.min(
+        Math.max(Number(process.env.PRESTIGE_APP_SMOKE_VISIBLE_HOLD_MS || 0), 0),
+        15000,
+      );
+      if (visibleHoldMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, visibleHoldMs));
+      }
+      await evaluate(`document.querySelector(
+        "[data-customer-portal-driver-tracking-toggle='saved-booking-001']",
+      )?.click()`);
+      await client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: desktopViewport.scale,
+        height: desktopViewport.height,
+        mobile: desktopViewport.mobile,
+        width: desktopViewport.width,
+      });
+
       const driverDetailsAcknowledgementReadyState = await waitForCondition(
         () =>
           evaluate(`(() => {
@@ -40573,6 +40663,23 @@ async function runChromeTest() {
         viewport: viewport.label,
       };
     };
+
+    if (process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-portal") {
+      reporter.step("focused customer portal route");
+      const customerPortal = await checkCustomerPortalRoute();
+      console.log(
+        JSON.stringify(
+          reporter.summary({
+            customerPortal,
+            ok: true,
+            scope: "customer-portal",
+          }),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
 
     if (process.env.PRESTIGE_APP_SMOKE_SCOPE === "customer-booking") {
       reporter.step("focused customer booking route");

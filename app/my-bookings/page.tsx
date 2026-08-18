@@ -1855,6 +1855,11 @@ export default function CustomerPortalPage() {
 
                                 if (!isExpanded) {
                                   void loadTripUpdatesForBooking(booking);
+                                  window.setTimeout(() => {
+                                    document
+                                      .querySelector(`[data-customer-portal-detail="${booking.id}"]`)
+                                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 0);
                                 } else if (activeTrackingBookingId === booking.id) {
                                   setActiveTrackingBookingId("");
                                 }

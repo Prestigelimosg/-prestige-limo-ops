@@ -37609,6 +37609,46 @@ async function runChromeTest() {
       for (const viewport of bookingRowDeviceViewports) {
         await setCustomerPortalViewportAndLoad(viewport);
         const state = await readCustomerPortalState();
+        const detailScrollBefore = await evaluate("window.scrollY");
+        await clickCustomerPortalDetail("saved-booking-001");
+        let previousDetailScrollY = detailScrollBefore;
+        let detailScrollStableReads = 0;
+        const detailScrollAfter = await waitForCondition(
+          async () => {
+            const candidate = await evaluate(`(() => {
+              const detail = document.querySelector('[data-customer-portal-detail="saved-booking-001"]');
+              const detailRect = detail?.getBoundingClientRect();
+              const headingRect = detail?.querySelector("h2")?.getBoundingClientRect();
+
+              return {
+                detailTop: detailRect?.top ?? null,
+                headingBottom: headingRect?.bottom ?? null,
+                headingTop: headingRect?.top ?? null,
+                innerHeight: window.innerHeight,
+                scrollY: window.scrollY,
+              };
+            })()`);
+
+            if (Math.abs(candidate.scrollY - previousDetailScrollY) < 0.5) {
+              detailScrollStableReads += 1;
+            } else {
+              previousDetailScrollY = candidate.scrollY;
+              detailScrollStableReads = 0;
+            }
+
+            return candidate.scrollY > detailScrollBefore &&
+              candidate.detailTop !== null &&
+              candidate.headingBottom !== null &&
+              candidate.headingTop !== null &&
+              detailScrollStableReads >= 2 &&
+              candidate.headingBottom > 0 &&
+              candidate.headingTop < candidate.innerHeight
+              ? candidate
+              : false;
+          },
+          10000,
+          `${viewport.label} customer portal View details scroll`,
+        );
         const borderIsThinAndShadowFree = state.bookingRowPresentation.rows.every(
           (row) =>
             row.borderTopWidth === "1px" &&
@@ -37640,6 +37680,8 @@ async function runChromeTest() {
         assert.equal(rowsStayContained, true, `${viewport.label}: expected every booking row inside the viewport`);
 
         bookingRowDeviceResults.push({
+          detailScrollY: detailScrollAfter.scrollY,
+          detailTop: detailScrollAfter.detailTop,
           docClientWidth: state.docClientWidth,
           docScrollWidth: state.docScrollWidth,
           label: viewport.label,

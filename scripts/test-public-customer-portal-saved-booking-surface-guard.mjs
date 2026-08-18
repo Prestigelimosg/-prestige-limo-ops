@@ -479,6 +479,19 @@ for (const fragment of [
   assertIncludes(portalPage, fragment, `/my-bookings saved-booking action ${fragment}`);
 }
 
+const detailButtonBlock = blockBetween(
+  portalPage,
+  "data-customer-portal-detail-button={booking.id}",
+  'type="button"',
+);
+for (const fragment of [
+  "window.setTimeout(() => {",
+  'querySelector(`[data-customer-portal-detail="${booking.id}"]`)',
+  '?.scrollIntoView({ behavior: "smooth", block: "start" });',
+]) {
+  assertIncludes(detailButtonBlock, fragment, `/my-bookings View details scroll ${fragment}`);
+}
+
 const detailBlock = blockBetween(portalPage, 'data-customer-portal-detail={expandedBooking.id}', "</section>");
 for (const fragment of [
   "tripStatusStopsCustomerTracking && driverTracking",

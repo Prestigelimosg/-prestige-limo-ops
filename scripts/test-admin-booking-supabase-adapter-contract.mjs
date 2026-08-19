@@ -250,7 +250,13 @@ class MockSupabaseQuery {
   }
 
   eq(column, value) {
-    this.filters.push({ column, value });
+    this.filters.push({ column, operator: "eq", value });
+
+    return this;
+  }
+
+  ilike(column, value) {
+    this.filters.push({ column, operator: "ilike", value });
 
     return this;
   }
@@ -327,6 +333,7 @@ class MockSupabaseClient {
       customer_contacts: [],
       customers: [],
       driver_job_links: [],
+      travelers: [],
     };
     this.nextIds = {
       audit_logs: 1,
@@ -337,6 +344,7 @@ class MockSupabaseClient {
       customer_contacts: 1,
       customers: 1,
       driver_job_links: 1,
+      travelers: 1,
     };
 
     for (const [table, rows] of Object.entries(seed)) {
@@ -616,7 +624,12 @@ class MockSupabaseClient {
 
   applyFilters(rows, filters) {
     return rows.filter((row) =>
-      filters.every((filter) => String(row[filter.column]) === String(filter.value)),
+      filters.every((filter) =>
+        filter.operator === "ilike"
+          ? String(row[filter.column] ?? "").toLocaleLowerCase() ===
+            String(filter.value ?? "").toLocaleLowerCase()
+          : String(row[filter.column]) === String(filter.value),
+      ),
     );
   }
 
@@ -691,6 +704,10 @@ function canonicalAdminPayload(overrides = {}) {
       vehicle_type_or_category: "AVF",
       ...overrides.booking,
     },
+    personal_customer_folder_create: {
+      display_name: overrides.booking?.customer_display_name || "Safe Ops Account",
+      ...overrides.personal_customer_folder_create,
+    },
     route_points: [
       {
         location: "Safe Canonical Pickup",
@@ -726,6 +743,14 @@ function canonicalAdminPayload(overrides = {}) {
       ...(overrides.service_items || []),
     ],
   };
+}
+
+function canonicalAdminUpdatePayload(overrides = {}) {
+  const payload = canonicalAdminPayload(overrides);
+
+  delete payload.personal_customer_folder_create;
+
+  return payload;
 }
 
 function canonicalCustomerPayload(overrides = {}) {
@@ -1036,7 +1061,7 @@ try {
   assert.equal(listResult.data[0].booking_reference, "SAFE-ADM-001");
   assertNoUnsafeKeys(listResult, "list adapter DTO");
 
-  const updatePayload = canonicalAdminPayload({
+  const updatePayload = canonicalAdminUpdatePayload({
     booking: {
       admin_internal_status: "approved_internally",
       booking_reference: "SAFE-ADM-001",
@@ -1100,7 +1125,7 @@ try {
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
   assertNoUnsafeKeys(updateOperation, "mocked update operation");
 
-  const driverReloadFallbackPayload = canonicalAdminPayload({
+  const driverReloadFallbackPayload = canonicalAdminUpdatePayload({
     booking: {
       booking_reference: "SAFE-DRIVER-CALENDAR-UPDATE-001",
       driver_contact: "+65 9000 0104",
@@ -1169,7 +1194,7 @@ try {
   assertNoUnsafeKeys(driverReloadFallbackResult, "driver reload fallback update result");
   globalThis.__prestigeSupabaseAdapterMock = createMock;
 
-  const customerRequestDecisionPayload = canonicalAdminPayload({
+  const customerRequestDecisionPayload = canonicalAdminUpdatePayload({
     booking: {
       admin_internal_status: "Ready for Confirmation",
       booking_reference: "SAFE-ADM-001",
@@ -1299,6 +1324,40 @@ try {
     "Editing an unchanged approved request must not queue a duplicate customer notification.",
   );
 
+  const missingPersonalChoicePayload = canonicalAdminPayload();
+  delete missingPersonalChoicePayload.personal_customer_folder_create;
+  const parsedMissingPersonalChoice = persistence.parseAdminBookingPersistencePayload(
+    missingPersonalChoicePayload,
+  );
+  const missingPersonalChoiceMock = installMockClient();
+  const missingPersonalChoiceResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    parsedMissingPersonalChoice.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(parsedMissingPersonalChoice.ok, true);
+  assert.equal(missingPersonalChoiceResult.ok, false);
+  assert.equal(missingPersonalChoiceResult.status, 409);
+  assert.match(missingPersonalChoiceResult.error, /explicitly confirm Create new personal customer/i);
+  assert.equal(insertedOperations(missingPersonalChoiceMock.client, "customers").length, 0);
+  assert.equal(insertedOperations(missingPersonalChoiceMock.client, "bookings").length, 0);
+
+  const existingTravelerMock = installMockClient({
+    travelers: [{ company_id: 38, id: 29, traveler_name: "Safe Passenger" }],
+  });
+  const existingTravelerResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(canonicalAdminPayload()).data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(existingTravelerResult.ok, false);
+  assert.equal(existingTravelerResult.status, 409);
+  assert.match(existingTravelerResult.error, /Select the existing verified Company, Booker, and Traveller/i);
+  assert.equal(insertedOperations(existingTravelerMock.client, "customers").length, 0);
+  assert.equal(insertedOperations(existingTravelerMock.client, "bookings").length, 0);
+
   const splitCustomerMock = installMockClient();
   const splitFirst = persistence.parseAdminBookingPersistencePayload(
     canonicalAdminPayload({
@@ -1407,7 +1466,7 @@ try {
     "Preferred current booking reload must explicitly select parser_source_reference.",
   );
 
-  const currentSchemaUpdatePayload = canonicalAdminPayload({
+  const currentSchemaUpdatePayload = canonicalAdminUpdatePayload({
     booking: {
       booking_reference: "SAFE-CURRENT-001",
       parser_source_reference: "Flight QR945",
@@ -1442,7 +1501,7 @@ try {
     "Current-schema updates must leave immutable parser provenance untouched.",
   );
 
-  const currentSchemaNullUpdatePayload = canonicalAdminPayload({
+  const currentSchemaNullUpdatePayload = canonicalAdminUpdatePayload({
     booking: {
       booking_reference: "SAFE-CURRENT-001",
       parser_source_reference: null,

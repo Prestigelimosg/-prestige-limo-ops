@@ -52,8 +52,33 @@ assertIncludes(
 );
 assertIncludes(
   appSource,
+  "No verified CRM customer is selected.",
+  "visible existing-versus-new customer choice",
+);
+assertIncludes(
+  appSource,
+  "data-save-crm-personal-customer-create={",
+  "explicit new personal customer action",
+);
+assertIncludes(
+  appSource,
+  "personal_customer_folder_create?:",
+  "bounded explicit personal customer creation intent",
+);
+assertIncludes(
+  adminBookingPersistenceSource,
+  '"personal_customer_folder_create"',
+  "server parser allowlist for explicit personal customer creation",
+);
+assertIncludes(
+  adminBookingAdapterSource,
+  "Select the existing verified Company, Booker, and Traveller before saving",
+  "server-side existing CRM identity fail-closed message",
+);
+assertExcludes(
+  appSource,
   "if (!needsTravelerName) {\n    return null;",
-  "passenger/traveler name is the billing key and should not require same company/booker confirmation",
+  "silent personal customer creation path when passenger is present",
 );
 assertIncludes(
   appSource,
@@ -137,8 +162,8 @@ assertIncludes(
 );
 assertIncludes(
   appSource,
-  "Existing traveler(s) under this billing/contact identity: ${saveCrmBillingIdentityReview.conflictingTravelerNames.join",
-  "stale billing identity message must derive from current traveler-key review",
+  "Select the existing verified CRM identity, or explicitly choose Create New Customer",
+  "stale personal customer message must preserve the existing-versus-new choice",
 );
 assertIncludes(appSource, "customerDisplayNameOverride", "customer display override option");
 assertIncludes(appSource, "clean(options.customerDisplayNameOverride)", "override applied before default customer account");

@@ -352,6 +352,7 @@ class MockSupabaseClient {
       customer_contacts: [],
       customers: [],
       companies: [],
+      travelers: [],
     };
     this.nextIds = {
       audit_logs: 1,
@@ -361,6 +362,7 @@ class MockSupabaseClient {
       customer_contacts: 1,
       customers: 1,
       companies: 1,
+      travelers: 1,
     };
   }
 
@@ -593,6 +595,14 @@ function adminPayload(overrides = {}) {
     ...(overrides.hotel_agency_folder_create
       ? { hotel_agency_folder_create: clone(overrides.hotel_agency_folder_create) }
       : {}),
+    ...(!overrides.hotel_agency_folder_create
+      ? {
+          personal_customer_folder_create: {
+            display_name: overrides.booking?.customer_display_name || "Gate Safe Account",
+            ...overrides.personal_customer_folder_create,
+          },
+        }
+      : {}),
     route_points: [
       {
         location: "Gate Safe Pickup",
@@ -615,6 +625,14 @@ function adminPayload(overrides = {}) {
       ...(overrides.service_items || []),
     ],
   };
+}
+
+function adminUpdatePayload(overrides = {}) {
+  const payload = adminPayload(overrides);
+
+  delete payload.personal_customer_folder_create;
+
+  return payload;
 }
 
 function customerPayload(overrides = {}) {
@@ -1044,7 +1062,7 @@ try {
         patchJson(
           "http://localhost/api/admin-bookings",
           {
-            ...adminPayload({ booking: { pax_count: 5 } }),
+            ...adminUpdatePayload({ booking: { pax_count: 5 } }),
             expected_updated_at: result.body.booking.updated_at,
             target_booking_reference: "GATE-ADM-001",
           },
@@ -1076,7 +1094,7 @@ try {
         patchJson(
           "http://localhost/api/admin-bookings",
           {
-            ...adminPayload({ booking: { pax_count: 9 } }),
+            ...adminUpdatePayload({ booking: { pax_count: 9 } }),
             expected_updated_at: result.body.booking.updated_at,
             target_booking_reference: "GATE-ADM-001",
           },
@@ -1440,7 +1458,7 @@ try {
   assert.match(updateAgencyCreateIntentResult.error, /Unknown admin booking fields rejected/);
 
   const omittedVersionUpdatePayload = {
-    ...adminPayload(),
+    ...adminUpdatePayload(),
     target_booking_reference: "GATE-ADM-001",
   };
   const firstOmittedVersionParse = persistence.parseAdminBookingUpdatePayload(

@@ -23984,6 +23984,56 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedMrLeeNoCompanySave, true, "Expected Mr Lee no-company save button to be clickable");
 
+    const mrLeeCustomerChoiceState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const choiceButton = document.querySelector('[data-save-crm-personal-customer-create="true"]');
+          const bookingPosts = (window.__prestigeMrLeeSaveRequestBodies || []).filter(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+          );
+
+          return choiceButton && document.body.innerText.includes("No verified CRM customer is selected")
+            ? {
+                bookingPostCount: bookingPosts.length,
+                buttonLabel: choiceButton.textContent.trim(),
+              }
+            : false;
+        })()`),
+      10000,
+      "Mr Lee explicit existing-versus-new customer choice",
+    );
+
+    assert.deepEqual(mrLeeCustomerChoiceState, {
+      bookingPostCount: 0,
+      buttonLabel: "Create New Customer",
+    });
+
+    const confirmedMrLeeNewCustomer = await evaluate(`(() => {
+      const choiceButton = document.querySelector('[data-save-crm-personal-customer-create="true"]');
+
+      if (!choiceButton || choiceButton.disabled) {
+        return false;
+      }
+
+      choiceButton.click();
+      return true;
+    })()`);
+    assert.equal(confirmedMrLeeNewCustomer, true, "Expected explicit new personal customer choice to be clickable");
+
+    const retriedMrLeeNoCompanySave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(retriedMrLeeNoCompanySave, true, "Expected confirmed Mr Lee save to be clickable");
+
     const mrLeeNoCompanySaveState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
@@ -24058,6 +24108,9 @@ async function runChromeTest() {
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_location, "10 Scotts Road");
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.dropoff_location, "Changi Airport");
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.passenger_name, mrLeeSaveTravelerName);
+    assert.deepEqual(mrLeeNoCompanySaveState.bookingInsert?.personal_customer_folder_create, {
+      display_name: mrLeeSaveTravelerName,
+    });
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pax_count, 2);
     assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.luggage_count, 3);
     assert.equal(

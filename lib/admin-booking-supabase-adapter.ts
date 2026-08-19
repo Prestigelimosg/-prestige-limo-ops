@@ -121,6 +121,10 @@ const safeUpdateConflictError =
   "Booking changed on another device. Reload the exact saved booking before updating.";
 const safeCustomerIdentityConflictError =
   "Verified customer identity matches multiple customer accounts. Review the existing customer profiles before saving.";
+const safeExistingCrmIdentitySelectionError =
+  "Select the existing verified Company, Booker, and Traveller before saving. No new customer folder was created.";
+const safePersonalCustomerChoiceError =
+  "Choose the existing verified CRM identity or explicitly confirm Create new personal customer before saving.";
 const safeAgencyFolderSelectionError =
   "Select the exact Hotel / Tour Agency folder before saving this booking.";
 const safeAgencyFolderConflictError =
@@ -1416,6 +1420,7 @@ async function findOrCreateCustomerId(
   booking: AdminBookingRecordInput,
   actor: AdminBookingPersistenceAdapterActor,
   hotelAgencyFolderCreate: AdminBookingPersistenceInput["hotel_agency_folder_create"] = null,
+  personalCustomerFolderCreate: AdminBookingPersistenceInput["personal_customer_folder_create"] = null,
 ): Promise<AdminBookingResult<DbIdentifier>> {
   const verifiedCustomerId = dbIdentifierOrNull(booking.customer_id);
   const verifiedCompanyId = dbIdentifierOrNull(booking.company_id);
@@ -1957,6 +1962,56 @@ async function findOrCreateCustomerId(
     }
   }
 
+  if (
+    isVerifiedAdminDispatcherActor(actor) &&
+    !verifiedCustomerId &&
+    !verifiedCompanyId &&
+    !verifiedBookerId &&
+    !verifiedTravelerId
+  ) {
+    const requestedPersonalDisplayName = textOrNull(personalCustomerFolderCreate?.display_name);
+    const bookingDisplayName = textOrNull(booking.customer_display_name);
+
+    if (
+      !personalCustomerFolderCreate ||
+      !isVerifiedAdminDispatcherActor(actor) ||
+      verifiedCustomerId ||
+      verifiedCompanyId ||
+      verifiedBookerId ||
+      verifiedTravelerId ||
+      !requestedPersonalDisplayName ||
+      requestedPersonalDisplayName.toLocaleLowerCase() !== bookingDisplayName?.toLocaleLowerCase()
+    ) {
+      return {
+        error: safePersonalCustomerChoiceError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    const passengerName = textOrNull(booking.passenger_name);
+
+    if (passengerName) {
+      const { data: matchingTravelerRows, error: matchingTravelerError } = await client
+        .from("travelers")
+        .select("id")
+        .ilike("traveler_name", passengerName)
+        .limit(2);
+
+      if (matchingTravelerError) {
+        return safeAdapterFailure(safeSaveError, 500, matchingTravelerError, "customer_lookup");
+      }
+
+      if (asArray(matchingTravelerRows).length > 0) {
+        return {
+          error: safeExistingCrmIdentitySelectionError,
+          ok: false,
+          status: 409,
+        };
+      }
+    }
+  }
+
   const displayName = customerPortalScopedDisplayName(booking);
   const { data: existingRows, error: existingError } = await client
     .from("customers")
@@ -2262,6 +2317,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     input.booking,
     actor,
     input.hotel_agency_folder_create,
+    input.personal_customer_folder_create,
   );
 
   if (!customerIdResult.ok) {

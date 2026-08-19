@@ -39,7 +39,7 @@ const blockedStatusByReason = {
   unauthorized: 401,
 } as const;
 
-export function readDriverNativeDeviceAlertBody(body: unknown) {
+function readDriverNativeDeviceAlertBody(body: unknown) {
   const record = body && typeof body === "object" && !Array.isArray(body)
     ? body as Record<string, unknown>
     : {};

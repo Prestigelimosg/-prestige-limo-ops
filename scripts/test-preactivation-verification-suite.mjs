@@ -446,6 +446,14 @@ const guardChecks = [
     script: "scripts/test-web-app-install-manifest-guard.mjs",
   },
   {
+    label: "Admin account session foundation guard",
+    script: "scripts/test-admin-account-session-foundation-guard.mjs",
+  },
+  {
+    label: "Admin iPhone companion foundation guard",
+    script: "scripts/test-admin-companion-foundation-guard.mjs",
+  },
+  {
     label: "Customer iPhone companion foundation guard",
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },

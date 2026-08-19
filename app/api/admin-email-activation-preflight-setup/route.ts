@@ -7,6 +7,7 @@ import { buildAdminEmailSenderSelectionSetup } from "../../../lib/admin-email-se
 import { buildAdminEmailSendPolicySetup } from "../../../lib/admin-email-send-policy-setup-foundation";
 import { adminCustomerDriverDetailsEmailConfigReadiness } from "../../../lib/admin-customer-driver-details-email-send-action";
 import {
+  adminAccountAuthIsEnabled,
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
@@ -87,6 +88,10 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
 
   if (boundary.ok) {
     return { context: boundary.context, ok: true };
+  }
+
+  if (adminAccountAuthIsEnabled()) {
+    return { ok: false, response: blockedResponse(boundary.error) };
   }
 
   if (hasSetupOnlyAdminDashboardBoundary(request)) {

@@ -86,6 +86,7 @@ const methodSurfaceChecks = [
   {
     path: "app/api/driver-job/[token]/route.ts",
     allowedMethods: ["GET", "PATCH"],
+    forbiddenFragments: ["export function readDriverNativeDeviceAlertBody"],
     requiredFragments: [
       "export async function GET(request: Request, context: DriverJobRouteContext)",
       "export async function PATCH(request: Request, context: DriverJobRouteContext)",
@@ -308,12 +309,15 @@ for (const phrase of [
 
 assertIncludes(preactivationSuite, guardScript, "preactivation public API method surface guard registration");
 
-for (const { allowedMethods, path, requiredFragments } of methodSurfaceChecks) {
+for (const { allowedMethods, forbiddenFragments = [], path, requiredFragments } of methodSurfaceChecks) {
   const source = files[path];
   assert.deepEqual(exportedMethods(source), allowedMethods, `${path} exported method surface`);
 
   for (const fragment of requiredFragments) {
     assertIncludes(source, fragment, `${path} method-surface fragment ${fragment}`);
+  }
+  for (const fragment of forbiddenFragments) {
+    assertExcludes(source, fragment, `${path} non-route export ${fragment}`);
   }
 
   assertExcludes(source, /\bexport\s+async\s+function\s+(?:TRACE|CONNECT)\b/, `${path} unsafe HTTP method exports`);

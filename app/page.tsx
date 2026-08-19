@@ -41749,22 +41749,23 @@ export default function Home() {
                 data-admin-dispatch-crm-identity-selectors="true"
               >
                 <div className="text-xs font-semibold text-slate-700 md:col-span-3">
-                  <span id="admin-dispatch-customer-account-label">Customer Account</span>
-                  <details
-                    className="group relative mt-1 w-full"
-                    data-booker-id={booking.bookerId}
-                    data-company-id={booking.companyId}
-                    data-customer-id={booking.customerId}
-                    data-admin-dispatch-customer-account-select="true"
-                    data-traveler-id={booking.travelerId}
-                    data-value={adminDispatchSelectedCustomerAccount?.key || ""}
-                    onToggle={(event) => {
-                      if (!event.currentTarget.open) {
-                        setAdminDispatchCustomerAccountSearch("");
-                      }
-                    }}
-                    ref={adminDispatchCustomerAccountChooserRef}
-                  >
+                  <div className="md:w-[calc((100%_-_1rem)/3)]">
+                    <span id="admin-dispatch-customer-account-label">Customer Account</span>
+                    <details
+                      className="group relative mt-1 w-full"
+                      data-booker-id={booking.bookerId}
+                      data-company-id={booking.companyId}
+                      data-customer-id={booking.customerId}
+                      data-admin-dispatch-customer-account-select="true"
+                      data-traveler-id={booking.travelerId}
+                      data-value={adminDispatchSelectedCustomerAccount?.key || ""}
+                      onToggle={(event) => {
+                        if (!event.currentTarget.open) {
+                          setAdminDispatchCustomerAccountSearch("");
+                        }
+                      }}
+                      ref={adminDispatchCustomerAccountChooserRef}
+                    >
                     <summary
                       aria-labelledby="admin-dispatch-customer-account-label"
                       className="flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-sky-300 bg-white px-2 text-sm outline-none transition focus-visible:border-sky-500 focus-visible:ring-2 focus-visible:ring-sky-100 [&::-webkit-details-marker]:hidden"
@@ -41837,7 +41838,8 @@ export default function Home() {
                         ) : null}
                       </div>
                     </div>
-                  </details>
+                    </details>
+                  </div>
                 </div>
                 <p className="font-medium text-slate-500 md:col-span-3">
                   Search uses stored account, company, Booker and passenger records. It never creates,

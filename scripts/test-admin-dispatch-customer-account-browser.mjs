@@ -178,7 +178,7 @@ async function main() {
           legacyCount: document.querySelectorAll('[data-admin-dispatch-agency-folder-select="true"], [data-admin-dispatch-corporate-customer-select="true"], [data-admin-dispatch-corporate-pair-select="true"]').length,
           listOverflowY: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-options="true"]')).overflowY,
           searchBackground: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-search="true"]')).backgroundColor,
-          widthDifference: Math.abs(sectorWidth - summaryWidth),
+          widthRatio: sectorWidth ? summaryWidth / sectorWidth : 0,
         } : false;
       })()`),
       10000,
@@ -188,7 +188,10 @@ async function main() {
     assert.equal(initialState.legacyCount, 0);
     assert.equal(initialState.listOverflowY, "auto");
     assert.match(initialState.searchBackground, /255, 255, 255/);
-    assert.ok(initialState.widthDifference <= 20, "Customer Account bar must span the existing sector width");
+    assert.ok(
+      initialState.widthRatio >= 0.3 && initialState.widthRatio <= 0.36,
+      "Customer Account bar must retain the previous one-column Customer width",
+    );
 
     const search = async (value) => {
       await evaluate(`(() => {

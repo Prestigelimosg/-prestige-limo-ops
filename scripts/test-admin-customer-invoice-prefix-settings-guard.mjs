@@ -98,6 +98,9 @@ for (const fragment of [
   'refererUrl.pathname === "/customers"',
   'refererUrl.pathname.startsWith("/customers/")',
   'method === "GET" || method === "POST"',
+  "adminAccountAuthIsEnabled",
+  "resolveAdminDispatcherBoundary",
+  'additionalSameOriginRefererPathPrefixes: ["/customers"]',
   'boundary.context.role !== "admin" && boundary.context.role !== "local-dev-admin"',
   '"x-prestige-admin-purpose"',
   "loadAdminCustomerInvoicePrefixSetting",
@@ -109,7 +112,6 @@ for (const fragment of [
 for (const forbiddenRouteFragment of [
   'refererUrl.pathname === "/"',
   '"/settings/invoice"',
-  "resolveAdminDispatcherBoundary(request",
   "reserveAdminMonthlyInvoiceNumber",
   "createCustomerInvoiceRecord",
 ]) {

@@ -1,7 +1,9 @@
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
+  adminAccountAuthIsEnabled,
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
+  resolveAdminDispatcherBoundary,
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import {
   loadAdminCustomerBookingReferenceSetting,
@@ -48,6 +50,20 @@ function hasSameOriginCustomerFolderReferer(request: Request) {
 }
 
 function requireCustomerFolderAdminBoundary(request: Request): BoundaryCheck {
+  if (adminAccountAuthIsEnabled()) {
+    const boundary = resolveAdminDispatcherBoundary(
+      request,
+      adminBookingPersistencePurpose,
+      { additionalSameOriginRefererPathPrefixes: ["/customers"] },
+    );
+
+    if (!boundary.ok || boundary.context.role !== "admin") {
+      return { ok: false, response: errorResponse(blockedMessage) };
+    }
+
+    return { context: boundary.context, ok: true };
+  }
+
   if (
     request.headers.get("x-prestige-admin-purpose") !==
       adminBookingPersistencePurpose ||

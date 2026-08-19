@@ -265,10 +265,15 @@ assertIncludes(
 assertIncludes(
   routeSource,
   [
-    "readDriverNativeDeviceAlertBody",
+    "function readDriverNativeDeviceAlertBody",
     "applyProductionDriverNativeDeviceAlertUpdate",
   ],
   "existing exact Driver Job route native notification registration",
+);
+assert.equal(
+  routeSource.includes("export function readDriverNativeDeviceAlertBody"),
+  false,
+  "The internal native-alert parser must not be exported as a Next.js route field",
 );
 
 assertIncludes(

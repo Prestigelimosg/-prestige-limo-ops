@@ -1,6 +1,7 @@
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 import {
+  adminAccountAuthIsEnabled,
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
@@ -90,6 +91,14 @@ export function resolveAdminCustomerInvoiceBoundary(
       actor: adminDispatcherBoundaryToPersistenceAdapterActor(rootBoundary.context),
       context: rootBoundary.context,
       ok: true,
+    };
+  }
+
+  if (adminAccountAuthIsEnabled()) {
+    return {
+      error: safeBlockedMessage,
+      ok: false,
+      status: 403,
     };
   }
 

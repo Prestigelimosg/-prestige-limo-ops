@@ -6,6 +6,7 @@ import {
 } from "../../../lib/admin-completed-booking-closeout-persistence";
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import {
+  adminAccountAuthIsEnabled,
   adminBookingPersistencePurpose,
   type AdminDispatcherBoundaryContext,
   resolveAdminDispatcherBoundary,
@@ -139,6 +140,13 @@ function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBounda
     return {
       context: boundary.context,
       ok: true,
+    };
+  }
+
+  if (adminAccountAuthIsEnabled()) {
+    return {
+      ok: false,
+      response: blockedResponse(safeBlockedMessage),
     };
   }
 

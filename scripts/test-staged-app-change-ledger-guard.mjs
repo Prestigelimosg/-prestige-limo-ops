@@ -8,6 +8,7 @@ const stagedFiles = explicitFilesIndex === -1
   : process.argv.slice(explicitFilesIndex + 1);
 
 const applicationPrefixes = [
+  "admin-companion/",
   "app/",
   "components/",
   "customer-companion/",

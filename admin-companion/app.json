@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Prestige SG Admin",
+    "slug": "prestige-admin",
+    "owner": "prestige-limo-ops",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "prestige-admin",
+    "platforms": [
+      "ios"
+    ],
+    "ios": {
+      "version": "1.0.0",
+      "supportsTablet": false,
+      "bundleIdentifier": "sg.prestigelimo.admin",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "CFBundleDisplayName": "Prestige Admin",
+        "NSFaceIDUsageDescription": "Allow Prestige Admin to use Face ID to protect verified operations access."
+      }
+    },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Prestige Admin to use Face ID to protect verified operations access."
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}

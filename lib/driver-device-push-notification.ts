@@ -122,6 +122,9 @@ type DriverDevicePushAlertInput = {
 };
 
 type DriverNativePushOpenTarget = "messages";
+type DriverNativePushVisibleBody =
+  | "Job update available"
+  | "Pickup is in 1 hour. Open Driver Portal to review.";
 
 type DriverDevicePushPayload = {
   body:
@@ -144,6 +147,7 @@ export type DriverNativePushSender = (
   expoPushToken: string,
   jobKey: string,
   openTarget: DriverNativePushOpenTarget | null,
+  visibleBody: DriverNativePushVisibleBody,
 ) => Promise<void>;
 
 type DriverDevicePushAlertOptions = {
@@ -730,6 +734,7 @@ async function sendNativePush(
   expoPushToken: string,
   jobKey: string,
   openTarget: DriverNativePushOpenTarget | null,
+  visibleBody: DriverNativePushVisibleBody,
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
   const controller = new AbortController();
@@ -738,7 +743,7 @@ async function sendNativePush(
   try {
     const response = await fetcher(expoPushEndpoint, {
       body: JSON.stringify({
-        body: "Job update available",
+        body: visibleBody,
         data: {
           job_key: jobKey,
           ...(openTarget ? { open_target: openTarget } : {}),
@@ -841,6 +846,7 @@ async function sendPayloadToDriverSubscriptions(
   config: DriverDevicePushProviderConfig,
   options: DriverDevicePushAlertOptions,
   nativeOpenTarget: DriverNativePushOpenTarget | null = null,
+  nativeVisibleBody: DriverNativePushVisibleBody = "Job update available",
 ): Promise<DriverDevicePushAlertResult> {
   const loaded = await loadActiveDriverSubscriptions(client, driverId);
   if (!loaded.ok) {
@@ -868,11 +874,13 @@ async function sendPayloadToDriverSubscriptions(
               subscription.endpoint,
               payload.job_key,
               nativeOpenTarget,
+              nativeVisibleBody,
             )
           : sendNativePush(
               subscription.endpoint,
               payload.job_key,
               nativeOpenTarget,
+              nativeVisibleBody,
               options.nativeFetch,
             )
         : sender(subscription.webSubscription!, payload),
@@ -1029,5 +1037,7 @@ export async function sendDriverDevicePushAlertForPickupReminder(
     pickupReminderPayload(linkId),
     config,
     options,
+    null,
+    "Pickup is in 1 hour. Open Driver Portal to review.",
   );
 }

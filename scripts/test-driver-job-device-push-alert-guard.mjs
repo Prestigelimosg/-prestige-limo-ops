@@ -256,9 +256,11 @@ assertIncludes(
     'source_surface: "driver_native_ios"',
     "https://exp.host/--/api/v2/push/send",
     'title: "Prestige Driver"',
-    'body: "Job update available"',
+    'nativeVisibleBody: DriverNativePushVisibleBody = "Job update available"',
+    'body: visibleBody',
+    '"Pickup is in 1 hour. Open Driver Portal to review."',
   ],
-  "single native extension of the existing driver push sender",
+  "single native extension of the existing driver push sender with bounded visible copy",
 );
 assertIncludes(
   routeSource,
@@ -974,6 +976,34 @@ try {
     "native push provider-visible payload privacy",
   );
 
+  let genericNativeProviderRequest = null;
+  const genericNativeAlertResult = await helper.sendDriverDevicePushAlertForAppUpdate(
+    nativeAlertClient,
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      workflow_area: "driver_job_update",
+    },
+    {
+      env: configuredEnv,
+      nativeFetch: async (_url, init) => {
+        genericNativeProviderRequest = JSON.parse(init.body);
+        return new Response(JSON.stringify({ data: { status: "ok" } }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      },
+    },
+  );
+  assert.equal(genericNativeAlertResult.ok, true);
+  assert.equal(genericNativeProviderRequest.body, "Job update available");
+  assert.equal(
+    Object.hasOwn(genericNativeProviderRequest.data, "open_target"),
+    false,
+    "generic native app updates must keep opening the normal job",
+  );
+
   let issuedJobPayload = null;
   const issuedJobClient = createMockClient({
     acknowledged: false,
@@ -1129,6 +1159,12 @@ try {
   assert.equal(nativePickupReminderAlert.ok, true);
   assert.equal(nativePickupReminderAlert.provider_request_count, 1);
   assert.equal(nativePickupProviderRequest.url, "https://exp.host/--/api/v2/push/send");
+  assert.equal(nativePickupProviderRequest.body.title, "Prestige Driver");
+  assert.equal(
+    nativePickupProviderRequest.body.body,
+    "Pickup is in 1 hour. Open Driver Portal to review.",
+    "native iOS must visibly identify the one-hour pickup reminder",
+  );
   assert.match(nativePickupProviderRequest.body.data.job_key, /^[0-9a-f]{64}$/);
   assert.equal(
     Object.hasOwn(nativePickupProviderRequest.body.data, "open_target"),

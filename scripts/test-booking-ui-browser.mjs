@@ -4167,6 +4167,7 @@ async function runChromeTest() {
           ]);
 
           return {
+            customerAccountSelectorCount: document.querySelectorAll("[data-admin-dispatch-customer-account-select='true']").length,
             corporateCustomerSelectorCount: document.querySelectorAll("[data-admin-dispatch-corporate-customer-select='true']").length,
             corporatePairSelectorCount: document.querySelectorAll("[data-admin-dispatch-corporate-pair-select='true']").length,
             retiredBookerSelectorCount: document.querySelectorAll("[data-admin-dispatch-booker-identity-select='true']").length,
@@ -4186,7 +4187,8 @@ async function runChromeTest() {
     );
     assert.equal(removedMockCustomerMatchState.mockPanelCount, 0);
     assert.deepEqual(removedMockCustomerMatchState.mockButtonLabels, []);
-    assert.equal(removedMockCustomerMatchState.corporateCustomerSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.customerAccountSelectorCount, 1);
+    assert.equal(removedMockCustomerMatchState.corporateCustomerSelectorCount, 0);
     assert.equal(removedMockCustomerMatchState.corporatePairSelectorCount, 0);
     assert.equal(removedMockCustomerMatchState.retiredCompanySelectorCount, 0);
     assert.equal(removedMockCustomerMatchState.retiredBookerSelectorCount, 0);
@@ -8543,7 +8545,29 @@ async function runChromeTest() {
               companies: [{ company_name: "Alson Limousine", domain: null, id: 55 }],
               ok: true,
               settings: null,
-              travelers: [],
+              travelers: [
+                {
+                  booker_id: 5501,
+                  booker_name: "Alson",
+                  company_id: 55,
+                  id: 55001,
+                  traveler_name: "Pui Yu Chan",
+                },
+                {
+                  booker_id: 5501,
+                  booker_name: "Alson",
+                  company_id: 55,
+                  id: 55002,
+                  traveler_name: "Alex Tan",
+                },
+                {
+                  booker_id: 5501,
+                  booker_name: "Alson",
+                  company_id: 55,
+                  id: 55003,
+                  traveler_name: "Alex Tan",
+                },
+              ],
             });
           }
           if (window.__prestigeEmailAiCustomerRecommendationMode === "email-conflict") {
@@ -8903,12 +8927,12 @@ async function runChromeTest() {
     const emailAiAgencyIdentityState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
           const selectedNotice = document.querySelector('[data-admin-dispatch-agency-folder-selected="true"]');
           const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
-          return selector instanceof HTMLSelectElement &&
-            selector.value === "174" &&
+          return selector instanceof HTMLDetailsElement &&
+            selector.dataset.value === "agency:174:41" &&
             selectedNotice &&
             suggestion
             ? {
@@ -8949,17 +8973,14 @@ async function runChromeTest() {
     );
     assert.match(emailAiAgencyIdentityState.selectedNoticeText, /Guest name stays on this booking only/i);
     await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
-      if (selector instanceof HTMLSelectElement) {
-        selector.value = "";
-        selector.dispatchEvent(new Event("change", { bubbles: true }));
-      }
+      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
+      document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click();
     })()`);
     const emailAiManualOverrideState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
-          return selector instanceof HTMLSelectElement && selector.value === ""
+          const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+          return selector instanceof HTMLDetailsElement && selector.dataset.value === ""
             ? {
                 suggestionCount: document.querySelectorAll('[data-admin-email-ai-customer-profile-suggestion="true"]').length,
               }
@@ -9003,14 +9024,11 @@ async function runChromeTest() {
     const emailAiCompanyFallbackState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const corporateSelector = document.querySelector('[data-admin-dispatch-corporate-customer-select="true"]');
-          const agencySelector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const accountSelector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
           const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
-          return corporateSelector instanceof HTMLSelectElement &&
-            corporateSelector.value === "55" &&
-            agencySelector instanceof HTMLSelectElement &&
-            agencySelector.value === "" &&
+          return accountSelector instanceof HTMLDetailsElement &&
+            accountSelector.dataset.value === "" &&
             suggestion
             ? {
                 customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
@@ -9042,6 +9060,188 @@ async function runChromeTest() {
     );
     assert.match(emailAiCompanyFallbackState.suggestionText, /corporate, exact company name match/i);
 
+    const unifiedCustomerAccountListState = await evaluate(`(() => {
+      const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+      if (!(chooser instanceof HTMLDetailsElement)) return false;
+      chooser.open = true;
+
+      return {
+        accountOptions: [...document.querySelectorAll('[data-admin-dispatch-customer-account-option]')]
+          .map((option) => ({
+            key: option.getAttribute("data-admin-dispatch-customer-account-option") || "",
+            text: option.textContent.replace(/\\s+/g, " ").trim(),
+          })),
+        createButton: Boolean(document.querySelector('[data-admin-dispatch-customer-account-create="true"]')),
+        legacySelectorCount: document.querySelectorAll(
+          '[data-admin-dispatch-agency-folder-select="true"], [data-admin-dispatch-corporate-customer-select="true"], [data-admin-dispatch-corporate-pair-select="true"]',
+        ).length,
+      };
+    })()`);
+    assert.equal(
+      unifiedCustomerAccountListState.createButton,
+      true,
+      "unified Customer Account search keeps agency, corporate, and personal identity tuples",
+    );
+    assert.equal(unifiedCustomerAccountListState.legacySelectorCount, 0);
+    assert.ok(
+      unifiedCustomerAccountListState.accountOptions.some(
+        (option) => option.key === "agency:161:601" && option.text.includes("BROWSER UI TEST AGENCY"),
+      ),
+      "Expected one unified list to retain the exact account-folder tuple",
+    );
+    assert.ok(
+      unifiedCustomerAccountListState.accountOptions.some(
+        (option) => option.key === "corporate:55:5501" && option.text.includes("Alson"),
+      ),
+      "Expected one unified list to retain the exact Company + Booker tuple",
+    );
+
+    const openedUnifiedCustomerQuickSearch = await evaluate(`(() => {
+      const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+      const search = document.querySelector('[data-admin-dispatch-customer-account-search="true"]');
+
+      if (!(chooser instanceof HTMLDetailsElement) || !(search instanceof HTMLInputElement)) {
+        return false;
+      }
+
+      chooser.open = true;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(search, "Pui Yu Chan");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      search.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`);
+    assert.equal(openedUnifiedCustomerQuickSearch, true);
+    const unifiedCustomerQuickSearchState = await waitForCondition(
+      () => evaluate(`(() => {
+        const search = document.querySelector('[data-admin-dispatch-customer-account-search="true"]');
+        const customerOptions = [...document.querySelectorAll('[data-admin-dispatch-customer-account-option]')]
+          .map((option) => option.getAttribute("data-admin-dispatch-customer-account-option") || "");
+
+        return search instanceof HTMLInputElement && search.value === "Pui Yu Chan" && customerOptions.length === 1
+          ? customerOptions
+          : false;
+      })()`),
+      10000,
+      "Customer Account passenger quick search",
+    );
+    assert.deepEqual(unifiedCustomerQuickSearchState, ["corporate:55:5501"]);
+
+    const openedSinglePassengerReview = await evaluate(`(() => {
+      document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click();
+      return true;
+    })()`);
+    assert.equal(openedSinglePassengerReview, true);
+    const singlePassengerReviewState = await waitForCondition(
+      () => evaluate(`(() => {
+        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return review && chooser instanceof HTMLDetailsElement
+          ? {
+              bookingPostCount: (window.__prestigeFetchCalls || []).filter((call) =>
+                String(call).includes("POST /api/admin-bookings"),
+              ).length,
+              candidateCount: document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button').length,
+              selectedKey: chooser.dataset.value || "",
+              text: review.textContent.replace(/\\s+/g, " ").trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "one possible passenger match asks Admin before selection",
+    );
+    assert.equal(singlePassengerReviewState.candidateCount, 0);
+    assert.equal(singlePassengerReviewState.selectedKey, "");
+    assert.match(singlePassengerReviewState.text, /Pui Yu Chan/);
+    assert.equal(
+      singlePassengerReviewState.bookingPostCount,
+      0,
+      "no Customer Account review choice sends a booking POST",
+    );
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-use-existing="true"]')?.click()`);
+    const acceptedPassengerState = await waitForCondition(
+      () => evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return chooser instanceof HTMLDetailsElement && chooser.dataset.value === "corporate:55:5501"
+          ? {
+              bookerId: chooser.dataset.bookerId || "",
+              companyId: chooser.dataset.companyId || "",
+              customerId: chooser.dataset.customerId || "",
+              travelerId: chooser.dataset.travelerId || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "confirmed exact Customer Account identity tuple",
+    );
+    assert.deepEqual(acceptedPassengerState, {
+      bookerId: "5501",
+      companyId: "55",
+      customerId: "",
+      travelerId: "55001",
+    });
+
+    await evaluate(`(() => {
+      const passengerInput = [...document.querySelectorAll("label")]
+        .find((label) => label.textContent.replace(/\\s+\\*/g, " ").trim().startsWith("Passenger name"))
+        ?.querySelector("input");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(passengerInput, "Alex Tan");
+      passengerInput?.dispatchEvent(new Event("input", { bubbles: true }));
+      passengerInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+      if (chooser instanceof HTMLDetailsElement) chooser.open = true;
+      document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click();
+    })()`);
+    const multiplePassengerReviewState = await waitForCondition(
+      () => evaluate(`(() => {
+        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
+        const candidates = document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button');
+        return review && candidates.length === 2
+          ? {
+              pressedCount: [...candidates].filter((candidate) => candidate.getAttribute("aria-pressed") === "true").length,
+              text: review.textContent.replace(/\\s+/g, " ").trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "multiple possible passenger matches remain a candidate list",
+    );
+    assert.equal(multiplePassengerReviewState.pressedCount, 0);
+    assert.match(multiplePassengerReviewState.text, /Alex Tan/);
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-different-person="true"]')?.click()`);
+    const differentPassengerState = await waitForCondition(
+      () => evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return chooser instanceof HTMLDetailsElement &&
+          chooser.dataset.value === "corporate:55:5501" &&
+          chooser.dataset.travelerId === ""
+          ? {
+              bookerId: chooser.dataset.bookerId || "",
+              companyId: chooser.dataset.companyId || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "different person keeps the account but clears the verified Traveller",
+    );
+    assert.deepEqual(differentPassengerState, { bookerId: "5501", companyId: "55" });
+
+    await evaluate(`(() => {
+      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
+    })()`);
+    const newCustomerChoiceState = await waitForCondition(
+      () => evaluate(`(() => ({
+        account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
+        corporate: Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')),
+        personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
+      }))()`),
+      10000,
+      "explicit new Customer Account type choice",
+    );
+    assert.deepEqual(newCustomerChoiceState, { account: true, corporate: true, personal: true });
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-cancel="true"]')?.click()`);
+
     const startedEmailAiBookerEmailOnly = await evaluate(`(() => {
       window.__prestigeEmailAiCustomerRecommendationMode = "booker-email-agency";
       window.__prestigeEmailAiCustomerRecommendationRequests = [];
@@ -9067,11 +9267,11 @@ async function runChromeTest() {
     const emailAiBookerEmailOnlyState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const agencySelector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+          const accountSelector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
           const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
-          return agencySelector instanceof HTMLSelectElement &&
-            agencySelector.value === "174" &&
+          return accountSelector instanceof HTMLDetailsElement &&
+            accountSelector.dataset.value === "agency:174:41" &&
             suggestion
             ? {
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
@@ -9126,14 +9326,11 @@ async function runChromeTest() {
     const emailAiConflictingEmailState = await waitForCondition(
       () =>
         evaluate(`(() => {
-          const agencySelector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
-          const corporateSelector = document.querySelector('[data-admin-dispatch-corporate-customer-select="true"]');
+          const accountSelector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
           const visibleText = document.body.innerText.replace(/\\s+/g, " ");
 
-          return agencySelector instanceof HTMLSelectElement &&
-            agencySelector.value === "" &&
-            corporateSelector instanceof HTMLSelectElement &&
-            corporateSelector.value === "" &&
+          return accountSelector instanceof HTMLDetailsElement &&
+            accountSelector.dataset.value === "" &&
             visibleText.includes("exact email address points to more than one app customer profile")
             ? {
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
@@ -22188,6 +22385,11 @@ async function runChromeTest() {
       };
     })()`);
 
+    await evaluate(`(() => {
+      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
+      document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click();
+    })()`);
+
     const clickedSaveBookingCrm = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
         (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
@@ -22645,11 +22847,10 @@ async function runChromeTest() {
     );
 
     const retriedAgencyCustomerList = await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+      const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
       if (
-        selector instanceof HTMLSelectElement &&
-        !selector.disabled &&
-        [...selector.options].some((option) => option.value === "161")
+        selector instanceof HTMLDetailsElement &&
+        document.querySelector('[data-admin-dispatch-customer-account-option="agency:161:601"]')
       ) {
         return "already-loaded";
       }
@@ -22671,12 +22872,11 @@ async function runChromeTest() {
 
     await waitForCondition(
       () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
-        return selector instanceof HTMLSelectElement &&
-          !selector.disabled &&
-          [...selector.options].some((option) => option.value === "create-new-hotel-tour-agency") &&
-          [...selector.options].some((option) => option.value === "161")
+        return selector instanceof HTMLDetailsElement &&
+          document.querySelector('[data-admin-dispatch-customer-account-create="true"]') &&
+          document.querySelector('[data-admin-dispatch-customer-account-option="agency:161:601"]')
           ? true
           : false;
       })()`),
@@ -22685,14 +22885,13 @@ async function runChromeTest() {
     );
 
     const selectedAgencyFolderState = await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+      const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
-      if (!(selector instanceof HTMLSelectElement)) {
+      if (!(selector instanceof HTMLDetailsElement)) {
         return false;
       }
 
-      selector.value = "161";
-      selector.dispatchEvent(new Event("change", { bubbles: true }));
+      document.querySelector('[data-admin-dispatch-customer-account-option="agency:161:601"]')?.click();
 
       return true;
     })()`);
@@ -22700,11 +22899,12 @@ async function runChromeTest() {
 
     const simplifiedAgencyUi = await waitForCondition(
       () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
         const selectedNotice = document.querySelector('[data-admin-dispatch-agency-folder-selected="true"]');
 
-        return selector instanceof HTMLSelectElement && selector.value === "161" && selectedNotice
+        return selector instanceof HTMLDetailsElement && selector.dataset.value === "agency:161:601" && selectedNotice
           ? {
+              customerAccountSelectors: document.querySelectorAll('[data-admin-dispatch-customer-account-select="true"]').length,
               corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
               corporatePairSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-pair-select="true"]').length,
               text: selectedNotice.textContent || "",
@@ -22716,13 +22916,14 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       {
+        customerAccountSelectors: simplifiedAgencyUi.customerAccountSelectors,
         corporateCustomerSelectors: simplifiedAgencyUi.corporateCustomerSelectors,
         corporatePairSelectors: simplifiedAgencyUi.corporatePairSelectors,
       },
-      { corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
-      "Expected an agency booking to show only the one agency-folder choice",
+      { customerAccountSelectors: 1, corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
+      "Expected an account booking to keep only the unified customer choice",
     );
-    assert.match(simplifiedAgencyUi.text, /Guest name stays on this booking only/);
+    assert.match(simplifiedAgencyUi.text, /Passenger name stays on this booking only/);
 
     await evaluate(`(() => {
       window.__prestigeCrmCompanyIdentityRequests = [];
@@ -22805,10 +23006,11 @@ async function runChromeTest() {
     assert.equal(resetAgencyBooking, true, "Expected New booking to clear the agency-folder selection");
     const resetAgencyUi = await waitForCondition(
       () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
-        return selector instanceof HTMLSelectElement && selector.value === ""
+        return selector instanceof HTMLDetailsElement && selector.dataset.value === ""
           ? {
+              customerAccountSelectors: document.querySelectorAll('[data-admin-dispatch-customer-account-select="true"]').length,
               corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
               selectedNotices: document.querySelectorAll('[data-admin-dispatch-agency-folder-selected="true"]').length,
             }
@@ -22817,7 +23019,7 @@ async function runChromeTest() {
       10000,
       "New booking agency reset",
     );
-    assert.deepEqual(resetAgencyUi, { corporateCustomerSelectors: 1, selectedNotices: 0 });
+    assert.deepEqual(resetAgencyUi, { customerAccountSelectors: 1, corporateCustomerSelectors: 0, selectedNotices: 0 });
 
     await setBookingMessageValue(bookingSample, "first agency booking message");
     const parsedFirstAgencyBooking = await evaluate(`(() => {
@@ -22848,32 +23050,33 @@ async function runChromeTest() {
     );
 
     const selectedFirstAgencyMode = await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+      const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
-      if (!(selector instanceof HTMLSelectElement)) {
+      if (!(selector instanceof HTMLDetailsElement)) {
         return false;
       }
 
-      selector.value = "create-new-hotel-tour-agency";
-      selector.dispatchEvent(new Event("change", { bubbles: true }));
+      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
+      document.querySelector('[data-admin-dispatch-new-customer-account="true"]')?.click();
       return true;
     })()`);
     assert.equal(selectedFirstAgencyMode, true, "Expected first agency mode to be selectable");
 
     const firstAgencyUi = await waitForCondition(
       () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
         const notice = document.querySelector('[data-admin-dispatch-agency-folder-create="true"]');
         const companyInput = document.querySelector('input[placeholder="Company / Account"]');
         const passengerInput = document.querySelector('input[placeholder="Passenger name"]');
 
-        return selector instanceof HTMLSelectElement &&
-          selector.value === "create-new-hotel-tour-agency" &&
+        return selector instanceof HTMLDetailsElement &&
+          selector.dataset.customerId === "create-new-hotel-tour-agency" &&
           notice &&
           companyInput instanceof HTMLInputElement &&
           passengerInput instanceof HTMLInputElement
           ? {
               company: companyInput.value,
+              customerAccountSelectors: document.querySelectorAll('[data-admin-dispatch-customer-account-select="true"]').length,
               corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
               corporatePairSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-pair-select="true"]').length,
               notice: notice.textContent || "",
@@ -22886,11 +23089,12 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       {
+        customerAccountSelectors: firstAgencyUi.customerAccountSelectors,
         corporateCustomerSelectors: firstAgencyUi.corporateCustomerSelectors,
         corporatePairSelectors: firstAgencyUi.corporatePairSelectors,
       },
-      { corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
-      "Expected first agency mode to keep the corporate customer choices hidden",
+      { customerAccountSelectors: 1, corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
+      "Expected first account mode to keep one unified customer choice",
     );
     assert.equal(firstAgencyUi.company, "BROWSER UI TEST COMPANY");
     assert.equal(firstAgencyUi.passenger, "BROWSER UI TEST TRAVELER");
@@ -22959,14 +23163,14 @@ async function runChromeTest() {
 
     const clearedFirstAgencyMode = await waitForCondition(
       () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-agency-folder-select="true"]');
+        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
         const companyInput = document.querySelector('input[placeholder="Company / Account"]');
         const passengerInput = document.querySelector('input[placeholder="Passenger name"]');
 
-        return selector instanceof HTMLSelectElement &&
+        return selector instanceof HTMLDetailsElement &&
           companyInput instanceof HTMLInputElement &&
           passengerInput instanceof HTMLInputElement &&
-          selector.value === "" &&
+          selector.dataset.customerId === "" &&
           companyInput.value === "" &&
           passengerInput.value === ""
           ? true
@@ -23968,6 +24172,11 @@ async function runChromeTest() {
         window.__prestigeUnhandledSupabaseCalls.push(\`\${method} \${url}\`);
         return jsonResponse({ message: "Unhandled Supabase mock" }, 500);
       };
+    })()`);
+
+    await evaluate(`(() => {
+      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
+      document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')?.click();
     })()`);
 
     const clickedMrLeeNoCompanySave = await evaluate(`(() => {

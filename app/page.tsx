@@ -2386,6 +2386,28 @@ type AdminDispatchAgencyFoldersReadResponse = {
   ok?: boolean;
 };
 
+type AdminDispatchCustomerAccountOption = {
+  bookerId: string;
+  bookerName: string;
+  companyId: string;
+  companyName: string;
+  customerId: string;
+  key: string;
+  kind: "agency" | "corporate";
+  label: string;
+  searchText: string;
+  secondaryLabel: string;
+  travelers: TravelerRecord[];
+};
+
+type AdminDispatchCustomerAccountMatchReview = {
+  account: AdminDispatchCustomerAccountOption;
+  candidates: TravelerRecord[];
+  selectedTravelerId: string;
+};
+
+type AdminDispatchNewCustomerType = "account" | "corporate" | "personal";
+
 type AdminEmailAiCustomerProfileRecommendation =
   | {
       companyId: number;
@@ -4976,6 +4998,72 @@ function billingIdentityMatches(first: string | number | null | undefined, secon
   const secondKey = normalizeBillingIdentityMatch(second);
 
   return Boolean(firstKey && secondKey && firstKey === secondKey);
+}
+
+const billingIdentityReviewIgnoredNameTokens = new Set(["dr", "mr", "mrs", "ms"]);
+
+function billingIdentityReviewNameTokens(value: string | number | null | undefined) {
+  return normalizeBillingIdentityMatch(value)
+    .split(" ")
+    .filter((token) => token && !billingIdentityReviewIgnoredNameTokens.has(token));
+}
+
+function billingIdentityTokenWithinOneEdit(first: string, second: string) {
+  if (first === second) {
+    return true;
+  }
+
+  if (Math.min(first.length, second.length) < 4 || Math.abs(first.length - second.length) > 1) {
+    return false;
+  }
+
+  let firstIndex = 0;
+  let secondIndex = 0;
+  let edits = 0;
+
+  while (firstIndex < first.length && secondIndex < second.length) {
+    if (first[firstIndex] === second[secondIndex]) {
+      firstIndex += 1;
+      secondIndex += 1;
+      continue;
+    }
+
+    edits += 1;
+    if (edits > 1) {
+      return false;
+    }
+
+    if (first.length > second.length) {
+      firstIndex += 1;
+    } else if (second.length > first.length) {
+      secondIndex += 1;
+    } else {
+      firstIndex += 1;
+      secondIndex += 1;
+    }
+  }
+
+  if (firstIndex < first.length || secondIndex < second.length) {
+    edits += 1;
+  }
+
+  return edits <= 1;
+}
+
+function billingIdentityPossibleMatch(
+  first: string | number | null | undefined,
+  second: string | number | null | undefined,
+) {
+  const firstTokens = billingIdentityReviewNameTokens(first);
+  const secondTokens = billingIdentityReviewNameTokens(second);
+
+  return Boolean(
+    firstTokens.length > 0 &&
+      firstTokens.length === secondTokens.length &&
+      firstTokens.every((token, index) =>
+        billingIdentityTokenWithinOneEdit(token, secondTokens[index]),
+      ),
+  );
 }
 
 const billingCompanyIdentityIgnoredTokens = new Set([
@@ -14595,6 +14683,14 @@ export default function Home() {
     useState<AdminDispatchAgencyFolder[]>([]);
   const [adminDispatchAgencyFoldersLoaded, setAdminDispatchAgencyFoldersLoaded] = useState(false);
   const [adminDispatchAgencyFoldersError, setAdminDispatchAgencyFoldersError] = useState("");
+  const [adminDispatchCustomerAccountSearch, setAdminDispatchCustomerAccountSearch] = useState("");
+  const [adminDispatchCustomerAccountMatchReview, setAdminDispatchCustomerAccountMatchReview] =
+    useState<AdminDispatchCustomerAccountMatchReview | null>(null);
+  const [adminDispatchNewCustomerChoiceOpen, setAdminDispatchNewCustomerChoiceOpen] =
+    useState(false);
+  const [adminDispatchNewCustomerType, setAdminDispatchNewCustomerType] =
+    useState<AdminDispatchNewCustomerType | null>(null);
+  const adminDispatchCustomerAccountChooserRef = useRef<HTMLDetailsElement | null>(null);
   const [ratesLoaded, setRatesLoaded] = useState(false);
   const [savingRates, setSavingRates] = useState(false);
   const adminDispatchCustomerListAutoLoadAttemptedRef = useRef(false);
@@ -19360,6 +19456,13 @@ export default function Home() {
     setDriverJobLinkHandoffReference("");
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
+    setAdminDispatchCustomerAccountSearch("");
+    setAdminDispatchCustomerAccountMatchReview(null);
+    setAdminDispatchNewCustomerChoiceOpen(false);
+    setAdminDispatchNewCustomerType(null);
+    if (adminDispatchCustomerAccountChooserRef.current) {
+      adminDispatchCustomerAccountChooserRef.current.open = false;
+    }
 
     if (!options.preserveAdminEmailAiReview) {
       adminEmailAiCustomerRecommendationRevisionRef.current += 1;
@@ -19560,6 +19663,58 @@ export default function Home() {
       return false;
     }
 
+    const hasVerifiedCustomerIdentity = Boolean(
+      adminDispatchVerifiedIdentityId(booking.customerId) ||
+        adminDispatchVerifiedIdentityId(booking.companyId) ||
+        adminDispatchVerifiedIdentityId(booking.bookerId) ||
+        adminDispatchVerifiedIdentityId(booking.travelerId),
+    );
+    const creatingCustomerAccount = adminDispatchIsCreatingAgencyFolder(booking);
+
+    if (
+      !clean(appliedAdminBookingSnapshotReference) &&
+      !hasVerifiedCustomerIdentity &&
+      !creatingCustomerAccount &&
+      !adminDispatchNewCustomerType
+    ) {
+      const saveMessage = {
+        tone: "error",
+        text: "Choose an existing Customer Account or use Create New Customer and select the exact customer type before Save + CRM.",
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return false;
+    }
+
+    if (
+      adminDispatchNewCustomerType === "corporate" &&
+      !saveCrmExplicitCompanyAccount(booking)
+    ) {
+      const saveMessage = {
+        tone: "error",
+        text: "Company + Booker / PA needs an exact Company / Account name before Save + CRM.",
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return false;
+    }
+
+    if (
+      adminDispatchNewCustomerType === "personal" &&
+      saveCrmExplicitCompanyAccount(booking)
+    ) {
+      const saveMessage = {
+        tone: "error",
+        text: "Personal customer requires Company / Account to stay blank. Choose Company + Booker / PA for a company booking.",
+      } satisfies Message;
+
+      setMessage(saveMessage);
+      setBookingSaveMessage(saveMessage);
+      return false;
+    }
+
     const missingPickupMessage = adminDispatchSaveCrmMissingPickupMessage(booking);
 
     if (missingPickupMessage) {
@@ -19600,6 +19755,17 @@ export default function Home() {
 
   function confirmSaveCrmBillingIdentityReview(review = saveCrmBillingIdentityReview) {
     if (!review) {
+      return;
+    }
+
+    if (
+      review.personalCustomerChoiceRequired &&
+      adminDispatchNewCustomerType !== "personal"
+    ) {
+      setSaveCrmBillingIdentityReviewMessage({
+        tone: "error",
+        text: "Choose Create New Customer, then Personal customer in Booking Details before confirming this billing identity.",
+      });
       return;
     }
 
@@ -26692,129 +26858,293 @@ export default function Home() {
     });
   }
 
-  const adminDispatchVerifiedCompanyOptions = rateCompanies.map((company) => ({
-    id: String(company.id),
-    name: clean(company.company_name) || `Company ${company.id}`,
-  }));
-  if (
-    booking.companyId &&
-    !adminDispatchVerifiedCompanyOptions.some((company) => company.id === booking.companyId)
-  ) {
-    adminDispatchVerifiedCompanyOptions.push({
-      id: booking.companyId,
-      name: clean(booking.company) || `Company ${booking.companyId}`,
+  const adminDispatchAgencyCompanyIds = new Set(
+    adminDispatchAgencyFolderOptions.map((account) => account.companyId).filter(Boolean),
+  );
+  const adminDispatchCustomerAccountOptions: AdminDispatchCustomerAccountOption[] =
+    adminDispatchAgencyFolderOptions.map((account) => {
+      const companyName =
+        clean(rateCompanies.find((company) => String(company.id) === account.companyId)?.company_name) ||
+        account.name;
+      const accountTravelers = rateTravelers.filter(
+        (traveler) =>
+          String(adminDispatchVerifiedIdentityId(traveler.company_id) || "") === account.companyId &&
+          Boolean(adminDispatchVerifiedIdentityId(traveler.id)),
+      );
+      const passengerSearchText = accountTravelers
+        .flatMap((traveler) => [clean(traveler.traveler_name), clean(traveler.booker_name)])
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        bookerId: "",
+        bookerName: "",
+        companyId: account.companyId,
+        companyName,
+        customerId: account.id,
+        key: `agency:${account.id}:${account.companyId}`,
+        kind: "agency" as const,
+        label: account.name,
+        searchText: `${account.name} ${companyName} ${passengerSearchText}`.toLocaleLowerCase(),
+        secondaryLabel: "Customer account · many passengers",
+        travelers: accountTravelers,
+      };
+    });
+  const adminDispatchCorporateAccountGroups = new Map<
+    string,
+    AdminDispatchCustomerAccountOption
+  >();
+
+  for (const traveler of rateTravelers) {
+    const companyId = String(adminDispatchVerifiedIdentityId(traveler.company_id) || "");
+    const bookerId = String(adminDispatchVerifiedIdentityId(traveler.booker_id) || "");
+    const travelerId = String(adminDispatchVerifiedIdentityId(traveler.id) || "");
+
+    if (!companyId || !bookerId || !travelerId || adminDispatchAgencyCompanyIds.has(companyId)) {
+      continue;
+    }
+
+    const companyName =
+      clean(rateCompanies.find((company) => String(company.id) === companyId)?.company_name) ||
+      `Company ${companyId}`;
+    const bookerName = clean(traveler.booker_name) || `Booker ${bookerId}`;
+    const key = `corporate:${companyId}:${bookerId}`;
+    const existing = adminDispatchCorporateAccountGroups.get(key);
+
+    if (existing) {
+      existing.travelers.push(traveler);
+      existing.searchText += ` ${clean(traveler.traveler_name).toLocaleLowerCase()}`;
+      existing.secondaryLabel = `${companyName} · ${existing.travelers.length} passenger${
+        existing.travelers.length === 1 ? "" : "s"
+      }`;
+      continue;
+    }
+
+    adminDispatchCorporateAccountGroups.set(key, {
+      bookerId,
+      bookerName,
+      companyId,
+      companyName,
+      customerId: "",
+      key,
+      kind: "corporate",
+      label: bookerName,
+      searchText: `${companyName} ${bookerName} ${clean(traveler.traveler_name)}`.toLocaleLowerCase(),
+      secondaryLabel: `${companyName} · 1 passenger`,
+      travelers: [traveler],
     });
   }
-  const adminDispatchCorporatePairOptions = rateTravelers
-    .filter(
-      (traveler) =>
-        adminDispatchVerifiedIdentityId(traveler.id) &&
-        adminDispatchVerifiedIdentityId(traveler.company_id) &&
-        adminDispatchVerifiedIdentityId(traveler.booker_id) &&
-        (!booking.companyId || traveler.company_id === Number(booking.companyId)),
-    )
-    .map((traveler) => ({
-      bookerId: String(traveler.booker_id),
-      bookerName: clean(traveler.booker_name) || "Saved booker",
-      companyId: String(traveler.company_id),
-      id: String(traveler.id),
-      label: `${clean(traveler.booker_name) || "Saved booker"} / ${clean(traveler.traveler_name) || "Saved traveller"}`,
-      travelerName: clean(traveler.traveler_name) || "Saved traveller",
-    }));
-  const adminDispatchSelectedCorporatePair = adminDispatchCorporatePairOptions.find(
-    (pair) => pair.id === booking.travelerId && pair.bookerId === booking.bookerId,
-  ) ?? null;
-  const adminDispatchSingleCorporatePair =
-    adminDispatchCorporatePairOptions.length === 1
-      ? adminDispatchCorporatePairOptions[0]
-      : null;
-  const adminDispatchSingleCorporatePairBookerId =
-    adminDispatchSingleCorporatePair?.bookerId || "";
-  const adminDispatchSingleCorporatePairBookerName =
-    adminDispatchSingleCorporatePair?.bookerName || "";
-  const adminDispatchSingleCorporatePairCompanyId =
-    adminDispatchSingleCorporatePair?.companyId || "";
-  const adminDispatchSingleCorporatePairTravelerId =
-    adminDispatchSingleCorporatePair?.id || "";
 
-  useEffect(() => {
+  for (const company of rateCompanies) {
+    const companyId = String(adminDispatchVerifiedIdentityId(company.id) || "");
+
     if (
-      activeTab !== "dispatch" ||
-      clean(booking.customerId) ||
-      !booking.companyId ||
-      booking.bookerId ||
-      booking.travelerId ||
-      !adminDispatchSingleCorporatePairBookerId ||
-      adminDispatchSingleCorporatePairCompanyId !== booking.companyId ||
-      !adminDispatchSingleCorporatePairTravelerId
+      !companyId ||
+      adminDispatchAgencyCompanyIds.has(companyId) ||
+      [...adminDispatchCorporateAccountGroups.values()].some(
+        (account) => account.companyId === companyId,
+      )
     ) {
+      continue;
+    }
+
+    const companyName = clean(company.company_name) || `Company ${companyId}`;
+    adminDispatchCorporateAccountGroups.set(`corporate:${companyId}:unassigned`, {
+      bookerId: "",
+      bookerName: "",
+      companyId,
+      companyName,
+      customerId: "",
+      key: `corporate:${companyId}:unassigned`,
+      kind: "corporate",
+      label: companyName,
+      searchText: companyName.toLocaleLowerCase(),
+      secondaryLabel: "Company · Booker / PA not set",
+      travelers: [],
+    });
+  }
+
+  adminDispatchCustomerAccountOptions.push(...adminDispatchCorporateAccountGroups.values());
+  if (
+    !clean(booking.customerId) &&
+    booking.companyId &&
+    !adminDispatchCustomerAccountOptions.some(
+      (account) =>
+        account.kind === "corporate" &&
+        account.companyId === booking.companyId &&
+        account.bookerId === booking.bookerId,
+    )
+  ) {
+    const loadedCompanyName = clean(booking.company) || `Company ${booking.companyId}`;
+    const loadedBookerName = clean(booking.booker);
+    const loadedTraveler = rateTravelers.find(
+      (traveler) =>
+        String(traveler.id) === booking.travelerId &&
+        String(traveler.company_id) === booking.companyId &&
+        String(traveler.booker_id || "") === booking.bookerId,
+    );
+
+    adminDispatchCustomerAccountOptions.push({
+      bookerId: booking.bookerId,
+      bookerName: loadedBookerName,
+      companyId: booking.companyId,
+      companyName: loadedCompanyName,
+      customerId: "",
+      key: `corporate:${booking.companyId}:${booking.bookerId || "unassigned"}`,
+      kind: "corporate",
+      label: loadedBookerName || loadedCompanyName,
+      searchText: `${loadedCompanyName} ${loadedBookerName} ${clean(booking.name)}`.toLocaleLowerCase(),
+      secondaryLabel: loadedBookerName
+        ? `${loadedCompanyName} · loaded booking identity`
+        : "Company · loaded booking identity",
+      travelers: loadedTraveler ? [loadedTraveler] : [],
+    });
+  }
+  adminDispatchCustomerAccountOptions.sort((first, second) =>
+    first.label.localeCompare(second.label),
+  );
+  const adminDispatchNormalizedCustomerAccountSearch = clean(
+    adminDispatchCustomerAccountSearch,
+  ).toLocaleLowerCase();
+  const adminDispatchFilteredCustomerAccountOptions =
+    adminDispatchNormalizedCustomerAccountSearch
+      ? adminDispatchCustomerAccountOptions.filter((account) =>
+          account.searchText.includes(adminDispatchNormalizedCustomerAccountSearch) ||
+          account.travelers.some((traveler) =>
+            billingIdentityPossibleMatch(
+              traveler.traveler_name,
+              adminDispatchNormalizedCustomerAccountSearch,
+            ),
+          ),
+        )
+      : adminDispatchCustomerAccountOptions;
+  const adminDispatchSelectedCustomerAccount =
+    adminDispatchCustomerAccountOptions.find((account) =>
+      account.kind === "agency"
+        ? account.customerId === booking.customerId && account.companyId === booking.companyId
+        : !clean(booking.customerId) &&
+          account.companyId === booking.companyId &&
+          (account.bookerId ? account.bookerId === booking.bookerId : !booking.bookerId),
+    ) ?? null;
+  const adminDispatchSelectedCustomerAccountName = adminDispatchCreatingAgencyFolder
+    ? "Create Customer Account · many passengers"
+    : adminDispatchSelectedCustomerAccount?.label || "Choose customer account";
+  const adminDispatchCustomerAccountSelectionLocked = Boolean(
+    clean(appliedAdminBookingSnapshotReference),
+  );
+  function applyAdminDispatchCustomerAccount(
+    account: AdminDispatchCustomerAccountOption,
+    traveler: TravelerRecord | null = null,
+  ) {
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
+    setAdminDispatchCustomerAccountSearch("");
+    setAdminDispatchCustomerAccountMatchReview(null);
+    setAdminDispatchNewCustomerChoiceOpen(false);
+    setAdminDispatchNewCustomerType(null);
+    if (adminDispatchCustomerAccountChooserRef.current) {
+      adminDispatchCustomerAccountChooserRef.current.open = false;
+    }
+
+    if (account.kind === "agency") {
+      setBooking((current) => ({
+        ...current,
+        bookerId: "",
+        company: account.companyName || current.company,
+        companyId: account.companyId,
+        customerId: account.customerId,
+        travelerId: "",
+      }));
       return;
     }
 
-    setBooking((current) => {
-      if (
-        clean(current.customerId) ||
-        current.companyId !== adminDispatchSingleCorporatePairCompanyId ||
-        current.bookerId ||
-        current.travelerId
-      ) {
-        return current;
-      }
-
-      return {
-        ...current,
-        booker: adminDispatchSingleCorporatePairBookerName || current.booker,
-        bookerId: adminDispatchSingleCorporatePairBookerId,
-        travelerId: adminDispatchSingleCorporatePairTravelerId,
-      };
-    });
-  }, [
-    activeTab,
-    adminDispatchSingleCorporatePairBookerId,
-    adminDispatchSingleCorporatePairBookerName,
-    adminDispatchSingleCorporatePairCompanyId,
-    adminDispatchSingleCorporatePairTravelerId,
-    booking.bookerId,
-    booking.companyId,
-    booking.customerId,
-    booking.travelerId,
-  ]);
-
-  function updateAdminDispatchCorporateCustomer(companyId: string) {
-    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
-    setAdminEmailAiCustomerProfileSuggestion(null);
-    const exactPairs = rateTravelers.filter(
-      (traveler) =>
-        String(traveler.company_id) === companyId &&
-        adminDispatchVerifiedIdentityId(traveler.id) &&
-        adminDispatchVerifiedIdentityId(traveler.booker_id),
-    );
-    const onlyPair = exactPairs.length === 1 ? exactPairs[0] : null;
-
     setBooking((current) => ({
       ...current,
-      booker: onlyPair ? clean(onlyPair.booker_name) || current.booker : current.booker,
-      bookerId: onlyPair ? String(onlyPair.booker_id) : "",
-      companyId,
+      booker: account.bookerName || current.booker,
+      bookerId: account.bookerId,
+      company: account.companyName || current.company,
+      companyId: account.companyId,
       customerId: "",
-      travelerId: onlyPair ? String(onlyPair.id) : "",
+      name: traveler ? clean(traveler.traveler_name) || current.name : current.name,
+      travelerId: traveler ? String(traveler.id) : "",
     }));
   }
 
-  function updateAdminDispatchCorporatePair(travelerId: string) {
-    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
-    setAdminEmailAiCustomerProfileSuggestion(null);
-    const pair = adminDispatchCorporatePairOptions.find(
-      (candidate) => candidate.id === travelerId,
+  function selectAdminDispatchCustomerAccount(account: AdminDispatchCustomerAccountOption) {
+    if (adminDispatchCustomerAccountSelectionLocked) {
+      return;
+    }
+
+    if (account.kind === "agency") {
+      applyAdminDispatchCustomerAccount(account);
+      return;
+    }
+
+    const passengerMatchText = clean(booking.name) || clean(adminDispatchCustomerAccountSearch);
+    const candidates = passengerMatchText
+      ? account.travelers.filter((traveler) =>
+          billingIdentityPossibleMatch(traveler.traveler_name, passengerMatchText),
+        )
+      : [];
+
+    if (candidates.length > 0) {
+      setAdminDispatchCustomerAccountMatchReview({
+        account,
+        candidates,
+        selectedTravelerId: candidates.length === 1 ? String(candidates[0].id) : "",
+      });
+      if (adminDispatchCustomerAccountChooserRef.current) {
+        adminDispatchCustomerAccountChooserRef.current.open = false;
+      }
+      return;
+    }
+
+    applyAdminDispatchCustomerAccount(account);
+  }
+
+  function confirmAdminDispatchExistingPassenger() {
+    if (adminDispatchCustomerAccountSelectionLocked || !adminDispatchCustomerAccountMatchReview) {
+      return;
+    }
+
+    const traveler = adminDispatchCustomerAccountMatchReview.candidates.find(
+      (candidate) => String(candidate.id) === adminDispatchCustomerAccountMatchReview.selectedTravelerId,
     );
+
+    if (!traveler) {
+      return;
+    }
+
+    applyAdminDispatchCustomerAccount(adminDispatchCustomerAccountMatchReview.account, traveler);
+  }
+
+  function confirmAdminDispatchDifferentPassenger() {
+    if (adminDispatchCustomerAccountSelectionLocked || !adminDispatchCustomerAccountMatchReview) {
+      return;
+    }
+
+    applyAdminDispatchCustomerAccount(adminDispatchCustomerAccountMatchReview.account);
+  }
+
+  function chooseAdminDispatchNewCustomerType(type: AdminDispatchNewCustomerType) {
+    if (adminDispatchCustomerAccountSelectionLocked) {
+      return;
+    }
+
+    setAdminDispatchNewCustomerType(type);
+    setAdminDispatchNewCustomerChoiceOpen(false);
+    setAdminDispatchCustomerAccountSearch("");
+    if (adminDispatchCustomerAccountChooserRef.current) {
+      adminDispatchCustomerAccountChooserRef.current.open = false;
+    }
 
     setBooking((current) => ({
       ...current,
-      booker: pair?.bookerName || current.booker,
-      bookerId: pair?.bookerId || "",
-      companyId: pair?.companyId || current.companyId,
-      customerId: "",
-      travelerId: pair?.id || "",
+      bookerId: "",
+      company: type === "personal" ? "" : current.company,
+      companyId: "",
+      customerId: type === "account" ? adminDispatchCreateAgencyFolderValue : "",
+      travelerId: "",
     }));
   }
   const codexPreparedJobCardsPanel = (
@@ -41418,67 +41748,107 @@ export default function Home() {
                 className="mb-2 grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-2 md:grid-cols-3"
                 data-admin-dispatch-crm-identity-selectors="true"
               >
-                <label className="text-xs font-semibold text-slate-700 md:col-span-3">
-                  Hotel / Tour Agency folder
-                  <select
-                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-agency-folder-select="true"
-                    disabled={!adminDispatchAgencyFoldersLoaded || Boolean(clean(appliedAdminBookingSnapshotReference))}
-                    onChange={(event) => {
-                      adminEmailAiCustomerRecommendationRevisionRef.current += 1;
-                      setAdminEmailAiCustomerProfileSuggestion(null);
-                      const customerId = event.target.value;
-                      const creatingAgencyFolder = customerId === adminDispatchCreateAgencyFolderValue;
-
-                      setBooking((current) => ({
-                        ...current,
-                        customerId,
-                        ...(creatingAgencyFolder
-                          ? {
-                              bookerId: "",
-                              companyId: "",
-                              travelerId: "",
-                            }
-                          : customerId
-                          ? {
-                              bookerId: "",
-                              companyId:
-                                adminDispatchAgencyFolderOptions.find(
-                                  (account) => account.id === customerId,
-                                )?.companyId || "",
-                              travelerId: "",
-                            }
-                          : {}),
-                      }));
+                <div className="text-xs font-semibold text-slate-700 md:col-span-3">
+                  <span id="admin-dispatch-customer-account-label">Customer Account</span>
+                  <details
+                    className="group relative mt-1 w-full"
+                    data-booker-id={booking.bookerId}
+                    data-company-id={booking.companyId}
+                    data-customer-id={booking.customerId}
+                    data-admin-dispatch-customer-account-select="true"
+                    data-traveler-id={booking.travelerId}
+                    data-value={adminDispatchSelectedCustomerAccount?.key || ""}
+                    onToggle={(event) => {
+                      if (!event.currentTarget.open) {
+                        setAdminDispatchCustomerAccountSearch("");
+                      }
                     }}
-                    value={
-                      adminDispatchCreatingAgencyFolder
-                        ? adminDispatchCreateAgencyFolderValue
-                        : adminDispatchSelectedAgencyFolder?.id || ""
-                    }
+                    ref={adminDispatchCustomerAccountChooserRef}
                   >
-                    <option value="">Not an agency booking</option>
-                    <option value={adminDispatchCreateAgencyFolderValue}>
-                      Create new Hotel / Tour Agency
-                    </option>
-                    {adminDispatchAgencyFolderOptions.map((account) => (
-                      <option key={account.id} value={account.id}>{account.name}</option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block font-medium text-slate-500">
-                    {clean(appliedAdminBookingSnapshotReference)
-                      ? "Existing booking: the saved agency relationship is preserved."
-                      : adminDispatchCreatingAgencyFolder
-                        ? "Enter the agency name once under Company / Account. Booker and Traveller stay blank; the passenger stays on this booking only."
-                        : "Agency booking: choose this one folder only. Booker and Traveller stay blank."}
-                  </span>
-                </label>
+                    <summary
+                      aria-labelledby="admin-dispatch-customer-account-label"
+                      className="flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-sky-300 bg-white px-2 text-sm outline-none transition focus-visible:border-sky-500 focus-visible:ring-2 focus-visible:ring-sky-100 [&::-webkit-details-marker]:hidden"
+                    >
+                      <span className="min-w-0 truncate" data-admin-dispatch-customer-account-value="true">
+                        {adminDispatchSelectedCustomerAccountName}
+                      </span>
+                      <span aria-hidden="true" className="shrink-0 text-slate-500 transition group-open:rotate-180">
+                        ⌄
+                      </span>
+                    </summary>
+                    <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden rounded-md border border-sky-300 bg-white shadow-lg">
+                      <label className="block p-2">
+                        <span className="sr-only">Quick search customer account</span>
+                        <input
+                          autoComplete="off"
+                          className="h-8 w-full rounded-md border border-sky-200 bg-white px-2 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                          data-admin-dispatch-customer-account-search="true"
+                          maxLength={80}
+                          onChange={(event) => setAdminDispatchCustomerAccountSearch(event.target.value)}
+                          placeholder="Search account, company, Booker or passenger"
+                          type="search"
+                          value={adminDispatchCustomerAccountSearch}
+                        />
+                      </label>
+                      <div
+                        className="max-h-56 overflow-y-auto border-t border-sky-100 p-1"
+                        data-admin-dispatch-customer-account-options="true"
+                      >
+                        <button
+                          className="block w-full rounded px-2 py-2 text-left text-sm font-bold text-sky-900 hover:bg-sky-50 focus-visible:bg-sky-50 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-white"
+                          data-admin-dispatch-customer-account-create="true"
+                          disabled={adminDispatchCustomerAccountSelectionLocked}
+                          onClick={() => {
+                            if (adminDispatchCustomerAccountSelectionLocked) {
+                              return;
+                            }
+                            setAdminDispatchNewCustomerChoiceOpen(true);
+                            if (adminDispatchCustomerAccountChooserRef.current) {
+                              adminDispatchCustomerAccountChooserRef.current.open = false;
+                            }
+                          }}
+                          type="button"
+                        >
+                          Create New Customer
+                        </button>
+                        {adminDispatchFilteredCustomerAccountOptions.map((account) => (
+                          <button
+                            aria-pressed={account.key === adminDispatchSelectedCustomerAccount?.key}
+                            className="block w-full rounded px-2 py-2 text-left hover:bg-sky-50 focus-visible:bg-sky-50 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-white"
+                            data-admin-dispatch-customer-account-option={account.key}
+                            disabled={adminDispatchCustomerAccountSelectionLocked}
+                            key={account.key}
+                            onClick={() => selectAdminDispatchCustomerAccount(account)}
+                            type="button"
+                          >
+                            <span className="block text-sm font-bold text-slate-900">{account.label}</span>
+                            <span className="block text-xs font-medium text-slate-500">
+                              {account.secondaryLabel}
+                            </span>
+                          </button>
+                        ))}
+                        {adminDispatchFilteredCustomerAccountOptions.length === 0 ? (
+                          <p
+                            className="px-2 py-3 text-sm font-medium text-slate-500"
+                            data-admin-dispatch-customer-account-empty="true"
+                          >
+                            No matching customer account. Use Create New Customer only after review.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+                <p className="font-medium text-slate-500 md:col-span-3">
+                  Search uses stored account, company, Booker and passenger records. It never creates,
+                  merges or links a customer until Admin makes an explicit choice.
+                </p>
                 {adminDispatchAgencyFoldersError ? (
                   <p
                     className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-800 md:col-span-3"
                     data-admin-dispatch-agency-folders-error="true"
                   >
-                    {adminDispatchAgencyFoldersError} Retry the customer list before saving an agency booking.
+                    {adminDispatchAgencyFoldersError} Retry the customer list before saving.
                   </p>
                 ) : null}
                 {adminDispatchSelectedAgencyFolder ? (
@@ -41486,78 +41856,161 @@ export default function Home() {
                     className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-3"
                     data-admin-dispatch-agency-folder-selected="true"
                   >
-                    Agency folder selected: {adminDispatchSelectedAgencyFolder.name}. Guest name stays on this booking only.
+                    Customer account selected: {adminDispatchSelectedAgencyFolder.name}. Passenger name stays on this booking only.
                   </p>
                 ) : adminDispatchCreatingAgencyFolder ? (
                   <p
                     className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-3"
                     data-admin-dispatch-agency-folder-create="true"
                   >
-                    First agency booking: enter the exact agency name in Company / Account below. Booker and Traveller stay blank. The passenger stays on this booking only.
+                    New customer account: enter its exact Company / Account name below. Booker and Traveller stay blank. Each booking keeps its own passenger name.
                   </p>
-                ) : (
-                  <>
-                <label className="text-xs font-semibold text-slate-700">
-                  Customer
-                  <select
-                    className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                    data-admin-dispatch-corporate-customer-select="true"
-                    onChange={(event) => updateAdminDispatchCorporateCustomer(event.target.value)}
-                    value={booking.companyId}
-                  >
-                    <option value="">Choose customer</option>
-                    {adminDispatchVerifiedCompanyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-                  </select>
-                </label>
-                {booking.companyId && adminDispatchCorporatePairOptions.length > 1 ? (
-                  <label className="text-xs font-semibold text-slate-700 md:col-span-2">
-                    Booker / Traveller
-                    <select
-                      className="mt-1 h-8 w-full rounded-md border border-sky-300 bg-white px-2 text-sm"
-                      data-admin-dispatch-corporate-pair-select="true"
-                      onChange={(event) => updateAdminDispatchCorporatePair(event.target.value)}
-                      value={adminDispatchSelectedCorporatePair?.id || ""}
-                    >
-                      <option value="">Choose the actual Booker / Traveller</option>
-                      {adminDispatchCorporatePairOptions.map((pair) => (
-                        <option key={pair.id} value={pair.id}>{pair.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                ) : booking.companyId && adminDispatchSelectedCorporatePair ? (
+                ) : adminDispatchSelectedCustomerAccount?.kind === "corporate" ? (
                   <p
-                    className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-2"
-                    data-admin-dispatch-corporate-pair-carried="true"
+                    className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-3"
+                    data-admin-dispatch-customer-account-selected="true"
                   >
-                    Booker / Traveller: {adminDispatchCorporatePairOptions[0].label}
-                  </p>
-                ) : booking.companyId &&
-                  adminDispatchCorporatePairOptions.length === 1 &&
-                  !booking.bookerId &&
-                  !booking.travelerId ? (
-                  <p
-                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-900 md:col-span-2"
-                    data-admin-dispatch-corporate-pair-applying="true"
-                  >
-                    Applying saved Booker / Traveller...
-                  </p>
-                ) : booking.companyId && adminDispatchCorporatePairOptions.length === 1 ? (
-                  <p
-                    className="rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-900 md:col-span-2"
-                    data-admin-dispatch-corporate-pair-conflict="true"
-                  >
-                    Saved Booker / Traveller does not match this booking. Review the booking before saving.
-                  </p>
-                ) : booking.companyId ? (
-                  <p
-                    className="rounded-md border border-amber-200 bg-white px-2 py-1 text-xs font-semibold text-amber-900 md:col-span-2"
-                    data-admin-dispatch-corporate-pair-missing="true"
-                  >
-                    Add the Booker / Traveller once in this customer profile before preparing an invoice.
+                    Customer account selected: {adminDispatchSelectedCustomerAccount.label} · {adminDispatchSelectedCustomerAccount.companyName}.
+                    {booking.travelerId
+                      ? ` Passenger: ${clean(booking.name)}.`
+                      : " Enter or review this booking's passenger before Save + CRM."}
                   </p>
                 ) : null}
-                  </>
-                )}
+                {adminDispatchNewCustomerType ? (
+                  <p
+                    className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-900 md:col-span-3"
+                    data-admin-dispatch-new-customer-type={adminDispatchNewCustomerType}
+                  >
+                    {adminDispatchNewCustomerType === "account"
+                      ? "New customer account selected: one account may hold many booking-specific passengers."
+                      : adminDispatchNewCustomerType === "corporate"
+                        ? "New Company + Booker / PA selected: enter the exact company, Booker and passenger details."
+                        : "New personal customer selected: Company stays blank and Billing Identity Review must be confirmed before Save + CRM."}
+                  </p>
+                ) : null}
+                {adminDispatchCustomerAccountMatchReview ? (
+                  <div
+                    className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 md:col-span-3"
+                    data-admin-dispatch-customer-account-match-review="true"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Review possible existing passenger"
+                  >
+                    <p className="font-bold">Possible existing passenger found</p>
+                    <p className="mt-1 font-medium">
+                      Account: {adminDispatchCustomerAccountMatchReview.account.label} · Company: {adminDispatchCustomerAccountMatchReview.account.companyName} · Booker: {adminDispatchCustomerAccountMatchReview.account.bookerName || "Not set"}.
+                    </p>
+                    {adminDispatchCustomerAccountMatchReview.candidates.length > 1 ? (
+                      <div className="mt-2 grid gap-1" data-admin-dispatch-customer-account-match-candidates="true">
+                        {adminDispatchCustomerAccountMatchReview.candidates.map((candidate) => (
+                          <button
+                            aria-pressed={
+                              String(candidate.id) ===
+                              adminDispatchCustomerAccountMatchReview.selectedTravelerId
+                            }
+                            className="rounded border border-amber-300 bg-white px-2 py-1.5 text-left font-semibold hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-white"
+                            disabled={adminDispatchCustomerAccountSelectionLocked}
+                            key={candidate.id}
+                            onClick={() =>
+                              setAdminDispatchCustomerAccountMatchReview((current) =>
+                                current
+                                  ? { ...current, selectedTravelerId: String(candidate.id) }
+                                  : current,
+                              )
+                            }
+                            type="button"
+                          >
+                            {clean(candidate.traveler_name)} · {clean(candidate.booker_name)} · CRM Traveller #{candidate.id}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 font-bold">
+                        Passenger: {clean(adminDispatchCustomerAccountMatchReview.candidates[0]?.traveler_name)}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        className="h-8 rounded-md bg-emerald-800 px-3 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+                        data-admin-dispatch-customer-account-use-existing="true"
+                        disabled={
+                          adminDispatchCustomerAccountSelectionLocked ||
+                          !adminDispatchCustomerAccountMatchReview.selectedTravelerId
+                        }
+                        onClick={confirmAdminDispatchExistingPassenger}
+                        type="button"
+                      >
+                        Yes — Use Existing
+                      </button>
+                      <button
+                        className="h-8 rounded-md border border-amber-500 bg-white px-3 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
+                        data-admin-dispatch-customer-account-different-person="true"
+                        disabled={adminDispatchCustomerAccountSelectionLocked}
+                        onClick={confirmAdminDispatchDifferentPassenger}
+                        type="button"
+                      >
+                        No — Different Person
+                      </button>
+                      <button
+                        className="h-8 rounded-md border border-slate-300 bg-white px-3 font-bold text-slate-700"
+                        data-admin-dispatch-customer-account-review-cancel="true"
+                        onClick={() => setAdminDispatchCustomerAccountMatchReview(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {adminDispatchNewCustomerChoiceOpen ? (
+                  <div
+                    className="rounded-md border border-sky-300 bg-white p-3 text-xs text-slate-900 md:col-span-3"
+                    data-admin-dispatch-new-customer-choice="true"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Choose new customer type"
+                  >
+                    <p className="font-bold">Choose the exact new-customer path</p>
+                    <p className="mt-1 font-medium text-slate-600">The app will not infer account ownership from names.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
+                        data-admin-dispatch-new-customer-account="true"
+                        disabled={adminDispatchCustomerAccountSelectionLocked}
+                        onClick={() => chooseAdminDispatchNewCustomerType("account")}
+                        type="button"
+                      >
+                        Customer account — many passengers
+                      </button>
+                      <button
+                        className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
+                        data-admin-dispatch-new-customer-corporate="true"
+                        disabled={adminDispatchCustomerAccountSelectionLocked}
+                        onClick={() => chooseAdminDispatchNewCustomerType("corporate")}
+                        type="button"
+                      >
+                        Company + Booker / PA
+                      </button>
+                      <button
+                        className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
+                        data-admin-dispatch-new-customer-personal="true"
+                        disabled={adminDispatchCustomerAccountSelectionLocked}
+                        onClick={() => chooseAdminDispatchNewCustomerType("personal")}
+                        type="button"
+                      >
+                        Personal customer
+                      </button>
+                      <button
+                        className="rounded-md border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700"
+                        data-admin-dispatch-new-customer-cancel="true"
+                        onClick={() => setAdminDispatchNewCustomerChoiceOpen(false)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {activeAdminEmailAiIntakeId && adminEmailAiCustomerProfileSuggestion ? (
                   <p
                     className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-950 md:col-span-3"

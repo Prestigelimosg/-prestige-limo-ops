@@ -127,7 +127,7 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /\.\.\.\(customerFolderNameChanged \? \{ display_name: normalizedCustomerFolderName \} : \{\}\)/,
+  /if \(customerFolderNameChanged\) \{[\s\S]+?customer_id: customerId,[\s\S]+?display_name: normalizedCustomerFolderName,/,
   "profile save must send the changed folder name through the existing exact-customer PATCH only",
 );
 assert.match(
@@ -135,10 +135,12 @@ assert.match(
   /nextUrl\.searchParams\.set\("name", savedCustomerFolderName\);[\s\S]+?router\.replace\(`\$\{nextUrl\.pathname\}\$\{nextUrl\.search\}`, \{ scroll: false \}\);/,
   "a successful folder rename must refresh the same customer route and top banner",
 );
-assert.match(
-  editorSource,
-  /if \(guestAccountBillingChanged\) \{[\s\S]+?prestige:customer-guest-account-billing-updated[\s\S]+?\}\s+if \(customerFolderNameChanged\) \{/,
-  "a folder-only rename must not trigger the separate guest-account billing refresh lane",
+assert.equal(
+  editorSource.includes("guestAccountBillingChanged") ||
+    editorSource.includes("prestige:customer-guest-account-billing-updated") ||
+    editorSource.includes('data-customer-guest-account-billing={customerId}'),
+  false,
+  "profile rename must not expose or trigger a customer-classification write lane",
 );
 assert.match(
   editorSource,

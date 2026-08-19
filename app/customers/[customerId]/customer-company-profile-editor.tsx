@@ -165,7 +165,6 @@ export function CustomerCompanyProfileEditor({
   const [message, setMessage] = useState("");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
-  const [loadedGuestAccountBillingEnabled, setLoadedGuestAccountBillingEnabled] = useState(false);
   const [customerFolderName, setCustomerFolderName] = useState(customerName.trim());
   const [loadedCustomerFolderName, setLoadedCustomerFolderName] = useState(customerName.trim());
 
@@ -196,7 +195,6 @@ export function CustomerCompanyProfileEditor({
         throw new Error("Exact customer folder name could not be loaded safely.");
       }
 
-      setLoadedGuestAccountBillingEnabled(guestAccountBillingEnabled);
       setCustomerFolderName(exactCustomerFolderName);
       setLoadedCustomerFolderName(exactCustomerFolderName);
       const companyLookupName = agencyCompanyProfileName(exactCustomerFolderName, guestAccountBillingEnabled);
@@ -289,8 +287,6 @@ export function CustomerCompanyProfileEditor({
     const normalizedCustomerFolderName = customerFolderName.replace(/\s+/g, " ").trim();
     const isCreate = profileMode === "create";
     const customerFolderNameChanged = normalizedCustomerFolderName !== loadedCustomerFolderName;
-    const guestAccountBillingChanged =
-      profile.guest_account_billing_enabled !== loadedGuestAccountBillingEnabled;
 
     if (!companyName) {
       setMessage("Company name is required before saving.");
@@ -306,7 +302,7 @@ export function CustomerCompanyProfileEditor({
 
     if (
       !window.confirm(
-        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${customerFolderNameChanged ? `, renames the customer folder to ${normalizedCustomerFolderName}` : ""}${guestAccountBillingChanged ? ` and ${profile.guest_account_billing_enabled ? "enables" : "disables"} Hotel / Tour Agency guest-account billing for this exact customer` : ""}. It does not change jobs, passenger names, invoice records, payments, or send any message.`,
+        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${customerFolderNameChanged ? ` and renames the customer folder to ${normalizedCustomerFolderName}` : ""}. It does not change the stored customer classification, jobs, passenger names, invoice records, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -350,14 +346,11 @@ export function CustomerCompanyProfileEditor({
       setProfile(nextProfile);
       setProfileMode("edit");
 
-      if (customerFolderNameChanged || guestAccountBillingChanged) {
+      if (customerFolderNameChanged) {
         const accountResponse = await fetch(adminCustomerAccountsApiPath, {
           body: JSON.stringify({
             customer_id: customerId,
-            ...(customerFolderNameChanged ? { display_name: normalizedCustomerFolderName } : {}),
-            ...(guestAccountBillingChanged
-              ? { guest_account_billing_enabled: profile.guest_account_billing_enabled }
-              : {}),
+            display_name: normalizedCustomerFolderName,
           }),
           headers: {
             "Content-Type": "application/json",
@@ -380,25 +373,11 @@ export function CustomerCompanyProfileEditor({
           return;
         }
 
-        if (guestAccountBillingChanged) {
-          setLoadedGuestAccountBillingEnabled(profile.guest_account_billing_enabled);
-          window.dispatchEvent(
-            new CustomEvent("prestige:customer-guest-account-billing-updated", {
-              detail: {
-                customerId,
-                enabled: profile.guest_account_billing_enabled,
-              },
-            }),
-          );
-        }
-
-        if (customerFolderNameChanged) {
-          setCustomerFolderName(savedCustomerFolderName);
-          setLoadedCustomerFolderName(savedCustomerFolderName);
-          const nextUrl = new URL(window.location.href);
-          nextUrl.searchParams.set("name", savedCustomerFolderName);
-          router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
-        }
+        setCustomerFolderName(savedCustomerFolderName);
+        setLoadedCustomerFolderName(savedCustomerFolderName);
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("name", savedCustomerFolderName);
+        router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
       }
 
       setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
@@ -447,24 +426,6 @@ export function CustomerCompanyProfileEditor({
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <label
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 text-xs font-bold text-amber-950"
-            data-customer-guest-account-billing={customerId}
-          >
-            <input
-              checked={profile.guest_account_billing_enabled}
-              disabled={status === "saving"}
-              onChange={(event) =>
-                setProfile((current) =>
-                  current
-                    ? { ...current, guest_account_billing_enabled: event.target.checked }
-                    : current,
-                )
-              }
-              type="checkbox"
-            />
-            Hotel / Tour Agency
-          </label>
           <CustomerAccountDangerZone compact customerId={customerId} customerName={customerName} />
           <button
             className="min-h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"

@@ -1,57 +1,105 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, appSmokeBrowser, bookingUiBrowser, rateSetupRead, adminBookers] = await Promise.all([
+const [app, appSmokeBrowser, bookingUiBrowser, rateSetupRead, adminBookers, customerProfileEditor, customerAccountBrowser, packageJson] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
   readFile("scripts/test-app-smoke-browser.mjs", "utf8"),
   readFile("scripts/test-booking-ui-browser.mjs", "utf8"),
   readFile("lib/admin-rate-setup-read.ts", "utf8"),
   readFile("lib/admin-bookers.ts", "utf8"),
+  readFile("app/customers/[customerId]/customer-company-profile-editor.tsx", "utf8"),
+  readFile("scripts/test-admin-dispatch-customer-account-browser.mjs", "utf8"),
+  readFile("package.json", "utf8"),
 ]);
 
 for (const fragment of [
   'data-admin-dispatch-crm-identity-selectors="true"',
-  'data-admin-dispatch-corporate-customer-select="true"',
-  'data-admin-dispatch-corporate-pair-select="true"',
-  'data-admin-dispatch-corporate-pair-carried="true"',
+  'data-admin-dispatch-customer-account-select="true"',
+  'data-admin-dispatch-customer-account-search="true"',
+  'data-admin-dispatch-customer-account-option={account.key}',
+  'data-admin-dispatch-customer-account-match-review="true"',
+  'data-admin-dispatch-customer-account-use-existing="true"',
+  'data-admin-dispatch-customer-account-different-person="true"',
+  'data-admin-dispatch-customer-account-review-cancel="true"',
+  'data-admin-dispatch-customer-account-create="true"',
+  'data-admin-dispatch-new-customer-choice="true"',
+  'data-admin-dispatch-new-customer-account="true"',
+  'data-admin-dispatch-new-customer-corporate="true"',
+  'data-admin-dispatch-new-customer-personal="true"',
+  "adminDispatchFilteredCustomerAccountOptions",
+  "adminDispatchCustomerAccountSearch",
+  "selectAdminDispatchCustomerAccount",
+  "confirmAdminDispatchExistingPassenger",
+  "confirmAdminDispatchDifferentPassenger",
+  "hasVerifiedCustomerIdentity",
+  "Choose an existing Customer Account or use Create New Customer",
+  'adminDispatchNewCustomerType === "corporate"',
+  'adminDispatchNewCustomerType === "personal"',
+  'adminDispatchNewCustomerType !== "personal"',
+  "setAdminDispatchCustomerAccountMatchReview(null)",
+  "setAdminDispatchNewCustomerType(null)",
   'data-admin-dispatch-customer-list-retry="true"',
   "adminDispatchCustomerListAutoLoadAttemptedRef",
   'activeTab !== "dispatch"',
   'includeAgencyFolders: true',
   'silent: true',
-  "adminDispatchCorporatePairOptions",
-  "adminDispatchSelectedCorporatePair",
-  "adminDispatchSingleCorporatePairBookerId",
-  "adminDispatchSingleCorporatePairTravelerId",
-  "updateAdminDispatchCorporateCustomer",
-  "updateAdminDispatchCorporatePair",
+  "adminDispatchCustomerAccountOptions",
+  "billingIdentityPossibleMatch",
+  "accountTravelers",
+  "passengerSearchText",
+  "CRM Traveller #",
+  "adminDispatchCustomerAccountSelectionLocked",
   "rateCompanies",
   "rateTravelers",
 ]) assert.ok(app.includes(fragment), `Missing ${fragment}`);
 
-for (const fragment of [
-  "bookerId: onlyPair ? String(onlyPair.booker_id)",
-  "companyId,",
-  "travelerId: onlyPair ? String(onlyPair.id)",
-  'bookerId: pair?.bookerId || ""',
-  "companyId: pair?.companyId || current.companyId",
-  'travelerId: pair?.id || ""',
-  "activeTab !== \"dispatch\"",
-  "booking.bookerId ||",
-  "booking.travelerId ||",
-  "current.companyId !== adminDispatchSingleCorporatePairCompanyId",
-  "bookerId: adminDispatchSingleCorporatePairBookerId",
-  "travelerId: adminDispatchSingleCorporatePairTravelerId",
-  "booking.companyId && adminDispatchSelectedCorporatePair",
-  'data-admin-dispatch-corporate-pair-applying="true"',
-  'data-admin-dispatch-corporate-pair-conflict="true"',
-  "Retry customer list",
-]) assert.ok(app.includes(fragment), `Missing exact pair carry-forward ${fragment}`);
+assert.ok(
+  !app.includes('data-admin-dispatch-agency-folder-select="true"'),
+  "The separate Hotel / Tour Agency selector must be absent after account unification",
+);
+assert.ok(
+  !app.includes('data-admin-dispatch-corporate-customer-select="true"'),
+  "The separate corporate selector must be absent after account unification",
+);
+assert.ok(
+  !app.includes('data-admin-dispatch-corporate-pair-select="true"'),
+  "The separate corporate pair selector must be absent after account unification",
+);
+assert.ok(
+  !customerProfileEditor.includes('data-customer-guest-account-billing={customerId}'),
+  "The profile must not expose the legacy Hotel / Tour Agency checkbox",
+);
+assert.ok(
+  customerProfileEditor.includes("profile.guest_account_billing_enabled"),
+  "Stored customer classification must remain available to the existing profile and access consumers",
+);
 
-assert.match(
-  app,
-  /booking\.companyId && adminDispatchSelectedCorporatePair[\s\S]{0,500}data-admin-dispatch-corporate-pair-carried="true"/,
-  "The carried label must render only after the booking contains the exact saved pair IDs",
+for (const fragment of [
+  "adminDispatchAgencyCompanyIds",
+  "adminDispatchAgencyCompanyIds.has(companyId)",
+  "`corporate:${companyId}:${bookerId}`",
+  "existing.travelers.push(traveler)",
+  'customerId: account.customerId',
+  'bookerId: account.bookerId',
+  'companyId: account.companyId',
+  'travelerId: traveler ? String(traveler.id) : ""',
+  'customerId: type === "account" ? adminDispatchCreateAgencyFolderValue : ""',
+  'company: type === "personal" ? "" : current.company',
+  "Retry customer list",
+]) assert.ok(app.includes(fragment), `Missing unified account identity preservation ${fragment}`);
+
+assert.ok(
+  !app.includes('data-admin-dispatch-corporate-pair-applying="true"'),
+  "The unified chooser must not silently auto-apply a lone passenger",
+);
+assert.ok(
+  !customerProfileEditor.includes("guestAccountBillingChanged") &&
+    !customerProfileEditor.includes("...(guestAccountBillingChanged"),
+  "Saving a customer profile must not rewrite its hidden stored classification",
+);
+assert.ok(
+  !customerProfileEditor.includes("prestige:customer-guest-account-billing-updated"),
+  "The removed profile checkbox must not retain a hidden classification mutation event",
 );
 
 assert.ok(!app.includes('data-admin-dispatch-company-identity-select="true"'));
@@ -109,6 +157,53 @@ for (const fragment of [
 ]) assert.ok(
   bookingUiBrowser.includes(fragment),
   `Missing visible first corporate Save + CRM coverage ${fragment}`,
+);
+
+for (const fragment of [
+  "unified Customer Account search keeps agency, corporate, and personal identity tuples",
+  "one possible passenger match asks Admin before selection",
+  "multiple possible passenger matches remain a candidate list",
+  "different person keeps the account but clears the verified Traveller",
+  "no Customer Account review choice sends a booking POST",
+]) assert.ok(
+  bookingUiBrowser.includes(fragment),
+  `Missing visible unified Customer Account coverage ${fragment}`,
+);
+
+for (const fragment of [
+  '"agency:174:41"',
+  '"corporate:55:5501"',
+  "Customer Account bar must span the existing sector width",
+  "one passenger review",
+  "multiple passenger candidates",
+  "different passenger account state",
+  "explicit new-customer choices",
+  "new-customer path selection",
+  "assert.equal(bookingPosts.length, 0)",
+  'search("Kim Passenger")',
+  'search("Mr Jwalent Nanavati")',
+  "CRM Traveller #55002",
+  "CRM Traveller #55003",
+]) assert.ok(
+  customerAccountBrowser.includes(fragment),
+  `Missing focused Customer Account browser coverage ${fragment}`,
+);
+for (const handler of [
+  "selectAdminDispatchCustomerAccount",
+  "confirmAdminDispatchExistingPassenger",
+  "confirmAdminDispatchDifferentPassenger",
+  "chooseAdminDispatchNewCustomerType",
+]) {
+  const start = app.indexOf(`function ${handler}`);
+  assert.ok(start >= 0, `Missing loaded-booking lock handler ${handler}`);
+  assert.ok(
+    app.slice(start, start + 450).includes("adminDispatchCustomerAccountSelectionLocked"),
+    `${handler} must reject stale customer-account changes after a saved booking is loaded`,
+  );
+}
+assert.ok(
+  packageJson.includes('"test:admin-dispatch-customer-account-browser"'),
+  "The focused Customer Account browser test must remain directly runnable",
 );
 
 for (const fragment of [

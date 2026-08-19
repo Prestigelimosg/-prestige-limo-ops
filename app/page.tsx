@@ -2365,6 +2365,9 @@ type AdminBookingPersistenceRequestBody = {
   hotel_agency_folder_create?: {
     company_name: string;
   };
+  personal_customer_folder_create?: {
+    display_name: string;
+  };
   route_points: NonNullable<AdminBookingPersistenceRecord["route_points"]>;
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
 };
@@ -2416,6 +2419,7 @@ type SaveCrmBillingIdentityReview = {
   key: string;
   matchingRecordCount: number;
   needsTravelerName: boolean;
+  personalCustomerChoiceRequired: boolean;
   travelerName: string;
 };
 
@@ -2423,6 +2427,7 @@ type SaveCrmBillingIdentityConfirmation = {
   accountLabel: string;
   companyAccount: string;
   key: string;
+  personalCustomerCreateConfirmed: boolean;
   reviewedAt: string;
   travelerName: string;
 };
@@ -2431,6 +2436,7 @@ type SaveCrmBillingIdentityAccountResolution =
   | {
       accountLabel: string | null;
       ok: true;
+      personalCustomerCreateConfirmed: boolean;
     }
   | {
       message: Message;
@@ -5142,6 +5148,13 @@ function buildSaveCrmBillingIdentityReview(
   const companyAccount = rawCompanyAccount || clean(bookingValue.name);
   const travelerName = clean(bookingValue.name);
   const currentBookerTokens = saveCrmCurrentBookerTokens(bookingValue);
+  const hasVerifiedIdentity = Boolean(
+    adminDispatchVerifiedIdentityId(bookingValue.customerId) ||
+      adminDispatchVerifiedIdentityId(bookingValue.companyId) ||
+      adminDispatchVerifiedIdentityId(bookingValue.bookerId) ||
+      adminDispatchVerifiedIdentityId(bookingValue.travelerId),
+  );
+  const personalCustomerChoiceRequired = !rawCompanyAccount && !hasVerifiedIdentity;
 
   if (!companyAccount && currentBookerTokens.length === 0) {
     return null;
@@ -5174,7 +5187,7 @@ function buildSaveCrmBillingIdentityReview(
 
   const needsTravelerName = !travelerName;
 
-  if (!needsTravelerName) {
+  if (!needsTravelerName && !personalCustomerChoiceRequired) {
     return null;
   }
 
@@ -5194,6 +5207,7 @@ function buildSaveCrmBillingIdentityReview(
     key,
     matchingRecordCount: uniqueRelatedTravelerNames.length,
     needsTravelerName,
+    personalCustomerChoiceRequired,
     travelerName,
   };
 }
@@ -9705,6 +9719,7 @@ function buildAdminBookingPersistencePayload(
     hotelAgencyFolderCreateOverride?: boolean;
     luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
+    personalCustomerFolderCreateOverride?: boolean;
   } = {},
 ): AdminBookingPersistenceRequestBody {
   const shortNoticeReviewRequired = isAdminShortNoticeReviewRequired(bookingValue, currentTimeMs);
@@ -9837,6 +9852,13 @@ function buildAdminBookingPersistencePayload(
       ? {
           hotel_agency_folder_create: {
             company_name: customerDisplayName,
+          },
+        }
+      : {}),
+    ...(options.personalCustomerFolderCreateOverride
+      ? {
+          personal_customer_folder_create: {
+            display_name: customerDisplayName,
           },
         }
       : {}),
@@ -10039,6 +10061,7 @@ function buildAdminDispatchReturnTripPersistencePayloads(
     hotelAgencyFolderCreateOverride?: boolean;
     luggageCountOverride?: number | null;
     parserSourceReferenceOverride?: string | null;
+    personalCustomerFolderCreateOverride?: boolean;
   } = {},
 ): AdminDispatchReturnTripPersistencePayload[] {
   const returnTripRequested = adminDispatchReturnTripRequested(bookingValue);
@@ -17899,9 +17922,11 @@ export default function Home() {
           ...saveCrmBillingIdentityMessage,
           text:
             clean(saveCrmBillingIdentityMessage.text).startsWith("Billing identity review required.")
-              ? `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${saveCrmBillingIdentityReview.conflictingTravelerNames.join(
-                  ", ",
-                )}. Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.`
+              ? saveCrmBillingIdentityReview.personalCustomerChoiceRequired
+                ? `Billing identity review required. Select the existing verified CRM identity, or explicitly choose Create New Customer for ${saveCrmBillingIdentityReview.accountLabel}.`
+                : `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${saveCrmBillingIdentityReview.conflictingTravelerNames.join(
+                    ", ",
+                  )}. Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.`
               : saveCrmBillingIdentityMessage.text,
         }
       : saveCrmBillingIdentityMessage;
@@ -19590,6 +19615,7 @@ export default function Home() {
       accountLabel: review.accountLabel,
       companyAccount: review.companyAccount,
       key: review.key,
+      personalCustomerCreateConfirmed: review.personalCustomerChoiceRequired,
       reviewedAt: new Date().toISOString(),
       travelerName: review.travelerName,
     } satisfies SaveCrmBillingIdentityConfirmation;
@@ -19597,7 +19623,9 @@ export default function Home() {
     setSaveCrmBillingIdentityConfirmation(confirmation);
     setSaveCrmBillingIdentityReviewMessage({
       tone: "success",
-      text: `Billing identity reviewed. Save + CRM will use/create customer account ${confirmation.accountLabel}.`,
+      text: confirmation.personalCustomerCreateConfirmed
+        ? `New personal customer confirmed: ${confirmation.accountLabel}. Save + CRM will stop if an existing CRM Traveller matches.`
+        : `Billing identity reviewed. Save + CRM will use customer account ${confirmation.accountLabel}.`,
     });
   }
 
@@ -19660,6 +19688,7 @@ export default function Home() {
       return {
         accountLabel: null,
         ok: true,
+        personalCustomerCreateConfirmed: false,
       };
     }
 
@@ -19684,9 +19713,11 @@ export default function Home() {
     if (saveCrmBillingIdentityConfirmation?.key !== review.key) {
       const message = {
         tone: "error",
-        text: `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${review.conflictingTravelerNames.join(
-          ", ",
-        )}. Confirm ${review.accountLabel}, then Save + CRM again.`,
+        text: review.personalCustomerChoiceRequired
+          ? `Billing identity review required. Select the existing verified CRM identity, or explicitly choose Create New Customer for ${review.accountLabel}.`
+          : `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${review.conflictingTravelerNames.join(
+              ", ",
+            )}. Confirm ${review.accountLabel}, then Save + CRM again.`,
       } satisfies Message;
 
       setSaveCrmBillingIdentityReviewMessage(message);
@@ -19700,6 +19731,8 @@ export default function Home() {
     return {
       accountLabel: saveCrmBillingIdentityConfirmation.accountLabel,
       ok: true,
+      personalCustomerCreateConfirmed:
+        saveCrmBillingIdentityConfirmation.personalCustomerCreateConfirmed,
     };
   }
 
@@ -21811,6 +21844,8 @@ export default function Home() {
           parserSourceReferenceOverride: activeAdminEmailAiIntakeId
             ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
             : undefined,
+          personalCustomerFolderCreateOverride:
+            billingIdentityResolution.personalCustomerCreateConfirmed,
         },
       );
       const savedBookings: Array<{
@@ -23248,6 +23283,8 @@ export default function Home() {
 
     const payload = buildAdminBookingPersistencePayload(booking, currentTimeMs, undefined, {
       customerDisplayNameOverride: billingIdentityResolution.accountLabel,
+      personalCustomerFolderCreateOverride:
+        billingIdentityResolution.personalCustomerCreateConfirmed,
     });
 
     setAdminBookingPersistenceAction("save");
@@ -45444,7 +45481,13 @@ export default function Home() {
                             </p>
                           ) : (
                             <>
-                              {saveCrmBillingIdentityReview.conflictingTravelerNames.length > 0 ? (
+                              {saveCrmBillingIdentityReview.personalCustomerChoiceRequired ? (
+                                <p className="break-words font-medium normal-case tracking-normal">
+                                  No verified CRM customer is selected. Select the existing Company, Booker, and
+                                  Traveller above. Create a new personal customer only when no existing CRM identity
+                                  applies.
+                                </p>
+                              ) : saveCrmBillingIdentityReview.conflictingTravelerNames.length > 0 ? (
                                 <p className="break-words font-medium normal-case tracking-normal">
                                   Existing traveler(s) under this billing/contact identity:{" "}
                                   {saveCrmBillingIdentityReview.conflictingTravelerNames.join(", ")}.
@@ -45457,7 +45500,9 @@ export default function Home() {
                               <p className="break-words font-medium normal-case tracking-normal">
                                 {saveCrmBillingIdentityReview.needsTravelerName
                                   ? "Enter Passenger name before Save + CRM."
-                                  : `Save will bill/create account ${saveCrmBillingIdentityReview.accountLabel}.`}
+                                  : saveCrmBillingIdentityReview.personalCustomerChoiceRequired
+                                    ? `New customer choice: ${saveCrmBillingIdentityReview.accountLabel}.`
+                                    : `Save will use account ${saveCrmBillingIdentityReview.accountLabel}.`}
                               </p>
                             </>
                           )}
@@ -45465,6 +45510,9 @@ export default function Home() {
                         <button
                           className="h-8 shrink-0 rounded border border-amber-300 bg-white px-2 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
                           data-save-crm-billing-identity-confirm="true"
+                          data-save-crm-personal-customer-create={
+                            saveCrmBillingIdentityReview.personalCustomerChoiceRequired ? "true" : undefined
+                          }
                           disabled={
                             saveCrmBillingIdentityReview.needsTravelerName ||
                             Boolean(confirmedSaveCrmBillingIdentity)
@@ -45472,7 +45520,11 @@ export default function Home() {
                           onClick={() => confirmSaveCrmBillingIdentityReview(saveCrmBillingIdentityReview)}
                           type="button"
                         >
-                          {confirmedSaveCrmBillingIdentity ? "Reviewed" : "Confirm Account"}
+                          {confirmedSaveCrmBillingIdentity
+                            ? "Reviewed"
+                            : saveCrmBillingIdentityReview.personalCustomerChoiceRequired
+                              ? "Create New Customer"
+                              : "Confirm Account"}
                         </button>
                       </div>
                       {saveCrmBillingIdentityMessage && !confirmedSaveCrmBillingIdentity ? (

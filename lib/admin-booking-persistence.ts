@@ -53,6 +53,10 @@ export type AdminHotelAgencyFolderCreateIntent = {
   company_name: string;
 };
 
+export type AdminPersonalCustomerFolderCreateIntent = {
+  display_name: string;
+};
+
 export type AdminBookingRoutePointInput = {
   point_type?: "pickup" | "dropoff" | "stop" | "waypoint" | "extra_stop";
   sequence_number?: number | null;
@@ -74,6 +78,7 @@ export type AdminBookingServiceItemInput = {
 export type AdminBookingPersistenceInput = {
   booking: AdminBookingRecordInput;
   hotel_agency_folder_create?: AdminHotelAgencyFolderCreateIntent | null;
+  personal_customer_folder_create?: AdminPersonalCustomerFolderCreateIntent | null;
   route_points: AdminBookingRoutePointInput[];
   service_items: AdminBookingServiceItemInput[];
 };
@@ -173,6 +178,7 @@ export const adminBookingPersistenceContractVersion =
 const createPayloadTopLevelFields = new Set([
   "booking",
   "hotel_agency_folder_create",
+  "personal_customer_folder_create",
   "route_points",
   "service_items",
 ]);
@@ -251,6 +257,7 @@ const bookingFields = new Set([
   "updated_at",
 ]);
 const hotelAgencyFolderCreateFields = new Set(["company_name"]);
+const personalCustomerFolderCreateFields = new Set(["display_name"]);
 
 const routePointFields = new Set([
   "point_type",
@@ -822,6 +829,8 @@ function parseAdminBookingOperationalPayload(
   const bookingRecord = asRecord(body.booking);
   const hasHotelAgencyFolderCreate = hasOwn(body, "hotel_agency_folder_create");
   const hotelAgencyFolderCreateRecord = asRecord(body.hotel_agency_folder_create);
+  const hasPersonalCustomerFolderCreate = hasOwn(body, "personal_customer_folder_create");
+  const personalCustomerFolderCreateRecord = asRecord(body.personal_customer_folder_create);
   const routePointRecords = asArray(body.route_points).map(asRecord);
   const serviceItemRecords = asArray(body.service_items).map(asRecord);
   const unknownNestedKeys = [
@@ -831,6 +840,13 @@ function parseAdminBookingOperationalPayload(
           hotelAgencyFolderCreateRecord,
           hotelAgencyFolderCreateFields,
           "hotel_agency_folder_create",
+        )
+      : []),
+    ...(hasPersonalCustomerFolderCreate
+      ? findUnknownKeys(
+          personalCustomerFolderCreateRecord,
+          personalCustomerFolderCreateFields,
+          "personal_customer_folder_create",
         )
       : []),
     ...routePointRecords.flatMap((record, index) =>
@@ -890,8 +906,32 @@ function parseAdminBookingOperationalPayload(
     };
   }
 
+  if (
+    hasPersonalCustomerFolderCreate &&
+    (body.personal_customer_folder_create === null ||
+      typeof body.personal_customer_folder_create !== "object" ||
+      Array.isArray(body.personal_customer_folder_create))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed personal customer folder creation request rejected.",
+    };
+  }
+
+  if (hasHotelAgencyFolderCreate && hasPersonalCustomerFolderCreate) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Only one customer folder creation choice is allowed per booking.",
+    };
+  }
+
   const hotelAgencyFolderCreateCompanyName = hasHotelAgencyFolderCreate
     ? textOrNull(hotelAgencyFolderCreateRecord.company_name)
+    : null;
+  const personalCustomerFolderCreateDisplayName = hasPersonalCustomerFolderCreate
+    ? textOrNull(personalCustomerFolderCreateRecord.display_name)
     : null;
 
   if (hasHotelAgencyFolderCreate && !hotelAgencyFolderCreateCompanyName) {
@@ -899,6 +939,14 @@ function parseAdminBookingOperationalPayload(
       ok: false,
       status: 400,
       error: "Hotel / Tour Agency name is required before creating its first folder.",
+    };
+  }
+
+  if (hasPersonalCustomerFolderCreate && !personalCustomerFolderCreateDisplayName) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Personal customer name is required before creating its folder.",
     };
   }
 
@@ -935,6 +983,13 @@ function parseAdminBookingOperationalPayload(
         ? {
             hotel_agency_folder_create: {
               company_name: hotelAgencyFolderCreateCompanyName,
+            },
+          }
+        : {}),
+      ...(personalCustomerFolderCreateDisplayName
+        ? {
+            personal_customer_folder_create: {
+              display_name: personalCustomerFolderCreateDisplayName,
             },
           }
         : {}),

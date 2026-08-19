@@ -181,7 +181,7 @@ async function main() {
     );
 
     const openedState = await evaluate(`(() => ({
-      agencyChecked: document.querySelector('[data-customer-guest-account-billing="${customerId}"] input')?.checked === true,
+      classificationControlCount: document.querySelectorAll('[data-customer-guest-account-billing="${customerId}"]').length,
       folderName: document.querySelector('[data-customer-folder-name="${customerId}"]')?.value || "",
       guidanceVisible: Boolean(document.querySelector('[data-customer-agency-guest-guidance="${customerId}"]')),
       topBanner: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
@@ -189,7 +189,7 @@ async function main() {
     }))()`);
 
     assert.deepEqual(openedState, {
-      agencyChecked: true,
+      classificationControlCount: 0,
       folderName: originalFolderName,
       guidanceVisible: true,
       topBanner: originalFolderName,
@@ -221,6 +221,7 @@ async function main() {
       display_name: correctedFolderName,
     });
     assert.equal(Object.hasOwn(folderPatchPayload, "traveller_name"), false);
+    assert.equal(Object.hasOwn(folderPatchPayload, "guest_account_billing_enabled"), false);
     assert.equal(companySavePayload.action_type, "company_update");
     assert.equal(companySavePayload.company_name, correctedFolderName);
     assert.equal(Object.hasOwn(companySavePayload, "traveller_name"), false);

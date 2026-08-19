@@ -30,12 +30,24 @@ const fieldsStart = source.profile.indexOf('className="mt-3 grid gap-2 sm:grid-c
 const actionRow = source.profile.slice(actionRowStart, fieldsStart);
 assert.equal(
   actionRowStart !== -1 && fieldsStart > actionRowStart &&
-    actionRow.includes("Hotel / Tour Agency") &&
+    !actionRow.includes("Hotel / Tour Agency") &&
     actionRow.includes("CustomerAccountDangerZone") &&
     actionRow.includes("Save profile"),
   true,
-  "Hotel / Tour Agency checkbox must stay in the existing profile action row",
+  "The legacy classification checkbox must be absent while the existing profile actions remain",
 );
+assert.equal(
+  source.profile.includes('data-customer-guest-account-billing={customerId}'),
+  false,
+  "The customer profile must not expose a stored classification toggle",
+);
+assert.equal(
+  source.profile.includes("guestAccountBillingChanged") ||
+    source.profile.includes("prestige:customer-guest-account-billing-updated"),
+  false,
+  "Profile save must not retain a hidden classification write",
+);
+includes(source.profile, "profile.guest_account_billing_enabled", "stored classification presentation");
 
 for (const fragment of [
   "customerFolderTravelerInvoiceGroups(",

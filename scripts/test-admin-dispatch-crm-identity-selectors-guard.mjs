@@ -49,6 +49,7 @@ for (const fragment of [
   "passengerSearchText",
   "CRM Traveller #",
   "adminDispatchCustomerAccountSelectionLocked",
+  'md:w-[calc((100%_-_1rem)/3)]',
   "rateCompanies",
   "rateTravelers",
 ]) assert.ok(app.includes(fragment), `Missing ${fragment}`);
@@ -173,7 +174,7 @@ for (const fragment of [
 for (const fragment of [
   '"agency:174:41"',
   '"corporate:55:5501"',
-  "Customer Account bar must span the existing sector width",
+  "Customer Account bar must retain the previous one-column Customer width",
   "one passenger review",
   "multiple passenger candidates",
   "different passenger account state",

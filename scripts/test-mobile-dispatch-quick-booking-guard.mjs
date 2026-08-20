@@ -41,6 +41,7 @@ for (const fragment of [
   'data-admin-mobile-header-status="true"',
   'data-admin-mobile-primary-tabs="true"',
   'data-admin-mobile-access-links="true"',
+  'data-dashboard-tab-has-alert-badge={showAdminActionBadge ? "true" : undefined}',
   '{ label: "Message", step: "message" }',
   '{ label: "Details", step: "details" }',
   '{ label: "Options", step: "options" }',
@@ -50,6 +51,23 @@ for (const fragment of [
   '{clean(booking.pickup) || "Pickup not set"} → {clean(booking.dropoff) || "Drop-off not set"}',
 ]) {
   assert.equal(appPage.includes(fragment), true, `Mobile quick booking must include ${fragment}`);
+}
+
+for (const fragment of [
+  'button[data-dashboard-tab-has-alert-badge="true"]',
+  'flex-direction: column',
+  'gap: 0.125rem',
+  'padding-inline: 0.25rem',
+  '[data-bookings-new-request-badge="true"]',
+  'max-width: 100%',
+  'padding-inline: 0.375rem',
+  'white-space: nowrap',
+]) {
+  assert.equal(
+    globalStyles.includes(fragment),
+    true,
+    `Mobile Dashboard alert badge containment must include ${fragment}`,
+  );
 }
 
 for (const fragment of [

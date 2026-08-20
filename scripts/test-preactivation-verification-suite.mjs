@@ -450,6 +450,10 @@ const guardChecks = [
     script: "scripts/test-admin-account-session-foundation-guard.mjs",
   },
   {
+    label: "modern Supabase secret-key server fetch guard",
+    script: "scripts/test-supabase-modern-secret-server-fetch-guard.mjs",
+  },
+  {
     label: "Admin iPhone companion foundation guard",
     script: "scripts/test-admin-companion-foundation-guard.mjs",
   },

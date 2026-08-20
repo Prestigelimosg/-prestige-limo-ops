@@ -83,6 +83,8 @@ export function resolveAdminCustomerInvoiceBoundary(
   request: Request,
 ): AdminCustomerInvoiceBoundaryResult {
   const rootBoundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathnames: ["/customers"],
+    additionalSameOriginRefererPathPrefixes: ["/customers/"],
     allowServerSessionRoleMethodsWithoutRequestToken: ["DELETE", "PATCH", "POST"],
   });
 

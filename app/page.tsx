@@ -34812,6 +34812,7 @@ export default function Home() {
                     : "border border-stone-200 bg-white text-slate-700 hover:bg-stone-50"
                 }`}
 	                data-app-tab={tab.id}
+                data-dashboard-tab-has-alert-badge={showAdminActionBadge ? "true" : undefined}
                 data-bookings-tab-autoload={tab.id === "bookings" ? "true" : undefined}
                 data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
 	                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}

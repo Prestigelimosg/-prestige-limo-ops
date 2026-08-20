@@ -12,6 +12,13 @@ f13d784b Merge PR #331: Restore compact Customer Account width
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Public Booking Voice Helper Retirement (2026-08-21)
+
+- The owner explicitly requested complete removal of the public Customer `/book` Speak/Listening control after complete-path inspection proved it was only a browser-local `SpeechRecognition` draft helper. It had no backend audio storage, provider call, separate booking route, parser call, database writer, or native bridge.
+- The existing `/book` header now retains only the established `My Bookings` link. The Speak/Listening button, helper/status/transcript panel, local transcript and listening state/refs, local field-fill handler, and runtime import are removed from the public page. The dormant shared helper remains unreferenced so this bounded removal does not delete unrelated historical source or broaden into another lane.
+- Every manual booking field, booking-memory suggestion, phone-verification boundary, return-trip control, `Submit Booking Request` action, `submitCustomerBookingRequest(form)` adapter, `POST /api/customer-booking-requests` route, persistence, Customer Portal, native Customer WebView paths, privacy rules, and Admin review remain unchanged. No booking is submitted automatically and no Customer, booking, CRM, invoice, payment, Driver, Calendar, GPS, notification, provider, schema, environment, or Production data is changed by this source repair.
+- Focused protection remains `scripts/test-customer-voice-booking-speak-button-ui-guard.mjs`, now fail-closed on any restored public voice control/runtime while requiring My Bookings and the established manual submit lane. The former voice input and field-fill guards accept only this explicit retired state, and the compact-header and booking-memory guards are aligned to the same established source boundaries.
+
 ### Three-App Thin Neutral Border Contrast And Overflow Check (2026-08-20)
 
 - The owner requested only slightly darker existing outlines across the separate Admin, Customer, and Driver apps, with every line remaining thin and no larger card, button, radius, padding, shadow, or workflow change. Complete-path source inspection found all three native shells already use one-pixel neutral separators, while the established role-scoped web surfaces use Tailwind neutral `200` section borders and neutral `300` outlined-button borders.

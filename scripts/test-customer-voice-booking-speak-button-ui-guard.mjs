@@ -7,6 +7,7 @@ const customerBookingLocalVoiceDraftPath = "lib/customer-booking-local-voice-dra
 const customerRequestAdapterPath = "lib/customer-booking-request-adapter.ts";
 const customerRequestRoutePath = "app/api/customer-booking-requests/route.ts";
 const adminBookingPersistencePath = "lib/admin-booking-persistence.ts";
+const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs";
 
@@ -66,6 +67,7 @@ const [
   customerRequestAdapter,
   customerRequestRoute,
   adminBookingPersistence,
+  ledger,
   preactivationSuite,
   apiFiles,
   libFiles,
@@ -75,10 +77,51 @@ const [
   readFile(customerRequestAdapterPath, "utf8"),
   readFile(customerRequestRoutePath, "utf8"),
   readFile(adminBookingPersistencePath, "utf8"),
+  readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
   listFiles("app/api"),
   listFiles("lib"),
 ]);
+
+if (!bookPage.includes('data-customer-voice-booking-speak-button="true"')) {
+  for (const forbidden of [
+    'data-customer-voice-booking-speak-button="true"',
+    'data-customer-voice-booking-helper="true"',
+    'data-customer-voice-booking-local-only="true"',
+    'data-customer-voice-booking-transcript="true"',
+    'data-customer-voice-booking-draft-fill="local-only"',
+    "customer-booking-local-voice-draft",
+    "getCustomerBookingSpeechRecognitionConstructor",
+    "applyCustomerBookingLocalVoiceDraftFieldFillToForm",
+    "applyLocalVoiceDraftFieldFill",
+    "handleSpeakDraft",
+    "voiceRecognitionRef",
+    "voiceTranscript",
+    "voiceListening",
+    '"Listening" : "Speak"',
+  ]) {
+    assertExcludes(bookPage, forbidden, `/book retired voice runtime ${forbidden}`);
+  }
+
+  assert.equal(
+    countMatches(bookPage, 'data-customer-booking-portal-link="true"'),
+    1,
+    "Existing My Bookings link must remain exactly once after voice retirement.",
+  );
+  assertIncludes(bookPage, 'href="/my-bookings"', "My Bookings href remains unchanged");
+  assertIncludes(bookPage, 'data-customer-booking-form="true"', "manual customer booking form remains");
+  assertIncludes(bookPage, 'data-customer-booking-submit="true"', "manual submit control remains");
+  assertIncludes(bookPage, "submitCustomerBookingRequest(form, {", "manual submit adapter remains");
+  assertIncludes(
+    ledger,
+    "### Customer Public Booking Voice Helper Retirement (2026-08-21)",
+    "voice retirement ledger checkpoint",
+  );
+  assertIncludes(preactivationSuite, guardScript, "preactivation suite voice retirement guard registration");
+
+  console.log("Customer public booking voice helper retirement guard passed");
+  process.exit(0);
+}
 
 assert.equal(
   countMatches(bookPage, 'data-customer-voice-booking-speak-button="true"'),

@@ -150,6 +150,34 @@ const [
   listFiles("lib"),
 ]);
 
+if (!bookPage.includes('data-customer-voice-booking-speak-button="true"')) {
+  for (const forbidden of [
+    'data-customer-voice-booking-helper="true"',
+    'data-customer-voice-booking-draft-fill="local-only"',
+    "customer-booking-local-voice-draft",
+    "applyLocalVoiceDraftFieldFill",
+    "handleSpeakDraft",
+    "voiceTranscriptRef",
+  ]) {
+    assertExcludes(bookPage, forbidden, `/book retired voice field-fill UI ${forbidden}`);
+  }
+  assert.equal(
+    countMatches(bookPage, 'data-customer-booking-portal-link="true"'),
+    1,
+    "/book must keep exactly one My Bookings link after voice retirement.",
+  );
+  assertIncludes(bookPage, 'data-customer-booking-form="true"', "manual customer booking form remains");
+  assertIncludes(bookPage, 'data-customer-booking-submit="true"', "manual submit control remains");
+  assertIncludes(bookPage, "submitCustomerBookingRequest(form, {", "manual submit adapter remains");
+  assertIncludes(
+    preactivationSuite,
+    "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs",
+    "preactivation suite voice retirement guard registration",
+  );
+  console.log("Customer Voice Booking Draft Field-Fill UI retired-state guard passed");
+  process.exit(0);
+}
+
 assert.equal(
   countMatches(bookPage, 'data-customer-voice-booking-speak-button="true"'),
   1,

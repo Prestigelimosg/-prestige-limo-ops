@@ -270,10 +270,7 @@ export type AdminDispatcherBoundaryRole = "local-dev-admin" | "admin" | "dispatc
 
 export type AdminDispatcherBoundaryContext = {
   actorLabel: string;
-  mode:
-    | "account-session-role-surface"
-    | "local-dev-admin-surface"
-    | "server-session-role-surface";
+  mode: "local-dev-admin-surface" | "server-session-role-surface";
   role: AdminDispatcherBoundaryRole;
 };
 
@@ -437,7 +434,7 @@ export function resolveAdminDispatcherBoundary(
       ok: true,
       context: {
         actorLabel: session.claims.actorLabel,
-        mode: "account-session-role-surface",
+        mode: "server-session-role-surface",
         role: session.claims.role,
       },
     };

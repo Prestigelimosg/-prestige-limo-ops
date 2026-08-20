@@ -2274,10 +2274,7 @@ export function adminDispatcherBoundaryToPersistenceAdapterActor(
   return {
     actor_label: context.actorLabel,
     actor_role: context.role === "dispatcher" ? "dispatcher" : "admin",
-    boundary_mode:
-      context.mode === "account-session-role-surface"
-        ? "server-session-role-surface"
-        : context.mode,
+    boundary_mode: context.mode,
     source_surface: "admin_api",
   };
 }

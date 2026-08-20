@@ -462,6 +462,10 @@ const guardChecks = [
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },
   {
+    label: "three-app thin neutral border contrast guard",
+    script: "scripts/test-three-app-thin-border-contrast-guard.mjs",
+  },
+  {
     label: "admin and installed public app deployment commit marker guard",
     script: "scripts/test-admin-deployment-commit-marker-guard.mjs",
   },

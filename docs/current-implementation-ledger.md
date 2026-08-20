@@ -12,6 +12,13 @@ f13d784b Merge PR #331: Restore compact Customer Account width
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Three-App Thin Neutral Border Contrast And Overflow Check (2026-08-20)
+
+- The owner requested only slightly darker existing outlines across the separate Admin, Customer, and Driver apps, with every line remaining thin and no larger card, button, radius, padding, shadow, or workflow change. Complete-path source inspection found all three native shells already use one-pixel neutral separators, while the established role-scoped web surfaces use Tailwind neutral `200` section borders and neutral `300` outlined-button borders.
+- The repair changes only neutral border color in the existing lanes. Native separators move from slate `200` to slate `300`. The exact Admin, Customer booking/portal, and Driver job/portal web roots move neutral section outlines to slate `300` and neutral outlined button/link edges to slate `400`; all widths remain the existing one pixel. Colored error, warning, success, selection, Calendar, booking, invoice, customer, Driver, payment, payout, PayNow, GPS, notification, and provider borders remain untouched. Filled buttons, layout dimensions, spacing, radii, shadows, text, actions, routes, writers, and data are unchanged.
+- Focused protection is `scripts/test-three-app-thin-border-contrast-guard.mjs`, registered in the preactivation suite. It requires light mode, the exact three native thin-border tokens, all five established scoped web roots, both color-only web rules, and rejects any geometry declaration inside the contrast contract.
+- Visible local light-mode Chrome verification covered Admin, Customer Booking, Customer Portal, Driver Portal, and a non-writing invalid Driver Job surface at 320px, 375px, 390px, 402px, 430px, and 440px. Every document width equalled its viewport, all sampled neutral section and outlined-button borders remained one pixel where the element has that edge, and the widest new-phone class introduced no document overflow. No booking, customer, invoice, Driver, Calendar, Supabase, Vercel, TestFlight, external message, payment, or provider write was performed.
+
 ### Admin Dashboard Phone Alert Badge Containment Repair (2026-08-20)
 
 - Physical Admin Build 1 evidence on the owner’s iPhone reproduced the green Dashboard `2 urgent` badge extending across the fixed-width phone tab and visibly colliding with the `Dashboard` label. Exact source tracing proved the established phone swipe row gives every primary tab a fixed `4.75rem` width while the Dashboard button rendered its label and meaningful alert badge side by side; the combined content cannot fit inside that width.

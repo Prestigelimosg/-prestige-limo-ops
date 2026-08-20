@@ -28,6 +28,35 @@ input {
   font: inherit;
 }
 
+/* BEGIN three-app thin neutral border contrast */
+:where(
+  .admin-ops-shell,
+  [data-customer-booking-page="true"],
+  [data-customer-portal-page="true"],
+  [data-driver-job-page="true"],
+  [data-driver-portal-page="true"]
+) :where(.border-slate-200, .border-stone-200, .border-zinc-200) {
+  border-color: #cbd5e1;
+}
+
+:where(
+  .admin-ops-shell,
+  [data-customer-booking-page="true"],
+  [data-customer-portal-page="true"],
+  [data-driver-job-page="true"],
+  [data-driver-portal-page="true"]
+) :where(button, a).border-slate-300,
+:where(
+  .admin-ops-shell,
+  [data-customer-booking-page="true"],
+  [data-customer-portal-page="true"],
+  [data-driver-job-page="true"],
+  [data-driver-portal-page="true"]
+) :where(button, a).border-stone-300 {
+  border-color: #94a3b8;
+}
+/* END three-app thin neutral border contrast */
+
 .admin-ops-shell {
   --ops-control-radius: 0.375rem;
 }

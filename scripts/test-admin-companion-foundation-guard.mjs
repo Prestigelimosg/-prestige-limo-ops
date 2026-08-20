@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const paths = {
@@ -25,8 +26,9 @@ const packageJson = JSON.parse(source.package);
 const rootTsconfig = JSON.parse(source.rootTsconfig);
 const normalizedApp = source.app.replace(/\s+/g, " ");
 const normalizedNavigation = source.navigation.replace(/\s+/g, " ");
+const iconBytes = await readFile("admin-companion/assets/app-icon.png");
 
-assert.equal(config.name, "Prestige SG Admin");
+assert.equal(config.name, "Prestige Limo Ops");
 assert.equal(config.slug, "prestige-admin");
 assert.equal(config.owner, "prestige-limo-ops");
 assert.equal(config.version, "1.0.0");
@@ -37,9 +39,11 @@ assert.equal(config.ios.version, "1.0.0");
 assert.equal(config.ios.buildNumber, "1");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.admin");
 assert.equal(config.ios.supportsTablet, false);
-assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Admin");
+assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Limo Ops");
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
-assert.match(config.ios.infoPlist.NSFaceIDUsageDescription, /Prestige Admin/);
+assert.match(config.ios.infoPlist.NSFaceIDUsageDescription, /Prestige Limo Ops/);
+assert.equal(config.icon, "./assets/app-icon.png");
+assert.equal(config.ios.icon, "./assets/app-icon.png");
 assert.equal(config.extra?.eas?.projectId, undefined, "Provider identity must remain unset before approval");
 assert.equal(eas.submit?.production?.ios?.ascAppId, undefined, "Apple app identity must remain unset before approval");
 assert.equal(Object.hasOwn(config.ios, "associatedDomains"), false);
@@ -54,10 +58,10 @@ for (const dependency of [
 }
 
 for (const phrase of [
-  "Prestige SG Admin",
+  "Prestige Limo Ops",
   "Admin sign in",
   "Face ID is required",
-  "Unlock Prestige Admin",
+  "Unlock Prestige Limo Ops",
   "Retry Face ID",
   "sharedCookiesEnabled",
   "thirdPartyCookiesEnabled={false}",
@@ -71,6 +75,20 @@ for (const phrase of [
 ]) {
   assert.equal(normalizedApp.includes(phrase), true, `${paths.app} must include ${phrase}`);
 }
+
+assert.deepEqual(
+  [...iconBytes.subarray(0, 8)],
+  [137, 80, 78, 71, 13, 10, 26, 10],
+  "The Prestige Limo Ops App Store icon must be a PNG",
+);
+assert.equal(iconBytes.readUInt32BE(16), 1024, "The Prestige Limo Ops icon must be 1024 pixels wide");
+assert.equal(iconBytes.readUInt32BE(20), 1024, "The Prestige Limo Ops icon must be 1024 pixels high");
+assert.equal(iconBytes[25], 2, "The Prestige Limo Ops icon must be RGB without an alpha channel");
+assert.equal(
+  createHash("sha256").update(iconBytes).digest("hex"),
+  "a3858672c1fc5d76edfa032f143f93fc680ee92e2f860a329818c3ad45ec7886",
+  "The Admin app must retain the exact owner-approved Prestige Limo Ops artwork",
+);
 
 for (const phrase of [
   'export const productionOrigin = "https://app.prestigelimo.sg"',
@@ -122,6 +140,9 @@ for (const phrase of [
   "server login succeeds",
   "Face ID",
   "No EAS project, Apple App ID, App Store Connect record, cloud build, submission, or TestFlight assignment",
+  "Admin App Name And Icon Approval (2026-08-20)",
+  "`Prestige Limo Ops`",
+  "`a3858672c1fc5d76edfa032f143f93fc680ee92e2f860a329818c3ad45ec7886`",
 ]) {
   assert.equal(source.ledger.includes(phrase), true, `${paths.ledger} must include ${phrase}`);
 }

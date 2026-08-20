@@ -23,7 +23,7 @@ export async function authenticateAdminAppUnlock() {
     cancelLabel: "Cancel",
     disableDeviceFallback: true,
     fallbackLabel: "",
-    promptMessage: "Unlock Prestige Admin",
+    promptMessage: "Unlock Prestige Limo Ops",
   });
   return result.success === true;
 }

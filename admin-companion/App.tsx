@@ -81,7 +81,7 @@ export default function App() {
       setBiometricEnabled(true);
       setCurrentUrl(protectedUrl);
       setNavigationKey((current) => current + 1);
-      setNotice("Face ID now protects verified Prestige Admin access on this iPhone.");
+      setNotice("Face ID now protects verified Prestige Limo Ops access on this iPhone.");
       setScreenMode("web");
     } finally {
       biometricPromptBusyRef.current = false;
@@ -136,7 +136,7 @@ export default function App() {
 
   const allowNavigation = useCallback((request: { url: string }) => {
     if (!shouldAllowAdminWebViewNavigation(request.url)) {
-      setNotice("For your security, Prestige Admin opens only approved operations pages.");
+      setNotice("For your security, Prestige Limo Ops opens only approved operations pages.");
       return false;
     }
 
@@ -172,7 +172,7 @@ export default function App() {
           <View style={styles.lockMark}>
             <Text style={styles.lockMarkText}>P</Text>
           </View>
-          <Text style={styles.lockedTitle}>Prestige SG Admin</Text>
+          <Text style={styles.lockedTitle}>Prestige Limo Ops</Text>
           <Text style={styles.lockedText}>
             {enrollmentRequired
               ? "Face ID is required before verified operations pages can open."
@@ -186,7 +186,7 @@ export default function App() {
             </Pressable>
           ) : screenMode === "locked" ? (
             <Pressable accessibilityRole="button" onPress={unlockAdminApp} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Unlock Prestige Admin</Text>
+              <Text style={styles.primaryButtonText}>Unlock Prestige Limo Ops</Text>
             </Pressable>
           ) : null}
         </SafeAreaView>
@@ -205,7 +205,7 @@ export default function App() {
             <Text style={styles.brandMarkText}>P</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.brand}>Prestige SG Admin</Text>
+            <Text style={styles.brand}>Prestige Limo Ops</Text>
             <Text style={styles.subtitle}>{signedInPage ? "Face ID protected" : "Admin sign in"}</Text>
           </View>
           {signedInPage ? (
@@ -228,10 +228,10 @@ export default function App() {
           javaScriptEnabled
           key={`prestige-admin-webview-${navigationKey}`}
           mixedContentMode="never"
-          onError={() => setNotice("Prestige Admin could not load. Check your secure connection and try again.")}
+          onError={() => setNotice("Prestige Limo Ops could not load. Check your secure connection and try again.")}
           onHttpError={(event) => {
             if (event.nativeEvent.statusCode >= 500) {
-              setNotice("Prestige Admin is temporarily unavailable.");
+              setNotice("Prestige Limo Ops is temporarily unavailable.");
             }
           }}
           onMessage={(event) => {

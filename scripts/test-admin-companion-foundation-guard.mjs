@@ -44,9 +44,11 @@ assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.match(config.ios.infoPlist.NSFaceIDUsageDescription, /Prestige Limo Ops/);
 assert.equal(config.icon, "./assets/app-icon.png");
 assert.equal(config.ios.icon, "./assets/app-icon.png");
-assert.equal(config.extra?.eas?.projectId, undefined, "Provider identity must remain unset before approval");
-assert.equal(eas.submit?.production?.ios?.ascAppId, undefined, "Apple app identity must remain unset before approval");
+assert.equal(config.extra?.eas?.projectId, "2dada379-f732-4e25-80a3-cdbbb8f52b11");
+assert.equal(eas.submit?.production?.ios?.ascAppId, "6803312296");
 assert.equal(Object.hasOwn(config.ios, "associatedDomains"), false);
+assert.equal(packageJson.dependencies.expo, "~57.0.14");
+assert.equal(packageJson.dependencies["react-native"], "0.86.2");
 
 for (const dependency of [
   "expo-local-authentication",
@@ -143,6 +145,10 @@ for (const phrase of [
   "Admin App Name And Icon Approval (2026-08-20)",
   "`Prestige Limo Ops`",
   "`a3858672c1fc5d76edfa032f143f93fc680ee92e2f860a329818c3ad45ec7886`",
+  "Admin Build 1 Provider Identity Preparation (2026-08-20)",
+  "`@prestige-limo-ops/prestige-admin`",
+  "`2dada379-f732-4e25-80a3-cdbbb8f52b11`",
+  "`6803312296`",
 ]) {
   assert.equal(source.ledger.includes(phrase), true, `${paths.ledger} must include ${phrase}`);
 }

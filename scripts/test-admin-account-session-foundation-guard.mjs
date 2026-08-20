@@ -8,6 +8,7 @@ import ts from "typescript";
 
 const files = {
   account: "lib/admin-account-auth.ts",
+  adapter: "lib/admin-booking-supabase-adapter.ts",
   boundary: "lib/admin-dispatcher-auth-boundary.ts",
   bookingReferenceRoute: "app/api/admin-customer-booking-reference-settings/route.ts",
   closeoutRoute: "app/api/admin-completed-booking-closeouts/route.ts",
@@ -25,6 +26,7 @@ const files = {
   preactivation: "scripts/test-preactivation-verification-suite.mjs",
   proxy: "proxy.ts",
   route: "app/api/admin-auth/session/route.ts",
+  savedBookingRead: "lib/admin-saved-booking-read.ts",
   session: "lib/admin-account-session.ts",
 };
 
@@ -202,6 +204,15 @@ assert.ok(
   source.boundary.indexOf("if (adminAccountAuthIsEnabled())") <
     source.boundary.indexOf("PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE"),
   "Enabled Admin account auth must be checked before every legacy server-session branch",
+);
+assert.match(
+  source.adapter,
+  /boundary_mode:\s*context\.mode === "account-session-role-surface"\s*\? "server-session-role-surface"\s*:\s*context\.mode/,
+  "A verified Admin account session must enter the established persistence actor boundary",
+);
+assert.ok(
+  source.savedBookingRead.includes('actor.boundary_mode !== "server-session-role-surface"'),
+  "The established saved-booking reader must retain its server-session actor lock",
 );
 
 for (const [key, fallbackCall] of [

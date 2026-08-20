@@ -10,6 +10,7 @@ const files = {
   account: "lib/admin-account-auth.ts",
   adapter: "lib/admin-booking-supabase-adapter.ts",
   boundary: "lib/admin-dispatcher-auth-boundary.ts",
+  calendarSync: "lib/admin-booking-google-calendar-sync.ts",
   bookingReferenceRoute: "app/api/admin-customer-booking-reference-settings/route.ts",
   closeoutRoute: "app/api/admin-completed-booking-closeouts/route.ts",
   customerAccountsRoute: "app/api/admin-customer-accounts/route.ts",
@@ -20,6 +21,8 @@ const files = {
   ledger: "docs/current-implementation-ledger.md",
   loginClient: "app/admin-sign-in/admin-sign-in-form.tsx",
   loginPage: "app/admin-sign-in/page.tsx",
+  mapLocationSearch: "lib/admin-map-location-search.ts",
+  mapRouteEstimates: "lib/admin-map-route-estimates.ts",
   migration: "supabase/migrations/20260819133237_admin_account_session_foundation.sql",
   serviceRoleMigration:
     "supabase/migrations/20260820075732_admin_access_accounts_service_role_least_privilege.sql",
@@ -196,10 +199,15 @@ for (const forbidden of [
 for (const phrase of [
   "adminAccountAuthIsEnabled",
   "resolveAdminAccountSession",
-  'mode: "account-session-role-surface"',
+  'mode: "server-session-role-surface"',
 ]) {
   assert.ok(source.boundary.includes(phrase), `Central Admin boundary missing: ${phrase}`);
 }
+assert.equal(
+  source.boundary.includes("account-session-role-surface"),
+  false,
+  "A verified Admin account cookie must use the established central server-session role surface",
+);
 assert.ok(
   source.boundary.indexOf("if (adminAccountAuthIsEnabled())") <
     source.boundary.indexOf("PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE"),
@@ -207,13 +215,24 @@ assert.ok(
 );
 assert.match(
   source.adapter,
-  /boundary_mode:\s*context\.mode === "account-session-role-surface"\s*\? "server-session-role-surface"\s*:\s*context\.mode/,
-  "A verified Admin account session must enter the established persistence actor boundary",
+  /boundary_mode:\s*context\.mode,/,
+  "The persistence adapter must consume the centrally canonical Admin boundary mode directly",
+);
+assert.equal(
+  source.adapter.includes("account-session-role-surface"),
+  false,
+  "The persistence adapter must not retain a route-local account-session compatibility shim",
 );
 assert.ok(
   source.savedBookingRead.includes('actor.boundary_mode !== "server-session-role-surface"'),
   "The established saved-booking reader must retain its server-session actor lock",
 );
+for (const key of ["calendarSync", "mapLocationSearch", "mapRouteEstimates"]) {
+  assert.ok(
+    source[key].includes('actor.mode !== "server-session-role-surface"'),
+    `${key} must retain its established verified server-session actor lock`,
+  );
+}
 
 for (const [key, fallbackCall] of [
   ["customerAccountsRoute", "return routeLocalCustomerFolderBoundary(request);"],
@@ -413,7 +432,7 @@ try {
       { additionalSameOriginRefererPathPrefixes: ["/customers"] },
     );
     assert.equal(validSession.ok, true, "One valid enabled Admin account cookie must pass centrally");
-    assert.equal(validSession.context.mode, "account-session-role-surface");
+    assert.equal(validSession.context.mode, "server-session-role-surface");
   } finally {
     for (const key of Object.keys(process.env)) {
       if (!(key in originalProcessEnv)) delete process.env[key];

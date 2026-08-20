@@ -20,6 +20,8 @@ const files = {
   loginClient: "app/admin-sign-in/admin-sign-in-form.tsx",
   loginPage: "app/admin-sign-in/page.tsx",
   migration: "supabase/migrations/20260819133237_admin_account_session_foundation.sql",
+  serviceRoleMigration:
+    "supabase/migrations/20260820075732_admin_access_accounts_service_role_least_privilege.sql",
   preactivation: "scripts/test-preactivation-verification-suite.mjs",
   proxy: "proxy.ts",
   route: "app/api/admin-auth/session/route.ts",
@@ -48,6 +50,16 @@ for (const phrase of [
   "grant select on table public.admin_access_accounts to service_role",
 ]) {
   assert.ok(source.migration.includes(phrase), `Admin account migration missing: ${phrase}`);
+}
+
+for (const phrase of [
+  "revoke all on table public.admin_access_accounts from service_role",
+  "grant select on table public.admin_access_accounts to service_role",
+]) {
+  assert.ok(
+    source.serviceRoleMigration.includes(phrase),
+    `Admin account service-role migration missing: ${phrase}`,
+  );
 }
 
 for (const phrase of [
@@ -328,6 +340,18 @@ try {
   );
 
   const boundaryRuntime = runtime;
+  const centralBoundaryCookie = runtime.issueAdminAccountSession({
+    accountId: "11111111-1111-4111-8111-111111111111",
+    actorLabel: "Owner Admin",
+    authUserId: "22222222-2222-4222-8222-222222222222",
+    env,
+    role: "admin",
+  });
+  assert.equal(
+    typeof centralBoundaryCookie,
+    "string",
+    "The central-boundary fixture must receive one fresh session cookie",
+  );
   const originalProcessEnv = { ...process.env };
   try {
     Object.assign(process.env, env, {
@@ -372,7 +396,7 @@ try {
     );
     const validSession = boundaryRuntime.resolveAdminDispatcherBoundary(
       new Request("https://app.prestigelimo.sg/api/admin-customer-accounts", {
-        headers: { ...headers, cookie },
+        headers: { ...headers, cookie: centralBoundaryCookie },
       }),
       "admin-booking-persistence",
       { additionalSameOriginRefererPathPrefixes: ["/customers"] },

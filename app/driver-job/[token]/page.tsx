@@ -2683,7 +2683,7 @@ export default function DriverJobPage() {
       : "Locked";
 
   return (
-    <main className="min-h-screen bg-stone-50 text-slate-950">
+    <main className="min-h-screen bg-stone-50 text-slate-950" data-driver-job-page="true">
       <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6">
         <header className="space-y-1 border-b border-stone-200 pb-3">
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>

@@ -447,7 +447,10 @@ export default function DriverPortalPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 px-3 py-4 text-slate-950 sm:px-5 sm:py-6">
+    <main
+      className="min-h-screen bg-slate-100 px-3 py-4 text-slate-950 sm:px-5 sm:py-6"
+      data-driver-portal-page="true"
+    >
       <div className="mx-auto max-w-3xl space-y-4">
         <header className="rounded-2xl bg-slate-950 px-4 py-5 text-white shadow-sm sm:px-6">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Prestige Limo</p>

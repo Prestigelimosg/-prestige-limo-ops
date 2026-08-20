@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
   roleBar: {
     alignItems: "center",
     backgroundColor: "#ffffff",
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: "#cbd5e1",
     borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
   emptyState: {
     alignSelf: "center",
     backgroundColor: "#ffffff",
-    borderColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
     borderRadius: 16,
     borderWidth: 1,
     gap: 10,

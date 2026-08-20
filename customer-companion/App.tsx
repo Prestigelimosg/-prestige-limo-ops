@@ -233,7 +233,7 @@ export default function App() {
 
 const colors = {
   background: "#f8fafc",
-  border: "#e2e8f0",
+  border: "#cbd5e1",
   gold: "#b08b3e",
   ink: "#0f172a",
   muted: "#64748b",

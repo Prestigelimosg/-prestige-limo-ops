@@ -550,7 +550,7 @@ const guardChecks = [
     script: "scripts/test-customer-voice-booking-draft-field-fill-ui-guard.mjs",
   },
   {
-    label: "Customer Voice Booking Speak button UI guard",
+    label: "Customer public booking voice helper retirement guard",
     script: "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs",
   },
   {

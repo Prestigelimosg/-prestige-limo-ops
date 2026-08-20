@@ -38,8 +38,6 @@ for (const fragment of [
   'data-customer-booking-header-note="true"',
   "Thank you for your request. Our team will review it at our soonest. Hotline: {hotlineContact}.",
   "text-2xl font-bold text-slate-950 sm:text-3xl",
-  'data-customer-voice-booking-helper="true"',
-  'data-customer-voice-booking-speak-button="true"',
   'data-customer-booking-portal-link="true"',
 ]) {
   assertIncludes(bookPage, fragment, `compact /book header fragment ${fragment}`);
@@ -56,6 +54,8 @@ for (const fragmentOrPattern of [
   "Booking request next steps",
   /Step\s+\{index \+ 1\}:/,
   "sm:text-4xl",
+  'data-customer-voice-booking-helper="true"',
+  'data-customer-voice-booking-speak-button="true"',
 ]) {
   assertExcludes(bookPage, fragmentOrPattern, "compact /book header source");
 }

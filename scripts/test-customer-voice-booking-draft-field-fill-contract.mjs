@@ -151,6 +151,34 @@ const [
   ].map((path) => readFile(path, "utf8")),
 );
 
+if (!bookPage.includes('data-customer-voice-booking-speak-button="true"')) {
+  for (const forbidden of [
+    'data-customer-voice-booking-helper="true"',
+    'data-customer-voice-booking-draft-fill="local-only"',
+    "customer-booking-local-voice-draft",
+    "applyLocalVoiceDraftFieldFill",
+    "handleSpeakDraft",
+    "voiceTranscriptRef",
+  ]) {
+    assertExcludes(bookPage, forbidden, `/book retired voice field-fill ${forbidden}`);
+  }
+  assertIncludes(bookPage, 'data-customer-booking-form="true"', "manual customer booking form remains");
+  assertIncludes(bookPage, 'data-customer-booking-submit="true"', "manual submit control remains");
+  assertIncludes(bookPage, "submitCustomerBookingRequest(form, {", "manual submit adapter remains");
+  assertIncludes(
+    ledger,
+    "### Customer Public Booking Voice Helper Retirement (2026-08-21)",
+    "voice retirement ledger checkpoint",
+  );
+  assertIncludes(
+    preactivationSuite,
+    "scripts/test-customer-voice-booking-speak-button-ui-guard.mjs",
+    "preactivation suite voice retirement guard registration",
+  );
+  console.log("Customer Voice Booking Draft Field-Fill retired-state guard passed");
+  process.exit(0);
+}
+
 const ledgerSection = sectionBetween(ledger, "### Customer Voice Booking Draft Field-Fill Contract Lock");
 const ledgerImplementationSection = sectionBetween(
   ledger,

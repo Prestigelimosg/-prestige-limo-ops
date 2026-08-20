@@ -14,13 +14,6 @@ import {
   findCustomerBookingMemorySuggestion,
 } from "../../lib/customer-booking-memory-form";
 import {
-  applyCustomerBookingLocalVoiceDraftFieldFillToForm,
-  getCustomerBookingSpeechRecognitionConstructor,
-  transcriptFromCustomerBookingSpeechEvent,
-  type CustomerBookingLocalVoiceDraftSupportedField,
-  type CustomerBookingSpeechRecognition,
-} from "../../lib/customer-booking-local-voice-draft";
-import {
   checkCustomerBookingPhoneOtpVerification,
   startCustomerBookingPhoneOtpVerification,
   type CustomerBookingPhoneOtpClientReason,
@@ -243,16 +236,7 @@ export default function CustomerBookingPage() {
   const [phoneOtpCooldown, setPhoneOtpCooldown] = useState(0);
   const [phoneOtpFeedback, setPhoneOtpFeedback] = useState<Feedback | null>(null);
   const bookingMemoryLoadStarted = useRef(false);
-  const voiceRecognitionRef = useRef<CustomerBookingSpeechRecognition | null>(null);
-  const voiceRecognitionErroredRef = useRef(false);
-  const voiceTranscriptRef = useRef("");
   const formRef = useRef<BookingRequestForm>(initialForm);
-  const [voiceListening, setVoiceListening] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
-  const [voiceHelperText, setVoiceHelperText] = useState(
-    "Use Speak as a local draft helper. Review the transcript, then type or edit the trip fields yourself.",
-  );
-  const [voiceDraftFilledFields, setVoiceDraftFilledFields] = useState<CustomerBookingLocalVoiceDraftSupportedField[]>([]);
   const [confirmationStatus, setConfirmationStatus] = useState<CustomerBookingConfirmationStatus | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
@@ -576,91 +560,6 @@ export default function CustomerBookingPage() {
     setConfirmationStatus(null);
   }
 
-  function applyLocalVoiceDraftFieldFill(transcript: string) {
-    const result = applyCustomerBookingLocalVoiceDraftFieldFillToForm(formRef.current, transcript);
-    setVoiceDraftFilledFields(result.filledFields);
-
-    if (result.filledFields.length === 0) {
-      setVoiceHelperText(
-        "Voice draft captured locally. No safe empty fields changed. Review the transcript and type details manually.",
-      );
-      return;
-    }
-
-    formRef.current = result.nextForm;
-    setForm(result.nextForm);
-    if (result.filledFields.includes("pickupTime")) {
-      setPickupTimeDraft(splitPickupTime(result.nextForm.pickupTime));
-    }
-    setMissingFields((current) =>
-      current.filter((item) => !result.filledFields.includes(item as CustomerBookingLocalVoiceDraftSupportedField)),
-    );
-    setConfirmationStatus(null);
-    setVoiceHelperText(
-      `Voice draft filled ${result.filledFields.map((field) => requiredFieldLabels[field]).join(", ")}. Review and edit before submitting.`,
-    );
-  }
-
-  function handleSpeakDraft() {
-    if (voiceListening) {
-      voiceRecognitionRef.current?.stop();
-      setVoiceListening(false);
-      setVoiceHelperText("Voice draft stopped. Review the transcript, then type or edit the trip fields yourself.");
-      return;
-    }
-
-    const SpeechRecognitionConstructor = getCustomerBookingSpeechRecognitionConstructor();
-
-    if (!SpeechRecognitionConstructor) {
-      setVoiceHelperText("Voice dictation is not supported in this browser. Type the trip details manually.");
-      return;
-    }
-
-    const recognition = new SpeechRecognitionConstructor();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = "en-SG";
-    recognition.onresult = (event) => {
-      const transcript = transcriptFromCustomerBookingSpeechEvent(event);
-
-      if (transcript) {
-        setVoiceTranscript(transcript);
-        voiceTranscriptRef.current = transcript;
-        setVoiceDraftFilledFields([]);
-        setVoiceHelperText("Voice draft captured locally. Review it, then type or edit the trip fields yourself.");
-      }
-    };
-    recognition.onerror = () => {
-      voiceRecognitionErroredRef.current = true;
-      setVoiceListening(false);
-      setVoiceHelperText("Voice draft was not captured. Type the trip details manually.");
-    };
-    recognition.onend = () => {
-      if (!voiceRecognitionErroredRef.current) {
-        applyLocalVoiceDraftFieldFill(voiceTranscriptRef.current);
-      }
-      voiceRecognitionErroredRef.current = false;
-      setVoiceListening(false);
-      voiceRecognitionRef.current = null;
-    };
-
-    voiceRecognitionRef.current = recognition;
-    setVoiceTranscript("");
-    voiceTranscriptRef.current = "";
-    voiceRecognitionErroredRef.current = false;
-    setVoiceDraftFilledFields([]);
-    setVoiceListening(true);
-    setVoiceHelperText("Listening locally. Speak the trip details, then review the transcript before editing fields.");
-
-    try {
-      recognition.start();
-    } catch {
-      setVoiceListening(false);
-      voiceRecognitionRef.current = null;
-      setVoiceHelperText("Voice dictation could not start. Type the trip details manually.");
-    }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -923,16 +822,6 @@ export default function CustomerBookingPage() {
               className="flex shrink-0 flex-wrap items-center gap-2"
               data-customer-booking-header-actions="true"
             >
-              <button
-                aria-pressed={voiceListening}
-                className="inline-flex min-h-10 items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950 transition hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
-                data-customer-voice-booking-mode="local-transcript-helper"
-                data-customer-voice-booking-speak-button="true"
-                onClick={handleSpeakDraft}
-                type="button"
-              >
-                {voiceListening ? "Listening" : "Speak"}
-              </button>
               <Link
                 className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-500"
                 data-customer-booking-portal-link="true"
@@ -941,28 +830,6 @@ export default function CustomerBookingPage() {
                 My Bookings
               </Link>
             </div>
-          </div>
-          <div
-            className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"
-            data-customer-voice-booking-helper="true"
-            data-customer-voice-booking-local-only="true"
-          >
-            <p data-customer-voice-booking-status="true">{voiceHelperText}</p>
-            {voiceTranscript ? (
-              <p className="mt-1" data-customer-voice-booking-draft-note="true">
-                <span className="font-semibold text-slate-950">Voice draft: </span>
-                <span data-customer-voice-booking-transcript="true">{voiceTranscript}</span>
-              </p>
-            ) : null}
-            {voiceDraftFilledFields.length > 0 ? (
-              <p
-                className="mt-1"
-                data-customer-voice-booking-draft-fill="local-only"
-                data-customer-voice-booking-draft-fill-fields={voiceDraftFilledFields.join(",")}
-              >
-                Filled fields: {voiceDraftFilledFields.map((field) => requiredFieldLabels[field]).join(", ")}
-              </p>
-            ) : null}
           </div>
         </header>
 

@@ -268,6 +268,15 @@ assert.ok(
     invoiceLegacyFallback > invoiceAccountStop,
   "Invoice routes must stop an enabled account-auth rejection before legacy authorization",
 );
+assert.ok(
+  source.customerInvoiceBoundary.includes(
+    'additionalSameOriginRefererPathnames: ["/customers"]',
+  ) &&
+    source.customerInvoiceBoundary.includes(
+      'additionalSameOriginRefererPathPrefixes: ["/customers/"]',
+    ),
+  "Enabled Admin account auth must preserve the exact established Customer invoice page referer lane",
+);
 
 for (const key of ["bookingReferenceRoute", "invoicePrefixRoute"]) {
   const accountGate = source[key].indexOf("if (adminAccountAuthIsEnabled())");

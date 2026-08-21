@@ -10,6 +10,15 @@ const appleAppSiteAssociation = {
           },
         ],
       },
+      {
+        appIDs: ["U9Y2574Y7S.sg.prestigelimo.customer"],
+        components: [
+          {
+            "/": "/api/customer-portal-access/*",
+            comment: "Open only the established private Prestige Customer portal access path.",
+          },
+        ],
+      },
     ],
   },
   webcredentials: {

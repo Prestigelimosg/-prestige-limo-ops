@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   loadCustomerPortalSavedBookings,
@@ -379,6 +379,7 @@ export default function CustomerPortalPage() {
   const [companyProfile, setCompanyProfile] =
     useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [expandedBookingId, setExpandedBookingId] = useState("");
+  const pendingManualDetailScrollIdRef = useRef("");
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, BookingRequestFeedback>>({});
   const [changeRequestDraft, setChangeRequestDraft] = useState<BookingChangeRequestDraft | null>(null);
@@ -883,6 +884,26 @@ export default function CustomerPortalPage() {
       setCheckingTripUpdatesId("");
     }
   }, []);
+
+  useEffect(() => {
+    if (
+      !expandedBookingId ||
+      pendingManualDetailScrollIdRef.current !== expandedBookingId
+    ) {
+      return;
+    }
+
+    pendingManualDetailScrollIdRef.current = "";
+    const animationFrameId = window.requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-customer-portal-detail="${expandedBookingId}"]`)
+        ?.scrollIntoView({ block: "start" });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [expandedBookingId]);
 
   const refreshCustomerTrackingForBooking = useCallback(
     async (booking: CustomerPortalBooking, options: { silent?: boolean } = {}) => {
@@ -1854,9 +1875,13 @@ export default function CustomerPortalPage() {
                                 setExpandedBookingId(nextExpandedBookingId);
 
                                 if (!isExpanded) {
+                                  pendingManualDetailScrollIdRef.current = booking.id;
                                   void loadTripUpdatesForBooking(booking);
                                 } else if (activeTrackingBookingId === booking.id) {
+                                  pendingManualDetailScrollIdRef.current = "";
                                   setActiveTrackingBookingId("");
+                                } else {
+                                  pendingManualDetailScrollIdRef.current = "";
                                 }
                               }}
                               type="button"

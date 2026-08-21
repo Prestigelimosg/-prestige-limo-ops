@@ -72,17 +72,21 @@ for (const forbidden of [
   "localStorage",
   "prestige.admin.otp",
   "prestige.admin.email",
+  "prestige.admin.pin",
 ]) {
   assert.equal(app.includes(forbidden), false, `Admin native source must not persist ${forbidden}`);
 }
 
 for (const phrase of [
-  'const [email, setEmail] = useState("")',
-  'const [stage, setStage] = useState<"request" | "verify">("request")',
-  'const [token, setToken] = useState("")',
-  'autoComplete="one-time-code"',
+  'const [pin, setPin] = useState("")',
+  'autoComplete="current-password"',
+  'type="password"',
+  'pattern="[0-9]{6}"',
 ]) {
-  assert.ok(signIn.includes(phrase), `The existing in-memory OTP form must retain ${phrase}`);
+  assert.ok(signIn.includes(phrase), `The existing in-memory PIN form must retain ${phrase}`);
+}
+for (const forbidden of ["sessionStorage", "localStorage", "AsyncStorage", "SecureStore"]) {
+  assert.equal(signIn.includes(forbidden), false, `The Admin PIN form must not persist through ${forbidden}`);
 }
 
 assert.ok(

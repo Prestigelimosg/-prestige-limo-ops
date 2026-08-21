@@ -104,16 +104,15 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "signInWithOtp",
-  "verifyOtp",
-  "shouldCreateUser: false",
-  "requestAdminAccountOtp",
-  "verifyAdminAccountOtp",
+  "signInWithPassword",
+  "signInAdminAccountWithPin",
+  "reserve_admin_auth_pin_attempt",
+  "clear_admin_auth_pin_attempt",
+  'const adminAccountSignInEmail = "info@prestigelimo.sg"',
   "revalidateAdminAccountSession",
-  'type: "email"',
   '.from("admin_access_accounts")',
   '.eq("auth_user_id", authUserId)',
-  '.eq("auth_email", email)',
+  '.eq("auth_email", adminAccountSignInEmail)',
   '.eq("account_status", "active")',
   '.eq("id", input.claims.accountId)',
   "SUPABASE_PUBLISHABLE_KEY",
@@ -124,17 +123,17 @@ for (const phrase of [
 }
 assert.equal(source.account.includes("user_metadata"), false, "Admin role must never trust user metadata");
 assert.equal(source.account.includes("signUp"), false, "The Admin surface must not expose public signup");
-assert.equal(source.account.includes("signInWithPassword"), false, "The Admin surface must not use passwords");
+assert.equal(source.account.includes("signInWithOtp"), false, "The retired Admin email-code lane must stay absent");
+assert.equal(source.account.includes("verifyOtp"), false, "The retired Admin OTP verifier must stay absent");
 
 for (const phrase of [
   "x-prestige-admin-auth-purpose",
   '"admin-account-sign-in"',
   '"admin-account-sign-out"',
   'refererUrl.pathname === "/admin-sign-in"',
-  "requestAdminAccountOtp",
-  "verifyAdminAccountOtp",
-  '"request_code"',
-  '"verify_code"',
+  "signInAdminAccountWithPin",
+  '"sign_in"',
+  '["action", "pin"]',
   "issueAdminAccountSession",
   "clearAdminAccountSessionCookie",
   'export const dynamic = "force-dynamic"',
@@ -166,9 +165,9 @@ for (const phrase of [
 
 for (const phrase of [
   "Admin sign in",
-  "Email",
-  "Send 6-digit code",
-  "6-digit code",
+  "Enter 6-digit Admin PIN",
+  'type="password"',
+  'pattern="[0-9]{6}"',
   'x-prestige-admin-auth-purpose',
   '"admin-account-sign-in"',
   'credentials: "same-origin"',
@@ -180,7 +179,7 @@ for (const phrase of [
     `Admin sign-in surface missing: ${phrase}`,
   );
 }
-assert.equal(source.loginClient.includes('type="password"'), false, "Admin sign-in must be passwordless");
+assert.equal(source.loginClient.includes('autoComplete="one-time-code"'), false, "Admin sign-in must not retain the retired email OTP input");
 
 for (const forbidden of [
   "PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN",
@@ -486,12 +485,13 @@ try {
   const accountRow = {
     account_role: "admin",
     account_status: "active",
-    auth_email: "owner@example.com",
+    auth_email: "info@prestigelimo.sg",
     auth_user_id: "22222222-2222-4222-8222-222222222222",
     id: "11111111-1111-4111-8111-111111111111",
     safe_display_label: "Owner Admin",
   };
-  function mockClient(rows) {
+  function mockClient(rows, options = {}) {
+    const rpcCalls = options.rpcCalls || [];
     return {
       from(table) {
         assert.equal(table, "admin_access_accounts");
@@ -510,65 +510,111 @@ try {
           select() { return this; },
         };
       },
+      rpc(name, args) {
+        rpcCalls.push({ args, name });
+        if (name === "reserve_admin_auth_pin_attempt") {
+          return {
+            async maybeSingle() {
+              return options.reserveError
+                ? { data: null, error: {} }
+                : { data: { attempt_allowed: options.attemptAllowed !== false }, error: null };
+            },
+          };
+        }
+        assert.equal(name, "clear_admin_auth_pin_attempt");
+        return Promise.resolve(
+          options.clearError
+            ? { data: null, error: {} }
+            : { data: options.clearResult !== false, error: null },
+        );
+      },
     };
   }
-  const authCalls = { requested: [], signedOut: 0, verified: [] };
+  const authCalls = { signedIn: [], signedOut: 0 };
   const mockAuth = {
-    async signInWithOtp(input) {
-      authCalls.requested.push(input);
-      return { error: null };
+    async signInWithPassword(input) {
+      authCalls.signedIn.push(input);
+      return input.password === "246810"
+        ? { data: { user: { id: accountRow.auth_user_id } }, error: null }
+        : { data: { user: null }, error: {} };
     },
     async signOut() {
       authCalls.signedOut += 1;
     },
-    async verifyOtp(input) {
-      authCalls.verified.push(input);
-      return { data: { user: { id: accountRow.auth_user_id } }, error: null };
-    },
   };
-  const otpEnv = { PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED: "true" };
-  const unknownRequest = await accountRuntime.requestAdminAccountOtp({
+  const pinEnv = { PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED: "true" };
+  const malformedPin = await accountRuntime.signInAdminAccountWithPin({
     auth: mockAuth,
     client: mockClient([accountRow]),
-    email: "unknown@example.com",
-    env: otpEnv,
+    env: pinEnv,
+    pin: "12345",
   });
-  assert.equal(unknownRequest.ok, true);
-  assert.equal(authCalls.requested.length, 0, "An unmapped email must trigger no OTP provider call");
-  const ownerRequest = await accountRuntime.requestAdminAccountOtp({
+  assert.equal(malformedPin.reason, "invalid_credentials");
+  assert.equal(authCalls.signedIn.length, 0, "A malformed PIN must trigger no Auth call");
+
+  const lockedRpcCalls = [];
+  const lockedAttempt = await accountRuntime.signInAdminAccountWithPin({
     auth: mockAuth,
-    client: mockClient([accountRow]),
-    email: "OWNER@example.com",
-    env: otpEnv,
+    client: mockClient([accountRow], { attemptAllowed: false, rpcCalls: lockedRpcCalls }),
+    env: pinEnv,
+    pin: "135790",
   });
-  assert.equal(ownerRequest.ok, true);
-  assert.deepEqual(authCalls.requested, [{
-    email: "owner@example.com",
-    options: { shouldCreateUser: false },
-  }]);
-  const malformedCode = await accountRuntime.verifyAdminAccountOtp({
+  assert.equal(lockedAttempt.reason, "invalid_credentials");
+  assert.equal(authCalls.signedIn.length, 0, "A locked account must trigger no Auth call");
+  assert.equal(lockedRpcCalls.length, 1, "A locked account must only reserve/read attempt state");
+
+  const invalidPin = await accountRuntime.signInAdminAccountWithPin({
     auth: mockAuth,
     client: mockClient([accountRow]),
-    email: "owner@example.com",
-    env: otpEnv,
-    token: "12345",
+    env: pinEnv,
+    pin: "135790",
   });
-  assert.equal(malformedCode.reason, "invalid_code");
-  assert.equal(authCalls.verified.length, 0, "A non-six-digit code must trigger no verification call");
-  const verifiedAccount = await accountRuntime.verifyAdminAccountOtp({
+  assert.equal(invalidPin.reason, "invalid_credentials");
+  assert.equal(authCalls.signedOut, 1, "A failed temporary password session must be discarded");
+
+  const successfulRpcCalls = [];
+  const verifiedAccount = await accountRuntime.signInAdminAccountWithPin({
     auth: mockAuth,
-    client: mockClient([accountRow]),
-    email: "owner@example.com",
-    env: otpEnv,
-    token: "123456",
+    client: mockClient([accountRow], { rpcCalls: successfulRpcCalls }),
+    env: pinEnv,
+    pin: "246810",
   });
   assert.equal(verifiedAccount.ok, true);
-  assert.deepEqual(authCalls.verified, [{
-    email: "owner@example.com",
-    token: "123456",
-    type: "email",
-  }]);
-  assert.equal(authCalls.signedOut, 1, "The temporary Supabase OTP session must be discarded");
+  assert.deepEqual(authCalls.signedIn, [
+    { email: "info@prestigelimo.sg", password: "135790" },
+    { email: "info@prestigelimo.sg", password: "246810" },
+  ]);
+  assert.deepEqual(
+    successfulRpcCalls.map((call) => call.name),
+    ["reserve_admin_auth_pin_attempt", "clear_admin_auth_pin_attempt"],
+  );
+  assert.equal(authCalls.signedOut, 2, "Every temporary Supabase password session must be discarded");
+
+  const unavailableAttempts = await accountRuntime.signInAdminAccountWithPin({
+    auth: mockAuth,
+    client: mockClient([accountRow], { reserveError: true }),
+    env: pinEnv,
+    pin: "246810",
+  });
+  assert.equal(unavailableAttempts.reason, "not_configured");
+  assert.equal(
+    authCalls.signedIn.length,
+    2,
+    "Unavailable durable attempt protection must fail before password authentication",
+  );
+
+  const unclearedAttempt = await accountRuntime.signInAdminAccountWithPin({
+    auth: mockAuth,
+    client: mockClient([accountRow], { clearResult: false }),
+    env: pinEnv,
+    pin: "246810",
+  });
+  assert.equal(unclearedAttempt.reason, "not_configured");
+  assert.equal(
+    authCalls.signedOut,
+    3,
+    "A successful password check with uncleared attempt state must discard its temporary session",
+  );
 
   const sessionClaims = {
     accountId: accountRow.id,
@@ -582,7 +628,7 @@ try {
     (await accountRuntime.revalidateAdminAccountSession({
       claims: sessionClaims,
       client: mockClient([accountRow]),
-      env: otpEnv,
+      env: pinEnv,
     })).ok,
     true,
     "An unchanged active Admin account must revalidate",
@@ -591,7 +637,7 @@ try {
     (await accountRuntime.revalidateAdminAccountSession({
       claims: sessionClaims,
       client: mockClient([{ ...accountRow, account_status: "suspended" }]),
-      env: otpEnv,
+      env: pinEnv,
     })).ok,
     false,
     "A suspended Admin account must invalidate its existing cookie immediately",
@@ -600,7 +646,7 @@ try {
     (await accountRuntime.revalidateAdminAccountSession({
       claims: sessionClaims,
       client: mockClient([{ ...accountRow, account_role: "dispatcher" }]),
-      env: otpEnv,
+      env: pinEnv,
     })).ok,
     false,
     "An Admin role change must invalidate the stale cookie immediately",

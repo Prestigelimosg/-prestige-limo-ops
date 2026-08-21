@@ -22554,6 +22554,12 @@ export default function Home() {
           } else {
             setMessage({ tone: "success", text: `${successText} Choose a booking below.` });
           }
+        } else {
+          setMessage((currentMessage) =>
+            currentMessage.tone === "info" && currentMessage.text === "Loading bookings..."
+              ? { tone: "info", text: "Ready for dispatch." }
+              : currentMessage,
+          );
         }
       }
     } catch (error) {

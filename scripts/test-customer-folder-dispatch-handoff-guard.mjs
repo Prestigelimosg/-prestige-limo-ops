@@ -311,8 +311,14 @@ for (const fragment of [
 
 for (const fragment of [
   "const customerFolderSavedBookingSourceReadLimit = 200;",
-  "listAdminBookings(actor, {",
-  "limit: customerFolderSavedBookingSourceReadLimit,",
+  "const customerFolderSavedBookingSourcePageSize = 100;",
+  "const bookingsResult = await loadAdminSavedBookingList({",
+  "limit: customerFolderSavedBookingSourcePageSize,",
+  "offset: 0,",
+  'scope: "all",',
+  "if (sourceBookings.length === customerFolderSavedBookingSourcePageSize)",
+  "const nextBookingsResult = await loadAdminSavedBookingList({",
+  "offset: customerFolderSavedBookingSourcePageSize,",
 ]) {
   assertIncludes(
     adminCustomerSavedBookingsRead,

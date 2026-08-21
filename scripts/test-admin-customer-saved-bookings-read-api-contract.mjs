@@ -23,6 +23,10 @@ const sourceFiles = [
   "app/api/admin-customer-saved-bookings/route.ts",
 ];
 const originalEnv = {
+  PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED:
+    process.env.PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED,
+  PRESTIGE_ADMIN_ACCOUNT_SESSION_SECRET:
+    process.env.PRESTIGE_ADMIN_ACCOUNT_SESSION_SECRET,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED,
   PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL:
@@ -118,6 +122,7 @@ async function loadHarness() {
   const require = createRequire(import.meta.url);
 
   return {
+    boundary: require(path.join(tempDir, "lib/admin-dispatcher-auth-boundary.js")),
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
     reader: require(path.join(tempDir, "lib/admin-customer-saved-bookings-read.js")),
     route: require(path.join(tempDir, "app/api/admin-customer-saved-bookings/route.js")),
@@ -242,6 +247,15 @@ function enabledEnv(overrides = {}) {
   };
 }
 
+function enabledAccountAuthEnv(overrides = {}) {
+  return enabledEnv({
+    PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED: "true",
+    PRESTIGE_ADMIN_ACCOUNT_SESSION_SECRET:
+      "customer-saved-bookings-account-session-secret-20260821",
+    ...overrides,
+  });
+}
+
 function sessionHeaders(overrides = {}) {
   return {
     referer: "http://localhost/customers",
@@ -339,7 +353,7 @@ const seed = {
 const harness = await loadHarness();
 
 try {
-  const { reader, route } = harness;
+  const { boundary, reader, route } = harness;
 
   assert.equal(reader.adminCustomerSavedBookingsReadVersion, "admin-customer-saved-bookings-read-v1");
   assert.deepEqual(
@@ -653,6 +667,65 @@ try {
   assert.equal(customerFolderMock.client.selectHistory.length, 1);
   assert.equal(customerFolderMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(customerFolderReadResult, "customer folder saved bookings read response should stay safe");
+
+  setEnv(enabledAccountAuthEnv());
+
+  const accountSessionCookie = boundary.issueAdminAccountSession({
+    accountId: "11111111-1111-4111-8111-111111111111",
+    actorLabel: "Owner Admin",
+    authUserId: "22222222-2222-4222-8222-222222222222",
+    role: "admin",
+  });
+  assert.equal(typeof accountSessionCookie, "string");
+
+  const authenticatedCustomerFolderMock = installMockClient(seed);
+  const authenticatedCustomerFolderReadResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=77&limit=10", {
+        headers: customerSurfaceHeaders({
+          cookie: accountSessionCookie.split(";")[0],
+          referer: "http://localhost/customers/ubs",
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(authenticatedCustomerFolderReadResult.status, 200);
+  assert.equal(authenticatedCustomerFolderReadResult.body.ok, true);
+  assert.deepEqual(
+    authenticatedCustomerFolderReadResult.body.saved_bookings.map(
+      (booking) => booking.booking_reference,
+    ),
+    ["UBS-SAFE-002", "UBS-SAFE-001"],
+  );
+  assert.equal(authenticatedCustomerFolderMock.client.operations.length, 0);
+  assert.equal(authenticatedCustomerFolderMock.client.selectHistory.length, 1);
+  assertNoLeaks(
+    authenticatedCustomerFolderReadResult,
+    "authenticated customer folder saved bookings read response should stay safe",
+  );
+
+  const lookalikeCustomerFolderMock = installMockClient(seed);
+  const lookalikeCustomerFolderReadResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-saved-bookings?customer_id=77&limit=10", {
+        headers: customerSurfaceHeaders({
+          cookie: accountSessionCookie.split(";")[0],
+          referer: "http://localhost/customers-public",
+        }),
+      }),
+    ),
+  );
+
+  assert.equal(lookalikeCustomerFolderReadResult.status, 403);
+  assert.deepEqual(lookalikeCustomerFolderReadResult.body, {
+    error: routeBlockedMessage,
+    ok: false,
+  });
+  assertNoSupabaseTouched(
+    lookalikeCustomerFolderMock,
+    "lookalike customer folder referer",
+  );
 
   setEnv(enabledEnv());
 

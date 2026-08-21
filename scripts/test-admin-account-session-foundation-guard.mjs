@@ -278,6 +278,16 @@ assert.ok(
   "Enabled Admin account auth must preserve the exact established Customer invoice page referer lane",
 );
 
+assert.ok(
+  source.customerSavedBookingsRoute.includes(
+    'additionalSameOriginRefererPathnames: ["/customers"]',
+  ) &&
+    source.customerSavedBookingsRoute.includes(
+      'additionalSameOriginRefererPathPrefixes: ["/customers/"]',
+    ),
+  "Enabled Admin account auth must preserve only the exact Customer-folder saved-bookings referer lane",
+);
+
 for (const key of ["bookingReferenceRoute", "invoicePrefixRoute"]) {
   const accountGate = source[key].indexOf("if (adminAccountAuthIsEnabled())");
   const centralBoundary = source[key].indexOf(

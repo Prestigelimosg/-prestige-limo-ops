@@ -173,6 +173,23 @@ async function main() {
       `[data-customer-company-profile-edit="${customerId}"]`,
       "customer profile edit button",
     );
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = document.querySelector('[data-customer-company-profile-edit="${customerId}"]');
+          if (!button) {
+            return false;
+          }
+          const reactPropsKey = Object.keys(button).find((key) => key.startsWith("__reactProps$"));
+          return Boolean(
+            reactPropsKey &&
+              button[reactPropsKey] &&
+              typeof button[reactPropsKey].onClick === "function"
+          );
+        })()`),
+      10000,
+      "hydrated customer profile edit button",
+    );
     await evaluate(`document.querySelector('[data-customer-company-profile-edit="${customerId}"]').click()`);
     await waitForSelector(
       evaluate,

@@ -654,10 +654,28 @@ async function runChromeTest() {
     };
 
     const clickTab = async (label) => {
-      await clickButtonByText(label, `${label} tab`);
       await waitForCondition(
         () =>
           evaluate(`(() => {
+            const button = [...document.querySelectorAll("button")].find(
+              (candidate) => candidate.textContent.trim() === ${JSON.stringify(label)},
+            );
+            if (!button || button.disabled) {
+              return false;
+            }
+            const reactPropsKey = Object.keys(button).find((key) => key.startsWith("__reactProps$"));
+            if (
+              !reactPropsKey ||
+              !button[reactPropsKey] ||
+              typeof button[reactPropsKey].onClick !== "function"
+            ) {
+              return false;
+            }
+
+            if (button.dataset.mobileUsabilityTabClickAttempted !== "true") {
+              button.click();
+              button.dataset.mobileUsabilityTabClickAttempted = "true";
+            }
             const selectedTab = [...document.querySelectorAll("button[role='tab']")].find(
               (button) =>
                 button.textContent.trim() === ${JSON.stringify(label)} &&
@@ -13121,6 +13139,14 @@ async function runChromeTest() {
           })()`),
         10000,
         "automatic saved-bookings load",
+      );
+      const settledBookingsStatusState = await evaluate(`(() => ({
+        text: document.body.innerText || "",
+      }))()`);
+      assert.equal(
+        settledBookingsStatusState.text.includes("Loading bookings..."),
+        false,
+        `${viewport.label}: expected settled Bookings content without a stale loading status`,
       );
       const loadedMobileFixtureAvailable = await evaluate(
         `document.body.innerText.includes("MOBILE USABILITY TRAVELER")`,

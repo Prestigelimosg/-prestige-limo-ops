@@ -101,9 +101,20 @@ for (const fragment of [
 
 assert.ok(
   dispatch.includes('data-admin-dispatch-crm-identity-selectors="true"') &&
-    dispatch.includes("adminDispatchCorporatePairOptions") &&
-    dispatch.includes('data-admin-dispatch-corporate-customer-select="true"') &&
-    dispatch.includes('data-admin-dispatch-corporate-pair-select="true"'),
+    dispatch.includes("adminDispatchCustomerAccountOptions") &&
+    dispatch.includes('data-admin-dispatch-customer-account-select="true"') &&
+    dispatch.includes('data-admin-dispatch-customer-account-options="true"') &&
+    dispatch.includes("data-admin-dispatch-customer-account-option=") &&
+    dispatch.includes("selectAdminDispatchCustomerAccount(account)") &&
+    dispatch.includes('placeholder="Search account, company, Booker or passenger"') &&
+    dispatch.includes(
+      'const bookerId = String(adminDispatchVerifiedIdentityId(traveler.booker_id) || "");',
+    ) &&
+    dispatch.includes(
+      'const travelerId = String(adminDispatchVerifiedIdentityId(traveler.id) || "");',
+    ) &&
+    dispatch.includes("data-booker-id={booking.bookerId}") &&
+    dispatch.includes("data-traveler-id={booking.travelerId}"),
   "Dispatch must reuse exact saved Booker and Traveller pairs through the simplified customer selection lane.",
 );
 assert.ok(

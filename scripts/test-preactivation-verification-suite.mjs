@@ -450,6 +450,14 @@ const guardChecks = [
     script: "scripts/test-admin-account-session-foundation-guard.mjs",
   },
   {
+    label: "Admin six-digit PIN sign-in guard",
+    script: "scripts/test-admin-pin-sign-in-guard.mjs",
+  },
+  {
+    label: "Admin PIN recovery guard",
+    script: "scripts/test-admin-pin-recovery-guard.mjs",
+  },
+  {
     label: "modern Supabase secret-key server fetch guard",
     script: "scripts/test-supabase-modern-secret-server-fetch-guard.mjs",
   },

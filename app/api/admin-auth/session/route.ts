@@ -1,6 +1,6 @@
 import {
-  requestAdminAccountOtp,
-  verifyAdminAccountOtp,
+  resetAdminAccountPinFromRecovery,
+  signInAdminAccountWithPin,
 } from "../../../../lib/admin-account-auth.ts";
 import {
   clearAdminAccountSessionCookie,
@@ -27,7 +27,7 @@ function adminProtectedRefererPath(pathname: string) {
 
 function sameOriginAuthRequest(
   request: Request,
-  purpose: "admin-account-sign-in" | "admin-account-sign-out",
+  purpose: "admin-account-pin-recovery" | "admin-account-sign-in" | "admin-account-sign-out",
 ) {
   if (request.headers.get("x-prestige-admin-auth-purpose") !== purpose) return false;
   const requestUrl = new URL(request.url);
@@ -38,7 +38,7 @@ function sameOriginAuthRequest(
   try {
     const refererUrl = new URL(referer);
     if (refererUrl.origin !== requestUrl.origin) return false;
-    return purpose === "admin-account-sign-in"
+    return purpose === "admin-account-sign-in" || purpose === "admin-account-pin-recovery"
       ? refererUrl.pathname === "/admin-sign-in"
       : adminProtectedRefererPath(refererUrl.pathname);
   } catch {
@@ -47,7 +47,14 @@ function sameOriginAuthRequest(
 }
 
 export async function POST(request: Request) {
-  if (!sameOriginAuthRequest(request, "admin-account-sign-in")) {
+  const purpose = request.headers.get("x-prestige-admin-auth-purpose");
+  if (
+    purpose !== "admin-account-sign-in" &&
+    purpose !== "admin-account-pin-recovery"
+  ) {
+    return response({ ok: false, reason: "unauthorized" }, 401);
+  }
+  if (!sameOriginAuthRequest(request, purpose)) {
     return response({ ok: false, reason: "unauthorized" }, 401);
   }
 
@@ -56,31 +63,43 @@ export async function POST(request: Request) {
     return response({ ok: false, reason: "invalid_request" }, 400);
   }
 
-  if (body.action === "request_code") {
-    if (Object.keys(body).some((key) => !["action", "email"].includes(key))) {
+  if (body.action === "recover_pin") {
+    if (purpose !== "admin-account-pin-recovery") {
+      return response({ ok: false, reason: "unauthorized" }, 401);
+    }
+    if (
+      Object.keys(body).some(
+        (key) => !["accessToken", "action", "pin", "refreshToken"].includes(key),
+      )
+    ) {
       return response({ ok: false, reason: "invalid_request" }, 400);
     }
-    const requested = await requestAdminAccountOtp({ email: body.email });
-    return requested.ok
-      ? response({ ok: true, status: "code_sent_if_authorized" }, 200)
-      : response({ ok: false, reason: "not_configured" }, 503);
+
+    const result = await resetAdminAccountPinFromRecovery({
+      accessToken: body.accessToken,
+      pin: body.pin,
+      refreshToken: body.refreshToken,
+    });
+    if (!result.ok) {
+      return result.reason === "not_configured"
+        ? response({ ok: false, reason: "not_configured" }, 503)
+        : response({ ok: false, reason: "invalid_recovery" }, 401);
+    }
+    return response({ ok: true, recovery: "complete" }, 200);
   }
 
-  if (body.action !== "verify_code") {
+  if (body.action !== "sign_in" || purpose !== "admin-account-sign-in") {
     return response({ ok: false, reason: "invalid_request" }, 400);
   }
-  if (Object.keys(body).some((key) => !["action", "email", "token"].includes(key))) {
+  if (Object.keys(body).some((key) => !["action", "pin"].includes(key))) {
     return response({ ok: false, reason: "invalid_request" }, 400);
   }
 
-  const result = await verifyAdminAccountOtp({
-    email: body.email,
-    token: body.token,
-  });
+  const result = await signInAdminAccountWithPin({ pin: body.pin });
   if (!result.ok) {
     return result.reason === "not_configured"
       ? response({ ok: false, reason: "not_configured" }, 503)
-      : response({ ok: false, reason: "invalid_code" }, 401);
+      : response({ ok: false, reason: "invalid_credentials" }, 401);
   }
 
   const cookie = issueAdminAccountSession(result);

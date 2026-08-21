@@ -163,94 +163,98 @@ export default function App() {
     webViewRef.current?.injectJavaScript(signOutScript);
   }, []);
 
-  if (screenMode !== "web") {
-    const enrollmentRequired = screenMode === "enrollment-required";
-    return (
-      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <SafeAreaView style={styles.lockedSafeArea}>
-          <StatusBar style="dark" />
-          <View style={styles.lockMark}>
-            <Text style={styles.lockMarkText}>P</Text>
-          </View>
-          <Text style={styles.lockedTitle}>Prestige Limo Ops</Text>
-          <Text style={styles.lockedText}>
-            {enrollmentRequired
-              ? "Face ID is required before verified operations pages can open."
-              : screenMode === "locked"
-                ? "Face ID is required to unlock this Admin app."
-                : "Checking Face ID…"}
-          </Text>
-          {enrollmentRequired ? (
-            <Pressable accessibilityRole="button" onPress={retryEnrollment} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Retry Face ID</Text>
-            </Pressable>
-          ) : screenMode === "locked" ? (
-            <Pressable accessibilityRole="button" onPress={unlockAdminApp} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Unlock Prestige Limo Ops</Text>
-            </Pressable>
-          ) : null}
-        </SafeAreaView>
-      </SafeAreaProvider>
-    );
-  }
-
+  const webLayerLocked = screenMode !== "web";
+  const enrollmentRequired = screenMode === "enrollment-required";
   const signedInPage = isProtectedAdminUrl(currentUrl) && biometricEnabled;
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+      <View style={styles.root}>
         <StatusBar style="dark" />
-        <View style={styles.header}>
-          <View style={styles.brandMark}>
-            <Text style={styles.brandMarkText}>P</Text>
-          </View>
-          <View style={styles.headerText}>
-            <Text style={styles.brand}>Prestige Limo Ops</Text>
-            <Text style={styles.subtitle}>{signedInPage ? "Face ID protected" : "Admin sign in"}</Text>
-          </View>
-          {signedInPage ? (
-            <Pressable accessibilityRole="button" onPress={signOut} style={styles.signOutButton}>
-              <Text style={styles.signOutButtonText}>Sign out</Text>
-            </Pressable>
-          ) : null}
+        <View
+          accessibilityElementsHidden={webLayerLocked}
+          importantForAccessibility={webLayerLocked ? "no-hide-descendants" : "auto"}
+          pointerEvents={webLayerLocked ? "none" : "auto"}
+          style={[styles.webLayer, webLayerLocked ? styles.hiddenWebLayer : null]}
+        >
+          <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+            <View style={styles.header}>
+              <View style={styles.brandMark}>
+                <Text style={styles.brandMarkText}>P</Text>
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.brand}>Prestige Limo Ops</Text>
+                <Text style={styles.subtitle}>{signedInPage ? "Face ID protected" : "Admin sign in"}</Text>
+              </View>
+              {signedInPage ? (
+                <Pressable accessibilityRole="button" onPress={signOut} style={styles.signOutButton}>
+                  <Text style={styles.signOutButtonText}>Sign out</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {notice ? (
+              <View accessibilityRole="alert" style={styles.notice}>
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            ) : null}
+            <WebView
+              allowsBackForwardNavigationGestures={false}
+              allowsLinkPreview={false}
+              cacheEnabled
+              domStorageEnabled
+              javaScriptCanOpenWindowsAutomatically={false}
+              javaScriptEnabled
+              key={`prestige-admin-webview-${navigationKey}`}
+              mixedContentMode="never"
+              onError={() => setNotice("Prestige Limo Ops could not load. Check your secure connection and try again.")}
+              onHttpError={(event) => {
+                if (event.nativeEvent.statusCode >= 500) {
+                  setNotice("Prestige Limo Ops is temporarily unavailable.");
+                }
+              }}
+              onMessage={(event) => {
+                if (event.nativeEvent.data.includes("admin-sign-out-failed")) {
+                  setNotice("Sign out did not complete. Please try again.");
+                }
+              }}
+              onNavigationStateChange={updateNavigation}
+              onShouldStartLoadWithRequest={allowNavigation}
+              originWhitelist={["https://app.prestigelimo.sg"]}
+              pullToRefreshEnabled
+              ref={webViewRef}
+              setSupportMultipleWindows={false}
+              sharedCookiesEnabled
+              source={{ uri: currentUrl }}
+              style={styles.webView}
+              thirdPartyCookiesEnabled={false}
+            />
+          </SafeAreaView>
         </View>
-        {notice ? (
-          <View accessibilityRole="alert" style={styles.notice}>
-            <Text style={styles.noticeText}>{notice}</Text>
-          </View>
+        {webLayerLocked ? (
+          <SafeAreaView style={[styles.lockedSafeArea, styles.lockOverlay]}>
+            <View style={styles.lockMark}>
+              <Text style={styles.lockMarkText}>P</Text>
+            </View>
+            <Text style={styles.lockedTitle}>Prestige Limo Ops</Text>
+            <Text style={styles.lockedText}>
+              {enrollmentRequired
+                ? "Face ID is required before verified operations pages can open."
+                : screenMode === "locked"
+                  ? "Face ID is required to unlock this Admin app."
+                  : "Checking Face ID…"}
+            </Text>
+            {enrollmentRequired ? (
+              <Pressable accessibilityRole="button" onPress={retryEnrollment} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Retry Face ID</Text>
+              </Pressable>
+            ) : screenMode === "locked" ? (
+              <Pressable accessibilityRole="button" onPress={unlockAdminApp} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Unlock Prestige Limo Ops</Text>
+              </Pressable>
+            ) : null}
+          </SafeAreaView>
         ) : null}
-        <WebView
-          allowsBackForwardNavigationGestures={false}
-          allowsLinkPreview={false}
-          cacheEnabled
-          domStorageEnabled
-          javaScriptCanOpenWindowsAutomatically={false}
-          javaScriptEnabled
-          key={`prestige-admin-webview-${navigationKey}`}
-          mixedContentMode="never"
-          onError={() => setNotice("Prestige Limo Ops could not load. Check your secure connection and try again.")}
-          onHttpError={(event) => {
-            if (event.nativeEvent.statusCode >= 500) {
-              setNotice("Prestige Limo Ops is temporarily unavailable.");
-            }
-          }}
-          onMessage={(event) => {
-            if (event.nativeEvent.data.includes("admin-sign-out-failed")) {
-              setNotice("Sign out did not complete. Please try again.");
-            }
-          }}
-          onNavigationStateChange={updateNavigation}
-          onShouldStartLoadWithRequest={allowNavigation}
-          originWhitelist={["https://app.prestigelimo.sg"]}
-          pullToRefreshEnabled
-          ref={webViewRef}
-          setSupportMultipleWindows={false}
-          sharedCookiesEnabled
-          source={{ uri: currentUrl }}
-          style={styles.webView}
-          thirdPartyCookiesEnabled={false}
-        />
-      </SafeAreaView>
+      </View>
     </SafeAreaProvider>
   );
 }
@@ -270,18 +274,22 @@ const styles = StyleSheet.create({
   brandMarkText: { color: colors.gold, fontSize: 19, fontWeight: "800" },
   header: { alignItems: "center", backgroundColor: colors.white, borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: "row", minHeight: 52, paddingHorizontal: 12, paddingVertical: 6 },
   headerText: { flex: 1, marginLeft: 9 },
+  hiddenWebLayer: { opacity: 0 },
   lockedSafeArea: { alignItems: "center", backgroundColor: colors.background, flex: 1, justifyContent: "center", padding: 28 },
   lockedText: { color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 10, maxWidth: 330, textAlign: "center" },
   lockedTitle: { color: colors.ink, fontSize: 25, fontWeight: "700", marginTop: 18 },
   lockMark: { alignItems: "center", backgroundColor: colors.ink, borderRadius: 24, height: 88, justifyContent: "center", width: 88 },
   lockMarkText: { color: colors.gold, fontSize: 44, fontWeight: "800" },
+  lockOverlay: { ...StyleSheet.absoluteFill, backgroundColor: colors.background, zIndex: 10 },
   notice: { backgroundColor: "#fff8e7", borderBottomColor: "#e8d6a8", borderBottomWidth: 1, paddingHorizontal: 14, paddingVertical: 8 },
   noticeText: { color: "#6b4f16", fontSize: 12, lineHeight: 17 },
   primaryButton: { backgroundColor: colors.ink, borderRadius: 10, marginTop: 24, paddingHorizontal: 22, paddingVertical: 12 },
   primaryButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  root: { backgroundColor: colors.background, flex: 1 },
   safeArea: { backgroundColor: colors.white, flex: 1 },
   signOutButton: { borderColor: colors.border, borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 7 },
   signOutButtonText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   subtitle: { color: colors.muted, fontSize: 11, marginTop: 1 },
+  webLayer: { flex: 1 },
   webView: { backgroundColor: colors.background, flex: 1 },
 });

@@ -458,6 +458,10 @@ const guardChecks = [
     script: "scripts/test-admin-companion-foundation-guard.mjs",
   },
   {
+    label: "Admin iPhone companion background OTP preservation guard",
+    script: "scripts/test-admin-companion-background-otp-preservation-guard.mjs",
+  },
+  {
     label: "Customer iPhone companion foundation guard",
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },

@@ -55,6 +55,11 @@ input {
 ) :where(button, a).border-stone-300 {
   border-color: #94a3b8;
 }
+
+[data-customer-portal-page="true"]
+  :where([data-customer-portal-row], [data-customer-portal-detail]) {
+  border-color: #94a3b8;
+}
 /* END three-app thin neutral border contrast */
 
 .admin-ops-shell {

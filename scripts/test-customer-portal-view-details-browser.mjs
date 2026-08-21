@@ -210,10 +210,21 @@ async function main() {
     const initialState = await evaluate(`(() => {
       const rows = [...document.querySelectorAll("[data-customer-portal-row]")];
       const targetButton = document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]');
+      const targetRow = rows.find((row) => row.contains(targetButton));
+      const targetRowStyle = targetRow ? window.getComputedStyle(targetRow) : null;
       return {
         detailCount: document.querySelectorAll("[data-customer-portal-detail]").length,
         documentWidth: document.documentElement.scrollWidth,
         rowCount: rows.length,
+        rowBorderColor: targetRowStyle?.borderTopColor || "",
+        rowBorderWidths: targetRowStyle
+          ? [
+              targetRowStyle.borderTopWidth,
+              targetRowStyle.borderRightWidth,
+              targetRowStyle.borderBottomWidth,
+              targetRowStyle.borderLeftWidth,
+            ]
+          : [],
         targetButtonText: targetButton?.textContent?.trim() || "",
         targetIsNonFinal: rows.findIndex((row) => row.contains(targetButton)) < rows.length - 1,
         viewportWidth: document.documentElement.clientWidth,
@@ -224,6 +235,8 @@ async function main() {
       detailCount: 0,
       documentWidth: 390,
       rowCount: 10,
+      rowBorderColor: "rgb(148, 163, 184)",
+      rowBorderWidths: ["1px", "1px", "1px", "1px"],
       targetButtonText: "View details",
       targetIsNonFinal: true,
       viewportWidth: 390,
@@ -246,6 +259,7 @@ async function main() {
           const detail = document.querySelector('[data-customer-portal-detail="${targetBookingId}"]');
           const rect = detail?.getBoundingClientRect();
           const button = document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]');
+          const detailStyle = detail ? window.getComputedStyle(detail) : null;
 
           if (!detail || button?.textContent?.trim() !== "Hide details") {
             return false;
@@ -258,6 +272,15 @@ async function main() {
             detailHasTracking: Boolean(
               detail.querySelector("[data-customer-portal-driver-tracking]"),
             ),
+            detailBorderColor: detailStyle?.borderTopColor || "",
+            detailBorderWidths: detailStyle
+              ? [
+                  detailStyle.borderTopWidth,
+                  detailStyle.borderRightWidth,
+                  detailStyle.borderBottomWidth,
+                  detailStyle.borderLeftWidth,
+                ]
+              : [],
             detailText: detail.innerText,
             detailVisibleInViewport: Boolean(
               rect && rect.bottom > 0 && rect.top < window.innerHeight
@@ -277,6 +300,8 @@ async function main() {
       "Manual View details must bring the existing exact detail panel into the viewport",
     );
     assert.equal(expandedState.targetButtonText, "Hide details");
+    assert.equal(expandedState.detailBorderColor, "rgb(148, 163, 184)");
+    assert.deepEqual(expandedState.detailBorderWidths, ["1px", "1px", "1px", "1px"]);
     assert.equal(expandedState.detailText.includes("Booking Details"), true);
     assert.equal(expandedState.detailText.includes("Driver Tracking"), true);
     assert.equal(expandedState.detailText.includes("Trip Updates"), true);
@@ -345,16 +370,37 @@ async function main() {
             const detail = document.querySelector('[data-customer-portal-detail="${targetBookingId}"]');
             const rect = detail?.getBoundingClientRect();
             const button = document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]');
+            const row = button?.closest("[data-customer-portal-row]");
+            const detailStyle = detail ? window.getComputedStyle(detail) : null;
+            const rowStyle = row ? window.getComputedStyle(row) : null;
 
             if (!detail || button?.textContent?.trim() !== "Hide details") {
               return false;
             }
 
             return {
+              detailBorderColor: detailStyle?.borderTopColor || "",
+              detailBorderWidths: detailStyle
+                ? [
+                    detailStyle.borderTopWidth,
+                    detailStyle.borderRightWidth,
+                    detailStyle.borderBottomWidth,
+                    detailStyle.borderLeftWidth,
+                  ]
+                : [],
               detailVisibleInViewport: Boolean(
                 rect && rect.bottom > 0 && rect.top < window.innerHeight
               ),
               documentWidth: document.documentElement.scrollWidth,
+              rowBorderColor: rowStyle?.borderTopColor || "",
+              rowBorderWidths: rowStyle
+                ? [
+                    rowStyle.borderTopWidth,
+                    rowStyle.borderRightWidth,
+                    rowStyle.borderBottomWidth,
+                    rowStyle.borderLeftWidth,
+                  ]
+                : [],
               viewportWidth: document.documentElement.clientWidth,
             };
           })()`),
@@ -362,7 +408,11 @@ async function main() {
         `${viewport.width}px expanded Customer detail panel`,
       );
       assert.equal(viewportState.detailVisibleInViewport, true);
+      assert.equal(viewportState.detailBorderColor, "rgb(148, 163, 184)");
+      assert.deepEqual(viewportState.detailBorderWidths, ["1px", "1px", "1px", "1px"]);
       assert.equal(viewportState.documentWidth, viewportState.viewportWidth);
+      assert.equal(viewportState.rowBorderColor, "rgb(148, 163, 184)");
+      assert.deepEqual(viewportState.rowBorderWidths, ["1px", "1px", "1px", "1px"]);
       await evaluate(
         `document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]').click()`,
       );

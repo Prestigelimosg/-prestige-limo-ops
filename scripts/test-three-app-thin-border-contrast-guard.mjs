@@ -69,6 +69,19 @@ const contractMatch = source.globals.match(
 assert.ok(contractMatch, "The three-app border contract must remain explicitly scoped");
 const borderContract = contractMatch[1];
 
+const customerBookingSurfaceContrastMatch = borderContract.match(
+  /\[data-customer-portal-page="true"\]\s*:where\(\[data-customer-portal-row\],\s*\[data-customer-portal-detail\]\)\s*\{([\s\S]*?)\}/,
+);
+assert.ok(
+  customerBookingSurfaceContrastMatch,
+  "The Customer portal booking-row and detail-panel contrast override must remain explicitly scoped",
+);
+assert.equal(
+  customerBookingSurfaceContrastMatch[1].trim(),
+  "border-color: #94a3b8;",
+  "The Customer booking surface override must change only the established border color",
+);
+
 for (const phrase of [
   ".admin-ops-shell",
   '[data-customer-booking-page="true"]',

@@ -56,13 +56,13 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "1");
+assert.equal(config.ios.buildNumber, "2");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
-assert.equal(
-  Object.hasOwn(config.ios, "associatedDomains"),
-  false,
-  "Universal Links must wait for a separately approved domain-association change",
+assert.deepEqual(
+  config.ios.associatedDomains,
+  ["applinks:app.prestigelimo.sg"],
+  "The Customer app must keep only its exact approved Universal Link host",
 );
 assert.equal(config.icon, "./assets/app-icon.png");
 assert.equal(config.ios.icon, "./assets/app-icon.png");
@@ -181,6 +181,8 @@ for (const phrase of [
   "the exact centered gold text `SG`",
   "`@prestige-limo-ops/prestige-customer`",
   "`ce71ff91-7f71-4297-bcef-edf420f94316`",
+  "Customer iOS Universal Link Build 2 Source Repair",
+  "`/api/customer-portal-access/*`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

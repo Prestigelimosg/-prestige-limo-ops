@@ -462,6 +462,10 @@ const guardChecks = [
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },
   {
+    label: "Customer Companion iOS Universal Link association guard",
+    script: "scripts/test-customer-companion-ios-universal-link-association-guard.mjs",
+  },
+  {
     label: "three-app thin neutral border contrast guard",
     script: "scripts/test-three-app-thin-border-contrast-guard.mjs",
   },

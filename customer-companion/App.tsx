@@ -21,6 +21,7 @@ import prestigeIcon from "./assets/icon.png";
 import {
   customerTabForUrl,
   customerTabUrl,
+  customerUniversalLinkUrl,
   isAllowedNativeContactUrl,
   shouldAllowCustomerWebViewNavigation,
   type CustomerTab,
@@ -42,18 +43,37 @@ export default function App() {
   const [unlockState, setUnlockState] = useState<UnlockState>("checking");
   const [notice, setNotice] = useState("");
   const biometricPromptBusyRef = useRef(false);
+  const pendingCustomerUniversalLinkRef = useRef<string | null>(null);
+  const unlockStateRef = useRef<UnlockState>("checking");
+
+  const openCustomerUniversalLink = useCallback((safeUrl: string) => {
+    pendingCustomerUniversalLinkRef.current = null;
+    setActiveTab("bookings");
+    setCurrentUrl(safeUrl);
+    setNotice("");
+  }, []);
+
+  const setCustomerUnlockState = useCallback((nextState: UnlockState) => {
+    unlockStateRef.current = nextState;
+    setUnlockState(nextState);
+
+    const pendingUrl = pendingCustomerUniversalLinkRef.current;
+    if (nextState === "ready" && pendingUrl) {
+      openCustomerUniversalLink(pendingUrl);
+    }
+  }, [openCustomerUniversalLink]);
 
   const unlockCustomerApp = useCallback(async () => {
     if (biometricPromptBusyRef.current) return;
     biometricPromptBusyRef.current = true;
-    setUnlockState("checking");
+    setCustomerUnlockState("checking");
     try {
       const unlocked = await authenticateCustomerAppUnlock().catch(() => false);
-      setUnlockState(unlocked ? "ready" : "locked");
+      setCustomerUnlockState(unlocked ? "ready" : "locked");
     } finally {
       biometricPromptBusyRef.current = false;
     }
-  }, []);
+  }, [setCustomerUnlockState]);
 
   useEffect(() => {
     let mounted = true;
@@ -68,19 +88,47 @@ export default function App() {
       setBiometricAvailable(available);
       setBiometricEnabled(enabled);
       if (!enabled) {
-        setUnlockState("ready");
+        setCustomerUnlockState("ready");
         return;
       }
 
       biometricPromptBusyRef.current = true;
       const unlocked = await authenticateCustomerAppUnlock().catch(() => false);
       biometricPromptBusyRef.current = false;
-      if (mounted) setUnlockState(unlocked ? "ready" : "locked");
+      if (mounted) setCustomerUnlockState(unlocked ? "ready" : "locked");
     }
 
     void preparePrivacyLock();
     return () => { mounted = false; };
-  }, []);
+  }, [setCustomerUnlockState]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    function queueCustomerUniversalLink(value: string | null) {
+      if (!mounted || !value) return;
+      const safeUrl = customerUniversalLinkUrl(value);
+      if (!safeUrl) return;
+
+      if (unlockStateRef.current === "ready") {
+        openCustomerUniversalLink(safeUrl);
+      } else {
+        pendingCustomerUniversalLinkRef.current = safeUrl;
+      }
+    }
+
+    void Linking.getInitialURL()
+      .then(queueCustomerUniversalLink)
+      .catch(() => undefined);
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      queueCustomerUniversalLink(url);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [openCustomerUniversalLink]);
 
   useEffect(() => {
     let previousState = AppState.currentState;
@@ -89,14 +137,14 @@ export default function App() {
       previousState = nextState;
 
       if (nextState !== "active" && biometricEnabled) {
-        setUnlockState("locked");
+        setCustomerUnlockState("locked");
       }
       if (returning && biometricEnabled) {
         void unlockCustomerApp();
       }
     });
     return () => subscription.remove();
-  }, [biometricEnabled, unlockCustomerApp]);
+  }, [biometricEnabled, setCustomerUnlockState, unlockCustomerApp]);
 
   const enableFaceId = useCallback(async () => {
     const enabled = await enableCustomerBiometricUnlock().catch(() => false);
@@ -105,9 +153,9 @@ export default function App() {
       return;
     }
     setBiometricEnabled(true);
-    setUnlockState("ready");
+    setCustomerUnlockState("ready");
     setNotice("Face ID is now protecting Prestige SG on this iPhone.");
-  }, []);
+  }, [setCustomerUnlockState]);
 
   const selectTab = useCallback((tab: CustomerTab) => {
     setActiveTab(tab);

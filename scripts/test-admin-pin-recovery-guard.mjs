@@ -158,7 +158,7 @@ try {
     };
   }
   function mockAuth(options = {}) {
-    const calls = { sessions: [], signedOut: 0, updates: [] };
+    const calls = { passwordChecks: [], sessions: [], signedOut: 0, updates: [] };
     return {
       calls,
       async setSession(input) {
@@ -179,6 +179,20 @@ try {
       },
       async signOut() {
         calls.signedOut += 1;
+      },
+      async signInWithPassword(input) {
+        calls.passwordChecks.push(input);
+        return options.passwordError
+          ? { data: { user: null }, error: {} }
+          : {
+              data: {
+                user: {
+                  email: owner.auth_email,
+                  id: options.passwordUserId || owner.auth_user_id,
+                },
+              },
+              error: null,
+            };
       },
       async updateUser(input) {
         calls.updates.push(input);
@@ -212,6 +226,10 @@ try {
     refresh_token: shortRefreshToken,
   }], "Recovery tokens must reach setSession byte-for-byte");
   assert.deepEqual(successfulAuth.calls.updates, [{ password: "246810" }]);
+  assert.deepEqual(successfulAuth.calls.passwordChecks, [{
+    email: owner.auth_email,
+    password: "246810",
+  }], "Recovery must canary the exact in-memory PIN with a fresh password grant");
   assert.equal(successfulAuth.calls.signedOut, 1, "The temporary recovery session must be discarded");
 
   for (const invalid of [
@@ -231,6 +249,7 @@ try {
     assert.equal(result.reason, "invalid_recovery");
     assert.equal(auth.calls.sessions.length, 0, "Invalid token bounds must fail before Supabase Auth");
     assert.equal(auth.calls.updates.length, 0, "Invalid token bounds must never update a password");
+    assert.equal(auth.calls.passwordChecks.length, 0, "Invalid token bounds must never run a password canary");
   }
 
   const wrongMappingAuth = mockAuth();
@@ -244,7 +263,27 @@ try {
   });
   assert.equal(wrongMapping.reason, "invalid_recovery");
   assert.equal(wrongMappingAuth.calls.updates.length, 0, "A non-owner mapping must block password update");
+  assert.equal(wrongMappingAuth.calls.passwordChecks.length, 0, "A non-owner mapping must block the password canary");
   assert.equal(wrongMappingAuth.calls.signedOut, 1, "A rejected recovery session must be discarded");
+
+  for (const options of [
+    { passwordError: true },
+    { passwordUserId: "33333333-3333-4333-8333-333333333333" },
+  ]) {
+    const auth = mockAuth(options);
+    const result = await runtime.resetAdminAccountPinFromRecovery({
+      accessToken,
+      auth,
+      client: mockClient([owner]),
+      env,
+      pin: "246810",
+      refreshToken: shortRefreshToken,
+    });
+    assert.equal(result.reason, "invalid_recovery");
+    assert.equal(auth.calls.updates.length, 1, "The exact Owner password update must precede its canary");
+    assert.equal(auth.calls.passwordChecks.length, 1, "A recovery update must run exactly one password canary");
+    assert.equal(auth.calls.signedOut, 1, "A failed password canary must discard its temporary session");
+  }
 } finally {
   await rm(tempDir, { force: true, recursive: true });
 }

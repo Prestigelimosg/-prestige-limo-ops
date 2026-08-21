@@ -12,6 +12,12 @@ f13d784b Merge PR #331: Restore compact Customer Account width
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Booking Card And Detail Thin Border Contrast Repair (2026-08-21)
+
+- Physical light-mode Customer inspection proved the existing My Bookings card and expanded-detail outlines remained lighter than the already-established outlined controls. The bounded repair changes only the border color of the existing exact `[data-customer-portal-row]` and `[data-customer-portal-detail]` elements to slate `400` (`#94a3b8`) beneath the existing Customer portal root; their established one-pixel width, radius, padding, dimensions, spacing, layout, content, and behavior remain unchanged.
+- The selector does not include Customer search or buttons, invoice containers, the public `/book` page, Admin, Driver, native shells, colored status panels, or any other surface. View/Hide details, manual viewport handoff, booking list/search/filter/pagination, Driver Details, Tracking, Trip Updates, alerts, Edit/Cancel review requests, quick replies, invoices, Customer session and PA-private scope, routes, APIs, persistence, and every writer remain unchanged.
+- Focused protection extends `scripts/test-three-app-thin-border-contrast-guard.mjs` and `scripts/test-customer-portal-view-details-browser.mjs`. The static guard requires the exact color-only scoped rule and rejects geometry changes; the intercepted light-mode browser check requires one-pixel `#94a3b8` row/detail borders at 390px, 430px, and 440px while preserving View/Hide details, viewport containment, zero console/runtime errors, and zero writer requests.
+
 ### Customer My Bookings Manual Detail Viewport Handoff Repair (2026-08-21)
 
 - Physical Customer Build 2 verification on the owner's mirrored iPhone reproduced that tapping `View details` on a non-final booking changed the exact control to `Hide details`, but the user remained at the booking row and saw no detail. Complete-path tracing proved the existing single expanded `Booking Details` and `Driver Tracking` panel renders after the complete visible booking list, so it was below the phone viewport; the manual expansion handler had no viewport handoff. The generic detail and Trip Updates content correctly exist even when confirmed Driver Details are not yet available.

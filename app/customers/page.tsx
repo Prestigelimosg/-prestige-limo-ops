@@ -8051,10 +8051,10 @@ export default function MockCustomerDashboardPage() {
 
         {!selectedCustomerWorkspaceOpen ? (
           <section
-            className="rounded-lg border border-sky-300 border-l-8 bg-sky-50 shadow-sm"
+            className="rounded-lg border border-slate-300 bg-white shadow-sm"
             data-customer-billing-overview="true"
           >
-          <div className="border-b border-slate-200 p-4 sm:p-5">
+          <div className="border-b border-slate-300 p-4 sm:p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-950">Customer Billing Overview</h2>
@@ -8134,14 +8134,14 @@ export default function MockCustomerDashboardPage() {
             <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
               <thead className="text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="border-b border-slate-200 px-3 py-2 font-bold">Customer Name</th>
-                  <th className="border-b border-slate-200 px-3 py-2 font-bold">Invoice Status</th>
-                  <th className="border-b border-slate-200 px-3 py-2 font-bold">Due / Latest Date</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">
+                  <th className="border-b border-slate-300 px-3 py-2 font-bold">Customer Name</th>
+                  <th className="border-b border-slate-300 px-3 py-2 font-bold">Invoice Status</th>
+                  <th className="border-b border-slate-300 px-3 py-2 font-bold">Due / Latest Date</th>
+                  <th className="border-b border-slate-300 px-3 py-2 text-right font-bold">
                     Invoice Amount
                   </th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">Balance</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-right font-bold">Jobs</th>
+                  <th className="border-b border-slate-300 px-3 py-2 text-right font-bold">Balance</th>
+                  <th className="border-b border-slate-300 px-3 py-2 text-right font-bold">Jobs</th>
                 </tr>
               </thead>
               <tbody>
@@ -8152,7 +8152,7 @@ export default function MockCustomerDashboardPage() {
                       data-customer-billing-overview-row={row.customerFolderKey}
                       key={row.customerFolderKey}
                     >
-                      <td className="border-b border-slate-100 px-3 py-3">
+                      <td className="border-b border-slate-300 px-3 py-3">
                         <Link
                           className="text-left font-bold text-slate-950 underline-offset-4 transition hover:text-sky-700 hover:underline"
                           data-customer-billing-overview-open={row.customerFolderKey}
@@ -8162,7 +8162,7 @@ export default function MockCustomerDashboardPage() {
                         </Link>
                         <p className="mt-1 text-xs text-slate-500">{row.customerId}</p>
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3">
+                      <td className="border-b border-slate-300 px-3 py-3">
                         <span
                           className={`inline-flex min-h-7 items-center rounded-md border px-2 text-xs font-bold ${
                             row.statusLabel === "Draft"
@@ -8182,16 +8182,16 @@ export default function MockCustomerDashboardPage() {
                           {row.invoiceCount} invoice{row.invoiceCount === 1 ? "" : "s"}
                         </p>
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 font-semibold text-slate-700">
+                      <td className="border-b border-slate-300 px-3 py-3 font-semibold text-slate-700">
                         {row.latestDateLabel}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-right font-semibold text-slate-900">
+                      <td className="border-b border-slate-300 px-3 py-3 text-right font-semibold text-slate-900">
                         {row.invoiceAmountLabel}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-right font-bold text-slate-950">
+                      <td className="border-b border-slate-300 px-3 py-3 text-right font-bold text-slate-950">
                         {row.balanceLabel}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-right text-xs font-bold text-slate-600">
+                      <td className="border-b border-slate-300 px-3 py-3 text-right text-xs font-bold text-slate-600">
                         {row.readyJobCount > 0 ? `${row.readyJobCount} ready` : ""}
                       </td>
                     </tr>
@@ -9147,7 +9147,7 @@ export default function MockCustomerDashboardPage() {
             className={
               plainInvoiceSelectedJobReviewActive
                 ? "bg-transparent"
-                : "rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"
+                : "rounded-lg border border-slate-300 bg-white shadow-sm"
             }
             data-customer-billing-workbench-drawer="true"
             open={
@@ -9174,7 +9174,7 @@ export default function MockCustomerDashboardPage() {
             className={
               plainInvoiceSelectedJobReviewActive
                 ? "grid gap-3"
-                : "grid gap-4 border-t border-slate-200 p-4 sm:p-5"
+                : "grid gap-4 border-t border-slate-300 p-4 sm:p-5"
             }
             data-customer-billing-workbench-contents="true"
           >

@@ -218,9 +218,19 @@ export async function resetAdminAccountPinFromRecovery(input: {
     }
 
     const updated = await clients.auth.updateUser({ password: pin });
-    return !updated.error &&
-      text(updated.data?.user?.id) === authUserId &&
-      text(updated.data?.user?.email).toLowerCase() === adminAccountSignInEmail
+    if (
+      updated.error ||
+      text(updated.data?.user?.id) !== authUserId ||
+      text(updated.data?.user?.email).toLowerCase() !== adminAccountSignInEmail
+    ) {
+      return { ok: false, reason: "invalid_recovery" };
+    }
+
+    const verifiedPin = await clients.auth.signInWithPassword({
+      email: adminAccountSignInEmail,
+      password: pin,
+    });
+    return !verifiedPin.error && text(verifiedPin.data?.user?.id) === authUserId
       ? { ok: true }
       : { ok: false, reason: "invalid_recovery" };
   } finally {

@@ -98,13 +98,33 @@ for (const fragment of [
   "Prepare monthly invoice",
   "Send Invoice Workbench",
   "Customers & Invoices",
-  'className="rounded-lg border border-sky-300 border-l-8 bg-sky-50 shadow-sm"',
+  'className="rounded-lg border border-slate-300 bg-white shadow-sm"',
   'className="rounded-lg border border-emerald-300 border-l-8 bg-emerald-50 shadow-sm"',
-  '"rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"',
+  '"rounded-lg border border-slate-300 bg-white shadow-sm"',
   "plainInvoiceSelectedJobReviewActive",
   'data-selected-job-invoice-actions="true"',
 ]) {
   assertIncludes(customersPage, fragment, `customers invoice workspace fragment ${fragment}`);
+}
+
+for (const fragment of [
+  '<div className="border-b border-slate-300 p-4 sm:p-5">',
+  '<th className="border-b border-slate-300 px-3 py-2 font-bold">Customer Name</th>',
+  '<td className="border-b border-slate-300 px-3 py-3">',
+  ': "grid gap-4 border-t border-slate-300 p-4 sm:p-5"',
+]) {
+  assertIncludes(customersPage, fragment, `neutral overview separator fragment ${fragment}`);
+}
+
+for (const retiredDecorativeClass of [
+  'className="rounded-lg border border-sky-300 border-l-8 bg-sky-50 shadow-sm"',
+  '"rounded-lg border border-violet-300 border-l-8 bg-violet-50 shadow-sm"',
+]) {
+  assert.equal(
+    customersPage.includes(retiredDecorativeClass),
+    false,
+    `Customers invoice workspace must retire decorative wrapper ${retiredDecorativeClass}.`,
+  );
 }
 
 assertIncludes(

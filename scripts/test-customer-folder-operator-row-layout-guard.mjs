@@ -80,6 +80,15 @@ assertIncludes(
   "border-b border-slate-300 bg-slate-50 px-4 py-3",
   "light total invoices structural header",
 );
+for (const fragment of [
+  'border-b border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600',
+  'className={`border-b border-slate-300 last:border-b-0 ${',
+  'className="border-t border-slate-300 bg-slate-50 px-4 py-4"',
+  'className="mt-3 overflow-x-auto rounded-md border border-slate-300 bg-white"',
+  'className="border-b border-slate-300 last:border-b-0"',
+]) {
+  assertIncludes(invoiceFolderPanel, fragment, `darker one-pixel invoice separator ${fragment}`);
+}
 assertIncludes(
   savedBookingsPanel,
   "sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-[0.12em] text-slate-600 shadow-sm",

@@ -1043,7 +1043,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
         </div>
       </div>
 
-      <p className="border-b border-slate-100 px-4 py-2 text-xs font-semibold text-slate-600">{storedInvoiceMessage}</p>
+      <p className="border-b border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600">{storedInvoiceMessage}</p>
 
       <div className="max-h-72 overflow-auto bg-white" data-customer-total-invoices-scroll="true">
         <table
@@ -1051,7 +1051,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           data-customer-invoice-folder-table="true"
         >
           <thead>
-            <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
+            <tr className="border-b border-slate-300 text-xs uppercase tracking-[0.14em] text-slate-500">
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Invoice number</th>
               <th className="px-4 py-3">Amount</th>
@@ -1080,7 +1080,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
 
               return (
                 <tr
-                  className={`border-b border-slate-100 last:border-b-0 ${
+                  className={`border-b border-slate-300 last:border-b-0 ${
                     selected ? "bg-sky-50/70" : "hover:bg-slate-50"
                   }`}
                   data-customer-invoice-folder-row={invoice.invoiceNumber}
@@ -1136,7 +1136,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
       </div>
 
       {selectedInvoice ? (
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-4" data-customer-invoice-folder-detail="true">
+        <div className="border-t border-slate-300 bg-slate-50 px-4 py-4" data-customer-invoice-folder-detail="true">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-base font-bold text-slate-950">{selectedInvoice.invoiceNumber} items</h3>
@@ -1150,12 +1150,12 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           </div>
 
           <div
-            className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white"
+            className="mt-3 overflow-x-auto rounded-md border border-slate-300 bg-white"
             data-customer-invoice-folder-selected-item-table={selectedInvoice.invoiceNumber}
           >
             <table className="w-full min-w-[680px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.14em] text-slate-500">
+                <tr className="border-b border-slate-300 text-xs uppercase tracking-[0.14em] text-slate-500">
                   <th className="px-4 py-3">No.</th>
                   <th className="px-4 py-3">Item description</th>
                   <th className="px-4 py-3 text-right">Amount</th>
@@ -1173,7 +1173,10 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                       },
                     ]
                 ).map((item, itemIndex) => (
-                  <tr key={`${selectedInvoice.invoiceNumber}-${itemIndex}`}>
+                  <tr
+                    className="border-b border-slate-300 last:border-b-0"
+                    key={`${selectedInvoice.invoiceNumber}-${itemIndex}`}
+                  >
                     <td className="px-4 py-4 font-bold text-slate-600">{itemIndex + 1}</td>
                     <td className="px-4 py-4 font-semibold leading-6 text-slate-900">
                       {item.description || "Invoice item description pending"}

@@ -121,7 +121,37 @@ async function main() {
           summary: { returned_count: 1 },
         };
       } else if (requestUrl.pathname === "/api/admin-customer-invoices") {
-        responseBody = { invoices: [], ok: true };
+        responseBody = {
+          invoices: [
+            {
+              amountCents: 7000,
+              amountLabel: "$70.00",
+              customerId,
+              customerName,
+              documentState: "issued",
+              documentType: "invoice",
+              invoiceNumber: "THEME-0002",
+              issueDateLabel: "05 Aug 2026",
+              lineItems: [{ amountLabel: "$70.00", description: "THEME TEST INVOICE ITEM 2" }],
+              reference: "theme-invoice-002",
+              status: "Paid",
+            },
+            {
+              amountCents: 7000,
+              amountLabel: "$70.00",
+              customerId,
+              customerName,
+              documentState: "issued",
+              documentType: "invoice",
+              invoiceNumber: "THEME-0001",
+              issueDateLabel: "04 Aug 2026",
+              lineItems: [{ amountLabel: "$70.00", description: "THEME TEST INVOICE ITEM 1" }],
+              reference: "theme-invoice-001",
+              status: "Paid",
+            },
+          ],
+          ok: true,
+        };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts") {
         responseBody = {
           accounts: [{
@@ -167,6 +197,11 @@ async function main() {
         10000,
         `${width}px intercepted pending booking reference`,
       );
+      await waitForCondition(
+        () => evaluate(`document.querySelectorAll('[data-customer-invoice-folder-row]').length === 2`),
+        10000,
+        `${width}px two intercepted invoice rows`,
+      );
 
       const state = await evaluate(`(() => {
         const tokenProbe = document.createElement('div');
@@ -195,15 +230,31 @@ async function main() {
         });
         const labels = sectors.map((element) => element.querySelector('p')?.textContent?.trim() || "");
         const invoiceHeader = document.querySelector('[data-customer-folder-sector="invoices"] > div');
+        const invoiceMessage = document.querySelector('[data-customer-folder-sector="invoices"] > p');
+        const invoiceRows = [...document.querySelectorAll('[data-customer-invoice-folder-row]')];
+        const invoiceTableHeader = document.querySelector('[data-customer-invoice-folder-table] thead tr');
+        const selectedItemHeader = document.querySelector('[data-customer-invoice-folder-selected-item-table] thead tr');
+        const selectedItemRows = [...document.querySelectorAll('[data-customer-invoice-folder-selected-item-table] tbody tr')];
         const pendingHeader = document.querySelector('[data-customer-folder-sector="unbilled-jobs"] thead');
         return {
           bodyBackground: getComputedStyle(document.querySelector('main')).backgroundColor,
           documentWidth: document.documentElement.scrollWidth,
           invoiceHeaderBackground: invoiceHeader ? getComputedStyle(invoiceHeader).backgroundColor : "",
           invoiceHeaderBorder: invoiceHeader ? getComputedStyle(invoiceHeader).borderBottomColor : "",
+          invoiceMessageBorder: invoiceMessage ? getComputedStyle(invoiceMessage).borderBottomColor : "",
+          invoiceRowBorders: invoiceRows.map((row) => ({
+            color: getComputedStyle(row).borderBottomColor,
+            width: getComputedStyle(row).borderBottomWidth,
+          })),
+          invoiceTableHeaderBorder: invoiceTableHeader ? getComputedStyle(invoiceTableHeader).borderBottomColor : "",
           labels,
           pendingHeaderBackground: pendingHeader ? getComputedStyle(pendingHeader).backgroundColor : "",
           pendingHeaderText: pendingHeader ? getComputedStyle(pendingHeader).color : "",
+          selectedItemHeaderBorder: selectedItemHeader ? getComputedStyle(selectedItemHeader).borderBottomColor : "",
+          selectedItemRowBorders: selectedItemRows.map((row) => ({
+            color: getComputedStyle(row).borderBottomColor,
+            width: getComputedStyle(row).borderBottomWidth,
+          })),
           sectorStyles,
           tokens: {
             slate300: tokenStyle.borderTopColor,
@@ -235,6 +286,17 @@ async function main() {
       ]);
       assert.equal(state.invoiceHeaderBackground, state.pendingHeaderBackground);
       assert.equal(state.invoiceHeaderBorder, state.tokens.slate300);
+      assert.equal(state.invoiceMessageBorder, state.tokens.slate300);
+      assert.equal(state.invoiceTableHeaderBorder, state.tokens.slate300);
+      assert.deepEqual(state.invoiceRowBorders, [
+        { color: state.tokens.slate300, width: "1px" },
+        { color: state.tokens.slate300, width: "0px" },
+      ]);
+      assert.equal(state.selectedItemHeaderBorder, state.tokens.slate300);
+      assert.deepEqual(state.selectedItemRowBorders, [
+        { color: state.tokens.slate300, width: "0px" },
+      ]);
+
       assert.equal(state.pendingHeaderText, state.tokens.slate600);
       results.push({ width, ...state });
     }

@@ -2305,13 +2305,13 @@ export function CustomerFolderSavedBookingsPanel({
   return (
     <>
     <section
-      className="rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md"
+      className="rounded-xl border border-slate-300 bg-white p-4 shadow-md"
       data-customer-folder-saved-bookings={customerId}
       data-customer-folder-sector="unbilled-jobs"
     >
       <div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
             3 · Pending jobs for payment
           </p>
           <h2
@@ -2358,11 +2358,11 @@ export function CustomerFolderSavedBookingsPanel({
             </span>
           </div>
           <div
-            className="max-h-[32rem] overflow-x-auto overflow-y-auto rounded-lg border border-amber-300 bg-white shadow-inner"
+            className="max-h-[32rem] overflow-x-auto overflow-y-auto rounded-lg border border-slate-300 bg-white shadow-inner"
             data-customer-folder-unbilled-scroll="true"
           >
           <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-amber-100 text-[11px] uppercase tracking-[0.12em] text-amber-950 shadow-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-[0.12em] text-slate-600 shadow-sm">
               <tr>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Select</th>
                 <th className="border-b border-slate-200 px-3 py-2 font-bold">Booking</th>
@@ -2777,13 +2777,13 @@ export function CustomerFolderSavedBookingsPanel({
       ) : null}
     </section>
       <section
-            className="rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md"
+            className="rounded-xl border border-slate-300 bg-white p-4 shadow-md"
             data-customer-folder-sector="invoice-review"
             data-customer-folder-selected-invoice-layout="true"
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
                   4 · Selected jobs invoice review
                 </p>
                 <h3 className="mt-1 text-lg font-bold text-slate-950">Customer invoice layout</h3>

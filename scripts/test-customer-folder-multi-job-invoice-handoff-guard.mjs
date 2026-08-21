@@ -58,7 +58,7 @@ for (const fragment of [
 
 includes(folderShell, 'data-customer-folder-sector="profile"', "profile sector marker");
 includes(folderShell, "1 · Customer profile &amp; invoice prefix", "profile sector label");
-includes(folderShell, "bg-slate-950", "classic black customer folder background");
+includes(folderShell, "min-h-screen bg-stone-50", "light customer folder background");
 includes(
   appSmoke,
   '"[data-customer-folder-sector=\'profile\']"',

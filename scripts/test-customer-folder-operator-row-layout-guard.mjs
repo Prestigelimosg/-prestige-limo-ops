@@ -56,23 +56,53 @@ for (const fragment of [
 
 assertIncludes(
   page,
-  "rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md",
-  "classic black-and-gold customer profile sector",
+  "rounded-xl border border-slate-300 bg-white p-4 shadow-md",
+  "light customer profile sector",
 );
 assertIncludes(
   invoiceFolderPanel,
-  "overflow-hidden rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 shadow-md",
-  "classic black-and-gold total invoices sector",
+  "overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md",
+  "light total invoices sector",
 );
 assertIncludes(
   savedBookingsPanel,
-  "rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md",
-  "classic black-and-gold saved bookings sector",
+  "rounded-xl border border-slate-300 bg-white p-4 shadow-md",
+  "light saved bookings sector",
 );
 assertIncludes(
   savedBookingsPanel,
-  "rounded-xl border border-amber-500 border-l-[12px] border-t-8 border-t-slate-950 bg-amber-50 p-4 shadow-md",
-  "classic black-and-gold selected invoice review sector",
+  "rounded-xl border border-slate-300 bg-white p-4 shadow-md",
+  "light selected invoice review sector",
+);
+assertIncludes(page, "min-h-screen bg-stone-50", "light customer folder page surface");
+assertIncludes(
+  invoiceFolderPanel,
+  "border-b border-slate-300 bg-slate-50 px-4 py-3",
+  "light total invoices structural header",
+);
+assertIncludes(
+  savedBookingsPanel,
+  "sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-[0.12em] text-slate-600 shadow-sm",
+  "light pending-jobs structural table header",
+);
+for (const source of [page, invoiceFolderPanel, savedBookingsPanel]) {
+  for (const retiredStructuralClass of ["border-l-[12px]", "border-t-8", "border-t-slate-950"]) {
+    assert.equal(
+      source.includes(retiredStructuralClass),
+      false,
+      `Customer folder structural surfaces must not retain ${retiredStructuralClass}.`,
+    );
+  }
+}
+assertIncludes(
+  invoiceFolderPanel,
+  "rounded-md border border-amber-400 bg-amber-50",
+  "semantic issued-invoice edit state",
+);
+assertIncludes(
+  savedBookingsPanel,
+  '"border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"',
+  "semantic pending-job review action state",
 );
 for (const fragment of [
   "data-customer-folder-saved-bookings-edit",

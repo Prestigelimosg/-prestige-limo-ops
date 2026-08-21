@@ -281,10 +281,10 @@ assertIncludes(
   "bookingRecordToAdminBookingPersistenceRecord(bookingRecord)",
   "selected booking legacy update-target source",
 );
-assertIncludes(
+assert.match(
   loadSelectedBookingBlock,
-  "markAdminBookingAsActiveForUpdates(bookingReference, loadedAdminBookingRecord)",
-  "selected booking active update target",
+  /markAdminBookingAsActiveForUpdates\(\s*bookingReference,\s*loadedAdminBookingRecord,\s*loadedBookingForm,?\s*\)/,
+  "selected booking active update target must retain the established record and form baseline",
 );
 for (const fragment of [
   "const bookingReference =",

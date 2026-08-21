@@ -132,7 +132,10 @@ function routeLocalCustomerFolderBoundary(request: Request): AdminDispatcherBoun
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
+  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose, {
+    additionalSameOriginRefererPathnames: ["/customers"],
+    additionalSameOriginRefererPathPrefixes: ["/customers/"],
+  });
 
   if (boundary.ok) {
     return {

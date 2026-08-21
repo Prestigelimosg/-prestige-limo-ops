@@ -132,7 +132,7 @@ for (const phrase of [
   "five digits, optionally preceded by the saved customer booking prefix",
   "The internal `booking_reference` remains the immutable server operation key",
   "`Save job details` reuses the established admin-only `PATCH /api/admin-bookings` writer",
-  "`Save price review` updates only the in-memory invoice-preparation review",
+  "The explicit `Save price review` action now persists only the exact reviewed amount on the exact unbilled booking through the existing guarded customer-invoice PATCH handoff",
   guardScript,
 ]) {
   includes(ledgerSection, phrase, `inline editor ledger phrase ${phrase}`);

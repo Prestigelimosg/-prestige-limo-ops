@@ -216,11 +216,15 @@ export async function GET(
   }
 
   const destination = new URL(`/driver-job/${encodeURIComponent(token)}`, request.url);
-  const response = Response.redirect(destination, 302);
-  response.headers.set("Cache-Control", "no-store");
-  response.headers.set("Referrer-Policy", "no-referrer");
-  response.headers.set("Vary", "Cookie, x-prestige-driver-installation-id");
-  return response;
+  return new Response(null, {
+    headers: {
+      "Cache-Control": "no-store",
+      Location: destination.toString(),
+      "Referrer-Policy": "no-referrer",
+      Vary: "Cookie, x-prestige-driver-installation-id",
+    },
+    status: 302,
+  });
 }
 
 export async function POST() {

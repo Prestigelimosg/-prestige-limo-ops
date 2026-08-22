@@ -15,6 +15,12 @@ const migrationName = readdirSync(join(root, "supabase/migrations"))
 assert.ok(migrationName, "Customer principal FK index migration must be created by Supabase CLI.");
 
 const migration = read(`supabase/migrations/${migrationName}`);
+const emailOtpMigrationName = readdirSync(join(root, "supabase/migrations"))
+  .filter((name) => name.endsWith("_customer_principal_email_otp_ip_limit.sql"))
+  .sort()
+  .at(-1);
+assert.ok(emailOtpMigrationName, "Customer principal email OTP IP limiter migration must exist.");
+const emailOtpMigration = read(`supabase/migrations/${emailOtpMigrationName}`);
 const executableStatements = migration
   .replace(/^\s*--.*$/gm, "")
   .split(";")
@@ -46,8 +52,8 @@ const access = read("lib/customer-principal-access.ts");
 const push = read("lib/customer-device-push-notification.ts");
 
 assert.match(
-  access,
-  /\.from\(challengeTable\)[\s\S]*?\.eq\("principal_id", principalId\)[\s\S]*?\.eq\("challenge_purpose", purpose\)[\s\S]*?\.gte\("created_at", challengeWindowStartedAt\)/,
+  emailOtpMigration,
+  /from public\.customer_access_email_challenges as challenge[\s\S]*?challenge\.principal_id = p_principal_id[\s\S]*?challenge\.challenge_purpose = p_challenge_purpose[\s\S]*?challenge\.created_at >= v_now - interval '15 minutes'/,
 );
 assert.match(
   access,

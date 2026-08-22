@@ -53,7 +53,7 @@ function sourceIpKey(request: Request) {
     request.headers.get("x-vercel-forwarded-for") ||
     request.headers.get("x-real-ip") ||
     request.headers.get("x-forwarded-for")?.split(",")[0] ||
-    "unavailable"
+    ""
   ).trim().slice(0, 256);
 }
 
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
     return responseFor(await startCustomerPrincipalEmailChallenge({
       ...body,
       purpose: action === "start_recovery" ? "forgot_pin" : action === "start_new_device" ? "new_device" : "activation",
+      requestIp: sourceIpKey(request),
     }));
   }
   if (action === "complete_activation") {

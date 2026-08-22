@@ -8,6 +8,7 @@ import {
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto";
+import { isIP } from "node:net";
 import { promisify } from "node:util";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -35,11 +36,17 @@ const deviceTable = "customer_access_devices";
 const sessionTable = "customer_access_device_sessions";
 const attemptTable = "customer_access_pin_attempts";
 const resendEmailApiUrl = "https://api.resend.com/emails";
+const reserveEmailChallengeRpc = "reserve_customer_principal_email_challenge";
 
 type PrincipalRole = "boss" | "pa";
 type MembershipRole = "boss" | "managing_pa";
 type EmailChallengePurpose = "activation" | "forgot_pin" | "new_device";
-type PrincipalClient = Pick<SupabaseClient, "from">;
+type PrincipalClient = Pick<SupabaseClient, "from" | "rpc">;
+
+type EmailChallengeConfig = {
+  apiKey: string;
+  from: string;
+};
 
 type PrincipalSessionPayload = {
   device_id: string;
@@ -154,6 +161,21 @@ function configValue(name: string) {
 
 function principalSessionSecret() {
   return configValue("PRESTIGE_CUSTOMER_PRINCIPAL_SESSION_SECRET");
+}
+
+function normalizedRequestIp(value: unknown) {
+  if (typeof value !== "string") return null;
+  const candidate = value.split(",")[0]?.trim().toLowerCase() || "";
+  return isIP(candidate) ? candidate : null;
+}
+
+function customerPrincipalEmailIpHash(value: unknown) {
+  const requestIp = normalizedRequestIp(value);
+  const secret = principalSessionSecret();
+  if (!requestIp || !secret) return null;
+  return createHmac("sha256", secret)
+    .update(`customer-principal-email-ip-v1:${requestIp}`)
+    .digest("hex");
 }
 
 function principalClient(): AdminBookingResult<PrincipalClient> {
@@ -509,23 +531,57 @@ function sixDigitOtp() {
   return String(Number.parseInt(randomBytes(4).toString("hex"), 16) % 1_000_000).padStart(6, "0");
 }
 
-async function sendEmailChallenge(email: string, code: string, purpose: EmailChallengePurpose) {
-  if (process.env.PRESTIGE_CUSTOMER_PRINCIPAL_EMAIL_OTP_ENABLED !== "true") return false;
+function emailChallengeConfig(): EmailChallengeConfig | null {
+  if (process.env.PRESTIGE_CUSTOMER_PRINCIPAL_EMAIL_OTP_ENABLED !== "true") return null;
   const apiKey = configValue("RESEND_API_KEY");
   const from = process.env.PRESTIGE_CUSTOMER_PRINCIPAL_EMAIL_FROM?.trim();
-  if (!apiKey || !from) return false;
-  const response = await fetch(resendEmailApiUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from,
-      subject: "Your Prestige SG verification code",
-      text: `Your Prestige SG verification code is ${code}. It expires in 10 minutes.`,
-      to: [email],
-      headers: { "X-Entity-Ref-ID": hashSecret(`${email}:${purpose}:${code}`) },
-    }),
+  const fromAddress = from?.match(/<([^<>]+)>$/)?.[1] || from;
+  if (!apiKey || !from || /[\r\n]/.test(from) || !normalizedEmail(fromAddress)) return null;
+  return { apiKey, from };
+}
+
+async function sendEmailChallenge(
+  email: string,
+  code: string,
+  purpose: EmailChallengePurpose,
+  config: EmailChallengeConfig,
+) {
+  try {
+    const response = await fetch(resendEmailApiUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: config.from,
+        subject: "Your Prestige SG verification code",
+        text: `Your Prestige SG verification code is ${code}. It expires in ${emailChallengeLifetimeSeconds / 60} minutes.`,
+        to: [email],
+        headers: { "X-Entity-Ref-ID": hashSecret(`${email}:${purpose}:${code}`) },
+      }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function reserveCustomerPrincipalEmailChallenge(
+  client: PrincipalClient,
+  principalId: string,
+  purpose: EmailChallengePurpose,
+  challengeHash: string,
+  requestIpHash: string,
+) {
+  const { data, error } = await client.rpc(reserveEmailChallengeRpc, {
+    p_challenge_hash: challengeHash,
+    p_challenge_purpose: purpose,
+    p_principal_id: principalId,
+    p_request_ip_hash: requestIpHash,
   });
-  return response.ok;
+  const row = asRecord(asArray(data)[0]);
+  if (error || typeof row.allowed !== "boolean") return null;
+  const challengeId = uuid(row.challenge_id);
+  if (row.allowed && !challengeId) return null;
+  return { allowed: row.allowed, challengeId };
 }
 
 export async function startCustomerPrincipalEmailChallenge(
@@ -573,41 +629,29 @@ export async function startCustomerPrincipalEmailChallenge(
   const targetEmail = normalizedEmail(asRecord(asArray(principalRows)[0]).normalized_email);
   if (!targetEmail) return principalFailure("Customer verification request is invalid.", 403);
 
-  const challengeWindowStartedAt = new Date(
-    Date.now() - customerPrincipalPinLockSeconds * 1000,
-  ).toISOString();
-  const { data: recentChallenges, error: recentChallengeError } = await clientResult.data
-    .from(challengeTable)
-    .select("id")
-    .eq("principal_id", principalId)
-    .eq("challenge_purpose", purpose)
-    .gte("created_at", challengeWindowStartedAt)
-    .is("used_at", null)
-    .limit(maxPinFailuresPerDeviceWindow);
-  if (recentChallengeError) {
-    return principalFailure("Customer verification request failed safely.", 500);
-  }
-  if (asArray(recentChallenges).length >= maxPinFailuresPerDeviceWindow) {
-    return principalFailure("Too many verification requests. Try again in 15 minutes.", 429);
-  }
-
-  const code = sixDigitOtp();
-  const expiresAt = new Date(Date.now() + emailChallengeLifetimeSeconds * 1000).toISOString();
-  const { data: challenge, error } = await clientResult.data
-    .from(challengeTable)
-    .insert({
-      challenge_hash: hashSecret(`${principalId}:${purpose}:${code}`),
-      challenge_purpose: purpose,
-      expires_at: expiresAt,
-      principal_id: principalId,
-    })
-    .select("id")
-    .single();
-  const challengeId = uuid(asRecord(challenge).id);
-  if (error || !challengeId || !(await sendEmailChallenge(targetEmail, code, purpose))) {
+  const emailConfig = emailChallengeConfig();
+  const requestIpHash = customerPrincipalEmailIpHash(body.requestIp);
+  if (!emailConfig || !requestIpHash) {
     return principalFailure("Customer verification email could not be sent.", 503);
   }
-  return { data: { challenge_id: challengeId, purpose }, ok: true };
+  const code = sixDigitOtp();
+  const reservation = await reserveCustomerPrincipalEmailChallenge(
+    clientResult.data,
+    principalId,
+    purpose,
+    hashSecret(`${principalId}:${purpose}:${code}`),
+    requestIpHash,
+  );
+  if (!reservation) {
+    return principalFailure("Customer verification request failed safely.", 503);
+  }
+  if (!reservation.allowed) {
+    return principalFailure("Too many verification requests. Try again in 15 minutes.", 429);
+  }
+  if (!reservation.challengeId || !(await sendEmailChallenge(targetEmail, code, purpose, emailConfig))) {
+    return principalFailure("Customer verification email could not be sent.", 503);
+  }
+  return { data: { challenge_id: reservation.challengeId, purpose }, ok: true };
 }
 
 function installationId(value: unknown) {

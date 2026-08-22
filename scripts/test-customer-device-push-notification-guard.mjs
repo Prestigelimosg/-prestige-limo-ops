@@ -278,6 +278,7 @@ assertIncludes(
 const tempDir = path.join(process.cwd(), ".tmp-customer-device-push-guard");
 const tempHelperPath = path.join(tempDir, "lib/customer-device-push-notification.js");
 const tempAccountPath = path.join(tempDir, "lib/customer-portal-access-account.js");
+const tempPrincipalPath = path.join(tempDir, "lib/customer-principal-access.js");
 
 await rm(tempDir, { force: true, recursive: true });
 await mkdir(path.dirname(tempHelperPath), { recursive: true });
@@ -288,6 +289,10 @@ await writeFile(
 await writeFile(
   tempAccountPath,
   'exports.assertActiveCustomerPortalAccessAccount = async () => ({ data: { customer_account_reference: "150" }, ok: true });\n',
+);
+await writeFile(
+  tempPrincipalPath,
+  'exports.assertActiveCustomerPrincipalSession = async () => ({ error: "not used by legacy push guard", ok: false, status: 403 });\n',
 );
 
 try {

@@ -44,7 +44,7 @@ const allowedApiRecordFields = [
 ];
 
 const allowedApiPayloadFields = ["ok", "pagination", "saved_bookings", "version"];
-const allowedQueryParams = ["booking_reference", "limit", "page"];
+const allowedQueryParams = ["booking_reference", "limit", "page", "traveler_id"];
 const allowedRowActions = ["cancel", "edit", "pdf"];
 const safeDetailLabels = [
   "Pickup date/time",
@@ -354,7 +354,7 @@ for (const fragment of [
   );
 }
 
-assert.equal(portalPage.split("fetch(").length - 1, 1, "/my-bookings exact direct fetch count");
+assert.equal(portalPage.split("fetch(").length - 1, 3, "/my-bookings exact direct fetch count");
 const customerQuickReplyBlock = blockBetween(
   portalPage,
   "async function sendCustomerDriverQuickReply",
@@ -362,7 +362,8 @@ const customerQuickReplyBlock = blockBetween(
 );
 for (const fragment of [
   'fetch("/api/customer-driver-quick-replies"',
-  "body: JSON.stringify({ booking_reference: bookingReference, template_key: templateKey })",
+  "client_message_id: clientMessageId",
+  "message_text: typedMessage",
   'credentials: "same-origin"',
   '"x-prestige-customer-purpose": "customer-driver-quick-reply"',
   'method: "POST"',
@@ -574,7 +575,9 @@ assertSameList(
   "customer portal adapter API payload fields",
 );
 for (const fragment of [
-  "fetcher(`${customerPortalSavedBookingsApiPath}?limit=25&page=1`",
+  'new URLSearchParams({ limit: "25", page: "1" })',
+  'params.set("traveler_id", String(travelerId))',
+  "fetcher(`${customerPortalSavedBookingsApiPath}?${params.toString()}`",
   'cache: "no-store"',
   'credentials: "same-origin"',
   '"x-prestige-customer-purpose": "customer-saved-bookings-read"',

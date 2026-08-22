@@ -5,6 +5,8 @@ export type CustomerTab = "book" | "bookings";
 const customerPagePaths = new Set([
   "/book",
   "/my-bookings",
+  "/customer-access/activate",
+  "/customer-access/sign-in",
 ]);
 const policyPaths = new Set([
   "/privacy",
@@ -67,11 +69,44 @@ function safeCustomerPortalUrl(requested: URL) {
   return safeUrl.toString();
 }
 
+function safeCustomerBookingUrl(requested: URL) {
+  if (requested.pathname !== "/my-bookings" || requested.hash) return null;
+  const keys = [...requested.searchParams.keys()];
+  if (keys.some((key) => key !== "booking" && key !== "tracking")) return null;
+  const booking = requested.searchParams.get("booking")?.trim().toUpperCase() || "";
+  if (!publicBookingReference.test(booking)) return null;
+  if (requested.searchParams.get("tracking") !== "1") return null;
+  const safe = new URL("/my-bookings", productionOrigin);
+  safe.searchParams.set("booking", booking);
+  safe.searchParams.set("tracking", "1");
+  return safe.toString();
+}
+
+function safeCustomerAccessUrl(requested: URL) {
+  if (requested.hash) return null;
+  if (requested.pathname === "/customer-access/activate") {
+    const invite = requested.searchParams.get("invite") || "";
+    return invite.length >= 40 && invite.length <= 4096 && [...requested.searchParams.keys()].every((key) => key === "invite")
+      ? requested.toString()
+      : null;
+  }
+  if (requested.pathname === "/customer-access/sign-in") {
+    const installation = requested.searchParams.get("installation") || "";
+    return /^customer-ios-[A-Za-z0-9-]{16,160}$/.test(installation) && [...requested.searchParams.keys()].every((key) => key === "installation")
+      ? requested.toString()
+      : null;
+  }
+  return null;
+}
+
 export function shouldAllowCustomerWebViewNavigation(requestedUrl: string) {
   const requested = parseProductionUrl(requestedUrl);
   if (!requested) return false;
 
-  if (customerPagePaths.has(requested.pathname)) return true;
+  if (customerPagePaths.has(requested.pathname)) {
+    if (!requested.search && !requested.hash) return true;
+    return safeCustomerBookingUrl(requested) !== null || safeCustomerAccessUrl(requested) !== null;
+  }
 
   if (
     policyPaths.has(requested.pathname) &&
@@ -89,7 +124,9 @@ export function shouldAllowCustomerWebViewNavigation(requestedUrl: string) {
 
 export function customerUniversalLinkUrl(value: string) {
   const requested = parseProductionUrl(value);
-  return requested ? safeCustomerPortalUrl(requested) : null;
+  return requested
+    ? safeCustomerPortalUrl(requested) || safeCustomerBookingUrl(requested) || safeCustomerAccessUrl(requested)
+    : null;
 }
 
 export function customerTabForUrl(value: string): CustomerTab | null {
@@ -99,7 +136,9 @@ export function customerTabForUrl(value: string): CustomerTab | null {
   if (requested.pathname === "/book") return "book";
   if (
     requested.pathname === "/my-bookings" ||
-    safeCustomerPortalUrl(requested) !== null
+    safeCustomerPortalUrl(requested) !== null ||
+    safeCustomerBookingUrl(requested) !== null ||
+    safeCustomerAccessUrl(requested) !== null
   ) {
     return "bookings";
   }

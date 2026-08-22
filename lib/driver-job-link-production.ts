@@ -272,6 +272,19 @@ export async function applyProductionDriverJobDetailsUpdate({
     // A saved acknowledgement must not fail because Admin device push is unavailable.
   }
 
+  try {
+    const { queueCustomerDriverDetailsReadyNotification } = await import(
+      "./customer-driver-app-notification-persistence.ts"
+    );
+    await queueCustomerDriverDetailsReadyNotification(
+      clientResult.client,
+      detailsResult.booking_reference,
+    );
+  } catch {
+    // Customer Copy/native alert fan-out is best-effort. A verified Driver
+    // Save & Acknowledge Job must remain persisted if notification delivery is unavailable.
+  }
+
   return {
     ...detailsResult,
     device_alerts: deviceAlerts,

@@ -348,6 +348,7 @@ assert.deepEqual(extractSetItems(customerSavedBookingsRead, "allowedQueryParams"
   "booking_reference",
   "limit",
   "page",
+  "traveler_id",
 ]);
 for (const fragment of [
   "includesForbiddenFragment(key)",

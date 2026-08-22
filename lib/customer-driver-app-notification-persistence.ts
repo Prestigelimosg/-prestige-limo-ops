@@ -28,6 +28,10 @@ import {
 } from "./driver-job-link-mode";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 import { sendDriverDevicePushAlertForAppUpdate } from "./driver-device-push-notification";
+import {
+  assertActiveCustomerPrincipalSession,
+  resolveCustomerPrincipalSessionToken,
+} from "./customer-principal-access";
 
 export const customerDriverAppNotificationPersistenceVersion =
   "stage-customer-driver-app-notification-api-v1";
@@ -215,12 +219,16 @@ type DriverLinkScope = {
 const notificationTable = "customer_driver_app_notification_outbox";
 const customerAccountSelect = "customer_account_reference, account_status";
 const bookingCustomerScopeSelect = "booking_reference, customer_id";
+const principalBookingScopeSelect =
+  "booking_reference, customer_id, company_id, booker_id, traveler_id";
 const driverJobLinkSelect = "id, booking_reference, link_status, expires_at, revoked_at";
 const driverJobStatusEventQuickReplySelect = "status_value, occurred_at";
 const notificationSelect =
   "id, notification_type, notification_status, priority, delivery_surface, event_key, booking_reference, driver_job_link_id, workflow_area, safe_title, safe_message, safe_context, source_surface, actor_role, actor_label, created_at, updated_at";
 const customerInAppNotificationReadSelect =
   "notification_type, notification_status, priority, delivery_surface, booking_reference, workflow_area, safe_title, safe_message, safe_context, created_at, updated_at";
+const customerSharedConversationReadSelect =
+  `${customerInAppNotificationReadSelect}, actor_role`;
 const defaultNotificationLimit = 25;
 const defaultCustomerInAppNotificationReadLimit = 5;
 const maxCustomerInAppNotificationReadLimit = 10;
@@ -1226,7 +1234,8 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   auth_user_id: string;
   booking_reference: string;
   customer_account_reference?: string | null;
-  mode: "server-session-cookie" | "server-session-token";
+  mode: "principal-device-session" | "server-session-cookie" | "server-session-token";
+  principal_session_token?: string | null;
   portal_link_issued_at?: number | null;
   portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
@@ -1283,6 +1292,20 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   }
 
   const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  const principalSession = resolveCustomerPrincipalSessionToken(providedToken.token);
+  if (principalSession) {
+    return {
+      data: {
+        auth_user_id: principalSession.principal_id,
+        booking_reference: bookingReference,
+        mode: "principal-device-session",
+        principal_session_token: providedToken.token,
+        runtime_gate: runtimeGate,
+      },
+      ok: true,
+    };
+  }
 
   if (isCustomerPortalAccessToken(providedToken.token)) {
     const portalAccessSession = resolveCustomerPortalAccessSession(
@@ -1394,10 +1417,11 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
 ): AdminBookingResult<{
   auth_user_id: string;
   booking_reference: string;
-  customer_account_reference: string;
-  mode: "server-session-cookie";
-  portal_link_issued_at: number;
-  portal_link_revision: string | null;
+  customer_account_reference?: string | null;
+  mode: "principal-device-session" | "server-session-cookie";
+  principal_session_token?: string | null;
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
 }> {
   const requestUrl = new URL(request.url);
@@ -1452,6 +1476,23 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
   }
 
   const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  const principalSession = resolveCustomerPrincipalSessionToken(providedToken.token);
+  if (principalSession) {
+    return {
+      data: {
+        auth_user_id: principalSession.principal_id,
+        booking_reference: bookingReference,
+        mode: "principal-device-session",
+        principal_session_token: providedToken.token,
+        runtime_gate: {
+          account_allowlist: new Set(),
+          mode: "one-customer",
+        },
+      },
+      ok: true,
+    };
+  }
 
   if (!isCustomerPortalAccessToken(providedToken.token)) {
     return customerAppNotificationsRequireAuthResult();
@@ -1563,6 +1604,41 @@ function toCustomerInAppNotificationReadEvidenceRecord(
   };
 }
 
+function toCustomerSharedConversationReadRecord(
+  value: unknown,
+): CustomerInAppNotificationReadEvidenceRecord | null {
+  const record = normalizeRecord(value);
+
+  if (
+    record.delivery_surface === "customer_app" &&
+    record.workflow_area !== "customer_driver_details_acknowledgements"
+  ) {
+    return toCustomerInAppNotificationReadEvidenceRecord(value);
+  }
+
+  if (
+    record.delivery_surface !== "driver_app" ||
+    record.actor_role !== "customer" ||
+    record.workflow_area !== "customer_driver_quick_replies"
+  ) {
+    return null;
+  }
+
+  return {
+    booking_reference: record.booking_reference,
+    created_at: record.created_at,
+    delivery_surface: "customer_app",
+    notification_status: record.notification_status,
+    notification_type: record.notification_type,
+    priority: record.priority,
+    safe_context: record.safe_context,
+    safe_message: record.safe_message,
+    safe_title: record.safe_title,
+    updated_at: record.updated_at,
+    workflow_area: record.workflow_area,
+  };
+}
+
 function customerInAppNotificationFromDriverStatusEvent(
   bookingReference: string,
   value: unknown,
@@ -1634,6 +1710,7 @@ async function loadCustomerAppNotificationsForBookingReference(
   client: NotificationClient,
   request: Request,
   bookingReference: string,
+  includeSharedConversation = false,
 ): Promise<AdminBookingResult<{
   notifications: CustomerInAppNotificationReadEvidenceRecord[];
 }>> {
@@ -1648,21 +1725,34 @@ async function loadCustomerAppNotificationsForBookingReference(
     };
   }
 
-  const { data, error } = await client
+  let query = client
     .from(notificationTable)
-    .select(customerInAppNotificationReadSelect)
-    .eq("delivery_surface", "customer_app")
-    .eq("booking_reference", bookingReference)
+    .select(
+      includeSharedConversation
+        ? customerSharedConversationReadSelect
+        : customerInAppNotificationReadSelect,
+    );
+  query = includeSharedConversation
+    ? query.eq("booking_reference", bookingReference)
+    : query
+        .eq("delivery_surface", "customer_app")
+        .eq("booking_reference", bookingReference);
+  const { data, error } = await query
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(includeSharedConversation ? Math.min(limit * 5, maxReadRows) : limit);
 
   if (error) {
     return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
   }
 
   const notifications = asArray(data)
-    .map(toCustomerInAppNotificationReadEvidenceRecord)
-    .filter((record): record is CustomerInAppNotificationReadEvidenceRecord => Boolean(record));
+    .map(
+      includeSharedConversation
+        ? toCustomerSharedConversationReadRecord
+        : toCustomerInAppNotificationReadEvidenceRecord,
+    )
+    .filter((record): record is CustomerInAppNotificationReadEvidenceRecord => Boolean(record))
+    .slice(0, limit);
 
   if (notifications.length === 0) {
     return loadCustomerSafeDriverStatusEventsForBookingReference(
@@ -1964,6 +2054,8 @@ async function loadCustomerAppNotificationsForControlledRuntime(
     auth_user_id: string;
     booking_reference: string;
     customer_account_reference?: string | null;
+    mode?: "principal-device-session" | "server-session-cookie" | "server-session-token";
+    principal_session_token?: string | null;
     portal_link_issued_at?: number | null;
     portal_link_revision?: string | null;
     runtime_gate: ControlledCustomerRuntimeGate;
@@ -1975,6 +2067,49 @@ async function loadCustomerAppNotificationsForControlledRuntime(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  if (boundary.mode === "principal-device-session" && boundary.principal_session_token) {
+    const principal = await assertActiveCustomerPrincipalSession(
+      boundary.principal_session_token,
+    );
+    if (!principal.ok) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+
+    const { data, error } = await clientResult.data
+      .from("bookings")
+      .select(principalBookingScopeSelect)
+      .eq("booking_reference", boundary.booking_reference)
+      .limit(1);
+    if (error) {
+      return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+    }
+
+    const booking = asRecord(asArray(data)[0]);
+    const companyId = Number(booking.company_id);
+    const bookerId = Number(booking.booker_id);
+    const travelerId = Number(booking.traveler_id);
+    const authorized = principal.data.memberships.some(
+      (membership) =>
+        membership.company_id === companyId &&
+        membership.booker_id === bookerId &&
+        membership.traveler_id === travelerId,
+    );
+    if (
+      safeIdentifier(booking.booking_reference, maxBookingReferenceLength) !==
+        boundary.booking_reference ||
+      !authorized
+    ) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+
+    return loadCustomerAppNotificationsForBookingReference(
+      clientResult.data,
+      request,
+      boundary.booking_reference,
+      true,
+    );
   }
 
   const mappedAccountReference = safeIdentifier(
@@ -2147,14 +2282,15 @@ function parseCustomerDriverQuickReplyPayload(
   direction: CustomerDriverQuickReplyDirection,
 ): AdminBookingResult<{
   booking_reference: string | null;
+  client_message_id: string | null;
   safe_message: string;
-  template_key: CustomerDriverQuickReplyTemplateKey;
+  template_key: CustomerDriverQuickReplyTemplateKey | null;
 }> {
   const record = asRecord(value);
   const allowedFields =
     direction === "customer_to_driver"
-      ? new Set(["booking_reference", "template_key"])
-      : new Set(["template_key"]);
+      ? new Set(["booking_reference", "client_message_id", "message_text", "template_key"])
+      : new Set(["client_message_id", "message_text", "template_key"]);
 
   if (
     unknownKeys(record, allowedFields).length > 0 ||
@@ -2176,8 +2312,16 @@ function parseCustomerDriverQuickReplyPayload(
     record.booking_reference,
     maxBookingReferenceLength,
   );
+  const clientMessageId = textOrNull(record.client_message_id);
+  const messageText = textOrNull(record.message_text);
+  const validClientMessageId = clientMessageId && uuidPattern.test(clientMessageId)
+    ? clientMessageId
+    : null;
 
-  if (!templateKey) {
+  if (
+    !templateKey &&
+    (!validClientMessageId || !messageText || messageText.length > 500)
+  ) {
     return {
       error: quickReplyMalformedError,
       ok: false,
@@ -2187,7 +2331,9 @@ function parseCustomerDriverQuickReplyPayload(
 
   if (
     direction === "customer_to_driver" &&
-    (!bookingReference || !customerQuickReplyTemplateKeys.has(templateKey))
+    (!bookingReference ||
+      (!templateKey && (!validClientMessageId || !messageText || messageText.length > 500)) ||
+      (templateKey && !customerQuickReplyTemplateKeys.has(templateKey)))
   ) {
     return {
       error: quickReplyMalformedError,
@@ -2198,6 +2344,7 @@ function parseCustomerDriverQuickReplyPayload(
 
   if (
     direction === "driver_to_customer" &&
+    templateKey &&
     !driverToCustomerQuickReplyTemplateKeys.has(templateKey)
   ) {
     return {
@@ -2213,14 +2360,19 @@ function parseCustomerDriverQuickReplyPayload(
         ? customerDriverDetailsAcknowledgementTemplate.message
         : customerToDriverQuickReplyTemplates[
             templateKey as keyof typeof customerToDriverQuickReplyTemplates
-          ]
+          ] || messageText
       : driverToCustomerQuickReplyTemplates[
           templateKey as keyof typeof driverToCustomerQuickReplyTemplates
-        ];
+        ] || messageText;
+
+  if (!safeMessage) {
+    return { error: quickReplyMalformedError, ok: false, status: 400 };
+  }
 
   return {
     data: {
       booking_reference: bookingReference,
+      client_message_id: validClientMessageId,
       safe_message: safeMessage,
       template_key: templateKey,
     },
@@ -2236,7 +2388,8 @@ function resolveCustomerQuickReplyRuntimeBoundary(
   auth_user_id: string;
   booking_reference: string;
   customer_account_reference?: string | null;
-  mode: "server-session-cookie" | "server-session-token";
+  mode: "principal-device-session" | "server-session-cookie" | "server-session-token";
+  principal_session_token?: string | null;
   portal_link_issued_at?: number | null;
   portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
@@ -2277,6 +2430,20 @@ function resolveCustomerQuickReplyRuntimeBoundary(
   }
 
   const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  const principalSession = resolveCustomerPrincipalSessionToken(providedToken.token);
+  if (principalSession) {
+    return {
+      data: {
+        auth_user_id: principalSession.principal_id,
+        booking_reference: bookingReference,
+        mode: "principal-device-session",
+        principal_session_token: providedToken.token,
+        runtime_gate: runtimeGate,
+      },
+      ok: true,
+    };
+  }
 
   if (isCustomerPortalAccessToken(providedToken.token)) {
     const portalAccessSession = resolveCustomerPortalAccessSession(
@@ -2413,11 +2580,57 @@ async function assertQuickReplyCustomerBookingScope(
     auth_user_id: string;
     booking_reference: string;
     customer_account_reference?: string | null;
+    mode?: "principal-device-session" | "server-session-cookie" | "server-session-token";
+    principal_session_token?: string | null;
     portal_link_issued_at?: number | null;
     portal_link_revision?: string | null;
     runtime_gate: ControlledCustomerRuntimeGate;
   },
-): Promise<AdminBookingResult<string>> {
+): Promise<AdminBookingResult<{
+  actual_sender_principal_id: string | null;
+  actual_sender_role: "boss" | "pa" | null;
+  customer_account_reference: string;
+  verifiedBossName: string;
+}>> {
+  if (boundary.mode === "principal-device-session" && boundary.principal_session_token) {
+    const principal = await assertActiveCustomerPrincipalSession(
+      boundary.principal_session_token,
+    );
+    if (!principal.ok) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+    const { data, error } = await client
+      .from("bookings")
+      .select(principalBookingScopeSelect)
+      .eq("booking_reference", boundary.booking_reference)
+      .limit(1);
+    if (error) {
+      return safeAdapterFailure(quickReplyCreateError, 500, error);
+    }
+    const booking = asRecord(asArray(data)[0]);
+    const membership = principal.data.memberships.find(
+      (entry) =>
+        entry.company_id === Number(booking.company_id) &&
+        entry.booker_id === Number(booking.booker_id) &&
+        entry.traveler_id === Number(booking.traveler_id),
+    );
+    if (
+      safeIdentifier(booking.booking_reference, maxBookingReferenceLength) !==
+        boundary.booking_reference ||
+      !membership
+    ) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+    return {
+      data: {
+        actual_sender_principal_id: principal.data.principal_id,
+        actual_sender_role: principal.data.principal_role,
+        customer_account_reference: membership.customer_account_reference,
+        verifiedBossName: membership.verified_boss_name,
+      },
+      ok: true,
+    };
+  }
   const mappedAccountReference = safeIdentifier(
     boundary.customer_account_reference,
     maxBookingReferenceLength,
@@ -2469,7 +2682,12 @@ async function assertQuickReplyCustomerBookingScope(
   }
 
   return {
-    data: accountReference.data,
+    data: {
+      actual_sender_principal_id: null,
+      actual_sender_role: null,
+      customer_account_reference: accountReference.data,
+      verifiedBossName: "Passenger",
+    },
     ok: true,
   };
 }
@@ -2509,18 +2727,26 @@ async function insertQuickReplyNotification(
   client: NotificationClient,
   input: CustomerDriverAppNotificationInput,
   actor: {
+    actual_sender_principal_id?: string | null;
+    actual_sender_role?: "boss" | "pa" | null;
     actor_label: string;
     actor_role: CustomerDriverAppNotificationRecord["actor_role"];
+    client_message_id?: string | null;
+    customer_display_sender_name?: string | null;
     source_surface: CustomerDriverAppNotificationRecord["source_surface"];
   },
 ): Promise<AdminBookingResult<CustomerDriverAppNotificationSafeRecord>> {
   const payload = {
     actor_label: actor.actor_label,
     actor_role: actor.actor_role,
+    actual_sender_principal_id: actor.actual_sender_principal_id || null,
+    actual_sender_role: actor.actual_sender_role || null,
     booking_reference: input.booking_reference,
     delivery_surface: input.delivery_surface,
     driver_job_link_id: input.driver_job_link_id,
     event_key: input.event_key,
+    client_message_id: actor.client_message_id || null,
+    customer_display_sender_name: actor.customer_display_sender_name || null,
     notification_status: input.notification_status,
     notification_type: input.notification_type,
     priority: input.priority,
@@ -2582,7 +2808,7 @@ async function insertQuickReplyNotification(
 
 export function customerDriverQuickReplyEventKey(
   direction: CustomerDriverQuickReplyDirection,
-  templateKey: CustomerDriverQuickReplyTemplateKey,
+  templateKey: CustomerDriverQuickReplyTemplateKey | null,
   bookingReference: string,
 ) {
   const identity = JSON.stringify([direction, bookingReference, templateKey]);
@@ -2591,27 +2817,49 @@ export function customerDriverQuickReplyEventKey(
   return `customer_driver_quick_reply:v2:${digest}`;
 }
 
+export function customerDriverMessageEventKey(
+  direction: CustomerDriverQuickReplyDirection,
+  bookingReference: string,
+  clientMessageId: string,
+) {
+  const digest = createHash("sha256")
+    .update(JSON.stringify([direction, bookingReference, clientMessageId]), "utf8")
+    .digest("hex");
+  return `customer_driver_message:v1:${digest}`;
+}
+
 function quickReplyInput(
   direction: CustomerDriverQuickReplyDirection,
-  templateKey: CustomerDriverQuickReplyTemplateKey,
+  templateKey: CustomerDriverQuickReplyTemplateKey | null,
   safeMessage: string,
   bookingReference: string,
   driverJobLinkId: string | null,
+  clientMessageId: string | null = null,
+  customerDisplaySenderName: string | null = null,
 ): CustomerDriverAppNotificationInput {
   return {
     booking_reference: bookingReference,
     delivery_surface: direction === "customer_to_driver" ? "driver_app" : "customer_app",
     driver_job_link_id: driverJobLinkId,
-    event_key: customerDriverQuickReplyEventKey(direction, templateKey, bookingReference),
+    event_key: clientMessageId
+      ? customerDriverMessageEventKey(direction, bookingReference, clientMessageId)
+      : customerDriverQuickReplyEventKey(
+          direction,
+          templateKey as CustomerDriverQuickReplyTemplateKey,
+          bookingReference,
+        ),
     notification_status: "queued",
     notification_type: "trip_update",
     priority: "normal",
     safe_context: {
       direction,
-      template_key: templateKey,
+      ...(templateKey ? { template_key: templateKey } : {}),
+      ...(customerDisplaySenderName ? { customer_sender_name: customerDisplaySenderName } : {}),
     },
     safe_message: safeMessage,
-    safe_title: direction === "customer_to_driver" ? "Passenger reply" : "Driver reply",
+    safe_title: direction === "customer_to_driver"
+      ? customerDisplaySenderName || "Passenger reply"
+      : "Driver reply",
     workflow_area: "customer_driver_quick_replies",
   };
 }
@@ -2889,10 +3137,16 @@ export async function sendCustomerQuickReplyToDriver(
           parsed.data.safe_message,
           boundary.data.booking_reference,
           null,
+          parsed.data.client_message_id,
+          scope.data.verifiedBossName,
         ),
     {
-      actor_label: "verified_customer_account",
+      actual_sender_principal_id: scope.data.actual_sender_principal_id,
+      actual_sender_role: scope.data.actual_sender_role,
+      actor_label: scope.data.verifiedBossName,
       actor_role: "customer",
+      client_message_id: parsed.data.client_message_id,
+      customer_display_sender_name: scope.data.verifiedBossName,
       source_surface: "customer_api",
     },
   );
@@ -2988,10 +3242,12 @@ export async function sendDriverQuickReplyToCustomer(
       parsed.data.safe_message,
       linkResult.data.booking_reference,
       linkResult.data.id,
+      parsed.data.client_message_id,
     ),
     {
       actor_label: "verified_driver_job_link",
       actor_role: "driver",
+      client_message_id: parsed.data.client_message_id,
       source_surface: "driver_api",
     },
   );
@@ -3218,6 +3474,35 @@ function pageRecords<T>(records: T[], limit: number, page: number) {
   const offset = (page - 1) * limit;
 
   return records.slice(offset, offset + limit);
+}
+
+export async function queueCustomerDriverDetailsReadyNotification(
+  client: NotificationClient,
+  bookingReferenceInput: unknown,
+) {
+  const bookingReference = safeIdentifier(bookingReferenceInput, maxBookingReferenceLength);
+  if (!bookingReference) return { ok: false, status: 400 } as const;
+  return insertQuickReplyNotification(
+    client,
+    {
+      booking_reference: bookingReference,
+      delivery_surface: "customer_app",
+      driver_job_link_id: null,
+      event_key: `${bookingReference}:customer-in-app:driver-details-ready`,
+      notification_status: "queued",
+      notification_type: "trip_update",
+      priority: "normal",
+      safe_context: { booking_reference: bookingReference },
+      safe_message: "Your Prestige Limo driver details are ready in your customer app.",
+      safe_title: "Driver details ready",
+      workflow_area: "customer_app_updates",
+    },
+    {
+      actor_label: "verified_driver_acknowledgement",
+      actor_role: "system",
+      source_surface: "system",
+    },
+  );
 }
 
 export async function createCustomerDriverAppNotification(
@@ -3505,7 +3790,6 @@ export async function loadDriverAppNotificationsForToken(
   let query = clientResult.data
     .from(notificationTable)
     .select(notificationSelect)
-    .eq("delivery_surface", "driver_app")
     .eq("booking_reference", linkResult.data.booking_reference)
     .order("created_at", { ascending: false })
     .limit(maxReadRows);
@@ -3524,10 +3808,22 @@ export async function loadDriverAppNotificationsForToken(
 
   const allRecords = asArray(data)
     .map(normalizeRecord)
-    .filter((record) => record.delivery_surface === "driver_app")
+    .filter(
+      (record) =>
+        record.delivery_surface === "driver_app" ||
+        (record.delivery_surface === "customer_app" &&
+          record.actor_role === "driver" &&
+          record.workflow_area === "customer_driver_quick_replies"),
+    )
     .filter((record) => record.booking_reference === linkResult.data.booking_reference)
     .filter((record) => !record.driver_job_link_id || record.driver_job_link_id === linkResult.data.id)
-    .map(toSafeRecord);
+    .map((record) =>
+      toSafeRecord(
+        record.delivery_surface === "customer_app"
+          ? { ...record, delivery_surface: "driver_app" }
+          : record,
+      ),
+    );
 
   return {
     data: {

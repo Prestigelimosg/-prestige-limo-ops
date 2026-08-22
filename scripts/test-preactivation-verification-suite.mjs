@@ -418,6 +418,10 @@ const guardChecks = [
     script: "scripts/test-customer-device-push-notification-guard.mjs",
   },
   {
+    label: "Customer principal access and native alert guard",
+    script: "scripts/test-customer-principal-native-alert-guard.mjs",
+  },
+  {
     label: "Customer thirty-minute pickup app reminder guard",
     script: "scripts/test-customer-thirty-minute-pickup-reminder-guard.mjs",
   },

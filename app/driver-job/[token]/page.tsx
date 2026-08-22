@@ -318,13 +318,6 @@ const statusActions = [
   { displayLabel: "Completed", label: "Job Completed", value: "Job Completed" },
 ] as const;
 
-const driverCustomerQuickReplies = [
-  { key: "driver_on_the_way", label: "I am on the way." },
-  { key: "driver_arrived", label: "I have arrived." },
-  { key: "driver_meet_pickup", label: "Please meet me at pickup point." },
-  { key: "driver_waiting_nearby", label: "I am waiting nearby." },
-] as const;
-
 const statusTimingSteps: DriverStatusTimingStep[] = [
   { aliases: ["driver_otw", "otw"], key: "otw", label: "I'm on the way" },
   { aliases: ["ots"], key: "ots", label: "I've arrived" },
@@ -1039,6 +1032,7 @@ export default function DriverJobPage() {
     feedback: null,
     sendingKey: "",
   });
+  const [driverCustomerMessageDraft, setDriverCustomerMessageDraft] = useState("");
   const [driverLiveLocation, setDriverLiveLocation] =
     useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
@@ -1142,16 +1136,20 @@ export default function DriverJobPage() {
     ]);
   }
 
-  async function sendDriverCustomerQuickReply(templateKey: string, message: string) {
+  async function sendDriverCustomerQuickReply(message: string) {
     if (!token || driverQuickReply.sendingKey) return;
 
-    setDriverQuickReply({ feedback: null, sendingKey: templateKey });
+    const safeMessage = message.replace(/\s+/g, " ").trim();
+    if (!safeMessage) return;
+    const clientMessageId = crypto.randomUUID();
+
+    setDriverQuickReply({ feedback: null, sendingKey: clientMessageId });
 
     try {
       const response = await fetch(
         `/api/driver-job/${encodeURIComponent(token)}/quick-replies`,
         {
-          body: JSON.stringify({ template_key: templateKey }),
+          body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         },
@@ -1167,9 +1165,10 @@ export default function DriverJobPage() {
       }
 
       setDriverQuickReply({
-        feedback: { tone: "success", text: `Sent to customer: ${message}` },
+        feedback: { tone: "success", text: `Sent to customer: ${safeMessage}` },
         sendingKey: "",
       });
+      setDriverCustomerMessageDraft("");
     } catch (error) {
       setDriverQuickReply({
         feedback: {
@@ -2905,28 +2904,33 @@ export default function DriverJobPage() {
               aria-labelledby="driver-customer-message-heading"
               className="order-[91] space-y-2"
               data-driver-customer-quick-replies="true"
+              data-driver-customer-shared-conversation="true"
             >
               <h2 id="driver-customer-message-heading" className="text-base font-semibold text-slate-900">
                 Message Customer
               </h2>
               <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-2.5">
                 <p className="text-sm font-medium text-sky-950">
-                  Tap one reply. The customer receives it in My Bookings and admin can see it.
+                  Type a message. The verified Boss and managing PA share this booking conversation, and admin can see it.
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {driverCustomerQuickReplies.map((reply) => (
-                    <button
-                      className="min-h-11 rounded-md border border-sky-700 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
-                      data-driver-customer-quick-reply={reply.key}
-                      disabled={Boolean(driverQuickReply.sendingKey) || ["pob", "completed"].includes(workflowStatus)}
-                      key={reply.key}
-                      onClick={() => void sendDriverCustomerQuickReply(reply.key, reply.label)}
-                      type="button"
-                    >
-                      {driverQuickReply.sendingKey === reply.key ? "Sending..." : reply.label}
-                    </button>
-                  ))}
-                </div>
+                <textarea
+                  className="min-h-24 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm text-slate-950"
+                  data-driver-customer-message-composer="true"
+                  disabled={Boolean(driverQuickReply.sendingKey) || ["pob", "completed"].includes(workflowStatus)}
+                  maxLength={500}
+                  onChange={(event) => setDriverCustomerMessageDraft(event.target.value)}
+                  placeholder="Type a message to the customer"
+                  value={driverCustomerMessageDraft}
+                />
+                <button
+                  className="min-h-11 rounded-md border border-sky-700 bg-sky-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  data-driver-customer-message-send="true"
+                  disabled={Boolean(driverQuickReply.sendingKey) || ["pob", "completed"].includes(workflowStatus) || !driverCustomerMessageDraft.trim()}
+                  onClick={() => void sendDriverCustomerQuickReply(driverCustomerMessageDraft)}
+                  type="button"
+                >
+                  {driverQuickReply.sendingKey ? "Sending…" : "Send to customer"}
+                </button>
                 {["pob", "completed"].includes(workflowStatus) ? (
                   <p className="text-xs font-semibold text-slate-600">Customer replies close after Passenger on board.</p>
                 ) : null}

@@ -8,19 +8,22 @@ const [source, ledger] = await Promise.all([
 
 for (const expected of [
   'data-driver-customer-quick-replies="true"',
-  '"driver_on_the_way"',
-  '"driver_arrived"',
-  '"driver_meet_pickup"',
-  '"driver_waiting_nearby"',
+  'data-driver-customer-shared-conversation="true"',
+  'data-driver-customer-message-composer="true"',
+  'data-driver-customer-message-send="true"',
+  "client_message_id: clientMessageId",
+  "message_text: safeMessage",
   '/quick-replies`,',
   'result?.direction !== "driver_to_customer"',
   '["pob", "completed"].includes(workflowStatus)',
-  "The customer receives it in My Bookings and admin can see it.",
+  "The verified Boss and managing PA share this booking conversation, and admin can see it.",
 ]) {
-  assert.ok(source.includes(expected), `driver quick-reply UI must retain ${expected}`);
+  assert.ok(source.includes(expected), `driver typed-message UI must retain ${expected}`);
 }
 
-assert.ok(!/textarea[\s\S]{0,300}data-driver-customer-quick-repl/.test(source), "driver-to-customer lane must not add free text");
+for (const retiredTemplate of ["driver_on_the_way", "driver_arrived", "driver_meet_pickup", "driver_waiting_nearby"]) {
+  assert.ok(!source.includes(`\"${retiredTemplate}\"`), `driver typed-message UI must retire fixed template ${retiredTemplate}`);
+}
 
 for (const expected of [
   "The owner then approved one exact live Driver → Customer reply for booking `10851`: `I have arrived.`.",
@@ -36,4 +39,4 @@ for (const expected of [
   assert.ok(ledger.includes(expected), `implementation ledger must retain ${expected}`);
 }
 
-console.log("Driver/customer quick-reply UI guard passed.");
+console.log("Driver/customer typed-message UI guard passed.");

@@ -4,9 +4,9 @@ import {
   revokeAdminCustomerPortalAccessAccount,
 } from "../../../lib/customer-portal-access-account";
 import {
-  createCustomerPortalAccessLinkToken,
-  safeCustomerPortalPublicBookingReference,
-} from "../../../lib/customer-portal-access-link";
+  issueCustomerPrincipalInvitation,
+  revokeCustomerPrincipalAccess,
+} from "../../../lib/customer-principal-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,9 +52,6 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
-    const publicBookingReference = safeCustomerPortalPublicBookingReference(
-      body.publicBookingReference,
-    );
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
         agencyCustomerAccount: body.agencyCustomerAccount,
@@ -70,33 +67,37 @@ export async function POST(request: Request) {
       return safeErrorResponse(account);
     }
 
-    const result = createCustomerPortalAccessLinkToken(account.data.customer_account_reference, {
-      linkRevision: account.data.link_revision,
-      scope: "portal_account",
-    });
+    const rawMemberships = Array.isArray(body.memberships) ? body.memberships : [];
+    const result = await issueCustomerPrincipalInvitation(
+      {
+        email: body.email,
+        memberships: rawMemberships.map((membership) => ({
+          ...(membership !== null && typeof membership === "object" ? membership : {}),
+          customerAccountReference: account.data.customer_account_reference,
+        })),
+        principalRole: body.principalRole,
+      },
+      boundary.actor,
+    );
 
     if (!result.ok) {
       return safeErrorResponse(result);
     }
 
-    const url = new URL(
-      `/api/customer-portal-access/${encodeURIComponent(result.data.token)}`,
-      request.url,
-    );
-
-    if (publicBookingReference) {
-      url.searchParams.set("booking", publicBookingReference);
-      url.searchParams.set("tracking", "1");
-    }
+    const url = result.data.invitation_url_path
+      ? new URL(result.data.invitation_url_path, request.url).toString()
+      : null;
 
     return Response.json({
+      accessStatus: result.data.access_status,
+      accessAction: "Manage Access",
       accountStatus: account.data.account_status,
-      customerAccountReference: result.data.customer_account_reference,
+      customerAccountReference: account.data.customer_account_reference,
       expiresAt: result.data.expires_at,
-      historyWindowMonths: 12,
       ok: true,
-      url: url.toString(),
-      version: result.data.version,
+      principalId: result.data.principal_id,
+      url,
+      version: "customer-principal-invitation-v1",
     });
   } catch {
     return safeFailureResponse();
@@ -128,17 +129,24 @@ export async function PATCH(request: Request) {
     const body = await readJsonBody(request);
     const action = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
 
-    if (action !== "revoke") {
+    if (action !== "revoke" && action !== "revoke_legacy") {
       return safeErrorResponse({
         error: "Customer portal access account action is invalid.",
         status: 400,
       });
     }
 
+    if (action === "revoke") {
+      const result = await revokeCustomerPrincipalAccess(
+        { principalId: body.principalId },
+        boundary.actor,
+      );
+      if (!result.ok) return safeErrorResponse(result);
+      return Response.json({ ok: true, principalId: result.data.principal_id, revoked: true });
+    }
+
     const result = await revokeAdminCustomerPortalAccessAccount(
-      {
-        customerAccountReference: body.customerAccountReference,
-      },
+      { customerAccountReference: body.customerAccountReference },
       boundary.actor,
     );
 

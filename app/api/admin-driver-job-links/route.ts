@@ -187,6 +187,7 @@ export async function POST(request: Request) {
       driver_job_url: driverJobUrlFromToken(result.data.driver_job_token),
       link: result.data.link,
       live_location: liveLocationAuthorization,
+      native_app_alert: result.data.native_app_alert,
       ok: true,
       token_display_once: true,
     });

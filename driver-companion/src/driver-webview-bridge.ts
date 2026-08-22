@@ -31,6 +31,8 @@ const allowedReadOnlyPaths = new Set([
   "/terms",
 ]);
 const driverPortalPath = "/driver-portal";
+const nativeDriverJobHandoffPathPattern =
+  /^\/api\/driver-native-job-open\/[0-9a-f]{64}$/;
 const installationIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -131,6 +133,16 @@ export function parseNativeCalendarOauthStartUrl(value: string) {
   return parsed.toString();
 }
 
+export function parseNativeDriverJobHandoffUrl(value: string) {
+  const parsed = parseSameOriginUrl(value);
+  return parsed &&
+    nativeDriverJobHandoffPathPattern.test(parsed.pathname) &&
+    !parsed.search &&
+    !parsed.hash
+    ? parsed.toString()
+    : null;
+}
+
 export function shouldAllowDriverWebViewNavigation(
   requestedUrl: string,
   currentUrl: string,
@@ -147,6 +159,15 @@ export function shouldAllowDriverWebViewNavigation(
     return true;
   }
 
+  const requestedNativeHandoff = parseNativeDriverJobHandoffUrl(requestedUrl);
+  const currentNativeHandoff = parseNativeDriverJobHandoffUrl(currentUrl);
+  if (
+    requestedNativeHandoff &&
+    (current.pathname === driverPortalPath || Boolean(currentNativeHandoff))
+  ) {
+    return true;
+  }
+
   if (
     allowedReadOnlyPaths.has(requested.pathname) &&
     !requested.search &&
@@ -157,7 +178,10 @@ export function shouldAllowDriverWebViewNavigation(
 
   try {
     const requestedJob = parseDriverJobUrl(requestedUrl);
-    if (current.pathname === driverPortalPath && !current.search && !current.hash) {
+    if (
+      (current.pathname === driverPortalPath && !current.search && !current.hash) ||
+      Boolean(currentNativeHandoff)
+    ) {
       return Boolean(requestedJob.token);
     }
 

@@ -38,6 +38,7 @@ import {
   parseDriverBridgeMessage,
   parseDriverJobUrl,
   parseNativeCalendarOauthStartUrl,
+  parseNativeDriverJobHandoffUrl,
   shouldAllowDriverWebViewNavigation,
   type DriverTrackingBridgeMessage,
 } from "./src/driver-webview-bridge";
@@ -50,6 +51,7 @@ import {
 import {
   forgetNativeNotificationToken,
   loadNativeDriverJob,
+  nativeDriverJobHandoffUrl,
   nativeNotificationOpenRequest,
   readNativeNotificationToken,
   rememberNativeDriverJob,
@@ -118,6 +120,7 @@ export default function App() {
   const biometricResumePendingRef = useRef(false);
   const bridgeBusyRef = useRef(false);
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
+  const webViewRequestHeadersRef = useRef<Record<string, string> | null>(null);
   const pendingOauthTokenRef = useRef("");
   const webViewRef = useRef<WebView>(null);
 
@@ -218,6 +221,7 @@ export default function App() {
       }
 
       currentWebViewUrlRef.current = incomingJob.jobUrl;
+      webViewRequestHeadersRef.current = null;
       setCanGoBack(false);
       setScreen((current) => ({
         active:
@@ -291,6 +295,10 @@ export default function App() {
   }, [receiveDriverJobUrl]);
 
   useEffect(() => {
+    if (!installationId) {
+      return;
+    }
+
     let mounted = true;
 
     const openNotificationJob = async (
@@ -306,6 +314,24 @@ export default function App() {
       const job = await loadNativeDriverJob(request.jobKey);
       if (mounted && job) {
         await receiveDriverJobUrl(job.jobUrl, request.openTarget);
+        return;
+      }
+
+      if (mounted && installationId) {
+        const handoffUrl = nativeDriverJobHandoffUrl(request.jobKey);
+        currentWebViewUrlRef.current = handoffUrl;
+        webViewRequestHeadersRef.current = {
+          "x-prestige-driver-installation-id": installationId,
+          "x-prestige-driver-purpose": "driver-native-job-open",
+        };
+        setCanGoBack(false);
+        setScreen((current) => ({
+          active: false,
+          jobUrl: handoffUrl,
+          message: "Opening the assigned job securely.",
+          navigationKey: current.navigationKey + 1,
+          openTarget: request.openTarget,
+        }));
       }
     };
 
@@ -329,7 +355,7 @@ export default function App() {
       mounted = false;
       subscription.remove();
     };
-  }, [receiveDriverJobUrl]);
+  }, [installationId, receiveDriverJobUrl]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
@@ -635,10 +661,14 @@ export default function App() {
       if (allowed) {
         try {
           currentWebViewUrlRef.current = parseDriverJobUrl(request.url).jobUrl;
+          webViewRequestHeadersRef.current = null;
         } catch {
           const requested = new URL(request.url);
           if (requested.origin === productionOrigin && requested.pathname === "/driver-portal") {
             currentWebViewUrlRef.current = `${productionOrigin}/driver-portal`;
+            webViewRequestHeadersRef.current = null;
+          } else if (parseNativeDriverJobHandoffUrl(request.url)) {
+            currentWebViewUrlRef.current = request.url;
           }
         }
       }
@@ -703,7 +733,12 @@ export default function App() {
             originWhitelist={[productionOrigin]}
             setSupportMultipleWindows={false}
             sharedCookiesEnabled
-            source={{ uri: currentWebViewUrlRef.current || screen.jobUrl }}
+            source={{
+              ...(webViewRequestHeadersRef.current
+                ? { headers: webViewRequestHeadersRef.current }
+                : {}),
+              uri: currentWebViewUrlRef.current || screen.jobUrl,
+            }}
             style={styles.webView}
           />
         ) : (

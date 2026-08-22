@@ -17,6 +17,7 @@ import {
   getDriverJobLinkExpiresAt,
   hashDriverJobLinkToken,
 } from "./driver-job-link";
+import { sealDriverNativeJobHandoffToken } from "./driver-native-job-handoff";
 import { sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
 
 export const adminDriverJobLinkPersistenceVersion =
@@ -77,6 +78,10 @@ export type AdminDriverJobLinkCreateInput = {
 export type AdminDriverJobLinkCreateResult = {
   driver_job_token: string;
   link: AdminDriverJobLinkRecord;
+  native_app_alert: {
+    provider_accepted: boolean;
+    reason: "not_available" | "provider_accepted" | "provider_failed";
+  };
 };
 
 export type AdminDriverJobLinkReadParams = {
@@ -1040,6 +1045,14 @@ export async function createAdminDriverJobLink(
 
   const token = generateDriverJobLinkToken();
   const tokenHash = hashDriverJobLinkToken(token);
+  const nativeHandoffCiphertext =
+    Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0
+      ? sealDriverNativeJobHandoffToken({
+          bookingReference: input.booking_reference,
+          token,
+          tokenHash,
+        })
+      : null;
   const now = new Date();
   const expiresAt = getDriverJobLinkExpiresAt(now, input.ttl_hours);
 
@@ -1078,6 +1091,9 @@ export async function createAdminDriverJobLink(
       job_card_kind: jobCardKind,
       job_card_revision: safeDriverJobPayloadRevision(input.driver_job_payload),
       link_purpose: "manual_driver_assignment_job_card",
+      ...(nativeHandoffCiphertext
+        ? { native_handoff_ciphertext: nativeHandoffCiphertext }
+        : {}),
     },
     source_surface: actor.source_surface,
     token_hash: tokenHash,
@@ -1094,18 +1110,24 @@ export async function createAdminDriverJobLink(
     return safeAdapterFailure(safeDriverJobLinkCreateError, 500, error);
   }
 
-  await sendDriverDevicePushAlertForNewJobLink(
+  const nativeAlertResult = await sendDriverDevicePushAlertForNewJobLink(
     clientResult.data,
     {
       driver_job_link_id: link.id,
       driver_job_token: token,
     },
   ).catch(() => null);
+  const nativeAppAlert = nativeAlertResult?.native_provider_accepted
+    ? { provider_accepted: true, reason: "provider_accepted" as const }
+    : nativeAlertResult && nativeAlertResult.native_provider_request_count > 0
+      ? { provider_accepted: false, reason: "provider_failed" as const }
+      : { provider_accepted: false, reason: "not_available" as const };
 
   return {
     data: {
       driver_job_token: token,
       link,
+      native_app_alert: nativeAppAlert,
     },
     ok: true,
   };

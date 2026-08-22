@@ -19482,6 +19482,18 @@ export default function Home() {
     setMobileDispatchBookingStep("message");
   }
 
+  function retainSavedBookingForDriverJobLinkHandoff(
+    savedRecord: AdminBookingPersistenceRecord,
+  ) {
+    const retainedBookingRecord =
+      adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
+
+    loadSelectedBooking(retainedBookingRecord, {
+      adminBookingRecordOverride: savedRecord,
+      focusDriverJobLink: true,
+    });
+  }
+
   function applyExtractedBooking(preview: NonNullable<ParsedBooking["extractedBookingsPreview"]>[number]) {
     const safePreview = preview ?? {};
     const sharedContextSource: Partial<BookingForm> = multiBookingNotice ?? parsedDebugBooking ?? {};
@@ -22184,7 +22196,11 @@ export default function Home() {
       } satisfies Message;
 
       if (!calendarSyncFailed) {
-        resetAdminBookingFormAfterSuccessfulPersistence();
+        if (savedBookings.length === 1 && !customerReturnUrl) {
+          retainSavedBookingForDriverJobLinkHandoff(primarySavedBooking);
+        } else {
+          resetAdminBookingFormAfterSuccessfulPersistence();
+        }
       }
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
@@ -25184,7 +25200,11 @@ export default function Home() {
           key: getBookingSaveGuardKey(updatedBookingReference),
           record: updatedBooking,
         };
-        resetAdminBookingFormAfterSuccessfulPersistence();
+        if (!customerReturnUrl) {
+          retainSavedBookingForDriverJobLinkHandoff(updatedBooking);
+        } else {
+          resetAdminBookingFormAfterSuccessfulPersistence();
+        }
         returnToCustomerFolderAfterUpdate();
       }
       setAdminBookingPersistenceMessage(updateMessage);
@@ -25726,6 +25746,20 @@ export default function Home() {
 
       const link = result.link as AdminDriverJobLinkRecord;
       const driverJobUrl = clean(result.driver_job_url);
+      const nativeAppAlert =
+        result.native_app_alert &&
+        typeof result.native_app_alert === "object" &&
+        !Array.isArray(result.native_app_alert)
+          ? result.native_app_alert as {
+              provider_accepted?: unknown;
+              reason?: unknown;
+            }
+          : null;
+      const nativeAppAlertMessage = nativeAppAlert?.provider_accepted === true
+        ? "Native app alert request was accepted by the provider; delivery to the phone is not guaranteed."
+        : nativeAppAlert?.reason === "provider_failed"
+          ? "Native app alert provider was unavailable. Use the one-time Copy Link fallback."
+          : "No verified installed native Driver app was available for this alert. Use the one-time Copy Link fallback.";
 
       if (!link || !driverJobUrl) {
         throw new Error("Driver job link response was missing the one-time URL.");
@@ -25788,8 +25822,8 @@ export default function Home() {
         message: {
           tone: "success",
           text: liveLocationAuthorized
-            ? "Driver job link created and live movement authorized automatically. Copy the one-time link now; it will not be listed again."
-            : "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup. Copy the one-time link now; it will not be listed again.",
+            ? `Driver job link created and live movement authorized automatically. ${nativeAppAlertMessage} Copy the one-time link now if manual sending is needed; it will not be listed again.`
+            : `Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup. ${nativeAppAlertMessage} Copy the one-time link now if manual sending is needed; it will not be listed again.`,
         },
         oneTimeUrl: driverJobUrl,
       });

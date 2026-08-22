@@ -422,6 +422,10 @@ const guardChecks = [
     script: "scripts/test-customer-principal-native-alert-guard.mjs",
   },
   {
+    label: "Customer principal workload FK index guard",
+    script: "scripts/test-customer-principal-fk-index-guard.mjs",
+  },
+  {
     label: "Customer thirty-minute pickup app reminder guard",
     script: "scripts/test-customer-thirty-minute-pickup-reminder-guard.mjs",
   },

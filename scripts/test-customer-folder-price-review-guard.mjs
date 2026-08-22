@@ -218,7 +218,7 @@ for (const fragment of [
 
 for (const fragment of [
   "export function calculateCustomerDspBillingActualMinutes",
-  "export function customerDspBillingTouchesMidnightWindow",
+  "export function calculateCustomerDspMidnightFeeHours",
   "export function calculateCustomerInvoiceRateReview",
   "export function customerInvoiceBookingType",
   "export function calculateCustomerDspInvoiceReview",
@@ -412,8 +412,8 @@ try {
   const require = createRequire(import.meta.url);
   const {
     calculateCustomerDspBillingActualMinutes,
+    calculateCustomerDspMidnightFeeHours,
     calculateCustomerInvoiceRateReview,
-    customerDspBillingTouchesMidnightWindow,
   } = require(
     path.join(calculationRuntimeDir, "customer-dsp-invoice-review.js"),
   );
@@ -515,6 +515,22 @@ try {
   assert.equal(orchardWithExtraStop?.surchargeAmountCents, 3_000);
   assert.equal(orchardWithExtraStop?.amountCents, 10_500);
 
+  for (const fixedTripBookingType of ["MNG", "DEP", "TRF"]) {
+    const fixedTripMidnightReview = calculateCustomerInvoiceRateReview(
+      {
+        ...exactIdentityInput,
+        bookingType: fixedTripBookingType,
+        pickupAt: "2026-08-21T23:00:00+08:00",
+      },
+      exactDefaultSetup,
+    );
+    assert.equal(
+      fixedTripMidnightReview?.surchargeAmountCents,
+      1_500,
+      `${fixedTripBookingType} must retain exactly one SGD15 midnight surcharge.`,
+    );
+  }
+
   const mismatchedTravelerReview = calculateCustomerInvoiceRateReview(
     exactIdentityInput,
     {
@@ -577,12 +593,12 @@ try {
   );
   assert.equal(booking10894Minutes, 524);
   assert.equal(
-    customerDspBillingTouchesMidnightWindow(
+    calculateCustomerDspMidnightFeeHours(
       booking10894BillingStartedAt,
       booking10894BillingEndedAt,
     ),
-    true,
-    "Booking 10894 must receive one midnight surcharge because its corrected DSP interval reaches 03:19 SGT.",
+    5,
+    "Booking 10894 must charge five started midnight-fee hours between 23:00 and 03:19 SGT.",
   );
   const booking10894Review = calculateCustomerInvoiceRateReview(
     {
@@ -610,23 +626,39 @@ try {
   );
   assert.equal(booking10894Review?.billableHours, 9);
   assert.equal(booking10894Review?.baseAmountCents, 58_500);
-  assert.equal(booking10894Review?.surchargeAmountCents, 1_500);
-  assert.equal(booking10894Review?.amountCents, 60_000);
+  assert.equal(booking10894Review?.surchargeAmountCents, 7_500);
+  assert.equal(booking10894Review?.amountCents, 66_000);
   assert.equal(
-    customerDspBillingTouchesMidnightWindow(
+    calculateCustomerDspMidnightFeeHours(
       "2026-08-21T07:00:00+08:00",
       "2026-08-21T23:00:00+08:00",
     ),
-    false,
-    "A DSP interval ending exactly at 23:00 must remain outside the midnight window.",
+    0,
+    "A DSP billing interval with no billable-hour start in the midnight window must have no midnight fee.",
   );
   assert.equal(
-    customerDspBillingTouchesMidnightWindow(
+    calculateCustomerDspMidnightFeeHours(
       "2026-08-21T23:00:00+08:00",
       "2026-08-21T23:01:00+08:00",
     ),
-    true,
-    "A DSP interval starting at 23:00 must receive the midnight surcharge.",
+    1,
+    "A partial first midnight hour must charge one hourly DSP midnight fee.",
+  );
+  assert.equal(
+    calculateCustomerDspMidnightFeeHours(
+      "2026-08-21T23:00:00+08:00",
+      "2026-08-22T00:00:00+08:00",
+    ),
+    1,
+    "One completed hour from 23:00 must charge one DSP midnight fee.",
+  );
+  assert.equal(
+    calculateCustomerDspMidnightFeeHours(
+      "2026-08-21T23:30:00+08:00",
+      "2026-08-22T00:30:00+08:00",
+    ),
+    2,
+    "A DSP interval touching the 23:00-00:00 and 00:00-01:00 clock-hour slots must charge two midnight fees.",
   );
 
   const bridgeCorrectedMinutes = calculateCustomerDspBillingActualMinutes(

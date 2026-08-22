@@ -291,22 +291,22 @@ async function main() {
       document.querySelector('[data-customer-folder-dsp-billing-time-save="true"]').click();
     })()`);
 
-    reporter.step("confirming one midnight surcharge in the recalculated proposal");
+    reporter.step("confirming five hourly DSP midnight fees in the recalculated proposal");
     await waitForCondition(
-      () => evaluate(`document.querySelector(${JSON.stringify(priceSelector)})?.textContent.includes("$600.00")`),
+      () => evaluate(`document.querySelector(${JSON.stringify(priceSelector)})?.textContent.includes("$660.00")`),
       10000,
-      "SGD600 crossing-midnight DSP proposal",
+      "SGD660 crossing-midnight DSP proposal",
     );
     const midnightState = await evaluate(`(() => ({
       breakdown: document.querySelector('[data-customer-folder-price-review-editor="${bookingReference}"]')?.textContent || "",
       priceText: document.querySelector(${JSON.stringify(priceSelector)})?.textContent.trim() || "",
       priceDraft: document.querySelector('[data-customer-folder-price-review-input="${bookingReference}"]')?.value || "",
     }))()`);
-    assert.equal(midnightState.priceText, "$600.00 · Review required · tick to confirm");
-    assert.equal(midnightState.priceDraft, "600.00");
+    assert.equal(midnightState.priceText, "$660.00 · Review required · tick to confirm");
+    assert.equal(midnightState.priceDraft, "660.00");
     assert.equal(midnightState.breakdown.includes("524 corrected billing min"), true);
     assert.equal(midnightState.breakdown.includes("9 billable hr"), true);
-    assert.equal(midnightState.breakdown.includes("$15.00 surcharges"), true);
+    assert.equal(midnightState.breakdown.includes("$75.00 surcharges"), true);
     assert.equal(
       requests.filter((request) => request.method === "PATCH" && request.path === "/api/admin-bookings").length,
       1,
@@ -340,7 +340,7 @@ async function main() {
         reporter.summary({
           bookingReference: "10894 fixture",
           finalPriceState: midnightState.priceText,
-          midnightSurchargeCents: 1500,
+          midnightSurchargeCents: 7500,
           patchCount: 1,
           result: "passed",
         }),

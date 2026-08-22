@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -2578,6 +2580,17 @@ async function insertQuickReplyNotification(
   };
 }
 
+export function customerDriverQuickReplyEventKey(
+  direction: CustomerDriverQuickReplyDirection,
+  templateKey: CustomerDriverQuickReplyTemplateKey,
+  bookingReference: string,
+) {
+  const identity = JSON.stringify([direction, bookingReference, templateKey]);
+  const digest = createHash("sha256").update(identity, "utf8").digest("hex");
+
+  return `customer_driver_quick_reply:v2:${digest}`;
+}
+
 function quickReplyInput(
   direction: CustomerDriverQuickReplyDirection,
   templateKey: CustomerDriverQuickReplyTemplateKey,
@@ -2589,7 +2602,7 @@ function quickReplyInput(
     booking_reference: bookingReference,
     delivery_surface: direction === "customer_to_driver" ? "driver_app" : "customer_app",
     driver_job_link_id: driverJobLinkId,
-    event_key: `customer_driver_quick_reply:${direction}:${templateKey}`,
+    event_key: customerDriverQuickReplyEventKey(direction, templateKey, bookingReference),
     notification_status: "queued",
     notification_type: "trip_update",
     priority: "normal",

@@ -1011,6 +1011,10 @@ const guardChecks = [
     script: "scripts/test-customer-driver-quick-replies-runtime-scaffold-guard.mjs",
   },
   {
+    label: "Customer/Driver quick-reply booking event-key guard",
+    script: "scripts/test-customer-driver-quick-reply-booking-event-key-guard.mjs",
+  },
+  {
     label: "Customer/Driver app compact surface guard",
     script: "scripts/test-customer-driver-app-compact-surface-guard.mjs",
   },

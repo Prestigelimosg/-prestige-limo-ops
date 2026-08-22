@@ -5708,6 +5708,8 @@ export default function MockCustomerDashboardPage() {
         const calculation = calculateCustomerDspInvoiceReview(
           {
             actualMinutes: billingActualMinutes,
+            billingEndedAt: summary?.dsp_ended_at,
+            billingStartedAt: billingStartAt,
             childSeatCount: row.childSeatCount,
             companyId: row.companyId,
             extraStopCount: row.extraStopCount,

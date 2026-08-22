@@ -88,6 +88,7 @@ async function main() {
   const chromeProcess = spawn(chromeBinary, chromeArgs, { stdio: "ignore" });
   let client = null;
   let currentBooking = bookingFixture();
+  let dspSummary = null;
   const requests = [];
   const consoleErrors = [];
 
@@ -164,6 +165,7 @@ async function main() {
               DSP: { AVF: 65 },
               MNG: { AVF: 85 },
             },
+            midnight_surcharge: 15,
           },
           travelers: [],
         };
@@ -171,7 +173,22 @@ async function main() {
         requestUrl.pathname === "/api/admin-driver-job-dsp-actual-time-summaries" &&
         method === "GET"
       ) {
-        responseBody = { latest_summary: null, ok: true };
+        responseBody = { latest_summary: dspSummary, ok: true };
+      } else if (
+        requestUrl.pathname === "/api/admin-driver-job-dsp-actual-time-summaries" &&
+        method === "POST"
+      ) {
+        const payload = JSON.parse(request.postData || "{}");
+        assert.equal(payload.booking_reference, bookingReference);
+        assert.equal(payload.dsp_started_at, "2026-08-21T18:35:00+08:00");
+        assert.equal(payload.dsp_ended_at, "2026-08-22T03:19:00+08:00");
+        dspSummary = {
+          billing_time_correction_reason: "end time",
+          billing_time_source: "admin_correction",
+          dsp_ended_at: payload.dsp_ended_at,
+          dsp_started_at: payload.dsp_started_at,
+        };
+        responseBody = { corrected_summary: dspSummary, ok: true };
       } else if (requestUrl.pathname === "/api/admin-bookings" && method === "GET") {
         responseBody = { booking: currentBooking, ok: true };
       } else if (requestUrl.pathname === "/api/admin-bookings" && method === "PATCH") {
@@ -251,18 +268,70 @@ async function main() {
     assert.equal(finalState.priceText, "Review required");
     assert.equal(finalState.priceText.includes("85.00"), false);
     assert.equal(finalState.invoiceDisabled, true);
+
+    reporter.step("saving the corrected crossing-midnight DSP interval");
+    await evaluate(`document.querySelector(${JSON.stringify(priceSelector)}).click()`);
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-customer-folder-dsp-billing-start="true"]'))`),
+      10000,
+      "DSP billing-time correction editor",
+    );
+    await evaluate(`(() => {
+      const values = [
+        ['[data-customer-folder-dsp-billing-start="true"]', "2026-08-21T18:35"],
+        ['[data-customer-folder-dsp-billing-end="true"]', "2026-08-22T03:19"],
+        ['[data-customer-folder-dsp-billing-reason="true"]', "end time"],
+      ];
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      for (const [selector, value] of values) {
+        const input = document.querySelector(selector);
+        setter.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      document.querySelector('[data-customer-folder-dsp-billing-time-save="true"]').click();
+    })()`);
+
+    reporter.step("confirming one midnight surcharge in the recalculated proposal");
+    await waitForCondition(
+      () => evaluate(`document.querySelector(${JSON.stringify(priceSelector)})?.textContent.includes("$600.00")`),
+      10000,
+      "SGD600 crossing-midnight DSP proposal",
+    );
+    const midnightState = await evaluate(`(() => ({
+      breakdown: document.querySelector('[data-customer-folder-price-review-editor="${bookingReference}"]')?.textContent || "",
+      priceText: document.querySelector(${JSON.stringify(priceSelector)})?.textContent.trim() || "",
+      priceDraft: document.querySelector('[data-customer-folder-price-review-input="${bookingReference}"]')?.value || "",
+    }))()`);
+    assert.equal(midnightState.priceText, "$600.00 · Review required · tick to confirm");
+    assert.equal(midnightState.priceDraft, "600.00");
+    assert.equal(midnightState.breakdown.includes("524 corrected billing min"), true);
+    assert.equal(midnightState.breakdown.includes("9 billable hr"), true);
+    assert.equal(midnightState.breakdown.includes("$15.00 surcharges"), true);
     assert.equal(
       requests.filter((request) => request.method === "PATCH" && request.path === "/api/admin-bookings").length,
       1,
     );
     assert.equal(
-      requests.some(
+      requests.filter(
         (request) =>
-          request.method !== "GET" &&
-          request.path !== "/api/admin-bookings",
+          request.method === "POST" &&
+          request.path === "/api/admin-driver-job-dsp-actual-time-summaries",
+      ).length,
+      1,
+    );
+    assert.equal(
+      requests.some((request) =>
+        request.method !== "GET" &&
+        !(
+          request.method === "PATCH" && request.path === "/api/admin-bookings"
+        ) &&
+        !(
+          request.method === "POST" &&
+          request.path === "/api/admin-driver-job-dsp-actual-time-summaries"
+        ),
       ),
       false,
-      "the runtime repair must not invoke invoice, price, timing, payment, email, or other writers",
+      "the runtime repair must not invoke price, invoice, email, payment, or other writers",
     );
     assert.deepEqual(consoleErrors, []);
 
@@ -270,7 +339,8 @@ async function main() {
       JSON.stringify(
         reporter.summary({
           bookingReference: "10894 fixture",
-          finalPriceState: finalState.priceText,
+          finalPriceState: midnightState.priceText,
+          midnightSurchargeCents: 1500,
           patchCount: 1,
           result: "passed",
         }),

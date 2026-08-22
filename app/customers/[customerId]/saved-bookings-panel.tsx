@@ -1022,6 +1022,8 @@ export function CustomerFolderSavedBookingsPanel({
           const reference = safeDispatchReference(booking);
           const bookingType = customerInvoiceBookingType(booking.service_type);
           let actualMinutes: number | null = null;
+          let billingEndAt: string | null | undefined = null;
+          let billingStartAt: string | null | undefined = null;
           let dspBillingTimeSource: CustomerFolderDspActualTimeSummary["billing_time_source"] =
             null;
 
@@ -1056,13 +1058,14 @@ export function CustomerFolderSavedBookingsPanel({
               | null;
             const summary = timingResult?.latest_summary;
             dspBillingTimeSource = summary?.billing_time_source ?? null;
-            const billingStartAt =
+            billingStartAt =
               summary?.billing_time_source === "admin_correction"
                 ? summary?.dsp_started_at
                 : booking.pickup_at;
+            billingEndAt = summary?.dsp_ended_at;
             actualMinutes = calculateCustomerDspBillingActualMinutes(
               billingStartAt,
-              summary?.dsp_ended_at,
+              billingEndAt,
             );
 
             if (
@@ -1086,6 +1089,8 @@ export function CustomerFolderSavedBookingsPanel({
           const calculation = calculateCustomerInvoiceRateReview(
             {
               actualMinutes,
+              billingEndedAt: billingEndAt,
+              billingStartedAt: billingStartAt,
               bookingType,
               childSeatCount: booking.child_seat_count,
               companyId: booking.company_id,

@@ -36,6 +36,8 @@ export type CustomerInvoiceRateSetupRecord = {
 
 export type CustomerDspInvoiceReviewInput = {
   actualMinutes: number | null | undefined;
+  billingEndedAt?: string | null | undefined;
+  billingStartedAt?: string | null | undefined;
   childSeatCount: number | null | undefined;
   companyId: number | null | undefined;
   extraStopCount: number | null | undefined;
@@ -176,6 +178,75 @@ function singaporePickupClock(value: string | null | undefined) {
   return hour && minute ? `${hour}${minute}` : "";
 }
 
+function singaporeBillingIntervalPoint(value: number) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value || "";
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  const hour = Number(part("hour"));
+  const minute = Number(part("minute"));
+
+  if (
+    !year ||
+    !month ||
+    !day ||
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute)
+  ) {
+    return null;
+  }
+
+  return {
+    dateKey: `${year}-${month}-${day}`,
+    minuteOfDay: hour * 60 + minute,
+  };
+}
+
+export function customerDspBillingTouchesMidnightWindow(
+  billingStartedAt: string | null | undefined,
+  billingEndedAt: string | null | undefined,
+) {
+  const startTime = new Date(String(billingStartedAt ?? "")).getTime();
+  const endTime = new Date(String(billingEndedAt ?? "")).getTime();
+
+  if (
+    !Number.isFinite(startTime) ||
+    !Number.isFinite(endTime) ||
+    endTime <= startTime
+  ) {
+    return null;
+  }
+
+  const start = singaporeBillingIntervalPoint(startTime);
+  const endExclusive = singaporeBillingIntervalPoint(endTime - 1);
+
+  if (!start || !endExclusive) {
+    return null;
+  }
+
+  if (start.dateKey !== endExclusive.dateKey) {
+    return true;
+  }
+
+  const isMidnightMinute = (minuteOfDay: number) =>
+    minuteOfDay >= 23 * 60 || minuteOfDay < 7 * 60;
+
+  return (
+    isMidnightMinute(start.minuteOfDay) ||
+    isMidnightMinute(endExclusive.minuteOfDay)
+  );
+}
+
 export function customerInvoiceBookingType(
   value: string | null | undefined,
 ): BookingType | null {
@@ -210,7 +281,8 @@ export function calculateCustomerInvoiceRateReview(
         traveler.id === input.travelerId &&
         (!input.companyId || traveler.company_id === input.companyId),
     ) || null;
-  const pricing = resolvePricing(
+  const resolvedRateSettings = rateSettings(rateSetup);
+  const resolvedPricing = resolvePricing(
     {
       bookingType,
       childSeatCount: Number(input.childSeatCount) || 0,
@@ -221,8 +293,24 @@ export function calculateCustomerInvoiceRateReview(
     },
     companyRecord || {},
     travelerRecord,
-    rateSettings(rateSetup),
+    resolvedRateSettings,
   );
+  const dspTouchesMidnight =
+    bookingType === "DSP"
+      ? customerDspBillingTouchesMidnightWindow(
+          input.billingStartedAt,
+          input.billingEndedAt,
+        )
+      : null;
+  const pricing =
+    dspTouchesMidnight === null
+      ? resolvedPricing
+      : {
+          ...resolvedPricing,
+          midnightSurcharge: dspTouchesMidnight
+            ? resolvedRateSettings.midnightSurcharge
+            : 0,
+        };
   const surchargeAmountCents = Math.round(
     (pricing.midnightSurcharge +
       pricing.extraStopCustomerAmount +

@@ -20,11 +20,13 @@ const [customerPage, preactivationSuite] = await Promise.all([
 
 for (const fragment of [
   "const customerFolderFinderPageSize = 10;",
-  "const customerBillingOverviewPageSize = 20;",
+  "const customerBillingOverviewPageSize = 15;",
   "const paginatedCustomerFolderFinderRows = filteredCustomers.slice(",
   "const paginatedCustomerBillingOverviewRows = filteredCustomerBillingOverviewRows.slice(",
   'data-customer-folder-finder-page-numbers="true"',
   'data-customer-billing-overview-pages="true"',
+  'data-customer-billing-overview-scroll="true"',
+  'data-customer-billing-overview-page-numbers="true"',
   'data-selected-customer-prepare-monthly-invoice="true"',
 ]) {
   assertIncludes(customerPage, fragment, `real customers scaled queue fragment ${fragment}`);

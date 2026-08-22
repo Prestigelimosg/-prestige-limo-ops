@@ -12,6 +12,13 @@ f13d784b Merge PR #331: Restore compact Customer Account width
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Customer Billing Overview Complete 15-Row Pagination Repair (2026-08-22)
+
+- Production `Load Accounts` reproduced a truncated Customer Billing Overview: the existing request asked the guarded account read for only 10 account-scope rows, and the existing overview correctly merged repeated scopes by exact customer ID, leaving only a few visible unique customers. This was an application limit, not a Supabase or Vercel read failure.
+- The existing guarded `Load Accounts` request now uses the route's already-established safe maximum of 1000 account rows so the current unique customer list can populate before client-side grouping. The established account-scope identities, exact customer-folder links, guarded saved-booking bridge, server search, invoice summaries, and customer-ID merge remain in the same lane.
+- The existing Customer Billing Overview now shows 15 unique customer rows per numbered page inside one bounded vertical/horizontal scroll box with a sticky table header. When more than 15 unique customers match, clickable page numbers remain directly below the box at the bottom-right for page 2, page 3, and onward. Quick search resets to page 1 and continues using the same guarded read.
+- This repair does not add another table, finder, route, API, account source, invoice lane, writer, schema, migration, Supabase/Vercel configuration change, provider send, payment, payout, PayNow, Calendar, Driver, messaging, GPS, or customer/driver-visible finance/internal data. Focused protection extends `scripts/test-customers-folder-finder-unbilled-queue-guard.mjs` and `scripts/test-customers-page-scaled-queues-guard.mjs`; visible browser verification covers 32 unique customers, 15-row pages, scrolling containment, and clickable pages 1–3 without a write request.
+
 ### DSP Customer Hourly Midnight-Fee Repair (2026-08-22)
 
 - Production booking `10894` reproduced a customer undercalculation after the owner saved an exact Admin DSP billing correction from `21 Aug 2026 18:35 SGT` to `22 Aug 2026 03:19 SGT`. The established duration and grace calculation was correct at `524` actual minutes → `9` billable hours × SGD65 = SGD585. The first interval repair incorrectly applied the configured SGD15 DSP midnight fee once and produced SGD600; the owner confirmed DSP uses SGD15 per midnight billable hour, while MNG, DEP, and TRF retain one SGD15 midnight fee.
@@ -3962,7 +3969,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 
 - The old Customer Folder / Job History Handoff support drawer is removed from the normal Customers page flow; the compact finder is now the single customer-folder lookup surface.
 - The compact finder keeps 10-row pages and an `All customers` dropdown with numbered page buttons for 200-plus accounts.
-- The separate Customer Billing Overview keeps 20-row pages; it does not reuse or change the finder/dropdown's documented 10-row page size.
+- The separate Customer Billing Overview keeps 15-row pages; it does not reuse or change the finder/dropdown's documented 10-row page size.
 - Finder load/search/selected feedback is a quiet one-line status under the controls, not a large success card, so the customer table stays visually dominant.
 - The fake top payment summary strip is removed from the daily Customers page.
 - The invoice workbench is collapsed behind an admin-only drawer, leaving the daily visible Customers page focused on the customer overview and selected-customer monthly preparation.
@@ -3975,7 +3982,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 ### Customers Page Scaled Queue Pagination UI Lock
 
 - The retired Customers follow-up, monthly-statement preview, and global Monthly Billing Queue surfaces remain removed from the normal Customers page.
-- The current Customer Folder Finder and `All customers` dropdown use numbered 10-row pages; the separate Customer Billing Overview uses numbered 20-row pages.
+- The current Customer Folder Finder and `All customers` dropdown use numbered 10-row pages; the separate Customer Billing Overview uses numbered 15-row pages.
 - Monthly invoice preparation remains inside the exact selected-customer workspace and hands off to the existing reviewed invoice workbench; there is no duplicate global billing queue or write path.
 - This is UI-only pagination on existing admin surfaces; it does not add routes, APIs, DB reads/writes, env changes, Vercel changes, provider sends, GPS/live-location, billing/payment/PDF/payout activation, calendar sync, or shims.
 - Existing admin-only boundaries remain unchanged and customer/driver forbidden finance/internal/mock-archive data remains blocked from public surfaces.

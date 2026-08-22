@@ -109,7 +109,7 @@ for (const fragment of [
 
 for (const fragment of [
   '<div className="border-b border-slate-300 p-4 sm:p-5">',
-  '<th className="border-b border-slate-300 px-3 py-2 font-bold">Customer Name</th>',
+  '<th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 font-bold">Customer Name</th>',
   '<td className="border-b border-slate-300 px-3 py-3">',
   ': "grid gap-4 border-t border-slate-300 p-4 sm:p-5"',
 ]) {

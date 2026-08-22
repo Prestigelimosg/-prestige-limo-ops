@@ -50,11 +50,41 @@ for (const fragment of [
   "created_at",
   "opaqueDriverJobLinkKey",
   "openDriverNativeJobHandoff",
-  "Response.redirect",
+  "new Response\\(null",
+  "Location: destination\\.toString\\(\\)",
+  "status: 302",
   '"Cache-Control": "no-store"',
 ]) {
   assert.match(resolver, new RegExp(fragment), `native resolver must preserve ${fragment}`);
 }
+
+assert.doesNotMatch(
+  resolver,
+  /Response\.redirect|response\.headers\.set/,
+  "native resolver must construct its redirect and privacy headers atomically",
+);
+
+const redirectCanaryDestination = new URL(
+  "https://app.prestigelimo.sg/driver-job/redacted-canary-token",
+);
+const redirectCanary = new Response(null, {
+  headers: {
+    "Cache-Control": "no-store",
+    Location: redirectCanaryDestination.toString(),
+    "Referrer-Policy": "no-referrer",
+    Vary: "Cookie, x-prestige-driver-installation-id",
+  },
+  status: 302,
+});
+assert.equal(redirectCanary.status, 302);
+assert.equal(redirectCanary.headers.get("location"), redirectCanaryDestination.toString());
+assert.equal(redirectCanary.headers.get("cache-control"), "no-store");
+assert.equal(redirectCanary.headers.get("referrer-policy"), "no-referrer");
+assert.equal(
+  redirectCanary.headers.get("vary"),
+  "Cookie, x-prestige-driver-installation-id",
+);
+assert.equal(await redirectCanary.text(), "");
 
 for (const forbidden of [
   "customer_price",

@@ -32,6 +32,7 @@
           "faceIDPermission": "Allow Prestige Limo Ops to use Face ID to protect verified operations access."
         }
       ],
+      "expo-notifications",
       "expo-secure-store"
     ],
     "extra": {

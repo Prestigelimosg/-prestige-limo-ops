@@ -21,6 +21,11 @@ const adminDevicePushContactEmailName =
 const supabaseUrlName = "SUPABASE_URL";
 const supabaseServiceRoleKeyName = "SUPABASE_SERVICE_ROLE_KEY";
 const adminDevicePushProviderTimeoutMs = 5000;
+const adminNativePushSubscriptionSource = "admin_native_ios";
+const adminNativePushSubscriptionSentinel = "native_expo_push_token";
+const adminBrowserPushSubscriptionSource = "admin_dashboard";
+const expoPushEndpoint = "https://exp.host/--/api/v2/push/send";
+const adminNativeDeviceLabelPrefix = "admin-native-ios:";
 
 const requiredEnvNames = [
   adminDevicePushNotificationEnvGateName,
@@ -76,6 +81,7 @@ type AdminDevicePushConfig = {
 };
 
 type AdminDevicePushSubscriptionInput = {
+  channel: "web";
   endpoint: string;
   keys: {
     p256dh: string;
@@ -83,6 +89,16 @@ type AdminDevicePushSubscriptionInput = {
   };
   device_label: string | null;
 };
+
+type AdminNativePushSubscriptionInput = {
+  channel: "native_ios";
+  endpoint: string;
+  installationId: string;
+};
+
+type ParsedAdminDevicePushSubscriptionInput =
+  | AdminDevicePushSubscriptionInput
+  | AdminNativePushSubscriptionInput;
 
 type AdminDevicePushSubscriptionSummary = {
   id: string | null;
@@ -164,9 +180,31 @@ export type AdminDevicePushSender = (
 
 type AdminDevicePushAlertOptions = {
   env?: EnvInput;
+  loadedSubscriptionLoader?: () => Promise<LoadedAdminDevicePushSubscription[]>;
+  nativePushSender?: (
+    expoPushToken: string,
+    payload: AdminNativeDevicePushPayload,
+  ) => Promise<void>;
   subscriptionLoader?: () => Promise<PushSubscription[]>;
   pushSender?: AdminDevicePushSender;
   vehiclePlate?: unknown;
+};
+
+type AdminNativeDevicePushPayload = {
+  body: "A driver job update is ready. Open Dashboard to review.";
+  data: {
+    open_target: "/";
+    type: "driver_acknowledged";
+  };
+  priority: "high";
+  sound: "default";
+  title: "Prestige Limo Ops";
+};
+
+type LoadedAdminDevicePushSubscription = {
+  channel: "native_ios" | "web";
+  endpoint: string;
+  webSubscription: PushSubscription | null;
 };
 
 function cleanEnvValue(env: EnvInput, key: string): string | null {
@@ -300,11 +338,24 @@ function parseRecord(value: unknown): Record<string, unknown> | null {
 
 function parseSubscriptionInput(
   value: unknown,
-): AdminDevicePushSubscriptionInput | null {
+): ParsedAdminDevicePushSubscriptionInput | null {
   const body = parseRecord(value);
   if (!body) {
     return null;
   }
+
+  if (body.channel === adminNativePushSubscriptionSource) {
+    const endpoint = parseExpoPushToken(body.native_token);
+    const installationId = parseAdminInstallationId(body.installation_id);
+    return endpoint && installationId
+      ? {
+          channel: "native_ios",
+          endpoint,
+          installationId,
+        }
+      : null;
+  }
+
   const subscription = parseRecord(body.subscription) ?? body;
   const keys = parseRecord(subscription.keys);
   const endpoint = safeText(subscription.endpoint, 2048);
@@ -317,6 +368,7 @@ function parseSubscriptionInput(
   }
 
   return {
+    channel: "web",
     endpoint,
     keys: {
       p256dh,
@@ -324,6 +376,26 @@ function parseSubscriptionInput(
     },
     device_label: deviceLabel,
   };
+}
+
+function parseExpoPushToken(value: unknown): string | null {
+  const token = safeText(value, 512);
+  return token && /^(?:Exponent|Expo)PushToken\[[A-Za-z0-9_-]{20,400}\]$/.test(token)
+    ? token
+    : null;
+}
+
+function parseAdminInstallationId(value: unknown): string | null {
+  const installationId = safeText(value, 36)?.toLowerCase() || "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+    installationId,
+  )
+    ? installationId
+    : null;
+}
+
+function adminNativeDeviceLabel(installationId: string): string {
+  return `${adminNativeDeviceLabelPrefix}${installationId}`;
 }
 
 function blockedSubscriptionResult(
@@ -377,22 +449,44 @@ export async function registerAdminDevicePushSubscription(
   }
 
   const supabase = createSupabaseClient(config);
+  const nativeDeviceLabel = parsed.channel === "native_ios"
+    ? adminNativeDeviceLabel(parsed.installationId)
+    : null;
+
+  if (parsed.channel === "native_ios") {
+    const { data: activeNativeRows, error: activeNativeError } = await supabase
+      .from("admin_device_push_subscriptions")
+      .select("endpoint, device_label, actor_label")
+      .eq("source_surface", adminNativePushSubscriptionSource)
+      .eq("subscription_status", "active")
+      .limit(3);
+    const rows = Array.isArray(activeNativeRows) ? activeNativeRows : [];
+    const existing = rows[0];
+    if (activeNativeError || rows.length > 1 || (existing && (
+      existing.endpoint !== parsed.endpoint ||
+      existing.device_label !== nativeDeviceLabel ||
+      existing.actor_label !== actor.actor_label
+    ))) {
+      return blockedSubscriptionResult(
+        "invalid_subscription", 409,
+        "The approved native Admin notification installation does not match.",
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("admin_device_push_subscriptions")
-    .upsert(
-      {
-        endpoint: parsed.endpoint,
-        p256dh: parsed.keys.p256dh,
-        auth: parsed.keys.auth,
-        device_label: parsed.device_label,
-        subscription_status: "active",
-        source_surface: "admin_dashboard",
-        actor_label: actor.actor_label,
-        revoked_at: null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "endpoint" },
-    )
+    .upsert({
+      endpoint: parsed.endpoint,
+      p256dh: parsed.channel === "native_ios" ? adminNativePushSubscriptionSentinel : parsed.keys.p256dh,
+      auth: parsed.channel === "native_ios" ? adminNativePushSubscriptionSentinel : parsed.keys.auth,
+      device_label: parsed.channel === "native_ios" ? nativeDeviceLabel : parsed.device_label,
+      subscription_status: "active",
+      source_surface: parsed.channel === "native_ios" ? adminNativePushSubscriptionSource : adminBrowserPushSubscriptionSource,
+      actor_label: actor.actor_label,
+      revoked_at: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "endpoint" })
     .select("id, device_label, subscription_status")
     .single();
 
@@ -402,6 +496,32 @@ export async function registerAdminDevicePushSubscription(
       500,
       "Admin device push subscription write failed safely.",
     );
+  }
+
+  if (parsed.channel === "native_ios") {
+    const { data: confirmedNativeRows, error: confirmedNativeError } = await supabase
+      .from("admin_device_push_subscriptions")
+      .select("endpoint, device_label, actor_label")
+      .eq("source_surface", adminNativePushSubscriptionSource)
+      .eq("subscription_status", "active")
+      .limit(3);
+    const confirmedRows = Array.isArray(confirmedNativeRows) ? confirmedNativeRows : [];
+    if (confirmedNativeError || confirmedRows.length !== 1 ||
+      confirmedRows[0]?.endpoint !== parsed.endpoint ||
+      confirmedRows[0]?.device_label !== nativeDeviceLabel ||
+      confirmedRows[0]?.actor_label !== actor.actor_label) {
+      const now = new Date().toISOString();
+      await supabase.from("admin_device_push_subscriptions").update({
+        subscription_status: "revoked", revoked_at: now, updated_at: now,
+      }).eq("endpoint", parsed.endpoint)
+        .eq("source_surface", adminNativePushSubscriptionSource)
+        .eq("device_label", nativeDeviceLabel)
+        .eq("actor_label", actor.actor_label);
+      return blockedSubscriptionResult(
+        "invalid_subscription", 409,
+        "Multiple native Admin notification registrations failed safely.",
+      );
+    }
   }
 
   return {
@@ -457,14 +577,21 @@ export async function revokeAdminDevicePushSubscription(
 
   const supabase = createSupabaseClient(config);
   const now = new Date().toISOString();
-  const { data, error } = await supabase
+  let revokeQuery = supabase
     .from("admin_device_push_subscriptions")
     .update({
       subscription_status: "revoked",
       revoked_at: now,
       updated_at: now,
     })
-    .eq("endpoint", parsed.endpoint)
+    .eq("endpoint", parsed.endpoint);
+  if (parsed.channel === "native_ios") {
+    revokeQuery = revokeQuery
+      .eq("source_surface", adminNativePushSubscriptionSource)
+      .eq("device_label", adminNativeDeviceLabel(parsed.installationId))
+      .eq("actor_label", actor.actor_label);
+  }
+  const { data, error } = await revokeQuery
     .select("id, device_label, subscription_status")
     .maybeSingle();
 
@@ -473,6 +600,14 @@ export async function revokeAdminDevicePushSubscription(
       "subscription_write_failed",
       500,
       "Admin device push subscription revoke failed safely.",
+    );
+  }
+
+  if (parsed.channel === "native_ios" && !data?.id) {
+    return blockedSubscriptionResult(
+      "invalid_subscription",
+      409,
+      "The exact native Admin notification subscription was not found.",
     );
   }
 
@@ -641,13 +776,48 @@ function isUsableBooking(booking: AdminBookingPersistenceRecord): boolean {
   );
 }
 
+function loadedAdminDevicePushSubscription(
+  value: unknown,
+): LoadedAdminDevicePushSubscription | null {
+  const row = parseRecord(value);
+  if (!row) return null;
+
+  const endpoint = safeText(row.endpoint, 2048);
+  if (!endpoint) return null;
+
+  if (row.source_surface === adminNativePushSubscriptionSource) {
+    const deviceLabel = safeText(row.device_label, 80);
+    const installationId = deviceLabel?.startsWith(adminNativeDeviceLabelPrefix)
+      ? parseAdminInstallationId(deviceLabel.slice(adminNativeDeviceLabelPrefix.length))
+      : null;
+    return parseExpoPushToken(endpoint) &&
+      row.p256dh === adminNativePushSubscriptionSentinel &&
+      row.auth === adminNativePushSubscriptionSentinel &&
+      installationId &&
+      safeText(row.actor_label, 160)
+      ? { channel: "native_ios", endpoint, webSubscription: null }
+      : null;
+  }
+
+  if (row.source_surface !== adminBrowserPushSubscriptionSource) return null;
+  const p256dh = safeText(row.p256dh, 512);
+  const auth = safeText(row.auth, 512);
+  return p256dh && auth
+    ? {
+        channel: "web",
+        endpoint,
+        webSubscription: { endpoint, keys: { auth, p256dh } },
+      }
+    : null;
+}
+
 async function loadActiveSubscriptions(
   config: AdminDevicePushConfig,
-): Promise<PushSubscription[]> {
+): Promise<LoadedAdminDevicePushSubscription[]> {
   const supabase = createSupabaseClient(config);
   const { data, error } = await supabase
     .from("admin_device_push_subscriptions")
-    .select("endpoint, p256dh, auth")
+    .select("endpoint, p256dh, auth, source_surface, device_label, actor_label")
     .eq("subscription_status", "active")
     .limit(25);
 
@@ -656,22 +826,8 @@ async function loadActiveSubscriptions(
   }
 
   return (Array.isArray(data) ? data : [])
-    .map((row) => {
-      const endpoint = safeText(row.endpoint, 2048);
-      const p256dh = safeText(row.p256dh, 512);
-      const auth = safeText(row.auth, 512);
-      if (!endpoint || !p256dh || !auth) {
-        return null;
-      }
-      return {
-        endpoint,
-        keys: {
-          p256dh,
-          auth,
-        },
-      } satisfies PushSubscription;
-    })
-    .filter((subscription): subscription is PushSubscription =>
+    .map(loadedAdminDevicePushSubscription)
+    .filter((subscription): subscription is LoadedAdminDevicePushSubscription =>
       Boolean(subscription),
     );
 }
@@ -692,6 +848,54 @@ async function sendWebPush(
   });
 }
 
+function safeNativeAcknowledgementPayload(): AdminNativeDevicePushPayload {
+  return {
+    body: "A driver job update is ready. Open Dashboard to review.",
+    data: {
+      open_target: "/",
+      type: "driver_acknowledged",
+    },
+    priority: "high",
+    sound: "default",
+    title: "Prestige Limo Ops",
+  };
+}
+
+async function sendNativePush(
+  expoPushToken: string,
+  payload: AdminNativeDevicePushPayload,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), adminDevicePushProviderTimeoutMs);
+  try {
+    const response = await fetcher(expoPushEndpoint, {
+      body: JSON.stringify({ ...payload, to: expoPushToken }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: controller.signal,
+    });
+    const body = parseRecord(await response.json().catch(() => null));
+    const ticket = Array.isArray(body?.data)
+      ? parseRecord(body.data[0])
+      : parseRecord(body?.data);
+    if (!response.ok || ticket?.status !== "ok") {
+      const error = new Error("Native Admin push provider rejected the request.") as Error & {
+        statusCode?: number;
+      };
+      error.statusCode = parseRecord(ticket?.details)?.error === "DeviceNotRegistered"
+        ? 410
+        : response.status || 502;
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function getPushProviderStatusCode(error: unknown): number | null {
   if (!error || typeof error !== "object") {
     return null;
@@ -703,9 +907,9 @@ function getPushProviderStatusCode(error: unknown): number | null {
 
 async function recordSubscriptionSendSuccess(
   config: AdminDevicePushConfig,
-  subscription: PushSubscription,
+  endpointValue: string,
 ): Promise<void> {
-  const endpoint = safeText(subscription.endpoint, 2048);
+  const endpoint = safeText(endpointValue, 2048);
   if (!endpoint) {
     return;
   }
@@ -726,10 +930,10 @@ async function recordSubscriptionSendSuccess(
 
 async function recordSubscriptionSendFailure(
   config: AdminDevicePushConfig,
-  subscription: PushSubscription,
+  endpointValue: string,
   error: unknown,
 ): Promise<void> {
-  const endpoint = safeText(subscription.endpoint, 2048);
+  const endpoint = safeText(endpointValue, 2048);
   if (!endpoint) {
     return;
   }
@@ -812,40 +1016,65 @@ export async function sendAdminDevicePushAlert(
     return blockedAlertResult("provider_failure", true);
   }
 
-  let subscriptions: PushSubscription[];
+  let subscriptions: LoadedAdminDevicePushSubscription[];
   try {
-    subscriptions = options.subscriptionLoader
-      ? await options.subscriptionLoader()
-      : await loadActiveSubscriptions(config);
+    subscriptions = options.loadedSubscriptionLoader
+      ? await options.loadedSubscriptionLoader()
+      : options.subscriptionLoader
+        ? (await options.subscriptionLoader()).map((subscription) => ({
+            channel: "web" as const,
+            endpoint: subscription.endpoint,
+            webSubscription: subscription,
+          }))
+        : await loadActiveSubscriptions(config);
   } catch {
     return blockedAlertResult("subscription_load_failed", true);
   }
 
-  if (subscriptions.length === 0) {
+  const nativeSubscriptionCount = subscriptions.filter(
+    (subscription) => subscription.channel === "native_ios",
+  ).length;
+  const eligibleSubscriptions = subscriptions.filter(
+    (subscription) =>
+      subscription.channel === "web" ||
+      (eventType === "driver_acknowledged" && nativeSubscriptionCount === 1),
+  );
+  if (eligibleSubscriptions.length === 0) {
     return blockedAlertResult("no_active_subscriptions", true);
   }
 
-  const sender =
+  const webSender =
     options.pushSender ??
     ((subscription: PushSubscription, pushPayload: AdminDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
 
+  const nativePayload = safeNativeAcknowledgementPayload();
   const shouldRecordSubscriptionHealth =
-    !options.subscriptionLoader && !options.pushSender;
+    !options.loadedSubscriptionLoader &&
+    !options.subscriptionLoader &&
+    !options.pushSender &&
+    !options.nativePushSender;
 
   let providerRequestCount = 0;
   let successfulRequestCount = 0;
-  for (const subscription of subscriptions) {
+  for (const subscription of eligibleSubscriptions) {
     providerRequestCount += 1;
     try {
-      await sender(subscription, payload);
+      if (subscription.channel === "native_ios") {
+        await (options.nativePushSender ?? sendNativePush)(
+          subscription.endpoint,
+          nativePayload,
+        );
+      } else {
+        await webSender(subscription.webSubscription!, payload);
+      }
       successfulRequestCount += 1;
       if (shouldRecordSubscriptionHealth) {
-        await recordSubscriptionSendSuccess(config, subscription);
+        await recordSubscriptionSendSuccess(config, subscription.endpoint);
       }
     } catch (error) {
       if (shouldRecordSubscriptionHealth) {
-        await recordSubscriptionSendFailure(config, subscription, error);
+        await recordSubscriptionSendFailure(config, subscription.endpoint, error);
       }
     }
   }

@@ -178,41 +178,12 @@ function singaporePickupClock(value: string | null | undefined) {
   return hour && minute ? `${hour}${minute}` : "";
 }
 
-function singaporeBillingIntervalPoint(value: number) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    day: "2-digit",
-    hour: "2-digit",
-    hourCycle: "h23",
-    minute: "2-digit",
-    month: "2-digit",
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-  }).formatToParts(new Date(value));
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((candidate) => candidate.type === type)?.value || "";
-  const year = part("year");
-  const month = part("month");
-  const day = part("day");
-  const hour = Number(part("hour"));
-  const minute = Number(part("minute"));
+const singaporeUtcOffsetMs = 8 * 60 * 60_000;
+const millisecondsPerHour = 60 * 60_000;
+const millisecondsPerDay = 24 * millisecondsPerHour;
+const midnightWindowHourSlots = 8;
 
-  if (
-    !year ||
-    !month ||
-    !day ||
-    !Number.isInteger(hour) ||
-    !Number.isInteger(minute)
-  ) {
-    return null;
-  }
-
-  return {
-    dateKey: `${year}-${month}-${day}`,
-    minuteOfDay: hour * 60 + minute,
-  };
-}
-
-export function customerDspBillingTouchesMidnightWindow(
+export function calculateCustomerDspMidnightFeeHours(
   billingStartedAt: string | null | undefined,
   billingEndedAt: string | null | undefined,
 ) {
@@ -227,24 +198,26 @@ export function customerDspBillingTouchesMidnightWindow(
     return null;
   }
 
-  const start = singaporeBillingIntervalPoint(startTime);
-  const endExclusive = singaporeBillingIntervalPoint(endTime - 1);
+  const localStartTime = startTime + singaporeUtcOffsetMs;
+  const localEndTime = endTime + singaporeUtcOffsetMs;
+  const firstWindowDay = Math.floor(localStartTime / millisecondsPerDay) - 1;
+  const lastWindowDay = Math.floor((localEndTime - 1) / millisecondsPerDay);
+  let midnightFeeHours = 0;
 
-  if (!start || !endExclusive) {
-    return null;
+  for (let day = firstWindowDay; day <= lastWindowDay; day += 1) {
+    const windowStart = day * millisecondsPerDay + 23 * millisecondsPerHour;
+
+    for (let slot = 0; slot < midnightWindowHourSlots; slot += 1) {
+      const slotStart = windowStart + slot * millisecondsPerHour;
+      const slotEnd = slotStart + millisecondsPerHour;
+
+      if (localStartTime < slotEnd && localEndTime > slotStart) {
+        midnightFeeHours += 1;
+      }
+    }
   }
 
-  if (start.dateKey !== endExclusive.dateKey) {
-    return true;
-  }
-
-  const isMidnightMinute = (minuteOfDay: number) =>
-    minuteOfDay >= 23 * 60 || minuteOfDay < 7 * 60;
-
-  return (
-    isMidnightMinute(start.minuteOfDay) ||
-    isMidnightMinute(endExclusive.minuteOfDay)
-  );
+  return midnightFeeHours;
 }
 
 export function customerInvoiceBookingType(
@@ -295,31 +268,14 @@ export function calculateCustomerInvoiceRateReview(
     travelerRecord,
     resolvedRateSettings,
   );
-  const dspTouchesMidnight =
-    bookingType === "DSP"
-      ? customerDspBillingTouchesMidnightWindow(
-          input.billingStartedAt,
-          input.billingEndedAt,
-        )
-      : null;
-  const pricing =
-    dspTouchesMidnight === null
-      ? resolvedPricing
-      : {
-          ...resolvedPricing,
-          midnightSurcharge: dspTouchesMidnight
-            ? resolvedRateSettings.midnightSurcharge
-            : 0,
-        };
-  const surchargeAmountCents = Math.round(
-    (pricing.midnightSurcharge +
-      pricing.extraStopCustomerAmount +
-      pricing.childSeatCustomerAmount) *
-      100,
-  );
-
   if (bookingType !== "DSP") {
-    const baseAmountCents = Math.round(pricing.customerRate * 100);
+    const surchargeAmountCents = Math.round(
+      (resolvedPricing.midnightSurcharge +
+        resolvedPricing.extraStopCustomerAmount +
+        resolvedPricing.childSeatCustomerAmount) *
+        100,
+    );
+    const baseAmountCents = Math.round(resolvedPricing.customerRate * 100);
 
     if (baseAmountCents <= 0) {
       return null;
@@ -332,10 +288,46 @@ export function calculateCustomerInvoiceRateReview(
       billableHours: null,
       billableMinutes: null,
       bookingType,
-      customerRateSource: pricing.pricingSource,
+      customerRateSource: resolvedPricing.pricingSource,
       customerRateUnit: "job",
       rateCents: baseAmountCents,
       surchargeAmountCents,
+    };
+  }
+
+  const baseCalculation = calculateDspCustomerInvoiceAmountCents(input.actualMinutes, {
+    ...resolvedPricing,
+    midnightSurcharge: 0,
+  });
+
+  if (!baseCalculation) {
+    return null;
+  }
+
+  const hasBillingInterval = Boolean(input.billingStartedAt || input.billingEndedAt);
+  let pricing = resolvedPricing;
+
+  if (hasBillingInterval) {
+    const intervalActualMinutes = calculateCustomerDspBillingActualMinutes(
+      input.billingStartedAt,
+      input.billingEndedAt,
+    );
+    const midnightFeeHours = calculateCustomerDspMidnightFeeHours(
+      input.billingStartedAt,
+      input.billingEndedAt,
+    );
+
+    if (
+      intervalActualMinutes !== baseCalculation.actualMinutes ||
+      midnightFeeHours === null
+    ) {
+      return null;
+    }
+
+    pricing = {
+      ...resolvedPricing,
+      midnightSurcharge:
+        resolvedRateSettings.midnightSurcharge * midnightFeeHours,
     };
   }
 

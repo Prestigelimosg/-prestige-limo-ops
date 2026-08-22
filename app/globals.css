@@ -279,6 +279,9 @@ input {
     > [data-dispatch-workflow-step="pickup-dropoff-vehicle"],
   [data-mobile-dispatch-step="details"]
     > .contents
+    > [data-dispatch-workflow-step="trip-extras"],
+  [data-mobile-dispatch-step="details"]
+    > .contents
     > [data-dispatch-workflow-step="map-route-assist"],
   [data-mobile-dispatch-step="review"]
     > .contents
@@ -295,10 +298,16 @@ input {
       [data-dispatch-workflow-step="booking-input-parser"]
     ):not([data-dispatch-workflow-step="booking-details"]):not(
       [data-dispatch-workflow-step="pickup-dropoff-vehicle"]
-    ):not([data-dispatch-workflow-step="map-route-assist"]):not(
-      [data-dispatch-workflow-step="job-card-preview"]
-    ):not([data-mobile-dispatch-review-panel]):not([hidden]):not(.hidden) {
+    ):not([data-dispatch-workflow-step="trip-extras"]):not(
+      [data-dispatch-workflow-step="map-route-assist"]
+    ):not([data-dispatch-workflow-step="job-card-preview"]):not(
+      [data-mobile-dispatch-review-panel]
+    ):not([hidden]):not(.hidden) {
     display: revert;
+  }
+
+  [data-dispatch-workflow-step="admin-lower-pricing"] {
+    order: 61;
   }
 }
 

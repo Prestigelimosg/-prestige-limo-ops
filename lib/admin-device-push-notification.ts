@@ -173,6 +173,21 @@ export type AdminDevicePushEventType =
   | "email_booking_cancellation"
   | "email_confirmed_booking";
 
+type AdminNativeDriverEventType =
+  | "driver_acknowledged"
+  | "driver_completed"
+  | "driver_ots"
+  | "driver_otw"
+  | "driver_pob";
+
+const adminNativeDriverEventTypes = new Set<AdminDevicePushEventType>([
+  "driver_acknowledged",
+  "driver_completed",
+  "driver_ots",
+  "driver_otw",
+  "driver_pob",
+]);
+
 export type AdminDevicePushSender = (
   subscription: PushSubscription,
   payload: AdminDevicePushPayload,
@@ -191,10 +206,10 @@ type AdminDevicePushAlertOptions = {
 };
 
 type AdminNativeDevicePushPayload = {
-  body: "A driver job update is ready. Open Dashboard to review.";
+  body: string;
   data: {
     open_target: "/";
-    type: "driver_acknowledged";
+    type: AdminNativeDriverEventType;
   };
   priority: "high";
   sound: "default";
@@ -712,6 +727,12 @@ function validAdminDevicePushEventType(value: unknown): value is AdminDevicePush
   return typeof value === "string" && value in adminDevicePushEventCopy;
 }
 
+function isAdminNativeDriverEventType(
+  value: AdminDevicePushEventType,
+): value is AdminNativeDriverEventType {
+  return adminNativeDriverEventTypes.has(value);
+}
+
 function safeVehiclePlate(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -848,12 +869,26 @@ async function sendWebPush(
   });
 }
 
-function safeNativeAcknowledgementPayload(): AdminNativeDevicePushPayload {
+function safeNativeDriverPayload(
+  eventType: AdminNativeDriverEventType,
+  vehiclePlate?: unknown,
+): AdminNativeDevicePushPayload {
+  const plate = safeVehiclePlate(vehiclePlate);
+  const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
+  const body =
+    plate && eventType === "driver_acknowledged"
+      ? `Driver ${plate} acknowledged the job.`
+      : plate && statusLabel
+        ? `${plate} reported ${statusLabel}.`
+        : eventType === "driver_acknowledged"
+          ? "A driver job update is ready. Open Dashboard to review."
+          : adminDevicePushEventCopy[eventType].body;
+
   return {
-    body: "A driver job update is ready. Open Dashboard to review.",
+    body,
     data: {
       open_target: "/",
-      type: "driver_acknowledged",
+      type: eventType,
     },
     priority: "high",
     sound: "default",
@@ -1034,10 +1069,13 @@ export async function sendAdminDevicePushAlert(
   const nativeSubscriptionCount = subscriptions.filter(
     (subscription) => subscription.channel === "native_ios",
   ).length;
+  const nativeEventType = isAdminNativeDriverEventType(eventType)
+    ? eventType
+    : null;
   const eligibleSubscriptions = subscriptions.filter(
     (subscription) =>
       subscription.channel === "web" ||
-      (eventType === "driver_acknowledged" && nativeSubscriptionCount === 1),
+      (Boolean(nativeEventType) && nativeSubscriptionCount === 1),
   );
   if (eligibleSubscriptions.length === 0) {
     return blockedAlertResult("no_active_subscriptions", true);
@@ -1048,7 +1086,9 @@ export async function sendAdminDevicePushAlert(
     ((subscription: PushSubscription, pushPayload: AdminDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
 
-  const nativePayload = safeNativeAcknowledgementPayload();
+  const nativePayload = nativeEventType
+    ? safeNativeDriverPayload(nativeEventType, options.vehiclePlate)
+    : null;
   const shouldRecordSubscriptionHealth =
     !options.loadedSubscriptionLoader &&
     !options.subscriptionLoader &&
@@ -1058,16 +1098,22 @@ export async function sendAdminDevicePushAlert(
   let providerRequestCount = 0;
   let successfulRequestCount = 0;
   for (const subscription of eligibleSubscriptions) {
+    const sendProviderRequest =
+      subscription.channel === "native_ios"
+        ? nativePayload
+          ? () =>
+              (options.nativePushSender ?? sendNativePush)(
+                subscription.endpoint,
+                nativePayload,
+              )
+          : null
+        : () => webSender(subscription.webSubscription!, payload);
+    if (!sendProviderRequest) {
+      continue;
+    }
     providerRequestCount += 1;
     try {
-      if (subscription.channel === "native_ios") {
-        await (options.nativePushSender ?? sendNativePush)(
-          subscription.endpoint,
-          nativePayload,
-        );
-      } else {
-        await webSender(subscription.webSubscription!, payload);
-      }
+      await sendProviderRequest();
       successfulRequestCount += 1;
       if (shouldRecordSubscriptionHealth) {
         await recordSubscriptionSendSuccess(config, subscription.endpoint);

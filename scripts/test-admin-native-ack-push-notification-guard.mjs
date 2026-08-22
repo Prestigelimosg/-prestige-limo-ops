@@ -57,6 +57,11 @@ includes(
     "forgetAdminNativeNotificationToken",
     "prestige.admin.native-notification-token.v1",
     "nativeAdminNotificationOpenRequest",
+    '"driver_acknowledged"',
+    '"driver_otw"',
+    '"driver_ots"',
+    '"driver_pob"',
+    '"driver_completed"',
     'open_target === "/"',
   ],
   "Admin native notification storage and safe open contract",
@@ -140,38 +145,59 @@ includes(
     '? adminNativePushSubscriptionSource',
     '.eq("source_surface", adminNativePushSubscriptionSource)',
     "nativeSubscriptionCount === 1",
-    'eventType === "driver_acknowledged"',
+    "isAdminNativeDriverEventType(eventType)",
     'title: "Prestige Limo Ops"',
-    'body: "A driver job update is ready. Open Dashboard to review."',
+    '`Driver ${plate} acknowledged the job.`',
+    '`${plate} reported ${statusLabel}.`',
     'open_target: "/"',
     "DeviceNotRegistered",
   ],
-  "Existing Admin push sender native ACK extension",
+  "Existing Admin push sender native Driver-event extension",
 );
 includes(
   "ledger",
   [
-    "Native Admin Driver-ACK Lock-Screen Alert",
+    "Native Admin Driver Plate Lock-Screen Alerts",
     "admin_native_ios",
-    "A driver job update is ready. Open Dashboard to review.",
+    "Driver 9696 acknowledged the job.",
+    "9696 reported Job Completed.",
   ],
   "Implementation ledger",
 );
 
 const tempDir = path.join(process.cwd(), ".tmp-admin-native-ack-push-guard");
 const tempHelper = path.join(tempDir, "lib/admin-device-push-notification.js");
+const tempNativeNotifications = path.join(
+  tempDir,
+  "admin-companion/src/admin-native-notifications.js",
+);
 const tempSupabaseStub = path.join(
   tempDir,
   "node_modules/@supabase/supabase-js/index.js",
 );
+const tempSecureStoreStub = path.join(
+  tempDir,
+  "node_modules/expo-secure-store/index.js",
+);
 await rm(tempDir, { force: true, recursive: true });
 await Promise.all([
   mkdir(path.dirname(tempHelper), { recursive: true }),
+  mkdir(path.dirname(tempNativeNotifications), { recursive: true }),
   mkdir(path.dirname(tempSupabaseStub), { recursive: true }),
+  mkdir(path.dirname(tempSecureStoreStub), { recursive: true }),
 ]);
 await writeFile(
   tempSupabaseStub,
   "exports.createClient = function () { return globalThis.__ADMIN_NATIVE_PUSH_TEST_CLIENT__; };",
+);
+await writeFile(
+  tempSecureStoreStub,
+  [
+    'exports.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY = "after-first-unlock-this-device-only";',
+    "exports.deleteItemAsync = async function () {};",
+    "exports.getItemAsync = async function () { return null; };",
+    "exports.setItemAsync = async function () {};",
+  ].join("\n"),
 );
 await writeFile(
   tempHelper,
@@ -184,9 +210,23 @@ await writeFile(
     fileName: paths.helper,
   }).outputText,
 );
+await writeFile(
+  tempNativeNotifications,
+  ts.transpileModule(source.nativeNotifications, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: paths.nativeNotifications,
+  }).outputText,
+);
 
 try {
   const helper = createRequire(import.meta.url)(tempHelper);
+  const nativeNotifications = createRequire(import.meta.url)(
+    tempNativeNotifications,
+  );
   const configuredEnv = {
     PRESTIGE_ADMIN_DEVICE_PUSH_ENABLED: "true",
     PRESTIGE_ADMIN_DEVICE_PUSH_VAPID_PUBLIC_KEY: "fake-public-key-for-guard",
@@ -300,11 +340,49 @@ try {
   assert.equal(nativeRevokeNoMatch.ok, false);
   assert.equal(nativeRevokeNoMatch.status, 409);
 
-  let nativePayload = null;
-  let nativeToken = null;
-  const acknowledgement = await helper.sendAdminDevicePushAlert(
-    "driver_acknowledged",
-    {
+  const nativeDriverEvents = {
+    driver_acknowledged: "Driver SNP 9124S acknowledged the job.",
+    driver_completed: "SNP 9124S reported Job Completed.",
+    driver_ots: "SNP 9124S reported OTS.",
+    driver_otw: "SNP 9124S reported OTW.",
+    driver_pob: "SNP 9124S reported POB.",
+  };
+  for (const eventType of Object.keys(nativeDriverEvents)) {
+    assert.deepEqual(
+      nativeNotifications.nativeAdminNotificationOpenRequest({
+        open_target: "/",
+        type: eventType,
+      }),
+      { openTarget: "/", type: eventType },
+      `${eventType} native tap must open the existing Admin Dashboard lane.`,
+    );
+  }
+  assert.equal(
+    nativeNotifications.nativeAdminNotificationOpenRequest({
+      open_target: "/",
+      type: "driver_issue",
+    }),
+    null,
+  );
+  assert.equal(
+    nativeNotifications.nativeAdminNotificationOpenRequest({
+      booking_reference: "must-not-pass",
+      open_target: "/",
+      type: "driver_otw",
+    }),
+    null,
+  );
+  assert.equal(
+    nativeNotifications.nativeAdminNotificationOpenRequest({
+      open_target: "/dashboard",
+      type: "driver_otw",
+    }),
+    null,
+  );
+  for (const [eventType, body] of Object.entries(nativeDriverEvents)) {
+    let nativePayload = null;
+    let nativeToken = null;
+    const nativeAlert = await helper.sendAdminDevicePushAlert(eventType, {
       env: configuredEnv,
       loadedSubscriptionLoader: async () => [{
         channel: "native_ios",
@@ -315,21 +393,19 @@ try {
         nativeToken = token;
         nativePayload = payload;
       },
-      vehiclePlate: "PRIVATE PLATE",
-    },
-  );
-  assert.equal(acknowledgement.ok, true);
-  assert.equal(acknowledgement.provider_request_count, 1);
-  assert.equal(nativeToken, nativeEndpoint);
-  assert.deepEqual(nativePayload, {
-    body: "A driver job update is ready. Open Dashboard to review.",
-    data: { open_target: "/", type: "driver_acknowledged" },
-    priority: "high",
-    sound: "default",
-    title: "Prestige Limo Ops",
-  });
-  for (const forbidden of [
-      "PRIVATE PLATE",
+      vehiclePlate: " snp 9124s ",
+    });
+    assert.equal(nativeAlert.ok, true, `${eventType} native push must send.`);
+    assert.equal(nativeAlert.provider_request_count, 1);
+    assert.equal(nativeToken, nativeEndpoint);
+    assert.deepEqual(nativePayload, {
+      body,
+      data: { open_target: "/", type: eventType },
+      priority: "high",
+      sound: "default",
+      title: "Prestige Limo Ops",
+    });
+    for (const forbidden of [
       "passenger",
       "route",
       "contact",
@@ -341,26 +417,41 @@ try {
       "paynow",
       "internal",
     ]) {
-    assert.equal(
-      JSON.stringify(nativePayload).toLowerCase().includes(forbidden.toLowerCase()),
-      false,
-      `Native Admin ACK payload must exclude ${forbidden}`,
-    );
+      assert.equal(
+        JSON.stringify(nativePayload).toLowerCase().includes(forbidden.toLowerCase()),
+        false,
+        `Native Admin ${eventType} payload must exclude ${forbidden}`,
+      );
+    }
   }
 
-  let nonAcknowledgementNativeSendCount = 0;
-  const nonAcknowledgement = await helper.sendAdminDevicePushAlert("driver_otw", {
+  let unsafePlatePayload = null;
+  const unsafePlateAlert = await helper.sendAdminDevicePushAlert("driver_otw", {
     env: configuredEnv,
     loadedSubscriptionLoader: async () => [{
       channel: "native_ios",
       endpoint: nativeEndpoint,
       webSubscription: null,
     }],
-    nativePushSender: async () => { nonAcknowledgementNativeSendCount += 1; },
+    nativePushSender: async (_token, payload) => { unsafePlatePayload = payload; },
+    vehiclePlate: "9696\nPassenger: Private",
   });
-  assert.equal(nonAcknowledgement.ok, false);
-  assert.equal(nonAcknowledgement.reason, "no_active_subscriptions");
-  assert.equal(nonAcknowledgementNativeSendCount, 0);
+  assert.equal(unsafePlateAlert.ok, true);
+  assert.equal(unsafePlatePayload.body, "Driver reported OTW. Open Dashboard to review.");
+
+  let nonDriverNativeSendCount = 0;
+  const nonDriverEvent = await helper.sendAdminDevicePushAlert("driver_issue", {
+    env: configuredEnv,
+    loadedSubscriptionLoader: async () => [{
+      channel: "native_ios",
+      endpoint: nativeEndpoint,
+      webSubscription: null,
+    }],
+    nativePushSender: async () => { nonDriverNativeSendCount += 1; },
+  });
+  assert.equal(nonDriverEvent.ok, false);
+  assert.equal(nonDriverEvent.reason, "no_active_subscriptions");
+  assert.equal(nonDriverNativeSendCount, 0);
 
   let duplicateNativeSendCount = 0;
   let preservedWebSendCount = 0;
@@ -401,4 +492,4 @@ try {
   await rm(tempDir, { force: true, recursive: true });
 }
 
-console.log("Admin native Driver-ACK push notification guard passed.");
+console.log("Admin native Driver plate push notification guard passed.");

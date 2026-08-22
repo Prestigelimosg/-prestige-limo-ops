@@ -6,9 +6,24 @@ const secureStoreOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
 };
 
+type AdminNativeNotificationType =
+  | "driver_acknowledged"
+  | "driver_completed"
+  | "driver_ots"
+  | "driver_otw"
+  | "driver_pob";
+
+const adminNativeNotificationTypes = new Set<AdminNativeNotificationType>([
+  "driver_acknowledged",
+  "driver_completed",
+  "driver_ots",
+  "driver_otw",
+  "driver_pob",
+]);
+
 export type AdminNativeNotificationOpenRequest = {
   openTarget: "/";
-  type: "driver_acknowledged";
+  type: AdminNativeNotificationType;
 };
 
 export function nativeAdminNotificationOpenRequest(
@@ -19,10 +34,17 @@ export function nativeAdminNotificationOpenRequest(
   }
 
   const notification = value as Record<string, unknown>;
+  const type =
+    typeof notification.type === "string" &&
+    adminNativeNotificationTypes.has(
+      notification.type as AdminNativeNotificationType,
+    )
+      ? (notification.type as AdminNativeNotificationType)
+      : null;
   return notification.open_target === "/" &&
-    notification.type === "driver_acknowledged" &&
+    type &&
     Object.keys(notification).every((key) => key === "open_target" || key === "type")
-    ? { openTarget: "/", type: "driver_acknowledged" }
+    ? { openTarget: "/", type }
     : null;
 }
 

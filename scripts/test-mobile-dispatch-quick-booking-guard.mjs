@@ -54,6 +54,31 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  'data-customer-copy-action-grid="true"',
+  'className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row"',
+  'data-customer-copy-readable-summary="true"',
+  'data-customer-copy-readable-summary-item="true"',
+  'data-customer-copy-readable-summary-wide=',
+  'grid-cols-2 gap-1.5',
+  'col-span-2 sm:col-span-1',
+  'w-full rounded-md border border-amber-200',
+]) {
+  assert.equal(
+    dispatchUi.includes(fragment),
+    true,
+    `Mobile Customer Copy space-use repair must include ${fragment}`,
+  );
+}
+
+assert.equal(
+  appPage.includes(
+    'const customerCopyReadableSummaryPrimaryOrder = [\n    "Passenger",\n    "Reference",\n    "Service",\n    "Pax",',
+  ),
+  true,
+  "Mobile Customer Copy must pair Passenger/Reference and Service/Pax before the full-width trip rows.",
+);
+
+for (const fragment of [
   'button[data-dashboard-tab-has-alert-badge="true"]',
   'flex-direction: column',
   'gap: 0.125rem',
@@ -113,6 +138,31 @@ for (const fragment of [
 ]) {
   assert.equal(globalStyles.includes(fragment), true, `Responsive visibility rules must include ${fragment}`);
 }
+
+for (const fragment of [
+  '[data-mobile-dispatch-step="details"]\n    > .contents\n    > [data-dispatch-workflow-step="trip-extras"]',
+  '[data-dispatch-workflow-step="pickup-dropoff-vehicle"]\n    ):not([data-dispatch-workflow-step="trip-extras"]):not(',
+  '[data-dispatch-workflow-step="admin-lower-pricing"] {\n    order: 61;',
+]) {
+  assert.equal(
+    globalStyles.includes(fragment),
+    true,
+    `Mobile Details and Options placement must include ${fragment}`,
+  );
+}
+
+assert.equal(
+  dispatchUi.indexOf('data-dispatch-workflow-step="pickup-dropoff-vehicle"') <
+    dispatchUi.indexOf('data-dispatch-workflow-step="trip-extras"'),
+  true,
+  "The established Route Extras & Child Seat sector must remain after Pickup / Drop-off in source order.",
+);
+assert.equal(
+  dispatchUi.indexOf('data-dispatch-workflow-step="driver-assignment"') <
+    dispatchUi.indexOf('data-dispatch-workflow-step="admin-lower-pricing"'),
+  false,
+  "Desktop source order must stay unchanged; the phone-only CSS override owns Pricing placement.",
+);
 
 assert.equal(
   globalStyles.includes("min-width: 640px"),

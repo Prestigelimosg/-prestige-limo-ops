@@ -35,8 +35,8 @@ assertIncludes(
 );
 assertIncludes(
   adminPage,
-  'const tripRouteFieldOrder: Array<keyof BookingForm> = [\n  "vehicle",\n  "date",\n  "time",\n  "flight",\n  "bookingType",',
-  "admin pickup/dropoff field order places service type next to flight",
+  'const tripRouteFieldOrder: Array<keyof BookingForm> = [\n  "vehicle",\n  "date",\n  "time",\n  "bookingType",\n  "dspEndDate",\n  "dspEndTime",\n  "flight",',
+  "admin pickup/dropoff field order retains the established DSP end fields before flight",
 );
 
 [

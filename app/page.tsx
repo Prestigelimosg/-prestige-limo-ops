@@ -28186,14 +28186,37 @@ export default function Home() {
         ]
       : []),
   ];
+  const customerCopyReadableSummaryPrimaryOrder = [
+    "Passenger",
+    "Reference",
+    "Service",
+    "Pax",
+    "Pickup",
+    "From",
+    "To",
+    "Driver",
+  ];
   const customerCopyReadableSummaryItems = [
-    ...dispatchReadableSummaryItems.filter(
-      (item) => !["Company", "Extra stops", "Flight", "Vehicle"].includes(item.label),
+    ...customerCopyReadableSummaryPrimaryOrder.flatMap((label) =>
+      dispatchReadableSummaryItems.filter((item) => item.label === label),
     ),
     ...(dispatchReadableCustomerVehicleValue
       ? [{ label: "Car", value: dispatchReadableCustomerVehicleValue }]
       : []),
+    ...["Return", "Return from", "Return to"].flatMap((label) =>
+      dispatchReadableSummaryItems.filter((item) => item.label === label),
+    ),
   ];
+  const customerCopyReadableSummaryWideLabels = new Set([
+    "Pickup",
+    "From",
+    "To",
+    "Driver",
+    "Car",
+    "Return",
+    "Return from",
+    "Return to",
+  ]);
   const jobCardSaveFeedbackDuplicatesBillingIdentity =
     Boolean(bookingSaveMessage && displayedSaveCrmBillingIdentityMessage && saveCrmBillingIdentityReview) &&
     clean(bookingSaveMessage?.text) === clean(displayedSaveCrmBillingIdentityMessage?.text);
@@ -46146,8 +46169,11 @@ export default function Home() {
                   <h2 className="text-lg font-semibold">Customer Copy</h2>
                   <p className="text-xs text-slate-500">Customer booking details.</p>
                 </div>
-                <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
+                  <div
+                    className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row"
+                    data-customer-copy-action-grid="true"
+                  >
                     {customerCopyEditState.isEditing ? (
                       <>
                         <button
@@ -46197,6 +46223,8 @@ export default function Home() {
                     </button>
                     <button
                       className={`min-h-9 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 ${
+                        customerCopyEditState.isEditing ? "" : "col-span-2 sm:col-auto"
+                      } ${
                         actionFeedbackButtonClass(
                           customerDriverDetailsPortalLinkCopyButtonTone,
                           "border-sky-300 text-sky-900 hover:bg-sky-50",
@@ -46252,7 +46280,7 @@ export default function Home() {
                 </div>
               </div>
               <div
-                className="mb-2 inline-flex max-w-full rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900"
+                className="mb-2 flex w-full rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 sm:inline-flex sm:w-auto sm:rounded-full"
                 data-customer-live-location-helper="true"
               >
                 {customerLiveLocationHelperText}
@@ -46537,12 +46565,20 @@ export default function Home() {
               ) : (
                 <>
                   <div
-                    className="mb-2 grid grid-cols-1 gap-1.5 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 text-xs sm:grid-cols-2 xl:grid-cols-3"
+                    className="mb-2 grid grid-cols-2 gap-1.5 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 text-xs sm:grid-cols-2 xl:grid-cols-3"
                     data-customer-copy-readable-summary="true"
                   >
                     {customerCopyReadableSummaryItems.map((item) => (
                       <div
-                        className="min-w-0 rounded border border-emerald-100 bg-white px-2 py-1.5"
+                        className={`min-w-0 rounded border border-emerald-100 bg-white px-2 py-1.5 ${
+                          customerCopyReadableSummaryWideLabels.has(item.label)
+                            ? "col-span-2 sm:col-span-1"
+                            : ""
+                        }`}
+                        data-customer-copy-readable-summary-item="true"
+                        data-customer-copy-readable-summary-wide={
+                          customerCopyReadableSummaryWideLabels.has(item.label) ? "true" : "false"
+                        }
                         key={`customer-${item.label}`}
                       >
                         <p className="text-[10px] font-semibold uppercase text-emerald-700">{item.label}</p>

@@ -28,6 +28,11 @@ const customerCopy = sliceBetween(
   'data-dispatch-workflow-step="customer-whatsapp-copy"',
   'data-dispatch-workflow-step="driver-dispatch-copy"',
 );
+const customerCopyReadableSummaryOrder = sliceBetween(
+  adminPage,
+  "const customerCopyReadableSummaryPrimaryOrder =",
+  "const customerCopyReadableSummaryItems =",
+);
 
 assert.match(helper, /function AdminOperationalUppercaseValue/);
 assert.match(helper, /className="uppercase"/);
@@ -58,9 +63,14 @@ for (const marker of [
 
 assert.doesNotMatch(customerCopy, /AdminOperationalUppercaseValue|data-admin-operational-uppercase-value/);
 assert.match(
-  adminPage,
-  /!\["Company", "Extra stops", "Flight", "Vehicle"\]\.includes\(item\.label\)/,
-  "New admin-only uppercase rows must stay out of the existing Customer Copy layout.",
+  customerCopyReadableSummaryOrder,
+  /\[\s*"Passenger",\s*"Reference",\s*"Service",\s*"Pax",\s*"Pickup",\s*"From",\s*"To",\s*"Driver",\s*\]/,
+  "Customer Copy must retain the explicit customer-safe readable-summary allowlist.",
+);
+assert.doesNotMatch(
+  customerCopyReadableSummaryOrder,
+  /"Company"|"Extra stops"|"Flight"|"Vehicle"/,
+  "Admin-only Company, Extra stops, Flight, and Vehicle rows must stay out of Customer Copy.",
 );
 assert.doesNotMatch(
   `${customerBook}\n${customerPortal}\n${customerInvoicePanel}`,

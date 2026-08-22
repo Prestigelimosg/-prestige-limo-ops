@@ -20,6 +20,7 @@ import {
 
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const browserName = (process.env.BROWSER || "chrome").toLowerCase();
+const customerCopyLayoutOnly = process.env.CUSTOMER_COPY_LAYOUT_ONLY === "1";
 const chromeBinary =
   process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9230);
@@ -687,6 +688,31 @@ async function runChromeTest() {
           })()`),
         10000,
         `${label} tab content`,
+      );
+    };
+
+    const clickMobileDispatchStep = async (step) => {
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector(
+              '[data-mobile-dispatch-quick-step=${JSON.stringify(step)}]',
+            );
+            if (!button || button.disabled) {
+              return false;
+            }
+            const reactPropsKey = Object.keys(button).find((key) => key.startsWith('__reactProps$'));
+            if (!reactPropsKey || typeof button[reactPropsKey]?.onClick !== 'function') {
+              return false;
+            }
+            if (button.getAttribute('aria-current') !== 'step') {
+              button.click();
+              return false;
+            }
+            return true;
+          })()`),
+        10000,
+        `mobile Dispatch ${step} step`,
       );
     };
 
@@ -4522,6 +4548,186 @@ async function runChromeTest() {
         true,
         `${viewport.label}: expected hidden archive not to create horizontal overflow`,
       );
+
+      if (viewport.width < 640) {
+        await clickMobileDispatchStep("options");
+        const mobileOptionsPlacement = await evaluate(`(() => {
+          const workflow = document.querySelector('[data-dispatch-workflow="true"]');
+          const trip = workflow?.querySelector('[data-dispatch-workflow-step="trip-extras"]');
+          const driver = workflow?.querySelector('[data-dispatch-workflow-step="driver-assignment"]');
+          const pricing = workflow?.querySelector('[data-dispatch-workflow-step="admin-lower-pricing"]');
+          if (!workflow || !trip || !driver || !pricing) {
+            return false;
+          }
+          const visible = (element) => {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && rect.width > 0 && rect.height > 0;
+          };
+          const optionsDriverRect = driver.getBoundingClientRect();
+          const optionsPricingRect = pricing.getBoundingClientRect();
+          return {
+            driverBottom: Math.round(optionsDriverRect.bottom),
+            driverVisible: visible(driver),
+            pricingTop: Math.round(optionsPricingRect.top),
+            pricingVisible: visible(pricing),
+            tripVisible: visible(trip),
+          };
+        })()`);
+        assert.equal(
+          mobileOptionsPlacement.tripVisible,
+          false,
+          `${viewport.label}: expected Route Extras & Child Seat excluded from mobile Options`,
+        );
+        assert.equal(
+          mobileOptionsPlacement.driverVisible &&
+            mobileOptionsPlacement.pricingVisible &&
+            mobileOptionsPlacement.pricingTop >= mobileOptionsPlacement.driverBottom &&
+            mobileOptionsPlacement.pricingTop - mobileOptionsPlacement.driverBottom <= 20,
+          true,
+          `${viewport.label}: expected Pricing immediately below Assigned Driver in mobile Options`,
+        );
+
+        await clickMobileDispatchStep("details");
+        const mobileDetailsPlacement = await evaluate(`(() => {
+          const workflow = document.querySelector('[data-dispatch-workflow="true"]');
+          const pickup = workflow?.querySelector('[data-dispatch-workflow-step="pickup-dropoff-vehicle"]');
+          const trip = workflow?.querySelector('[data-dispatch-workflow-step="trip-extras"]');
+          const pricing = workflow?.querySelector('[data-dispatch-workflow-step="admin-lower-pricing"]');
+          if (!workflow || !pickup || !trip || !pricing) {
+            return false;
+          }
+          const visible = (element) => {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && rect.width > 0 && rect.height > 0;
+          };
+          const detailsPickupRect = pickup.getBoundingClientRect();
+          const detailsTripRect = trip.getBoundingClientRect();
+          return {
+            pickupBottom: Math.round(detailsPickupRect.bottom),
+            pickupVisible: visible(pickup),
+            pricingVisible: visible(pricing),
+            tripTop: Math.round(detailsTripRect.top),
+            tripVisible: visible(trip),
+          };
+        })()`);
+        assert.equal(
+          mobileDetailsPlacement.pickupVisible &&
+            mobileDetailsPlacement.tripVisible &&
+            !mobileDetailsPlacement.pricingVisible &&
+            mobileDetailsPlacement.tripTop >= mobileDetailsPlacement.pickupBottom &&
+            mobileDetailsPlacement.tripTop - mobileDetailsPlacement.pickupBottom <= 20,
+          true,
+          `${viewport.label}: expected Route Extras & Child Seat immediately below Pickup / Drop-off in mobile Details`,
+        );
+
+        await clickMobileDispatchStep("options");
+
+        const customerCopyLayout = await waitForCondition(
+          () =>
+            evaluate(`(() => {
+              const section = document.querySelector('[data-dispatch-workflow-step="customer-whatsapp-copy"]');
+              const actionGrid = section?.querySelector('[data-customer-copy-action-grid="true"]');
+              const helper = section?.querySelector('[data-customer-live-location-helper="true"]');
+              const summary = section?.querySelector('[data-customer-copy-readable-summary="true"]');
+              if (!section || !actionGrid || !helper || !summary) {
+                return false;
+              }
+              const sectionRect = section.getBoundingClientRect();
+              const actionGridRect = actionGrid.getBoundingClientRect();
+              const helperRect = helper.getBoundingClientRect();
+              const summaryRect = summary.getBoundingClientRect();
+              const actions = [...actionGrid.querySelectorAll('button')].map((button) => {
+                const rect = button.getBoundingClientRect();
+                return {
+                  height: Math.round(rect.height),
+                  left: Math.round(rect.left),
+                  text: button.textContent.trim(),
+                  top: Math.round(rect.top),
+                  width: Math.round(rect.width),
+                };
+              });
+              const items = [...summary.querySelectorAll('[data-customer-copy-readable-summary-item="true"]')]
+                .map((item) => {
+                  const rect = item.getBoundingClientRect();
+                  return {
+                    label: item.querySelector('p')?.textContent.trim() || '',
+                    top: Math.round(rect.top),
+                    wide: item.getAttribute('data-customer-copy-readable-summary-wide') || '',
+                    width: Math.round(rect.width),
+                  };
+                });
+              return {
+                actionGridLeft: Math.round(actionGridRect.left),
+                actionGridWidth: Math.round(actionGridRect.width),
+                actions,
+                docClientWidth: document.documentElement.clientWidth,
+                docScrollWidth: document.documentElement.scrollWidth,
+                helperWidth: Math.round(helperRect.width),
+                items,
+                sectionWidth: Math.round(sectionRect.width),
+                summaryWidth: Math.round(summaryRect.width),
+                visible: actionGridRect.width > 0 && summaryRect.width > 0,
+              };
+            })()`),
+          10000,
+          `${viewport.label} Customer Copy compact mobile layout`,
+        );
+        assert.equal(customerCopyLayout.visible, true, `${viewport.label}: expected visible Customer Copy layout`);
+        assert.equal(
+          customerCopyLayout.actionGridWidth >= customerCopyLayout.sectionWidth - 30,
+          true,
+          `${viewport.label}: expected Customer Copy actions to use the available width`,
+        );
+        const customerCopyActions = Object.fromEntries(
+          customerCopyLayout.actions.map((action) => [action.text, action]),
+        );
+        assert.equal(
+          Math.abs(customerCopyActions.Edit.top - customerCopyActions.Copy.top) <= 2 &&
+            Math.abs(customerCopyActions.Edit.width - customerCopyActions.Copy.width) <= 2,
+          true,
+          `${viewport.label}: expected Edit and Copy to share one balanced row`,
+        );
+        assert.equal(
+          customerCopyActions["Copy Booking Invite"].top > customerCopyActions.Edit.top &&
+            Math.abs(customerCopyActions["Copy Booking Invite"].left - customerCopyLayout.actionGridLeft) <= 2 &&
+            customerCopyActions["Copy Booking Invite"].width >= customerCopyLayout.actionGridWidth - 2,
+          true,
+          `${viewport.label}: expected Copy Booking Invite to fill the next row`,
+        );
+        assert.equal(
+          customerCopyLayout.helperWidth >= customerCopyLayout.actionGridWidth - 2,
+          true,
+          `${viewport.label}: expected the Customer Copy helper to use the available width`,
+        );
+        const customerCopyItems = Object.fromEntries(
+          customerCopyLayout.items.map((item) => [item.label, item]),
+        );
+        assert.equal(
+          customerCopyItems.Passenger.top === customerCopyItems.Reference.top &&
+            customerCopyItems.Service.top === customerCopyItems.Pax.top,
+          true,
+          `${viewport.label}: expected short Customer Copy facts to share two-column rows`,
+        );
+        for (const label of ["Pickup", "From", "To", "Driver"]) {
+          assert.equal(
+            customerCopyItems[label].wide === "true" &&
+              customerCopyItems[label].width >= customerCopyLayout.summaryWidth - 20,
+            true,
+            `${viewport.label}: expected ${label} to remain a readable full-width Customer Copy row`,
+          );
+        }
+        assert.equal(
+          customerCopyLayout.docScrollWidth <= customerCopyLayout.docClientWidth + 2,
+          true,
+          `${viewport.label}: expected compact Customer Copy layout not to overflow horizontally`,
+        );
+      }
+
+      if (customerCopyLayoutOnly) {
+        return;
+      }
 
       await clickTab("Dashboard");
       if (viewport.label === viewports[0].label) {
@@ -13819,6 +14025,9 @@ async function runChromeTest() {
     for (const viewport of viewports) {
       reporter.step(`checking viewport matrix: ${viewport.label}`);
       await checkMainAppViewport(viewport);
+      if (customerCopyLayoutOnly) {
+        break;
+      }
       for (const route of responsiveRoutes) {
         await checkResponsiveRouteViewport(viewport, route);
         if (route.path === "/customers") {
@@ -13845,8 +14054,10 @@ async function runChromeTest() {
       ], "public driver job page");
     }
 
-    await checkLoadedCopySectionsAtSmallPhone();
-    await checkCustomerBillingDetailPanelAtSmallPhone();
+    if (!customerCopyLayoutOnly) {
+      await checkLoadedCopySectionsAtSmallPhone();
+      await checkCustomerBillingDetailPanelAtSmallPhone();
+    }
 
     const runtimeState = await evaluate(`(() => ({
       consoleErrors: window.__prestigeConsoleErrors || [],
@@ -13861,9 +14072,11 @@ async function runChromeTest() {
       consoleErrorCount: consoleErrors.length,
       errorCount: errors.length,
       ok: true,
-      publicRoutesPerViewport: responsiveRoutes.length + 2,
+      publicRoutesPerViewport: customerCopyLayoutOnly ? 0 : responsiveRoutes.length + 2,
       verboseHint: "Set PRESTIGE_BROWSER_TEST_VERBOSE=1 for verbose browser diagnostics.",
-      viewports: viewports.map((viewport) => viewport.label),
+      viewports: customerCopyLayoutOnly
+        ? [viewports[0].label]
+        : viewports.map((viewport) => viewport.label),
     }), null, 2));
   } catch (error) {
     let pageSnapshot = "";

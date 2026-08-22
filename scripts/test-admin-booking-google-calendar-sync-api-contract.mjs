@@ -429,13 +429,23 @@ try {
   assert.match(appSource, /await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/);
   const updateAppliedSnapshotSource = sourceBetween(
     appSource,
-    "async function updateAppliedAdminBookingOperationalSnapshot()",
+    "async function updateAppliedAdminBookingOperationalSnapshot(",
     "function getDispatchCopyText(",
   );
   assert.match(
     updateAppliedSnapshotSource,
     /markAdminBookingAsActiveForUpdates\(updatedBookingReference, updatedBooking\);[\s\S]*?upsertLoadedBookingFromAdminRecord\(updatedBooking\);[\s\S]*?await autoSyncSavedBookingGoogleCalendar\(updatedBooking\);/,
     "Update + Cal must publish the exact persisted driver-bearing response to the loaded booking state before syncing that same response to Calendar.",
+  );
+  const assignmentOnlySuccessSource = sourceBetween(
+    updateAppliedSnapshotSource,
+    "if (assignmentOnly) {\n        const retainedAssignmentBooking",
+    "const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);",
+  );
+  assert.doesNotMatch(
+    assignmentOnlySuccessSource,
+    /autoSyncSavedBookingGoogleCalendar|adminBookingCalendarGoogleSyncApiPath|createGoogleCalendarSyncAgenda/,
+    "a saved Type 2 assignment-only PATCH must return before the redundant middle Operations Calendar upsert",
   );
   assert.doesNotMatch(appSource, /Sync Google is backup\./);
   assert.match(calendarPayloadSource, /const pickupDateTime = clean\(bookingRecord\.pickup_at\) \|\| clean\(bookingRecord\.pickup_datetime\);/);

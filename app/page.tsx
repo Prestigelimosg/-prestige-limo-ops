@@ -2999,6 +2999,32 @@ function adminBookingFormSyncSignature(booking: BookingForm) {
   );
 }
 
+const adminBookingDriverAssignmentFormFields = [
+  "driverId",
+  "driverName",
+  "driverContact",
+  "driverPlate",
+  "driverVehicleModel",
+] as const satisfies ReadonlyArray<keyof BookingForm>;
+
+function adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
+  booking: BookingForm,
+  baselineBooking: BookingForm,
+) {
+  const bookingWithBaselineDriverAssignment = {
+    ...booking,
+  };
+
+  for (const field of adminBookingDriverAssignmentFormFields) {
+    bookingWithBaselineDriverAssignment[field] = baselineBooking[field];
+  }
+
+  return (
+    adminBookingFormSyncSignature(bookingWithBaselineDriverAssignment) ===
+    adminBookingFormSyncSignature(baselineBooking)
+  );
+}
+
 function adminBookingVersionsMatch(
   leftValue: string | null | undefined,
   rightValue: string | null | undefined,
@@ -14748,6 +14774,7 @@ export default function Home() {
   const adminBookingCreateIntentRef = useRef(true);
   const loadedAdminBookingBaselineRef = useRef<{
     bookingReference: string;
+    form: BookingForm;
     formSignature: string;
     updatedAt: string;
   } | null>(null);
@@ -18219,11 +18246,12 @@ export default function Home() {
     setAdminBookingCrossDeviceConflict(null);
 
     if (savedRecord) {
+      const baselineForm = bookingFormOverride ?? bookingFormRef.current;
+
       loadedAdminBookingBaselineRef.current = {
         bookingReference: safeBookingReference,
-        formSignature: adminBookingFormSyncSignature(
-          bookingFormOverride ?? bookingFormRef.current,
-        ),
+        form: { ...baselineForm },
+        formSignature: adminBookingFormSyncSignature(baselineForm),
         updatedAt: clean(savedRecord.updated_at),
       };
       setAdminBookingPersistenceRecords((current) => [
@@ -18433,6 +18461,20 @@ export default function Home() {
   const draftDriverAssignmentApplied = Boolean(
     currentDraftDriverAssignmentSignature &&
       currentDraftDriverAssignmentSignature === appliedDraftDriverAssignmentSignature,
+  );
+  const loadedDriverAssignmentDiffersFromBaseline = Boolean(
+    loadedAdminBookingBaselineRef.current &&
+      currentDraftDriverAssignmentSignature !==
+        draftDriverAssignmentSignature(loadedAdminBookingBaselineRef.current.form),
+  );
+  const saveLoadedDriverAssignmentAvailable = Boolean(
+    cleanReferenceText(appliedAdminBookingSnapshotReference) &&
+      appliedAdminBookingSnapshot &&
+      assignedDriverRecord &&
+      !assignedDriverIsInactive &&
+      loadedDriverAssignmentDiffersFromBaseline &&
+      clean(booking.returnTripRequested) !== "yes" &&
+      !dispatchHandoffCustomerReturnUrlRef.current,
   );
   const customerLiveLocation = useMemo(
     () => customerLiveLocationState(booking, currentTimeMs),
@@ -19626,12 +19668,14 @@ export default function Home() {
 
   function retainSavedBookingForDriverJobLinkHandoff(
     savedRecord: AdminBookingPersistenceRecord,
+    bookingFormOverride?: BookingForm,
   ) {
     const retainedBookingRecord =
       adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
 
     loadSelectedBooking(retainedBookingRecord, {
       adminBookingRecordOverride: savedRecord,
+      bookingFormOverride,
       focusDriverJobLink: true,
     });
   }
@@ -22448,6 +22492,7 @@ export default function Home() {
     adminBookingCreateIntentRef.current = false;
     loadedAdminBookingBaselineRef.current = {
       bookingReference: remoteReference,
+      form: { ...remoteForm },
       formSignature: adminBookingFormSyncSignature(remoteForm),
       updatedAt: remoteUpdatedAt,
     };
@@ -22838,6 +22883,7 @@ export default function Home() {
     });
     bookingFormRef.current = loadedBookingForm;
     setBooking(() => loadedBookingForm);
+    setAppliedDraftDriverAssignmentSignature("");
     if (bookingReference) {
       delete driverJobLinkVehicleFallbackRefreshLastRequestedRef.current[bookingReference];
     }
@@ -23768,6 +23814,7 @@ export default function Home() {
     adminBookingCreateIntentRef.current = false;
     loadedAdminBookingBaselineRef.current = {
       bookingReference,
+      form: { ...appliedSnapshot.booking },
       formSignature: adminBookingFormSyncSignature(appliedSnapshot.booking),
       updatedAt: clean(record.updated_at),
     };
@@ -25032,7 +25079,10 @@ export default function Home() {
     }
   }
 
-  async function updateAppliedAdminBookingOperationalSnapshot() {
+  async function updateAppliedAdminBookingOperationalSnapshot(
+    options: { assignmentOnly?: boolean } = {},
+  ) {
+    const assignmentOnly = options.assignmentOnly === true;
     const targetBookingReference =
       cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
       cleanReferenceText(appliedAdminBookingSnapshotReference) ||
@@ -25046,6 +25096,54 @@ export default function Home() {
         text: "Apply a loaded operational snapshot before updating.",
       });
       return;
+    }
+
+    if (assignmentOnly) {
+      const baseline = loadedAdminBookingBaselineRef.current;
+      const verifiedDriverId = adminDispatchVerifiedIdentityId(booking.driverId);
+      const verifiedDriver = driverAssignmentDisplayDrivers.find(
+        (driver) => driver.id === verifiedDriverId,
+      );
+      const verifiedDriverAssignmentSignature = verifiedDriver
+        ? draftDriverAssignmentSignature({
+            driverContact: clean(verifiedDriver.contact_number),
+            driverId: String(verifiedDriver.id),
+            driverName: clean(verifiedDriver.driver_name),
+            driverPlate: clean(verifiedDriver.plate_number),
+            driverVehicleModel: clean(verifiedDriver.vehicle_type),
+          })
+        : "";
+      const assignmentFailure =
+        !saveLoadedDriverAssignmentAvailable ||
+        !baseline ||
+        baseline.bookingReference !== targetBookingReference ||
+        !appliedAdminBookingSnapshot
+          ? "Reload one exact saved booking before saving its verified driver assignment. No booking or Calendar event was changed."
+          : appliedAdminBookingSnapshotIsPendingCustomerRequest
+            ? "Accept this customer booking request through the existing Accept + Cal action before assigning its driver. No booking or Calendar event was changed."
+            : !verifiedDriverId ||
+                !verifiedDriver ||
+                isInactiveDriver(verifiedDriver) ||
+                verifiedDriverAssignmentSignature !== currentDraftDriverAssignmentSignature
+              ? "Select one active verified Driver Database profile and apply its unchanged details before saving. No booking or Calendar event was changed."
+              : !adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
+                    booking,
+                    baseline.form,
+                  )
+                ? "Other booking details changed with this driver assignment. Use the existing Update + Cal action for the full amendment; nothing was saved."
+                : null;
+
+      if (assignmentFailure) {
+        const failureMessage = {
+          tone: "error",
+          text: assignmentFailure,
+        } satisfies Message;
+
+        setAdminBookingPersistenceMessage(failureMessage);
+        setMessage(failureMessage);
+        setBookingSaveMessage(failureMessage);
+        return;
+      }
     }
 
     const returnToCustomerFolderAfterUpdate = () => {
@@ -25078,21 +25176,31 @@ export default function Home() {
       return;
     }
 
-    const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
+    const appliedSnapshot = appliedAdminBookingSnapshot;
+    const billingIdentityResolution = assignmentOnly
+      ? {
+          accountLabel: appliedSnapshot
+            ? adminBookingPersistenceCustomerDisplayName(appliedSnapshot)
+            : null,
+          ok: true as const,
+          personalCustomerCreateConfirmed: false,
+        }
+      : await resolveSaveCrmBillingIdentityAccountForSave();
 
     if (!billingIdentityResolution.ok) {
       setAdminBookingPersistenceMessage(billingIdentityResolution.message);
       return;
     }
 
-    const serviceChangePriceReviewResolution = resolveServiceChangePriceReviewForSave();
+    const serviceChangePriceReviewResolution = assignmentOnly
+      ? { ok: true as const }
+      : resolveServiceChangePriceReviewForSave();
 
     if (!serviceChangePriceReviewResolution.ok) {
       setAdminBookingPersistenceMessage(serviceChangePriceReviewResolution.message);
       return;
     }
 
-    const appliedSnapshot = appliedAdminBookingSnapshot;
     const acceptingCustomerRequest = appliedAdminBookingSnapshotIsPendingCustomerRequest;
     const updateCompanyId = adminDispatchVerifiedIdentityId(booking.companyId);
     const updateCustomerId = adminDispatchVerifiedIdentityId(booking.customerId);
@@ -25305,8 +25413,42 @@ export default function Home() {
       upsertLoadedBookingFromAdminRecord(updatedBooking);
       setAdminBookingPersistenceMessage({
         tone: "info",
-        text: `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Syncing Google Calendar...`,
+        text: assignmentOnly
+          ? `Saving verified driver assignment for ${updatedBookingReference}...`
+          : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} Syncing Google Calendar...`,
       });
+
+      if (assignmentOnly) {
+        const retainedAssignmentBooking = {
+          ...bookingRecordToForm(
+            adminBookingPersistenceRecordToCalendarBookingRecord(updatedBooking),
+          ),
+          driverContact: booking.driverContact,
+          driverId: booking.driverId,
+          driverName: booking.driverName,
+          driverPlate: booking.driverPlate,
+          driverVehicleModel: booking.driverVehicleModel,
+        };
+        const assignmentMessage = {
+          tone: "success",
+          text: `Driver assignment saved: ${updatedBookingReference}. Create Link is ready. Operations Calendar will receive the confirmed plate after Driver Save & Acknowledge Job; Update + Cal remains available for recovery.`,
+        } satisfies Message;
+
+        lastSuccessfulBookingSaveRef.current = {
+          bookingId: updatedBookingReference,
+          key: getBookingSaveGuardKey(updatedBookingReference),
+          record: updatedBooking,
+        };
+        retainSavedBookingForDriverJobLinkHandoff(updatedBooking, retainedAssignmentBooking);
+        setAppliedDraftDriverAssignmentSignature(
+          draftDriverAssignmentSignature(retainedAssignmentBooking),
+        );
+        setAdminBookingPersistenceMessage(assignmentMessage);
+        setMessage(assignmentMessage);
+        setBookingSaveMessage(assignmentMessage);
+        return;
+      }
+
       const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);
 
       if (calendarSyncResult.ok && acceptingCustomerRequest) {
@@ -26075,7 +26217,7 @@ export default function Home() {
     }
   }
 
-  function assignDraftDriver() {
+  async function assignDraftDriver() {
     if (draftDriverAssignmentApplied) {
       setAppliedDraftDriverAssignmentSignature("");
       setMessage({
@@ -26087,6 +26229,11 @@ export default function Home() {
 
     if (!clean(booking.driverName)) {
       setMessage({ tone: "error", text: "Enter a driver name before assigning this draft." });
+      return;
+    }
+
+    if (saveLoadedDriverAssignmentAvailable) {
+      await updateAppliedAdminBookingOperationalSnapshot({ assignmentOnly: true });
       return;
     }
 
@@ -34586,6 +34733,15 @@ export default function Home() {
     lastSuccessfulBookingSaveRef.current?.key === currentBookingSaveGuardKey;
   const bookingUpdateInFlight =
     Boolean(activeAppliedBookingReference) && adminBookingPersistenceAction === "update";
+  const loadedDriverAssignmentOnlyChange = Boolean(
+    activeAppliedBookingReference &&
+      saveLoadedDriverAssignmentAvailable &&
+      loadedAdminBookingBaselineRef.current &&
+      adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(
+        booking,
+        loadedAdminBookingBaselineRef.current.form,
+      ),
+  );
   const bookingSaveButtonTone: Message["tone"] | null = bookingSaveSucceededForCurrentDraft
     ? "success"
     : bookingSaveMessage?.tone === "error"
@@ -34617,6 +34773,8 @@ export default function Home() {
       ? "Saved"
       : bookingUpdateIdentityNeedsReload
         ? "Reload booking"
+      : loadedDriverAssignmentOnlyChange
+        ? "Save Driver Assignment above"
       : activeAppliedBookingReference
         ? appliedAdminBookingSnapshotIsPendingCustomerRequest
           ? "Accept + Cal"
@@ -42780,10 +42938,17 @@ export default function Home() {
                   data-admin-draft-driver-assignment-state={
                     draftDriverAssignmentApplied ? "applied" : "ready"
                   }
+                  disabled={adminBookingPersistenceAction !== null}
                   onClick={assignDraftDriver}
                   type="button"
                 >
-                  {draftDriverAssignmentApplied ? "Applied / Cancel to Revise" : "Apply Driver to Draft"}
+                  {adminBookingPersistenceAction === "update" && saveLoadedDriverAssignmentAvailable
+                    ? "Saving Driver Assignment..."
+                    : draftDriverAssignmentApplied
+                      ? "Applied / Cancel to Revise"
+                      : saveLoadedDriverAssignmentAvailable
+                        ? "Save Driver Assignment"
+                        : "Apply Driver to Draft"}
                 </button>
               </div>
             </section>
@@ -42971,7 +43136,7 @@ export default function Home() {
                     className="min-h-9 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                     data-admin-booking-persistence-update-applied="true"
                     disabled={adminBookingPersistenceAction !== null}
-                    onClick={updateAppliedAdminBookingOperationalSnapshot}
+                    onClick={() => void updateAppliedAdminBookingOperationalSnapshot()}
                     type="button"
                   >
                     {adminBookingPersistenceAction === "update"
@@ -46032,7 +46197,7 @@ export default function Home() {
                             "bg-slate-950 text-white hover:bg-slate-800",
                           )
                         }`}
-                        disabled={saving || bookingUpdateInFlight}
+                        disabled={saving || bookingUpdateInFlight || loadedDriverAssignmentOnlyChange}
                         onClick={handleJobCardPrimaryBookingAction}
                         type="button"
                       >

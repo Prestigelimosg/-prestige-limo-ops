@@ -406,6 +406,10 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
+    label: "admin native Driver-ACK push notification guard",
+    script: "scripts/test-admin-native-ack-push-notification-guard.mjs",
+  },
+  {
     label: "customer device push notification guard",
     script: "scripts/test-customer-device-push-notification-guard.mjs",
   },

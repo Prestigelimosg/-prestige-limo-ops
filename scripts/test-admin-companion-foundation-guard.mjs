@@ -51,13 +51,17 @@ assert.equal(packageJson.dependencies.expo, "~57.0.14");
 assert.equal(packageJson.dependencies["react-native"], "0.86.2");
 
 for (const dependency of [
+  "expo-constants",
+  "expo-crypto",
   "expo-local-authentication",
+  "expo-notifications",
   "expo-secure-store",
   "react-native-safe-area-context",
   "react-native-webview",
 ]) {
   assert.equal(typeof packageJson.dependencies[dependency], "string", `Missing ${dependency}`);
 }
+assert.equal(config.plugins.includes("expo-notifications"), true);
 
 for (const phrase of [
   "Prestige Limo Ops",
@@ -114,7 +118,6 @@ for (const forbidden of [
   "PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN",
   "PRESTIGE_ADMIN_ACCOUNT_SESSION_SECRET",
   "service_role",
-  "expo-notifications",
   "expo-location",
   "PayNow",
 ]) {

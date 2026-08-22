@@ -11216,13 +11216,50 @@ function adminDevicePushFailureMessage(rawError: unknown) {
   return "Admin device push setup could not be completed. Reload the admin dashboard and try again.";
 }
 
-function adminDevicePushIsSupported() {
+type AdminNativePushWindow = Window & {
+  ReactNativeWebView?: { postMessage(value: string): void };
+  __PRESTIGE_ADMIN_NATIVE_APP__?: boolean;
+  __PRESTIGE_ADMIN_INSTALLATION_ID__?: string;
+  __PRESTIGE_ADMIN_NOTIFICATION_PERMISSION__?: "denied" | "granted" | "undetermined";
+  __PRESTIGE_ADMIN_NOTIFICATIONS_ENABLED__?: boolean;
+};
+
+function adminNativePushWindow() {
+  return typeof window === "undefined" ? null : (window as AdminNativePushWindow);
+}
+
+function adminNativePushIsSupported() {
+  const nativeWindow = adminNativePushWindow();
+  return Boolean(
+    nativeWindow?.__PRESTIGE_ADMIN_NATIVE_APP__ === true &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        nativeWindow.__PRESTIGE_ADMIN_INSTALLATION_ID__ || "",
+      ) &&
+      nativeWindow.ReactNativeWebView?.postMessage,
+  );
+}
+
+function adminNativePushPostMessage(
+  type: "admin_notifications_register" | "admin_notifications_unregister",
+) {
+  const nativeWindow = adminNativePushWindow();
+  if (!adminNativePushIsSupported() || !nativeWindow?.ReactNativeWebView) {
+    throw new Error("Native Admin push is unsupported.");
+  }
+  nativeWindow.ReactNativeWebView.postMessage(JSON.stringify({ type }));
+}
+
+function adminBrowserDevicePushIsSupported() {
   return (
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
     "PushManager" in window &&
     "Notification" in window
   );
+}
+
+function adminDevicePushIsSupported() {
+  return adminNativePushIsSupported() || adminBrowserDevicePushIsSupported();
 }
 
 function adminDevicePushBase64ToUint8Array(base64String: string) {
@@ -15627,6 +15664,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
+    const nativePush = adminNativePushIsSupported();
 
     if (activeTab !== "dashboard") {
       return () => {
@@ -15667,7 +15705,7 @@ export default function Home() {
           return;
         }
 
-        if (!readiness.ready || !clean(readiness.public_key)) {
+        if (!readiness.ready || (!nativePush && !clean(readiness.public_key))) {
           setAdminDevicePushState({
             message: {
               tone: "info",
@@ -15675,6 +15713,28 @@ export default function Home() {
             },
             publicKey: null,
             status: readiness.enabled ? "blocked" : "disabled",
+            supported: true,
+          });
+          return;
+        }
+
+        if (nativePush) {
+          const nativeWindow = adminNativePushWindow();
+          const permission = nativeWindow?.__PRESTIGE_ADMIN_NOTIFICATION_PERMISSION__;
+          const enabled =
+            permission === "granted" &&
+            nativeWindow?.__PRESTIGE_ADMIN_NOTIFICATIONS_ENABLED__ === true;
+          setAdminDevicePushState({
+            message: {
+              tone: enabled ? "success" : "info",
+              text: enabled
+                ? "Device push is enabled for this Admin app."
+                : permission === "denied"
+                  ? "Admin app push is OFF. Enable Notifications for Prestige Limo Ops in iPhone Settings, then tap Push OFF."
+                  : "Device push is ready. Tap Push OFF to enable it on this Admin app.",
+            },
+            publicKey: clean(readiness.public_key),
+            status: enabled ? "enabled" : permission === "denied" ? "blocked" : "ready",
             supported: true,
           });
           return;
@@ -15721,6 +15781,51 @@ export default function Home() {
       cancelled = true;
     };
   }, [activeTab]);
+
+  useEffect(() => {
+    const receiveNativePushResult = (event: Event) => {
+      if (!adminNativePushIsSupported()) return;
+      const detail = (event as CustomEvent).detail as {
+        ok?: unknown;
+        state?: unknown;
+      } | null;
+      const state = detail?.state;
+      if (!["denied", "disabled", "enabled", "failed"].includes(String(state))) return;
+
+      setAdminDevicePushAction(null);
+      setAdminDevicePushState((current) => ({
+        ...current,
+        message:
+          state === "enabled"
+            ? { tone: "success", text: "Device push enabled for this Admin app." }
+            : state === "disabled"
+              ? { tone: "success", text: "Device push disabled for this Admin app." }
+              : state === "denied"
+                ? {
+                    tone: "info",
+                    text: "Admin app push is OFF. Enable Notifications for Prestige Limo Ops in iPhone Settings, then tap Push OFF.",
+                  }
+                : { tone: "error", text: "Admin app push could not be updated. Please try again." },
+        status:
+          state === "enabled"
+            ? "enabled"
+            : state === "disabled"
+              ? "ready"
+              : state === "denied"
+                ? "blocked"
+                : "error",
+      }));
+    };
+
+    window.addEventListener(
+      "prestige-admin-native-notification-result",
+      receiveNativePushResult,
+    );
+    return () => window.removeEventListener(
+      "prestige-admin-native-notification-result",
+      receiveNativePushResult,
+    );
+  }, []);
 
   const handleAdminAutomationRuntimeToggle = async () => {
     if (
@@ -15769,7 +15874,12 @@ export default function Home() {
   };
 
   const handleAdminDevicePushEnable = async () => {
-    if (!adminDevicePushState.supported || !adminDevicePushState.publicKey) {
+    const nativePush = adminNativePushIsSupported();
+    const browserPublicKey = adminDevicePushState.publicKey || "";
+    if (
+      !adminDevicePushState.supported ||
+      (!nativePush && !browserPublicKey)
+    ) {
       setAdminDevicePushState((current) => ({
         ...current,
         message: {
@@ -15785,10 +15895,26 @@ export default function Home() {
       ...current,
       message: {
         tone: "info",
-        text: "Requesting notification permission for this admin device...",
+        text: nativePush
+          ? "Requesting iPhone notification permission for this Admin app..."
+          : "Requesting notification permission for this admin device...",
       },
       status: "saving",
     }));
+
+    if (nativePush) {
+      try {
+        adminNativePushPostMessage("admin_notifications_register");
+      } catch (error) {
+        setAdminDevicePushAction(null);
+        setAdminDevicePushState((current) => ({
+          ...current,
+          message: { tone: "error", text: adminDevicePushFailureMessage(error) },
+          status: "error",
+        }));
+      }
+      return;
+    }
 
     try {
       const permission = await Notification.requestPermission();
@@ -15805,7 +15931,7 @@ export default function Home() {
         existingSubscription ??
         (await registration.pushManager.subscribe({
           applicationServerKey: adminDevicePushBase64ToUint8Array(
-            adminDevicePushState.publicKey,
+            browserPublicKey,
           ),
           userVisibleOnly: true,
         }));
@@ -15844,10 +15970,26 @@ export default function Home() {
       ...current,
       message: {
         tone: "info",
-        text: "Disabling device push for this browser...",
+        text: adminNativePushIsSupported()
+          ? "Disabling device push for this Admin app..."
+          : "Disabling device push for this browser...",
       },
       status: "saving",
     }));
+
+    if (adminNativePushIsSupported()) {
+      try {
+        adminNativePushPostMessage("admin_notifications_unregister");
+      } catch (error) {
+        setAdminDevicePushAction(null);
+        setAdminDevicePushState((current) => ({
+          ...current,
+          message: { tone: "error", text: adminDevicePushFailureMessage(error) },
+          status: "error",
+        }));
+      }
+      return;
+    }
 
     try {
       const registration = await navigator.serviceWorker.getRegistration(
@@ -48399,7 +48541,9 @@ export default function Home() {
                   disabled={
                     adminDevicePushAction !== null ||
                     !adminDevicePushState.supported ||
-                    (adminDevicePushState.status !== "enabled" && !adminDevicePushState.publicKey)
+                    (adminDevicePushState.status !== "enabled" &&
+                      !adminNativePushIsSupported() &&
+                      !adminDevicePushState.publicKey)
                   }
                   onClick={
                     adminDevicePushState.status === "enabled"

@@ -16,7 +16,7 @@ const saveBlock = between(
   "function bookingRecordReferenceCandidates",
 );
 const updateBlock = between(
-  "async function updateAppliedAdminBookingOperationalSnapshot()",
+  "async function updateAppliedAdminBookingOperationalSnapshot(",
   "function getDispatchCopyText",
 );
 

@@ -92,6 +92,8 @@ for (const fragment of [
   "adminRateSetupApiPath",
   "calculateCustomerDspBillingActualMinutes",
   "calculateCustomerInvoiceRateReview",
+  "billingStartedAt: billingStartAt",
+  "billingEndedAt: billingEndAt",
   'summary?.billing_time_source === "admin_correction"',
   "summary?.dsp_started_at",
   "summary?.dsp_ended_at",
@@ -102,6 +104,13 @@ for (const fragment of [
   "customerFolderSelectedPriceReviewsParam",
 ]) {
   includes(folder, fragment, `customer-folder price review ${fragment}`);
+}
+
+for (const fragment of [
+  "billingStartedAt: billingStartAt",
+  "billingEndedAt: summary?.dsp_ended_at",
+]) {
+  includes(customers, fragment, `selected-customer DSP midnight interval ${fragment}`);
 }
 
 assert.equal(
@@ -209,6 +218,7 @@ for (const fragment of [
 
 for (const fragment of [
   "export function calculateCustomerDspBillingActualMinutes",
+  "export function customerDspBillingTouchesMidnightWindow",
   "export function calculateCustomerInvoiceRateReview",
   "export function customerInvoiceBookingType",
   "export function calculateCustomerDspInvoiceReview",
@@ -403,6 +413,7 @@ try {
   const {
     calculateCustomerDspBillingActualMinutes,
     calculateCustomerInvoiceRateReview,
+    customerDspBillingTouchesMidnightWindow,
   } = require(
     path.join(calculationRuntimeDir, "customer-dsp-invoice-review.js"),
   );
@@ -536,6 +547,8 @@ try {
   const bookingToJcReview = calculateCustomerInvoiceRateReview(
     {
       actualMinutes: bookingToJcMinutes,
+      billingEndedAt: "2026-07-26T15:30:59+08:00",
+      billingStartedAt: "2026-07-26T13:00:00+08:00",
       bookingType: "DSP",
       childSeatCount: 0,
       companyId: 26,
@@ -556,6 +569,66 @@ try {
   assert.equal(bookingToJcReview?.billableHours, 3);
   assert.equal(bookingToJcReview?.amountCents, 19_500);
 
+  const booking10894BillingStartedAt = "2026-08-21T10:35:00.000Z";
+  const booking10894BillingEndedAt = "2026-08-21T19:19:00.000Z";
+  const booking10894Minutes = calculateCustomerDspBillingActualMinutes(
+    booking10894BillingStartedAt,
+    booking10894BillingEndedAt,
+  );
+  assert.equal(booking10894Minutes, 524);
+  assert.equal(
+    customerDspBillingTouchesMidnightWindow(
+      booking10894BillingStartedAt,
+      booking10894BillingEndedAt,
+    ),
+    true,
+    "Booking 10894 must receive one midnight surcharge because its corrected DSP interval reaches 03:19 SGT.",
+  );
+  const booking10894Review = calculateCustomerInvoiceRateReview(
+    {
+      actualMinutes: booking10894Minutes,
+      billingEndedAt: booking10894BillingEndedAt,
+      billingStartedAt: booking10894BillingStartedAt,
+      bookingType: "DSP",
+      childSeatCount: 0,
+      companyId: 51,
+      extraStopCount: 0,
+      pickupAt: booking10894BillingStartedAt,
+      travelerId: null,
+      vehicleType: "AVF",
+    },
+    {
+      companies: [{ customer_rates: {}, id: 51 }],
+      settings: {
+        child_seat_customer_surcharge: 15,
+        customer_rates: { DSP: { AVF: 65 } },
+        extra_stop_surcharge: 15,
+        midnight_surcharge: 15,
+      },
+      travelers: [],
+    },
+  );
+  assert.equal(booking10894Review?.billableHours, 9);
+  assert.equal(booking10894Review?.baseAmountCents, 58_500);
+  assert.equal(booking10894Review?.surchargeAmountCents, 1_500);
+  assert.equal(booking10894Review?.amountCents, 60_000);
+  assert.equal(
+    customerDspBillingTouchesMidnightWindow(
+      "2026-08-21T07:00:00+08:00",
+      "2026-08-21T23:00:00+08:00",
+    ),
+    false,
+    "A DSP interval ending exactly at 23:00 must remain outside the midnight window.",
+  );
+  assert.equal(
+    customerDspBillingTouchesMidnightWindow(
+      "2026-08-21T23:00:00+08:00",
+      "2026-08-21T23:01:00+08:00",
+    ),
+    true,
+    "A DSP interval starting at 23:00 must receive the midnight surcharge.",
+  );
+
   const bridgeCorrectedMinutes = calculateCustomerDspBillingActualMinutes(
     "2026-08-06T09:30:00+08:00",
     "2026-08-06T19:15:00+08:00",
@@ -564,11 +637,13 @@ try {
   const bridgeCorrectedReview = calculateCustomerInvoiceRateReview(
     {
       actualMinutes: bridgeCorrectedMinutes,
+      billingEndedAt: "2026-08-06T19:15:00+08:00",
+      billingStartedAt: "2026-08-06T09:30:00+08:00",
       bookingType: "DSP",
       childSeatCount: 0,
       companyId: 77,
       extraStopCount: 0,
-      pickupAt: "2026-08-06T10:00:00+08:00",
+      pickupAt: "2026-08-06T00:30:00+08:00",
       travelerId: 79,
       vehicleType: "S",
     },

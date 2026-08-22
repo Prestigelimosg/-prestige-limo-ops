@@ -113,11 +113,10 @@ assert.equal(
   "Direction must remain part of the same-booking idempotency identity.",
 );
 assert.equal(
-  helper.includes(
-    "event_key: customerDriverQuickReplyEventKey(direction, templateKey, bookingReference)",
-  ),
+  helper.includes("customerDriverQuickReplyEventKey(") &&
+    helper.includes("customerDriverMessageEventKey(direction, bookingReference, clientMessageId)"),
   true,
-  "The established quickReplyInput writer must use the booking-scoped helper.",
+  "The established writer must keep booking-scoped fixed-template and typed-message helpers.",
 );
 assert.equal(
   helper.includes("event_key: `customer_driver_quick_reply:${direction}:${templateKey}`"),
@@ -134,10 +133,10 @@ for (const phrase of [
   "Customer/Driver Quick-Reply Booking-Scoped Event-Key Repair",
   "same fixed quick-reply template on two different exact booking references",
   "same booking, direction, and template remains deterministic",
-  "Customer Native Alerts And Shared Boss/PA Customer Copy implementation map only",
-  "every active enrolled Apple device belonging to the exact authorized Boss and managing PA",
+  "Customer Native Alerts And Shared Boss/PA Customer Copy handoff",
+  "Native Expo delivery fans out only to active exact devices",
   "Driver details ready",
-  "full verified driver name, contact, plate, and vehicle remain inside the authenticated Customer Copy/My Bookings detail",
+  "persists verified name, contact, plate, and vehicle",
 ]) {
   assert.equal(ledger.includes(phrase), true, `Ledger must preserve: ${phrase}`);
 }

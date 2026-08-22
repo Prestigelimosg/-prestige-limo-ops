@@ -1,7 +1,9 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
+import { randomUUID } from "expo-crypto";
 
 const biometricEnabledKey = "prestige.customer.biometric-enabled.v1";
+const customerInstallationIdKey = "prestige.customer.installation-id.v1";
 const secureStoreOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
 };
@@ -36,4 +38,12 @@ export async function enableCustomerBiometricUnlock() {
     secureStoreOptions,
   );
   return true;
+}
+
+export async function customerInstallationId() {
+  const existing = await SecureStore.getItemAsync(customerInstallationIdKey, secureStoreOptions);
+  if (existing) return existing;
+  const created = `customer-ios-${randomUUID()}`;
+  await SecureStore.setItemAsync(customerInstallationIdKey, created, secureStoreOptions);
+  return created;
 }

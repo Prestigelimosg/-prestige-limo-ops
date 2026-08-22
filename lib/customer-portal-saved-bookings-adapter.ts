@@ -351,12 +351,16 @@ export function mapCustomerSavedBookingsPayload(payload: unknown): CustomerPorta
 export async function loadCustomerPortalSavedBookings({
   fetcher = fetch,
   signal,
+  travelerId,
 }: {
   fetcher?: CustomerPortalSavedBookingsFetch;
   signal?: AbortSignal;
+  travelerId?: number | null;
 } = {}): Promise<CustomerPortalBooking[] | null> {
   try {
-    const response = await fetcher(`${customerPortalSavedBookingsApiPath}?limit=25&page=1`, {
+    const params = new URLSearchParams({ limit: "25", page: "1" });
+    if (travelerId && Number.isSafeInteger(travelerId)) params.set("traveler_id", String(travelerId));
+    const response = await fetcher(`${customerPortalSavedBookingsApiPath}?${params.toString()}`, {
       cache: "no-store",
       credentials: "same-origin",
       headers: {

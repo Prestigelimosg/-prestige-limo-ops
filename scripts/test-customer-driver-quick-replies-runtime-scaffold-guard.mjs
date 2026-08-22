@@ -142,7 +142,7 @@ for (const fragment of [
   'latestStatus === "pob" || latestStatus === "completed"',
   "customer_driver_app_notification_outbox",
   'delivery_surface: direction === "customer_to_driver" ? "driver_app" : "customer_app"',
-  'safe_title: direction === "customer_to_driver" ? "Passenger reply" : "Driver reply"',
+  'customerDisplaySenderName || "Passenger reply"',
   'workflow_area: "customer_driver_quick_replies"',
   "findForbiddenFieldNames(payload)",
   "findForbiddenTextValues(payload)",

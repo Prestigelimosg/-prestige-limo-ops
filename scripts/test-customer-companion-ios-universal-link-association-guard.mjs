@@ -72,10 +72,19 @@ assert.deepEqual(
           "/": "/api/customer-portal-access/*",
           comment: "Open only the established private Prestige Customer portal access path.",
         },
+        {
+          "/": "/customer-access/activate",
+          comment: "Open only the one-use Prestige SG account activation path.",
+        },
+        {
+          "/": "/my-bookings",
+          "?": { booking: "*", tracking: "1" },
+          comment: "Open one exact authenticated Customer booking after notification tap.",
+        },
       ],
     },
   ],
-  "The AASA must preserve Driver and add only the existing Customer portal path",
+  "The AASA must preserve Driver and add only bounded Customer access/tap paths",
 );
 assert.deepEqual(
   association.webcredentials.apps,

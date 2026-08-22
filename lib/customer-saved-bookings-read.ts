@@ -12,6 +12,10 @@ import {
 } from "./customer-portal-access-link";
 import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
+import {
+  assertActiveCustomerPrincipalSession,
+  resolveCustomerPrincipalSessionToken,
+} from "./customer-principal-access";
 
 export const customerSavedBookingsReadVersion =
   "stage-customer-saved-bookings-read-api-v1";
@@ -21,7 +25,11 @@ export type CustomerSavedBookingsBoundaryContext = {
   company_id?: number | null;
   booker_id?: number | null;
   customer_account_reference?: string | null;
-  mode: "server-session-cookie" | "server-session-token";
+  mode: "principal-device-session" | "server-session-cookie" | "server-session-token";
+  principal_session_token?: string | null;
+  principal_id?: string | null;
+  principal_role?: "boss" | "pa" | null;
+  traveler_id?: number | null;
   portal_link_issued_at?: number | null;
   portal_link_revision?: string | null;
   runtime_gate: ControlledCustomerRuntimeGate;
@@ -39,6 +47,7 @@ export type CustomerSavedBookingsReadParams = {
   booking_reference: string | null;
   limit: number;
   page: number;
+  traveler_id: number | null;
 };
 
 export type CustomerSavedBookingRecord = {
@@ -62,6 +71,11 @@ export type CustomerSavedBookingRecord = {
 };
 
 export type CustomerSavedBookingsReadResult = {
+  access?: {
+    managed_bosses: Array<{ traveler_id: number; verified_boss_name: string }>;
+    principal_role: "boss" | "pa";
+    selected_traveler_id: number;
+  };
   pagination: {
     has_next_page: boolean;
     has_previous_page: boolean;
@@ -89,7 +103,7 @@ type CustomerSavedBookingsSessionTokenSource =
   | "request-cookie"
   | "request-header";
 type CustomerSavedBookingsAccountFilter = {
-  column: "customer_id" | "company_id" | "booker_id";
+  column: "customer_id" | "company_id" | "booker_id" | "traveler_id";
   method: "eq";
   value: string;
 };
@@ -126,7 +140,7 @@ const customerSavedBookingsSessionCookieName =
   "prestige_customer_saved_bookings_session";
 const customerSavedBookingsFallbackSessionCookieName =
   "prestige_customer_session";
-const allowedQueryParams = new Set(["booking_reference", "limit", "page"]);
+const allowedQueryParams = new Set(["booking_reference", "limit", "page", "traveler_id"]);
 const allowedCustomerStatuses = new Set([
   "cancelled",
   "confirmed",
@@ -698,10 +712,14 @@ function getServerOnlyCustomerSavedBookingsSupabaseClient(
       context.customer_account_reference,
       context.runtime_gate,
     );
+  const principalDeviceSession =
+    context.mode === "principal-device-session" &&
+    Boolean(context.principal_id && context.principal_session_token);
 
   if (
     process.env.PRESTIGE_CUSTOMER_SAVED_BOOKINGS_AUTH_ENABLED !== "true" &&
-    !signedPortalCookieSession
+    !signedPortalCookieSession &&
+    !principalDeviceSession
   ) {
     return {
       error: customerSavedBookingsDisabledError,
@@ -927,6 +945,10 @@ export function parseCustomerSavedBookingsReadParams(
 
   const limit = validLimit(readParamsValue(params, "limit"));
   const page = validPage(readParamsValue(params, "page"));
+  const rawTravelerId = readParamsValue(params, "traveler_id");
+  const travelerId = rawTravelerId === undefined || rawTravelerId === null || rawTravelerId === ""
+    ? null
+    : verifiedIdentityId(rawTravelerId);
 
   if (!limit) {
     return {
@@ -944,11 +966,20 @@ export function parseCustomerSavedBookingsReadParams(
     };
   }
 
+  if (rawTravelerId && !travelerId) {
+    return {
+      error: "Malformed managed Boss selection rejected.",
+      ok: false,
+      status: 400,
+    };
+  }
+
   return {
     data: {
       booking_reference: bookingReference,
       limit,
       page,
+      traveler_id: travelerId,
     },
     ok: true,
   };
@@ -990,6 +1021,25 @@ export function resolveCustomerSavedBookingsBoundaryForPurpose(
   }
 
   const providedToken = readCustomerSavedBookingsSessionToken(request);
+
+  const principalSession = resolveCustomerPrincipalSessionToken(providedToken.token);
+  if (principalSession) {
+    return {
+      data: {
+        auth_user_id: principalSession.principal_id,
+        customer_account_reference: null,
+        mode: "principal-device-session",
+        principal_id: principalSession.principal_id,
+        principal_session_token: providedToken.token,
+        runtime_gate: {
+          account_allowlist: new Set<string>(),
+          mode: "small-allowlist",
+        },
+        source_surface: "customer_api",
+      },
+      ok: true,
+    };
+  }
 
   if (isCustomerPortalAccessToken(providedToken.token)) {
     const runtimeGate = resolveControlledCustomerPortalRuntimeGate();
@@ -1108,6 +1158,35 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  if (context.mode === "principal-device-session") {
+    const principalAccess = context.principal_session_token
+      ? await assertActiveCustomerPrincipalSession(context.principal_session_token)
+      : customerSavedBookingsAuthRequiredResult<never>();
+    if (!principalAccess.ok) return customerSavedBookingsAuthRequiredResult();
+
+    const requestedTravelerId = verifiedIdentityId(travelerIdInput);
+    const selectedTravelerId = requestedTravelerId ||
+      (principalAccess.data.memberships.length === 1
+        ? principalAccess.data.memberships[0].traveler_id
+        : null);
+    const membership = selectedTravelerId
+      ? principalAccess.data.memberships.find((entry) => entry.traveler_id === selectedTravelerId)
+      : null;
+    if (!membership) return customerSavedBookingsAuthRequiredResult();
+
+    return {
+      data: {
+        booker_email: principalAccess.data.normalized_email,
+        booker_id: membership.booker_id,
+        company_id: membership.company_id,
+        customer_account_reference: membership.customer_account_reference,
+        traveler_id: membership.traveler_id,
+        traveler_name: membership.verified_boss_name,
+      },
+      ok: true,
+    };
   }
 
   let customerAccountReference = validBookingReference(context.customer_account_reference);
@@ -1254,6 +1333,59 @@ export async function loadCustomerSavedBookings(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  if (context.mode === "principal-device-session") {
+    const principalAccess = context.principal_session_token
+      ? await assertActiveCustomerPrincipalSession(context.principal_session_token)
+      : customerSavedBookingsAuthRequiredResult<never>();
+    if (!principalAccess.ok) return customerSavedBookingsAuthRequiredResult();
+    const selectedTravelerId = parsed.data.traveler_id ||
+      (principalAccess.data.memberships.length === 1
+        ? principalAccess.data.memberships[0].traveler_id
+        : null);
+    const membership = selectedTravelerId
+      ? principalAccess.data.memberships.find((entry) => entry.traveler_id === selectedTravelerId)
+      : null;
+    if (!membership) return customerSavedBookingsAuthRequiredResult();
+    const bookingRowsResult = await readCustomerSavedBookingRows(
+      clientResult.data,
+      [
+        { column: "company_id", method: "eq", value: String(membership.company_id) },
+        { column: "booker_id", method: "eq", value: String(membership.booker_id) },
+        { column: "traveler_id", method: "eq", value: String(membership.traveler_id) },
+      ],
+      parsed.data,
+    );
+    if (!bookingRowsResult.ok) return bookingRowsResult;
+    if (parsed.data.booking_reference && bookingRowsResult.data.length === 0) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
+    const rows = bookingRowsResult.data
+      .map(asRecord)
+      .map(toCustomerSavedBookingRecord)
+      .filter((record): record is CustomerSavedBookingRecord => Boolean(record));
+    return {
+      data: {
+        access: {
+          managed_bosses: principalAccess.data.memberships.map((entry) => ({
+            traveler_id: entry.traveler_id,
+            verified_boss_name: entry.verified_boss_name,
+          })),
+          principal_role: principalAccess.data.principal_role,
+          selected_traveler_id: membership.traveler_id,
+        },
+        pagination: {
+          has_next_page: rows.length > parsed.data.limit,
+          has_previous_page: parsed.data.page > 1,
+          page: parsed.data.page,
+          page_size: parsed.data.limit,
+        },
+        saved_bookings: rows.slice(0, parsed.data.limit),
+        version: customerSavedBookingsReadVersion,
+      },
+      ok: true,
+    };
   }
 
   let customerAccountReference = validBookingReference(context.customer_account_reference);

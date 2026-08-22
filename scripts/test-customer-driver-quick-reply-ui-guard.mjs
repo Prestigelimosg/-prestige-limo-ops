@@ -7,21 +7,23 @@ const [source, ledger] = await Promise.all([
 ]);
 
 for (const expected of [
-  "data-customer-driver-quick-replies=",
-  '"customer_at_lobby"',
-  '"customer_running_late"',
-  '"customer_wait_pickup"',
-  '"customer_cannot_find_car"',
+  "data-customer-shared-conversation=",
+  "data-customer-driver-message-composer=",
+  "data-customer-driver-message-send=",
+  "client_message_id: clientMessageId",
+  "message_text: typedMessage",
   'fetch("/api/customer-driver-quick-replies"',
   '"x-prestige-customer-purpose": "customer-driver-quick-reply"',
   'result?.direction !== "customer_to_driver"',
-  "tripStatusStopsCustomerTracking ||",
-  "admin can see it.",
+  "customerQuickRepliesClosed",
+  "Boss and managing PA share this booking conversation.",
 ]) {
-  assert.ok(source.includes(expected), `customer quick-reply UI must retain ${expected}`);
+  assert.ok(source.includes(expected), `customer typed-message UI must retain ${expected}`);
 }
 
-assert.ok(!/textarea[\s\S]{0,300}data-customer-driver-quick-repl/.test(source), "customer-to-driver lane must not add free text");
+for (const retiredTemplate of ["customer_at_lobby", "customer_running_late", "customer_wait_pickup", "customer_cannot_find_car"]) {
+  assert.ok(!source.includes(`\"${retiredTemplate}\"`), `customer typed-message UI must retire fixed template ${retiredTemplate}`);
+}
 
 for (const expected of [
   "The owner approved one exact live Customer → Driver reply for booking `10851`: `I am at the lobby.`.",
@@ -38,4 +40,4 @@ for (const expected of [
   assert.ok(ledger.includes(expected), `implementation ledger must retain ${expected}`);
 }
 
-console.log("Customer/driver quick-reply UI guard passed.");
+console.log("Customer/driver typed-message UI guard passed.");

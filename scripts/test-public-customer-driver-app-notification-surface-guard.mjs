@@ -87,7 +87,7 @@ const contractChecks = [
     label: "customer/driver app notification API contract",
     requiredFragments: [
       "customerAuthRequiredMessage",
-      "Expected driver GET to verify token hash before scoped notification read",
+      "Expected driver GET to verify token hash before the scoped shared-conversation read",
       "Expected driver PATCH to update only exact queued notifications scoped to the verified link",
       "Customer/driver app notification API contract tests passed.",
     ],
@@ -605,8 +605,8 @@ for (const fragment of [
 }
 assertIncludes(
   files[driverPagePath],
-  "body: JSON.stringify({ template_key: templateKey })",
-  "driver page quick-reply caller sends only its approved template key",
+  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage })",
+  "driver page typed-message caller sends only its client id and bounded message",
 );
 assertIncludes(
   files[driverPagePath],

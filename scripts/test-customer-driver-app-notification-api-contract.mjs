@@ -221,10 +221,12 @@ async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
   const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
+  const principalPath = path.join(tempDir, "lib/customer-principal-access.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
+  await mkdir(path.dirname(principalPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -243,6 +245,13 @@ async function writeMockModules(tempDir) {
   await writeFile(
     webPushPath,
     "module.exports = { setVapidDetails() {}, async sendNotification() {} };",
+  );
+  await writeFile(
+    principalPath,
+    [
+      "exports.resolveCustomerPrincipalSessionToken = () => null;",
+      "exports.assertActiveCustomerPrincipalSession = async () => ({ error: 'not used by legacy contract', ok: false, status: 403 });",
+    ].join("\n"),
   );
 }
 
@@ -1741,14 +1750,13 @@ try {
         },
         {
           filters: [
-            { column: "delivery_surface", type: "eq", value: "driver_app" },
             { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
             { column: "notification_status", type: "eq", value: "queued" },
           ],
           table: notificationTable,
         },
       ],
-      "Expected driver GET to verify token hash before scoped notification read",
+      "Expected driver GET to verify token hash before the scoped shared-conversation read",
     );
 
     setEnv(validEnv());

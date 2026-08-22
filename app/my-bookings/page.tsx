@@ -51,6 +51,14 @@ type CustomerDevicePushState = {
   status: CustomerDevicePushStatus;
   supported: boolean;
 };
+type CustomerPrincipalAccessState =
+  | { status: "checking" }
+  | { status: "legacy" }
+  | {
+      status: "principal";
+      principal_role: "boss" | "pa";
+      managed_bosses: Array<{ traveler_id: number; verified_boss_name: string }>;
+    };
 type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
 type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
 type CustomerQuickReplyState = Record<
@@ -114,13 +122,6 @@ const invoiceFolders: InvoiceFolder[] = [
   "Credit Notes",
 ];
 const portalSections: PortalSection[] = ["New Booking Request", "Invoices", ...bookingFilters];
-const customerDriverQuickReplies = [
-  { key: "customer_at_lobby", label: "I am at the lobby." },
-  { key: "customer_running_late", label: "I am running 5 minutes late." },
-  { key: "customer_wait_pickup", label: "Please wait at pickup point." },
-  { key: "customer_cannot_find_car", label: "I cannot find the car." },
-] as const;
-
 const initialBookingPages: Record<BookingFilter, number> = {
   Cancelled: 1,
   Completed: 1,
@@ -366,6 +367,8 @@ function customerDevicePushFailureMessage(error: unknown) {
 
 export default function CustomerPortalPage() {
   const [activeSection, setActiveSection] = useState<PortalSection>("Upcoming");
+  const [customerPrincipalAccess, setCustomerPrincipalAccess] = useState<CustomerPrincipalAccessState>({ status: "checking" });
+  const [selectedManagedBossId, setSelectedManagedBossId] = useState<number | null>(null);
   const [customerDevicePushAction, setCustomerDevicePushAction] = useState<
     "disable" | "enable" | null
   >(null);
@@ -394,6 +397,7 @@ export default function CustomerPortalPage() {
   const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
   const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
   const [customerQuickReplies, setCustomerQuickReplies] = useState<CustomerQuickReplyState>({});
+  const [customerMessageDrafts, setCustomerMessageDrafts] = useState<Record<string, string>>({});
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
   const [bookingPages, setBookingPages] = useState<Record<BookingFilter, number>>(initialBookingPages);
   const [selectedBookingMonths, setSelectedBookingMonths] =
@@ -401,6 +405,7 @@ export default function CustomerPortalPage() {
   const [customerInvoiceRecords, setCustomerInvoiceRecords] = useState<CustomerPortalInvoiceRecord[]>([]);
   const [customerInvoicesLoadState, setCustomerInvoicesLoadState] =
     useState<PortalInvoicesLoadState>("loading");
+  const [principalLogoutBusy, setPrincipalLogoutBusy] = useState(false);
   const [invoiceDownloadStates, setInvoiceDownloadStates] =
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
@@ -408,7 +413,7 @@ export default function CustomerPortalPage() {
 
   const refreshCustomerPortalSavedBookings = useCallback(
     async ({ resetView = false, signal }: { resetView?: boolean; signal: AbortSignal }) => {
-      const loadedBookings = await loadCustomerPortalSavedBookings({ signal });
+      const loadedBookings = await loadCustomerPortalSavedBookings({ signal, travelerId: selectedManagedBossId });
 
       if (signal.aborted) {
         return;
@@ -433,8 +438,46 @@ export default function CustomerPortalPage() {
       setBookingPages({ ...initialBookingPages });
       setSelectedBookingMonths({ ...initialSelectedBookingMonths });
     },
-    [],
+    [selectedManagedBossId],
   );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/customer-principal-access", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { "x-prestige-customer-purpose": "customer-principal-access-read" },
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null);
+        const role = payload?.data?.principal_role;
+        const bosses = Array.isArray(payload?.data?.memberships)
+          ? payload.data.memberships
+              .map((entry: unknown) => {
+                const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+                const travelerId = Number(row.traveler_id);
+                const bossName = typeof row.verified_boss_name === "string" ? row.verified_boss_name.trim() : "";
+                return Number.isSafeInteger(travelerId) && travelerId > 0 && bossName
+                  ? { traveler_id: travelerId, verified_boss_name: bossName }
+                  : null;
+              })
+              .filter((entry: unknown): entry is { traveler_id: number; verified_boss_name: string } => Boolean(entry))
+          : [];
+        if (response.ok && payload?.ok === true && (role === "pa" || role === "boss") && bosses.length > 0) {
+          setCustomerPrincipalAccess({ managed_bosses: bosses, principal_role: role, status: "principal" });
+          setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
+          setActiveSection((current) => current === "Invoices" ? "Upcoming" : current);
+          return;
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+      }
+      setCustomerPrincipalAccess({ status: "legacy" });
+    })();
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -506,27 +549,32 @@ export default function CustomerPortalPage() {
 
   async function sendCustomerDriverQuickReply(
     booking: CustomerPortalBooking,
-    templateKey: string,
+    templateKey: string | null,
     message: string,
     expectedDirection: "customer_to_admin" | "customer_to_driver" = "customer_to_driver",
   ) {
     const bookingReference = bookingReferenceFromPortalId(booking.id);
     const isDriverDetailsAcknowledgement = expectedDirection === "customer_to_admin";
 
-    if (!bookingReference || customerQuickReplies[booking.id]?.sendingKey) return;
+    const typedMessage = message.replace(/\s+/g, " ").trim();
+    if (!bookingReference || customerQuickReplies[booking.id]?.sendingKey || (!templateKey && !typedMessage)) return;
+    const clientMessageId = crypto.randomUUID();
 
     setCustomerQuickReplies((current) => ({
       ...current,
       [booking.id]: {
         feedback: null,
         feedbackTarget: isDriverDetailsAcknowledgement ? "driver_details" : "driver",
-        sendingKey: templateKey,
+        sendingKey: templateKey || clientMessageId,
       },
     }));
 
     try {
       const response = await fetch("/api/customer-driver-quick-replies", {
-        body: JSON.stringify({ booking_reference: bookingReference, template_key: templateKey }),
+        body: JSON.stringify({
+          booking_reference: bookingReference,
+          ...(templateKey ? { template_key: templateKey } : { client_message_id: clientMessageId, message_text: typedMessage }),
+        }),
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
@@ -561,12 +609,16 @@ export default function CustomerPortalPage() {
             tone: "success",
             text: isDriverDetailsAcknowledgement
               ? "Driver details acknowledged. Prestige Limo has been notified."
-              : `Sent to driver: ${message}`,
+              : `Sent to driver: ${typedMessage}`,
           },
           feedbackTarget: isDriverDetailsAcknowledgement ? "driver_details" : "driver",
           sendingKey: "",
         },
       }));
+
+      if (!templateKey) {
+        setCustomerMessageDrafts((current) => ({ ...current, [booking.id]: "" }));
+      }
 
       if (isDriverDetailsAcknowledgement) {
         await loadTripUpdatesForBooking(booking);
@@ -657,6 +709,12 @@ export default function CustomerPortalPage() {
     const controller = new AbortController();
 
     async function loadCustomerInvoices() {
+      if (customerPrincipalAccess.status === "checking") return;
+      if (customerPrincipalAccess.status === "principal") {
+        setCustomerInvoiceRecords([]);
+        setCustomerInvoicesLoadState("blocked");
+        return;
+      }
       try {
         const storedInvoices = await loadCustomerPortalInvoiceRecords({ signal: controller.signal });
 
@@ -680,7 +738,7 @@ export default function CustomerPortalPage() {
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [customerPrincipalAccess.status]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -717,6 +775,20 @@ export default function CustomerPortalPage() {
       activeController?.abort();
       window.removeEventListener("focus", refreshOnForeground);
       document.removeEventListener("visibilitychange", refreshOnForeground);
+    };
+  }, [refreshCustomerPortalSavedBookings]);
+
+  useEffect(() => {
+    let activeController: AbortController | null = null;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      activeController?.abort();
+      activeController = new AbortController();
+      void refreshCustomerPortalSavedBookings({ signal: activeController.signal });
+    }, 5000);
+    return () => {
+      window.clearInterval(interval);
+      activeController?.abort();
     };
   }, [refreshCustomerPortalSavedBookings]);
 
@@ -1390,6 +1462,21 @@ export default function CustomerPortalPage() {
     }
   }
 
+  async function handleCustomerPrincipalLogout() {
+    setPrincipalLogoutBusy(true);
+    try {
+      await fetch("/api/customer-principal-access", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+    } finally {
+      window.location.assign("/customer-access/sign-in");
+    }
+  }
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-3 py-4 text-slate-950 sm:px-4 lg:px-6"
@@ -1412,6 +1499,7 @@ export default function CustomerPortalPage() {
               ) : null}
               <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
             </div>
+            {customerPrincipalAccess.status === "legacy" ? (
             <div className="flex shrink-0 items-center gap-1.5" data-customer-alerts-control="true">
               <span className="text-[11px] font-semibold text-slate-600">Driver / Admin alerts</span>
               <button
@@ -1447,6 +1535,17 @@ export default function CustomerPortalPage() {
                     : "OFF"}
               </button>
             </div>
+            ) : customerPrincipalAccess.status === "principal" ? (
+              <button
+                className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700"
+                data-customer-principal-logout="true"
+                disabled={principalLogoutBusy}
+                onClick={handleCustomerPrincipalLogout}
+                type="button"
+              >
+                {principalLogoutBusy ? "Signing out…" : "Sign out"}
+              </button>
+            ) : null}
           </div>
           <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
           {companyContactLines.length > 0 ? (
@@ -1459,12 +1558,29 @@ export default function CustomerPortalPage() {
           ) : null}
         </header>
 
+        {customerPrincipalAccess.status === "principal" && customerPrincipalAccess.managed_bosses.length > 1 ? (
+          <label className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950" data-customer-managed-boss-selector="true">
+            View bookings for
+            <select
+              className="mt-1 w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-slate-950"
+              onChange={(event) => setSelectedManagedBossId(Number(event.target.value))}
+              value={selectedManagedBossId || ""}
+            >
+              {customerPrincipalAccess.managed_bosses.map((boss) => (
+                <option key={boss.traveler_id} value={boss.traveler_id}>{boss.verified_boss_name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         <nav
           aria-label="Customer portal sections"
           className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2"
           data-customer-portal-sections="true"
         >
-          {portalSections.map((section) => {
+          {portalSections
+            .filter((section) => customerPrincipalAccess.status !== "principal" || section !== "Invoices")
+            .map((section) => {
             const isBookRequestLink = section === "New Booking Request";
             const isActive = !isBookRequestLink && activeSection === section;
             const isBookingFilter = bookingFilterSet.has(section);
@@ -2215,7 +2331,7 @@ export default function CustomerPortalPage() {
                               </dd>
                             </div>
                           </dl>
-                          {driverDetailsSentUpdate ? (
+                          {driverDetailsSentUpdate && customerPrincipalAccess.status !== "principal" ? (
                             <div className="mt-3 border-t border-emerald-200 pt-3">
                               <button
                                 className="min-h-10 rounded-md border border-emerald-700 bg-white px-3 py-1.5 text-sm font-semibold text-emerald-950 transition enabled:hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70"
@@ -2264,25 +2380,30 @@ export default function CustomerPortalPage() {
                         <div
                           className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
                           data-customer-driver-quick-replies={expandedBooking.id}
+                          data-customer-shared-conversation={expandedBooking.id}
                         >
                           <h3 className="text-sm font-semibold text-sky-950">Message Driver</h3>
                           <p className="mt-1 text-xs font-medium text-sky-900">
-                            Tap one reply. Your driver receives it in this job and admin can see it.
+                            Boss and managing PA share this booking conversation. The driver sees the verified Boss name.
                           </p>
-                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                            {customerDriverQuickReplies.map((reply) => (
-                              <button
-                                className="min-h-11 rounded-md border border-sky-700 bg-white px-3 py-2 text-left text-sm font-semibold text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                data-customer-driver-quick-reply={reply.key}
-                                disabled={Boolean(customerQuickReplyState.sendingKey) || customerQuickRepliesClosed}
-                                key={reply.key}
-                                onClick={() => void sendCustomerDriverQuickReply(expandedBooking, reply.key, reply.label)}
-                                type="button"
-                              >
-                                {customerQuickReplyState.sendingKey === reply.key ? "Sending..." : reply.label}
-                              </button>
-                            ))}
-                          </div>
+                          <textarea
+                            className="mt-2 min-h-24 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm text-slate-950"
+                            data-customer-driver-message-composer={expandedBooking.id}
+                            disabled={Boolean(customerQuickReplyState.sendingKey) || customerQuickRepliesClosed}
+                            maxLength={500}
+                            onChange={(event) => setCustomerMessageDrafts((current) => ({ ...current, [expandedBooking.id]: event.target.value }))}
+                            placeholder="Type a message to the driver"
+                            value={customerMessageDrafts[expandedBooking.id] || ""}
+                          />
+                          <button
+                            className="mt-2 min-h-11 rounded-md border border-sky-700 bg-sky-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            data-customer-driver-message-send={expandedBooking.id}
+                            disabled={Boolean(customerQuickReplyState.sendingKey) || customerQuickRepliesClosed || !(customerMessageDrafts[expandedBooking.id] || "").trim()}
+                            onClick={() => void sendCustomerDriverQuickReply(expandedBooking, null, customerMessageDrafts[expandedBooking.id] || "")}
+                            type="button"
+                          >
+                            {customerQuickReplyState.sendingKey ? "Sending…" : "Send to driver"}
+                          </button>
                           {customerQuickRepliesClosed ? (
                             <p className="mt-2 text-xs font-semibold text-slate-600">
                               Driver replies close after Passenger on board.

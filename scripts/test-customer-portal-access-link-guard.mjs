@@ -215,11 +215,11 @@ assertIncludes(adminRoute, "resolveAdminCustomerInvoiceBoundary(request)", "admi
 assertIncludes(adminRoute, "ensureAdminCustomerPortalAccessAccount", "admin portal access route invite activation");
 assertIncludes(adminRoute, "agencyCustomerAccount: body.agencyCustomerAccount", "admin portal access route agency intent");
 assertIncludes(adminRoute, "revokeAdminCustomerPortalAccessAccount", "admin portal access route revoke action");
-assertIncludes(adminRoute, "createCustomerPortalAccessLinkToken(account.data.customer_account_reference", "admin portal access route account-scoped link creation");
-assertIncludes(adminRoute, 'scope: "portal_account"', "admin portal access route portal-account scoped token");
-assertIncludes(adminRoute, "safeCustomerPortalPublicBookingReference(", "admin portal access route public booking deep-link validation");
-assertIncludes(adminRoute, "body.publicBookingReference,", "admin portal access route public booking deep-link input");
-assertIncludes(adminRoute, 'action !== "revoke"', "admin portal access route only allows revoke patch action");
+assertIncludes(adminRoute, "issueCustomerPrincipalInvitation", "admin portal access route one-use invitation creation");
+assertIncludes(adminRoute, "memberships: rawMemberships.map", "admin portal access route verified membership handoff");
+assertIncludes(adminRoute, "revokeCustomerPrincipalAccess", "admin portal access route principal revoke action");
+assertIncludes(adminRoute, 'action !== "revoke" && action !== "revoke_legacy"', "admin portal access route bounded revoke actions");
+assertExcludes(adminRoute, "createCustomerPortalAccessLinkToken", "admin portal access route retired permanent-link creation");
 assertExcludes(adminRoute, "body.bookingReference", "admin portal access route internal booking deep-link input");
 assertExcludes(adminRoute, /Set-Cookie|NextResponse|@supabase\/supabase-js|\bcreateClient\b|\.(?:from|insert|upsert|update|delete|rpc)\s*\(/, "admin portal access route unsafe path");
 
@@ -265,9 +265,9 @@ for (const fragment of [
   'data-admin-customer-driver-details-copy-with-portal-link-external-send="false"',
   'data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"',
   'data-admin-customer-driver-details-copy-with-portal-link-feedback="true"',
-  "Copy + App Link",
-  "Copying link",
-  "Copied + link",
+  "Manage Access",
+  "Preparing access",
+  "Invitation copied",
 ]) {
   assertIncludes(appPage, fragment, `dispatch customer app link ${fragment}`);
 }
@@ -276,13 +276,13 @@ for (const fragment of [
   "const customerAccountReference = customerDriverDetailsPortalAccountReference;",
   "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
-  "publicBookingReference: dispatchPublicBookingReference,",
   "customerAccountReference,",
+  "principalRole: selectedRole,",
+  "memberships: [{",
   "agencyCustomerAccount: customerDriverDetailsPortalAgencyAccount,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   "navigator.clipboard.writeText(",
-  "customerDriverDetailsWithPortalLinkText(messageText, portalUrl, booking.bookingType)",
   "portalUrl,",
   "Paste/send manually; no provider message was sent.",
   "external_send: false",
@@ -303,8 +303,13 @@ assertExcludes(
 );
 assertIncludes(
   appPage,
-  "(!customerDriverDetailsPortalBookerId && !customerDriverDetailsPortalAgencyAccount)",
-  "dispatch customer app link permits only a verified agency account to omit the permanent booker",
+  "!customerDriverDetailsPortalBookerId ||",
+  "dispatch Customer access invitation requires the verified booker",
+);
+assertIncludes(
+  appPage,
+  "!adminDispatchVerifiedIdentityId(booking.travelerId)",
+  "dispatch Customer access invitation requires the verified traveller",
 );
 assertExcludes(
   customerFinderSection,

@@ -25624,32 +25624,16 @@ export default function Home() {
     await copyDispatchCopy("customerCopy");
   }
 
-  function customerDriverDetailsWithPortalLinkText(messageText: string, portalUrl: string, bookingTypeValue = "") {
-    const liveLocationPortalNote =
-      normalizeBookingType(bookingTypeValue) === "MNG"
-        ? "Arrival live location appears in the customer app only after manual arrival readiness and driver sharing."
-        : "Live location appears in the customer app only when ready, usually around 30 minutes before pickup, after the driver shares location.";
-
-    return [
-      messageText,
-      [
-        "CUSTOMER APP",
-        "View driver details and trip status:",
-        liveLocationPortalNote,
-        portalUrl,
-      ].join("\n"),
-    ]
-      .map((section) => section.trim())
-      .filter(Boolean)
-      .join("\n\n");
-  }
-
   async function createCustomerDriverDetailsPortalLink() {
     const bookingReference = customerDriverDetailsPortalBookingReference;
     const customerAccountReference = customerDriverDetailsPortalAccountReference;
     const companyId = customerDriverDetailsPortalCompanyId;
     const bookerId = customerDriverDetailsPortalBookerId;
-    const agencyCustomerAccount = customerDriverDetailsPortalAgencyAccount;
+    const travelerId = adminDispatchVerifiedIdentityId(booking.travelerId);
+    const verifiedTraveler = travelerId
+      ? rateTravelers.find((traveler) => String(traveler.id) === String(travelerId))
+      : null;
+    const verifiedBossName = clean(verifiedTraveler?.traveler_name);
 
     if (!bookingReference) {
       throw new Error("Load a saved booking before copying the customer app link.");
@@ -25663,8 +25647,20 @@ export default function Home() {
       throw new Error("Customer app link requires a saved CRM customer account. Use Save + CRM or load the saved booking first.");
     }
 
-    if (!companyId || (!bookerId && !agencyCustomerAccount)) {
-      throw new Error("Customer app link requires a verified CRM company and booker. Select both and save the booking first.");
+    if (!companyId || !bookerId || !travelerId || !verifiedBossName) {
+      throw new Error("Customer app access requires a verified CRM company, booker, and traveller. Select all three and save the booking first.");
+    }
+
+    const selectedRole = window.prompt("Manage Access: type PA or Boss for this invitation.", "PA")?.trim().toLowerCase();
+    if (selectedRole !== "pa" && selectedRole !== "boss") {
+      throw new Error("Choose PA or Boss. No access invitation was created.");
+    }
+    const invitedEmail = window.prompt(
+      `Enter the separate verified email for this ${selectedRole === "pa" ? "PA" : "Boss"}.`,
+      selectedRole === "pa" ? clean(booking.bookerEmail).toLowerCase() : "",
+    )?.trim().toLowerCase();
+    if (!invitedEmail || !isValidEmail(invitedEmail)) {
+      throw new Error("A valid separate email is required. No access invitation was created.");
     }
 
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
@@ -25673,7 +25669,14 @@ export default function Home() {
         bookerId,
         companyId,
         customerAccountReference,
-        publicBookingReference: dispatchPublicBookingReference,
+        email: invitedEmail,
+        memberships: [{
+          bookerId,
+          companyId,
+          travelerId,
+          verifiedBossName,
+        }],
+        principalRole: selectedRole,
         safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
       }),
       cache: "no-store",
@@ -25684,16 +25687,23 @@ export default function Home() {
       method: "POST",
     });
     const result = (await response.json().catch(() => null)) as {
+      accessStatus?: "access_updated" | "invitation_created";
       ok?: boolean;
       url?: string;
     } | null;
     const portalUrl = typeof result?.url === "string" ? result.url.trim() : "";
 
-    if (!response.ok || result?.ok !== true || !portalUrl) {
-      throw new Error("Customer app link could not be created for this saved customer account.");
+    if (!response.ok || result?.ok !== true) {
+      throw new Error("Customer access invitation could not be created for this saved customer account.");
+    }
+    if (result.accessStatus === "access_updated") {
+      return { accessUpdated: true, portalUrl: "" };
+    }
+    if (result.accessStatus !== "invitation_created" || !portalUrl) {
+      throw new Error("Customer access invitation could not be created for this saved customer account.");
     }
 
-    return portalUrl;
+    return { accessUpdated: false, portalUrl };
   }
 
   async function createCustomerBookingInvitationLink() {
@@ -25726,7 +25736,6 @@ export default function Home() {
     const bookingInvitationMode = !bookingReference;
     const copyStateReference = bookingReference || customerBookingInvitationCopyStateKey;
     const displayBookingReference = dispatchPublicBookingReference || "loaded booking";
-    const messageText = getDispatchCopyText("customerCopy");
 
     setCustomerDriverDetailsPortalLinkCopyState({
       external_send: false,
@@ -25737,7 +25746,7 @@ export default function Home() {
       tone: "info",
       text: bookingInvitationMode
         ? "Preparing one-time customer booking invitation..."
-        : `Preparing customer app link for ${displayBookingReference}...`,
+        : `Preparing Customer access invitation for ${displayBookingReference}...`,
     });
 
     try {
@@ -25772,13 +25781,32 @@ export default function Home() {
         return;
       }
 
-      if (!clean(messageText)) {
-        throw new Error("Customer copy is empty. Load a saved booking first.");
+      const accessResult = await createCustomerDriverDetailsPortalLink();
+      if (accessResult.accessUpdated) {
+        setCustomerDriverDetailsPortalLinkCopyState({
+          external_send: false,
+          loadedReference: copyStateReference,
+          noProviderSend: true,
+          portalLinkCopied: false,
+          portalUrl: "",
+          tone: "success",
+          text: "PA access is already active and now covers every verified Boss under this PA. No new invitation or PIN reset was created.",
+        });
+        setCopyFeedback({
+          target: "customerCopy",
+          tone: "success",
+          text: "Active PA access updated.",
+        });
+        return;
       }
-
-      const portalUrl = await createCustomerDriverDetailsPortalLink();
+      const portalUrl = accessResult.portalUrl;
       await navigator.clipboard.writeText(
-        customerDriverDetailsWithPortalLinkText(messageText, portalUrl, booking.bookingType),
+        [
+          "PRESTIGE SG ACCESS INVITATION",
+          "Use this private invitation once to verify your email and create your 6-digit PIN:",
+          portalUrl,
+          "This invitation expires in 30 minutes.",
+        ].join("\n"),
       );
       setCustomerDriverDetailsPortalLinkCopyState({
         external_send: false,
@@ -25787,12 +25815,12 @@ export default function Home() {
         portalLinkCopied: true,
         portalUrl,
         tone: "success",
-        text: `Customer driver details and customer app link copied for ${displayBookingReference}. Paste/send manually; no provider message was sent.`,
+        text: `Customer access invitation copied for ${displayBookingReference}. Paste/send manually; no provider message was sent.`,
       });
       setCopyFeedback({
         target: "customerCopy",
         tone: "success",
-        text: "Customer copy with app link copied.",
+        text: "Customer access invitation copied.",
       });
     } catch (error) {
       const errorText =
@@ -34822,11 +34850,11 @@ export default function Home() {
         : null;
   const customerDriverDetailsPortalLinkCopyButtonLabel =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info"
-      ? "Copying link"
+      ? "Preparing access"
       : customerDriverDetailsPortalLinkCopyDisplayState?.portalLinkCopied
-        ? "Copied + link"
+        ? "Invitation copied"
         : customerDriverDetailsPortalBookingReference
-          ? "Copy + App Link"
+          ? "Manage Access"
           : "Copy Booking Invite";
   const customerDriverDetailsPortalLinkCopyDisabled =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info" ||
@@ -34834,7 +34862,8 @@ export default function Home() {
       (!customerDriverDetailsPortalLinkCopyReady ||
         !customerDriverDetailsPortalAccountReference ||
         !customerDriverDetailsPortalCompanyId ||
-        (!customerDriverDetailsPortalBookerId && !customerDriverDetailsPortalAgencyAccount)));
+        !customerDriverDetailsPortalBookerId ||
+        !adminDispatchVerifiedIdentityId(booking.travelerId)));
   const driverDispatchCopied =
     driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
   const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
@@ -46589,9 +46618,10 @@ export default function Home() {
                           : !customerDriverDetailsPortalAccountReference
                             ? "Save + CRM or load the saved booking before copying a customer app link."
                             : !customerDriverDetailsPortalCompanyId ||
-                                (!customerDriverDetailsPortalBookerId && !customerDriverDetailsPortalAgencyAccount)
+                                !customerDriverDetailsPortalBookerId ||
+                                !adminDispatchVerifiedIdentityId(booking.travelerId)
                               ? "Select and save the verified CRM company and booker before copying a customer app link."
-                            : "Copy customer-safe driver details with a customer app link. Live location appears only when ready; no provider message is sent."
+                            : "Manage PA/Boss access with a separate 30-minute one-use invitation. No provider message is sent."
                       }
                       type="button"
                     >

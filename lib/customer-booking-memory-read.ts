@@ -720,7 +720,7 @@ export function resolveCustomerBookingMemoryBoundary(
     "/book",
   );
 
-  if (portalBoundary.ok) {
+  if (portalBoundary.ok && portalBoundary.data.mode !== "principal-device-session") {
     return {
       data: {
         auth_user_id: portalBoundary.data.auth_user_id,

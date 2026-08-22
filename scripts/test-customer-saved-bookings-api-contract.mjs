@@ -147,9 +147,11 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const principalPath = path.join(tempDir, "lib/customer-principal-access.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(principalPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,
@@ -163,6 +165,13 @@ async function writeMockModules(tempDir) {
       "  return mock.client;",
       "}",
       "module.exports = { createClient };",
+    ].join("\n"),
+  );
+  await writeFile(
+    principalPath,
+    [
+      "exports.resolveCustomerPrincipalSessionToken = () => null;",
+      "exports.assertActiveCustomerPrincipalSession = async () => ({ error: 'not used by legacy contract', ok: false, status: 403 });",
     ].join("\n"),
   );
 }
@@ -574,6 +583,7 @@ try {
         booking_reference: "CUST-SAVED-001",
         limit: 10,
         page: 1,
+        traveler_id: null,
       },
       ok: true,
     },

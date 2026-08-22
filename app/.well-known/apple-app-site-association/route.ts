@@ -17,6 +17,15 @@ const appleAppSiteAssociation = {
             "/": "/api/customer-portal-access/*",
             comment: "Open only the established private Prestige Customer portal access path.",
           },
+          {
+            "/": "/customer-access/activate",
+            comment: "Open only the one-use Prestige SG account activation path.",
+          },
+          {
+            "/": "/my-bookings",
+            "?": { booking: "*", tracking: "1" },
+            comment: "Open one exact authenticated Customer booking after notification tap.",
+          },
         ],
       },
     ],

@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "14",
-  "The approved fourteenth TestFlight build number must be explicit",
+  "15",
+  "The approved fifteenth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -129,6 +129,8 @@ for (const phrase of [
   "`ios.buildNumber` is explicitly `13`",
   "Driver iOS TestFlight Build 14 Logo Replacement (2026-08-18)",
   "`ios.buildNumber` is explicitly `14`",
+  "Driver iOS TestFlight Build 15 Type 2 Native Handoff (source checkpoint 2026-08-22)",
+  "`ios.buildNumber` is explicitly `15`",
   "`bf866745d1f7a59791eea43204df17083a857a0943d7365ac3adf0161e008552`",
   "No commit, push, pull request, merge, EAS build, Apple upload, TestFlight assignment, external testing, App Review submission, or public release is included in this local checkpoint",
   "94e64ea215a39acfd2a04e3281bd899919494392",

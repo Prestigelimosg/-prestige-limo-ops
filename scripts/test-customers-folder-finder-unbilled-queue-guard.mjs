@@ -57,7 +57,10 @@ const ledgerSection = sectionBetween(
 
 for (const fragment of [
   "const customerFolderFinderPageSize = 10;",
-  "const customerBillingOverviewPageSize = 20;",
+  "const customerBillingOverviewPageSize = 15;",
+  'limit: "1000",',
+  'data-customer-billing-overview-scroll="true"',
+  'data-customer-billing-overview-page-numbers="true"',
   "const [customerFolderFinderPage, setCustomerFolderFinderPage] = useState(1);",
   "const [customerFolderFinderSelectedId, setCustomerFolderFinderSelectedId] = useState(\"\");",
   "const [customerFolderFinderDropdownOpen, setCustomerFolderFinderDropdownOpen] = useState(false);",

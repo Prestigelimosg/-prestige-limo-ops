@@ -161,7 +161,7 @@ const outstandingReviewSortOptions: Array<{ label: string; value: OutstandingRev
 const outstandingReviewPageSizeOptions = [10, 25];
 const customerQueuePageSizeOptions = [10, 25];
 const customerFolderFinderPageSize = 10;
-const customerBillingOverviewPageSize = 20;
+const customerBillingOverviewPageSize = 15;
 const customerBillingDocumentPageSize = 5;
 type CustomerInvoiceWorkspaceTab = "create-invoice" | "statements" | "outstanding" | "follow-up";
 
@@ -3977,7 +3977,7 @@ export default function MockCustomerDashboardPage() {
 
     try {
       const params = new URLSearchParams({
-        limit: "10",
+        limit: "1000",
       });
       if (trimmedSearch) {
         params.set("search", trimmedSearch);
@@ -8132,18 +8132,22 @@ export default function MockCustomerDashboardPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto p-4 sm:p-5">
+          <div className="p-4 sm:p-5">
+            <div
+              className="max-h-[52rem] overflow-auto rounded-md border border-slate-200"
+              data-customer-billing-overview-scroll="true"
+            >
             <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
               <thead className="text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="border-b border-slate-300 px-3 py-2 font-bold">Customer Name</th>
-                  <th className="border-b border-slate-300 px-3 py-2 font-bold">Invoice Status</th>
-                  <th className="border-b border-slate-300 px-3 py-2 font-bold">Due / Latest Date</th>
-                  <th className="border-b border-slate-300 px-3 py-2 text-right font-bold">
+                  <th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 font-bold">Customer Name</th>
+                  <th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 font-bold">Invoice Status</th>
+                  <th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 font-bold">Due / Latest Date</th>
+                  <th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 text-right font-bold">
                     Invoice Amount
                   </th>
-                  <th className="border-b border-slate-300 px-3 py-2 text-right font-bold">Balance</th>
-                  <th className="border-b border-slate-300 px-3 py-2 text-right font-bold">Jobs</th>
+                  <th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 text-right font-bold">Balance</th>
+                  <th className="sticky top-0 z-10 border-b border-slate-300 bg-white px-3 py-2 text-right font-bold">Jobs</th>
                 </tr>
               </thead>
               <tbody>
@@ -8207,15 +8211,19 @@ export default function MockCustomerDashboardPage() {
                 )}
               </tbody>
             </table>
+            </div>
             {customerBillingOverviewTotalPages > 1 ? (
               <div
-                className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600"
+                className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs font-bold text-slate-600"
                 data-customer-billing-overview-pages="true"
               >
                 <span>
                   Page {activeCustomerBillingOverviewPage} of {customerBillingOverviewTotalPages}
                 </span>
-                <div className="flex flex-wrap gap-1">
+                <div
+                  className="flex flex-wrap justify-end gap-1"
+                  data-customer-billing-overview-page-numbers="true"
+                >
                   {customerBillingOverviewPageNumbers.map((pageNumber) => (
                     <button
                       className={`min-h-8 min-w-8 rounded-md border px-2 transition ${

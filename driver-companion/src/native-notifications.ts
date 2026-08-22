@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 
 import {
   parseDriverJobUrl,
+  productionOrigin,
   type ActiveDriverJob,
 } from "./driver-job-contract.ts";
 
@@ -12,6 +13,14 @@ const nativeNotificationJobStoragePrefix =
 
 function validJobKey(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+export function nativeDriverJobHandoffUrl(jobKey: string) {
+  if (!validJobKey(jobKey)) {
+    throw new Error("Invalid native notification job key.");
+  }
+
+  return `${productionOrigin}/api/driver-native-job-open/${jobKey}`;
 }
 
 export function nativeNotificationOpenRequest(value: unknown) {

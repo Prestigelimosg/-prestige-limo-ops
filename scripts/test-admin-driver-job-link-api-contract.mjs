@@ -26,6 +26,7 @@ const sourceFiles = [
   "lib/admin-dispatcher-auth-boundary.ts",
   "lib/driver-device-push-notification.ts",
   "lib/driver-job-link.ts",
+  "lib/driver-native-job-handoff.ts",
   "lib/driver-job-status-workflow.ts",
   "app/api/admin-driver-job-links/route.ts",
 ];

@@ -422,6 +422,14 @@ const guardChecks = [
     script: "scripts/test-driver-job-device-push-alert-guard.mjs",
   },
   {
+    label: "Admin Driver Job Link no-reload handoff guard",
+    script: "scripts/test-admin-driver-job-link-no-reload-handoff-guard.mjs",
+  },
+  {
+    label: "Driver native pre-ACK handoff guard",
+    script: "scripts/test-driver-native-preack-handoff-guard.mjs",
+  },
+  {
     label: "Driver one-hour pickup app push reminder guard",
     script: "scripts/test-driver-one-hour-pickup-push-reminder-guard.mjs",
   },

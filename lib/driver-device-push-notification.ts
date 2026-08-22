@@ -76,6 +76,8 @@ export type DriverDevicePushRegistrationResult = {
 
 export type DriverDevicePushAlertResult = {
   enabled: boolean;
+  native_provider_accepted: boolean;
+  native_provider_request_count: number;
   ok: boolean;
   provider_request_count: number;
   reason:
@@ -124,6 +126,7 @@ type DriverDevicePushAlertInput = {
 type DriverNativePushOpenTarget = "messages";
 type DriverNativePushVisibleBody =
   | "Job update available"
+  | "New job available. Tap to review."
   | "Pickup is in 1 hour. Open Driver Portal to review.";
 
 type DriverDevicePushPayload = {
@@ -591,6 +594,8 @@ function alertResult(
   reason: DriverDevicePushAlertResult["reason"],
   options: {
     enabled?: boolean;
+    nativeProviderAccepted?: boolean;
+    nativeProviderRequestCount?: number;
     ok?: boolean;
     providerRequestCount?: number;
     status?: DriverDevicePushAlertResult["status"];
@@ -598,6 +603,8 @@ function alertResult(
 ): DriverDevicePushAlertResult {
   return {
     enabled: options.enabled === true,
+    native_provider_accepted: options.nativeProviderAccepted === true,
+    native_provider_request_count: options.nativeProviderRequestCount ?? 0,
     ok: options.ok === true,
     provider_request_count: options.providerRequestCount ?? 0,
     reason,
@@ -839,6 +846,26 @@ async function loadActiveDriverSubscriptions(
   }
 }
 
+async function driverHasActiveOnePhoneAccount(
+  client: DriverDevicePushClient,
+  driverId: number,
+) {
+  try {
+    const { data, error } = await client
+      .from("driver_access_accounts")
+      .select("id, active_device_id_hash")
+      .eq("driver_reference", String(driverId))
+      .eq("account_status", "active")
+      .maybeSingle();
+    const account = asRecord(data);
+    return !error &&
+      Boolean(safeUuid(account.id)) &&
+      /^[0-9a-f]{64}$/.test(safeText(account.active_device_id_hash, 64) || "");
+  } catch {
+    return false;
+  }
+}
+
 async function sendPayloadToDriverSubscriptions(
   client: DriverDevicePushClient,
   driverId: number,
@@ -847,6 +874,8 @@ async function sendPayloadToDriverSubscriptions(
   options: DriverDevicePushAlertOptions,
   nativeOpenTarget: DriverNativePushOpenTarget | null = null,
   nativeVisibleBody: DriverNativePushVisibleBody = "Job update available",
+  nativeJobKey: string | null = payload.target_path ? null : payload.job_key,
+  requireSingleNativeSubscription = false,
 ): Promise<DriverDevicePushAlertResult> {
   const loaded = await loadActiveDriverSubscriptions(client, driverId);
   if (!loaded.ok) {
@@ -860,9 +889,14 @@ async function sendPayloadToDriverSubscriptions(
     ((subscription: PushSubscription, pushPayload: DriverDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
   const shouldRecordHealth = !options.pushSender;
-  const eligibleSubscriptions = payload.target_path
-    ? loaded.subscriptions.filter((subscription) => subscription.channel === "web")
-    : loaded.subscriptions;
+  const nativeSubscriptionCount = loaded.subscriptions.filter(
+    (subscription) => subscription.channel === "native_ios",
+  ).length;
+  const nativeIsEligible = Boolean(nativeJobKey) &&
+    (!requireSingleNativeSubscription || nativeSubscriptionCount === 1);
+  const eligibleSubscriptions = loaded.subscriptions.filter(
+    (subscription) => subscription.channel === "web" || nativeIsEligible,
+  );
   if (eligibleSubscriptions.length === 0) {
     return alertResult("no_active_subscriptions", { enabled: true });
   }
@@ -872,13 +906,13 @@ async function sendPayloadToDriverSubscriptions(
         ? options.nativePushSender
           ? options.nativePushSender(
               subscription.endpoint,
-              payload.job_key,
+              nativeJobKey!,
               nativeOpenTarget,
               nativeVisibleBody,
             )
           : sendNativePush(
               subscription.endpoint,
-              payload.job_key,
+              nativeJobKey!,
               nativeOpenTarget,
               nativeVisibleBody,
               options.nativeFetch,
@@ -900,15 +934,26 @@ async function sendPayloadToDriverSubscriptions(
   }
 
   const succeeded = results.filter((result) => result.status === "fulfilled").length;
+  const nativeProviderRequestCount = eligibleSubscriptions.filter(
+    (subscription) => subscription.channel === "native_ios",
+  ).length;
+  const nativeProviderAccepted = eligibleSubscriptions.some(
+    (subscription, index) =>
+      subscription.channel === "native_ios" && results[index]?.status === "fulfilled",
+  );
   return succeeded > 0
     ? alertResult("send_succeeded", {
         enabled: true,
+        nativeProviderAccepted,
+        nativeProviderRequestCount,
         ok: true,
         providerRequestCount: eligibleSubscriptions.length,
         status: "sent",
       })
     : alertResult("provider_failure", {
         enabled: true,
+        nativeProviderAccepted,
+        nativeProviderRequestCount,
         providerRequestCount: eligibleSubscriptions.length,
         status: "failed",
       });
@@ -946,12 +991,27 @@ export async function sendDriverDevicePushAlertForNewJobLink(
   const linkId = safeUuid(link?.id);
   const driverId = safePositiveInteger(link?.driver_id);
   const exactToken = safeText(link?.token_hash, 128) === tokenHash;
+  const nativeHandoffAvailable = Boolean(
+    safeText(asRecord(link?.safe_link_context).native_handoff_ciphertext, 1200),
+  );
   const payload = linkId ? newJobPayload(linkId, input.driver_job_token) : null;
   if (!link || !linkId || !driverId || !exactToken || !payload) {
     return alertResult("invalid_driver_link", { enabled: true });
   }
+  const nativeAccountEligible = nativeHandoffAvailable &&
+    await driverHasActiveOnePhoneAccount(client, driverId);
 
-  return sendPayloadToDriverSubscriptions(client, driverId, payload, config, options);
+  return sendPayloadToDriverSubscriptions(
+    client,
+    driverId,
+    payload,
+    config,
+    options,
+    null,
+    "New job available. Tap to review.",
+    nativeAccountEligible ? payload.job_key : null,
+    true,
+  );
 }
 
 export async function sendDriverDevicePushAlertForAppUpdate(

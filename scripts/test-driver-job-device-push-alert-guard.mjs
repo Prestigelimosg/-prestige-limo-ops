@@ -627,7 +627,12 @@ class QueryBuilder {
   then(resolve, reject) { return Promise.resolve(this.client.resolve(this)).then(resolve, reject); }
 }
 
-function createMockClient({ acknowledged = true, subscriptions = [] } = {}) {
+function createMockClient({
+  acknowledged = true,
+  activeOnePhoneAccount = true,
+  nativeHandoff = false,
+  subscriptions = [],
+} = {}) {
   const linkId = "11111111-1111-4111-8111-111111111111";
   const calls = [];
   const client = {
@@ -650,9 +655,14 @@ function createMockClient({ acknowledged = true, subscriptions = [] } = {}) {
             id: linkId,
             link_status: "active",
             revoked_at: null,
-            safe_link_context: acknowledged
-              ? { driver_acknowledged_at: "2026-07-22T00:00:00.000Z" }
-              : {},
+            safe_link_context: {
+              ...(acknowledged
+                ? { driver_acknowledged_at: "2026-07-22T00:00:00.000Z" }
+                : {}),
+              ...(nativeHandoff
+                ? { native_handoff_ciphertext: "v1.opaque.server.only.handoff" }
+                : {}),
+            },
             token_hash: "hash:NEW-PRIVATE-DRIVER-JOB-TOKEN",
           },
           error: null,
@@ -660,6 +670,17 @@ function createMockClient({ acknowledged = true, subscriptions = [] } = {}) {
       }
       if (query.table === "driver_device_push_subscriptions" && query.operation === "select") {
         return { data: subscriptions, error: null };
+      }
+      if (query.table === "driver_access_accounts") {
+        return activeOnePhoneAccount
+          ? {
+              data: {
+                active_device_id_hash: "a".repeat(64),
+                id: "33333333-3333-4333-8333-333333333333",
+              },
+              error: null,
+            }
+          : { data: null, error: null };
       }
       return { data: null, error: null };
     },
@@ -1082,6 +1103,107 @@ try {
   assert.equal(nativeOnlyIssuedJobAlert.ok, false);
   assert.equal(nativeOnlyIssuedJobAlert.reason, "no_active_subscriptions");
   assert.equal(preAcknowledgementNativeSendCount, 0);
+  let nativePreAcknowledgementRequest = null;
+  const nativeHandoffIssuedJobClient = createMockClient({
+    acknowledged: false,
+    nativeHandoff: true,
+    subscriptions: [
+      {
+        auth: "native_expo_push_token",
+        endpoint: nativeExpoPushToken,
+        p256dh: "native_expo_push_token",
+        source_surface: "driver_native_ios",
+      },
+    ],
+  });
+  const nativeHandoffIssuedJobAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
+    nativeHandoffIssuedJobClient,
+    {
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      driver_job_token: "NEW-PRIVATE-DRIVER-JOB-TOKEN",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async (expoToken, jobKey, openTarget, visibleBody) => {
+        nativePreAcknowledgementRequest = { expoToken, jobKey, openTarget, visibleBody };
+      },
+    },
+  );
+  assert.equal(nativeHandoffIssuedJobAlert.ok, true);
+  assert.equal(nativeHandoffIssuedJobAlert.native_provider_accepted, true);
+  assert.equal(nativeHandoffIssuedJobAlert.native_provider_request_count, 1);
+  assert.deepEqual(nativePreAcknowledgementRequest, {
+    expoToken: nativeExpoPushToken,
+    jobKey: nativeHandoffIssuedJobAlert.ok
+      ? helper.opaqueDriverJobLinkKey("11111111-1111-4111-8111-111111111111")
+      : "",
+    openTarget: null,
+    visibleBody: "New job available. Tap to review.",
+  });
+  assertExcludes(
+    JSON.stringify(nativePreAcknowledgementRequest),
+    ["NEW-PRIVATE-DRIVER-JOB-TOKEN", "/driver-job/", "PRIVATE-BOOKING-REFERENCE"],
+    "native pre-ACK provider payload",
+  );
+  let nativeWithoutAccountSendCount = 0;
+  const nativeWithoutAccountAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
+    createMockClient({
+      acknowledged: false,
+      activeOnePhoneAccount: false,
+      nativeHandoff: true,
+      subscriptions: [
+        {
+          auth: "native_expo_push_token",
+          endpoint: nativeExpoPushToken,
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+      ],
+    }),
+    {
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      driver_job_token: "NEW-PRIVATE-DRIVER-JOB-TOKEN",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async () => { nativeWithoutAccountSendCount += 1; },
+    },
+  );
+  assert.equal(nativeWithoutAccountAlert.ok, false);
+  assert.equal(nativeWithoutAccountAlert.reason, "no_active_subscriptions");
+  assert.equal(nativeWithoutAccountSendCount, 0);
+  let multipleNativeSendCount = 0;
+  const multipleNativeAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
+    createMockClient({
+      acknowledged: false,
+      nativeHandoff: true,
+      subscriptions: [
+        {
+          auth: "native_expo_push_token",
+          endpoint: nativeExpoPushToken,
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+        {
+          auth: "native_expo_push_token",
+          endpoint: "ExpoPushToken[zyxwvutsrqponmlkjihgfedcba0987654321]",
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+      ],
+    }),
+    {
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      driver_job_token: "NEW-PRIVATE-DRIVER-JOB-TOKEN",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async () => { multipleNativeSendCount += 1; },
+    },
+  );
+  assert.equal(multipleNativeAlert.ok, false);
+  assert.equal(multipleNativeAlert.reason, "no_active_subscriptions");
+  assert.equal(multipleNativeSendCount, 0);
   const mismatchedIssuedJobAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
     issuedJobClient,
     {

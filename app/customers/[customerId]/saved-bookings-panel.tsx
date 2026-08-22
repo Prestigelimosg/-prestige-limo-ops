@@ -1000,7 +1000,7 @@ export function CustomerFolderSavedBookingsPanel({
 
   async function loadAutomatedBillingReviews(
     bookings: CustomerFolderSavedBookingRecord[],
-    options: { forceRateSetup?: boolean } = {},
+    options: { forceRateSetup?: boolean; replaceReviewed?: boolean } = {},
   ) {
     const proposalBookings = bookings.filter(
       (booking) =>
@@ -1140,7 +1140,7 @@ export function CustomerFolderSavedBookingsPanel({
         const next = { ...current };
 
         calculatedReviews.forEach(({ reference, review }) => {
-          if (next[reference]?.status !== "reviewed") {
+          if (options.replaceReviewed || next[reference]?.status !== "reviewed") {
             next[reference] = review;
           }
         });
@@ -1155,7 +1155,7 @@ export function CustomerFolderSavedBookingsPanel({
         proposalBookings.forEach((booking) => {
           const reference = safeDispatchReference(booking);
 
-          if (next[reference]?.status !== "reviewed") {
+          if (options.replaceReviewed || next[reference]?.status !== "reviewed") {
             next[reference] = {
               amountCents: null,
               breakdown: "Prestige rate calculation is unavailable. Enter an approved price manually.",
@@ -2087,6 +2087,22 @@ export function CustomerFolderSavedBookingsPanel({
         throw new Error(result?.error || "Exact job update failed safely.");
       }
 
+      const updatedBillingBooking: CustomerFolderSavedBookingRecord = {
+        ...booking,
+        booker_id: updatedBooking.booker_id,
+        company_id: updatedBooking.company_id,
+        customer_account: updatedBooking.customer_display_name,
+        dropoff_location: updatedBooking.dropoff_location,
+        passenger_name: updatedBooking.passenger_name,
+        pickup_at: updatedBooking.pickup_at || updatedBooking.pickup_datetime,
+        pickup_location: updatedBooking.pickup_location,
+        public_booking_reference:
+          updatedBooking.public_booking_reference || booking.public_booking_reference,
+        route_summary: updatedBooking.route_summary,
+        service_type: updatedBooking.service_type || updatedBooking.route_type,
+        traveler_id: updatedBooking.traveler_id,
+      };
+
       setInlineEditState({
         booking: updatedBooking,
         form: inlineEditFormFromBooking(updatedBooking),
@@ -2098,36 +2114,32 @@ export function CustomerFolderSavedBookingsPanel({
         message: `Saved job ${safePublicBookingReference(updatedBooking.public_booking_reference) || publicBookingReferenceDisplay(booking)}.`,
         savedBookings: current.savedBookings.map((savedBooking) =>
           safeDispatchReference(savedBooking) === reference
-            ? {
-                ...savedBooking,
-                booker_id: updatedBooking.booker_id,
-                company_id: updatedBooking.company_id,
-                customer_account: updatedBooking.customer_display_name,
-                dropoff_location: updatedBooking.dropoff_location,
-                passenger_name: updatedBooking.passenger_name,
-                pickup_at: updatedBooking.pickup_at || updatedBooking.pickup_datetime,
-                pickup_location: updatedBooking.pickup_location,
-                public_booking_reference:
-                  updatedBooking.public_booking_reference || savedBooking.public_booking_reference,
-                route_summary: updatedBooking.route_summary,
-                service_type: updatedBooking.service_type || updatedBooking.route_type,
-                traveler_id: updatedBooking.traveler_id,
-              }
+            ? updatedBillingBooking
             : savedBooking,
         ),
         tone: "success",
       }));
+      setBillingReviews((current) => ({
+        ...current,
+        [reference]: {
+          amountCents: null,
+          breakdown:
+            "Saved job details changed. Recalculating the current customer price before invoice handoff.",
+          message: "Calculating",
+          status: "calculating",
+        },
+      }));
+      const recalculatedReviews = await loadAutomatedBillingReviews([updatedBillingBooking], {
+        forceRateSetup: true,
+        replaceReviewed: true,
+      });
+      const recalculatedReview = recalculatedReviews.find(
+        (candidate) => candidate.reference === reference,
+      );
+      const recalculatedAmountCents = recalculatedReview?.review.amountCents ?? null;
+
       if (options.keepEditorOpen) {
-        setBillingReviews((current) => ({
-          ...current,
-          [reference]: {
-            amountCents: current[reference]?.amountCents ?? null,
-            breakdown:
-              "Customer identity or job information changed. Review and confirm the displayed customer price again before invoice handoff.",
-            message: "Review corrected job price",
-            status: "proposed",
-          },
-        }));
+        setPriceDraft(recalculatedAmountCents ? (recalculatedAmountCents / 100).toFixed(2) : "");
         return;
       }
 

@@ -141,6 +141,45 @@ const automatedBillingReview = sectionBetween(
   "async function loadSavedBookings",
 );
 
+for (const fragment of [
+  "options: { forceRateSetup?: boolean; replaceReviewed?: boolean } = {}",
+  'options.replaceReviewed || next[reference]?.status !== "reviewed"',
+]) {
+  includes(
+    automatedBillingReview,
+    fragment,
+    `customer-folder reviewed-price invalidation ${fragment}`,
+  );
+}
+
+const inlineBookingSave = sectionBetween(
+  folder,
+  "async function saveInlineBookingDetails",
+  "function openPriceReview",
+);
+
+for (const fragment of [
+  "const updatedBillingBooking: CustomerFolderSavedBookingRecord = {",
+  'message: "Calculating"',
+  'status: "calculating"',
+  "const recalculatedReviews = await loadAutomatedBillingReviews([updatedBillingBooking], {",
+  "forceRateSetup: true",
+  "replaceReviewed: true",
+  'setPriceDraft(recalculatedAmountCents ? (recalculatedAmountCents / 100).toFixed(2) : "")',
+]) {
+  includes(
+    inlineBookingSave,
+    fragment,
+    `saved job detail price invalidation ${fragment}`,
+  );
+}
+
+assert.equal(
+  inlineBookingSave.includes('amountCents: current[reference]?.amountCents ?? null'),
+  false,
+  "a saved service or identity change must never retain an older reviewed amount",
+);
+
 for (const forbidden of [
   "summary.dsp_total_minutes",
   "summary?.actual_time_status",

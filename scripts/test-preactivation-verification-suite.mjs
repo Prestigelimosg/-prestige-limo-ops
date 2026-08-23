@@ -422,6 +422,10 @@ const guardChecks = [
     script: "scripts/test-customer-principal-native-alert-guard.mjs",
   },
   {
+    label: "Customer principal session ID guard",
+    script: "scripts/test-customer-principal-session-id-guard.mjs",
+  },
+  {
     label: "Customer principal email OTP IP rate-limit guard",
     script: "scripts/test-customer-principal-email-otp-rate-limit-guard.mjs",
   },

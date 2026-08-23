@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [appSource, ledger] = await Promise.all([
+const [appSource, calendarSyncSource, ledger] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
+  readFile("lib/admin-booking-google-calendar-sync.ts", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
 ]);
 const bookingUiBrowserSource = await readFile("scripts/test-booking-ui-browser.mjs", "utf8");
@@ -66,6 +67,28 @@ assert.match(
   /window\.confirm\(/,
   "new profile links, creates, or conflicting profile updates must require Admin confirmation",
 );
+for (const disclosure of [
+  `Create and link the new CRM company profile "${"${requestedCompanyName}"}" using this booking's Booker contact? This does not create an invoice, change rates, or send a message. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
+  `Create or reuse this verified Booker + Traveller under ${"${companyName}"}? Booker: ${"${bookerName}"}. Traveller: ${"${travelerName}"}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change driver, payment, or agency guests. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
+]) {
+  assert.ok(
+    appSource.includes(disclosure),
+    `Save + CRM confirmation must disclose the established private Operations Calendar handoff: ${disclosure}`,
+  );
+}
+assert.ok(
+  appSource.includes("const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(savedBooking);"),
+  "Save + CRM must retain its established Operations Calendar handoff",
+);
+assert.ok(
+  calendarSyncSource.includes('send_updates: "none"'),
+  "The disclosed Operations Calendar handoff must retain sendUpdates=none",
+);
+assert.equal(
+  /attendees\s*:/.test(calendarSyncSource),
+  false,
+  "The disclosed Operations Calendar handoff must not add attendees",
+);
 assert.match(
   saveCrmSyncSection,
   /status !== "saved"/,
@@ -120,6 +143,10 @@ assert.ok(
 assert.ok(
   ledger.includes("Booker email as `operations_email`"),
   "the ledger must preserve the approved operations-email meaning",
+);
+assert.ok(
+  ledger.includes("### Save + CRM Operations Calendar Confirmation Disclosure Repair (2026-08-23)"),
+  "the implementation ledger must record the exact Save + CRM Operations Calendar disclosure repair",
 );
 for (const fragment of [
   "__prestigeCrmCompanyIdentityRequests",

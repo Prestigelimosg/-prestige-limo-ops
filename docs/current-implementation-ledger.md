@@ -12,6 +12,12 @@ f13d784b Merge PR #331: Restore compact Customer Account width
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+### Save + CRM Operations Calendar Confirmation Disclosure Repair (2026-08-23)
+
+- Production acceptance of the isolated Company + Booker / PA test booking proved the existing complete `Save + CRM` continuation persisted the booking and auto-synced its established private Operations Calendar event. Both pre-save confirmations had instead said their CRM identity actions did not change Calendar, so the combined action disclosed the downstream side effect inaccurately even though the Calendar handoff itself behaved as designed.
+- The two exact confirmations used by this corporate flow now state that saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email and `sendUpdates=none`. Company, Booker, Traveller, customer, contact, booking, route, Calendar event, deterministic event identity, reminder, provider, API, persistence, and post-save behavior remain unchanged.
+- Focused protection is the strengthened `scripts/test-save-crm-company-profile-sync-guard.mjs`. It requires both disclosures to match the established `autoSyncSavedBookingGoogleCalendar` continuation, retains `send_updates: "none"`, and rejects attendees in the Operations Calendar provider payload. The unrelated pre-existing compact Dispatch CSS guard failure remains out of scope and unchanged. Test records company `53`, Booker `26`, Traveller `40`, customer `192`, contact `396`, booking row `221`, and route points `1092`/`1093` remain preserved for the separately approved canary/cleanup workflow.
+
 ### Customer Principal Activation Hydration Repair (2026-08-23)
 
 - Production physical/browser acceptance reproduced the exact established `/customer-access/activate?invite=…` page with one currently valid isolated test invitation present in `window.location.search`, while the existing `Verify invited email` control remained disabled and no Customer principal API request, OTP challenge, or email send occurred. A fail-first hydrated-browser diagnostic proved React had attached the existing click handler and computed `disabled=false`, but the live DOM retained the server-rendered `disabled=true` attribute.

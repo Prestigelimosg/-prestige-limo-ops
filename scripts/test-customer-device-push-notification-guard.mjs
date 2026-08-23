@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -292,11 +293,55 @@ await writeFile(
 );
 await writeFile(
   tempPrincipalPath,
-  'exports.assertActiveCustomerPrincipalSession = async () => ({ error: "not used by legacy push guard", ok: false, status: 403 });\n',
+  'exports.assertActiveCustomerPrincipalSession = async () => ({ data: { device_id: "device-native-1", memberships: [{ customer_account_reference: "150" }], principal_id: "principal-native-1" }, ok: true });\n',
 );
 
+let originalCreateClient;
 try {
-  const helper = createRequire(import.meta.url)(tempHelperPath);
+  const localRequire = createRequire(import.meta.url);
+  const supabaseModule = localRequire("@supabase/supabase-js");
+  originalCreateClient = supabaseModule.createClient;
+  const nativeFilters = [];
+  let nativeUpdate = null;
+  const nativeInstallationHash = createHash("sha256")
+    .update("customer-ios-12345678-1234-4123-8123-123456789abc")
+    .digest("hex");
+  const nativeClient = {
+    from(table) {
+      const chain = {
+        eq(field, value) {
+          nativeFilters.push([field, value]);
+          return this;
+        },
+        limit() {
+          return Promise.resolve({
+            data: table === "customer_access_devices"
+              ? [{
+                  device_status: "active",
+                  id: "device-native-1",
+                  installation_id_hash: nativeInstallationHash,
+                  principal_id: "principal-native-1",
+                }]
+              : [],
+            error: null,
+          });
+        },
+        select() {
+          return this;
+        },
+        then(resolve, reject) {
+          return Promise.resolve({ data: [], error: null }).then(resolve, reject);
+        },
+        update(payload) {
+          nativeUpdate = payload;
+          return this;
+        },
+      };
+      return chain;
+    },
+  };
+  supabaseModule.createClient = () => nativeClient;
+  const helper = localRequire(tempHelperPath);
   const configuredEnv = {
     PRESTIGE_ADMIN_DEVICE_PUSH_CONTACT_EMAIL: "ops@example.test",
     PRESTIGE_ADMIN_DEVICE_PUSH_VAPID_PRIVATE_KEY: "fake-private-key-for-customer-guard",
@@ -311,6 +356,45 @@ try {
   assert.equal(closedReadiness.ready, false);
   assert.equal(closedReadiness.public_key, null);
   assert.equal(closedReadiness.reason, "push_gate_closed");
+
+  const nativeRevoke = await helper.revokeCustomerDevicePushSubscription(
+    {
+      delivery_channel: "native_expo",
+      installation_id: "customer-ios-12345678-1234-4123-8123-123456789abc",
+      native_expo_token: "ExpoPushToken[customer_native_guard_1]",
+    },
+    {
+      mode: "principal-device-session",
+      principal_session_token: "principal-session-native-1",
+    },
+    configuredEnv,
+  );
+  assert.deepEqual(nativeRevoke, {
+    error: null,
+    ok: true,
+    reason: "subscription_revoked",
+    status: 200,
+    subscription_status: "revoked",
+  });
+  assert.equal(nativeUpdate.subscription_status, "revoked");
+  assert.equal(typeof nativeUpdate.revoked_at, "string");
+  assert.equal(
+    nativeFilters.some(([field, value]) => field === "principal_id" && value === "principal-native-1"),
+    true,
+  );
+  assert.equal(
+    nativeFilters.some(([field, value]) => field === "device_id" && value === "device-native-1"),
+    true,
+  );
+  assert.equal(
+    nativeFilters.some(([field, value]) => field === "delivery_channel" && value === "native_expo"),
+    true,
+  );
+  assert.equal(
+    nativeFilters.some(([field]) => field === "native_expo_token"),
+    false,
+    "OFF must revoke all rotated native tokens for only the exact verified principal device",
+  );
 
   let bookingReadCount = 0;
   const fakeClient = {
@@ -412,6 +496,9 @@ try {
   assert.equal(noSubscriptionAlert.reason, "no_active_subscriptions");
   assert.equal(noSubscriptionAlert.provider_request_count, 0);
 } finally {
+  if (originalCreateClient) {
+    createRequire(import.meta.url)("@supabase/supabase-js").createClient = originalCreateClient;
+  }
   await rm(tempDir, { force: true, recursive: true });
 }
 

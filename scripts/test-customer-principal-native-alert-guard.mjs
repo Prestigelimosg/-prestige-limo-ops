@@ -120,6 +120,19 @@ assert.doesNotMatch(adminAccess, /createCustomerPortalAccessLinkToken\(account\.
 const myBookings = read("app/my-bookings/page.tsx");
 assert.match(myBookings, /data-customer-managed-boss-selector/);
 assert.match(myBookings, /data-customer-shared-conversation/);
+assert.match(
+  myBookings,
+  /customerPrincipalAccess\.status !== "checking"[\s\S]*?data-customer-alerts-control="true"/,
+  "The one established alerts switch must remain visible for authenticated PA, Boss, and legacy Customer access",
+);
+assert.doesNotMatch(
+  myBookings,
+  /customerPrincipalAccess\.status === "legacy" \? \([\s\S]{0,300}?data-customer-alerts-control="true"/,
+  "PA/Boss principal access must not lose the established Customer alerts switch",
+);
+assert.match(myBookings, /customer_native_notifications_enable/);
+assert.match(myBookings, /customer_native_notifications_disable/);
+assert.match(myBookings, /prestige-customer-native-alerts/);
 assert.match(myBookings, /setInterval\([^]*?5000\)/);
 assert.match(myBookings, /principal_role/);
 assert.match(myBookings, /customer_driver_details/);
@@ -158,6 +171,30 @@ assert.match(companionPackage, /expo-constants/);
 
 const companion = read("customer-companion/App.tsx");
 assert.match(companion, /registerCustomerNativeNotifications/);
+assert.match(companion, /onMessage=\{handleCustomerNativeBridgeMessage\}/);
+assert.match(companion, /customer_native_notifications_enable/);
+assert.match(companion, /customer_native_notifications_disable/);
+assert.match(companion, /customer_native_notifications_result/);
+assert.match(
+  companion,
+  /const \[loadedCustomerWebView, setLoadedCustomerWebView\] = useState\(\{ url: "", sequence: 0 \}\)/,
+  "The Customer shell must track every completed WebView load so native registration can converge in either order",
+);
+assert.match(
+  companion,
+  /useEffect\(\(\) => \{[\s\S]*?!nativeRegistration[\s\S]*?nativeAlertsEnablePendingRef\.current[\s\S]*?isCustomerBookingsUrl\(currentUrl\)[\s\S]*?isCustomerBookingsUrl\(loadedCustomerWebView\.url\)[\s\S]*?injectCustomerNativeRegistration\(nativeRegistration\)[\s\S]*?\}, \[[^\]]*currentUrl[^\]]*loadedCustomerWebView[^\]]*nativeRegistration[^\]]*\]\)/,
+  "A token that arrives after My Bookings loads must still register with the established Customer session",
+);
+assert.match(
+  companion,
+  /onLoadEnd=\{\(event\) => \{[\s\S]*?setLoadedCustomerWebView\(\(previous\) => \(\{[\s\S]*?sequence: previous\.sequence \+ 1,[\s\S]*?url: event\.nativeEvent\.url,[\s\S]*?\}\)\)[\s\S]*?\}\}/,
+  "Every completed WebView load must retrigger the idempotent native registration handoff",
+);
+assert.doesNotMatch(
+  companion,
+  /onLoadEnd=\{\(\) => \{\s*if \(!nativeRegistration\) return;/,
+  "Native registration must not be available only when the token wins the WebView load race",
+);
 assert.match(companion, /Use 6-digit PIN/);
 assert.match(companion, /customerUniversalLinkUrl/);
 assert.match(companion, /function isCustomerBookingsUrl/);
@@ -172,5 +209,27 @@ assert.match(nativeNotifications, /getExpoPushTokenAsync/);
 assert.match(nativeNotifications, /addNotificationResponseReceivedListener/);
 assert.match(nativeNotifications, /booking_reference/);
 assert.match(nativeNotifications, /installation/);
+
+const customerInstallation = read("customer-companion/src/customer-installation.ts");
+assert.match(customerInstallation, /prestige\.customer\.native-alerts-enabled\.v1/);
+assert.match(customerInstallation, /isCustomerNativeAlertsEnabled/);
+assert.match(customerInstallation, /setCustomerNativeAlertsEnabled/);
+
+assert.match(
+  push,
+  /export async function revokeCustomerDevicePushSubscription[\s\S]*?parseNativeSubscription\(input\)[\s\S]*?delivery_channel", "native_expo"/,
+  "The established OFF switch must revoke the exact principal device native subscription",
+);
+const nativeRevokeBlock = push.slice(
+  push.indexOf("export async function revokeCustomerDevicePushSubscription"),
+  push.indexOf("function safePayload"),
+);
+assert.match(nativeRevokeBlock, /\.eq\("principal_id", principal\.data\.principal_id\)/);
+assert.match(nativeRevokeBlock, /\.eq\("device_id", principal\.data\.device_id\)/);
+assert.doesNotMatch(
+  nativeRevokeBlock,
+  /\.eq\("native_expo_token", nativeSubscription\.native_expo_token\)/,
+  "OFF must revoke every native token on the exact verified device so rotation cannot leave a stale active token",
+);
 
 console.log("Customer principal access and native alert guard passed.");

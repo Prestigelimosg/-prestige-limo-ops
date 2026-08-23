@@ -150,6 +150,14 @@ async function main() {
 
       if (requestUrl.pathname === "/api/customer-saved-bookings" && method === "GET") {
         responseBody = savedBookingsPayload;
+      } else if (requestUrl.pathname === "/api/customer-principal-access" && method === "GET") {
+        responseBody = {
+          data: {
+            memberships: [{ traveler_id: 77, verified_boss_name: "Owner Boss Native Push Test" }],
+            principal_role: "pa",
+          },
+          ok: true,
+        };
       } else if (requestUrl.pathname === "/api/customer-app-notifications" && method === "GET") {
         responseBody = {
           delivery_surface: "customer_app",
@@ -213,8 +221,10 @@ async function main() {
       const targetRow = rows.find((row) => row.contains(targetButton));
       const targetRowStyle = targetRow ? window.getComputedStyle(targetRow) : null;
       return {
+        alertsToggleCount: document.querySelectorAll('[data-customer-device-push-toggle="true"]').length,
         detailCount: document.querySelectorAll("[data-customer-portal-detail]").length,
         documentWidth: document.documentElement.scrollWidth,
+        hasPrincipalSignOut: Boolean(document.querySelector('[data-customer-principal-logout="true"]')),
         rowCount: rows.length,
         rowBorderColor: targetRowStyle?.borderTopColor || "",
         rowBorderWidths: targetRowStyle
@@ -232,8 +242,10 @@ async function main() {
     })()`);
 
     assert.deepEqual(initialState, {
+      alertsToggleCount: 1,
       detailCount: 0,
       documentWidth: 390,
+      hasPrincipalSignOut: true,
       rowCount: 10,
       rowBorderColor: "rgb(148, 163, 184)",
       rowBorderWidths: ["1px", "1px", "1px", "1px"],

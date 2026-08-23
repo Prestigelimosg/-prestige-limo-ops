@@ -61,6 +61,7 @@ export default function App() {
   const [installationId, setInstallationId] = useState("");
   const [nativeRegistration, setNativeRegistration] = useState<CustomerNativeRegistration | null>(null);
   const biometricPromptBusyRef = useRef(false);
+  const biometricResumePendingRef = useRef(false);
   const pendingCustomerUniversalLinkRef = useRef<string | null>(null);
   const unlockStateRef = useRef<UnlockState>("checking");
   const webViewRef = useRef<WebViewType>(null);
@@ -181,12 +182,19 @@ export default function App() {
       const returning = previousState !== "active" && nextState === "active";
       previousState = nextState;
 
+      if (nextState !== "active" && biometricPromptBusyRef.current) {
+        biometricResumePendingRef.current = true;
+      }
       if (nextState !== "active" && biometricEnabled) {
         setCustomerUnlockState("locked");
       }
-      if (returning && biometricEnabled) {
-        void unlockCustomerApp();
+      if (!returning) return;
+      if (biometricResumePendingRef.current) {
+        biometricResumePendingRef.current = false;
+        return;
       }
+      if (biometricPromptBusyRef.current) return;
+      if (biometricEnabled) void unlockCustomerApp();
     });
     return () => subscription.remove();
   }, [biometricEnabled, setCustomerUnlockState, unlockCustomerApp]);

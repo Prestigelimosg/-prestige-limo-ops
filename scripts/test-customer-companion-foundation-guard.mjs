@@ -56,7 +56,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "3");
+assert.equal(config.ios.buildNumber, "4");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.deepEqual(
@@ -80,6 +80,17 @@ for (const dependency of [
 ]) {
   assert.equal(typeof packageJson.dependencies[dependency], "string", `Missing ${dependency}`);
 }
+
+assert.equal(
+  packageJson.dependencies.expo,
+  "~57.0.15",
+  "The Customer iOS app must use the supported Expo 57 patch line without the Hermes V1 memory regression",
+);
+assert.equal(
+  packageJson.dependencies["react-native"],
+  "0.86.2",
+  "The Customer iOS app must use the React Native patch containing the repaired Hermes runtime",
+);
 
 assert.deepEqual(
   [...appStoreIconBytes.subarray(0, 8)],
@@ -207,6 +218,7 @@ for (const phrase of [
   "Customer iOS Universal Link Build 2 Source Repair",
   "Customer iOS Build 3 Push-Credential Release Checkpoint",
   "Customer Build 3 Face ID Foreground Resume Loop Repair",
+  "Customer iOS Build 4 End-To-End Audit And Release Checkpoint",
   "`/api/customer-portal-access/*`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);

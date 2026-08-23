@@ -219,6 +219,10 @@ for (const phrase of [
   "Customer iOS Build 3 Push-Credential Release Checkpoint",
   "Customer Build 3 Face ID Foreground Resume Loop Repair",
   "Customer iOS Build 4 End-To-End Audit And Release Checkpoint",
+  "`f2177a44-46b3-4be7-9904-f7596a277359`",
+  "`0263821d-54e1-4c59-ac4e-a24582b74c0a`",
+  "`ce89de2bbda5bedb57e774940b7ec58e9dd3feef22ad1c38cb514762a3a825b2`",
+  "`IN_BETA_TESTING`",
   "`/api/customer-portal-access/*`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);

@@ -6803,7 +6803,7 @@ async function resolveSaveCrmCompanyProfileForSave(
         !window.confirm(
           creatingAgencyFolder
             ? `Create the new CRM company profile "${requestedCompanyName}" and its first Hotel / Tour Agency folder with this booking? Booker and Traveller identities stay blank; the passenger stays on this booking only. This does not create an invoice, change rates or Calendar, or send a message.`
-            : `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates or Calendar, or send a message.`,
+            : `Create and link the new CRM company profile "${requestedCompanyName}" using this booking's Booker contact? This does not create an invoice, change rates, or send a message. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
         )
       ) {
         return {
@@ -7317,7 +7317,7 @@ async function resolveSaveCrmCorporateIdentityForSave(
 
   if (
     !window.confirm(
-      `Create or reuse this verified Booker + Traveller under ${companyName}? Booker: ${bookerName}. Traveller: ${travelerName}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change Calendar, driver, payment, or agency guests.`,
+      `Create or reuse this verified Booker + Traveller under ${companyName}? Booker: ${bookerName}. Traveller: ${travelerName}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change driver, payment, or agency guests. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
     )
   ) {
     return {

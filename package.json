@@ -14,6 +14,7 @@
     "test:customer-company-profile": "node --experimental-strip-types scripts/test-customer-company-profile-contract.mjs",
     "test:customer-company-profile-browser": "node scripts/test-customer-company-profile-browser.mjs",
     "test:customer-corporate-identity-browser": "node scripts/test-customer-corporate-identity-browser.mjs",
+    "test:customer-principal-activation-browser": "node scripts/test-customer-principal-activation-browser.mjs",
     "test:customer-account-delete": "node scripts/test-admin-customer-account-delete-api-contract.mjs && node scripts/test-admin-customer-account-delete-runtime.mjs",
     "test:retired-ritz-mock-customer": "node scripts/test-retired-ritz-mock-customer-guard.mjs",
     "test:customer-folder-dispatch-update-cal": "node scripts/test-customer-folder-dispatch-update-cal-guard.mjs",

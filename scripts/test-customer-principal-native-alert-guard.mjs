@@ -56,6 +56,7 @@ assert.match(migration, /device_id uuid/);
 for (const path of [
   "lib/customer-principal-access.ts",
   "app/api/customer-principal-access/route.ts",
+  "app/customer-access/activate/page.tsx",
   "app/api/admin-customer-portal-access-links/route.ts",
   "app/api/customer-device-push-subscriptions/route.ts",
   "lib/customer-device-push-notification.ts",
@@ -69,6 +70,20 @@ for (const path of [
 ]) {
   assert.ok(existsSync(join(root, path)), `${path} must remain in the established lane`);
 }
+
+const activation = read("app/customer-access/activate/page.tsx");
+assert.match(activation, /const \[invitation, setInvitation\] = useState\(""\)/);
+assert.match(activation, /const \[invitationLoaded, setInvitationLoaded\] = useState\(false\)/);
+assert.match(
+  activation,
+  /useEffect\(\(\) => \{[\s\S]*?new URLSearchParams\(window\.location\.search\)\.get\("invite"\)[\s\S]*?setInvitationLoaded\(true\)[\s\S]*?\}, \[\]\)/,
+);
+assert.match(activation, /if \(!invitationLoaded \|\| invitation\) return/);
+assert.match(activation, /disabled=\{busy \|\| !invitationLoaded \|\| !invitation\}/);
+assert.doesNotMatch(
+  activation,
+  /useMemo\(\(\) => \{[\s\S]*?typeof window === "undefined"[\s\S]*?window\.location\.search/,
+);
 
 const access = read("lib/customer-principal-access.ts");
 assert.match(access, /customerPrincipalInviteLifetimeSeconds\s*=\s*30\s*\*\s*60/);

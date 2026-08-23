@@ -56,7 +56,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "2");
+assert.equal(config.ios.buildNumber, "3");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.deepEqual(
@@ -182,6 +182,7 @@ for (const phrase of [
   "`@prestige-limo-ops/prestige-customer`",
   "`ce71ff91-7f71-4297-bcef-edf420f94316`",
   "Customer iOS Universal Link Build 2 Source Repair",
+  "Customer iOS Build 3 Push-Credential Release Checkpoint",
   "`/api/customer-portal-access/*`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);

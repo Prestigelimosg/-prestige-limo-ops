@@ -120,6 +120,29 @@ for (const phrase of [
 }
 
 for (const phrase of [
+  "const biometricResumePendingRef = useRef(false)",
+  'if (nextState !== "active" && biometricPromptBusyRef.current)',
+  "biometricResumePendingRef.current = true",
+  "if (!returning) return",
+  "if (biometricResumePendingRef.current)",
+  "biometricResumePendingRef.current = false",
+  "if (biometricPromptBusyRef.current) return",
+]) {
+  assert.equal(
+    normalizedApp.includes(phrase),
+    true,
+    `${appPath} must suppress the biometric prompt's own inactive-to-active resume cycle with ${phrase}`,
+  );
+}
+
+assert.equal(
+  appSource.indexOf("if (biometricResumePendingRef.current) {") <
+    appSource.indexOf("if (biometricEnabled) void unlockCustomerApp();"),
+  true,
+  "The Face ID prompt resume must be consumed before a genuine later foreground unlock starts.",
+);
+
+for (const phrase of [
   'export const productionOrigin = "https://app.prestigelimo.sg"',
   '"/book"',
   '"/my-bookings"',
@@ -183,6 +206,7 @@ for (const phrase of [
   "`ce71ff91-7f71-4297-bcef-edf420f94316`",
   "Customer iOS Universal Link Build 2 Source Repair",
   "Customer iOS Build 3 Push-Credential Release Checkpoint",
+  "Customer Build 3 Face ID Foreground Resume Loop Repair",
   "`/api/customer-portal-access/*`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);

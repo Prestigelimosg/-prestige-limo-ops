@@ -778,6 +778,7 @@ async function createSessionForExistingDevice(
   const { error } = await client.from(sessionTable).insert({
     device_id: deviceId,
     expires_at: new Date(expiresAtSeconds * 1000).toISOString(),
+    id: sessionId,
     principal_id: principalId,
     session_status: "active",
     session_token_hash: hashSecret(token),

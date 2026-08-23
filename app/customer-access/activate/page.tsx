@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type Step = "invite" | "verify" | "complete";
 
@@ -25,18 +25,24 @@ export default function CustomerAccessActivationPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const invitation = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("invite") || "";
+  const [invitation, setInvitation] = useState("");
+  const [invitationLoaded, setInvitationLoaded] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setInvitation(new URLSearchParams(window.location.search).get("invite")?.trim() || "");
+      setInvitationLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (invitation) return;
+    if (!invitationLoaded || invitation) return;
     const timer = window.setTimeout(() => {
       setMessage("This Customer access invitation is missing or invalid.");
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [invitation]);
+  }, [invitation, invitationLoaded]);
 
   async function requestCode() {
     setBusy(true);
@@ -104,7 +110,7 @@ export default function CustomerAccessActivationPage() {
 
       <section className="mt-8 rounded-2xl border border-slate-200 p-5 shadow-sm">
         {step === "invite" ? (
-          <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy || !invitation} onClick={requestCode} type="button">
+          <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy || !invitationLoaded || !invitation} onClick={requestCode} type="button">
             {busy ? "Sending code…" : "Verify invited email"}
           </button>
         ) : step === "verify" ? (

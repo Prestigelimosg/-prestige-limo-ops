@@ -41,7 +41,7 @@ function importTypeScriptModule(source, fileName) {
 }
 
 const config = JSON.parse(configSource).expo;
-assert.equal(config.ios.buildNumber, "3", "The approved Customer release source must be Build 3");
+assert.equal(config.ios.buildNumber, "4", "The approved Customer release source must be Build 4");
 assert.deepEqual(
   config.ios.associatedDomains,
   ["applinks:app.prestigelimo.sg"],

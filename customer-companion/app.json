@@ -13,7 +13,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "sg.prestigelimo.customer",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "associatedDomains": [
         "applinks:app.prestigelimo.sg"
       ],

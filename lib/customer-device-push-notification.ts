@@ -460,6 +460,42 @@ export async function revokeCustomerDevicePushSubscription(
   context: CustomerSavedBookingsBoundaryContext,
   env: EnvInput = process.env,
 ): Promise<CustomerDevicePushSubscriptionResult> {
+  const nativeSubscription = parseNativeSubscription(input);
+  if (nativeSubscription && context.mode === "principal-device-session" && context.principal_session_token) {
+    const databaseConfig = resolveDatabaseConfig(env);
+    if (!databaseConfig) {
+      return blockedSubscriptionResult("provider_not_configured", 503, "Customer alerts are not enabled.");
+    }
+    const principal = await assertActiveCustomerPrincipalSession(context.principal_session_token);
+    if (!principal.ok) {
+      return blockedSubscriptionResult("unauthorized", 403, "Customer alerts require active Customer app access.");
+    }
+    const client = createServerClient(databaseConfig);
+    const installationHash = createHash("sha256").update(nativeSubscription.installation_id).digest("hex");
+    const { data: deviceRows, error: deviceError } = await client
+      .from("customer_access_devices")
+      .select("id, principal_id, installation_id_hash, device_status")
+      .eq("id", principal.data.device_id)
+      .eq("principal_id", principal.data.principal_id)
+      .eq("installation_id_hash", installationHash)
+      .limit(1);
+    const device = record(Array.isArray(deviceRows) ? deviceRows[0] : null);
+    if (deviceError || device?.device_status !== "active") {
+      return blockedSubscriptionResult("unauthorized", 403, "Customer alert device binding did not match.");
+    }
+    const now = new Date().toISOString();
+    const { error } = await client
+      .from(subscriptionTable)
+      .update({ revoked_at: now, subscription_status: "revoked", updated_at: now })
+      .eq("principal_id", principal.data.principal_id)
+      .eq("device_id", principal.data.device_id)
+      .eq("delivery_channel", "native_expo");
+    if (error) {
+      return blockedSubscriptionResult("subscription_write_failed", 500, "Customer alerts could not be disabled safely.");
+    }
+    return { error: null, ok: true, reason: "subscription_revoked", status: 200, subscription_status: "revoked" };
+  }
+
   const config = resolveConfig(env);
   const customerAccountReference = boundaryAccountReference(context);
   const subscription = parseSubscription(input);

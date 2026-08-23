@@ -51,6 +51,17 @@ type CustomerDevicePushState = {
   status: CustomerDevicePushStatus;
   supported: boolean;
 };
+type CustomerNativeAlertsBridge = {
+  postMessage: (message: string) => void;
+};
+type CustomerNativeAlertsState = {
+  available: true;
+  enabled: boolean;
+};
+type CustomerNativeAlertsWindow = Window & {
+  ReactNativeWebView?: CustomerNativeAlertsBridge;
+  __prestigeCustomerNativeAlerts?: CustomerNativeAlertsState;
+};
 type CustomerPrincipalAccessState =
   | { status: "checking" }
   | { status: "legacy" }
@@ -305,6 +316,26 @@ function customerDevicePushIsSupported() {
   );
 }
 
+function customerNativeAlertsBridge() {
+  if (typeof window === "undefined") return null;
+  const nativeWindow = window as CustomerNativeAlertsWindow;
+  return nativeWindow.__prestigeCustomerNativeAlerts?.available === true &&
+    typeof nativeWindow.ReactNativeWebView?.postMessage === "function"
+    ? nativeWindow.ReactNativeWebView
+    : null;
+}
+
+function postCustomerNativeAlertsAction(action: "disable" | "enable") {
+  const bridge = customerNativeAlertsBridge();
+  if (!bridge) return false;
+  bridge.postMessage(JSON.stringify({
+    type: action === "enable"
+      ? "customer_native_notifications_enable"
+      : "customer_native_notifications_disable",
+  }));
+  return true;
+}
+
 function customerDevicePushBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -372,6 +403,7 @@ export default function CustomerPortalPage() {
   const [customerDevicePushAction, setCustomerDevicePushAction] = useState<
     "disable" | "enable" | null
   >(null);
+  const [customerNativeAlertsActive, setCustomerNativeAlertsActive] = useState(false);
   const [customerDevicePushState, setCustomerDevicePushState] =
     useState<CustomerDevicePushState>({
       message: "Checking customer alerts...",
@@ -481,6 +513,46 @@ export default function CustomerPortalPage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    const nativeWindow = window as CustomerNativeAlertsWindow;
+    const nativeBridge = customerNativeAlertsBridge();
+    if (nativeBridge) {
+      setCustomerNativeAlertsActive(true);
+      const enabled = nativeWindow.__prestigeCustomerNativeAlerts?.enabled === true;
+      setCustomerDevicePushState({
+        message: enabled
+          ? "Alerts are enabled on this device."
+          : "Tap once to enable booking alerts on this device.",
+        publicKey: null,
+        status: enabled ? "enabled" : "ready",
+        supported: true,
+      });
+
+      const handleNativeAlertsState = (event: Event) => {
+        const detail = (event as CustomEvent<{
+          enabled?: boolean;
+          message?: string;
+          status?: "enabled" | "error" | "ready";
+        }>).detail;
+        if (!detail || typeof detail.enabled !== "boolean" ||
+          !["enabled", "error", "ready"].includes(String(detail.status))) return;
+        setCustomerDevicePushAction(null);
+        setCustomerDevicePushState({
+          message: typeof detail.message === "string"
+            ? detail.message
+            : "Alerts could not be changed. Reload My Bookings and try again.",
+          publicKey: null,
+          status: detail.status || "error",
+          supported: true,
+        });
+      };
+
+      window.addEventListener("prestige-customer-native-alerts", handleNativeAlertsState);
+      return () => {
+        cancelled = true;
+        window.removeEventListener("prestige-customer-native-alerts", handleNativeAlertsState);
+      };
+    }
 
     if (!customerDevicePushIsSupported()) {
       setCustomerDevicePushState({
@@ -1342,6 +1414,24 @@ export default function CustomerPortalPage() {
   }
 
   async function handleCustomerDevicePushEnable() {
+    if (customerNativeAlertsBridge()) {
+      setCustomerDevicePushAction("enable");
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: "Turning on booking alerts...",
+        status: "saving",
+      }));
+      if (!postCustomerNativeAlertsAction("enable")) {
+        setCustomerDevicePushAction(null);
+        setCustomerDevicePushState((current) => ({
+          ...current,
+          message: "Alerts could not be changed. Reload My Bookings and try again.",
+          status: "error",
+        }));
+      }
+      return;
+    }
+
     if (!customerDevicePushState.supported || !customerDevicePushState.publicKey) {
       setCustomerDevicePushState((current) => ({
         ...current,
@@ -1410,6 +1500,24 @@ export default function CustomerPortalPage() {
   }
 
   async function handleCustomerDevicePushDisable() {
+    if (customerNativeAlertsBridge()) {
+      setCustomerDevicePushAction("disable");
+      setCustomerDevicePushState((current) => ({
+        ...current,
+        message: "Turning off booking alerts...",
+        status: "saving",
+      }));
+      if (!postCustomerNativeAlertsAction("disable")) {
+        setCustomerDevicePushAction(null);
+        setCustomerDevicePushState((current) => ({
+          ...current,
+          message: "Alerts could not be changed. Reload My Bookings and try again.",
+          status: "error",
+        }));
+      }
+      return;
+    }
+
     if (!customerDevicePushState.supported) {
       return;
     }
@@ -1499,53 +1607,57 @@ export default function CustomerPortalPage() {
               ) : null}
               <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
             </div>
-            {customerPrincipalAccess.status === "legacy" ? (
-            <div className="flex shrink-0 items-center gap-1.5" data-customer-alerts-control="true">
-              <span className="text-[11px] font-semibold text-slate-600">Driver / Admin alerts</span>
-              <button
-                aria-checked={customerDevicePushState.status === "enabled"}
-                aria-label={`Driver and Admin alerts ${customerDevicePushState.status === "enabled" ? "ON" : "OFF"}`}
-                className={`h-7 shrink-0 rounded-full border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
-                  customerDevicePushState.status === "enabled"
-                    ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-                data-customer-device-push-toggle="true"
-                disabled={
-                  customerDevicePushAction !== null ||
-                  !customerDevicePushState.supported ||
-                  (customerDevicePushState.status !== "enabled" &&
-                    !customerDevicePushState.publicKey)
-                }
-                onClick={
-                  customerDevicePushState.status === "enabled"
-                    ? handleCustomerDevicePushDisable
-                    : handleCustomerDevicePushEnable
-                }
-                role="switch"
-                title={customerDevicePushState.message}
-                type="button"
-              >
-                {customerDevicePushAction
-                  ? customerDevicePushAction === "enable"
-                    ? "Turning ON..."
-                    : "Turning OFF..."
-                  : customerDevicePushState.status === "enabled"
-                    ? "ON"
-                    : "OFF"}
-              </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {customerPrincipalAccess.status !== "checking" ? (
+                <div className="flex shrink-0 items-center gap-1.5" data-customer-alerts-control="true">
+                  <span className="text-[11px] font-semibold text-slate-600">Driver / Admin alerts</span>
+                  <button
+                    aria-checked={customerDevicePushState.status === "enabled"}
+                    aria-label={`Driver and Admin alerts ${customerDevicePushState.status === "enabled" ? "ON" : "OFF"}`}
+                    className={`h-7 shrink-0 rounded-full border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:text-slate-400 ${
+                      customerDevicePushState.status === "enabled"
+                        ? "border-sky-700 bg-sky-700 text-white hover:bg-sky-600"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                    data-customer-device-push-toggle="true"
+                    disabled={
+                      customerDevicePushAction !== null ||
+                      !customerDevicePushState.supported ||
+                      (customerDevicePushState.status !== "enabled" &&
+                        !customerDevicePushState.publicKey &&
+                        !customerNativeAlertsActive)
+                    }
+                    onClick={
+                      customerDevicePushState.status === "enabled"
+                        ? handleCustomerDevicePushDisable
+                        : handleCustomerDevicePushEnable
+                    }
+                    role="switch"
+                    title={customerDevicePushState.message}
+                    type="button"
+                  >
+                    {customerDevicePushAction
+                      ? customerDevicePushAction === "enable"
+                        ? "Turning ON..."
+                        : "Turning OFF..."
+                      : customerDevicePushState.status === "enabled"
+                        ? "ON"
+                        : "OFF"}
+                  </button>
+                </div>
+              ) : null}
+              {customerPrincipalAccess.status === "principal" ? (
+                <button
+                  className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700"
+                  data-customer-principal-logout="true"
+                  disabled={principalLogoutBusy}
+                  onClick={handleCustomerPrincipalLogout}
+                  type="button"
+                >
+                  {principalLogoutBusy ? "Signing out…" : "Sign out"}
+                </button>
+              ) : null}
             </div>
-            ) : customerPrincipalAccess.status === "principal" ? (
-              <button
-                className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700"
-                data-customer-principal-logout="true"
-                disabled={principalLogoutBusy}
-                onClick={handleCustomerPrincipalLogout}
-                type="button"
-              >
-                {principalLogoutBusy ? "Signing out…" : "Sign out"}
-              </button>
-            ) : null}
           </div>
           <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
           {companyContactLines.length > 0 ? (

@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { randomUUID } from "expo-crypto";
 
 const biometricEnabledKey = "prestige.customer.biometric-enabled.v1";
+const nativeAlertsEnabledKey = "prestige.customer.native-alerts-enabled.v1";
 const customerInstallationIdKey = "prestige.customer.installation-id.v1";
 const secureStoreOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
@@ -38,6 +39,19 @@ export async function enableCustomerBiometricUnlock() {
     secureStoreOptions,
   );
   return true;
+}
+
+export async function isCustomerNativeAlertsEnabled() {
+  return await SecureStore.getItemAsync(nativeAlertsEnabledKey, secureStoreOptions) === "enabled";
+}
+
+export async function setCustomerNativeAlertsEnabled(enabled: boolean) {
+  if (enabled) {
+    await SecureStore.setItemAsync(nativeAlertsEnabledKey, "enabled", secureStoreOptions);
+    return;
+  }
+
+  await SecureStore.deleteItemAsync(nativeAlertsEnabledKey);
 }
 
 export async function customerInstallationId() {

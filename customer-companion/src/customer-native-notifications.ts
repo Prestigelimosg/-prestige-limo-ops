@@ -27,11 +27,8 @@ export function customerNotificationBookingUrl(data: unknown) {
   return url.toString();
 }
 
-export async function registerCustomerNativeNotifications(): Promise<CustomerNativeRegistration | null> {
+export async function readCustomerNativeNotifications(): Promise<CustomerNativeRegistration | null> {
   if (!Device.isDevice) return null;
-  const existing = await Notifications.getPermissionsAsync();
-  const permission = existing.granted ? existing : await Notifications.requestPermissionsAsync();
-  if (!permission.granted) return null;
   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
   if (typeof projectId !== "string" || !projectId) return null;
   const token = await Notifications.getExpoPushTokenAsync({ projectId });
@@ -40,6 +37,14 @@ export async function registerCustomerNativeNotifications(): Promise<CustomerNat
     expoPushToken: token.data,
     installationId: await customerInstallationId(),
   };
+}
+
+export async function registerCustomerNativeNotifications(): Promise<CustomerNativeRegistration | null> {
+  if (!Device.isDevice) return null;
+  const existing = await Notifications.getPermissionsAsync();
+  const permission = existing.granted ? existing : await Notifications.requestPermissionsAsync();
+  if (!permission.granted) return null;
+  return await readCustomerNativeNotifications();
 }
 
 export function addCustomerNotificationTapListener(onOpen: (url: string) => void) {

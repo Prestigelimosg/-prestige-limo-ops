@@ -14,7 +14,11 @@ import {
   SafeAreaView,
   initialWindowMetrics,
 } from "react-native-safe-area-context";
-import { WebView, type WebViewNavigation } from "react-native-webview";
+import {
+  WebView,
+  type WebViewMessageEvent,
+  type WebViewNavigation,
+} from "react-native-webview";
 import type { WebView as WebViewType } from "react-native-webview";
 
 import prestigeIcon from "./assets/icon.png";
@@ -32,16 +36,79 @@ import {
   customerBiometricsAvailable,
   enableCustomerBiometricUnlock,
   isCustomerBiometricUnlockEnabled,
+  isCustomerNativeAlertsEnabled,
   customerInstallationId,
+  setCustomerNativeAlertsEnabled,
 } from "./src/customer-installation";
 import {
   addCustomerNotificationTapListener,
   initialCustomerNotificationUrl,
+  readCustomerNativeNotifications,
   registerCustomerNativeNotifications,
   type CustomerNativeRegistration,
 } from "./src/customer-native-notifications";
 
 type UnlockState = "checking" | "locked" | "ready";
+type CustomerNativeNotificationAction = "disable" | "enable";
+
+type CustomerNativeBridgeMessage =
+  | { type: "customer_native_notifications_disable" }
+  | { type: "customer_native_notifications_enable" }
+  | {
+      action: CustomerNativeNotificationAction;
+      ok: boolean;
+      type: "customer_native_notifications_result";
+    };
+
+function parseCustomerNativeBridgeMessage(value: string): CustomerNativeBridgeMessage | null {
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const keys = Object.keys(parsed).sort();
+
+    if (
+      keys.length === 1 &&
+      keys[0] === "type" &&
+      (parsed.type === "customer_native_notifications_enable" ||
+        parsed.type === "customer_native_notifications_disable")
+    ) {
+      return { type: parsed.type };
+    }
+
+    if (
+      keys.join(",") === "action,ok,type" &&
+      parsed.type === "customer_native_notifications_result" &&
+      (parsed.action === "enable" || parsed.action === "disable") &&
+      typeof parsed.ok === "boolean"
+    ) {
+      return {
+        action: parsed.action,
+        ok: parsed.ok,
+        type: parsed.type,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function customerNativeNotificationResultScript(input: {
+  enabled: boolean;
+  message: string;
+  status: "enabled" | "error" | "ready";
+}) {
+  return `(function(){window.dispatchEvent(new CustomEvent('prestige-customer-native-alerts',{detail:${JSON.stringify(input)}}));})();true;`;
+}
+
+function customerNativeNotificationMutationScript(
+  action: CustomerNativeNotificationAction,
+  registration: CustomerNativeRegistration,
+) {
+  const enabledAfterSuccess = action === "enable";
+  const method = enabledAfterSuccess ? "POST" : "PATCH";
+  return `(function(){var action=${JSON.stringify(action)};var notify=function(ok){var enabled=ok?${JSON.stringify(enabledAfterSuccess)}:${JSON.stringify(!enabledAfterSuccess)};var detail={enabled:enabled,message:ok?(enabled?'Booking alerts are enabled on this device.':'Booking alerts are off on this device.'):'Alerts could not be changed. Reload My Bookings and try again.',status:ok?(enabled?'enabled':'ready'):'error'};window.dispatchEvent(new CustomEvent('prestige-customer-native-alerts',{detail:detail}));if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function'){window.ReactNativeWebView.postMessage(JSON.stringify({action:action,ok:ok,type:'customer_native_notifications_result'}));}};fetch('/api/customer-device-push-subscriptions',{method:${JSON.stringify(method)},credentials:'same-origin',headers:{'Content-Type':'application/json','x-prestige-customer-purpose':'customer-device-push-subscription'},body:JSON.stringify({delivery_channel:'native_expo',native_expo_token:${JSON.stringify(registration.expoPushToken)},installation_id:${JSON.stringify(registration.installationId)}})}).then(function(response){return response.json().catch(function(){return null;}).then(function(payload){notify(response.ok&&payload&&payload.ok===true);});}).catch(function(){notify(false);});})();true;`;
+}
 
 function isCustomerBookingsUrl(value: string) {
   try {
@@ -59,12 +126,33 @@ export default function App() {
   const [unlockState, setUnlockState] = useState<UnlockState>("checking");
   const [notice, setNotice] = useState("");
   const [installationId, setInstallationId] = useState("");
+  const [nativeAlertsEnabled, setNativeAlertsEnabled] = useState(false);
+  const [nativeAlertsPreferenceReady, setNativeAlertsPreferenceReady] = useState(false);
   const [nativeRegistration, setNativeRegistration] = useState<CustomerNativeRegistration | null>(null);
+  const [loadedCustomerWebView, setLoadedCustomerWebView] = useState({ url: "", sequence: 0 });
   const biometricPromptBusyRef = useRef(false);
   const biometricResumePendingRef = useRef(false);
   const pendingCustomerUniversalLinkRef = useRef<string | null>(null);
+  const nativeAlertsDisablePendingRef = useRef(false);
+  const nativeAlertsEnablePendingRef = useRef(false);
+  const nativeAlertsMutationBusyRef = useRef(false);
+  const nativeAlertsRegistrationAttemptRef = useRef("");
   const unlockStateRef = useRef<UnlockState>("checking");
   const webViewRef = useRef<WebViewType>(null);
+
+  const injectCustomerNativeRegistration = useCallback((registration: CustomerNativeRegistration) => {
+    webViewRef.current?.injectJavaScript(
+      customerNativeNotificationMutationScript("enable", registration),
+    );
+  }, []);
+
+  const sendCustomerNativeNotificationResult = useCallback((input: {
+    enabled: boolean;
+    message: string;
+    status: "enabled" | "error" | "ready";
+  }) => {
+    webViewRef.current?.injectJavaScript(customerNativeNotificationResultScript(input));
+  }, []);
 
   const openCustomerUniversalLink = useCallback((safeUrl: string) => {
     if (biometricAvailable && !biometricEnabled && isCustomerBookingsUrl(safeUrl)) {
@@ -158,7 +246,14 @@ export default function App() {
   }, [openCustomerUniversalLink]);
 
   useEffect(() => {
-    void customerInstallationId().then(setInstallationId).catch(() => undefined);
+    void Promise.all([
+      customerInstallationId().catch(() => ""),
+      isCustomerNativeAlertsEnabled().catch(() => false),
+    ]).then(([resolvedInstallationId, alertsEnabled]) => {
+      setInstallationId(resolvedInstallationId);
+      setNativeAlertsEnabled(alertsEnabled);
+      setNativeAlertsPreferenceReady(true);
+    });
     const subscription = addCustomerNotificationTapListener((url) => {
       if (unlockStateRef.current === "ready") openCustomerUniversalLink(url);
       else pendingCustomerUniversalLinkRef.current = url;
@@ -172,9 +267,143 @@ export default function App() {
   }, [openCustomerUniversalLink]);
 
   useEffect(() => {
-    if (unlockState !== "ready") return;
-    void registerCustomerNativeNotifications().then(setNativeRegistration).catch(() => null);
-  }, [unlockState]);
+    if (unlockState !== "ready" || !nativeAlertsPreferenceReady || !nativeAlertsEnabled) return;
+    void registerCustomerNativeNotifications()
+      .then((registration) => {
+        if (registration && !nativeAlertsDisablePendingRef.current) {
+          setNativeRegistration(registration);
+          return;
+        }
+        setNativeAlertsEnabled(false);
+        sendCustomerNativeNotificationResult({
+          enabled: false,
+          message: "Alerts are blocked in this device's notification settings.",
+          status: "error",
+        });
+      })
+      .catch(() => {
+        setNativeAlertsEnabled(false);
+        sendCustomerNativeNotificationResult({
+          enabled: false,
+          message: "Alerts could not be changed. Reload My Bookings and try again.",
+          status: "error",
+        });
+      });
+  }, [nativeAlertsEnabled, nativeAlertsPreferenceReady, sendCustomerNativeNotificationResult, unlockState]);
+
+  useEffect(() => {
+    if (
+      !nativeRegistration ||
+      (!nativeAlertsEnabled && !nativeAlertsEnablePendingRef.current) ||
+      !isCustomerBookingsUrl(currentUrl) ||
+      !isCustomerBookingsUrl(loadedCustomerWebView.url)
+    ) return;
+    const attemptKey = `${loadedCustomerWebView.sequence}:${nativeRegistration.expoPushToken}`;
+    if (nativeAlertsRegistrationAttemptRef.current === attemptKey) return;
+    nativeAlertsRegistrationAttemptRef.current = attemptKey;
+    injectCustomerNativeRegistration(nativeRegistration);
+  }, [currentUrl, injectCustomerNativeRegistration, loadedCustomerWebView, nativeAlertsEnabled, nativeRegistration]);
+
+  const handleCustomerNativeBridgeMessage = useCallback(async (event: WebViewMessageEvent) => {
+    const request = parseCustomerNativeBridgeMessage(event.nativeEvent.data);
+    if (
+      !request ||
+      !isCustomerBookingsUrl(currentUrl) ||
+      !isCustomerBookingsUrl(loadedCustomerWebView.url)
+    ) return;
+
+    if (request.type === "customer_native_notifications_result") {
+      nativeAlertsMutationBusyRef.current = false;
+      if (request.action === "enable") {
+        const manualEnable = nativeAlertsEnablePendingRef.current;
+        nativeAlertsEnablePendingRef.current = false;
+        if (request.ok) {
+          setNativeAlertsEnabled(true);
+        } else if (manualEnable) {
+          nativeAlertsRegistrationAttemptRef.current = "";
+          await setCustomerNativeAlertsEnabled(false).catch(() => undefined);
+          setNativeRegistration(null);
+          setNativeAlertsEnabled(false);
+        }
+        return;
+      }
+
+      if (request.ok) {
+        try {
+          await setCustomerNativeAlertsEnabled(false);
+          nativeAlertsRegistrationAttemptRef.current = "";
+          setNativeAlertsEnabled(false);
+          setNativeRegistration(null);
+        } catch {
+          sendCustomerNativeNotificationResult({
+            enabled: true,
+            message: "Alerts could not be changed. Reload My Bookings and try again.",
+            status: "error",
+          });
+        }
+      }
+      nativeAlertsDisablePendingRef.current = false;
+      return;
+    }
+
+    if (nativeAlertsMutationBusyRef.current) {
+      sendCustomerNativeNotificationResult({
+        enabled: nativeAlertsEnabled,
+        message: "Another alert change is still running.",
+        status: "error",
+      });
+      return;
+    }
+
+    nativeAlertsMutationBusyRef.current = true;
+    let mutationStarted = false;
+    try {
+      if (request.type === "customer_native_notifications_enable") {
+        const registration = await registerCustomerNativeNotifications();
+        if (!registration) {
+          sendCustomerNativeNotificationResult({
+            enabled: false,
+            message: "Alerts are blocked in this device's notification settings.",
+            status: "error",
+          });
+          return;
+        }
+        await setCustomerNativeAlertsEnabled(true);
+        nativeAlertsEnablePendingRef.current = true;
+        nativeAlertsRegistrationAttemptRef.current = "";
+        mutationStarted = true;
+        setNativeRegistration(registration);
+        return;
+      }
+
+      nativeAlertsDisablePendingRef.current = true;
+      const registration = nativeRegistration || await readCustomerNativeNotifications();
+      if (!registration) {
+        nativeAlertsDisablePendingRef.current = false;
+        sendCustomerNativeNotificationResult({
+          enabled: nativeAlertsEnabled,
+          message: "Alerts could not be changed. Reload My Bookings and try again.",
+          status: "error",
+        });
+        return;
+      }
+      mutationStarted = true;
+      webViewRef.current?.injectJavaScript(
+        customerNativeNotificationMutationScript("disable", registration),
+      );
+    } catch {
+      sendCustomerNativeNotificationResult({
+        enabled: nativeAlertsEnabled,
+        message: "Alerts could not be changed. Reload My Bookings and try again.",
+        status: "error",
+      });
+    } finally {
+      if (!mutationStarted) {
+        nativeAlertsDisablePendingRef.current = false;
+        nativeAlertsMutationBusyRef.current = false;
+      }
+    }
+  }, [currentUrl, loadedCustomerWebView.url, nativeAlertsEnabled, nativeRegistration, sendCustomerNativeNotificationResult]);
 
   useEffect(() => {
     let previousState = AppState.currentState;
@@ -242,7 +471,7 @@ export default function App() {
     }
   }, [biometricAvailable, biometricEnabled]);
 
-  if (unlockState !== "ready") {
+  if (unlockState !== "ready" || !nativeAlertsPreferenceReady) {
     return (
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <SafeAreaView style={styles.lockedSafeArea}>
@@ -282,7 +511,9 @@ export default function App() {
               </>
             )
           ) : (
-            <Text style={styles.checkingText}>Checking Face ID…</Text>
+            <Text style={styles.checkingText}>
+              {unlockState === "checking" ? "Checking Face ID…" : "Preparing Prestige SG…"}
+            </Text>
           )}
         </SafeAreaView>
       </SafeAreaProvider>
@@ -323,13 +554,15 @@ export default function App() {
           javaScriptEnabled
           key="prestige-customer-webview"
           ref={webViewRef}
-          injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; true;` : undefined}
+          injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; true;` : undefined}
           mixedContentMode="never"
+          onMessage={handleCustomerNativeBridgeMessage}
           onNavigationStateChange={updateNavigation}
-          onLoadEnd={() => {
-            if (!nativeRegistration) return;
-            const script = `(function(){fetch('/api/customer-device-push-subscriptions',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','x-prestige-customer-purpose':'customer-device-push-subscription'},body:JSON.stringify({delivery_channel:'native_expo',native_expo_token:${JSON.stringify(nativeRegistration.expoPushToken)},installation_id:${JSON.stringify(nativeRegistration.installationId)}})}).catch(function(){});})();true;`;
-            webViewRef.current?.injectJavaScript(script);
+          onLoadEnd={(event) => {
+            setLoadedCustomerWebView((previous) => ({
+              sequence: previous.sequence + 1,
+              url: event.nativeEvent.url,
+            }));
           }}
           onShouldStartLoadWithRequest={allowNavigation}
           originWhitelist={["https://app.prestigelimo.sg"]}

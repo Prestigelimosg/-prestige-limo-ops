@@ -41,7 +41,7 @@ function importTypeScriptModule(source, fileName) {
 }
 
 const config = JSON.parse(configSource).expo;
-assert.equal(config.ios.buildNumber, "4", "The approved Customer release source must be Build 4");
+assert.equal(config.ios.buildNumber, "5", "The approved Customer release source must be Build 5");
 assert.deepEqual(
   config.ios.associatedDomains,
   ["applinks:app.prestigelimo.sg"],
@@ -159,6 +159,7 @@ for (const phrase of [
   "`/api/customer-portal-access/*`",
   "Face ID",
   "physical iPhone verification remains required",
+  "Customer iOS Build 5 Native Alert Control Release Checkpoint",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

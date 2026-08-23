@@ -56,7 +56,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "4");
+assert.equal(config.ios.buildNumber, "5");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.deepEqual(
@@ -219,6 +219,7 @@ for (const phrase of [
   "Customer iOS Build 3 Push-Credential Release Checkpoint",
   "Customer Build 3 Face ID Foreground Resume Loop Repair",
   "Customer iOS Build 4 End-To-End Audit And Release Checkpoint",
+  "Customer iOS Build 5 Native Alert Control Release Checkpoint",
   "`f2177a44-46b3-4be7-9904-f7596a277359`",
   "`0263821d-54e1-4c59-ac4e-a24582b74c0a`",
   "`ce89de2bbda5bedb57e774940b7ec58e9dd3feef22ad1c38cb514762a3a825b2`",

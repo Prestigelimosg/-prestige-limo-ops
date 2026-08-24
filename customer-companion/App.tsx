@@ -24,6 +24,12 @@ import type { WebView as WebViewType } from "react-native-webview";
 import prestigeIcon from "./assets/icon.png";
 
 import {
+  beginCustomerBiometricAttempt,
+  createCustomerBiometricLifecycle,
+  finishCustomerBiometricAttempt,
+  transitionCustomerBiometricAppState,
+} from "./src/customer-biometric-lifecycle";
+import {
   customerTabForUrl,
   customerTabUrl,
   customerUniversalLinkUrl,
@@ -130,8 +136,12 @@ export default function App() {
   const [nativeAlertsPreferenceReady, setNativeAlertsPreferenceReady] = useState(false);
   const [nativeRegistration, setNativeRegistration] = useState<CustomerNativeRegistration | null>(null);
   const [loadedCustomerWebView, setLoadedCustomerWebView] = useState({ url: "", sequence: 0 });
-  const biometricPromptBusyRef = useRef(false);
-  const biometricResumePendingRef = useRef(false);
+  const appMountedRef = useRef(true);
+  const biometricAvailableRef = useRef(false);
+  const biometricEnabledRef = useRef(false);
+  const biometricLifecycleRef = useRef(
+    createCustomerBiometricLifecycle(AppState.currentState),
+  );
   const pendingCustomerUniversalLinkRef = useRef<string | null>(null);
   const nativeAlertsDisablePendingRef = useRef(false);
   const nativeAlertsEnablePendingRef = useRef(false);
@@ -155,7 +165,11 @@ export default function App() {
   }, []);
 
   const openCustomerUniversalLink = useCallback((safeUrl: string) => {
-    if (biometricAvailable && !biometricEnabled && isCustomerBookingsUrl(safeUrl)) {
+    if (
+      biometricAvailableRef.current &&
+      !biometricEnabledRef.current &&
+      isCustomerBookingsUrl(safeUrl)
+    ) {
       pendingCustomerUniversalLinkRef.current = safeUrl;
       unlockStateRef.current = "locked";
       setUnlockState("locked");
@@ -166,7 +180,7 @@ export default function App() {
     setActiveTab("bookings");
     setCurrentUrl(safeUrl);
     setNotice("");
-  }, [biometricAvailable, biometricEnabled]);
+  }, []);
 
   const setCustomerUnlockState = useCallback((nextState: UnlockState) => {
     unlockStateRef.current = nextState;
@@ -179,16 +193,26 @@ export default function App() {
   }, [openCustomerUniversalLink]);
 
   const unlockCustomerApp = useCallback(async () => {
-    if (biometricPromptBusyRef.current) return;
-    biometricPromptBusyRef.current = true;
+    const attemptId = beginCustomerBiometricAttempt(biometricLifecycleRef.current);
+    if (attemptId === null) return;
+
     setCustomerUnlockState("checking");
-    try {
-      const unlocked = await authenticateCustomerAppUnlock().catch(() => false);
+    const unlocked = await authenticateCustomerAppUnlock().catch(() => false);
+    const currentAttempt = finishCustomerBiometricAttempt(
+      biometricLifecycleRef.current,
+      attemptId,
+    );
+    if (currentAttempt && appMountedRef.current) {
       setCustomerUnlockState(unlocked ? "ready" : "locked");
-    } finally {
-      biometricPromptBusyRef.current = false;
     }
   }, [setCustomerUnlockState]);
+
+  useEffect(() => {
+    appMountedRef.current = true;
+    return () => {
+      appMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -200,6 +224,8 @@ export default function App() {
       ]);
       if (!mounted) return;
 
+      biometricAvailableRef.current = available;
+      biometricEnabledRef.current = enabled;
       setBiometricAvailable(available);
       setBiometricEnabled(enabled);
       if (!enabled) {
@@ -207,15 +233,12 @@ export default function App() {
         return;
       }
 
-      biometricPromptBusyRef.current = true;
-      const unlocked = await authenticateCustomerAppUnlock().catch(() => false);
-      biometricPromptBusyRef.current = false;
-      if (mounted) setCustomerUnlockState(unlocked ? "ready" : "locked");
+      void unlockCustomerApp();
     }
 
     void preparePrivacyLock();
     return () => { mounted = false; };
-  }, [setCustomerUnlockState]);
+  }, [setCustomerUnlockState, unlockCustomerApp]);
 
   useEffect(() => {
     let mounted = true;
@@ -406,27 +429,19 @@ export default function App() {
   }, [currentUrl, loadedCustomerWebView.url, nativeAlertsEnabled, nativeRegistration, sendCustomerNativeNotificationResult]);
 
   useEffect(() => {
-    let previousState = AppState.currentState;
     const subscription = AppState.addEventListener("change", (nextState) => {
-      const returning = previousState !== "active" && nextState === "active";
-      previousState = nextState;
-
-      if (nextState !== "active" && biometricPromptBusyRef.current) {
-        biometricResumePendingRef.current = true;
-      }
-      if (nextState !== "active" && biometricEnabled) {
+      const action = transitionCustomerBiometricAppState(
+        biometricLifecycleRef.current,
+        nextState,
+        biometricEnabledRef.current,
+      );
+      if (action === "lock") {
         setCustomerUnlockState("locked");
       }
-      if (!returning) return;
-      if (biometricResumePendingRef.current) {
-        biometricResumePendingRef.current = false;
-        return;
-      }
-      if (biometricPromptBusyRef.current) return;
-      if (biometricEnabled) void unlockCustomerApp();
+      if (action === "unlock") void unlockCustomerApp();
     });
     return () => subscription.remove();
-  }, [biometricEnabled, setCustomerUnlockState, unlockCustomerApp]);
+  }, [setCustomerUnlockState, unlockCustomerApp]);
 
   const enableFaceId = useCallback(async () => {
     const enabled = await enableCustomerBiometricUnlock().catch(() => false);
@@ -434,6 +449,8 @@ export default function App() {
       setNotice("Face ID was not enabled. Customer bookings remain locked on this iPhone.");
       return;
     }
+    biometricAvailableRef.current = true;
+    biometricEnabledRef.current = true;
     setBiometricEnabled(true);
     setCustomerUnlockState("ready");
     setNotice("Face ID is now protecting Prestige SG on this iPhone.");

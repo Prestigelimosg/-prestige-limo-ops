@@ -506,6 +506,10 @@ const guardChecks = [
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },
   {
+    label: "Customer biometric single-flight guard",
+    script: "scripts/test-customer-biometric-single-flight-guard.mjs",
+  },
+  {
     label: "Customer Companion iOS Universal Link association guard",
     script: "scripts/test-customer-companion-ios-universal-link-association-guard.mjs",
   },

@@ -133,6 +133,7 @@ type CustomerDevicePushAlertOptions = {
 };
 
 type CustomerNativeAudience = {
+  driverPlateNumber: string | null;
   publicBookingReference: string;
   tokens: string[];
 };
@@ -221,6 +222,14 @@ function safeAccountReference(value: unknown) {
 function safePublicBookingReference(value: unknown) {
   const cleaned = safeText(value, 120)?.toUpperCase();
   return cleaned && /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
+function safeDriverPlateNumber(value: unknown) {
+  const cleaned = safeText(value, 20)?.toUpperCase();
+
+  return cleaned && /\d/.test(cleaned) && /^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(cleaned)
     ? cleaned
     : null;
 }
@@ -657,7 +666,7 @@ async function loadNativeAudienceForBooking(
   bookingReference: string,
 ): Promise<CustomerNativeAudience | null> {
   const { data: bookingRows, error: bookingError } = await client.from("bookings")
-    .select("company_id, booker_id, traveler_id, public_booking_reference")
+    .select("company_id, booker_id, traveler_id, public_booking_reference, driver_plate_number")
     .eq("booking_reference", bookingReference)
     .limit(1);
   const booking = record(Array.isArray(bookingRows) ? bookingRows[0] : null);
@@ -665,6 +674,7 @@ async function loadNativeAudienceForBooking(
   const bookerId = Number(booking?.booker_id);
   const travelerId = Number(booking?.traveler_id);
   const publicBookingReference = safePublicBookingReference(booking?.public_booking_reference);
+  const driverPlateNumber = safeDriverPlateNumber(booking?.driver_plate_number);
   if (bookingError || !Number.isSafeInteger(companyId) || !Number.isSafeInteger(bookerId) || !Number.isSafeInteger(travelerId) || !publicBookingReference) return null;
 
   // Exact audience only: the Boss and every active managing PA membership for
@@ -682,7 +692,7 @@ async function loadNativeAudienceForBooking(
     .eq("booker_id", bookerId)
     .eq("membership_role", "managing_pa")
     .eq("membership_status", "active");
-  if (bossMembershipError || paMembershipError) return { publicBookingReference, tokens: [] };
+  if (bossMembershipError || paMembershipError) return { driverPlateNumber, publicBookingReference, tokens: [] };
   const membershipRows = [
     ...(Array.isArray(bossMembershipRows) ? bossMembershipRows : []),
     ...(Array.isArray(paMembershipRows) ? paMembershipRows : []),
@@ -691,17 +701,17 @@ async function loadNativeAudienceForBooking(
     .filter((row) => row.membership_role === "boss" || row.membership_role === "managing_pa")
     .map((row) => safeText(row.principal_id, 36))
     .filter((value): value is string => Boolean(value)))];
-  if (principalIds.length === 0) return { publicBookingReference, tokens: [] };
+  if (principalIds.length === 0) return { driverPlateNumber, publicBookingReference, tokens: [] };
   const { data: principalRows } = await client.from("customer_access_principals")
     .select("id").in("id", principalIds).eq("principal_status", "active");
   const activePrincipalIds = (Array.isArray(principalRows) ? principalRows : [])
     .map((row) => safeText(row.id, 36)).filter((value): value is string => Boolean(value));
-  if (activePrincipalIds.length === 0) return { publicBookingReference, tokens: [] };
+  if (activePrincipalIds.length === 0) return { driverPlateNumber, publicBookingReference, tokens: [] };
   const { data: deviceRows } = await client.from("customer_access_devices")
     .select("id, principal_id").in("principal_id", activePrincipalIds).eq("device_status", "active");
   const activeDeviceIds = (Array.isArray(deviceRows) ? deviceRows : [])
     .map((row) => safeText(row.id, 36)).filter((value): value is string => Boolean(value));
-  if (activeDeviceIds.length === 0) return { publicBookingReference, tokens: [] };
+  if (activeDeviceIds.length === 0) return { driverPlateNumber, publicBookingReference, tokens: [] };
   const { data: subscriptionRows } = await client.from(subscriptionTable)
     .select("native_expo_token, principal_id, device_id")
     .in("principal_id", activePrincipalIds)
@@ -711,11 +721,17 @@ async function loadNativeAudienceForBooking(
   const tokens = (Array.isArray(subscriptionRows) ? subscriptionRows : [])
     .map((row) => safeText(row.native_expo_token, 256))
     .filter((value): value is string => Boolean(value));
-  return { publicBookingReference, tokens };
+  return { driverPlateNumber, publicBookingReference, tokens };
 }
 
-async function sendNativeExpoAlert(token: string, bookingReference: string, notification: CustomerDevicePushNotificationRecord) {
+async function sendNativeExpoAlert(
+  token: string,
+  bookingReference: string,
+  notification: CustomerDevicePushNotificationRecord,
+  driverPlateNumberInput?: unknown,
+) {
   const driverDetailsReady = notification.safe_title === "Driver details ready";
+  const driverPlateNumber = safeDriverPlateNumber(driverPlateNumberInput);
   const response = await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -724,7 +740,9 @@ async function sendNativeExpoAlert(token: string, bookingReference: string, noti
       sound: "default",
       title: driverDetailsReady ? "Driver details ready" : "Prestige Limo booking update",
       body: driverDetailsReady
-        ? "Driver details are ready. Open Prestige SG to review."
+        ? driverPlateNumber
+          ? `Car plate ${driverPlateNumber}. Open Prestige SG to review.`
+          : "Driver details are ready. Open Prestige SG to review."
         : "A booking update is ready. Open Prestige SG to review.",
       data: { booking_reference: bookingReference },
     }),
@@ -944,7 +962,12 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
     for (const token of nativeAudience.tokens) {
       providerRequestCount += 1;
       try {
-        await sendNativeExpoAlert(token, nativeAudience.publicBookingReference, notification);
+        await sendNativeExpoAlert(
+          token,
+          nativeAudience.publicBookingReference,
+          notification,
+          nativeAudience.driverPlateNumber,
+        );
         successfulRequestCount += 1;
         await recordNativeDeliveryHealth(client, token);
       } catch (error) {

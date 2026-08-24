@@ -91,18 +91,21 @@ assertIncludes(
     'url: "/my-bookings"',
     "timeout: customerDevicePushProviderTimeoutMs",
     "statusCode === 404 || statusCode === 410",
-    'select("company_id, booker_id, traveler_id, public_booking_reference")',
     "safePublicBookingReference",
     "recordNativeDeliveryHealth",
     'ticket.status !== "ok"',
     "Customer native Expo ticket was rejected.",
+    'select("company_id, booker_id, traveler_id, public_booking_reference, driver_plate_number")',
+    "safeDriverPlateNumber",
+    "nativeAudience.driverPlateNumber",
+    "Car plate ${driverPlateNumber}. Open Prestige SG to review.",
   ],
   "customer device push helper",
 );
 assert.match(
   helperSource,
-  /sendNativeExpoAlert\(token, nativeAudience\.publicBookingReference, notification\)/,
-  "Native push data must carry the exact public booking reference, never the internal ADM reference",
+  /sendNativeExpoAlert\([\s\S]*?token,[\s\S]*?nativeAudience\.publicBookingReference,[\s\S]*?notification,[\s\S]*?nativeAudience\.driverPlateNumber,[\s\S]*?\)/,
+  "Native push data must carry the exact public booking reference and safe confirmed plate, never the internal ADM reference",
 );
 assert.doesNotMatch(
   helperSource,
@@ -404,11 +407,36 @@ try {
         actor_role: "driver",
         booking_reference: "ADM-20260823123045",
         delivery_surface: "customer_app",
-        safe_title: "Driver on the way",
+        safe_title: "Driver details ready",
       },
+      "9696",
     );
     assert.equal(exactExpoBody.data.booking_reference, "10899");
+    assert.equal(exactExpoBody.title, "Driver details ready");
+    assert.equal(exactExpoBody.body, "Car plate 9696. Open Prestige SG to review.");
     assert.equal(JSON.stringify(exactExpoBody).includes("ADM-20260823123045"), false);
+    assertExcludes(
+      JSON.stringify(exactExpoBody),
+      ["87576969", "SOH", "AVF", "payout", "invoice", "payment", "internal note"],
+      "native Driver details ready lock-screen payload",
+    );
+
+    await helper.__testSendNativeExpoAlert(
+      "ExpoPushToken[customer_native_guard_1]",
+      "10899",
+      {
+        actor_role: "driver",
+        booking_reference: "ADM-20260823123045",
+        delivery_surface: "customer_app",
+        safe_title: "Driver details ready",
+      },
+      "not-a-valid-plate",
+    );
+    assert.equal(
+      exactExpoBody.body,
+      "Driver details are ready. Open Prestige SG to review.",
+      "an invalid plate must fail closed to the existing generic Customer alert",
+    );
 
     global.fetch = async () => ({
       ok: true,

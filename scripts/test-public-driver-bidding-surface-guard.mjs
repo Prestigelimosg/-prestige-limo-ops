@@ -145,7 +145,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "driver page fetch call count",
-      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, issue-alert POST with `issue_type`, typed Driver-to-Customer shared-conversation POST with `client_message_id + message_text`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -506,12 +506,12 @@ assertIncludes(
 assertIncludes(
   files[driverPagePath],
   "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
-  "driver job page separately approved fixed-template quick-reply caller",
+  "driver job page separately approved typed shared-conversation caller",
 );
 assertIncludes(
   files[driverPagePath],
-  "body: JSON.stringify({ template_key: templateKey })",
-  "driver job page quick-reply caller must send only its approved template key",
+  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage })",
+  "driver job page shared-conversation caller must send only its approved typed payload",
 );
 assertIncludes(
   files[driverPagePath],

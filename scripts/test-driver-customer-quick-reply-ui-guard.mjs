@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [source, ledger] = await Promise.all([
+const [source, persistence, agents, ledger] = await Promise.all([
   readFile("app/driver-job/[token]/page.tsx", "utf8"),
+  readFile("lib/customer-driver-app-notification-persistence.ts", "utf8"),
+  readFile("AGENTS.md", "utf8"),
   readFile("docs/current-implementation-ledger.md", "utf8"),
 ]);
 
@@ -25,7 +27,36 @@ for (const retiredTemplate of ["driver_on_the_way", "driver_arrived", "driver_me
   assert.ok(!source.includes(`\"${retiredTemplate}\"`), `driver typed-message UI must retire fixed template ${retiredTemplate}`);
 }
 
+const driverSend = persistence.slice(
+  persistence.indexOf("export async function sendDriverQuickReplyToCustomer"),
+  persistence.indexOf("export function parseCustomerDriverAppNotificationCreatePayload"),
+);
 for (const expected of [
+  'parseCustomerDriverQuickReplyPayload(rawBody, "driver_to_customer")',
+  '"driver_to_customer"',
+  "parsed.data.client_message_id",
+  'delivery_surface: "customer_app"',
+  'direction: "driver_to_customer"',
+]) {
+  assert.ok(driverSend.includes(expected), `driver typed-message persistence must retain ${expected}`);
+}
+assert.equal(
+  (driverSend.match(/insertQuickReplyNotification\(/g) || []).length,
+  1,
+  "one Driver typed message must create one existing customer_app outbox row",
+);
+for (const expected of [
+  "One Driver → Customer message creates one existing `customer_app` outbox row that both authorized PA and Boss may read",
+  "never duplicate the row per recipient",
+]) {
+  assert.ok(agents.includes(expected), `AGENTS Driver fan-out contract must retain ${expected}`);
+}
+
+for (const expected of [
+  "### Typed Shared PA/Boss Customer/Driver Conversation Contract Reconciliation (2026-08-24)",
+  "One Driver-to-Customer `customer_app` row is readable by both authorized PA and Boss through that same exact-booking conversation",
+  "the persistence layer must never clone the row once per principal or device.",
+  "the established Admin message history retains the human Customer → Driver and Driver → Customer directions.",
   "The owner then approved one exact live Driver → Customer reply for booking `10851`: `I have arrived.`.",
   "the corrected query proved an exact pre-count of zero",
   "`Sent to customer: I have arrived.`",

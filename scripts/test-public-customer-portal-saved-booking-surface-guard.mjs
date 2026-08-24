@@ -261,9 +261,9 @@ for (const phrase of [
 
 for (const phrase of [
   "Public customer portal saved-booking display/action surfaces are guarded across `/my-bookings`, `lib/customer-portal-saved-bookings-adapter.ts`, `lib/customer-portal-booking-change-request-adapter.ts`, and `lib/customer-saved-bookings-read.ts`.",
-  "This guard allows only the approved customer booking change-request review write plus the exact fixed-template customer-to-driver quick-reply write; neither may directly mutate a saved booking, and no other write is approved.",
+  "This guard allows only the approved customer booking change-request review write plus the exact typed Customer-to-Driver shared-conversation write using `client_message_id + message_text`; neither may directly mutate a saved booking, and no other write is approved.",
   "`/my-bookings` saved-booking rows must render only customer-safe status, passenger, pickup/drop-off, service, vehicle, date/time, flight, and optional request-note display fields; the expanded detail view may additionally render a customer-safe assigned-driver details card and one approved Driver Tracking panel that combines gated in-app map viewing with compact Trip Updates for safe customer-app driver progress only.",
-  "`/my-bookings` saved-booking row actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion; the expanded assigned-driver detail may additionally offer the separately guarded fixed-template `Message Driver` action.",
+  "`/my-bookings` saved-booking row actions must stay limited to disabled PDF, customer-safe edit/cancel review request form, and local detail expansion; the expanded assigned-driver detail may additionally offer the separately guarded typed shared PA/Boss `Message Driver` action and the separate fixed `Acknowledge driver details` action.",
   "The customer PDF control must remain disabled/no-op and must not create files, links, downloads, invoices, payment records, or provider sends.",
   "Edit and cancel controls may submit only through `lib/customer-portal-booking-change-request-adapter.ts` to `/api/customer-booking-change-requests`; they must not mutate bookings, update calendar, or change `/api/customer-saved-bookings`.",
   "The customer portal saved-bookings adapter must keep using the guarded read endpoint with `cache: \"no-store\"`, `credentials: \"same-origin\"`, and the customer saved-bookings purpose header without manual Cookie, Authorization, customer session-token, or admin headers.",
@@ -369,7 +369,7 @@ for (const fragment of [
   'method: "POST"',
   'result?.direction !== "customer_to_driver"',
 ]) {
-  assertIncludes(customerQuickReplyBlock, fragment, `/my-bookings fixed quick reply ${fragment}`);
+  assertIncludes(customerQuickReplyBlock, fragment, `/my-bookings typed shared-conversation reply ${fragment}`);
 }
 assertExcludes(
   customerQuickReplyBlock,

@@ -293,7 +293,7 @@ for (const phrase of [
   "Customer request field data attributes and static control names must stay on the approved form-field allowlist and must not introduce pricing, payout, PayNow, billing, invoice, payment/PDF, provider/send, auth, location-photo, calendar, parser/debug, token/secret, internal/admin finance/note, mock archive, or rate fields.",
   "`/book` continues to submit through `submitCustomerBookingRequest` and the customer-safe adapter, not raw fetch/session/admin plumbing.",
   "`/my-bookings` new-request link must not submit to customer booking request persistence.",
-  "The separately guarded fixed-template customer-to-driver quick-reply POST does not create a duplicate booking-request form, submit booking-request fields, or call customer booking-request persistence.",
+  "The separately guarded typed Customer-to-Driver shared-conversation POST does not create a duplicate booking-request form, submit booking-request fields, or call customer booking-request persistence.",
   "Customer request copy must remain request-only and must not create a price, payment, invoice, PDF, or billing file from these forms.",
   "The customer request adapter may submit only the approved API payload fields, including the bounded customer-safe `specialRequest`, and must not forward finance/internal fields.",
   "This guard coordinates the customer booking page API audit, public route source privacy guard, public API request input guard, and customer booking request adapter contract in the preactivation suite.",

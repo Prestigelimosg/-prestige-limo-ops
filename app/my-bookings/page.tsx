@@ -945,6 +945,8 @@ export default function CustomerPortalPage() {
       : portalBookingsLoadState === "blocked"
         ? "Sign in to view bookings."
         : "No bookings match the current search.";
+  const customerNativeSessionBlocked =
+    customerNativeAlertsActive && portalBookingsLoadState === "blocked";
 
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = bookingFilterSet.has(section) ? (section as BookingFilter) : "Upcoming";
@@ -1670,6 +1672,25 @@ export default function CustomerPortalPage() {
           ) : null}
         </header>
 
+        {customerNativeSessionBlocked ? (
+          <section
+            className="rounded-xl border border-amber-300 bg-amber-50 p-4"
+            data-customer-native-session-recovery="true"
+          >
+            <h2 className="text-base font-bold text-amber-950">Customer sign-in required</h2>
+            <p className="mt-1 text-sm leading-6 text-amber-950">
+              Face ID protects this app on your iPhone, but it cannot replace your secure Customer sign-in.
+            </p>
+            <Link
+              className="mt-3 inline-flex min-h-10 items-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+              href="/customer-access/sign-in"
+              data-customer-native-session-sign-in="true"
+            >
+              Sign in securely
+            </Link>
+          </section>
+        ) : null}
+
         {customerPrincipalAccess.status === "principal" && customerPrincipalAccess.managed_bosses.length > 1 ? (
           <label className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-950" data-customer-managed-boss-selector="true">
             View bookings for
@@ -1689,6 +1710,7 @@ export default function CustomerPortalPage() {
           aria-label="Customer portal sections"
           className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2"
           data-customer-portal-sections="true"
+          hidden={customerNativeSessionBlocked}
         >
           {portalSections
             .filter((section) => customerPrincipalAccess.status !== "principal" || section !== "Invoices")

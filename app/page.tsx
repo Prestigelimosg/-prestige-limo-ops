@@ -30352,6 +30352,7 @@ export default function Home() {
       dashboardDriverJobStatusAutoRequestedRef.current.add(bookingReference);
       void refreshDashboardDriverJobStatusRead(bookingReference);
       void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
+      void refreshAdminTodayJobMessageHistory(bookingReference);
     }
     // The booking reference key is the trigger; the read callback intentionally uses the latest page state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -30368,14 +30369,33 @@ export default function Home() {
       return;
     }
 
+    const refreshVisibleAdminMessageHistories = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      for (const bookingReference of bookingReferences) {
+        void refreshAdminTodayJobMessageHistory(bookingReference);
+      }
+    };
+
     const intervalId = window.setInterval(() => {
       for (const bookingReference of bookingReferences) {
         void refreshDashboardDriverJobStatusRead(bookingReference);
         void refreshDashboardDriverOtsPhotoProofRead(bookingReference);
+        void refreshAdminTodayJobMessageHistory(bookingReference);
       }
     }, 10 * 1000);
+    window.addEventListener("focus", refreshVisibleAdminMessageHistories);
+    document.addEventListener("visibilitychange", refreshVisibleAdminMessageHistories);
+    window.addEventListener("pageshow", refreshVisibleAdminMessageHistories);
 
-    return () => window.clearInterval(intervalId);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleAdminMessageHistories);
+      document.removeEventListener("visibilitychange", refreshVisibleAdminMessageHistories);
+      window.removeEventListener("pageshow", refreshVisibleAdminMessageHistories);
+    };
     // The booking reference key controls interval membership; callback internals read the latest status sync state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayJobsMonitorIsActive, activeJobDriverStatusReferenceKey, dashboardDriverJobAutoRefreshEnabled]);

@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const configPath = "customer-companion/app.json";
 const packagePath = "customer-companion/package.json";
 const appPath = "customer-companion/App.tsx";
+const biometricLifecyclePath = "customer-companion/src/customer-biometric-lifecycle.ts";
 const navigationPath = "customer-companion/src/customer-navigation.ts";
 const installationPath = "customer-companion/src/customer-installation.ts";
 const appStoreIconPath = "customer-companion/assets/app-icon.png";
@@ -17,6 +18,7 @@ const [
   configSource,
   packageSource,
   appSource,
+  biometricLifecycleSource,
   navigationSource,
   installationSource,
   appStoreIconBytes,
@@ -28,6 +30,7 @@ const [
   readFile(configPath, "utf8"),
   readFile(packagePath, "utf8"),
   readFile(appPath, "utf8"),
+  readFile(biometricLifecyclePath, "utf8"),
   readFile(navigationPath, "utf8"),
   readFile(installationPath, "utf8"),
   readFile(appStoreIconPath),
@@ -41,6 +44,7 @@ const config = JSON.parse(configSource).expo;
 const packageJson = JSON.parse(packageSource);
 const rootTsconfig = JSON.parse(rootTsconfigSource);
 const normalizedApp = appSource.replace(/\s+/g, " ");
+const normalizedBiometricLifecycle = biometricLifecycleSource.replace(/\s+/g, " ");
 const normalizedNavigation = navigationSource.replace(/\s+/g, " ");
 
 assert.equal(config.name, "Prestige SG");
@@ -131,27 +135,45 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "const biometricResumePendingRef = useRef(false)",
-  'if (nextState !== "active" && biometricPromptBusyRef.current)',
-  "biometricResumePendingRef.current = true",
-  "if (!returning) return",
-  "if (biometricResumePendingRef.current)",
-  "biometricResumePendingRef.current = false",
-  "if (biometricPromptBusyRef.current) return",
+  "beginCustomerBiometricAttempt(biometricLifecycleRef.current)",
+  "finishCustomerBiometricAttempt( biometricLifecycleRef.current, attemptId",
+  "transitionCustomerBiometricAppState( biometricLifecycleRef.current, nextState, biometricEnabledRef.current",
+  "if (action === \"lock\")",
+  "if (action === \"unlock\") void unlockCustomerApp()",
 ]) {
   assert.equal(
     normalizedApp.includes(phrase),
     true,
-    `${appPath} must suppress the biometric prompt's own inactive-to-active resume cycle with ${phrase}`,
+    `${appPath} must serialize Customer biometric attempts with ${phrase}`,
   );
 }
 
-assert.equal(
-  appSource.indexOf("if (biometricResumePendingRef.current) {") <
-    appSource.indexOf("if (biometricEnabled) void unlockCustomerApp();"),
-  true,
-  "The Face ID prompt resume must be consumed before a genuine later foreground unlock starts.",
-);
+for (const phrase of [
+  "activeAttemptId",
+  "promptResumeAttemptId",
+  "promptResumeObserved",
+  "if (lifecycle.activeAttemptId !== null) return null",
+  "if (lifecycle.activeAttemptId !== attemptId) return false",
+  'return biometricEnabled ? "lock" : "ignore"',
+  'return biometricEnabled ? "unlock" : "ignore"',
+]) {
+  assert.equal(
+    normalizedBiometricLifecycle.includes(phrase),
+    true,
+    `${biometricLifecyclePath} must preserve ${phrase}`,
+  );
+}
+
+for (const removedRaceMarker of [
+  "biometricPromptBusyRef",
+  "biometricResumePendingRef",
+]) {
+  assert.equal(
+    appSource.includes(removedRaceMarker),
+    false,
+    `${appPath} must not restore the split ${removedRaceMarker} lifecycle gate`,
+  );
+}
 
 for (const phrase of [
   'export const productionOrigin = "https://app.prestigelimo.sg"',
@@ -220,6 +242,8 @@ for (const phrase of [
   "Customer Build 3 Face ID Foreground Resume Loop Repair",
   "Customer iOS Build 4 End-To-End Audit And Release Checkpoint",
   "Customer iOS Build 5 Native Alert Control Release Checkpoint",
+  "Customer Build 5 Physical Face ID Single-Flight Source Repair",
+  "scripts/test-customer-biometric-single-flight-guard.mjs",
   "`16260f55-cfcc-4d47-8ac2-3ecf35bd90b7`",
   "`4d9f9222-71a8-42ef-9934-85dbf271cecd`",
   "`86cf6dd193340071d6f6b7d14e538af87311012e887ab4e28ba595bf46a3d08a`",
@@ -237,6 +261,11 @@ assert.equal(
   preactivationSource.includes("scripts/test-customer-companion-foundation-guard.mjs"),
   true,
   "The Customer companion foundation guard must run in preactivation verification",
+);
+assert.equal(
+  preactivationSource.includes("scripts/test-customer-biometric-single-flight-guard.mjs"),
+  true,
+  "The Customer biometric single-flight guard must run in preactivation verification",
 );
 
 assert.equal(

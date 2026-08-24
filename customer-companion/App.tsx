@@ -576,9 +576,10 @@ export default function App() {
           onMessage={handleCustomerNativeBridgeMessage}
           onNavigationStateChange={updateNavigation}
           onLoadEnd={(event) => {
+            const loadedUrl = event.nativeEvent.url;
             setLoadedCustomerWebView((previous) => ({
               sequence: previous.sequence + 1,
-              url: event.nativeEvent.url,
+              url: loadedUrl,
             }));
           }}
           onShouldStartLoadWithRequest={allowNavigation}

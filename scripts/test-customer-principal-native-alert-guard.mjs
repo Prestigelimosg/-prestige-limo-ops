@@ -187,8 +187,13 @@ assert.match(
 );
 assert.match(
   companion,
-  /onLoadEnd=\{\(event\) => \{[\s\S]*?setLoadedCustomerWebView\(\(previous\) => \(\{[\s\S]*?sequence: previous\.sequence \+ 1,[\s\S]*?url: event\.nativeEvent\.url,[\s\S]*?\}\)\)[\s\S]*?\}\}/,
-  "Every completed WebView load must retrigger the idempotent native registration handoff",
+  /onLoadEnd=\{\(event\) => \{\s*const loadedUrl = event\.nativeEvent\.url;\s*setLoadedCustomerWebView\(\(previous\) => \(\{[\s\S]*?sequence: previous\.sequence \+ 1,[\s\S]*?url: loadedUrl,[\s\S]*?\}\)\)[\s\S]*?\}\}/,
+  "Every completed WebView load must capture its URL synchronously before React releases the synthetic event",
+);
+assert.doesNotMatch(
+  companion,
+  /setLoadedCustomerWebView\(\(previous\) => \(\{[\s\S]*?event\.nativeEvent/,
+  "The delayed state updater must never dereference a released WebView synthetic event",
 );
 assert.doesNotMatch(
   companion,

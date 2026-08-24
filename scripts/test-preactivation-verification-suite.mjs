@@ -502,6 +502,10 @@ const guardChecks = [
     script: "scripts/test-admin-companion-background-otp-preservation-guard.mjs",
   },
   {
+    label: "Admin iPhone companion WebView recovery guard",
+    script: "scripts/test-admin-companion-webview-recovery-guard.mjs",
+  },
+  {
     label: "Customer iPhone companion foundation guard",
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },

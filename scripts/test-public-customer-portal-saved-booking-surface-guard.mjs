@@ -554,9 +554,24 @@ assertIncludes(
 );
 assert.equal(
   detailBlock.indexOf("{trackingReady && safeDriverTracking?.mapEmbedUrl ? (") <
-    detailBlock.indexOf('className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]"'),
+    detailBlock.indexOf('className="relative aspect-[4/3] w-full bg-slate-100 sm:aspect-[16/9]"'),
   true,
   "/my-bookings real map frame must render only after customer-visible tracking is ready",
+);
+assertIncludes(
+  detailBlock,
+  'className="pointer-events-none h-full w-full border-0"',
+  "/my-bookings live map must remain display-only so Customer page scrolling owns touch gestures",
+);
+assertIncludes(
+  detailBlock,
+  "tabIndex={-1}",
+  "/my-bookings live map must stay outside Customer keyboard focus order",
+);
+assertExcludes(
+  detailBlock,
+  "aspect-[4/3] min-h-72",
+  "/my-bookings live map must not outgrow its mobile tracking panel",
 );
 
 const bookingResultsBlock = blockBetween(

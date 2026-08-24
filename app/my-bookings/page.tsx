@@ -2635,13 +2635,14 @@ export default function CustomerPortalPage() {
                             </div>
                             {trackingReady && safeDriverTracking?.mapEmbedUrl ? (
                               <>
-                                <div className="relative aspect-[4/3] min-h-72 bg-slate-100 sm:aspect-[16/9]">
+                                <div className="relative aspect-[4/3] w-full bg-slate-100 sm:aspect-[16/9]">
                                   <iframe
-                                    className="h-full w-full border-0"
+                                    className="pointer-events-none h-full w-full border-0"
                                     data-customer-portal-driver-tracking-map={expandedBooking.id}
                                     loading="lazy"
                                     referrerPolicy="no-referrer-when-downgrade"
                                     src={safeDriverTracking.mapEmbedUrl}
+                                    tabIndex={-1}
                                     title="Driver live map"
                                   />
                                 </div>

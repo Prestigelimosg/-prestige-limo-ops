@@ -176,6 +176,18 @@ async function main() {
           provider_send: false,
           version: "customer-view-details-browser-fixture",
         };
+      } else if (requestUrl.pathname === "/api/customer-live-location-map" && method === "GET") {
+        responseBody = {
+          active_driver_marker: {
+            accuracy_meters: 18,
+            latitude: 1.3521,
+            longitude: 103.8198,
+            updated_at: "2026-08-24T12:00:00.000Z",
+          },
+          customerVisible: true,
+          marker_count: 1,
+          ok: true,
+        };
       } else if (requestUrl.pathname === "/api/customer-invoices" && method === "GET") {
         responseBody = { invoices: [], ok: true };
       } else if (requestUrl.pathname === "/api/customer-device-push-subscriptions" && method === "GET") {
@@ -369,6 +381,55 @@ async function main() {
     assert.match(vehicleLabelState.cardText, /Car type Alphard/);
     assert.doesNotMatch(vehicleLabelState.cardText, /\\bAVF\\b/);
     assert.equal(vehicleLabelState.documentWidth, vehicleLabelState.viewportWidth);
+
+    await evaluate(`(() => {
+      document
+        .querySelector('[data-customer-portal-driver-tracking-toggle="saved-VIEW-001"]')
+        ?.click();
+    })()`);
+    const liveMapInteractionState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-001"]');
+          const map = detail?.querySelector('[data-customer-portal-driver-tracking-map]');
+          const messageComposer = detail?.querySelector('[data-customer-driver-message-composer]');
+          const trackingPanel = detail?.querySelector('[data-customer-portal-driver-tracking-panel]');
+          const trackingSection = detail?.querySelector('[data-customer-portal-driver-tracking]');
+          const mapRect = map?.getBoundingClientRect();
+          const panelRect = trackingPanel?.getBoundingClientRect();
+
+          if (!map || !mapRect || !panelRect || !messageComposer || !trackingSection) {
+            return false;
+          }
+
+          const mapStyle = window.getComputedStyle(map);
+          const hitElement = document.elementFromPoint(
+            Math.min(mapRect.left + mapRect.width / 2, window.innerWidth - 1),
+            Math.min(Math.max(mapRect.top + 12, 1), window.innerHeight - 1),
+          );
+
+          return {
+            mapContainedByPanel: mapRect.left >= panelRect.left && mapRect.right <= panelRect.right,
+            mapReceivesPointerHit: hitElement === map,
+            messageBeforeTracking:
+              Boolean(messageComposer.compareDocumentPosition(trackingSection) & Node.DOCUMENT_POSITION_FOLLOWING),
+            pointerEvents: mapStyle.pointerEvents,
+            tabIndex: map.tabIndex,
+          };
+        })()`),
+      10000,
+      "Customer live map interaction guard",
+    );
+
+    assert.deepEqual(liveMapInteractionState, {
+      mapContainedByPanel: true,
+      mapReceivesPointerHit: false,
+      messageBeforeTracking: true,
+      pointerEvents: "none",
+      tabIndex: -1,
+    });
+    assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
+
     const visibleHoldMs = Math.min(
       Math.max(Number(process.env.PRESTIGE_BROWSER_VISIBLE_HOLD_MS || 0), 0),
       15000,

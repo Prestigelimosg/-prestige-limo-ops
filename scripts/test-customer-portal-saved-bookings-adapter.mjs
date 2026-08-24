@@ -195,6 +195,31 @@ try {
   ]);
   assertNoVisibleLeak(mapped, "safe mapped booking");
 
+  const codedVehicleLabels = mapCustomerSavedBookingsPayload({
+    ok: true,
+    saved_bookings: [
+      {
+        booking_reference: "SAFE-PORTAL-AVF",
+        customer_driver_details: {
+          car_type: "AVF",
+        },
+      },
+      {
+        booking_reference: "SAFE-PORTAL-VVV",
+        customer_driver_details: {
+          car_type: "VVV",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    codedVehicleLabels?.map((booking) => booking.driverDetails?.carType),
+    ["Alphard", "Viano"],
+    "Customer vehicle labels should expand only the stored AVF and VVV codes for display.",
+  );
+  assertNoVisibleLeak(codedVehicleLabels, "coded Customer vehicle labels");
+
   assert.deepEqual(
     mapCustomerSavedBookingsPayload({
       ok: true,

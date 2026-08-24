@@ -227,10 +227,27 @@ const presentationLedgerSection = sectionBetween(
   ledger,
   "### Customer PWA Locked Tracking Presentation Repair (2026-08-18)",
 );
+const vehicleDisplayLedgerSection = sectionBetween(
+  ledger,
+  "### Customer Vehicle Display Label Repair (2026-08-24)",
+);
 const ledgerSection = sectionBetween(
   ledger,
   "### Public Customer Portal Saved-Booking Surface Guard Lock",
 );
+
+for (const phrase of [
+  "Customer-facing display boundary",
+  "`AVF` renders as `Alphard` and `VVV` renders as `Viano`",
+  "Stored vehicle codes, API response fields, booking and Driver acknowledgement persistence",
+  "`scripts/test-customer-portal-saved-bookings-adapter.mjs`",
+]) {
+  assertIncludes(
+    vehicleDisplayLedgerSection,
+    phrase,
+    `Customer vehicle display label ledger phrase: ${phrase}`,
+  );
+}
 
 for (const phrase of [
   "each existing row one neutral 1 px border and an 8 px gap from the next row",
@@ -588,6 +605,9 @@ for (const fragment of [
   "safeText(record.pickup_location) || \"Pickup to confirm\"",
   "safeText(record.service_type, 120) || \"Service to confirm\"",
   "toCustomerPortalDriverDetails(record.customer_driver_details)",
+  "customerVehicleDisplayLabel(record.car_type)",
+  'cleaned.toUpperCase() === "AVF"',
+  'cleaned.toUpperCase() === "VVV"',
 ]) {
   assertIncludes(portalAdapter, fragment, `customer portal adapter safe behavior ${fragment}`);
 }

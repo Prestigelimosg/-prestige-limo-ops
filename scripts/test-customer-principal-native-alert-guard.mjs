@@ -108,8 +108,15 @@ assert.match(
   activation,
   /useEffect\(\(\) => \{[\s\S]*?new URLSearchParams\(window\.location\.search\)\.get\("invite"\)[\s\S]*?setInvitationLoaded\(true\)[\s\S]*?\}, \[\]\)/,
 );
-assert.match(activation, /if \(!invitationLoaded \|\| invitation\) return/);
-assert.match(activation, /disabled=\{busy \|\| !invitationLoaded \|\| !invitation\}/);
+assert.match(activation, /const activationResumeStorageKey = "prestige-customer-activation-resume-v1"/);
+assert.match(activation, /const customerEmailChallengeLifetimeMs = 10 \* 60 \* 1000/);
+assert.match(activation, /window\.crypto\.subtle\.digest\([\s\S]*?"SHA-256"/);
+assert.match(activation, /challengeId,[\s\S]*?expiresAt:[\s\S]*?invitationFingerprint:[\s\S]*?version: 1/);
+assert.match(activation, /window\.localStorage\.setItem\(activationResumeStorageKey, JSON\.stringify\(resume\)\)/);
+assert.match(activation, /stored\.expiresAt > Date\.now\(\)[\s\S]*?stored\.invitationFingerprint === fingerprint[\s\S]*?setChallengeId\(stored\.challengeId\)[\s\S]*?setStep\("verify"\)/);
+assert.match(activation, /clearActivationResume\(\);[\s\S]*?setStep\("complete"\)/);
+assert.match(activation, /disabled=\{busy \|\| !invitationLoaded \|\| !activationResumeLoaded \|\| !invitation\}/);
+assert.doesNotMatch(activation, /localStorage\.setItem\([^\n]*(?:invitation|code|pin|confirmPin)/i);
 assert.doesNotMatch(
   activation,
   /useMemo\(\(\) => \{[\s\S]*?typeof window === "undefined"[\s\S]*?window\.location\.search/,

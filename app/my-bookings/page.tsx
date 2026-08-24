@@ -100,6 +100,7 @@ type BookingChangeRequestDraft = {
 };
 
 const visibleBookingLimit = 10;
+const CUSTOMER_MESSAGES_VISIBLE_REFRESH_MS = 5_000;
 const customerBookingChangeServiceOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -1002,7 +1003,10 @@ export default function CustomerPortalPage() {
     setCheckingTripUpdatesId("");
   }
 
-  const loadTripUpdatesForBooking = useCallback(async (booking: CustomerPortalBooking) => {
+  const loadTripUpdatesForBooking = useCallback(async (
+    booking: Pick<CustomerPortalBooking, "id">,
+    options: { signal?: AbortSignal; silent?: boolean } = {},
+  ) => {
     const bookingReference = bookingReferenceFromPortalId(booking.id);
 
     if (!bookingReference) {
@@ -1017,17 +1021,28 @@ export default function CustomerPortalPage() {
       return;
     }
 
-    setCheckingTripUpdatesId(booking.id);
+    if (!options.silent) {
+      setCheckingTripUpdatesId(booking.id);
+    }
 
     try {
-      const result = await loadCustomerPortalTripUpdates({ bookingReference });
+      const result = await loadCustomerPortalTripUpdates({
+        bookingReference,
+        signal: options.signal,
+      });
+
+      if (options.signal?.aborted) {
+        return;
+      }
 
       setTripUpdatesByBookingId((current) => ({
         ...current,
         [booking.id]: result,
       }));
     } finally {
-      setCheckingTripUpdatesId("");
+      if (!options.silent) {
+        setCheckingTripUpdatesId("");
+      }
     }
   }, []);
 
@@ -1188,6 +1203,45 @@ export default function CustomerPortalPage() {
     portalBookingsLoadState,
     refreshCustomerTrackingForBooking,
   ]);
+
+  useEffect(() => {
+    if (!expandedBookingId) {
+      return;
+    }
+
+    let customerMessagesAbortController: AbortController | null = null;
+    const refreshExpandedCustomerMessagesWhileVisible = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      customerMessagesAbortController?.abort();
+      customerMessagesAbortController = new AbortController();
+      void loadTripUpdatesForBooking(
+        { id: expandedBookingId },
+        {
+          signal: customerMessagesAbortController.signal,
+          silent: true,
+        },
+      );
+    };
+
+    const customerMessagesRefreshInterval = window.setInterval(
+      refreshExpandedCustomerMessagesWhileVisible,
+      CUSTOMER_MESSAGES_VISIBLE_REFRESH_MS,
+    );
+    window.addEventListener("focus", refreshExpandedCustomerMessagesWhileVisible);
+    document.addEventListener("visibilitychange", refreshExpandedCustomerMessagesWhileVisible);
+    window.addEventListener("pageshow", refreshExpandedCustomerMessagesWhileVisible);
+
+    return () => {
+      window.clearInterval(customerMessagesRefreshInterval);
+      customerMessagesAbortController?.abort();
+      window.removeEventListener("focus", refreshExpandedCustomerMessagesWhileVisible);
+      document.removeEventListener("visibilitychange", refreshExpandedCustomerMessagesWhileVisible);
+      window.removeEventListener("pageshow", refreshExpandedCustomerMessagesWhileVisible);
+    };
+  }, [expandedBookingId, loadTripUpdatesForBooking]);
 
   useEffect(() => {
     if (!activeTrackingBookingId) {

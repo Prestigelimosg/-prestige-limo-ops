@@ -98,6 +98,7 @@ async function main() {
   const apiCalls = [];
   const browserErrors = [];
   const browserConsoleErrors = [];
+  let customerNotificationReadCount = 0;
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -167,11 +168,31 @@ async function main() {
           ok: true,
         };
       } else if (requestUrl.pathname === "/api/customer-app-notifications" && method === "GET") {
+        customerNotificationReadCount += 1;
+        const isAutomaticMessageRead =
+          requestUrl.searchParams.get("booking_reference") === "VIEW-002" &&
+          customerNotificationReadCount >= 2;
         responseBody = {
           delivery_surface: "customer_app",
           external_send: false,
-          notification_count: 0,
-          notifications: [],
+          notification_count: isAutomaticMessageRead ? 1 : 0,
+          notifications: isAutomaticMessageRead
+            ? [
+                {
+                  booking_reference: "VIEW-002",
+                  created_at: "2026-08-24T12:00:00.000Z",
+                  delivery_surface: "customer_app",
+                  notification_status: "queued",
+                  notification_type: "trip_update",
+                  priority: "normal",
+                  safe_context: {},
+                  safe_message: "I have arrived at the pickup point.",
+                  safe_title: "Message from driver",
+                  updated_at: "2026-08-24T12:00:00.000Z",
+                  workflow_area: "customer_driver_quick_replies",
+                },
+              ]
+            : [],
           ok: true,
           provider_send: false,
           version: "customer-view-details-browser-fixture",
@@ -341,6 +362,34 @@ async function main() {
     assert.equal(expandedState.detailHasTracking, true);
     assert.equal(expandedState.documentWidth, expandedState.viewportWidth);
     assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
+
+    const automaticCustomerMessageState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const detail = document.querySelector('[data-customer-portal-detail="${targetBookingId}"]');
+          const refreshButton = detail?.querySelector('[data-customer-portal-trip-updates-refresh]');
+
+          if (!detail?.innerText.includes("I have arrived at the pickup point.")) {
+            return false;
+          }
+
+          return {
+            detailText: detail.innerText,
+            refreshButtonText: refreshButton?.textContent?.trim() || "",
+          };
+        })()`),
+      8000,
+      "automatic PA/Boss Customer message refresh",
+    );
+    assert.match(automaticCustomerMessageState.detailText, /Message from driver/);
+    assert.match(automaticCustomerMessageState.detailText, /I have arrived at the pickup point\./);
+    assert.equal(automaticCustomerMessageState.refreshButtonText, "Refresh");
+    assert.equal(customerNotificationReadCount >= 2, true);
+    assert.equal(
+      apiCalls.filter((call) => call === "GET /api/customer-live-location-map").length,
+      0,
+      "Customer message refresh must not start or duplicate live-location reads while tracking is closed.",
+    );
 
     await evaluate(
       `document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]').click()`,

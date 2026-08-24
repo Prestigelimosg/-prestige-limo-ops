@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   AppState,
   Pressable,
   StyleSheet,
@@ -19,6 +20,10 @@ import {
   type WebViewMessageEvent,
   type WebViewNavigation,
 } from "react-native-webview";
+import type {
+  WebViewErrorEvent,
+  WebViewNavigationEvent,
+} from "react-native-webview/lib/WebViewTypes";
 
 import {
   authenticateAdminAppUnlock,
@@ -47,6 +52,10 @@ import {
 } from "./src/admin-webview-bridge";
 
 type ScreenMode = "checking" | "enrollment-required" | "locked" | "web";
+type AdminWebViewLoadState = "loading" | "ready" | "failed";
+
+const adminWebViewInitialLoadTimeoutMs = 15_000;
+const adminWebViewAutomaticRecoveryLimit = 1;
 
 const signOutScript = `
 void fetch("/api/admin-auth/session", {
@@ -82,6 +91,8 @@ export default function App() {
   >("undetermined");
   const [notice, setNotice] = useState("");
   const [screenMode, setScreenMode] = useState<ScreenMode>("checking");
+  const [webViewLoadState, setWebViewLoadState] =
+    useState<AdminWebViewLoadState>("loading");
   const biometricPromptBusyRef = useRef(false);
   const biometricResumePendingRef = useRef(false);
   const nativeBridgeBusyRef = useRef(false);
@@ -92,7 +103,74 @@ export default function App() {
   const pendingPreviousNativeTokenRef = useRef("");
   const pendingProtectedUrlRef = useRef("");
   const signOutPendingRef = useRef(false);
+  const webViewAutomaticRecoveryCountRef = useRef(0);
+  const webViewHasCompletedLoadRef = useRef(false);
+  const webViewLoadFailurePendingRef = useRef(false);
+  const webViewLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<WebView>(null);
+
+  const clearAdminWebViewLoadTimeout = useCallback(() => {
+    if (!webViewLoadTimeoutRef.current) return;
+    clearTimeout(webViewLoadTimeoutRef.current);
+    webViewLoadTimeoutRef.current = null;
+  }, []);
+
+  const recoverAdminWebView = useCallback((automatic: boolean) => {
+    clearAdminWebViewLoadTimeout();
+    if (
+      automatic &&
+      webViewAutomaticRecoveryCountRef.current >= adminWebViewAutomaticRecoveryLimit
+    ) {
+      setWebViewLoadState("failed");
+      return;
+    }
+
+    if (automatic) {
+      webViewAutomaticRecoveryCountRef.current += 1;
+    } else {
+      webViewAutomaticRecoveryCountRef.current = 0;
+    }
+    webViewHasCompletedLoadRef.current = false;
+    setWebViewLoadState("loading");
+    setNavigationKey((current) => current + 1);
+  }, [clearAdminWebViewLoadTimeout]);
+
+  const handleAdminWebViewLoadStart = useCallback(() => {
+    clearAdminWebViewLoadTimeout();
+    webViewHasCompletedLoadRef.current = false;
+    webViewLoadFailurePendingRef.current = false;
+    setWebViewLoadState("loading");
+    webViewLoadTimeoutRef.current = setTimeout(() => {
+      webViewLoadTimeoutRef.current = null;
+      if (
+        webViewHasCompletedLoadRef.current ||
+        AppState.currentState !== "active"
+      ) {
+        return;
+      }
+      webViewLoadFailurePendingRef.current = true;
+      recoverAdminWebView(true);
+    }, adminWebViewInitialLoadTimeoutMs);
+  }, [clearAdminWebViewLoadTimeout, recoverAdminWebView]);
+
+  const handleAdminWebViewLoadError = useCallback((event: WebViewErrorEvent) => {
+    event.preventDefault();
+    webViewLoadFailurePendingRef.current = true;
+    webViewHasCompletedLoadRef.current = false;
+    recoverAdminWebView(true);
+  }, [recoverAdminWebView]);
+
+  const handleAdminWebViewContentProcessTermination = useCallback(() => {
+    webViewLoadFailurePendingRef.current = true;
+    webViewHasCompletedLoadRef.current = false;
+    recoverAdminWebView(true);
+  }, [recoverAdminWebView]);
+
+  const retryAdminWebView = useCallback(() => {
+    webViewLoadFailurePendingRef.current = false;
+    webViewHasCompletedLoadRef.current = false;
+    recoverAdminWebView(false);
+  }, [recoverAdminWebView]);
 
   const unlockAdminApp = useCallback(async () => {
     if (biometricPromptBusyRef.current) return;
@@ -172,11 +250,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    return () => clearAdminWebViewLoadTimeout();
+  }, [clearAdminWebViewLoadTimeout]);
+
+  useEffect(() => {
     let previousState = AppState.currentState;
     const subscription = AppState.addEventListener("change", (nextState) => {
       const returningToForeground = previousState !== "active" && nextState === "active";
       previousState = nextState;
 
+      if (nextState !== "active") {
+        clearAdminWebViewLoadTimeout();
+      }
       if (nextState !== "active" && biometricPromptBusyRef.current) {
         biometricResumePendingRef.current = true;
       } else if (nextState !== "active" && biometricEnabled) {
@@ -215,7 +300,23 @@ export default function App() {
     });
 
     return () => subscription.remove();
-  }, [biometricEnabled, unlockAdminApp]);
+  }, [
+    biometricEnabled,
+    clearAdminWebViewLoadTimeout,
+    unlockAdminApp,
+  ]);
+
+  useEffect(() => {
+    if (
+      screenMode !== "web" ||
+      webViewLoadState !== "loading" ||
+      webViewHasCompletedLoadRef.current ||
+      AppState.currentState !== "active"
+    ) {
+      return;
+    }
+    handleAdminWebViewLoadStart();
+  }, [handleAdminWebViewLoadStart, screenMode, webViewLoadState]);
 
   useEffect(() => {
     const openDashboardFromNotification = (
@@ -380,6 +481,22 @@ export default function App() {
     }
   }, [installationId]);
 
+  const handleAdminWebViewLoadEnd = useCallback((
+    event: WebViewNavigationEvent | WebViewErrorEvent,
+  ) => {
+    if (webViewLoadFailurePendingRef.current) return;
+    clearAdminWebViewLoadTimeout();
+    webViewHasCompletedLoadRef.current = true;
+    webViewAutomaticRecoveryCountRef.current = 0;
+    setWebViewLoadState("ready");
+    if (
+      signOutPendingRef.current &&
+      event.nativeEvent.url === `${productionOrigin}/`
+    ) {
+      void requestNativeSubscription("unregister", "sign_out");
+    }
+  }, [clearAdminWebViewLoadTimeout, requestNativeSubscription]);
+
   const handleWebViewMessage = useCallback(async (event: WebViewMessageEvent) => {
     const message = parseAdminBridgeMessage(event.nativeEvent.data);
     if (!message) {
@@ -535,44 +652,57 @@ export default function App() {
                 <Text style={styles.noticeText}>{notice}</Text>
               </View>
             ) : null}
-            <WebView
-              injectedJavaScriptBeforeContentLoaded={adminBridgeBootstrap}
-              allowsBackForwardNavigationGestures={false}
-              allowsLinkPreview={false}
-              cacheEnabled
-              domStorageEnabled
-              javaScriptCanOpenWindowsAutomatically={false}
-              javaScriptEnabled
-              key={`prestige-admin-webview-${navigationKey}`}
-              mixedContentMode="never"
-              onError={() => setNotice("Prestige Limo Ops could not load. Check your secure connection and try again.")}
-              onHttpError={(event) => {
-                if (event.nativeEvent.statusCode >= 500) {
-                  setNotice("Prestige Limo Ops is temporarily unavailable.");
-                }
-              }}
-              onLoadEnd={() => {
-                if (
-                  signOutPendingRef.current &&
-                  currentUrl === `${productionOrigin}/`
-                ) {
-                  void requestNativeSubscription("unregister", "sign_out");
-                }
-              }}
-              onMessage={(event) => {
-                void handleWebViewMessage(event);
-              }}
-              onNavigationStateChange={updateNavigation}
-              onShouldStartLoadWithRequest={allowNavigation}
-              originWhitelist={["https://app.prestigelimo.sg"]}
-              pullToRefreshEnabled
-              ref={webViewRef}
-              setSupportMultipleWindows={false}
-              sharedCookiesEnabled
-              source={{ uri: currentUrl }}
-              style={styles.webView}
-              thirdPartyCookiesEnabled={false}
-            />
+            <View style={styles.webViewContainer}>
+              <WebView
+                injectedJavaScriptBeforeContentLoaded={adminBridgeBootstrap}
+                allowsBackForwardNavigationGestures={false}
+                allowsLinkPreview={false}
+                cacheEnabled
+                domStorageEnabled
+                javaScriptCanOpenWindowsAutomatically={false}
+                javaScriptEnabled
+                key={`prestige-admin-webview-${navigationKey}`}
+                mixedContentMode="never"
+                onContentProcessDidTerminate={handleAdminWebViewContentProcessTermination}
+                onError={handleAdminWebViewLoadError}
+                onHttpError={(event) => {
+                  if (event.nativeEvent.statusCode >= 500) {
+                    setNotice("Prestige Limo Ops is temporarily unavailable.");
+                  }
+                }}
+                onLoadEnd={handleAdminWebViewLoadEnd}
+                onLoadStart={handleAdminWebViewLoadStart}
+                onMessage={(event) => {
+                  void handleWebViewMessage(event);
+                }}
+                onNavigationStateChange={updateNavigation}
+                onShouldStartLoadWithRequest={allowNavigation}
+                originWhitelist={["https://app.prestigelimo.sg"]}
+                pullToRefreshEnabled
+                ref={webViewRef}
+                setSupportMultipleWindows={false}
+                sharedCookiesEnabled
+                source={{ uri: currentUrl }}
+                style={styles.webView}
+                thirdPartyCookiesEnabled={false}
+              />
+              {webViewLoadState === "loading" ? (
+                <View accessibilityRole="progressbar" style={styles.webViewRecoveryOverlay}>
+                  <ActivityIndicator color={colors.gold} size="large" />
+                  <Text style={styles.webViewRecoveryText}>Loading secure Admin sign-in…</Text>
+                </View>
+              ) : webViewLoadState === "failed" ? (
+                <View accessibilityRole="alert" style={styles.webViewRecoveryOverlay}>
+                  <Text style={styles.webViewRecoveryTitle}>The secure Admin screen did not load.</Text>
+                  <Text style={styles.webViewRecoveryText}>
+                    {"Check this iPhone's connection, then reload the protected Admin screen."}
+                  </Text>
+                  <Pressable accessibilityRole="button" onPress={retryAdminWebView} style={styles.primaryButton}>
+                    <Text style={styles.primaryButtonText}>Reload Admin screen</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
           </SafeAreaView>
         </View>
         {webLayerLocked ? (
@@ -637,4 +767,8 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.muted, fontSize: 11, marginTop: 1 },
   webLayer: { flex: 1 },
   webView: { backgroundColor: colors.background, flex: 1 },
+  webViewContainer: { backgroundColor: colors.background, flex: 1 },
+  webViewRecoveryOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", backgroundColor: colors.background, justifyContent: "center", padding: 28 },
+  webViewRecoveryText: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 12, maxWidth: 330, textAlign: "center" },
+  webViewRecoveryTitle: { color: colors.ink, fontSize: 18, fontWeight: "700", textAlign: "center" },
 });

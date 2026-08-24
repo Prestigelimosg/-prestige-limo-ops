@@ -250,7 +250,7 @@ const ledgerSection = sectionBetween(ledger, "### Public Driver Job Action Surfa
 for (const phrase of [
   "Public driver job display/action surfaces are guarded across `/driver-job/[token]`, the driver job status workflow, issue choices, and driver job action routes.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
-  "The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, one acknowledged same-origin calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, four static same-tab public links to `/google-calendar`, `/privacy`, `/terms`, and the established `/driver-portal`, issue-alert POST with `issue_type`, fixed-template driver-to-customer quick-reply POST with `template_key`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.",
+  "The driver page action surface must stay limited to safe job GET, token-scoped driver-details PATCH, saved app-update GET, one acknowledged same-origin calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, four static same-tab public links to `/google-calendar`, `/privacy`, `/terms`, and the established `/driver-portal`, issue-alert POST with `issue_type`, typed Driver-to-Customer shared-conversation POST with `client_message_id + message_text`, driver-consented live-location calls, admin-only OTS photo proof POST, and status PATCH with the guarded status value.",
   "Driver status controls must stay limited to OTW, OTS, POB, and Job Completed, coordinated with `guardDriverJobStatusTransition`.",
   "Driver issue choices must stay limited to operational/safety issue values and must not include finance, billing, payment, PayNow, payout, invoice, PDF, parser/debug, internal admin, or mock QA/archive issue types.",
   "Driver app updates and status timing must render only safe fields: `safe_title`, `safe_message`, notification metadata, and status labels/times; visible activity-log and saved-status-history panels stay hidden from the driver page.",
@@ -339,7 +339,7 @@ for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
   "body: JSON.stringify({ issue_type: issueChoice.value })",
   "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
-  "body: JSON.stringify({ template_key: templateKey })",
+  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage })",
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",

@@ -144,7 +144,7 @@ const contractChecks = [
     label: "public API client caller boundary guard",
     requiredFragments: [
       "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
-      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, issue-alert POST with `issue_type`, fixed-template customer quick-reply POST with `template_key` only, admin-only OTS photo proof POST, and status PATCH with `status` only.",
+      "`/driver-job/[token]` must keep driver API calls limited to safe job GET, token-scoped driver-details PATCH, notification GET, one direct acknowledged calendar-import navigation, acknowledged Driver account-create POST with only `email` and `password` plus exact `driver-account-create` purpose, issue-alert POST with `issue_type`, typed Driver-to-Customer shared-conversation POST with `client_message_id + message_text`, admin-only OTS photo proof POST, and status PATCH with `status` only.",
       "Public API client caller boundary guard passed",
     ],
     script: "scripts/test-public-api-client-caller-boundary-guard.mjs",
@@ -585,7 +585,7 @@ assert.equal(
 assertIncludes(
   files[driverPagePath],
   "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
-  "driver page approved fixed-template customer quick-reply caller",
+  "driver page approved typed Customer shared-conversation caller",
 );
 assertIncludes(
   files[driverPagePath],

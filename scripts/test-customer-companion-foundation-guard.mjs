@@ -60,7 +60,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "5");
+assert.equal(config.ios.buildNumber, "6");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.deepEqual(
@@ -243,6 +243,7 @@ for (const phrase of [
   "Customer iOS Build 4 End-To-End Audit And Release Checkpoint",
   "Customer iOS Build 5 Native Alert Control Release Checkpoint",
   "Customer Build 5 Physical Face ID Single-Flight Source Repair",
+  "Customer iOS Build 6 Face ID Single-Flight Acceptance Release Checkpoint",
   "scripts/test-customer-biometric-single-flight-guard.mjs",
   "`16260f55-cfcc-4d47-8ac2-3ecf35bd90b7`",
   "`4d9f9222-71a8-42ef-9934-85dbf271cecd`",

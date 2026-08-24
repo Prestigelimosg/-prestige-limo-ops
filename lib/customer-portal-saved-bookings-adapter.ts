@@ -149,6 +149,20 @@ function safeText(value: unknown, maxLength = maxSafeTextLength) {
   return cleaned;
 }
 
+function customerVehicleDisplayLabel(value: unknown) {
+  const cleaned = safeText(value, 120) || "";
+
+  if (cleaned.toUpperCase() === "AVF") {
+    return "Alphard";
+  }
+
+  if (cleaned.toUpperCase() === "VVV") {
+    return "Viano";
+  }
+
+  return cleaned;
+}
+
 function safeBookingReference(value: unknown) {
   const cleaned = safeText(value, 120);
 
@@ -281,7 +295,7 @@ function toCustomerPortalDriverDetails(value: unknown): CustomerPortalDriverDeta
   const driverName = safeText(record.driver_name, 120) || "";
   const driverContact = safeText(record.driver_contact, 80) || "";
   const carPlate = safeText(record.car_plate, 80) || "";
-  const carType = safeText(record.car_type, 120) || "";
+  const carType = customerVehicleDisplayLabel(record.car_type);
 
   if (!driverName && !driverContact && !carPlate && !carType) {
     return undefined;

@@ -48,7 +48,15 @@ const savedBookingsPayload = {
     booking_month: upcomingPickupAt(index + 1).slice(0, 7),
     booking_reference: `VIEW-${String(index + 1).padStart(3, "0")}`,
     created_at: new Date().toISOString(),
-    customer_driver_details: null,
+    customer_driver_details:
+      index === 0
+        ? {
+            car_plate: "SMA1234A",
+            car_type: "AVF",
+            driver_contact: "90000001",
+            driver_name: "Safe Driver",
+          }
+        : null,
     customer_facing_status: "confirmed",
     dropoff_location: index % 2 === 0 ? "Changi Airport T3" : "Raffles Singapore",
     passenger_name: `Viewport Passenger ${index + 1}`,
@@ -336,6 +344,41 @@ async function main() {
       "collapsed Customer detail panel",
     );
     assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
+
+    await evaluate(`(() => {
+      const button = document.querySelector('[data-customer-portal-detail-button="saved-VIEW-001"]');
+      button?.click();
+    })()`);
+    const vehicleLabelState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-001"]');
+          const card = detail?.querySelector('[data-customer-portal-driver-details-card]');
+
+          return card
+            ? {
+                cardText: card.innerText.replace(/\\s+/g, " ").trim(),
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+              }
+            : false;
+        })()`),
+      10000,
+      "Customer vehicle display label",
+    );
+    assert.match(vehicleLabelState.cardText, /Car type Alphard/);
+    assert.doesNotMatch(vehicleLabelState.cardText, /\\bAVF\\b/);
+    assert.equal(vehicleLabelState.documentWidth, vehicleLabelState.viewportWidth);
+    const visibleHoldMs = Math.min(
+      Math.max(Number(process.env.PRESTIGE_BROWSER_VISIBLE_HOLD_MS || 0), 0),
+      15000,
+    );
+    if (visibleHoldMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, visibleHoldMs));
+    }
+    await evaluate(
+      `document.querySelector('[data-customer-portal-detail-button="saved-VIEW-001"]')?.click()`,
+    );
 
     for (const viewport of [
       { height: 932, width: 430 },

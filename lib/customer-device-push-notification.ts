@@ -732,18 +732,35 @@ async function sendNativeExpoAlert(
 ) {
   const driverDetailsReady = notification.safe_title === "Driver details ready";
   const driverPlateNumber = safeDriverPlateNumber(driverPlateNumberInput);
+  const safeNotificationTitle = safeText(notification.safe_title, 80);
+  const driverStatusTitle =
+    notification.actor_role === "driver" &&
+    notification.delivery_surface === "customer_app" &&
+    notification.workflow_area === "driver_status_customer_in_app" &&
+    (safeNotificationTitle === "Driver on the way" ||
+      safeNotificationTitle === "Driver arrived" ||
+      safeNotificationTitle === "Passenger onboard")
+      ? safeNotificationTitle
+      : null;
+  const driverStatusPlateReady = Boolean(driverStatusTitle && driverPlateNumber);
   const response = await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
       to: token,
       sound: "default",
-      title: driverDetailsReady ? "Driver details ready" : "Prestige Limo booking update",
+      title: driverDetailsReady
+        ? "Driver details ready"
+        : driverStatusPlateReady
+          ? driverStatusTitle
+          : "Prestige Limo booking update",
       body: driverDetailsReady
         ? driverPlateNumber
           ? `Car plate ${driverPlateNumber}. Open Prestige SG to review.`
           : "Driver details are ready. Open Prestige SG to review."
-        : "A booking update is ready. Open Prestige SG to review.",
+        : driverStatusPlateReady
+          ? `Car plate ${driverPlateNumber}. Open Prestige SG to review.`
+          : "A booking update is ready. Open Prestige SG to review.",
       data: { booking_reference: bookingReference },
     }),
   });

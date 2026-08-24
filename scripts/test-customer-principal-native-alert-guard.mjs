@@ -25,6 +25,36 @@ const migrationName = readdirSync(join(root, "supabase/migrations"))
 assert.ok(migrationName, "customer principal/native-alert migration must be created by Supabase CLI");
 
 const migration = read(`supabase/migrations/${migrationName}`);
+const nativeTokenConflictRepairName = readdirSync(join(root, "supabase/migrations"))
+  .filter((name) => name.endsWith("_customer_native_token_upsert_conflict.sql"))
+  .sort()
+  .at(-1);
+
+assert.ok(
+  nativeTokenConflictRepairName,
+  "Customer native-token upsert conflict repair migration must be created by Supabase CLI",
+);
+
+const nativeTokenConflictRepair = read(`supabase/migrations/${nativeTokenConflictRepairName}`);
+const nativeTokenConflictStatements = nativeTokenConflictRepair
+  .replace(/^\s*--.*$/gm, "")
+  .split(";")
+  .map((statement) => statement.replace(/\s+/g, " ").trim())
+  .filter(Boolean);
+
+assert.deepEqual(nativeTokenConflictStatements, [
+  "drop index if exists public.customer_device_push_subscriptions_native_token_key",
+  "create unique index customer_device_push_subscriptions_native_token_key on public.customer_device_push_subscriptions (native_expo_token)",
+]);
+assert.doesNotMatch(
+  nativeTokenConflictRepair,
+  /where\s+native_expo_token\s+is\s+not\s+null/i,
+  "The native-token conflict target must be inferable by the established PostgREST upsert",
+);
+assert.match(
+  ledger,
+  /Customer Native Alert Production Upsert Conflict Repair/,
+);
 for (const table of [
   "customer_access_principals",
   "customer_access_memberships",

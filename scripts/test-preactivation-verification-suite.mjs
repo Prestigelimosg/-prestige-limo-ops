@@ -422,6 +422,10 @@ const guardChecks = [
     script: "scripts/test-customer-principal-native-alert-guard.mjs",
   },
   {
+    label: "Customer principal sign-in email-first AutoFill guard",
+    script: "scripts/test-customer-principal-sign-in-autofill-guard.mjs",
+  },
+  {
     label: "Customer principal session ID guard",
     script: "scripts/test-customer-principal-session-id-guard.mjs",
   },

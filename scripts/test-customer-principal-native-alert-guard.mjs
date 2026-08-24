@@ -133,6 +133,11 @@ assert.doesNotMatch(
 assert.match(myBookings, /customer_native_notifications_enable/);
 assert.match(myBookings, /customer_native_notifications_disable/);
 assert.match(myBookings, /prestige-customer-native-alerts/);
+assert.match(
+  myBookings,
+  /customerNativeSessionBlocked[\s\S]*?data-customer-native-session-recovery="true"[\s\S]*?Face ID protects this app on your iPhone, but it cannot replace your secure Customer sign-in[\s\S]*?href="\/customer-access\/sign-in"[\s\S]*?data-customer-native-session-sign-in="true"/,
+  "A Face-ID-unlocked native shell with a rejected server session must show the existing Customer sign-in recovery path instead of an authenticated-looking booking screen",
+);
 assert.match(myBookings, /setInterval\([^]*?5000\)/);
 assert.match(myBookings, /principal_role/);
 assert.match(myBookings, /customer_driver_details/);
@@ -177,6 +182,16 @@ assert.match(companion, /customer_native_notifications_disable/);
 assert.match(companion, /customer_native_notifications_result/);
 assert.match(
   companion,
+  /request\.action === "enable"[\s\S]*?if \(request\.ok\)[\s\S]*?else \{[\s\S]*?setCustomerNativeAlertsEnabled\(false\)[\s\S]*?setNativeRegistration\(null\)[\s\S]*?setNativeAlertsEnabled\(false\)/,
+  "Automatic and manual native registration rejection must both clear the persisted local ON state",
+);
+assert.match(
+  companion,
+  /reason: "request_failed" \| "server_session_required" \| "success"/,
+  "The native bridge must distinguish a rejected Customer server session without exposing a token",
+);
+assert.match(
+  companion,
   /const \[loadedCustomerWebView, setLoadedCustomerWebView\] = useState\(\{ url: "", sequence: 0 \}\)/,
   "The Customer shell must track every completed WebView load so native registration can converge in either order",
 );
@@ -214,6 +229,11 @@ assert.match(nativeNotifications, /getExpoPushTokenAsync/);
 assert.match(nativeNotifications, /addNotificationResponseReceivedListener/);
 assert.match(nativeNotifications, /booking_reference/);
 assert.match(nativeNotifications, /installation/);
+assert.match(
+  nativeNotifications,
+  /safeBookingReference\(record\.booking_reference\)[\s\S]*?url\.searchParams\.set\("booking", bookingReference\)/,
+  "Notification taps must route only through the bounded public booking reference",
+);
 
 const customerInstallation = read("customer-companion/src/customer-installation.ts");
 assert.match(customerInstallation, /prestige\.customer\.native-alerts-enabled\.v1/);

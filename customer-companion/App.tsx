@@ -63,6 +63,7 @@ type CustomerNativeBridgeMessage =
   | {
       action: CustomerNativeNotificationAction;
       ok: boolean;
+      reason: "request_failed" | "server_session_required" | "success";
       type: "customer_native_notifications_result";
     };
 
@@ -81,14 +82,18 @@ function parseCustomerNativeBridgeMessage(value: string): CustomerNativeBridgeMe
     }
 
     if (
-      keys.join(",") === "action,ok,type" &&
+      keys.join(",") === "action,ok,reason,type" &&
       parsed.type === "customer_native_notifications_result" &&
       (parsed.action === "enable" || parsed.action === "disable") &&
-      typeof parsed.ok === "boolean"
+      typeof parsed.ok === "boolean" &&
+      (parsed.reason === "request_failed" ||
+        parsed.reason === "server_session_required" ||
+        parsed.reason === "success")
     ) {
       return {
         action: parsed.action,
         ok: parsed.ok,
+        reason: parsed.reason,
         type: parsed.type,
       };
     }
@@ -113,7 +118,7 @@ function customerNativeNotificationMutationScript(
 ) {
   const enabledAfterSuccess = action === "enable";
   const method = enabledAfterSuccess ? "POST" : "PATCH";
-  return `(function(){var action=${JSON.stringify(action)};var notify=function(ok){var enabled=ok?${JSON.stringify(enabledAfterSuccess)}:${JSON.stringify(!enabledAfterSuccess)};var detail={enabled:enabled,message:ok?(enabled?'Booking alerts are enabled on this device.':'Booking alerts are off on this device.'):'Alerts could not be changed. Reload My Bookings and try again.',status:ok?(enabled?'enabled':'ready'):'error'};window.dispatchEvent(new CustomEvent('prestige-customer-native-alerts',{detail:detail}));if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function'){window.ReactNativeWebView.postMessage(JSON.stringify({action:action,ok:ok,type:'customer_native_notifications_result'}));}};fetch('/api/customer-device-push-subscriptions',{method:${JSON.stringify(method)},credentials:'same-origin',headers:{'Content-Type':'application/json','x-prestige-customer-purpose':'customer-device-push-subscription'},body:JSON.stringify({delivery_channel:'native_expo',native_expo_token:${JSON.stringify(registration.expoPushToken)},installation_id:${JSON.stringify(registration.installationId)}})}).then(function(response){return response.json().catch(function(){return null;}).then(function(payload){notify(response.ok&&payload&&payload.ok===true);});}).catch(function(){notify(false);});})();true;`;
+  return `(function(){var action=${JSON.stringify(action)};var notify=function(ok,reason){var enabled=ok?${JSON.stringify(enabledAfterSuccess)}:${JSON.stringify(!enabledAfterSuccess)};var detail={enabled:enabled,message:ok?(enabled?'Booking alerts are enabled on this device.':'Booking alerts are off on this device.'):(reason==='server_session_required'?'Customer sign-in is required before alerts can be enabled.':'Alerts could not be changed. Reload My Bookings and try again.'),status:ok?(enabled?'enabled':'ready'):'error'};window.dispatchEvent(new CustomEvent('prestige-customer-native-alerts',{detail:detail}));if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function'){window.ReactNativeWebView.postMessage(JSON.stringify({action:action,ok:ok,reason:reason,type:'customer_native_notifications_result'}));}};fetch('/api/customer-device-push-subscriptions',{method:${JSON.stringify(method)},credentials:'same-origin',headers:{'Content-Type':'application/json','x-prestige-customer-purpose':'customer-device-push-subscription'},body:JSON.stringify({delivery_channel:'native_expo',native_expo_token:${JSON.stringify(registration.expoPushToken)},installation_id:${JSON.stringify(registration.installationId)}})}).then(function(response){return response.json().catch(function(){return null;}).then(function(payload){var ok=response.ok&&payload&&payload.ok===true;var reason=ok?'success':((response.status===401||response.status===403||(payload&&payload.reason==='unauthorized'))?'server_session_required':'request_failed');notify(ok,reason);});}).catch(function(){notify(false,'request_failed');});})();true;`;
 }
 
 function isCustomerBookingsUrl(value: string) {
@@ -338,11 +343,10 @@ export default function App() {
     if (request.type === "customer_native_notifications_result") {
       nativeAlertsMutationBusyRef.current = false;
       if (request.action === "enable") {
-        const manualEnable = nativeAlertsEnablePendingRef.current;
         nativeAlertsEnablePendingRef.current = false;
         if (request.ok) {
           setNativeAlertsEnabled(true);
-        } else if (manualEnable) {
+        } else {
           nativeAlertsRegistrationAttemptRef.current = "";
           await setCustomerNativeAlertsEnabled(false).catch(() => undefined);
           setNativeRegistration(null);

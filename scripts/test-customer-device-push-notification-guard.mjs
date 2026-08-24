@@ -91,8 +91,33 @@ assertIncludes(
     'url: "/my-bookings"',
     "timeout: customerDevicePushProviderTimeoutMs",
     "statusCode === 404 || statusCode === 410",
+    'select("company_id, booker_id, traveler_id, public_booking_reference")',
+    "safePublicBookingReference",
+    "recordNativeDeliveryHealth",
+    'ticket.status !== "ok"',
+    "Customer native Expo ticket was rejected.",
   ],
   "customer device push helper",
+);
+assert.match(
+  helperSource,
+  /sendNativeExpoAlert\(token, nativeAudience\.publicBookingReference, notification\)/,
+  "Native push data must carry the exact public booking reference, never the internal ADM reference",
+);
+assert.doesNotMatch(
+  helperSource,
+  /sendNativeExpoAlert\(token, exactBookingReference, notification\)/,
+  "The internal booking reference must not enter the native notification tap payload",
+);
+assert.match(
+  helperSource,
+  /await response\.json\(\)[\s\S]*?ticket\.status !== "ok"[\s\S]*?ticket\.id/,
+  "A HTTP 2xx response alone must not count as an accepted Expo push ticket",
+);
+assert.match(
+  helperSource,
+  /async function recordNativeDeliveryHealth[\s\S]*?last_failure_at[\s\S]*?last_success_at[\s\S]*?recordNativeDeliveryHealth\(client, token/,
+  "The existing subscription row must record accepted-ticket or rejected-ticket evidence without adding another sender",
 );
 assertIncludes(
   helperSource,
@@ -285,7 +310,10 @@ await rm(tempDir, { force: true, recursive: true });
 await mkdir(path.dirname(tempHelperPath), { recursive: true });
 await writeFile(
   tempHelperPath,
-  transpileTypescript(helperSource, path.join(process.cwd(), helperPath)),
+  transpileTypescript(
+    `${helperSource}\nexport { sendNativeExpoAlert as __testSendNativeExpoAlert, recordNativeDeliveryHealth as __testRecordNativeDeliveryHealth };\n`,
+    path.join(process.cwd(), helperPath),
+  ),
 );
 await writeFile(
   tempAccountPath,
@@ -356,6 +384,96 @@ try {
   assert.equal(closedReadiness.ready, false);
   assert.equal(closedReadiness.public_key, null);
   assert.equal(closedReadiness.reason, "push_gate_closed");
+
+  const originalFetch = global.fetch;
+  let exactExpoBody = null;
+  try {
+    global.fetch = async (_url, init) => {
+      exactExpoBody = JSON.parse(String(init?.body || "null"));
+      return {
+        ok: true,
+        async json() {
+          return { data: { id: "expo-ticket-10899", status: "ok" } };
+        },
+      };
+    };
+    await helper.__testSendNativeExpoAlert(
+      "ExpoPushToken[customer_native_guard_1]",
+      "10899",
+      {
+        actor_role: "driver",
+        booking_reference: "ADM-20260823123045",
+        delivery_surface: "customer_app",
+        safe_title: "Driver on the way",
+      },
+    );
+    assert.equal(exactExpoBody.data.booking_reference, "10899");
+    assert.equal(JSON.stringify(exactExpoBody).includes("ADM-20260823123045"), false);
+
+    global.fetch = async () => ({
+      ok: true,
+      async json() {
+        return {
+          data: {
+            details: { error: "DeviceNotRegistered" },
+            message: "The device is not registered.",
+            status: "error",
+          },
+        };
+      },
+    });
+    await assert.rejects(
+      () => helper.__testSendNativeExpoAlert(
+        "ExpoPushToken[customer_native_guard_1]",
+        "10899",
+        {
+          actor_role: "driver",
+          booking_reference: "ADM-20260823123045",
+          delivery_surface: "customer_app",
+        },
+      ),
+      (error) => error.message === "Customer native Expo ticket was rejected." &&
+        error.expoError === "DeviceNotRegistered",
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+
+  const nativeHealthUpdates = [];
+  const nativeHealthClient = {
+    from(table) {
+      assert.equal(table, "customer_device_push_subscriptions");
+      return {
+        eq(field, value) {
+          this.filters.push([field, value]);
+          return this;
+        },
+        filters: [],
+        then(resolve, reject) {
+          nativeHealthUpdates.push({ filters: this.filters, update: this.updatePayload });
+          return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+        },
+        update(payload) {
+          this.updatePayload = payload;
+          return this;
+        },
+      };
+    },
+  };
+  await helper.__testRecordNativeDeliveryHealth(
+    nativeHealthClient,
+    "ExpoPushToken[customer_native_guard_1]",
+  );
+  await helper.__testRecordNativeDeliveryHealth(
+    nativeHealthClient,
+    "ExpoPushToken[customer_native_guard_1]",
+    { expoError: "DeviceNotRegistered" },
+  );
+  assert.equal(typeof nativeHealthUpdates[0].update.last_success_at, "string");
+  assert.equal(typeof nativeHealthUpdates[1].update.last_failure_at, "string");
+  assert.equal(nativeHealthUpdates[1].update.subscription_status, "revoked");
+  assert.equal(nativeHealthUpdates[1].filters.some(([field, value]) =>
+    field === "native_expo_token" && value === "ExpoPushToken[customer_native_guard_1]"), true);
 
   const nativeRevoke = await helper.revokeCustomerDevicePushSubscription(
     {

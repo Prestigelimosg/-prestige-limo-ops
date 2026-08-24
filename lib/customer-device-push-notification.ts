@@ -132,6 +132,18 @@ type CustomerDevicePushAlertOptions = {
   ) => Promise<PushSubscription[]>;
 };
 
+type CustomerNativeAudience = {
+  publicBookingReference: string;
+  tokens: string[];
+};
+
+type CustomerNativeExpoTicket = {
+  details?: { error?: unknown };
+  id?: unknown;
+  message?: unknown;
+  status?: unknown;
+};
+
 function cleanEnvValue(env: EnvInput, key: string) {
   const value = env[key]?.trim();
 
@@ -202,6 +214,13 @@ function safeAccountReference(value: unknown) {
   const cleaned = safeText(value, 120);
 
   return cleaned && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(cleaned)
+    ? cleaned
+    : null;
+}
+
+function safePublicBookingReference(value: unknown) {
+  const cleaned = safeText(value, 120)?.toUpperCase();
+  return cleaned && /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(cleaned)
     ? cleaned
     : null;
 }
@@ -636,16 +655,17 @@ async function loadActiveSubscriptions(
 async function loadNativeAudienceForBooking(
   client: CustomerDevicePushClient,
   bookingReference: string,
-) {
+): Promise<CustomerNativeAudience | null> {
   const { data: bookingRows, error: bookingError } = await client.from("bookings")
-    .select("company_id, booker_id, traveler_id")
+    .select("company_id, booker_id, traveler_id, public_booking_reference")
     .eq("booking_reference", bookingReference)
     .limit(1);
   const booking = record(Array.isArray(bookingRows) ? bookingRows[0] : null);
   const companyId = Number(booking?.company_id);
   const bookerId = Number(booking?.booker_id);
   const travelerId = Number(booking?.traveler_id);
-  if (bookingError || !Number.isSafeInteger(companyId) || !Number.isSafeInteger(bookerId) || !Number.isSafeInteger(travelerId)) return [];
+  const publicBookingReference = safePublicBookingReference(booking?.public_booking_reference);
+  if (bookingError || !Number.isSafeInteger(companyId) || !Number.isSafeInteger(bookerId) || !Number.isSafeInteger(travelerId) || !publicBookingReference) return null;
 
   // Exact audience only: the Boss and every active managing PA membership for
   // this verified booking scope. Never customer-wide or global broadcast.
@@ -662,7 +682,7 @@ async function loadNativeAudienceForBooking(
     .eq("booker_id", bookerId)
     .eq("membership_role", "managing_pa")
     .eq("membership_status", "active");
-  if (bossMembershipError || paMembershipError) return [];
+  if (bossMembershipError || paMembershipError) return { publicBookingReference, tokens: [] };
   const membershipRows = [
     ...(Array.isArray(bossMembershipRows) ? bossMembershipRows : []),
     ...(Array.isArray(paMembershipRows) ? paMembershipRows : []),
@@ -671,26 +691,27 @@ async function loadNativeAudienceForBooking(
     .filter((row) => row.membership_role === "boss" || row.membership_role === "managing_pa")
     .map((row) => safeText(row.principal_id, 36))
     .filter((value): value is string => Boolean(value)))];
-  if (principalIds.length === 0) return [];
+  if (principalIds.length === 0) return { publicBookingReference, tokens: [] };
   const { data: principalRows } = await client.from("customer_access_principals")
     .select("id").in("id", principalIds).eq("principal_status", "active");
   const activePrincipalIds = (Array.isArray(principalRows) ? principalRows : [])
     .map((row) => safeText(row.id, 36)).filter((value): value is string => Boolean(value));
-  if (activePrincipalIds.length === 0) return [];
+  if (activePrincipalIds.length === 0) return { publicBookingReference, tokens: [] };
   const { data: deviceRows } = await client.from("customer_access_devices")
     .select("id, principal_id").in("principal_id", activePrincipalIds).eq("device_status", "active");
   const activeDeviceIds = (Array.isArray(deviceRows) ? deviceRows : [])
     .map((row) => safeText(row.id, 36)).filter((value): value is string => Boolean(value));
-  if (activeDeviceIds.length === 0) return [];
+  if (activeDeviceIds.length === 0) return { publicBookingReference, tokens: [] };
   const { data: subscriptionRows } = await client.from(subscriptionTable)
     .select("native_expo_token, principal_id, device_id")
     .in("principal_id", activePrincipalIds)
     .in("device_id", activeDeviceIds)
     .eq("delivery_channel", "native_expo")
     .eq("subscription_status", "active");
-  return (Array.isArray(subscriptionRows) ? subscriptionRows : [])
+  const tokens = (Array.isArray(subscriptionRows) ? subscriptionRows : [])
     .map((row) => safeText(row.native_expo_token, 256))
     .filter((value): value is string => Boolean(value));
+  return { publicBookingReference, tokens };
 }
 
 async function sendNativeExpoAlert(token: string, bookingReference: string, notification: CustomerDevicePushNotificationRecord) {
@@ -709,6 +730,15 @@ async function sendNativeExpoAlert(token: string, bookingReference: string, noti
     }),
   });
   if (!response.ok) throw new Error("Customer native Expo alert failed.");
+  const payload: unknown = await response.json();
+  const ticket = record(record(payload)?.data) as CustomerNativeExpoTicket | null;
+  if (!ticket || ticket.status !== "ok" || !safeText(ticket.id, 256)) {
+    const error = new Error("Customer native Expo ticket was rejected.") as Error & {
+      expoError?: string;
+    };
+    error.expoError = safeText(ticket?.details?.error, 120) || undefined;
+    throw error;
+  }
 }
 
 async function sendWebPush(
@@ -765,6 +795,38 @@ async function recordDeliveryHealth(
     await client.from(subscriptionTable).update(update).eq("endpoint", endpoint);
   } catch {
     // Delivery health is best-effort and must not affect the saved customer update.
+  }
+}
+
+async function recordNativeDeliveryHealth(
+  client: CustomerDevicePushClient,
+  token: string,
+  error?: unknown,
+) {
+  const now = new Date().toISOString();
+  const expoError = error && typeof error === "object"
+    ? safeText((error as { expoError?: unknown }).expoError, 120)
+    : null;
+  const shouldRevoke = expoError === "DeviceNotRegistered";
+  const update = error
+    ? {
+        last_failure_at: now,
+        ...(shouldRevoke
+          ? { revoked_at: now, subscription_status: "revoked" }
+          : {}),
+        updated_at: now,
+      }
+    : {
+        last_success_at: now,
+        updated_at: now,
+      };
+
+  try {
+    await client.from(subscriptionTable).update(update)
+      .eq("native_expo_token", token)
+      .eq("delivery_channel", "native_expo");
+  } catch {
+    // Ticket health is best-effort and never affects the saved customer update.
   }
 }
 
@@ -826,11 +888,11 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
   }
 
   let subscriptions: PushSubscription[] = [];
-  let nativeTokens: string[] = [];
+  let nativeAudience: CustomerNativeAudience | null = null;
 
   try {
     if (!options.subscriptionLoader && !options.pushSender) {
-      nativeTokens = await loadNativeAudienceForBooking(client, exactBookingReference);
+      nativeAudience = await loadNativeAudienceForBooking(client, exactBookingReference);
     }
     const activeAccount = await assertActiveCustomerPortalAccessAccount(
       exactCustomerAccountReference,
@@ -842,14 +904,14 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
         : config
           ? await loadActiveSubscriptions(client, exactCustomerAccountReference)
           : [];
-    } else if (nativeTokens.length === 0) {
+    } else if (!nativeAudience || nativeAudience.tokens.length === 0) {
       return blockedAlert("unauthorized");
     }
   } catch {
     return blockedAlert("subscription_load_failed");
   }
 
-  if (subscriptions.length === 0 && nativeTokens.length === 0) {
+  if (subscriptions.length === 0 && (!nativeAudience || nativeAudience.tokens.length === 0)) {
     return blockedAlert("no_active_subscriptions");
   }
 
@@ -878,13 +940,17 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
     }
   }
 
-  for (const token of nativeTokens) {
-    providerRequestCount += 1;
-    try {
-      await sendNativeExpoAlert(token, exactBookingReference, notification);
-      successfulRequestCount += 1;
-    } catch {
-      // Native delivery is best-effort and never rolls back the saved update.
+  if (nativeAudience) {
+    for (const token of nativeAudience.tokens) {
+      providerRequestCount += 1;
+      try {
+        await sendNativeExpoAlert(token, nativeAudience.publicBookingReference, notification);
+        successfulRequestCount += 1;
+        await recordNativeDeliveryHealth(client, token);
+      } catch (error) {
+        await recordNativeDeliveryHealth(client, token, error);
+        // Native delivery is best-effort and never rolls back the saved update.
+      }
     }
   }
 

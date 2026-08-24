@@ -438,6 +438,64 @@ try {
       "an invalid plate must fail closed to the existing generic Customer alert",
     );
 
+    for (const expectedTitle of [
+      "Driver on the way",
+      "Driver arrived",
+      "Passenger onboard",
+    ]) {
+      await helper.__testSendNativeExpoAlert(
+        "ExpoPushToken[customer_native_guard_1]",
+        "10899",
+        {
+          actor_role: "driver",
+          booking_reference: "ADM-20260823123045",
+          delivery_surface: "customer_app",
+          safe_title: expectedTitle,
+          workflow_area: "driver_status_customer_in_app",
+        },
+        "9696",
+      );
+      assert.equal(exactExpoBody.data.booking_reference, "10899");
+      assert.equal(exactExpoBody.title, expectedTitle);
+      assert.equal(exactExpoBody.body, "Car plate 9696. Open Prestige SG to review.");
+      assert.equal(JSON.stringify(exactExpoBody).includes("ADM-20260823123045"), false);
+      assertExcludes(
+        JSON.stringify(exactExpoBody),
+        ["87576969", "SOH", "AVF", "payout", "invoice", "payment", "internal note"],
+        `native ${expectedTitle} lock-screen payload`,
+      );
+    }
+
+    await helper.__testSendNativeExpoAlert(
+      "ExpoPushToken[customer_native_guard_1]",
+      "10899",
+      {
+        actor_role: "driver",
+        booking_reference: "ADM-20260823123045",
+        delivery_surface: "customer_app",
+        safe_title: "Driver on the way",
+        workflow_area: "customer_app_updates",
+      },
+      "9696",
+    );
+    assert.equal(exactExpoBody.title, "Prestige Limo booking update");
+    assert.equal(exactExpoBody.body, "A booking update is ready. Open Prestige SG to review.");
+
+    await helper.__testSendNativeExpoAlert(
+      "ExpoPushToken[customer_native_guard_1]",
+      "10899",
+      {
+        actor_role: "driver",
+        booking_reference: "ADM-20260823123045",
+        delivery_surface: "customer_app",
+        safe_title: "Completed",
+        workflow_area: "driver_status_customer_in_app",
+      },
+      "9696",
+    );
+    assert.equal(exactExpoBody.title, "Prestige Limo booking update");
+    assert.equal(exactExpoBody.body, "A booking update is ready. Open Prestige SG to review.");
+
     global.fetch = async () => ({
       ok: true,
       async json() {

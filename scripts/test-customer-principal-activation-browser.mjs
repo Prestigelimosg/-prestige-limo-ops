@@ -57,6 +57,9 @@ async function main() {
       client.send("Page.enable"),
       client.send("Runtime.enable"),
       client.send("Network.enable"),
+      client.send("Fetch.enable", {
+        patterns: [{ requestStage: "Request", urlPattern: "*/api/customer-principal-access" }],
+      }),
     ]);
 
     const evaluate = async (expression) => {
@@ -76,6 +79,28 @@ async function main() {
       if (requestUrl.pathname === "/api/customer-principal-access") {
         principalRequests.push(request.method || "GET");
       }
+    });
+
+    client.on("Fetch.requestPaused", ({ requestId, request }) => {
+      void (async () => {
+        let body = null;
+        try {
+          body = JSON.parse(request.postData || "");
+        } catch {}
+        if (request.method === "POST" && body?.action === "start_activation") {
+          await client.send("Fetch.fulfillRequest", {
+            body: Buffer.from(JSON.stringify({
+              data: { challenge_id: "00000000-0000-4000-8000-000000000001" },
+              ok: true,
+            })).toString("base64"),
+            requestId,
+            responseCode: 200,
+            responseHeaders: [{ name: "content-type", value: "application/json; charset=utf-8" }],
+          });
+          return;
+        }
+        await client.send("Fetch.failRequest", { errorReason: "BlockedByClient", requestId });
+      })();
     });
 
     const activationUrl = new URL("/customer-access/activate", appUrl);
@@ -131,6 +156,82 @@ async function main() {
     })()`);
     assert.equal(missingInviteDisabled, true);
     assert.deepEqual(principalRequests, [], "Missing invitation rendering must not call the principal API.");
+
+    reporter.step("reproducing the Customer app foreground reload after the email challenge starts");
+    await navigateWithLoadEvent(client, activationUrl.toString());
+    await waitForCondition(
+      () => evaluate(`(() => {
+        const button = [...document.querySelectorAll("button")]
+          .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
+        return button?.disabled === false;
+      })()`),
+      10000,
+      "enabled invitation verification button before challenge",
+    );
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")]
+        .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
+      button.click();
+    })()`);
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("One-time email code")`),
+      10000,
+      "activation code and PIN step",
+    );
+    assert.deepEqual(principalRequests, ["POST"], "The safe diagnostic must start exactly one local challenge.");
+
+    await evaluate(`(() => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      const values = ["244430", "123456", "123456"];
+      [...document.querySelectorAll("input")].forEach((input, index) => {
+        setValue.call(input, values[index]);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    })()`);
+
+    await navigateWithLoadEvent(client, activationUrl.toString());
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("One-time email code")`),
+      10000,
+      "resumed activation code and PIN step after foreground reload",
+    );
+    const resumedState = await evaluate(`(() => {
+      const storage = window.localStorage.getItem("prestige-customer-activation-resume-v1") || "";
+      return {
+        fieldValues: [...document.querySelectorAll("input")].map((input) => input.value),
+        hasCreateAccess: document.body.innerText.includes("Create secure access"),
+        hasVerifyInvite: document.body.innerText.includes("Verify invited email"),
+        storageContainsInvitation: storage.includes(${JSON.stringify(diagnosticInvitation)}),
+        storageContainsOtpOrPin: storage.includes("244430") || storage.includes("123456"),
+      };
+    })()`);
+    assert.deepEqual(resumedState, {
+      fieldValues: ["", "", ""],
+      hasCreateAccess: true,
+      hasVerifyInvite: false,
+      storageContainsInvitation: false,
+      storageContainsOtpOrPin: false,
+    });
+    assert.deepEqual(principalRequests, ["POST"], "Foreground resume must not send another email challenge.");
+
+    await evaluate(`(() => {
+      const key = "prestige-customer-activation-resume-v1";
+      const stored = JSON.parse(window.localStorage.getItem(key));
+      window.localStorage.setItem(key, JSON.stringify({ ...stored, expiresAt: Date.now() - 1 }));
+    })()`);
+    await navigateWithLoadEvent(client, activationUrl.toString());
+    await waitForCondition(
+      () => evaluate(`document.body.innerText.includes("Your email code expired. Verify invited email to request a new one.")`),
+      10000,
+      "expired activation challenge recovery",
+    );
+    const expiredState = await evaluate(`(() => ({
+      resumeCleared: window.localStorage.getItem("prestige-customer-activation-resume-v1") === null,
+      verifyInviteEnabled: [...document.querySelectorAll("button")]
+        .some((candidate) => candidate.textContent?.trim() === "Verify invited email" && !candidate.disabled),
+    }))()`);
+    assert.deepEqual(expiredState, { resumeCleared: true, verifyInviteEnabled: true });
+    assert.deepEqual(principalRequests, ["POST"], "Expiry recovery must not send another email challenge.");
     console.log(JSON.stringify(reporter.summary({ ok: true }), null, 2));
     console.log("Customer principal activation hydration browser guard passed.");
   } finally {

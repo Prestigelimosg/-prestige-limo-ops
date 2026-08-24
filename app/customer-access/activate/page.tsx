@@ -4,6 +4,65 @@ import { useEffect, useState } from "react";
 
 type Step = "invite" | "verify" | "complete";
 
+type ActivationResume = {
+  challengeId: string;
+  expiresAt: number;
+  invitationFingerprint: string;
+  version: 1;
+};
+
+const activationResumeStorageKey = "prestige-customer-activation-resume-v1";
+const customerEmailChallengeLifetimeMs = 10 * 60 * 1000;
+const challengeIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function invitationFingerprint(invitation: string) {
+  try {
+    const digest = await window.crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(invitation),
+    );
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+function readActivationResume(): ActivationResume | null {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(activationResumeStorageKey) || "null");
+    if (
+      parsed?.version !== 1 ||
+      !challengeIdPattern.test(parsed.challengeId) ||
+      !Number.isFinite(parsed.expiresAt) ||
+      !/^[0-9a-f]{64}$/.test(parsed.invitationFingerprint)
+    ) return null;
+    return parsed as ActivationResume;
+  } catch {
+    return null;
+  }
+}
+
+function clearActivationResume() {
+  try {
+    window.localStorage.removeItem(activationResumeStorageKey);
+  } catch {}
+}
+
+async function saveActivationResume(invitation: string, challengeId: string) {
+  if (!challengeIdPattern.test(challengeId)) return;
+  const fingerprint = await invitationFingerprint(invitation);
+  if (!fingerprint) return;
+  const resume: ActivationResume = {
+    challengeId,
+    expiresAt: Date.now() + customerEmailChallengeLifetimeMs,
+    invitationFingerprint: fingerprint,
+    version: 1,
+  };
+  try {
+    window.localStorage.setItem(activationResumeStorageKey, JSON.stringify(resume));
+  } catch {}
+}
+
 function installationId() {
   const nativeInstallationId = (
     window as Window & { __prestigeCustomerInstallationId?: string }
@@ -27,6 +86,7 @@ export default function CustomerAccessActivationPage() {
   const [busy, setBusy] = useState(false);
   const [invitation, setInvitation] = useState("");
   const [invitationLoaded, setInvitationLoaded] = useState(false);
+  const [activationResumeLoaded, setActivationResumeLoaded] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -37,11 +97,42 @@ export default function CustomerAccessActivationPage() {
   }, []);
 
   useEffect(() => {
-    if (!invitationLoaded || invitation) return;
-    const timer = window.setTimeout(() => {
-      setMessage("This Customer access invitation is missing or invalid.");
-    }, 0);
-    return () => window.clearTimeout(timer);
+    if (!invitationLoaded) return;
+    let cancelled = false;
+
+    void (async () => {
+      if (!invitation) {
+        if (!cancelled) {
+          setMessage("This Customer access invitation is missing or invalid.");
+          setActivationResumeLoaded(true);
+        }
+        return;
+      }
+
+      const stored = readActivationResume();
+      const fingerprint = await invitationFingerprint(invitation);
+      if (cancelled) return;
+
+      if (
+        stored &&
+        stored.expiresAt > Date.now() &&
+        fingerprint && stored.invitationFingerprint === fingerprint
+      ) {
+        setChallengeId(stored.challengeId);
+        setStep("verify");
+        setMessage("Continue with the email code already sent to your invited email.");
+      } else {
+        if (stored) clearActivationResume();
+        if (stored?.expiresAt && stored.expiresAt <= Date.now()) {
+          setMessage("Your email code expired. Verify invited email to request a new one.");
+        }
+      }
+      setActivationResumeLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [invitation, invitationLoaded]);
 
   async function requestCode() {
@@ -59,6 +150,7 @@ export default function CustomerAccessActivationPage() {
         throw new Error(payload?.error || "Verification code could not be sent.");
       }
       setChallengeId(payload.data.challenge_id);
+      await saveActivationResume(invitation, payload.data.challenge_id);
       setStep("verify");
       setMessage("A one-time verification code was sent to your invited email.");
     } catch (error) {
@@ -92,6 +184,7 @@ export default function CustomerAccessActivationPage() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || payload?.ok !== true) throw new Error(payload?.error || "Activation failed safely.");
+      clearActivationResume();
       setStep("complete");
       setMessage("Account ready. Open Prestige SG and enable Face ID.");
       window.setTimeout(() => window.location.assign("/my-bookings"), 700);
@@ -110,7 +203,7 @@ export default function CustomerAccessActivationPage() {
 
       <section className="mt-8 rounded-2xl border border-slate-200 p-5 shadow-sm">
         {step === "invite" ? (
-          <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy || !invitationLoaded || !invitation} onClick={requestCode} type="button">
+          <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy || !invitationLoaded || !activationResumeLoaded || !invitation} onClick={requestCode} type="button">
             {busy ? "Sending code…" : "Verify invited email"}
           </button>
         ) : step === "verify" ? (

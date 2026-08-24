@@ -53,6 +53,22 @@ async function writeRuntimeHarness() {
       transpileRuntimeModule(runtimeSessionMap),
     ),
     writeFile(
+      join(tempDir, "customer-principal-access.mjs"),
+      `export function resolveCustomerPrincipalSessionToken(token) {
+  return typeof token === "string" && token.startsWith("customer_principal_v1.")
+    ? { principal_id: token.slice("customer_principal_v1.".length) }
+    : null;
+}
+
+export async function assertActiveCustomerPrincipalSession(token) {
+  const context = globalThis.__prestigeCustomerPrincipalSessions?.get(token);
+  return context
+    ? { data: context, ok: true }
+    : { error: "Customer app access is required.", ok: false, status: 403 };
+}
+`,
+    ),
+    writeFile(
       join(tempDir, "customer-live-location-map-runtime.mjs"),
       transpileRuntimeModule(runtime, [
         [
@@ -66,6 +82,10 @@ async function writeRuntimeHarness() {
         [
           /from "\.\/customer-runtime-session-map";/g,
           'from "./customer-runtime-session-map.mjs";',
+        ],
+        [
+          /from "\.\/customer-principal-access";/g,
+          'from "./customer-principal-access.mjs";',
         ],
       ]),
     ),
@@ -294,6 +314,193 @@ try {
   assert.equal("driver_job_link_id" in success.body.active_driver_marker, false);
   assert.equal("raw_driver_token" in success.body.active_driver_marker, false);
   assert.equal("customer_price" in success.body.active_driver_marker, false);
+
+  const principalBookingReference = "10901";
+  const principalBooking = {
+    booking_reference: principalBookingReference,
+    booker_id: 26,
+    company_id: 53,
+    customer_id: "LEGACY-ACCOUNT-NOT-USED",
+    route_type: "TRF",
+    service_type: "Transfer",
+    traveler_id: 40,
+  };
+  const principalLatestPosition = {
+    ...safeLatestPosition,
+    booking_reference: principalBookingReference,
+  };
+  const bossPrincipalToken = "customer_principal_v1.boss-live-map";
+  const paPrincipalToken = "customer_principal_v1.pa-live-map";
+  const wrongTravelerPrincipalToken = "customer_principal_v1.wrong-traveler-live-map";
+  const wrongBookerPrincipalToken = "customer_principal_v1.wrong-booker-live-map";
+  const wrongCompanyPrincipalToken = "customer_principal_v1.wrong-company-live-map";
+  const inactivePrincipalToken = "customer_principal_v1.inactive-live-map";
+  const principalMembership = {
+    booker_id: 26,
+    company_id: 53,
+    customer_account_reference: "PRINCIPAL-ACCOUNT-192",
+    traveler_id: 40,
+    verified_boss_name: "Native Push QA Boss",
+  };
+  globalThis.__prestigeCustomerPrincipalSessions = new Map([
+    [
+      bossPrincipalToken,
+      {
+        memberships: [{ ...principalMembership, membership_role: "boss" }],
+        normalized_email: "boss@example.test",
+        principal_role: "boss",
+      },
+    ],
+    [
+      paPrincipalToken,
+      {
+        memberships: [{ ...principalMembership, membership_role: "managing_pa" }],
+        normalized_email: "pa@example.test",
+        principal_role: "pa",
+      },
+    ],
+    [
+      wrongTravelerPrincipalToken,
+      {
+        memberships: [
+          {
+            ...principalMembership,
+            membership_role: "managing_pa",
+            traveler_id: 41,
+            verified_boss_name: "Different Traveller",
+          },
+        ],
+        normalized_email: "wrong@example.test",
+        principal_role: "pa",
+      },
+    ],
+    [
+      wrongBookerPrincipalToken,
+      {
+        memberships: [
+          {
+            ...principalMembership,
+            booker_id: 27,
+            membership_role: "managing_pa",
+          },
+        ],
+        normalized_email: "wrong-booker@example.test",
+        principal_role: "pa",
+      },
+    ],
+    [
+      wrongCompanyPrincipalToken,
+      {
+        memberships: [
+          {
+            ...principalMembership,
+            company_id: 54,
+            membership_role: "managing_pa",
+          },
+        ],
+        normalized_email: "wrong-company@example.test",
+        principal_role: "pa",
+      },
+    ],
+  ]);
+  const principalClient = createQueryClient({
+    bookingRows: [principalBooking],
+    latestRows: [principalLatestPosition],
+    settingRow: baseSetting({ bookingReference: principalBookingReference }),
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(principalClient);
+  const principalEnv = { PRESTIGE_DRIVER_LIVE_LOCATION_MODE: "runtime" };
+
+  for (const [role, principalToken] of [
+    ["Boss", bossPrincipalToken],
+    ["PA", paPrincipalToken],
+  ]) {
+    const principalRead = await handleCustomerLiveLocationMapRuntimeRequest({
+      boundary,
+      env: principalEnv,
+      request: customerRequest({
+        bookingReference: principalBookingReference,
+        origin,
+        sessionToken: principalToken,
+      }),
+    });
+    assert.equal(
+      principalRead.status,
+      200,
+      `${role} principal membership must read only its exact OTW/OTS booking location.`,
+    );
+    assert.equal(principalRead.body.ok, true);
+    assert.equal(principalRead.body.marker_count, 1);
+    assert.equal(principalRead.body.customerVisible, true);
+    assert.equal(principalRead.body.booking_reference_label, "scoped");
+  }
+
+  for (const wrongPrincipalToken of [
+    wrongTravelerPrincipalToken,
+    wrongBookerPrincipalToken,
+    wrongCompanyPrincipalToken,
+  ]) {
+    const wrongPrincipalRead = await handleCustomerLiveLocationMapRuntimeRequest({
+      boundary,
+      env: principalEnv,
+      request: customerRequest({
+        bookingReference: principalBookingReference,
+        origin,
+        sessionToken: wrongPrincipalToken,
+      }),
+    });
+    assert.equal(wrongPrincipalRead.status, 403);
+    assert.equal(
+      wrongPrincipalRead.body.reason,
+      "customer_live_location_map_booking_account_scope_blocked",
+    );
+    assert.equal(wrongPrincipalRead.body.customerVisible, false);
+  }
+
+  const inactivePrincipalRead = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: principalEnv,
+    request: customerRequest({
+      bookingReference: principalBookingReference,
+      origin,
+      sessionToken: inactivePrincipalToken,
+    }),
+  });
+  assert.equal(inactivePrincipalRead.status, 403);
+  assert.equal(
+    inactivePrincipalRead.body.reason,
+    "customer_live_location_map_customer_auth_blocked",
+  );
+  assert.equal(inactivePrincipalRead.body.customerVisible, false);
+
+  const principalPobClient = createQueryClient({
+    bookingRows: [principalBooking],
+    latestRows: [principalLatestPosition],
+    settingRow: baseSetting({ bookingReference: principalBookingReference }),
+    statusRows: [
+      {
+        booking_reference: principalBookingReference,
+        occurred_at: "2026-08-24T10:00:00.000Z",
+        status_value: "pob",
+      },
+    ],
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(principalPobClient);
+  const principalAfterPob = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: principalEnv,
+    request: customerRequest({
+      bookingReference: principalBookingReference,
+      origin,
+      sessionToken: bossPrincipalToken,
+    }),
+  });
+  assert.equal(principalAfterPob.status, 403);
+  assert.equal(
+    principalAfterPob.body.reason,
+    "customer_live_location_map_trip_tracking_closed",
+  );
+  assert.equal(principalAfterPob.body.customerVisible, false);
 
   const wrongCustomerClient = createQueryClient({
     accessRows: [

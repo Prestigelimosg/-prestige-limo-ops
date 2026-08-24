@@ -11,6 +11,10 @@ import {
   isCustomerPortalAccessToken,
   resolveCustomerPortalAccessSession,
 } from "./customer-portal-access-link";
+import {
+  assertActiveCustomerPrincipalSession,
+  resolveCustomerPrincipalSessionToken,
+} from "./customer-principal-access";
 import { resolveExactTwoCustomerRuntimeSessionMap } from "./customer-runtime-session-map";
 
 export const customerLiveLocationMapRuntimeVersion =
@@ -19,6 +23,23 @@ export const customerLiveLocationMapRuntimeVersion =
 type CustomerLiveLocationMapEnv = Record<string, string | undefined>;
 type UnknownRecord = Record<string, unknown>;
 type CustomerLiveLocationMapClient = Pick<SupabaseClient, "from">;
+
+type CustomerRuntimePrincipalMembershipScope = {
+  accountReference: string;
+  bookerId: number;
+  companyId: number;
+  travelerId: number;
+};
+
+type CustomerRuntimeScope =
+  | {
+      accountReference: string;
+      kind: "legacy-account";
+    }
+  | {
+      kind: "principal-memberships";
+      memberships: CustomerRuntimePrincipalMembershipScope[];
+    };
 
 type CustomerLiveLocationMapBoundary = {
   bookingReferencePresent: boolean;
@@ -166,6 +187,49 @@ function asFiniteNumber(value: unknown) {
   }
 
   return null;
+}
+
+function positiveInteger(value: unknown) {
+  const parsed = asFiniteNumber(value);
+
+  return parsed !== null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function principalMembershipScopes(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const memberships = value
+    .map((entry) => {
+      const row = asRecord(entry);
+      const accountReference = safeReference(row.customer_account_reference);
+      const bookerId = positiveInteger(row.booker_id);
+      const companyId = positiveInteger(row.company_id);
+      const travelerId = positiveInteger(row.traveler_id);
+
+      if (!accountReference || !bookerId || !companyId || !travelerId) {
+        return null;
+      }
+
+      return {
+        accountReference,
+        bookerId,
+        companyId,
+        travelerId,
+      } satisfies CustomerRuntimePrincipalMembershipScope;
+    })
+    .filter((entry): entry is CustomerRuntimePrincipalMembershipScope => entry !== null);
+
+  return memberships.filter(
+    (membership, index) =>
+      memberships.findIndex(
+        (candidate) =>
+          candidate.companyId === membership.companyId &&
+          candidate.bookerId === membership.bookerId &&
+          candidate.travelerId === membership.travelerId,
+      ) === index,
+  );
 }
 
 function boundedOptionalNumber(value: unknown, min: number, max: number) {
@@ -458,7 +522,7 @@ async function resolveCustomerRuntimeAccountReference({
   request: Request;
 }): Promise<
   | {
-      accountReference: string;
+      customerScope: CustomerRuntimeScope;
       ok: true;
     }
   | {
@@ -469,6 +533,36 @@ async function resolveCustomerRuntimeAccountReference({
 > {
   const { sessionToken } = customerHeaders(request);
   const accountAllowlist = controlledCustomerRuntimeAccountAllowlist(env);
+
+  if (resolveCustomerPrincipalSessionToken(sessionToken)) {
+    const principalSession = await assertActiveCustomerPrincipalSession(sessionToken);
+
+    if (!principalSession.ok) {
+      return {
+        ok: false,
+        reason: "customer_live_location_map_customer_auth_blocked",
+        status: 403,
+      };
+    }
+
+    const memberships = principalMembershipScopes(principalSession.data.memberships);
+
+    if (memberships.length === 0) {
+      return {
+        ok: false,
+        reason: "customer_live_location_map_customer_auth_blocked",
+        status: 403,
+      };
+    }
+
+    return {
+      customerScope: {
+        kind: "principal-memberships",
+        memberships,
+      },
+      ok: true,
+    };
+  }
 
   if (isCustomerPortalAccessToken(sessionToken)) {
     const portalAccessSession = resolveCustomerPortalAccessSession(sessionToken);
@@ -497,7 +591,10 @@ async function resolveCustomerRuntimeAccountReference({
     }
 
     return {
-      accountReference: portalAccessSession.data.customer_account_reference,
+      customerScope: {
+        accountReference: portalAccessSession.data.customer_account_reference,
+        kind: "legacy-account",
+      },
       ok: true,
     };
   }
@@ -545,7 +642,10 @@ async function resolveCustomerRuntimeAccountReference({
     }
 
     return {
-      accountReference: mappedSession.customer_account_reference,
+      customerScope: {
+        accountReference: mappedSession.customer_account_reference,
+        kind: "legacy-account",
+      },
       ok: true,
     };
   }
@@ -599,7 +699,10 @@ async function resolveCustomerRuntimeAccountReference({
   }
 
   return {
-    accountReference,
+    customerScope: {
+      accountReference,
+      kind: "legacy-account",
+    },
     ok: true,
   };
 }
@@ -623,20 +726,20 @@ async function readAppSideRuntimePolicy({
     };
   }
 
-  const customerAccount = await resolveCustomerRuntimeAccountReference({
+  const customerIdentity = await resolveCustomerRuntimeAccountReference({
     client,
     env,
     request,
   });
 
-  if (!customerAccount.ok) {
-    return customerAccount;
+  if (!customerIdentity.ok) {
+    return customerIdentity;
   }
 
   const bookingScope = await verifyCustomerBookingScope({
-    accountReference: customerAccount.accountReference,
     bookingReference,
     client,
+    customerScope: customerIdentity.customerScope,
   });
 
   if (!bookingScope.ok) {
@@ -655,7 +758,7 @@ async function readAppSideRuntimePolicy({
     return {
       ok: true,
       policy: {
-        accountReference: customerAccount.accountReference,
+        accountReference: bookingScope.accountReference,
         allowedBookingReferences: [bookingReference],
         source: "app_side_runtime_setting",
         staleAfterSeconds: positiveIntegerEnv(
@@ -672,7 +775,7 @@ async function readAppSideRuntimePolicy({
   return {
     ok: true,
     policy: {
-      accountReference: customerAccount.accountReference,
+      accountReference: bookingScope.accountReference,
       allowedBookingReferences: [bookingReference],
       source: "app_side_runtime_setting",
       staleAfterSeconds:
@@ -750,15 +853,16 @@ async function verifyCustomerTrackingStatus({
 }
 
 async function verifyCustomerBookingScope({
-  accountReference,
   bookingReference,
   client,
+  customerScope,
 }: {
-  accountReference: string;
   bookingReference: string;
   client: CustomerLiveLocationMapClient;
+  customerScope: CustomerRuntimeScope;
 }): Promise<
   | {
+      accountReference: string;
       ok: true;
     }
   | {
@@ -769,7 +873,9 @@ async function verifyCustomerBookingScope({
 > {
   const { data, error } = await client
     .from(bookingsTable)
-    .select("booking_reference, customer_id, route_type, service_type")
+    .select(
+      "booking_reference, customer_id, company_id, booker_id, traveler_id, route_type, service_type",
+    )
     .eq("booking_reference", bookingReference)
     .limit(5);
 
@@ -781,24 +887,38 @@ async function verifyCustomerBookingScope({
     };
   }
 
-  const booking =
+  const candidateBooking =
     (Array.isArray(data) ? data : [])
       .map(asRecord)
-      .find((row) => {
-        const matchedBookingReference = safeReference(row.booking_reference);
-        const matchedAccountReference = safeReference(row.customer_id);
-
-        return (
-          matchedBookingReference === bookingReference &&
-          matchedAccountReference === accountReference
-        );
-      }) || {};
+      .find((row) => safeReference(row.booking_reference) === bookingReference) || {};
+  const matchedMembership =
+    customerScope.kind === "principal-memberships"
+      ? customerScope.memberships.find(
+          (membership) =>
+            membership.companyId === positiveInteger(candidateBooking.company_id) &&
+            membership.bookerId === positiveInteger(candidateBooking.booker_id) &&
+            membership.travelerId === positiveInteger(candidateBooking.traveler_id),
+        ) || null
+      : null;
+  const booking =
+    customerScope.kind === "legacy-account"
+      ? safeReference(candidateBooking.customer_id) === customerScope.accountReference
+        ? candidateBooking
+        : {}
+      : matchedMembership
+        ? candidateBooking
+        : {};
   const matchedBookingReference = safeReference(booking.booking_reference);
-  const matchedAccountReference = safeReference(booking.customer_id);
+  const matchedAccountReference =
+    customerScope.kind === "legacy-account"
+      ? safeReference(booking.customer_id)
+      : matchedMembership?.accountReference || "";
 
   if (
     matchedBookingReference !== bookingReference ||
-    matchedAccountReference !== accountReference
+    !matchedAccountReference ||
+    (customerScope.kind === "legacy-account" &&
+      matchedAccountReference !== customerScope.accountReference)
   ) {
     return {
       ok: false,
@@ -816,6 +936,7 @@ async function verifyCustomerBookingScope({
   }
 
   return {
+    accountReference: matchedAccountReference,
     ok: true,
   };
 }

@@ -1608,7 +1608,7 @@ export default function CustomerPortalPage() {
               <p className="truncate text-sm font-semibold uppercase text-slate-600">{companyName}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {customerPrincipalAccess.status !== "checking" ? (
+              {portalBookingsLoadState === "ready" && customerPrincipalAccess.status !== "checking" ? (
                 <div className="flex shrink-0 items-center gap-1.5" data-customer-alerts-control="true">
                   <span className="text-[11px] font-semibold text-slate-600">Driver / Admin alerts</span>
                   <button

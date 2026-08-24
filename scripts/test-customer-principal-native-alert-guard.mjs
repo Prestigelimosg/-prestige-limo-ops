@@ -122,8 +122,8 @@ assert.match(myBookings, /data-customer-managed-boss-selector/);
 assert.match(myBookings, /data-customer-shared-conversation/);
 assert.match(
   myBookings,
-  /customerPrincipalAccess\.status !== "checking"[\s\S]*?data-customer-alerts-control="true"/,
-  "The one established alerts switch must remain visible for authenticated PA, Boss, and legacy Customer access",
+  /portalBookingsLoadState === "ready"\s*&&\s*customerPrincipalAccess\.status !== "checking"[\s\S]*?data-customer-alerts-control="true"/,
+  "The one established alerts switch must remain visible for authenticated PA, Boss, and legacy Customer access, but never inside a Face-ID-unlocked shell whose server session is blocked",
 );
 assert.doesNotMatch(
   myBookings,

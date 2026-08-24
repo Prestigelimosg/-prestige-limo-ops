@@ -12,6 +12,7 @@ export default function CustomerAccessSignInPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
   const installationId = useMemo(() => {
     if (typeof window === "undefined") return "";
     const nativeInstallationId = (
@@ -83,29 +84,72 @@ export default function CustomerAccessSignInPage() {
     }
   }
 
+  function continueWithEmail() {
+    if (!email.trim()) {
+      setMessage("Enter your verified email first.");
+      return;
+    }
+    setEmail(email.trim());
+    setMessage("");
+    setEmailConfirmed(true);
+  }
+
+  function changeEmail() {
+    setPin("");
+    setCode("");
+    setChallengeId("");
+    setMode("login");
+    setMessage("");
+    setEmailConfirmed(false);
+  }
+
   return (
     <main className="mx-auto min-h-screen max-w-xl bg-white px-5 py-12 text-slate-950">
       <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-700">Prestige SG</p>
       <h1 className="mt-3 text-3xl font-bold">Customer sign in</h1>
       <p className="mt-2 text-slate-600">Face ID is the normal app unlock. Use your 6-digit PIN only when needed.</p>
       <section className="mt-8 space-y-4 rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <label className="block text-sm font-semibold">Verified email
-          <input className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
-        </label>
-        {mode !== "login" ? (
-          <label className="block text-sm font-semibold">One-time email code
-            <input className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" inputMode="numeric" maxLength={6} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} value={code} />
-          </label>
-        ) : null}
-        <label className="block text-sm font-semibold">{mode === "recovery" ? "Create new 6-digit PIN" : "6-digit PIN"}
-          <input className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" inputMode="numeric" maxLength={6} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} type="password" value={pin} />
-        </label>
-        <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy} onClick={submit} type="button">
-          {busy ? "Checking…" : mode === "recovery" ? "Reset PIN and sign in" : "Sign in"}
-        </button>
-        {mode === "login" ? (
-          <button className="w-full rounded-xl border border-slate-300 px-4 py-3 font-semibold" disabled={busy} onClick={recover} type="button">Forgot PIN</button>
-        ) : null}
+        {!emailConfirmed ? (
+          <div className="space-y-4" data-customer-sign-in-email-step="true">
+            <label className="block text-sm font-semibold">Verified email
+              <input
+                autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect="off"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3"
+                onChange={(event) => setEmail(event.target.value)}
+                spellCheck={false}
+                type="email"
+                value={email}
+              />
+            </label>
+            <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white" onClick={continueWithEmail} type="button">Continue</button>
+          </div>
+        ) : (
+          <div className="space-y-4" data-customer-sign-in-credentials-step="true">
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Verified email</p>
+                <p className="break-all text-sm font-semibold">{email}</p>
+              </div>
+              <button className="shrink-0 text-sm font-semibold text-sky-700" disabled={busy} onClick={changeEmail} type="button">Change email</button>
+            </div>
+            {mode !== "login" ? (
+              <label className="block text-sm font-semibold">One-time email code
+                <input className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" inputMode="numeric" maxLength={6} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} value={code} />
+              </label>
+            ) : null}
+            <label className="block text-sm font-semibold">{mode === "recovery" ? "Create new 6-digit PIN" : "6-digit PIN"}
+              <input autoComplete="current-password" className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" inputMode="numeric" maxLength={6} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} type="password" value={pin} />
+            </label>
+            <button className="w-full rounded-xl bg-slate-950 px-4 py-3 font-semibold text-white disabled:opacity-50" disabled={busy} onClick={submit} type="button">
+              {busy ? "Checking…" : mode === "recovery" ? "Reset PIN and sign in" : "Sign in"}
+            </button>
+            {mode === "login" ? (
+              <button className="w-full rounded-xl border border-slate-300 px-4 py-3 font-semibold" disabled={busy} onClick={recover} type="button">Forgot PIN</button>
+            ) : null}
+          </div>
+        )}
         {message ? <p className="rounded-xl bg-slate-100 px-4 py-3 text-sm" role="status">{message}</p> : null}
       </section>
     </main>

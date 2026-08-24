@@ -208,9 +208,9 @@ async function main() {
         request_review_status: "approved",
         short_notice_review_status: "Not Required",
         driver_id: null,
-        driver_name: null,
-        driver_contact: null,
-        driver_plate_number: null,
+        driver_name: "ACKNOWLEDGED LINK DRIVER",
+        driver_contact: "+65 8999 1099",
+        driver_plate_number: "SLA1099A",
         created_at: "2026-06-25T02:00:00.000Z",
         updated_at: "2026-06-25T02:00:00.000Z",
         companies: { company_name: "Type 2 Customer", domain: "type2.example.com" },
@@ -264,6 +264,38 @@ async function main() {
             },
             version: "type2-assignment-browser-mock"
           }), { headers: { "Content-Type": "application/json" }, status: 200 });
+        }
+
+        if (method === "GET" && String(url).includes("/api/admin-driver-job-links")) {
+          const requestUrl = new URL(String(url), window.location.href);
+          const bookingReference = requestUrl.searchParams.get("booking_reference");
+
+          if (bookingReference === type2Booking.booking_reference) {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+            return new Response(JSON.stringify({
+              links: [{
+                acknowledged_at: "2026-06-25T02:03:00.000Z",
+                booking_reference: type2Booking.booking_reference,
+                expires_at: "2030-06-30T14:00:00+08:00",
+                id: "type2-existing-link-1",
+                issued_at: "2026-06-25T02:02:00.000Z",
+                link_status: "active",
+                revoked_at: null,
+                safe_summary: {
+                  assigned_driver: "ACKNOWLEDGED LINK DRIVER",
+                  assigned_driver_contact: "+65 8999 1099",
+                  assigned_driver_plate: "SLA1099A",
+                  vehicle: "Viano"
+                }
+              }],
+              ok: true
+            }), { headers: { "Content-Type": "application/json" }, status: 200 });
+          }
+
+          return new Response(JSON.stringify({ links: [], ok: true }), {
+            headers: { "Content-Type": "application/json" },
+            status: 200
+          });
         }
 
         if (String(url).includes("/api/admin-bookings")) {
@@ -529,6 +561,47 @@ async function main() {
     assert.equal(selectedType2DriverState.assignmentLabel, "Save Driver Assignment");
     assert.equal(selectedType2DriverState.primaryLabel, "Save Driver Assignment above");
     assert.equal(selectedType2DriverState.primaryDisabled, true);
+
+    await evaluate(`(() => {
+      const bookingsTab = document.querySelector("button[data-app-tab='bookings']")
+        || [...document.querySelectorAll("button[role='tab']")]
+          .find((button) => button.querySelector("[data-app-tab-label='true']")?.textContent.trim() === "Bookings");
+      bookingsTab?.click();
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await evaluate(`(() => {
+      const dispatchTab = document.querySelector("button[data-app-tab='dispatch']")
+        || [...document.querySelectorAll("button[role='tab']")]
+          .find((button) => button.querySelector("[data-app-tab-label='true']")?.textContent.trim() === "Dispatch");
+      dispatchTab?.click();
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const selectedType2DriverFieldsAfterLinkRefresh = await evaluate(`(() => {
+      const normalizeLabel = (value) => String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
+      const getField = (labelText) => {
+        const label = [...document.querySelectorAll("label")].find(
+          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        const field = label?.querySelector("input, select");
+        return field && "value" in field ? field.value : "";
+      };
+      return {
+        contact: getField("Driver Contact"),
+        driverId: getField("Driver"),
+        name: getField("Driver Name"),
+        plate: getField("Driver Car Plate"),
+      };
+    })()`);
+    assert.deepEqual(
+      selectedType2DriverFieldsAfterLinkRefresh,
+      {
+        contact: "+65 8111 7301",
+        driverId: "7301",
+        name: "TYPE 2 VERIFIED DRIVER",
+        plate: "SLC7301T",
+      },
+      "an existing Driver Job Link refresh must not overwrite the Admin's unsaved verified profile selection",
+    );
 
     await evaluate(`(() => {
       window.__type2AssignmentCalendarCalls = [];

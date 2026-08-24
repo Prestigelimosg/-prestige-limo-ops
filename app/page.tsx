@@ -4540,6 +4540,39 @@ function isAssignableDriver(driver: Pick<DriverRecord, "availability_status"> | 
   return !isInactiveDriver(driver);
 }
 
+function adminDispatchHasUnsavedVerifiedDriverProfileSelection(
+  booking: BookingForm,
+  baselineBooking: BookingForm | null | undefined,
+  driverRecords: DriverAssignmentDisplayRecord[],
+) {
+  if (!baselineBooking) {
+    return false;
+  }
+
+  const selectedDriver = driverRecords.find(
+    (driver) => String(driver.id) === clean(booking.driverId),
+  );
+
+  if (!selectedDriver || isInactiveDriver(selectedDriver)) {
+    return false;
+  }
+
+  const currentSignature = draftDriverAssignmentSignature(booking);
+  const verifiedProfileSignature = draftDriverAssignmentSignature({
+    driverContact: clean(selectedDriver.contact_number),
+    driverId: String(selectedDriver.id),
+    driverName: clean(selectedDriver.driver_name),
+    driverPlate: clean(selectedDriver.plate_number),
+    driverVehicleModel: clean(selectedDriver.vehicle_type),
+  });
+
+  return Boolean(
+    currentSignature &&
+      currentSignature === verifiedProfileSignature &&
+      currentSignature !== draftDriverAssignmentSignature(baselineBooking),
+  );
+}
+
 function hasBookingDriver(bookingRecord: Pick<BookingRecord, "driver_id" | "driver_name">) {
   return Boolean(bookingRecord.driver_id || clean(bookingRecord.driver_name));
 }
@@ -14688,6 +14721,7 @@ export default function Home() {
   const [driverAssignmentDisplayDrivers, setDriverAssignmentDisplayDrivers] = useState<
     DriverAssignmentDisplayRecord[]
   >([]);
+  const driverAssignmentDisplayDriversRef = useRef<DriverAssignmentDisplayRecord[]>([]);
   const [bookingCompletionMessages, setBookingCompletionMessages] =
     useState<Record<string, Message>>({});
   const [completedCancelHandoffBooking, setCompletedCancelHandoffBooking] =
@@ -15269,6 +15303,10 @@ export default function Home() {
   useEffect(() => {
     bookingFormRef.current = booking;
   }, [booking]);
+
+  useEffect(() => {
+    driverAssignmentDisplayDriversRef.current = driverAssignmentDisplayDrivers;
+  }, [driverAssignmentDisplayDrivers]);
 
   useEffect(() => {
     loadedBookingIdRef.current = loadedBookingId;
@@ -16729,6 +16767,16 @@ export default function Home() {
     }
 
     setBooking((currentBooking) => {
+      if (
+        adminDispatchHasUnsavedVerifiedDriverProfileSelection(
+          currentBooking,
+          loadedAdminBookingBaselineRef.current?.form,
+          driverAssignmentDisplayDriversRef.current,
+        )
+      ) {
+        return currentBooking;
+      }
+
       const nextBooking = {
         ...currentBooking,
         driverContact: driverContact || currentBooking.driverContact,
@@ -18451,13 +18499,30 @@ export default function Home() {
   const assignedDriverRecord = assignedDriverId
     ? driverAssignmentDisplayDrivers.find((driver) => String(driver.id) === assignedDriverId)
     : undefined;
-  const assignedDriverSelectValue = assignedDriverId;
   const assignedDriverIsInactive = Boolean(assignedDriverRecord && isInactiveDriver(assignedDriverRecord));
-  const showSavedAssignedDriverOption = Boolean(
-    assignedDriverId && (!assignedDriverRecord || assignedDriverIsInactive),
-  );
-  const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
   const currentDraftDriverAssignmentSignature = draftDriverAssignmentSignature(booking);
+  const assignedDriverProfileSignature = assignedDriverRecord
+    ? draftDriverAssignmentSignature({
+        driverContact: clean(assignedDriverRecord.contact_number),
+        driverId: String(assignedDriverRecord.id),
+        driverName: clean(assignedDriverRecord.driver_name),
+        driverPlate: clean(assignedDriverRecord.plate_number),
+        driverVehicleModel: clean(assignedDriverRecord.vehicle_type),
+      })
+    : "";
+  const assignedDriverMatchesVerifiedProfile = Boolean(
+    assignedDriverProfileSignature &&
+      currentDraftDriverAssignmentSignature === assignedDriverProfileSignature,
+  );
+  const showSavedAssignedDriverOption = Boolean(
+    assignedDriverId &&
+      (!assignedDriverRecord || assignedDriverIsInactive || !assignedDriverMatchesVerifiedProfile),
+  );
+  const savedAssignedDriverOptionValue = showSavedAssignedDriverOption
+    ? `saved:${assignedDriverId}`
+    : "";
+  const assignedDriverSelectValue = savedAssignedDriverOptionValue || assignedDriverId;
+  const assignedDriverPlate = clean(booking.driverPlate) || clean(assignedDriverRecord?.plate_number);
   const draftDriverAssignmentApplied = Boolean(
     currentDraftDriverAssignmentSignature &&
       currentDraftDriverAssignmentSignature === appliedDraftDriverAssignmentSignature,
@@ -22562,6 +22627,16 @@ export default function Home() {
     }
 
     setBooking((currentBooking) => {
+      if (
+        adminDispatchHasUnsavedVerifiedDriverProfileSelection(
+          currentBooking,
+          loadedAdminBookingBaselineRef.current?.form,
+          driverAssignmentDisplayDriversRef.current,
+        )
+      ) {
+        return currentBooking;
+      }
+
       const nextBooking = {
         ...currentBooking,
         driverContact: driverContact || currentBooking.driverContact,
@@ -42901,7 +42976,7 @@ export default function Home() {
                   >
                     <option value="">Select driver</option>
                     {showSavedAssignedDriverOption ? (
-                      <option disabled={assignedDriverIsInactive} value={assignedDriverId}>
+                      <option disabled value={savedAssignedDriverOptionValue}>
                         Saved: {clean(booking.driverName) || `Driver ${assignedDriverId}`}
                         {assignedDriverIsInactive ? " (inactive)" : ""}
                       </option>

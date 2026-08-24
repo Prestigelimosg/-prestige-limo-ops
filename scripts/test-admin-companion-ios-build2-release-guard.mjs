@@ -24,8 +24,8 @@ assert.equal(config.version, "1.0.0");
 assert.equal(config.ios.version, "1.0.0");
 assert.equal(
   config.ios.buildNumber,
-  "2",
-  "The approved second Admin TestFlight build number must be explicit",
+  "3",
+  "The approved third Admin TestFlight build number must be explicit",
 );
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.admin");
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Limo Ops");
@@ -44,12 +44,16 @@ assert.equal(Object.hasOwn(config.ios, "associatedDomains"), false);
 for (const phrase of [
   "Admin iOS TestFlight Build 2 Native ACK Alert (source checkpoint 2026-08-22)",
   "`ios.buildNumber` is explicitly `2`",
+  "Admin iOS TestFlight Build 3 Blank Sign-In Recovery (source checkpoint 2026-08-24)",
+  "`ios.buildNumber` advances only from processed Build 2 to `3`",
+  "`caf3f563c4505f71a850a6ac646dfce7b4e13c09`",
   "`@prestige-limo-ops/prestige-admin`",
   "`2dada379-f732-4e25-80a3-cdbbb8f52b11`",
   "`sg.prestigelimo.admin`",
   "`6803312296`",
   "existing internal `Owner Testing` group",
   "No real notification or Production subscription/data mutation",
+  "No Production data change, notification, status, message, booking, Calendar, invoice, payment, payout, PayNow, schema, environment, or external send",
 ]) {
   assert.equal(
     ledgerSource.includes(phrase),
@@ -66,4 +70,4 @@ assert.equal(
   "The Admin Build 2 release guard must run in preactivation verification",
 );
 
-console.log("Admin Companion iOS Build 2 release guard passed.");
+console.log("Admin Companion iOS Build 3 release guard passed.");

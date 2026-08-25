@@ -194,8 +194,8 @@ const guardChecks = [
     script: "scripts/test-customer-copy-multi-channel-existing-workflow-lock.mjs",
   },
   {
-    label: "admin manual Telegram copy channel guard",
-    script: "scripts/test-admin-manual-telegram-copy-channel-guard.mjs",
+    label: "Telegram application absence guard",
+    script: "scripts/test-telegram-application-absence-guard.mjs",
   },
   {
     label: "staging deployment approval packet guard",
@@ -1141,18 +1141,6 @@ const guardChecks = [
   {
     label: "SMS provider no-send approval packet guard",
     script: "scripts/test-sms-provider-no-send-approval-packet.mjs",
-  },
-  {
-    label: "Telegram no-live guard",
-    script: "scripts/test-telegram-internal-admin-alert-no-live-guard.mjs",
-  },
-  {
-    label: "Telegram internal admin alert live-send guard",
-    script: "scripts/test-telegram-internal-admin-alert-live-send-guard.mjs",
-  },
-  {
-    label: "Telegram True Live Location evidence contract guard",
-    script: "scripts/test-telegram-live-location-evidence-contract-guard.mjs",
   },
   {
     label: "Driver Location Source + POB Status evidence contract guard",

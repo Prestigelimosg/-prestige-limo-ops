@@ -412,12 +412,6 @@ const telegramBoundaryBrowserExpression = String.raw`(async () => {
     /Telegram Internal Admin Alert|MOCK-JOB-042|secure job link placeholder|Mock only — no Telegram message sent|Mock preview stays local/i;
   const telegramPreviewForbiddenControlPattern =
     /send\s*(?:telegram)?|test\s*(?:send|telegram)|telegram\s*send|sendmessage|getupdates/i;
-  const adminManualTelegramCopySelector = [
-    "[data-admin-customer-driver-details-telegram-manual-copy-action]",
-    "[data-admin-customer-driver-details-telegram-manual-copy-status]",
-    "[data-driver-job-link-telegram-manual-copy-button]",
-    "[data-driver-job-link-telegram-manual-copy-status]",
-  ].join(",");
   const controlText = (element) =>
     [
       element.textContent || "",
@@ -459,9 +453,6 @@ const telegramBoundaryBrowserExpression = String.raw`(async () => {
   const previewRect = telegramPreviewSection?.getBoundingClientRect();
   const bodyClone = document.body.cloneNode(true);
   bodyClone.querySelector("[data-telegram-alert-preview]")?.remove();
-  bodyClone
-    .querySelectorAll(adminManualTelegramCopySelector)
-    .forEach((element) => element.remove());
   const visibleText = bodyClone.innerText || "";
   const previewControls = telegramPreviewSection
     ? [...telegramPreviewSection.querySelectorAll("button,a,[role='button'],input,textarea,select,label")]
@@ -475,7 +466,6 @@ const telegramBoundaryBrowserExpression = String.raw`(async () => {
   const controls = [
     ...document.querySelectorAll("button,a,[role='button'],input,textarea,select,label"),
   ]
-    .filter((element) => !element.closest(adminManualTelegramCopySelector))
     .map(controlText)
     .filter(Boolean);
   const localStorageValues = readStorage(localStorage);
@@ -26845,7 +26835,12 @@ async function runChromeTest() {
 
         return {
           customerAppLinkLanePresent: hiddenSelectorPresent("[data-admin-customer-driver-details-copy-with-portal-link]"),
-          customerTelegramManualCopyLanePresent: hiddenSelectorPresent("[data-admin-customer-driver-details-telegram-manual-copy-action]"),
+          telegramApplicationControlsPresent: Boolean(document.querySelector([
+            "[data-admin-customer-driver-details-telegram-manual-copy-action]",
+            "[data-admin-customer-driver-details-telegram-manual-copy-status]",
+            "[data-driver-job-link-telegram-manual-copy-button]",
+            "[data-driver-job-link-telegram-manual-copy-status]",
+          ].join(","))),
           realRecoveryReadinessPresent: hiddenSelectorPresent("[data-admin-dispatch-recovery-replacement-readiness]"),
           replacementMockPanelPresent: hiddenSelectorPresent("[data-admin-replacement-placeholder]"),
           replacementMockTextLeaks: [
@@ -26905,9 +26900,9 @@ async function runChromeTest() {
         "Expected customer Copy + App Link lane to remain available",
       );
       assert.equal(
-        state.customerTelegramManualCopyLanePresent,
-        true,
-        "Expected customer manual Telegram copy lane to remain available",
+        state.telegramApplicationControlsPresent,
+        false,
+        "Expected all Telegram application controls to be removed",
       );
       await checkTelegramBoundary("assigned driver mock panels removed");
 

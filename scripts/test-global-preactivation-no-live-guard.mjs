@@ -10,7 +10,7 @@ const requiredGuardScripts = [
   "scripts/test-sms-customer-driver-details-no-live-guard.mjs",
   "scripts/test-customer-copy-multi-channel-no-live-guard.mjs",
   "scripts/test-customer-driver-details-link-no-live-guard.mjs",
-  "scripts/test-telegram-internal-admin-alert-no-live-guard.mjs",
+  "scripts/test-telegram-application-absence-guard.mjs",
   "scripts/test-live-location-no-live-guard.mjs",
   "scripts/test-admin-ots-photo-proof-no-live-guard.mjs",
   "scripts/test-customer-driver-auth-no-live-guard.mjs",
@@ -37,17 +37,12 @@ const setupRouteNameFragments = [
   "admin-production-deployment-hardening",
   "admin-rate-settings-write-action",
   "admin-sms-customer-driver-details",
-  "admin-telegram-internal-admin-alert",
   "admin-whatsapp-customer-driver-details",
 ];
 const separatelyGuardedPostRouteFiles = new Map([
   [
     "app/api/admin-customer-driver-details-email-send-action/route.ts",
     "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs",
-  ],
-  [
-    "app/api/admin-telegram-internal-admin-alert-send/route.ts",
-    "scripts/test-telegram-internal-admin-alert-live-send-guard.mjs",
   ],
 ]);
 const separatelyGuardedRuntimeRouteFiles = new Map([
@@ -59,7 +54,6 @@ const separatelyGuardedRuntimeRouteFiles = new Map([
 const requiredMasterModules = [
   "Customer Copy Email/WhatsApp/SMS driver-details messaging",
   "secure customer driver-details link",
-  "Telegram internal admin alerts",
   "live location",
   "OTS photo proof",
   "customer/driver auth",

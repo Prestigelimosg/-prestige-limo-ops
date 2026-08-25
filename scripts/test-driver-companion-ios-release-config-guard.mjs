@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "15",
-  "The approved fifteenth TestFlight build number must be explicit",
+  "16",
+  "The approved sixteenth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,

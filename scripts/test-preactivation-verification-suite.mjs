@@ -414,6 +414,10 @@ const guardChecks = [
     script: "scripts/test-admin-companion-ios-build2-release-guard.mjs",
   },
   {
+    label: "Native Apple badge TestFlight release guard",
+    script: "scripts/test-native-apple-badge-testflight-release-guard.mjs",
+  },
+  {
     label: "customer device push notification guard",
     script: "scripts/test-customer-device-push-notification-guard.mjs",
   },

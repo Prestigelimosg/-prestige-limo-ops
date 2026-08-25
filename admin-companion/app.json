@@ -15,7 +15,7 @@
       "version": "1.0.0",
       "supportsTablet": false,
       "bundleIdentifier": "sg.prestigelimo.admin",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "icon": "./assets/app-icon.png",
       "config": {
         "usesNonExemptEncryption": false

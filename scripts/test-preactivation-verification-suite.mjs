@@ -406,8 +406,12 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
-    label: "admin native Driver-ACK push notification guard",
+    label: "admin complete native alert and Driver plate guard",
     script: "scripts/test-admin-native-ack-push-notification-guard.mjs",
+  },
+  {
+    label: "admin all native alerts Build 5 guard",
+    script: "scripts/test-admin-all-native-alerts-build5-guard.mjs",
   },
   {
     label: "Admin Companion iOS Build 2 release guard",

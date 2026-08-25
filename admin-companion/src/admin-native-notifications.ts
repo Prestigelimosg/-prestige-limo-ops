@@ -7,18 +7,42 @@ const secureStoreOptions: SecureStore.SecureStoreOptions = {
 };
 
 type AdminNativeNotificationType =
+  | "new_booking_request"
+  | "urgent_booking_request"
+  | "customer_booking_amendment"
+  | "customer_booking_cancellation"
+  | "customer_driver_details_acknowledged"
+  | "customer_to_driver_reply"
   | "driver_acknowledged"
   | "driver_completed"
+  | "driver_issue"
   | "driver_ots"
+  | "driver_ots_photo"
   | "driver_otw"
-  | "driver_pob";
+  | "driver_pob"
+  | "driver_to_customer_reply"
+  | "email_booking_amendment"
+  | "email_booking_cancellation"
+  | "email_confirmed_booking";
 
 const adminNativeNotificationTypes = new Set<AdminNativeNotificationType>([
+  "new_booking_request",
+  "urgent_booking_request",
+  "customer_booking_amendment",
+  "customer_booking_cancellation",
+  "customer_driver_details_acknowledged",
+  "customer_to_driver_reply",
   "driver_acknowledged",
   "driver_completed",
+  "driver_issue",
   "driver_ots",
+  "driver_ots_photo",
   "driver_otw",
   "driver_pob",
+  "driver_to_customer_reply",
+  "email_booking_amendment",
+  "email_booking_cancellation",
+  "email_confirmed_booking",
 ]);
 
 export type AdminNativeNotificationOpenRequest = {

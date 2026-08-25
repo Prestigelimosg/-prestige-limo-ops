@@ -7,6 +7,11 @@ import webPush, { type PushSubscription } from "web-push";
 import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
 import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-bookings-read";
 import { assertActiveCustomerPrincipalSession } from "./customer-principal-access";
+import {
+  releaseNativePushBadgeCount,
+  reserveNativePushBadgeCount,
+  resetNativePushBadgeCount,
+} from "./native-push-badge-count";
 
 export const customerDevicePushNotificationVersion =
   "customer-device-push-notification-v1";
@@ -125,6 +130,7 @@ export type CustomerDevicePushSender = (
 ) => Promise<void>;
 
 type CustomerDevicePushAlertOptions = {
+  badgeClient?: CustomerDevicePushClient;
   env?: EnvInput;
   pushSender?: CustomerDevicePushSender;
   subscriptionLoader?: (
@@ -396,6 +402,11 @@ export async function registerCustomerDevicePushSubscription(
       updated_at: now,
     }, { onConflict: "native_expo_token" });
     if (error) return blockedSubscriptionResult("subscription_write_failed", 500, "Customer alert registration failed safely.");
+    await resetNativePushBadgeCount(client, {
+      table: "customer_device_push_subscriptions",
+      token: nativeSubscription.native_expo_token,
+      tokenColumn: "native_expo_token",
+    }).catch(() => false);
     return { error: null, ok: true, reason: "subscription_registered", status: 200, subscription_status: "active" };
   }
 
@@ -729,6 +740,7 @@ async function sendNativeExpoAlert(
   bookingReference: string,
   notification: CustomerDevicePushNotificationRecord,
   driverPlateNumberInput?: unknown,
+  badgeCount?: number,
 ) {
   const driverDetailsReady = notification.safe_title === "Driver details ready";
   const driverPlateNumber = safeDriverPlateNumber(driverPlateNumberInput);
@@ -748,6 +760,7 @@ async function sendNativeExpoAlert(
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
       to: token,
+      ...(badgeCount ? { badge: badgeCount } : {}),
       sound: "default",
       title: driverDetailsReady
         ? "Driver details ready"
@@ -955,6 +968,7 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
         sendWebPush(config, subscription, pushPayload)
     : null);
   const recordHealth = !options.subscriptionLoader && !options.pushSender;
+  const badgeClient = options.badgeClient ?? (recordHealth ? client : null);
   let providerRequestCount = 0;
   let successfulRequestCount = 0;
 
@@ -978,16 +992,27 @@ export async function sendCustomerDevicePushAlertForAppUpdate(
   if (nativeAudience) {
     for (const token of nativeAudience.tokens) {
       providerRequestCount += 1;
+      const badgeReservation = badgeClient
+        ? await reserveNativePushBadgeCount(badgeClient, {
+            table: "customer_device_push_subscriptions",
+            token,
+            tokenColumn: "native_expo_token",
+          }).catch(() => null)
+        : null;
       try {
         await sendNativeExpoAlert(
           token,
           nativeAudience.publicBookingReference,
           notification,
           nativeAudience.driverPlateNumber,
+          badgeReservation?.count,
         );
         successfulRequestCount += 1;
         await recordNativeDeliveryHealth(client, token);
       } catch (error) {
+        if (badgeReservation) {
+          await releaseNativePushBadgeCount(badgeClient!, badgeReservation).catch(() => false);
+        }
         await recordNativeDeliveryHealth(client, token, error);
         // Native delivery is best-effort and never rolls back the saved update.
       }

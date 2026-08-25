@@ -306,11 +306,16 @@ assertIncludes(
 
 const tempDir = path.join(process.cwd(), ".tmp-customer-device-push-guard");
 const tempHelperPath = path.join(tempDir, "lib/customer-device-push-notification.js");
+const tempBadgeHelperPath = path.join(tempDir, "lib/native-push-badge-count.js");
 const tempAccountPath = path.join(tempDir, "lib/customer-portal-access-account.js");
 const tempPrincipalPath = path.join(tempDir, "lib/customer-principal-access.js");
 
 await rm(tempDir, { force: true, recursive: true });
 await mkdir(path.dirname(tempHelperPath), { recursive: true });
+await writeFile(
+  tempBadgeHelperPath,
+  "exports.reserveNativePushBadgeCount = async () => null; exports.releaseNativePushBadgeCount = async () => false; exports.resetNativePushBadgeCount = async () => false;",
+);
 await writeFile(
   tempHelperPath,
   transpileTypescript(

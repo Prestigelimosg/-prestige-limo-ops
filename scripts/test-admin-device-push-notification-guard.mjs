@@ -332,9 +332,14 @@ assertIncludes(
 
 const tempDir = path.join(process.cwd(), ".tmp-admin-device-push-guard");
 const tempHelperPath = path.join(tempDir, "lib/admin-device-push-notification.js");
+const tempBadgeHelperPath = path.join(tempDir, "lib/native-push-badge-count.js");
 
 await rm(tempDir, { force: true, recursive: true });
 await mkdir(path.dirname(tempHelperPath), { recursive: true });
+await writeFile(
+  tempBadgeHelperPath,
+  "exports.reserveNativePushBadgeCount = async () => null; exports.releaseNativePushBadgeCount = async () => false; exports.resetNativePushBadgeCount = async () => false;",
+);
 await writeFile(
   tempHelperPath,
   transpileTypescript(helperSource, path.join(process.cwd(), helperPath)),

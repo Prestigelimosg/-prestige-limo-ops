@@ -9,6 +9,7 @@ const sourceFiles = [
   "lib/driver-job-status-workflow.ts",
   "lib/driver-job-link.ts",
   "lib/driver-device-push-notification.ts",
+  "lib/native-push-badge-count.ts",
   "lib/driver-portal-session.ts",
   "lib/driver-portal-jobs.ts",
 ];

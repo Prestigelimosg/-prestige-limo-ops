@@ -7,6 +7,11 @@ import {
   isDriverJobLinkExpiryOutsideAllowedWindow,
   isDriverJobLinkExpired,
 } from "./driver-job-link.ts";
+import {
+  releaseNativePushBadgeCount,
+  reserveNativePushBadgeCount,
+  resetNativePushBadgeCount,
+} from "./native-push-badge-count.ts";
 
 export const driverDevicePushNotificationVersion =
   "driver-device-push-notification-v2";
@@ -151,9 +156,11 @@ export type DriverNativePushSender = (
   jobKey: string,
   openTarget: DriverNativePushOpenTarget | null,
   visibleBody: DriverNativePushVisibleBody,
+  badgeCount?: number,
 ) => Promise<void>;
 
 type DriverDevicePushAlertOptions = {
+  badgeClient?: DriverDevicePushClient;
   env?: EnvInput;
   nativeFetch?: typeof fetch;
   nativePushSender?: DriverNativePushSender;
@@ -481,6 +488,14 @@ export async function registerDriverNativeDevicePushSubscriptionForAcknowledgedL
       { onConflict: "endpoint" },
     );
 
+  if (!error) {
+    await resetNativePushBadgeCount(input.client, {
+      table: "driver_device_push_subscriptions",
+      token: expoPushToken,
+      tokenColumn: "endpoint",
+    }).catch(() => false);
+  }
+
   return error
     ? nativeDeviceAlertUpdateResult("subscription_write_failed")
     : nativeDeviceAlertUpdateResult("subscription_registered", {
@@ -742,6 +757,7 @@ async function sendNativePush(
   jobKey: string,
   openTarget: DriverNativePushOpenTarget | null,
   visibleBody: DriverNativePushVisibleBody,
+  badgeCount?: number,
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
   const controller = new AbortController();
@@ -750,6 +766,7 @@ async function sendNativePush(
   try {
     const response = await fetcher(expoPushEndpoint, {
       body: JSON.stringify({
+        ...(badgeCount ? { badge: badgeCount } : {}),
         body: visibleBody,
         data: {
           job_key: jobKey,
@@ -889,6 +906,8 @@ async function sendPayloadToDriverSubscriptions(
     ((subscription: PushSubscription, pushPayload: DriverDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
   const shouldRecordHealth = !options.pushSender;
+  const badgeClient = options.badgeClient ??
+    (!options.nativePushSender && !options.pushSender ? client : null);
   const nativeSubscriptionCount = loaded.subscriptions.filter(
     (subscription) => subscription.channel === "native_ios",
   ).length;
@@ -901,24 +920,42 @@ async function sendPayloadToDriverSubscriptions(
     return alertResult("no_active_subscriptions", { enabled: true });
   }
   const results = await Promise.allSettled(
-    eligibleSubscriptions.map((subscription) =>
-      subscription.channel === "native_ios"
-        ? options.nativePushSender
-          ? options.nativePushSender(
+    eligibleSubscriptions.map(async (subscription) => {
+      if (subscription.channel !== "native_ios") {
+        return sender(subscription.webSubscription!, payload);
+      }
+
+      const badgeReservation = badgeClient
+        ? await reserveNativePushBadgeCount(badgeClient, {
+            table: "driver_device_push_subscriptions",
+            token: subscription.endpoint,
+            tokenColumn: "endpoint",
+          }).catch(() => null)
+        : null;
+      try {
+        return options.nativePushSender
+          ? await options.nativePushSender(
               subscription.endpoint,
               nativeJobKey!,
               nativeOpenTarget,
               nativeVisibleBody,
+              badgeReservation?.count,
             )
-          : sendNativePush(
+          : await sendNativePush(
               subscription.endpoint,
               nativeJobKey!,
               nativeOpenTarget,
               nativeVisibleBody,
+              badgeReservation?.count,
               options.nativeFetch,
-            )
-        : sender(subscription.webSubscription!, payload),
-    ),
+            );
+      } catch (error) {
+        if (badgeReservation) {
+          await releaseNativePushBadgeCount(badgeClient!, badgeReservation).catch(() => false);
+        }
+        throw error;
+      }
+    }),
   );
 
   if (shouldRecordHealth && !options.nativePushSender) {

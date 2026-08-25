@@ -5,6 +5,11 @@ import webPush, { type PushSubscription } from "web-push";
 
 import type { AdminBookingPersistenceRecord } from "./admin-booking-persistence";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
+import {
+  releaseNativePushBadgeCount,
+  reserveNativePushBadgeCount,
+  resetNativePushBadgeCount,
+} from "./native-push-badge-count";
 
 export const adminDevicePushNotificationVersion =
   "admin-device-push-notification-v1";
@@ -194,6 +199,7 @@ export type AdminDevicePushSender = (
 ) => Promise<void>;
 
 type AdminDevicePushAlertOptions = {
+  badgeClient?: Pick<SupabaseClient, "from">;
   env?: EnvInput;
   loadedSubscriptionLoader?: () => Promise<LoadedAdminDevicePushSubscription[]>;
   nativePushSender?: (
@@ -206,6 +212,7 @@ type AdminDevicePushAlertOptions = {
 };
 
 type AdminNativeDevicePushPayload = {
+  badge?: number;
   body: string;
   data: {
     open_target: "/";
@@ -537,6 +544,14 @@ export async function registerAdminDevicePushSubscription(
         "Multiple native Admin notification registrations failed safely.",
       );
     }
+  }
+
+  if (parsed.channel === "native_ios") {
+    await resetNativePushBadgeCount(supabase, {
+      table: "admin_device_push_subscriptions",
+      token: parsed.endpoint,
+      tokenColumn: "endpoint",
+    }).catch(() => false);
   }
 
   return {
@@ -1094,17 +1109,29 @@ export async function sendAdminDevicePushAlert(
     !options.subscriptionLoader &&
     !options.pushSender &&
     !options.nativePushSender;
+  const badgeClient = options.badgeClient ??
+    (shouldRecordSubscriptionHealth ? createSupabaseClient(config) : null);
 
   let providerRequestCount = 0;
   let successfulRequestCount = 0;
   for (const subscription of eligibleSubscriptions) {
+    const badgeReservation =
+      subscription.channel === "native_ios" && nativePayload && badgeClient
+        ? await reserveNativePushBadgeCount(badgeClient, {
+            table: "admin_device_push_subscriptions",
+            token: subscription.endpoint,
+            tokenColumn: "endpoint",
+          }).catch(() => null)
+        : null;
     const sendProviderRequest =
       subscription.channel === "native_ios"
         ? nativePayload
           ? () =>
               (options.nativePushSender ?? sendNativePush)(
                 subscription.endpoint,
-                nativePayload,
+                badgeReservation
+                  ? { ...nativePayload, badge: badgeReservation.count }
+                  : nativePayload,
               )
           : null
         : () => webSender(subscription.webSubscription!, payload);
@@ -1119,6 +1146,12 @@ export async function sendAdminDevicePushAlert(
         await recordSubscriptionSendSuccess(config, subscription.endpoint);
       }
     } catch (error) {
+      if (badgeReservation) {
+        await releaseNativePushBadgeCount(
+          badgeClient!,
+          badgeReservation,
+        ).catch(() => false);
+      }
       if (shouldRecordSubscriptionHealth) {
         await recordSubscriptionSendFailure(config, subscription.endpoint, error);
       }

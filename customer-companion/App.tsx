@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
@@ -48,11 +49,21 @@ import {
 } from "./src/customer-installation";
 import {
   addCustomerNotificationTapListener,
+  addCustomerNotificationReceivedListener,
   initialCustomerNotificationUrl,
   readCustomerNativeNotifications,
   registerCustomerNativeNotifications,
   type CustomerNativeRegistration,
 } from "./src/customer-native-notifications";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 type UnlockState = "checking" | "locked" | "ready";
 type CustomerNativeNotificationAction = "disable" | "enable";
@@ -282,7 +293,15 @@ export default function App() {
       setNativeAlertsEnabled(alertsEnabled);
       setNativeAlertsPreferenceReady(true);
     });
+    void Notifications.getBadgeCountAsync().then((count) => {
+      if (count > 0) {
+        setActiveTab("bookings");
+        setCurrentUrl(customerTabUrl("bookings"));
+      }
+      return Notifications.setBadgeCountAsync(0);
+    }).catch(() => false);
     const subscription = addCustomerNotificationTapListener((url) => {
+      void Notifications.setBadgeCountAsync(0).catch(() => false);
       if (unlockStateRef.current === "ready") openCustomerUniversalLink(url);
       else pendingCustomerUniversalLinkRef.current = url;
     });
@@ -293,6 +312,22 @@ export default function App() {
     }).catch(() => undefined);
     return () => subscription.remove();
   }, [openCustomerUniversalLink]);
+
+  useEffect(() => {
+    const subscription = addCustomerNotificationReceivedListener(() => {
+      if (
+        !nativeRegistration ||
+        !isCustomerBookingsUrl(currentUrl) ||
+        !isCustomerBookingsUrl(loadedCustomerWebView.url)
+      ) {
+        return;
+      }
+      void Notifications.setBadgeCountAsync(0).catch(() => false);
+      nativeAlertsRegistrationAttemptRef.current = "";
+      injectCustomerNativeRegistration(nativeRegistration);
+    });
+    return () => subscription.remove();
+  }, [currentUrl, injectCustomerNativeRegistration, loadedCustomerWebView.url, nativeRegistration]);
 
   useEffect(() => {
     if (unlockState !== "ready" || !nativeAlertsPreferenceReady || !nativeAlertsEnabled) return;
@@ -345,6 +380,7 @@ export default function App() {
       if (request.action === "enable") {
         nativeAlertsEnablePendingRef.current = false;
         if (request.ok) {
+          void Notifications.setBadgeCountAsync(0).catch(() => false);
           setNativeAlertsEnabled(true);
         } else {
           nativeAlertsRegistrationAttemptRef.current = "";
@@ -443,6 +479,15 @@ export default function App() {
         setCustomerUnlockState("locked");
       }
       if (action === "unlock") void unlockCustomerApp();
+      if (nextState === "active") {
+        void Notifications.getBadgeCountAsync().then((count) => {
+          if (count > 0) {
+            setActiveTab("bookings");
+            setCurrentUrl(customerTabUrl("bookings"));
+          }
+          return Notifications.setBadgeCountAsync(0);
+        }).catch(() => false);
+      }
     });
     return () => subscription.remove();
   }, [setCustomerUnlockState, unlockCustomerApp]);

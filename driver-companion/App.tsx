@@ -83,7 +83,7 @@ const initialScreenState: ScreenState = {
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
@@ -119,6 +119,7 @@ export default function App() {
   const biometricPromptBusyRef = useRef(false);
   const biometricResumePendingRef = useRef(false);
   const bridgeBusyRef = useRef(false);
+  const badgeNotificationHandledRef = useRef("");
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
   const webViewRequestHeadersRef = useRef<Record<string, string> | null>(null);
   const pendingOauthTokenRef = useRef("");
@@ -301,12 +302,8 @@ export default function App() {
 
     let mounted = true;
 
-    const openNotificationJob = async (
-      response: Notifications.NotificationResponse | null,
-    ) => {
-      const request = nativeNotificationOpenRequest(
-        response?.notification.request.content.data,
-      );
+    const openNotificationData = async (data: unknown) => {
+      const request = nativeNotificationOpenRequest(data);
       if (!request) {
         return;
       }
@@ -337,15 +334,41 @@ export default function App() {
 
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        void openNotificationJob(response);
+        badgeNotificationHandledRef.current = response.notification.request.identifier;
+        void Notifications.setBadgeCountAsync(0).catch(() => false);
+        void openNotificationData(response.notification.request.content.data);
       },
     );
+
+    const openLatestBadgeNotification = async () => {
+      const [count, presented] = await Promise.all([
+        Notifications.getBadgeCountAsync(),
+        Notifications.getPresentedNotificationsAsync(),
+      ]);
+      if (count > 0 && presented.length > 0) {
+        const latest = [...presented].sort((first, second) => second.date - first.date)[0];
+        if (badgeNotificationHandledRef.current !== latest.request.identifier) {
+          badgeNotificationHandledRef.current = latest.request.identifier;
+          await openNotificationData(latest.request.content.data);
+        }
+      }
+      await Notifications.setBadgeCountAsync(0).catch(() => false);
+    };
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void openLatestBadgeNotification().catch(() => undefined);
+      }
+    });
 
     try {
       const initialResponse = Notifications.getLastNotificationResponse();
       if (initialResponse) {
-        void openNotificationJob(initialResponse)
+        badgeNotificationHandledRef.current = initialResponse.notification.request.identifier;
+        void Notifications.setBadgeCountAsync(0).catch(() => false);
+        void openNotificationData(initialResponse.notification.request.content.data)
           .finally(() => Notifications.clearLastNotificationResponse());
+      } else {
+        void openLatestBadgeNotification().catch(() => undefined);
       }
     } catch {
       // A notification response is optional; ordinary exact-link opening remains available.
@@ -354,6 +377,7 @@ export default function App() {
     return () => {
       mounted = false;
       subscription.remove();
+      appStateSubscription.remove();
     };
   }, [installationId, receiveDriverJobUrl]);
 

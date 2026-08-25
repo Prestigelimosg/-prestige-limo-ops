@@ -74,13 +74,14 @@ true;
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
 });
 
 export default function App() {
+  const [badgeResetSequence, setBadgeResetSequence] = useState(1);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(adminSignInUrl());
   const [installationId, setInstallationId] = useState("");
@@ -97,10 +98,11 @@ export default function App() {
   const biometricResumePendingRef = useRef(false);
   const nativeBridgeBusyRef = useRef(false);
   const pendingNativeActionRef = useRef<"register" | "unregister" | null>(null);
-  const pendingNativeContextRef = useRef<"sign_out" | "toggle" | null>(null);
+  const pendingNativeContextRef = useRef<"badge_reset" | "sign_out" | "toggle" | null>(null);
   const pendingDashboardOpenRef = useRef(false);
   const pendingNativeTokenRef = useRef("");
   const pendingPreviousNativeTokenRef = useRef("");
+  const completedBadgeResetSequenceRef = useRef(0);
   const pendingProtectedUrlRef = useRef("");
   const signOutPendingRef = useRef(false);
   const webViewAutomaticRecoveryCountRef = useRef(0);
@@ -233,6 +235,7 @@ export default function App() {
       setBiometricEnabled(enabled);
       setNotificationEnabled(Boolean(savedNotificationToken) && nextPermission === "granted");
       setNotificationPermission(nextPermission);
+      void Notifications.setBadgeCountAsync(0).catch(() => false);
       setNavigationKey((current) => current + 1);
       if (!enabled) {
         setScreenMode("web");
@@ -269,6 +272,8 @@ export default function App() {
       }
 
       if (returningToForeground) {
+        void Notifications.setBadgeCountAsync(0).catch(() => false);
+        setBadgeResetSequence((current) => current + 1);
         void Promise.all([
           Notifications.getPermissionsAsync(),
           readAdminNativeNotificationToken(),
@@ -338,7 +343,11 @@ export default function App() {
     };
 
     const subscription = Notifications.addNotificationResponseReceivedListener(
-      openDashboardFromNotification,
+      (response) => {
+        void Notifications.setBadgeCountAsync(0).catch(() => false);
+        setBadgeResetSequence((current) => current + 1);
+        openDashboardFromNotification(response);
+      },
     );
     try {
       const initialResponse = Notifications.getLastNotificationResponse();
@@ -394,7 +403,7 @@ export default function App() {
 
   const requestNativeSubscription = useCallback(async (
     action: "register" | "unregister",
-    context: "sign_out" | "toggle" = "toggle",
+    context: "badge_reset" | "sign_out" | "toggle" = "toggle",
   ) => {
     if (!installationId || nativeBridgeBusyRef.current) return;
     nativeBridgeBusyRef.current = true;
@@ -458,7 +467,7 @@ export default function App() {
       pendingPreviousNativeTokenRef.current = existingToken || "";
       pendingNativeActionRef.current = action;
       pendingNativeContextRef.current = context;
-      setNotificationEnabled(false);
+      if (context !== "badge_reset") setNotificationEnabled(false);
       webViewRef.current?.injectJavaScript(
         adminNativeSubscriptionRequestScript({
           action,
@@ -473,13 +482,34 @@ export default function App() {
       pendingPreviousNativeTokenRef.current = "";
       pendingNativeActionRef.current = null;
       pendingNativeContextRef.current = null;
-      setNotificationEnabled(false);
-      webViewRef.current?.injectJavaScript(
-        adminNativeNotificationResultScript({ ok: false, state: "failed" }),
-      );
+      if (context !== "badge_reset") {
+        setNotificationEnabled(false);
+        webViewRef.current?.injectJavaScript(
+          adminNativeNotificationResultScript({ ok: false, state: "failed" }),
+        );
+      }
       nativeBridgeBusyRef.current = false;
     }
   }, [installationId]);
+
+  useEffect(() => {
+    if (
+      !notificationEnabled ||
+      screenMode !== "web" ||
+      webViewLoadState !== "ready" ||
+      completedBadgeResetSequenceRef.current === badgeResetSequence
+    ) {
+      return;
+    }
+    completedBadgeResetSequenceRef.current = badgeResetSequence;
+    void requestNativeSubscription("register", "badge_reset");
+  }, [
+    badgeResetSequence,
+    notificationEnabled,
+    requestNativeSubscription,
+    screenMode,
+    webViewLoadState,
+  ]);
 
   const handleAdminWebViewLoadEnd = useCallback((
     event: WebViewNavigationEvent | WebViewErrorEvent,
@@ -524,6 +554,14 @@ export default function App() {
     }
 
     if (!message.ok) {
+      if (message.context === "badge_reset") {
+        pendingNativeTokenRef.current = "";
+        pendingPreviousNativeTokenRef.current = "";
+        pendingNativeActionRef.current = null;
+        pendingNativeContextRef.current = null;
+        nativeBridgeBusyRef.current = false;
+        return;
+      }
       const pendingToken = pendingNativeTokenRef.current;
       const previousToken = pendingPreviousNativeTokenRef.current;
       if (message.action === "register" && pendingToken !== previousToken) {

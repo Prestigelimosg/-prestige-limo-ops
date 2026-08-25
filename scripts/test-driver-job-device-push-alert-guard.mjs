@@ -472,6 +472,7 @@ assertIncludes(
 
 const tempDir = path.join(process.cwd(), ".tmp-driver-device-push-guard");
 const tempHelperPath = path.join(tempDir, "lib/driver-device-push-notification.js");
+const tempBadgeHelperPath = path.join(tempDir, "lib/native-push-badge-count.ts");
 const tempDriverLinkPath = path.join(tempDir, "lib/driver-job-link.ts");
 const tempNativeStoragePath = path.join(
   tempDir,
@@ -491,6 +492,10 @@ const tempSecureStorePath = path.join(
 );
 await rm(tempDir, { force: true, recursive: true });
 await mkdir(path.dirname(tempHelperPath), { recursive: true });
+await writeFile(
+  tempBadgeHelperPath,
+  "exports.reserveNativePushBadgeCount = async () => null; exports.releaseNativePushBadgeCount = async () => false; exports.resetNativePushBadgeCount = async () => false;",
+);
 await writeFile(
   tempHelperPath,
   transpileTypescript(helperSource, path.join(process.cwd(), helperPath)),

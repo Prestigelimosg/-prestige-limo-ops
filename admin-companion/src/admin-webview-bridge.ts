@@ -7,7 +7,7 @@ export type AdminBridgeMessage =
   | { type: "admin_notifications_unregister" }
   | {
       action: "register" | "unregister";
-      context: "sign_out" | "toggle";
+      context: "badge_reset" | "sign_out" | "toggle";
       ok: boolean;
       type: "admin_native_subscription_complete";
     };
@@ -35,7 +35,9 @@ export function parseAdminBridgeMessage(value: string): AdminBridgeMessage | nul
       keys.join(",") === "action,context,ok,type" &&
       parsed.type === "admin_native_subscription_complete" &&
       (parsed.action === "register" || parsed.action === "unregister") &&
-      (parsed.context === "toggle" || parsed.context === "sign_out") &&
+      (parsed.context === "badge_reset" ||
+        parsed.context === "toggle" ||
+        parsed.context === "sign_out") &&
       typeof parsed.ok === "boolean"
     ) {
       return {
@@ -121,7 +123,7 @@ export function adminNativeNotificationResultScript(result: {
 
 export function adminNativeSubscriptionRequestScript(input: {
   action: "register" | "unregister";
-  context: "sign_out" | "toggle";
+  context: "badge_reset" | "sign_out" | "toggle";
   installationId: string;
   nativeToken: string;
   previousToken?: string | null;

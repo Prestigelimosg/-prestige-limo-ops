@@ -54,6 +54,10 @@ export function addCustomerNotificationTapListener(onOpen: (url: string) => void
   });
 }
 
+export function addCustomerNotificationReceivedListener(onReceive: () => void) {
+  return Notifications.addNotificationReceivedListener(onReceive);
+}
+
 export async function initialCustomerNotificationUrl() {
   const response = await Notifications.getLastNotificationResponseAsync();
   return response ? customerNotificationBookingUrl(response.notification.request.content.data) : null;

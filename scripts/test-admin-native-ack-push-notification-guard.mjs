@@ -167,6 +167,7 @@ includes(
 
 const tempDir = path.join(process.cwd(), ".tmp-admin-native-ack-push-guard");
 const tempHelper = path.join(tempDir, "lib/admin-device-push-notification.js");
+const tempBadgeHelper = path.join(tempDir, "lib/native-push-badge-count.js");
 const tempNativeNotifications = path.join(
   tempDir,
   "admin-companion/src/admin-native-notifications.js",
@@ -182,6 +183,7 @@ const tempSecureStoreStub = path.join(
 await rm(tempDir, { force: true, recursive: true });
 await Promise.all([
   mkdir(path.dirname(tempHelper), { recursive: true }),
+  mkdir(path.dirname(tempBadgeHelper), { recursive: true }),
   mkdir(path.dirname(tempNativeNotifications), { recursive: true }),
   mkdir(path.dirname(tempSupabaseStub), { recursive: true }),
   mkdir(path.dirname(tempSecureStoreStub), { recursive: true }),
@@ -198,6 +200,10 @@ await writeFile(
     "exports.getItemAsync = async function () { return null; };",
     "exports.setItemAsync = async function () {};",
   ].join("\n"),
+);
+await writeFile(
+  tempBadgeHelper,
+  "exports.reserveNativePushBadgeCount = async () => null; exports.releaseNativePushBadgeCount = async () => false; exports.resetNativePushBadgeCount = async () => false;",
 );
 await writeFile(
   tempHelper,

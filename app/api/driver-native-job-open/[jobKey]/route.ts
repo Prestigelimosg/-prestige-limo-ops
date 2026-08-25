@@ -7,6 +7,7 @@ import {
 } from "../../../../lib/driver-job-link";
 import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
 import { openDriverNativeJobHandoff } from "../../../../lib/driver-native-job-handoff";
+import { resetDriverNativePushBadgeCount } from "../../../../lib/native-push-badge-count";
 import { resolveDriverPortalSession } from "../../../../lib/driver-portal-session";
 
 export const dynamic = "force-dynamic";
@@ -214,6 +215,11 @@ export async function GET(
   if (!token || hashDriverJobLinkToken(token) !== tokenHash) {
     return blocked(410);
   }
+
+  await resetDriverNativePushBadgeCount(
+    clientResult.client,
+    session.claims.driverId,
+  ).catch(() => false);
 
   const destination = new URL(`/driver-job/${encodeURIComponent(token)}`, request.url);
   return new Response(null, {

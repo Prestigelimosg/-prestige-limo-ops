@@ -107,7 +107,7 @@ const invoicePortalAccessProofFunction = sectionBetween(
 const customerPortalLinkCopyHandler = sectionBetween(
   appPage,
   "async function createCustomerDriverDetailsPortalLink()",
-  "\n  async function copyManualTelegramMessage",
+  "\n  function adminDriverJobLinkFailureMessage",
 );
 const customerFinderSection = sectionBetween(
   customersPage,

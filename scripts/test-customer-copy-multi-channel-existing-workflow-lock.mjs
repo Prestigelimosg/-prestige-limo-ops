@@ -81,17 +81,17 @@ for (const fragment of [
   "Customer app link copy may be triggered only by explicit admin click through the existing `POST /api/admin-customer-portal-access-links` route, using the saved booking `customer_id`/customer account reference only; it must not fall back to passenger, booker, company, or display names as the account reference.",
   "WhatsApp and SMS remain parked on setup-only/no-op GET paths: `GET /api/admin-whatsapp-customer-driver-details-send-disabled-setup` and `GET /api/admin-sms-customer-driver-details-send-disabled-setup`.",
   "Customer In-App and Driver In-App remain the existing admin-selected app notification path through `POST /api/admin-customer-driver-app-notifications`.",
-  "Telegram provider sending remains the existing internal-admin alert send path only: `POST /api/admin-telegram-internal-admin-alert-send`.",
-  "Customer and driver Telegram controls are admin manual-copy only; they write already-visible safe copy to the clipboard and keep `external_send=false`.",
+  "Telegram is not an available application channel: its admin controls, routes, helpers, provider path, and Telegram-specific planning documents are removed.",
   "`scripts/test-customer-copy-multi-channel-no-live-guard.mjs` owns the parked SMS/WhatsApp no-live guard and the Email UI-to-gated-route source guard.",
+  "`scripts/test-telegram-application-absence-guard.mjs` prevents Telegram application controls, routes, helpers, planning documents, and retired retention guards from returning while preserving Telegram privacy denylist protections and disabled push capability assertions.",
   "Email may be triggered only by explicit admin click through `POST /api/admin-customer-driver-details-email-send-action`, using the gated Resend helper and allowlist safeguards.",
   "A closed gate produces no send-action POST from the browser.",
   "Resend retains that protection for 24 hours; changed customer booking or driver details produce a different key.",
   "This same-page lock and the provider key are duplicate-click safeguards, not permanent send history.",
   "The existing send-audit payload foundation remains setup-only with `auditWriteEnabled: false`",
-  "Customer/driver Telegram may only be prepared through the existing admin manual clipboard controls.",
   "SMS and WhatsApp remain parked setup-only/no-op for now.",
-  "Activating SMS or WhatsApp sends, customer/driver Telegram provider sends, automatic fallback, automatic multi-channel blast, batch send, scheduler, polling, retry automation, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser-learning behavior, or broad DB writes.",
+  "Reintroducing Telegram application controls, routes, helpers, provider calls, bot configuration, planning documents, or provider-send behavior without a new explicit owner-approved lane.",
+  "Activating SMS or WhatsApp sends, automatic fallback, automatic multi-channel blast, batch send, scheduler, polling, retry automation, payment/PDF/pricing/payout/auth/location/photo/calendar behavior, parser-learning behavior, or broad DB writes.",
   "Customers must never see driver payout, PayNow payout, internal admin notes, parser/debug internals, admin finance, or mock QA/dev archive data.",
   "Drivers must never see customer price, billing, invoice/payment, payout comparisons, PayNow payout details, internal finance notes, internal admin notes, or mock QA/dev archive data.",
 ]) {
@@ -107,7 +107,7 @@ const customerCopySection = extractBetween(
 const customerPortalLinkCopyHandler = extractBetween(
   appPage,
   "async function createCustomerDriverDetailsPortalLink()",
-  "async function copyManualTelegramMessage(",
+  "function adminDriverJobLinkFailureMessage(",
   "customer driver details portal link copy handler",
 );
 const appOutsideCustomerCopy = appPage.replace(customerCopySection, "");
@@ -127,7 +127,6 @@ for (const fragment of [
   "async function sendAdminCustomerDriverDetailsEmail()",
   "async function checkAdminCustomerDriverDetailsMessageDisabledSend(",
   "async function copyCustomerDriverDetailsWithCustomerAppLink()",
-  "async function copyManualTelegramMessage(",
   "async function sendAdminCustomerDriverDetailsCustomerInAppNotification()",
   "const adminCustomerDriverDetailsMultiChannelDisabledStatusText =",
   "Email uses the gated email route. WhatsApp and SMS are parked setup-only/no-live.",
@@ -146,17 +145,12 @@ for (const fragment of [
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
-  'data-admin-customer-driver-details-telegram-manual-copy-action="true"',
-  'data-admin-customer-driver-details-telegram-manual-copy-status="true"',
   'data-admin-customer-driver-details-customer-in-app-send-action="true"',
   'data-admin-customer-driver-details-manual-channel-note="true"',
   'data-admin-email-activation-preflight-status="true"',
   'onClick={sendAdminCustomerDriverDetailsEmail}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}',
   'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}',
-  'onClick={() => copyManualTelegramMessage("customerDriverDetails")}',
-  'data-driver-job-link-telegram-manual-copy-button="true"',
-  'onClick={() => copyManualTelegramMessage("driverJobLink")}',
   "WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.",
   'data-admin-customer-driver-details-email-recipient="true"',
   "Email recipient:",
@@ -183,8 +177,6 @@ for (const [fragment, expectedCount] of [
   ['data-admin-customer-driver-details-email-send-gate-open=', 1],
   ['data-admin-customer-driver-details-whatsapp-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-sms-disabled-send-action="true"', 1],
-  ['data-admin-customer-driver-details-telegram-manual-copy-action="true"', 1],
-  ['data-admin-customer-driver-details-telegram-manual-copy-status="true"', 1],
   ['data-admin-customer-driver-details-customer-in-app-send-action="true"', 1],
   ['data-admin-customer-driver-details-manual-channel-note="true"', 1],
   ['data-admin-email-activation-preflight-status="true"', 1],
@@ -200,14 +192,14 @@ for (const fragment of [
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   'data-admin-customer-driver-details-sms-disabled-send-action="true"',
-  'data-admin-customer-driver-details-telegram-manual-copy-action="true"',
-  'data-admin-customer-driver-details-telegram-manual-copy-status="true"',
   'data-admin-customer-driver-details-customer-in-app-send-action="true"',
   'data-admin-customer-driver-details-manual-channel-note="true"',
   'data-admin-email-activation-preflight-status="true"',
 ]) {
   assertExcludes(appOutsideCustomerCopy, fragment, `Customer Copy fragment outside section ${fragment}`);
 }
+
+assertNotMatches(appPage, /telegram/i, "removed Telegram application UI");
 
 assertIncludes(emailSendActionRoute, "export async function POST", "email send action route POST");
 assertIncludes(
@@ -278,18 +270,17 @@ for (const fragment of [
   "WhatsApp and SMS remain parked on setup-only/no-op GET paths.",
   "Customer In-App and Driver In-App remain explicit admin-selected in-app notification actions through `POST /api/admin-customer-driver-app-notifications`.",
   "Copy + App Link remains explicit admin-selected manual clipboard preparation through the existing `POST /api/admin-customer-portal-access-links` route; it requires the saved booking `customer_id` / customer account reference and must not fall back to passenger, booker, company, or display names.",
-  "Telegram provider sending remains the existing internal-admin alert send path only through `POST /api/admin-telegram-internal-admin-alert-send`.",
-  "Customer/driver Telegram controls are manual clipboard-only and keep `external_send=false`, no provider call, no chat ID, no `t.me` URL, no DB write, and no notification write.",
-  "Do not add duplicate Email, WhatsApp, SMS, Telegram, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.",
+  "Telegram application controls, routes, helpers, provider calls, and Telegram-specific planning documents are removed.",
+  "Do not add duplicate Email, WhatsApp, SMS, customer-message, driver-notification, provider-send, or customer driver-details workflow sectors, buttons, cards, routes, helpers, or shims.",
   "SMS and WhatsApp sends remain parked unless separately approved.",
-  "Customer/driver Telegram provider sends remain parked unless separately approved.",
+  "Any Telegram reintroduction requires a new explicit owner-approved lane.",
 ]) {
   assertIncludes(ledgerSection, fragment, `ledger Customer Copy lock fragment ${fragment}`);
 }
 
 for (const fragment of [
   "[Customer Copy Multi-Channel Existing Workflow Lock](customer-copy-multi-channel-existing-workflow-lock.md)",
-  "existing admin Customer Copy Email/WhatsApp/SMS customer driver-details review row, explicit Copy + App Link action, admin manual Telegram clipboard controls, and no-duplicate rule",
+  "existing admin Customer Copy Email/WhatsApp/SMS customer driver-details review row, explicit Copy + App Link action, Telegram application-absence boundary, and no-duplicate rule",
 ]) {
   assertIncludes(docsIndex, fragment, `docs index Customer Copy lock fragment ${fragment}`);
 }

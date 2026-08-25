@@ -105,11 +105,14 @@ assertIncludes(
     "timeout: adminDevicePushProviderTimeoutMs",
     "New booking request received. Open Dashboard to review.",
     "New booking request",
+    "Urgent booking request received. Open Dashboard to review.",
+    "Urgent booking request",
     "whatsapp_enabled: false",
     "telegram_enabled: false",
     "sms_enabled: false",
     "email_provider_enabled: false",
     "sendAdminDevicePushAlert",
+    "urgent_booking_request",
     "customer_booking_amendment",
     "customer_booking_cancellation",
     "email_confirmed_booking",
@@ -425,6 +428,44 @@ try {
     JSON.stringify(sentPayload),
     ["Private Passenger", "Private pickup", "CUST-PRIVATE-003", "private-id"],
     "admin push payload",
+  );
+
+  let urgentPayload = null;
+  const urgentAlert = await helper.sendAdminNewBookingDevicePushAlert(
+    {
+      booking_reference: "CUST-PRIVATE-URGENT",
+      id: "private-urgent-id",
+      short_notice_review_status: "Admin Review Required",
+    },
+    {
+      env: configuredEnv,
+      subscriptionLoader: async () => [
+        {
+          endpoint: "https://push.example.test/urgent-subscription",
+          keys: {
+            auth: "fake-auth-urgent",
+            p256dh: "fake-p256dh-urgent",
+          },
+        },
+      ],
+      pushSender: async (_subscription, payload) => {
+        urgentPayload = payload;
+      },
+    },
+  );
+  assert.equal(urgentAlert.ok, true);
+  assert.equal(urgentAlert.provider_request_count, 1);
+  assert.deepEqual(urgentPayload, {
+    body: "Urgent booking request received. Open Dashboard to review.",
+    tag: "prestige-admin-urgent-booking-request",
+    title: "Urgent booking request",
+    url: "/",
+    version: "admin-device-push-notification-v1",
+  });
+  assertExcludes(
+    JSON.stringify(urgentPayload),
+    ["CUST-PRIVATE-URGENT", "private-urgent-id"],
+    "urgent admin push payload",
   );
 
   const approvedOperationalEvents = {

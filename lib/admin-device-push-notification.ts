@@ -162,6 +162,7 @@ type AdminDevicePushPayload = {
 
 export type AdminDevicePushEventType =
   | "new_booking_request"
+  | "urgent_booking_request"
   | "customer_booking_amendment"
   | "customer_booking_cancellation"
   | "customer_driver_details_acknowledged"
@@ -178,20 +179,7 @@ export type AdminDevicePushEventType =
   | "email_booking_cancellation"
   | "email_confirmed_booking";
 
-type AdminNativeDriverEventType =
-  | "driver_acknowledged"
-  | "driver_completed"
-  | "driver_ots"
-  | "driver_otw"
-  | "driver_pob";
-
-const adminNativeDriverEventTypes = new Set<AdminDevicePushEventType>([
-  "driver_acknowledged",
-  "driver_completed",
-  "driver_ots",
-  "driver_otw",
-  "driver_pob",
-]);
+type AdminNativeDevicePushEventType = AdminDevicePushEventType;
 
 export type AdminDevicePushSender = (
   subscription: PushSubscription,
@@ -216,7 +204,7 @@ type AdminNativeDevicePushPayload = {
   body: string;
   data: {
     open_target: "/";
-    type: AdminNativeDriverEventType;
+    type: AdminNativeDevicePushEventType;
   };
   priority: "high";
   sound: "default";
@@ -727,6 +715,10 @@ const adminDevicePushEventCopy: Record<
     body: "New booking request received. Open Dashboard to review.",
     title: "New booking request",
   },
+  urgent_booking_request: {
+    body: "Urgent booking request received. Open Dashboard to review.",
+    title: "Urgent booking request",
+  },
 };
 
 const adminDevicePushVehicleStatusLabels: Partial<
@@ -740,12 +732,6 @@ const adminDevicePushVehicleStatusLabels: Partial<
 
 function validAdminDevicePushEventType(value: unknown): value is AdminDevicePushEventType {
   return typeof value === "string" && value in adminDevicePushEventCopy;
-}
-
-function isAdminNativeDriverEventType(
-  value: AdminDevicePushEventType,
-): value is AdminNativeDriverEventType {
-  return adminNativeDriverEventTypes.has(value);
 }
 
 function safeVehiclePlate(value: unknown): string | null {
@@ -884,8 +870,8 @@ async function sendWebPush(
   });
 }
 
-function safeNativeDriverPayload(
-  eventType: AdminNativeDriverEventType,
+function safeNativePayload(
+  eventType: AdminNativeDevicePushEventType,
   vehiclePlate?: unknown,
 ): AdminNativeDevicePushPayload {
   const plate = safeVehiclePlate(vehiclePlate);
@@ -1038,7 +1024,15 @@ export async function sendAdminNewBookingDevicePushAlert(
     return blockedAlertResult("invalid_booking");
   }
 
-  return sendAdminDevicePushAlert("new_booking_request", options);
+  const adminReviewRequiredStatus = "Admin Review Required";
+  const eventType =
+    typeof booking.short_notice_review_status === "string" &&
+    booking.short_notice_review_status.trim().toLowerCase() ===
+      adminReviewRequiredStatus.toLowerCase()
+      ? "urgent_booking_request"
+      : "new_booking_request";
+
+  return sendAdminDevicePushAlert(eventType, options);
 }
 
 export async function sendAdminDevicePushAlert(
@@ -1084,13 +1078,11 @@ export async function sendAdminDevicePushAlert(
   const nativeSubscriptionCount = subscriptions.filter(
     (subscription) => subscription.channel === "native_ios",
   ).length;
-  const nativeEventType = isAdminNativeDriverEventType(eventType)
-    ? eventType
-    : null;
+  const nativeEventType: AdminNativeDevicePushEventType = eventType;
   const eligibleSubscriptions = subscriptions.filter(
     (subscription) =>
       subscription.channel === "web" ||
-      (Boolean(nativeEventType) && nativeSubscriptionCount === 1),
+      nativeSubscriptionCount === 1,
   );
   if (eligibleSubscriptions.length === 0) {
     return blockedAlertResult("no_active_subscriptions", true);
@@ -1101,9 +1093,7 @@ export async function sendAdminDevicePushAlert(
     ((subscription: PushSubscription, pushPayload: AdminDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
 
-  const nativePayload = nativeEventType
-    ? safeNativeDriverPayload(nativeEventType, options.vehiclePlate)
-    : null;
+  const nativePayload = safeNativePayload(nativeEventType, options.vehiclePlate);
   const shouldRecordSubscriptionHealth =
     !options.loadedSubscriptionLoader &&
     !options.subscriptionLoader &&

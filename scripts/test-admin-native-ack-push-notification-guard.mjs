@@ -145,14 +145,15 @@ includes(
     '? adminNativePushSubscriptionSource',
     '.eq("source_surface", adminNativePushSubscriptionSource)',
     "nativeSubscriptionCount === 1",
-    "isAdminNativeDriverEventType(eventType)",
+    "type AdminNativeDevicePushEventType = AdminDevicePushEventType",
+    "safeNativePayload(nativeEventType, options.vehiclePlate)",
     'title: "Prestige Limo Ops"',
     '`Driver ${plate} acknowledged the job.`',
     '`${plate} reported ${statusLabel}.`',
     'open_target: "/"',
     "DeviceNotRegistered",
   ],
-  "Existing Admin push sender native Driver-event extension",
+  "Existing Admin push sender complete native-event extension",
 );
 includes(
   "ledger",
@@ -346,14 +347,26 @@ try {
   assert.equal(nativeRevokeNoMatch.ok, false);
   assert.equal(nativeRevokeNoMatch.status, 409);
 
-  const nativeDriverEvents = {
+  const nativeAdminEvents = {
+    new_booking_request: "New booking request received. Open Dashboard to review.",
+    urgent_booking_request: "Urgent booking request received. Open Dashboard to review.",
+    customer_booking_amendment: "Customer amendment request received. Open Dashboard to review.",
+    customer_booking_cancellation: "Customer cancellation request received. Open Dashboard to review.",
+    customer_driver_details_acknowledged: "Customer acknowledged the assigned driver details. Open Dashboard to review.",
+    customer_to_driver_reply: "Customer sent a driver app reply. Open Dashboard to review.",
     driver_acknowledged: "Driver SNP 9124S acknowledged the job.",
     driver_completed: "SNP 9124S reported Job Completed.",
+    driver_issue: "Driver reported an issue. Open Dashboard to review.",
     driver_ots: "SNP 9124S reported OTS.",
+    driver_ots_photo: "Driver sent an OTS photo. Open Dashboard to review.",
     driver_otw: "SNP 9124S reported OTW.",
     driver_pob: "SNP 9124S reported POB.",
+    driver_to_customer_reply: "Driver sent a customer app reply. Open Dashboard to review.",
+    email_booking_amendment: "Booking amendment received by email. Open Dashboard to review.",
+    email_booking_cancellation: "Booking cancellation received by email. Open Dashboard to review.",
+    email_confirmed_booking: "Confirmed booking received by email. Open Dashboard to review.",
   };
-  for (const eventType of Object.keys(nativeDriverEvents)) {
+  for (const eventType of Object.keys(nativeAdminEvents)) {
     assert.deepEqual(
       nativeNotifications.nativeAdminNotificationOpenRequest({
         open_target: "/",
@@ -366,7 +379,7 @@ try {
   assert.equal(
     nativeNotifications.nativeAdminNotificationOpenRequest({
       open_target: "/",
-      type: "driver_issue",
+      type: "monthly_billing",
     }),
     null,
   );
@@ -385,7 +398,7 @@ try {
     }),
     null,
   );
-  for (const [eventType, body] of Object.entries(nativeDriverEvents)) {
+  for (const [eventType, body] of Object.entries(nativeAdminEvents)) {
     let nativePayload = null;
     let nativeToken = null;
     const nativeAlert = await helper.sendAdminDevicePushAlert(eventType, {
@@ -415,7 +428,6 @@ try {
       "passenger",
       "route",
       "contact",
-      "booking",
       "price",
       "billing",
       "invoice",
@@ -445,19 +457,19 @@ try {
   assert.equal(unsafePlateAlert.ok, true);
   assert.equal(unsafePlatePayload.body, "Driver reported OTW. Open Dashboard to review.");
 
-  let nonDriverNativeSendCount = 0;
-  const nonDriverEvent = await helper.sendAdminDevicePushAlert("driver_issue", {
+  let invalidNativeSendCount = 0;
+  const invalidNativeEvent = await helper.sendAdminDevicePushAlert("monthly_billing", {
     env: configuredEnv,
     loadedSubscriptionLoader: async () => [{
       channel: "native_ios",
       endpoint: nativeEndpoint,
       webSubscription: null,
     }],
-    nativePushSender: async () => { nonDriverNativeSendCount += 1; },
+    nativePushSender: async () => { invalidNativeSendCount += 1; },
   });
-  assert.equal(nonDriverEvent.ok, false);
-  assert.equal(nonDriverEvent.reason, "no_active_subscriptions");
-  assert.equal(nonDriverNativeSendCount, 0);
+  assert.equal(invalidNativeEvent.ok, false);
+  assert.equal(invalidNativeEvent.reason, "invalid_event");
+  assert.equal(invalidNativeSendCount, 0);
 
   let duplicateNativeSendCount = 0;
   let preservedWebSendCount = 0;
@@ -498,4 +510,4 @@ try {
   await rm(tempDir, { force: true, recursive: true });
 }
 
-console.log("Admin native Driver plate push notification guard passed.");
+console.log("Admin complete native alert and Driver plate guard passed.");

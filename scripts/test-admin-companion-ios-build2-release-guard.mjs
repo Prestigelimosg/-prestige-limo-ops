@@ -24,8 +24,8 @@ assert.equal(config.version, "1.0.0");
 assert.equal(config.ios.version, "1.0.0");
 assert.equal(
   config.ios.buildNumber,
-  "4",
-  "The approved fourth Admin TestFlight build number must be explicit",
+  "5",
+  "The approved fifth Admin TestFlight build number must be explicit",
 );
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.admin");
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Limo Ops");
@@ -70,4 +70,4 @@ assert.equal(
   "The Admin Build 2 release guard must run in preactivation verification",
 );
 
-console.log("Admin Companion iOS Build 4 release guard passed.");
+console.log("Admin Companion iOS Build 5 release guard passed.");

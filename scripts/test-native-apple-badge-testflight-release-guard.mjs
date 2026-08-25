@@ -26,7 +26,7 @@ assert.deepEqual(
     [driver.name, driver.ios.bundleIdentifier, driver.extra?.eas?.projectId, driver.ios.buildNumber, driverEas.submit?.production?.ios?.ascAppId],
   ],
   [
-    ["Prestige Limo Ops", "sg.prestigelimo.admin", "2dada379-f732-4e25-80a3-cdbbb8f52b11", "4", "6803312296"],
+    ["Prestige Limo Ops", "sg.prestigelimo.admin", "2dada379-f732-4e25-80a3-cdbbb8f52b11", "5", "6803312296"],
     ["Prestige SG", "sg.prestigelimo.customer", "ce71ff91-7f71-4297-bcef-edf420f94316", "9", "6802691447"],
     ["Prestige SG Driver", "sg.prestigelimo.drivercompanion", "2a797181-d09d-4384-8d01-583456e83c3e", "16", "6800706103"],
   ],

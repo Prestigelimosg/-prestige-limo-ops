@@ -1,5 +1,6 @@
 import {
   createAdminBooking,
+  type AdminCustomerAccountCollisionReview,
   type AdminBookingPersistenceRecord,
   type AdminBookingPersistenceUpdateInput,
   loadAdminBookingByReference,
@@ -42,6 +43,7 @@ function blockedResponse(error: string) {
 
 type AdminBookingSafeFailureDetail = {
   category?: string;
+  customer_account_collision_review?: AdminCustomerAccountCollisionReview;
   error: string;
   operation?: string;
   status: number;
@@ -52,6 +54,9 @@ function safeFailurePayload(detail: AdminBookingSafeFailureDetail) {
     ok: false,
     error: detail.error,
     ...(detail.category ? { safe_error_category: detail.category } : {}),
+    ...(detail.customer_account_collision_review
+      ? { customer_account_collision_review: detail.customer_account_collision_review }
+      : {}),
     ...(detail.operation ? { safe_error_operation: detail.operation } : {}),
   };
 }

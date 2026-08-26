@@ -57,6 +57,22 @@ export type AdminPersonalCustomerFolderCreateIntent = {
   display_name: string;
 };
 
+export type AdminCustomerAccountCollisionResolution = {
+  action: "create_new" | "merge";
+  reviewed_customer_ids: number[];
+  selected_customer_id?: number | null;
+};
+
+export type AdminCustomerAccountCollisionCandidate = {
+  customer_account: string;
+  customer_id: number | string;
+};
+
+export type AdminCustomerAccountCollisionReview = {
+  candidates: AdminCustomerAccountCollisionCandidate[];
+  code: "customer_account_collision_review_required";
+};
+
 export type AdminBookingRoutePointInput = {
   point_type?: "pickup" | "dropoff" | "stop" | "waypoint" | "extra_stop";
   sequence_number?: number | null;
@@ -77,6 +93,7 @@ export type AdminBookingServiceItemInput = {
 
 export type AdminBookingPersistenceInput = {
   booking: AdminBookingRecordInput;
+  customer_account_collision_resolution?: AdminCustomerAccountCollisionResolution | null;
   hotel_agency_folder_create?: AdminHotelAgencyFolderCreateIntent | null;
   personal_customer_folder_create?: AdminPersonalCustomerFolderCreateIntent | null;
   route_points: AdminBookingRoutePointInput[];
@@ -148,6 +165,7 @@ export type AdminBookingResult<T> =
   | {
       ok: false;
       category?: AdminBookingPersistenceSafeErrorCategory;
+      customer_account_collision_review?: AdminCustomerAccountCollisionReview;
       error: string;
       operation?: AdminBookingPersistenceSafeErrorOperation;
       status: number;
@@ -177,6 +195,7 @@ export const adminBookingPersistenceContractVersion =
 
 const createPayloadTopLevelFields = new Set([
   "booking",
+  "customer_account_collision_resolution",
   "hotel_agency_folder_create",
   "personal_customer_folder_create",
   "route_points",
@@ -258,6 +277,11 @@ const bookingFields = new Set([
 ]);
 const hotelAgencyFolderCreateFields = new Set(["company_name"]);
 const personalCustomerFolderCreateFields = new Set(["display_name"]);
+const customerAccountCollisionResolutionFields = new Set([
+  "action",
+  "reviewed_customer_ids",
+  "selected_customer_id",
+]);
 
 const routePointFields = new Set([
   "point_type",
@@ -831,6 +855,13 @@ function parseAdminBookingOperationalPayload(
   const hotelAgencyFolderCreateRecord = asRecord(body.hotel_agency_folder_create);
   const hasPersonalCustomerFolderCreate = hasOwn(body, "personal_customer_folder_create");
   const personalCustomerFolderCreateRecord = asRecord(body.personal_customer_folder_create);
+  const hasCustomerAccountCollisionResolution = hasOwn(
+    body,
+    "customer_account_collision_resolution",
+  );
+  const customerAccountCollisionResolutionRecord = asRecord(
+    body.customer_account_collision_resolution,
+  );
   const routePointRecords = asArray(body.route_points).map(asRecord);
   const serviceItemRecords = asArray(body.service_items).map(asRecord);
   const unknownNestedKeys = [
@@ -847,6 +878,13 @@ function parseAdminBookingOperationalPayload(
           personalCustomerFolderCreateRecord,
           personalCustomerFolderCreateFields,
           "personal_customer_folder_create",
+        )
+      : []),
+    ...(hasCustomerAccountCollisionResolution
+      ? findUnknownKeys(
+          customerAccountCollisionResolutionRecord,
+          customerAccountCollisionResolutionFields,
+          "customer_account_collision_resolution",
         )
       : []),
     ...routePointRecords.flatMap((record, index) =>
@@ -919,6 +957,19 @@ function parseAdminBookingOperationalPayload(
     };
   }
 
+  if (
+    hasCustomerAccountCollisionResolution &&
+    (body.customer_account_collision_resolution === null ||
+      typeof body.customer_account_collision_resolution !== "object" ||
+      Array.isArray(body.customer_account_collision_resolution))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed customer account collision resolution rejected.",
+    };
+  }
+
   if (hasHotelAgencyFolderCreate && hasPersonalCustomerFolderCreate) {
     return {
       ok: false,
@@ -933,6 +984,44 @@ function parseAdminBookingOperationalPayload(
   const personalCustomerFolderCreateDisplayName = hasPersonalCustomerFolderCreate
     ? textOrNull(personalCustomerFolderCreateRecord.display_name)
     : null;
+  const customerAccountCollisionAction = hasCustomerAccountCollisionResolution
+    ? textOrNull(customerAccountCollisionResolutionRecord.action)
+    : null;
+  const reviewedCustomerIds = hasCustomerAccountCollisionResolution &&
+      Array.isArray(customerAccountCollisionResolutionRecord.reviewed_customer_ids)
+    ? customerAccountCollisionResolutionRecord.reviewed_customer_ids.map(integerOrNull)
+    : [];
+  const selectedCustomerId = hasCustomerAccountCollisionResolution
+    ? integerOrNull(customerAccountCollisionResolutionRecord.selected_customer_id)
+    : null;
+
+  if (hasCustomerAccountCollisionResolution) {
+    const uniqueReviewedCustomerIds = new Set(reviewedCustomerIds);
+    const reviewedCustomerIdsAreValid =
+      reviewedCustomerIds.length > 0 &&
+      reviewedCustomerIds.length <= 20 &&
+      reviewedCustomerIds.every((customerId) => customerId !== null && customerId > 0) &&
+      uniqueReviewedCustomerIds.size === reviewedCustomerIds.length;
+    const mergeResolutionIsValid =
+      customerAccountCollisionAction === "merge" &&
+      selectedCustomerId !== null &&
+      selectedCustomerId > 0 &&
+      uniqueReviewedCustomerIds.has(selectedCustomerId);
+    const createNewResolutionIsValid =
+      customerAccountCollisionAction === "create_new" &&
+      !hasOwn(customerAccountCollisionResolutionRecord, "selected_customer_id");
+
+    if (
+      !reviewedCustomerIdsAreValid ||
+      (!mergeResolutionIsValid && !createNewResolutionIsValid)
+    ) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Malformed customer account collision resolution rejected.",
+      };
+    }
+  }
 
   if (hasHotelAgencyFolderCreate && !hotelAgencyFolderCreateCompanyName) {
     return {
@@ -979,6 +1068,17 @@ function parseAdminBookingOperationalPayload(
     ok: true,
     data: {
       booking,
+      ...(hasCustomerAccountCollisionResolution
+        ? {
+            customer_account_collision_resolution: {
+              action: customerAccountCollisionAction as "create_new" | "merge",
+              reviewed_customer_ids: reviewedCustomerIds as number[],
+              ...(selectedCustomerId
+                ? { selected_customer_id: selectedCustomerId }
+                : {}),
+            },
+          }
+        : {}),
       ...(hotelAgencyFolderCreateCompanyName
         ? {
             hotel_agency_folder_create: {

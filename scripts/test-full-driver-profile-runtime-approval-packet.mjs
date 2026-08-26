@@ -184,7 +184,7 @@ for (const fragment of [
 
 const saveBookingSource = sliceBetween(
   appPage,
-  "async function saveBooking()",
+  "async function saveBooking(",
   "async function loadBookings",
 );
 assertIncludes(saveBookingSource, 'fetch("/api/admin-bookings"', "Save Booking + CRM safe endpoint");

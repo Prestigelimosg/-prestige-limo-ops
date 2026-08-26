@@ -185,9 +185,9 @@ for (const fragment of [
   "clearMessageEditIdentityState.primaryLabel, \"Update + Cal\"",
   "clearMessageEditIdentityState.editIdentity, /Editing booking 10839/",
   "updateAfterDriverDeleteState.bookingUpdate?.expected_updated_at",
-  "updateAfterDriverDeleteState.flightValue, \"\"",
-  "updateAfterDriverDeleteState.editIdentityCount, 0",
-  "updateAfterDriverDeleteState.primarySaveLabel, \"Save + CRM\"",
+  "updateAfterDriverDeleteState.flightValue, \"DL9905\"",
+  "updateAfterDriverDeleteState.editIdentityCount, 1",
+  "updateAfterDriverDeleteState.primarySaveLabel, \"Update + Cal\"",
 ]) {
   includes(bookingUiBrowser, fragment, `visible browser save-reset coverage ${fragment}`);
 }

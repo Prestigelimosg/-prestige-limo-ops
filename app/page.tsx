@@ -2353,6 +2353,11 @@ type AdminBookingPersistenceRequestBody = {
     cancellation_review_status?: string | null;
     parser_source_reference: string | null;
   };
+  customer_account_collision_resolution?: {
+    action: "create_new" | "merge";
+    reviewed_customer_ids: number[];
+    selected_customer_id?: number;
+  };
   hotel_agency_folder_create?: {
     company_name: string;
   };
@@ -2361,6 +2366,32 @@ type AdminBookingPersistenceRequestBody = {
   };
   route_points: NonNullable<AdminBookingPersistenceRecord["route_points"]>;
   service_items: NonNullable<AdminBookingPersistenceRecord["service_items"]>;
+};
+
+type AdminCustomerAccountCollisionCandidate = {
+  customer_account: string;
+  customer_id: number;
+};
+
+type AdminCustomerAccountCollisionReview = {
+  candidates: AdminCustomerAccountCollisionCandidate[];
+  code: "customer_account_collision_review_required";
+};
+
+type AdminCustomerAccountCollisionReviewState =
+  AdminCustomerAccountCollisionReview & {
+    billingIdentityResolution: Extract<
+      SaveCrmBillingIdentityAccountResolution,
+      { ok: true }
+    >;
+    bookingKey: string;
+    selectedCustomerId: number | null;
+  };
+
+type AdminCustomerAccountCollisionResolution = {
+  action: "create_new" | "merge";
+  reviewed_customer_ids: number[];
+  selected_customer_id?: number;
 };
 
 type AdminDispatchAgencyFolder = {
@@ -9824,6 +9855,45 @@ function adminDispatchVerifiedIdentityId(value: string | number | null | undefin
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function adminCustomerAccountCollisionBookingKey(bookingValue: BookingForm) {
+  return JSON.stringify({
+    booker: clean(bookingValue.booker),
+    bookerContact: clean(bookingValue.bookerContact),
+    bookerEmail: clean(bookingValue.bookerEmail).toLocaleLowerCase(),
+    bookerId: adminDispatchVerifiedIdentityId(bookingValue.bookerId),
+    company: saveCrmExplicitCompanyAccount(bookingValue),
+    companyId: adminDispatchVerifiedIdentityId(bookingValue.companyId),
+    customerId: adminDispatchVerifiedIdentityId(bookingValue.customerId),
+    passenger: clean(bookingValue.name),
+    travelerId: adminDispatchVerifiedIdentityId(bookingValue.travelerId),
+  });
+}
+
+function adminSaveCrmPostSuccessFormAction(input: {
+  calendarSyncFailed: boolean;
+  calendarSyncSkipped: boolean;
+  customerReturnUrl: string;
+  installedAdminNative: boolean;
+  primarySavedDriverId: string | number | null | undefined;
+  savedBookingCount: number;
+}): "intact" | "reset" | "retain" {
+  if (input.calendarSyncFailed) {
+    return "intact";
+  }
+
+  if (
+    input.installedAdminNative ||
+    input.calendarSyncSkipped ||
+    input.savedBookingCount !== 1 ||
+    Boolean(input.customerReturnUrl) ||
+    !adminDispatchVerifiedIdentityId(input.primarySavedDriverId)
+  ) {
+    return "reset";
+  }
+
+  return "retain";
+}
+
 function adminDispatchIsCreatingAgencyFolder(bookingValue: Pick<BookingForm, "customerId">) {
   return clean(bookingValue.customerId) === adminDispatchCreateAgencyFolderValue;
 }
@@ -9996,7 +10066,7 @@ function buildAdminBookingPersistencePayload(
     ...(options.personalCustomerFolderCreateOverride
       ? {
           personal_customer_folder_create: {
-            display_name: customerDisplayName,
+            display_name: clean(bookingValue.name) || customerDisplayName,
           },
         }
       : {}),
@@ -10994,10 +11064,49 @@ function adminBookingPersistenceFailureMessage(
 }
 
 type AdminBookingPersistenceFailureResponse = {
+  customer_account_collision_review?: unknown;
   error?: string;
   safe_error_category?: string;
   safe_error_operation?: string;
 };
+
+function adminCustomerAccountCollisionReviewFromResponse(
+  value: unknown,
+): AdminCustomerAccountCollisionReview | null {
+  const review = value as {
+    candidates?: Array<{ customer_account?: unknown; customer_id?: unknown }>;
+    code?: unknown;
+  } | null;
+
+  if (
+    review?.code !== "customer_account_collision_review_required" ||
+    !Array.isArray(review.candidates) ||
+    review.candidates.length === 0 ||
+    review.candidates.length > 20
+  ) {
+    return null;
+  }
+
+  const candidates = review.candidates.flatMap((candidate) => {
+    const customerId = Number(candidate?.customer_id);
+    const customerAccount = clean(String(candidate?.customer_account ?? "")).slice(0, 220);
+
+    return Number.isSafeInteger(customerId) && customerId > 0 && customerAccount
+      ? [{ customer_account: customerAccount, customer_id: customerId }]
+      : [];
+  });
+  const uniqueCustomerIds = new Set(candidates.map((candidate) => candidate.customer_id));
+
+  return candidates.length === review.candidates.length &&
+    uniqueCustomerIds.size === candidates.length
+    ? {
+        candidates: [...candidates].sort(
+          (first, second) => first.customer_id - second.customer_id,
+        ),
+        code: "customer_account_collision_review_required",
+      }
+    : null;
+}
 
 function adminBookingPersistenceFailureDetail(
   result: AdminBookingPersistenceFailureResponse | null | undefined,
@@ -14820,6 +14929,8 @@ export default function Home() {
     useState<SaveCrmBillingIdentityConfirmation | null>(null);
   const [saveCrmBillingIdentityMessage, setSaveCrmBillingIdentityMessage] =
     useState<Message | null>(null);
+  const [adminCustomerAccountCollisionReview, setAdminCustomerAccountCollisionReview] =
+    useState<AdminCustomerAccountCollisionReviewState | null>(null);
   const [serviceChangePriceReviewConfirmation, setServiceChangePriceReviewConfirmation] =
     useState<ServiceChangePriceReviewConfirmation | null>(null);
   const [serviceChangePriceReviewMessage, setServiceChangePriceReviewMessage] =
@@ -18234,6 +18345,11 @@ export default function Home() {
       : saveCrmBillingIdentityMessage;
   const saveCrmBillingIdentityAccountOverride =
     confirmedSaveCrmBillingIdentity?.accountLabel || "";
+  const activeAdminCustomerAccountCollisionReview =
+    adminCustomerAccountCollisionReview?.bookingKey ===
+    adminCustomerAccountCollisionBookingKey(booking)
+      ? adminCustomerAccountCollisionReview
+      : null;
   const serviceChangePriceReview = useMemo(
     () =>
       buildServiceChangePriceReview(
@@ -18552,6 +18668,17 @@ export default function Home() {
   const customerCopyCard = useMemo(() => {
     const serviceType = customerBookingTypeLabel(booking.bookingType);
     const bookingReference = clean(dispatchReleaseWorkflowBookingReference);
+    const customerCopySavedPassengerName =
+      (bookingReference &&
+      cleanReferenceText(appliedAdminBookingSnapshot?.booking_reference) === bookingReference
+        ? clean(appliedAdminBookingSnapshot?.passenger_name)
+        : "") ||
+      (bookingReference &&
+      cleanReferenceText(dispatchReleaseLoadedBookingRecord?.booking_reference) === bookingReference
+        ? clean(dispatchReleaseLoadedBookingRecord?.passenger_name)
+        : "");
+    const customerCopyPassengerName =
+      clean(booking.name) || customerCopySavedPassengerName;
     const flightLocationParts = dispatchCopyLocationFlightParts(booking);
     const bookingDriverName = clean(booking.driverName);
     const bookingDriverContact = clean(booking.driverContact);
@@ -18581,7 +18708,7 @@ export default function Home() {
     const sections = [
       [
         "CUSTOMER BOOKING DETAILS",
-        clean(booking.name) ? `Passenger name: ${clean(booking.name)}` : "",
+        `Passenger name: ${customerCopyPassengerName || "Passenger not set"}`,
         dispatchPublicBookingReference
           ? `Booking reference: ${dispatchPublicBookingReference}`
           : "",
@@ -18603,9 +18730,13 @@ export default function Home() {
   }, [
     activeAdminDriverJobLink?.booking_reference,
     activeAdminDriverJobLink?.safe_summary.vehicle,
+    appliedAdminBookingSnapshot?.booking_reference,
+    appliedAdminBookingSnapshot?.passenger_name,
     assignedDriverRecord?.plate_number,
     assignedDriverRecord?.vehicle_type,
     booking,
+    dispatchReleaseLoadedBookingRecord?.booking_reference,
+    dispatchReleaseLoadedBookingRecord?.passenger_name,
     dispatchPublicBookingReference,
     dispatchReleaseWorkflowBookingReference,
   ]);
@@ -22065,8 +22196,70 @@ export default function Home() {
     }
   }
 
-  async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {
+  function reviewedAdminCustomerAccountCollisionIds(
+    review: AdminCustomerAccountCollisionReviewState,
+  ) {
+    return review.candidates
+      .map((candidate) => candidate.customer_id)
+      .sort((first, second) => first - second);
+  }
+
+  function mergeDetectedAdminCustomerAccount(
+    review: AdminCustomerAccountCollisionReviewState,
+  ) {
+    if (!review.selectedCustomerId) {
+      const selectionMessage = {
+        tone: "error",
+        text: "Select the exact existing Customer Account before Merge.",
+      } satisfies Message;
+
+      setMessage(selectionMessage);
+      setBookingSaveMessage(selectionMessage);
+      return;
+    }
+
+    void saveBooking({
+      action: "merge",
+      reviewed_customer_ids: reviewedAdminCustomerAccountCollisionIds(review),
+      selected_customer_id: review.selectedCustomerId,
+    });
+  }
+
+  function createNewDetectedAdminCustomerAccount(
+    review: AdminCustomerAccountCollisionReviewState,
+  ) {
+    void saveBooking({
+      action: "create_new",
+      reviewed_customer_ids: reviewedAdminCustomerAccountCollisionIds(review),
+    });
+  }
+
+  async function saveBooking(
+    customerAccountCollisionResolution?: AdminCustomerAccountCollisionResolution,
+  ): Promise<AdminBookingPersistenceRecord | null> {
     setAdminBookingPersistenceMessage(null);
+
+    const activeCustomerAccountCollisionReviewForRetry =
+      customerAccountCollisionResolution &&
+      adminCustomerAccountCollisionReview?.bookingKey ===
+        adminCustomerAccountCollisionBookingKey(booking) &&
+      adminCustomerAccountCollisionReview.billingIdentityResolution.ok
+        ? adminCustomerAccountCollisionReview
+        : null;
+
+    if (
+      customerAccountCollisionResolution &&
+      !activeCustomerAccountCollisionReviewForRetry
+    ) {
+      const staleReviewMessage = {
+        tone: "error",
+        text: "Detected customer account review is no longer current. Save + CRM again to recheck similar accounts.",
+      } satisfies Message;
+
+      setMessage(staleReviewMessage);
+      setBookingSaveMessage(staleReviewMessage);
+      return null;
+    }
 
     if (!validateBooking()) {
       return null;
@@ -22131,7 +22324,9 @@ export default function Home() {
       return lastSuccessfulBookingSave.record;
     }
 
-    const billingIdentityResolution = await resolveSaveCrmBillingIdentityAccountForSave();
+    const billingIdentityResolution = activeCustomerAccountCollisionReviewForRetry
+      ? activeCustomerAccountCollisionReviewForRetry.billingIdentityResolution
+      : await resolveSaveCrmBillingIdentityAccountForSave();
 
     if (!billingIdentityResolution.ok) {
       return null;
@@ -22266,6 +22461,11 @@ export default function Home() {
             billingIdentityResolution.personalCustomerCreateConfirmed,
         },
       );
+
+      if (customerAccountCollisionResolution && bookingPayloads[0]) {
+        bookingPayloads[0].payload.customer_account_collision_resolution =
+          customerAccountCollisionResolution;
+      }
       const savedBookings: Array<{
         bookingValue: BookingForm;
         legLabel: "outbound" | "return";
@@ -22293,6 +22493,7 @@ export default function Home() {
         let responseOk = false;
         let responseBody: {
           booking?: AdminBookingPersistenceRecord | null;
+          customer_account_collision_review?: unknown;
           error?: string;
           ok?: boolean;
           safe_error_category?: string;
@@ -22331,6 +22532,42 @@ export default function Home() {
 
         const savedBooking = responseBody?.booking ?? null;
         const savedBookingReference = clean(savedBooking?.booking_reference);
+        const customerAccountCollisionReview =
+          adminCustomerAccountCollisionReviewFromResponse(
+            responseBody?.customer_account_collision_review,
+          );
+
+        if (
+          !responseOk &&
+          responseBody?.ok !== true &&
+          bookingPayload.legLabel === "outbound" &&
+          savedBookings.length === 0 &&
+          customerAccountCollisionReview
+        ) {
+          setAdminCustomerAccountCollisionReview({
+            ...customerAccountCollisionReview,
+            billingIdentityResolution: {
+              accountLabel: billingIdentityResolution.accountLabel,
+              ok: true,
+              personalCustomerCreateConfirmed:
+                billingIdentityResolution.personalCustomerCreateConfirmed,
+            },
+            bookingKey: adminCustomerAccountCollisionBookingKey(bookingForSave),
+            selectedCustomerId:
+              customerAccountCollisionReview.candidates.length === 1
+                ? customerAccountCollisionReview.candidates[0].customer_id
+                : null,
+          });
+          const reviewMessage = {
+            tone: "info",
+            text: "Detected similar customer/company name. Choose Merge or Create new before Save + CRM continues.",
+          } satisfies Message;
+
+          setMessage(reviewMessage);
+          setBookingSaveMessage(reviewMessage);
+          setAdminBookingPersistenceMessage(reviewMessage);
+          return null;
+        }
 
         if (!responseOk || responseBody?.ok !== true || !savedBooking || !savedBookingReference) {
           const errorMessage = adminBookingPersistenceFailureDetail(
@@ -22378,6 +22615,8 @@ export default function Home() {
         throw new Error("Admin booking persistence returned no saved booking.");
       }
 
+      setAdminCustomerAccountCollisionReview(null);
+
       markAdminBookingAsActiveForUpdates(primarySavedBookingReference, primarySavedBooking);
       driverJobLinkHandoffFocusAppliedRef.current = "";
       setDriverJobLinkHandoffReference(primarySavedBookingReference);
@@ -22422,6 +22661,14 @@ export default function Home() {
       const calendarSyncSkipped = calendarSyncResults.some(
         (result) => "skipped" in result && result.skipped,
       );
+      const postSuccessFormAction = adminSaveCrmPostSuccessFormAction({
+        calendarSyncFailed: Boolean(calendarSyncFailed),
+        calendarSyncSkipped,
+        customerReturnUrl,
+        installedAdminNative: adminNativePushIsSupported(),
+        primarySavedDriverId: primarySavedBooking.driver_id,
+        savedBookingCount: savedBookings.length,
+      });
 
       const saveMessage = {
         tone: calendarSyncFailed ? "error" : "success",
@@ -22438,12 +22685,10 @@ export default function Home() {
             )}. Google Calendar auto-synced; reminders included; no guest email sent.`,
       } satisfies Message;
 
-      if (!calendarSyncFailed) {
-        if (savedBookings.length === 1 && !customerReturnUrl) {
-          retainSavedBookingForDriverJobLinkHandoff(primarySavedBooking);
-        } else {
-          resetAdminBookingFormAfterSuccessfulPersistence();
-        }
+      if (postSuccessFormAction === "retain") {
+        retainSavedBookingForDriverJobLinkHandoff(primarySavedBooking);
+      } else if (postSuccessFormAction === "reset") {
+        resetAdminBookingFormAfterSuccessfulPersistence();
       }
       setMessage(saveMessage);
       setBookingSaveMessage(saveMessage);
@@ -27357,7 +27602,7 @@ export default function Home() {
       key: `corporate:${booking.companyId}:${booking.bookerId || "unassigned"}`,
       kind: "corporate",
       label: loadedBookerName || loadedCompanyName,
-      searchText: `${loadedCompanyName} ${loadedBookerName} ${clean(booking.name)}`.toLocaleLowerCase(),
+      searchText: `${loadedCompanyName} ${loadedBookerName}`.toLocaleLowerCase(),
       secondaryLabel: loadedBookerName
         ? `${loadedCompanyName} · loaded booking identity`
         : "Company · loaded booking identity",
@@ -27495,6 +27740,8 @@ export default function Home() {
       return;
     }
 
+    adminEmailAiCustomerRecommendationRevisionRef.current += 1;
+    setAdminEmailAiCustomerProfileSuggestion(null);
     setAdminDispatchNewCustomerType(type);
     setAdminDispatchNewCustomerChoiceOpen(false);
     setAdminDispatchCustomerAccountSearch("");
@@ -46296,6 +46543,89 @@ export default function Home() {
                       data-booking-save-feedback="job-card"
                     >
                       {bookingSaveMessage.text}
+                    </div>
+                  ) : null}
+                  {activeAdminCustomerAccountCollisionReview ? (
+                    <div
+                      className="max-w-full rounded-md border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] font-semibold leading-4 text-amber-950"
+                      data-admin-customer-account-collision-review="true"
+                    >
+                      <p className="uppercase tracking-wide">
+                        Detected similar customer/company name
+                      </p>
+                      <p className="mt-1 font-medium normal-case tracking-normal">
+                        Review the existing account before this Save + CRM creates or uses a customer folder. Nothing is merged automatically.
+                      </p>
+                      <div className="mt-2 grid gap-1">
+                        {activeAdminCustomerAccountCollisionReview.candidates.map(
+                          (candidate) => (
+                            <label
+                              className="flex min-w-0 items-start gap-2 rounded border border-amber-200 bg-white px-2 py-1.5"
+                              key={candidate.customer_id}
+                            >
+                              {activeAdminCustomerAccountCollisionReview.candidates.length > 1 ? (
+                                <input
+                                  checked={
+                                    activeAdminCustomerAccountCollisionReview.selectedCustomerId ===
+                                    candidate.customer_id
+                                  }
+                                  className="mt-0.5"
+                                  data-admin-customer-account-collision-candidate={candidate.customer_id}
+                                  disabled={saving}
+                                  name="admin-customer-account-collision-candidate"
+                                  onChange={() =>
+                                    setAdminCustomerAccountCollisionReview((current) =>
+                                      current &&
+                                      current.bookingKey ===
+                                        activeAdminCustomerAccountCollisionReview.bookingKey
+                                        ? {
+                                            ...current,
+                                            selectedCustomerId: candidate.customer_id,
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                  type="radio"
+                                />
+                              ) : null}
+                              <span className="min-w-0 break-words font-medium normal-case tracking-normal">
+                                {candidate.customer_account}
+                              </span>
+                            </label>
+                          ),
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          className="h-8 rounded border border-amber-300 bg-white px-3 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                          data-admin-customer-account-collision-merge="true"
+                          disabled={
+                            saving ||
+                            !activeAdminCustomerAccountCollisionReview.selectedCustomerId
+                          }
+                          onClick={() =>
+                            mergeDetectedAdminCustomerAccount(
+                              activeAdminCustomerAccountCollisionReview,
+                            )
+                          }
+                          type="button"
+                        >
+                          Merge
+                        </button>
+                        <button
+                          className="h-8 rounded border border-amber-300 bg-white px-3 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                          data-admin-customer-account-collision-create-new="true"
+                          disabled={saving}
+                          onClick={() =>
+                            createNewDetectedAdminCustomerAccount(
+                              activeAdminCustomerAccountCollisionReview,
+                            )
+                          }
+                          type="button"
+                        >
+                          Create new
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                   {saveCrmBillingIdentityReview ? (

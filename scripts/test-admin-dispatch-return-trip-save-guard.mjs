@@ -45,7 +45,7 @@ for (const fragment of [
 
 const saveBookingBlock = blockBetween(
   appPage,
-  "async function saveBooking(): Promise<AdminBookingPersistenceRecord | null> {",
+  "async function saveBooking(",
   "  function bookingRecordReferenceCandidates",
 );
 
@@ -65,7 +65,7 @@ for (const fragment of [
 
 const updateBlock = blockBetween(
   appPage,
-  "async function updateAppliedAdminBookingOperationalSnapshot()",
+  "async function updateAppliedAdminBookingOperationalSnapshot(",
   "  function getDispatchCopyText",
 );
 

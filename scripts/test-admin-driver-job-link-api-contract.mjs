@@ -92,13 +92,19 @@ async function writeHarnessFile(tempDir, relativePath) {
 }
 
 async function writeMockModules(tempDir) {
+  const nativePushBadgePath = path.join(tempDir, "lib/native-push-badge-count.js");
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
   const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
 
+  await mkdir(path.dirname(nativePushBadgePath), { recursive: true });
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
+  await writeFile(
+    nativePushBadgePath,
+    "exports.reserveNativePushBadgeCount = async () => null; exports.releaseNativePushBadgeCount = async () => false; exports.resetNativePushBadgeCount = async () => false;",
+  );
   await writeFile(serverOnlyPath, "");
   await writeFile(
     supabasePath,

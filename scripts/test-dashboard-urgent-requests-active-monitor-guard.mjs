@@ -81,7 +81,7 @@ const clearLoadedBookingSelectionContext = sliceBetween(
 );
 const saveBookingSection = sliceBetween(
   appPage,
-  "async function saveBooking()",
+  "async function saveBooking(",
   "function bookingRecordReferenceCandidates",
 );
 const bookingStatusUpdateSection = sliceBetween(

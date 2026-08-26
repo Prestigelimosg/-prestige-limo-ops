@@ -167,7 +167,7 @@ for (const [label, source] of [
 
 const saveBookingSource = sectionBetween(
   appPage,
-  "async function saveBooking()",
+  "async function saveBooking(",
   "async function saveAdminBookingOperationalSnapshot()",
 );
 assertIncludes(saveBookingSource, 'fetch("/api/admin-bookings"', "Save Booking + CRM safe endpoint");
@@ -183,7 +183,7 @@ const saveDriverProfileSource = sectionBetween(
 const deleteDriverProfileSource = sectionBetween(
   appPage,
   "async function deleteDriverProfile",
-  "async function saveBooking()",
+  "async function saveBooking(",
 );
 
 for (const [label, source] of [

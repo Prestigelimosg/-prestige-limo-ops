@@ -2314,6 +2314,12 @@ type AdminBookingPersistenceRecord = {
   }>;
 };
 
+type AdminExactBookingReadResponse = {
+  booking?: (BookingRecord & AdminBookingPersistenceRecord) | null;
+  error?: string;
+  ok?: boolean;
+};
+
 type AdminBookingPersistenceRequestBody = {
   booking: {
     booking_reference: string;
@@ -14898,6 +14904,7 @@ export default function Home() {
   const [bookingSaveMessage, setBookingSaveMessage] = useState<Message | null>(null);
   const [adminBookingPersistenceRecords, setAdminBookingPersistenceRecords] =
     useState<AdminBookingPersistenceRecord[]>([]);
+  const loadSelectedBookingRequestRevisionRef = useRef(0);
   const [adminBookingPersistenceMessage, setAdminBookingPersistenceMessage] =
     useState<Message | null>(null);
   const [adminBookingPersistenceAction, setAdminBookingPersistenceAction] =
@@ -23147,7 +23154,41 @@ export default function Home() {
     });
   }
 
-  function loadSelectedBooking(
+  async function loadExactAdminBookingPersistenceRecord(
+    bookingReference: string,
+    failureMessage: string,
+  ) {
+    const exactBookingReference = cleanReferenceText(bookingReference);
+
+    if (!exactBookingReference) {
+      throw new Error(failureMessage);
+    }
+
+    const params = new URLSearchParams({ booking_reference: exactBookingReference });
+    const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": "admin-booking-persistence",
+      },
+      method: "GET",
+    });
+    const result = (await response.json().catch(() => null)) as
+      | AdminExactBookingReadResponse
+      | null;
+    const exactBookingRecord = result?.booking || null;
+
+    if (
+      !response.ok ||
+      result?.ok !== true ||
+      !exactBookingRecord ||
+      cleanReferenceText(exactBookingRecord.booking_reference) !== exactBookingReference
+    ) {
+      throw new Error(adminBookingPersistenceFailureDetail(result, failureMessage));
+    }
+
+    return exactBookingRecord;
+  }
+
+  async function loadSelectedBooking(
     bookingRecord: BookingRecord,
     options: {
       adminBookingRecordOverride?: AdminBookingPersistenceRecord;
@@ -23158,8 +23199,11 @@ export default function Home() {
       focusJobCard?: boolean;
     } = {},
   ) {
+    const requestRevision = loadSelectedBookingRequestRevisionRef.current + 1;
+    loadSelectedBookingRequestRevisionRef.current = requestRevision;
+    const persistedBookingReference = bookingRecordPersistedReference(bookingRecord);
     const bookingReference =
-      bookingRecordPersistedReference(bookingRecord) ||
+      persistedBookingReference ||
       cleanReferenceText(bookingRecord.flight_no) ||
       getBookingDateKey(bookingRecord);
     const bookingDisplayReference = bookingPublicReference(bookingRecord);
@@ -23167,9 +23211,44 @@ export default function Home() {
     const loadedBookingForm = options.bookingFormOverride
       ? { ...options.bookingFormOverride }
       : bookingRecordToForm(bookingRecord);
+    let exactLoadedAdminBookingRecord = persistedBookingReference
+      ? findAdminBookingPersistenceRecordByReference(
+          adminBookingPersistenceRecords,
+          persistedBookingReference,
+        )
+      : null;
+    if (
+      !options.adminBookingRecordOverride &&
+      !exactLoadedAdminBookingRecord &&
+      persistedBookingReference
+    ) {
+      try {
+        exactLoadedAdminBookingRecord = await loadExactAdminBookingPersistenceRecord(
+          persistedBookingReference,
+          `Exact saved booking ${adminVisibleBookingReference(persistedBookingReference)} could not be loaded.`,
+        );
+      } catch {
+        // Keep the established narrow booking fallback when the guarded full-record read is unavailable.
+      }
+
+      if (loadSelectedBookingRequestRevisionRef.current !== requestRevision) {
+        return;
+      }
+    }
     const loadedAdminBookingRecord =
       options.adminBookingRecordOverride ||
+      exactLoadedAdminBookingRecord ||
       bookingRecordToAdminBookingPersistenceRecord(bookingRecord);
+
+    if (exactLoadedAdminBookingRecord) {
+      setAdminBookingPersistenceRecords((currentRecords) => [
+        exactLoadedAdminBookingRecord,
+        ...currentRecords.filter(
+          (currentRecord) =>
+            cleanReferenceText(currentRecord.booking_reference) !== persistedBookingReference,
+        ),
+      ]);
+    }
 
     rememberHandledCustomerBookingRequest(bookingRecord);
     setDriverJobLinkCopyMessage(null);
@@ -23466,7 +23545,7 @@ export default function Home() {
       } satisfies RequestInit;
       const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, requestInit);
       const responseBody = (await response.json().catch(() => null)) as
-        | AdminSavedBookingReadResponse
+        | AdminExactBookingReadResponse
         | null;
       const targetBooking = responseBody?.booking ?? null;
       const responseReference = targetBooking
@@ -23495,7 +23574,10 @@ export default function Home() {
 
         return [targetBooking, ...filteredBookings];
       });
-      loadSelectedBooking(targetBooking, { focusCustomerCopy: true });
+      void loadSelectedBooking(targetBooking, {
+        adminBookingRecordOverride: targetBooking,
+        focusCustomerCopy: true,
+      });
 
       if (typeof window !== "undefined") {
         window.history.replaceState(null, "", window.location.pathname);
@@ -23512,14 +23594,17 @@ export default function Home() {
     }
   }
 
-  function openBookingInCompletedCancelReview(bookingRecord: BookingRecord, bookingReference: string) {
+  function openBookingInCompletedCancelReview(
+    bookingRecord: BookingRecord & AdminBookingPersistenceRecord,
+    bookingReference: string,
+  ) {
     const cancelledReviewBooking = {
       ...bookingRecord,
       admin_internal_status: "cancelled",
       cancellation_review_status: "cancelled",
       customer_facing_status: "cancelled",
       status: "cancelled",
-    } satisfies BookingRecord;
+    } satisfies BookingRecord & AdminBookingPersistenceRecord;
     const cancelReviewMessage = `Booking ${bookingReference} opened in Completed / History for cancel review. No booking, invoice, payment, send, payout, GPS, provider, or Supabase record was changed. Use the existing Completed closeout controls before any save.`;
 
     setBookings((currentBookings) => {
@@ -23530,7 +23615,10 @@ export default function Home() {
       return [cancelledReviewBooking, ...filteredBookings];
     });
     setCompletedCancelHandoffBooking(cancelledReviewBooking);
-    loadSelectedBooking(cancelledReviewBooking, { focusCustomerCopy: true });
+    void loadSelectedBooking(cancelledReviewBooking, {
+      adminBookingRecordOverride: cancelledReviewBooking,
+      focusCustomerCopy: true,
+    });
     setActiveTab("completed");
     setCompletedMonthFilter(bookingRecordCompletedHistoryMonthKey(cancelledReviewBooking));
     setCompletedSearchTerm("");
@@ -23586,7 +23674,7 @@ export default function Home() {
         method: "GET",
       });
       const responseBody = (await response.json().catch(() => null)) as
-        | AdminSavedBookingReadResponse
+        | AdminExactBookingReadResponse
         | null;
       const targetBooking = responseBody?.booking ?? null;
       const responseReference = targetBooking
@@ -23816,35 +23904,10 @@ export default function Home() {
     });
 
     try {
-      const params = new URLSearchParams({ booking_reference: exactBookingReference });
-      const response = await fetch(`/api/admin-bookings?${params.toString()}`, {
-        headers: {
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "GET",
-      });
-      const result = (await response.json().catch(() => null)) as
-        | {
-            booking?: AdminBookingPersistenceRecord | null;
-            error?: string;
-            ok?: boolean;
-          }
-        | null;
-      const exactRequestRecord = result?.booking || null;
-
-      if (
-        !response.ok ||
-        result?.ok !== true ||
-        !exactRequestRecord ||
-        cleanReferenceText(exactRequestRecord.booking_reference) !== exactBookingReference
-      ) {
-        throw new Error(
-          adminBookingPersistenceFailureDetail(
-            result,
-            `Exact customer request ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
-          ),
-        );
-      }
+      const exactRequestRecord = await loadExactAdminBookingPersistenceRecord(
+        exactBookingReference,
+        `Exact customer request ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+      );
 
       const exactBookingRecord =
         adminBookingPersistenceRecordToCalendarBookingRecord(exactRequestRecord);
@@ -23857,7 +23920,7 @@ export default function Home() {
 
         return [exactBookingRecord, ...remainingBookings];
       });
-      loadSelectedBooking(exactBookingRecord, {
+      await loadSelectedBooking(exactBookingRecord, {
         adminBookingRecordOverride: exactRequestRecord,
         focusDriverJobLink: true,
       });

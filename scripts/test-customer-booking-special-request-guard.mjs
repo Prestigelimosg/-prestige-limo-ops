@@ -121,6 +121,49 @@ for (const fragment of [
 }
 
 for (const fragment of [
+  "async function loadExactAdminBookingPersistenceRecord(",
+  'new URLSearchParams({ booking_reference: exactBookingReference })',
+  'fetch(`/api/admin-bookings?${params.toString()}`',
+  '"x-prestige-admin-purpose": "admin-booking-persistence"',
+  "cleanReferenceText(exactBookingRecord.booking_reference) !== exactBookingReference",
+  "type AdminExactBookingReadResponse = {",
+  "adminBookingRecordOverride: targetBooking,",
+  "adminBookingRecordOverride: cancelledReviewBooking,",
+  "let exactLoadedAdminBookingRecord =",
+  "findAdminBookingPersistenceRecordByReference(",
+  "adminBookingPersistenceRecords,",
+  "await loadExactAdminBookingPersistenceRecord(",
+  "loadSelectedBookingRequestRevisionRef.current !== requestRevision",
+  "options.adminBookingRecordOverride ||",
+  "exactLoadedAdminBookingRecord ||",
+  "bookingRecordToAdminBookingPersistenceRecord(bookingRecord)",
+]) {
+  assert.equal(
+    adminPage.includes(fragment),
+    true,
+    `Generic Admin booking loads must preserve the exact full persistence record before narrow fallback: ${fragment}.`,
+  );
+}
+const bookingRecordTypeSection = adminPage.slice(
+  adminPage.indexOf("type BookingRecord = {"),
+  adminPage.indexOf("const loadBookingsOperationalDisplayFieldNames"),
+);
+const narrowBookingConversionSection = adminPage.slice(
+  adminPage.indexOf("function bookingRecordToAdminBookingPersistenceRecord("),
+  adminPage.indexOf("function customerBookingTypeLabel("),
+);
+assert.doesNotMatch(
+  bookingRecordTypeSection,
+  /customer_special_request/,
+  "Customer Special Request must not broaden the general BookingRecord projection.",
+);
+assert.doesNotMatch(
+  narrowBookingConversionSection,
+  /customer_special_request/,
+  "Customer Special Request must not be copied into the narrow general-booking conversion.",
+);
+
+for (const fragment of [
   "alter table if exists public.bookings",
   "add column if not exists customer_special_request text",
   "bookings_customer_special_request_safe_check",
@@ -188,6 +231,25 @@ try {
   assert.equal(
     valid.data.requests[0].booking.customer_special_request,
     "Child seat needed\nEvent starts at 10:00",
+  );
+
+  const linkedReturn = parseCustomerBookingRequestPayloads({
+    ...request("  Child seat needed\r\nEvent starts at 10:00  "),
+    returnDropoffLocation: "Special Request Test Return Dropoff",
+    returnPickupDate: "2026-08-21",
+    returnPickupLocation: "Special Request Test Return Pickup",
+    returnPickupTime: "18:00",
+    returnTripRequested: "yes",
+  });
+  assert.equal(linkedReturn.ok, true);
+  assert.equal(linkedReturn.data.requests.length, 2);
+  assert.deepEqual(
+    linkedReturn.data.requests.map((entry) => entry.booking.customer_special_request),
+    [
+      "Child seat needed\nEvent starts at 10:00",
+      "Child seat needed\nEvent starts at 10:00",
+    ],
+    "Outbound and linked return legs must retain the same normalized Customer Special Request.",
   );
 
   const blank = parseCustomerBookingRequestPayloads(request("   "));

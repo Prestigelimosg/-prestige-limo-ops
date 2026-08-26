@@ -130,10 +130,16 @@ async function writeMockModules(tempDir) {
   await writeFile(
     path.join(tempDir, "lib/admin-device-push-notification.js"),
     [
+      "async function sendAdminManualBookingCreatedDevicePushAlert(booking) {",
+      "  const mock = globalThis.__prestigePersistenceGateMock;",
+      "  mock.manualAlertCalls.push(booking);",
+      "  if (mock.manualAlertShouldFail) throw new Error('mock_native_provider_failure');",
+      "  return { external_send: false, no_op: true, ok: true, status: 'blocked' };",
+      "}",
       "async function sendAdminNewBookingDevicePushAlert() {",
       "  return { external_send: false, no_op: true, ok: true, status: 'blocked' };",
       "}",
-      "module.exports = { sendAdminNewBookingDevicePushAlert };",
+      "module.exports = { sendAdminManualBookingCreatedDevicePushAlert, sendAdminNewBookingDevicePushAlert };",
     ].join("\n"),
   );
   await writeFile(
@@ -564,6 +570,8 @@ function installMockClient(options) {
   globalThis.__prestigePersistenceGateMock = {
     client,
     createdClients: [],
+    manualAlertCalls: [],
+    manualAlertShouldFail: false,
   };
 
   return globalThis.__prestigePersistenceGateMock;
@@ -1900,6 +1908,80 @@ try {
 
   setEnv(enabledWriteEnv());
 
+  const manualAlertMock = installMockClient();
+  const manualAlertResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booking_reference: "GATE-MANUAL-ALERT-001",
+            source_channel: "admin-dashboard",
+            source_surface: null,
+          },
+        }),
+        sessionHeaders({
+          "x-prestige-admin-native-alert": "primary-manual-create",
+        }),
+      ),
+    ),
+  );
+  assert.equal(manualAlertResult.status, 200);
+  assert.equal(manualAlertMock.manualAlertCalls.length, 1);
+  assert.equal(
+    manualAlertMock.manualAlertCalls[0].booking_reference,
+    "GATE-MANUAL-ALERT-001",
+    "One successful primary manual create must invoke the established sender once.",
+  );
+
+  const noManualAlertIntentMock = installMockClient();
+  const noManualAlertIntentResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booking_reference: "GATE-MANUAL-NO-ALERT-001",
+            source_channel: "admin-dashboard",
+            source_surface: null,
+          },
+        }),
+        sessionHeaders(),
+      ),
+    ),
+  );
+  assert.equal(noManualAlertIntentResult.status, 200);
+  assert.equal(
+    noManualAlertIntentMock.manualAlertCalls.length,
+    0,
+    "A return leg or another caller without the primary intent must not emit a manual-create alert.",
+  );
+
+  const manualAlertFailureMock = installMockClient();
+  manualAlertFailureMock.manualAlertShouldFail = true;
+  const manualAlertFailureResult = await readResponse(
+    await adminRoute.POST(
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            booking_reference: "GATE-MANUAL-ALERT-FAIL-001",
+            source_channel: "admin-dashboard",
+            source_surface: null,
+          },
+        }),
+        sessionHeaders({
+          "x-prestige-admin-native-alert": "primary-manual-create",
+        }),
+      ),
+    ),
+  );
+  assert.equal(manualAlertFailureResult.status, 200);
+  assert.equal(manualAlertFailureResult.body.ok, true);
+  assert.equal(manualAlertFailureMock.manualAlertCalls.length, 1);
+
+  setEnv(enabledWriteEnv());
+
   const failureMock = installMockClient({
     failures: {
       "insert:bookings": {
@@ -1909,7 +1991,18 @@ try {
   });
   const failureResult = await readResponse(
     await adminRoute.POST(
-      postJson("http://localhost/api/admin-bookings", adminPayload(), sessionHeaders()),
+      postJson(
+        "http://localhost/api/admin-bookings",
+        adminPayload({
+          booking: {
+            source_channel: "admin-dashboard",
+            source_surface: null,
+          },
+        }),
+        sessionHeaders({
+          "x-prestige-admin-native-alert": "primary-manual-create",
+        }),
+      ),
     ),
   );
 
@@ -1921,6 +2014,11 @@ try {
     safe_error_operation: "booking_row",
   });
   assert.equal(failureMock.createdClients.length, 1);
+  assert.equal(
+    failureMock.manualAlertCalls.length,
+    0,
+    "A failed authoritative create must not invoke the manual native sender.",
+  );
   assertNoLeaks(failureResult, "adapter failure response should hide Supabase internals");
 } finally {
   restoreEnv();

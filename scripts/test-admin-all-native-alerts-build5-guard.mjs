@@ -20,6 +20,8 @@ const [
 ]);
 
 const allAdminNativeAlertTypes = [
+  "admin_booking_created",
+  "admin_urgent_booking_created",
   "new_booking_request",
   "urgent_booking_request",
   "customer_booking_amendment",

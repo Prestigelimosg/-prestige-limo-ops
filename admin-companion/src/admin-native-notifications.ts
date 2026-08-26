@@ -7,6 +7,8 @@ const secureStoreOptions: SecureStore.SecureStoreOptions = {
 };
 
 type AdminNativeNotificationType =
+  | "admin_booking_created"
+  | "admin_urgent_booking_created"
   | "new_booking_request"
   | "urgent_booking_request"
   | "customer_booking_amendment"
@@ -26,6 +28,8 @@ type AdminNativeNotificationType =
   | "email_confirmed_booking";
 
 const adminNativeNotificationTypes = new Set<AdminNativeNotificationType>([
+  "admin_booking_created",
+  "admin_urgent_booking_created",
   "new_booking_request",
   "urgent_booking_request",
   "customer_booking_amendment",

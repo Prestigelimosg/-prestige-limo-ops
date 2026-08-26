@@ -469,6 +469,14 @@ try {
   );
 
   const approvedOperationalEvents = {
+    admin_booking_created: [
+      "New job saved",
+      "New job saved. Open Dashboard to review.",
+    ],
+    admin_urgent_booking_created: [
+      "Urgent job saved",
+      "Urgent job saved. Open Dashboard to review.",
+    ],
     customer_booking_amendment: [
       "Customer amendment request",
       "Customer amendment request received. Open Dashboard to review.",
@@ -558,6 +566,39 @@ try {
       JSON.stringify(operationalPayload),
       ["payout", "paynow", "billing", "payment", "invoice", "price", "internal note"],
       `${eventType} admin push payload`,
+    );
+  }
+
+  for (const [shortNoticeStatus, expectedEventType] of [
+    ["Not Required", "admin_booking_created"],
+    ["Admin Review Required", "admin_urgent_booking_created"],
+  ]) {
+    let manualPayload = null;
+    const manualAlert = await helper.sendAdminManualBookingCreatedDevicePushAlert(
+      {
+        booking_reference: `MANUAL-${expectedEventType}`,
+        short_notice_review_status: shortNoticeStatus,
+      },
+      {
+        env: configuredEnv,
+        subscriptionLoader: async () => [
+          {
+            endpoint: "https://push.example.test/manual-subscription",
+            keys: {
+              auth: "fake-auth-manual",
+              p256dh: "fake-p256dh-manual",
+            },
+          },
+        ],
+        pushSender: async (_subscription, payload) => {
+          manualPayload = payload;
+        },
+      },
+    );
+    assert.equal(manualAlert.ok, true);
+    assert.equal(
+      manualPayload.tag,
+      `prestige-admin-${expectedEventType.replaceAll("_", "-")}`,
     );
   }
 

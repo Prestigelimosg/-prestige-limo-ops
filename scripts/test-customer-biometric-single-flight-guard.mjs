@@ -22,6 +22,23 @@ assert.match(
   /transitionCustomerBiometricAppState/,
   "Customer AppState handling must use the tested biometric lifecycle transition.",
 );
+for (const fragment of [
+  "readCustomerBiometricMonotonicTimeMs()",
+  'unlockStateRef.current === "ready"',
+  'if (action === "reveal") setCustomerUnlockState("ready")',
+  "accessibilityElementsHidden={webLayerLocked}",
+  'importantForAccessibility={webLayerLocked ? "no-hide-descendants" : "auto"}',
+  'pointerEvents={webLayerLocked ? "none" : "auto"}',
+  "const [customerWebViewMounted, setCustomerWebViewMounted] = useState(false)",
+  'if (nextState === "ready") setCustomerWebViewMounted(true)',
+  "customerWebViewMounted && nativeAlertsPreferenceReady",
+]) {
+  assert.equal(
+    appSource.includes(fragment),
+    true,
+    `Customer app must preserve the 60-second covered WebView lifecycle: ${fragment}`,
+  );
+}
 
 const lifecycleSource = await readFile(lifecyclePath, "utf8");
 assert.match(lifecycleSource, /export function beginCustomerBiometricAttempt/);
@@ -59,11 +76,13 @@ new Function("exports", "module", compiledLifecycle)(
   lifecycleModule,
 );
 const {
+  CUSTOMER_BIOMETRIC_RETURN_GRACE_MS,
   beginCustomerBiometricAttempt,
   createCustomerBiometricLifecycle,
   finishCustomerBiometricAttempt,
   transitionCustomerBiometricAppState,
 } = lifecycleModule.exports;
+assert.equal(CUSTOMER_BIOMETRIC_RETURN_GRACE_MS, 60_000);
 
 function expectSingleAttempt(state, label) {
   const first = beginCustomerBiometricAttempt(state);
@@ -79,45 +98,113 @@ function expectSingleAttempt(state, label) {
 {
   const state = createCustomerBiometricLifecycle("active");
   const attempt = expectSingleAttempt(state, "resolve before foreground");
-  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true), "ignore");
+  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true, 1_000, false), "ignore");
   assert.equal(finishCustomerBiometricAttempt(state, attempt), true);
-  assert.equal(transitionCustomerBiometricAppState(state, "active", true), "ignore");
+  assert.equal(transitionCustomerBiometricAppState(state, "active", true, 2_000, false), "ignore");
+  assert.equal(state.backgroundedAtMs, null, "Face ID's own sheet must not arm grace");
   assert.equal(beginCustomerBiometricAttempt(state) > attempt, true);
 }
 
 {
   const state = createCustomerBiometricLifecycle("active");
   const attempt = expectSingleAttempt(state, "foreground before resolve");
-  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true), "ignore");
-  assert.equal(transitionCustomerBiometricAppState(state, "active", true), "ignore");
+  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true, 1_000, false), "ignore");
+  assert.equal(transitionCustomerBiometricAppState(state, "active", true, 2_000, false), "ignore");
   assert.equal(beginCustomerBiometricAttempt(state), null);
   assert.equal(finishCustomerBiometricAttempt(state, attempt), true);
+  assert.equal(state.backgroundedAtMs, null, "Face ID's own sheet must not arm grace");
   assert.equal(typeof beginCustomerBiometricAttempt(state), "number");
 }
 
 {
   const state = createCustomerBiometricLifecycle("active");
   const attempt = expectSingleAttempt(state, "listener and state changes");
-  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true), "ignore");
+  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true, 1_000, false), "ignore");
   assert.equal(beginCustomerBiometricAttempt(state), null);
-  assert.equal(transitionCustomerBiometricAppState(state, "active", true), "ignore");
+  assert.equal(transitionCustomerBiometricAppState(state, "active", true, 2_000, false), "ignore");
   assert.equal(finishCustomerBiometricAttempt(state, attempt), true);
+}
+
+for (const [elapsedMs, expected] of [
+  [59_000, "reveal"],
+  [60_000, "unlock"],
+  [61_000, "unlock"],
+]) {
+  const state = createCustomerBiometricLifecycle("active");
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "inactive", true, 1_000, true),
+    "lock",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "background", true, 2_000, false),
+    "lock",
+  );
+  assert.equal(
+    state.backgroundedAtMs,
+    1_000,
+    "A later background event must not extend the Customer grace window",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "active", true, 1_000 + elapsedMs, false),
+    expected,
+    `${elapsedMs / 1_000}s Customer return boundary`,
+  );
+  assert.equal(state.backgroundedAtMs, null, "A Customer return must consume its grace window");
 }
 
 {
   const state = createCustomerBiometricLifecycle("active");
-  const attempt = expectSingleAttempt(state, "mirroring immediate failure");
-  assert.equal(finishCustomerBiometricAttempt(state, attempt), true);
-  assert.equal(transitionCustomerBiometricAppState(state, "inactive", true), "lock");
-  assert.equal(transitionCustomerBiometricAppState(state, "active", true), "unlock");
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "inactive", true, 10_000, false),
+    "lock",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "active", true, 11_000, false),
+    "unlock",
+    "A Customer app already covered at leave must never receive return grace",
+  );
+}
+
+for (const invalidReturnTime of [Number.NaN, 9_999]) {
+  const state = createCustomerBiometricLifecycle("active");
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "inactive", true, 10_000, true),
+    "lock",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "active", true, invalidReturnTime, false),
+    "unlock",
+    "Invalid or backwards Customer time must fail closed to Face ID",
+  );
 }
 
 {
   const state = createCustomerBiometricLifecycle("active");
-  assert.equal(transitionCustomerBiometricAppState(state, "background", true), "lock");
-  assert.equal(transitionCustomerBiometricAppState(state, "active", true), "unlock");
-  const attempt = expectSingleAttempt(state, "genuine later foreground");
-  assert.equal(finishCustomerBiometricAttempt(state, attempt), true);
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "background", false, 1_000, true),
+    "ignore",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "active", false, 2_000, false),
+    "ignore",
+  );
+}
+
+{
+  const state = createCustomerBiometricLifecycle("active");
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "inactive", true, 1_000, true),
+    "lock",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "active", true, 60_000, false),
+    "reveal",
+  );
+  assert.equal(
+    transitionCustomerBiometricAppState(state, "active", true, 60_500, false),
+    "ignore",
+    "Repeated active Customer events must not reveal or prompt again",
+  );
 }
 
 {

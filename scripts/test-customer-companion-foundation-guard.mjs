@@ -137,8 +137,9 @@ for (const phrase of [
 for (const phrase of [
   "beginCustomerBiometricAttempt(biometricLifecycleRef.current)",
   "finishCustomerBiometricAttempt( biometricLifecycleRef.current, attemptId",
-  "transitionCustomerBiometricAppState( biometricLifecycleRef.current, nextState, biometricEnabledRef.current",
+  "transitionCustomerBiometricAppState( biometricLifecycleRef.current, nextState, biometricEnabledRef.current, readCustomerBiometricMonotonicTimeMs(), unlockStateRef.current === \"ready\"",
   "if (action === \"lock\")",
+  "if (action === \"reveal\") setCustomerUnlockState(\"ready\")",
   "if (action === \"unlock\") void unlockCustomerApp()",
 ]) {
   assert.equal(
@@ -150,12 +151,17 @@ for (const phrase of [
 
 for (const phrase of [
   "activeAttemptId",
+  "CUSTOMER_BIOMETRIC_RETURN_GRACE_MS",
+  "backgroundedAtMs",
+  "backgroundGraceEligible",
+  "globalThis.performance?.now",
   "promptResumeAttemptId",
   "promptResumeObserved",
   "if (lifecycle.activeAttemptId !== null) return null",
   "if (lifecycle.activeAttemptId !== attemptId) return false",
   'return biometricEnabled ? "lock" : "ignore"',
-  'return biometricEnabled ? "unlock" : "ignore"',
+  'return "reveal"',
+  'return "unlock"',
 ]) {
   assert.equal(
     normalizedBiometricLifecycle.includes(phrase),
@@ -246,6 +252,7 @@ for (const phrase of [
   "Customer iOS Build 6 Face ID Single-Flight Acceptance Release Checkpoint",
   "Customer iOS Build 7 Shared Unlock Crash Repair Release Checkpoint",
   "Customer iOS Build 8 Native Push Repair Release Checkpoint",
+  "Customer Native 60-Second Face ID Return Grace Repair",
   "`ios.buildNumber` advances only from processed Build 7 to `8`",
   "`553f33e3201efe9c0235248c5c44db8f65d6ed10`",
   "existing internal `Owner Testing` group",

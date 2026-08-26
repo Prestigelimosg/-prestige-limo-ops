@@ -157,6 +157,7 @@ async function main() {
         contact_display_name: "Canonical Booker",
         contact_phone: "+65 8000 9998",
         contact_email: "canonical@example.com",
+        customer_special_request: "Child seat required\\nEvent starts at 10:00",
         job_card: null,
         status: "requested",
         driver_id: null,
@@ -304,10 +305,18 @@ async function main() {
 
           if (method === "GET") {
             const bookingReference = requestUrl.searchParams.get("booking_reference");
+            window.__canonicalLoadBookingCalls.push({
+              bookingReference,
+              method,
+              surface: "operational",
+              url: String(url),
+            });
             return new Response(JSON.stringify(
-              bookingReference === type2Booking.booking_reference
-                ? { booking: type2Booking, ok: true }
-                : { bookings: [canonicalBooking, type2Booking], ok: true }
+              bookingReference === canonicalBooking.booking_reference
+                ? { booking: canonicalBooking, ok: true }
+                : bookingReference === type2Booking.booking_reference
+                  ? { booking: type2Booking, ok: true }
+                  : { bookings: [canonicalBooking, type2Booking], ok: true }
             ), { headers: { "Content-Type": "application/json" }, status: 200 });
           }
 
@@ -437,6 +446,14 @@ async function main() {
     assert.equal(cardState.text.includes("Pickup > Drop-off"), false);
     assert.equal(/price|billing|invoice|payment|payout|finance/i.test(cardState.text), false);
 
+    const preOpenWriteCounts = await evaluate(`(() => ({
+      bookingPatch: (window.__type2AssignmentPatchBodies || []).length,
+      calendar: (window.__type2AssignmentCalendarCalls || []).filter(
+        (call) => call.method !== "GET",
+      ).length,
+      driverLink: (window.__type2AssignmentLinkBodies || []).length,
+    }))()`);
+
     const applyClicked = await evaluate(`(() => {
       const record = document.querySelector("[data-recent-operational-card='CANONICAL-REQ-001']");
       const button = [...(record?.querySelectorAll("button") || [])]
@@ -463,16 +480,35 @@ async function main() {
             return field && "value" in field ? field.value : "";
           };
           if (!statusFeedback) return false;
+          const specialRequest = document.querySelector(
+            "[data-admin-dispatch-customer-special-request='true']",
+          );
           return {
             booker: getField("Booker"),
             bookingType: getField("Booking type"),
+            exactReadCount: (window.__canonicalLoadBookingCalls || []).filter(
+              (call) =>
+                call.surface === "operational" &&
+                call.bookingReference === "CANONICAL-REQ-001",
+            ).length,
             company: getField("Company / Account"),
             dropoff: getField("Drop-off"),
             name: getField("Passenger name"),
             pax: getField("Pax"),
             pickup: getField("Pickup"),
+            specialRequestHeading:
+              specialRequest?.querySelector("p:first-child")?.textContent.trim() || "",
+            specialRequestValue:
+              specialRequest?.querySelector("p:last-child")?.textContent.trim() || "",
             time: getField("Pickup time"),
             vehicle: getField("Vehicle"),
+            writeCounts: {
+              bookingPatch: (window.__type2AssignmentPatchBodies || []).length,
+              calendar: (window.__type2AssignmentCalendarCalls || []).filter(
+                (call) => call.method !== "GET",
+              ).length,
+              driverLink: (window.__type2AssignmentLinkBodies || []).length,
+            },
           };
         })()`),
       10000,
@@ -485,6 +521,18 @@ async function main() {
     assert.equal(appliedState.bookingType, "DEP");
     assert.equal(appliedState.pickup, "Canonical Pickup");
     assert.equal(appliedState.dropoff, "Canonical Dropoff");
+    assert.equal(appliedState.exactReadCount, 1, "Generic Open / Edit must use one exact guarded read");
+    assert.equal(appliedState.specialRequestHeading, "Customer special request");
+    assert.equal(
+      appliedState.specialRequestValue,
+      "Child seat required\nEvent starts at 10:00",
+      "Generic Admin Open / Edit must preserve the saved multiline Customer Special Request",
+    );
+    assert.deepEqual(
+      appliedState.writeCounts,
+      preOpenWriteCounts,
+      "Generic Open / Edit must not write or send anything",
+    );
     assert.equal(appliedState.pax, "3");
     assert.equal(appliedState.vehicle, "AVF");
     assert.match(appliedState.time, /^1115/);

@@ -8,6 +8,7 @@ import type {
 } from "./admin-booking-persistence";
 import { resolveCustomerSavedBookingsBoundaryForPurpose } from "./customer-saved-bookings-read";
 import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
+import { assertActiveCustomerPrincipalSession } from "./customer-principal-access";
 
 export const customerBookingMemoryReadVersion =
   "customer-booking-memory-read-v1";
@@ -17,7 +18,9 @@ export type CustomerBookingMemoryBoundaryContext = {
   booker_id?: number | null;
   company_id?: number | null;
   customer_account_reference?: string | null;
-  mode: "server-session-cookie" | "server-session-token";
+  mode: "principal-device-session" | "server-session-cookie" | "server-session-token";
+  principal_id?: string | null;
+  principal_session_token?: string | null;
   portal_link_issued_at?: number | null;
   portal_link_revision?: string | null;
   source_surface: "customer_api";
@@ -510,10 +513,15 @@ function getServerOnlyCustomerBookingMemoryClient(
     (Boolean(context.portal_link_revision) ||
       (context.portal_link_issued_at != null &&
         Number.isInteger(context.portal_link_issued_at)));
+  const signedPrincipalDeviceSession =
+    context.mode === "principal-device-session" &&
+    safeUuid(context.auth_user_id) === safeUuid(context.principal_id) &&
+    Boolean(textOrNull(context.principal_session_token));
 
   if (
     process.env.PRESTIGE_CUSTOMER_BOOKING_MEMORY_AUTH_ENABLED !== "true" &&
-    !signedPortalCookieSession
+    !signedPortalCookieSession &&
+    !signedPrincipalDeviceSession
   ) {
     return {
       error: customerBookingMemoryDisabledError,
@@ -720,7 +728,29 @@ export function resolveCustomerBookingMemoryBoundary(
     "/book",
   );
 
-  if (portalBoundary.ok && portalBoundary.data.mode !== "principal-device-session") {
+  if (portalBoundary.ok) {
+    if (portalBoundary.data.mode === "principal-device-session") {
+      const principalId = safeUuid(portalBoundary.data.principal_id);
+      const principalSessionToken = textOrNull(
+        portalBoundary.data.principal_session_token,
+      );
+
+      if (!principalId || principalId !== safeUuid(portalBoundary.data.auth_user_id) || !principalSessionToken) {
+        return customerBookingMemoryAuthRequiredResult();
+      }
+
+      return {
+        data: {
+          auth_user_id: principalId,
+          mode: "principal-device-session",
+          principal_id: principalId,
+          principal_session_token: principalSessionToken,
+          source_surface: "customer_api",
+        },
+        ok: true,
+      };
+    }
+
     return {
       data: {
         auth_user_id: portalBoundary.data.auth_user_id,
@@ -782,7 +812,69 @@ export async function loadCustomerBookingMemory(
 
   let accountRow: UnknownRecord;
 
-  if (context.customer_account_reference) {
+  if (context.mode === "principal-device-session") {
+    const principalId = safeUuid(context.principal_id);
+    const principalSessionToken = textOrNull(context.principal_session_token);
+    const principalAccess = principalSessionToken
+      ? await assertActiveCustomerPrincipalSession(principalSessionToken)
+      : customerBookingMemoryAuthRequiredResult<never>();
+
+    if (
+      !principalAccess.ok ||
+      !principalId ||
+      principalAccess.data.principal_id !== principalId ||
+      safeUuid(context.auth_user_id) !== principalId
+    ) {
+      return customerBookingMemoryAuthRequiredResult();
+    }
+
+    const accountRoots = new Map<
+      string,
+      { bookerId: number; companyId: number; customerAccountReference: string }
+    >();
+
+    for (const membership of principalAccess.data.memberships) {
+      const bookerId = positiveInteger(membership.booker_id);
+      const companyId = positiveInteger(membership.company_id);
+      const customerAccountReference = validBookingReference(
+        membership.customer_account_reference,
+      );
+
+      if (!bookerId || !companyId || !customerAccountReference) {
+        return customerBookingMemoryAuthRequiredResult();
+      }
+
+      accountRoots.set(
+        `${companyId}:${bookerId}:${customerAccountReference}`,
+        { bookerId, companyId, customerAccountReference },
+      );
+    }
+
+    if (accountRoots.size !== 1) {
+      return customerBookingMemoryAuthRequiredResult();
+    }
+
+    const [accountRoot] = accountRoots.values();
+    const activeAccount = await assertActiveCustomerPortalAccessAccount(
+      accountRoot.customerAccountReference,
+      clientResult.data,
+    );
+
+    if (!activeAccount.ok) {
+      return customerBookingMemoryAuthRequiredResult();
+    }
+
+    const activeAccountRow = asRecord(activeAccount.data);
+
+    if (
+      positiveInteger(activeAccountRow.company_id) !== accountRoot.companyId ||
+      positiveInteger(activeAccountRow.booker_id) !== accountRoot.bookerId
+    ) {
+      return customerBookingMemoryAuthRequiredResult();
+    }
+
+    accountRow = activeAccountRow;
+  } else if (context.customer_account_reference) {
     const activeAccount = await assertActiveCustomerPortalAccessAccount(
       context.customer_account_reference,
       clientResult.data,

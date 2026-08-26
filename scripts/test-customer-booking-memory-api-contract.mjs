@@ -12,6 +12,8 @@ const sessionCookieName = "prestige_customer_saved_bookings_session";
 const customSessionCookieName = "prestige_customer_portal_session";
 const authUserId = "33333333-3333-4333-8333-333333333333";
 const customerAccountReference = "44444444-4444-4444-8444-444444444444";
+const principalId = "66666666-6666-4666-8666-666666666666";
+const principalSessionToken = "customer-principal-session-contract-token";
 const serviceRoleSentinel = "SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_BOOKING_MEMORY_SENTINEL";
 const supabaseUrlSentinel = "https://customer-booking-memory-contract.supabase.co";
 const allowedMemoryFields = [
@@ -131,6 +133,7 @@ async function writeMockModules(tempDir) {
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
   const savedBookingsPath = path.join(tempDir, "lib/customer-saved-bookings-read.js");
   const accessAccountPath = path.join(tempDir, "lib/customer-portal-access-account.js");
+  const principalAccessPath = path.join(tempDir, "lib/customer-principal-access.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
@@ -154,14 +157,30 @@ async function writeMockModules(tempDir) {
     savedBookingsPath,
     [
       "function resolveCustomerSavedBookingsBoundaryForPurpose() {",
-      "  return { error: 'legacy memory session fallback', ok: false, status: 403 };",
+      "  return globalThis.__prestigeCustomerBookingMemoryApiMock?.portalBoundary || { error: 'legacy memory session fallback', ok: false, status: 403 };",
       "}",
       "module.exports = { resolveCustomerSavedBookingsBoundaryForPurpose };",
     ].join("\n"),
   );
   await writeFile(
     accessAccountPath,
-    "module.exports = { async assertActiveCustomerPortalAccessAccount() { return { error: 'not used by legacy harness', ok: false, status: 403 }; } };",
+    [
+      "async function assertActiveCustomerPortalAccessAccount(reference) {",
+      "  const mock = globalThis.__prestigeCustomerBookingMemoryApiMock;",
+      "  const row = mock?.client?.tables?.customer_access_accounts?.find((candidate) => candidate.customer_account_reference === reference && candidate.account_status === 'active');",
+      "  return row ? { data: JSON.parse(JSON.stringify(row)), ok: true } : { error: 'Customer app access is required.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { assertActiveCustomerPortalAccessAccount };",
+    ].join("\n"),
+  );
+  await writeFile(
+    principalAccessPath,
+    [
+      "async function assertActiveCustomerPrincipalSession() {",
+      "  return globalThis.__prestigeCustomerBookingMemoryApiMock?.principalAccessResult || { error: 'Customer app access is required.', ok: false, status: 403 };",
+      "}",
+      "module.exports = { assertActiveCustomerPrincipalSession };",
+    ].join("\n"),
   );
 }
 
@@ -322,6 +341,8 @@ function installMockClient(seed = {}, options = {}) {
   const mock = {
     client: new MockSupabaseClient(seed, options),
     createdClients: [],
+    portalBoundary: options.portalBoundary || null,
+    principalAccessResult: options.principalAccessResult || null,
   };
 
   globalThis.__prestigeCustomerBookingMemoryApiMock = mock;
@@ -781,6 +802,181 @@ try {
     ],
   );
   assertSafeApiBody(profileBody, "verified booker profile response");
+
+  const trustedProfileSeed = seedBookingMemoryRows();
+  trustedProfileSeed.customer_access_accounts[0].company_id = 7;
+  trustedProfileSeed.customer_access_accounts[0].booker_id = 55;
+  trustedProfileSeed.bookers = profileSeed.bookers;
+  trustedProfileSeed.travelers = profileSeed.travelers;
+
+  setEnv({
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
+    SUPABASE_URL: supabaseUrlSentinel,
+  });
+  const signedPortalMock = installMockClient(trustedProfileSeed, {
+    portalBoundary: {
+      data: {
+        auth_user_id: authUserId,
+        booker_id: 55,
+        company_id: 7,
+        customer_account_reference: customerAccountReference,
+        mode: "server-session-cookie",
+        portal_link_issued_at: 1_786_000_000,
+        portal_link_revision: "current-link-revision",
+        source_surface: "customer_api",
+      },
+      ok: true,
+    },
+  });
+  const signedPortalResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-booking-memory?limit=2", {
+      headers: {
+        cookie: `${sessionCookieName}=signed-current-copy-app-link-session`,
+        referer: "http://localhost/book",
+        "x-prestige-customer-purpose": "customer-booking-memory-read",
+      },
+    }),
+  );
+  const signedPortalBody = await json(signedPortalResponse);
+  assert.equal(
+    signedPortalResponse.status,
+    200,
+    "A valid current Copy + App Link portal session must bypass the public SMS boundary.",
+  );
+  assert.equal(signedPortalBody.ok, true);
+  assert.equal(signedPortalBody.booker_profile.email, "william@prestigelimo.sg");
+  assert.equal(signedPortalMock.client.operations.length, 0);
+
+  setEnv({
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
+    SUPABASE_URL: supabaseUrlSentinel,
+  });
+  const principalMock = installMockClient(trustedProfileSeed, {
+    portalBoundary: {
+      data: {
+        auth_user_id: principalId,
+        customer_account_reference: null,
+        mode: "principal-device-session",
+        principal_id: principalId,
+        principal_session_token: principalSessionToken,
+        runtime_gate: { account_allowlist: new Set(), mode: "small-allowlist" },
+        source_surface: "customer_api",
+      },
+      ok: true,
+    },
+    principalAccessResult: {
+      data: {
+        memberships: [
+          {
+            booker_id: 55,
+            company_id: 7,
+            customer_account_reference: customerAccountReference,
+            membership_role: "managing_pa",
+            traveler_id: 901,
+            verified_boss_name: "Traveller One",
+          },
+        ],
+        normalized_email: "pa@example.com",
+        principal_id: principalId,
+        principal_role: "pa",
+      },
+      ok: true,
+    },
+  });
+  const principalResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-booking-memory?limit=2", {
+      headers: {
+        cookie: `${sessionCookieName}=${principalSessionToken}`,
+        referer: "http://localhost/book",
+        "x-prestige-customer-purpose": "customer-booking-memory-read",
+      },
+    }),
+  );
+  const principalBody = await json(principalResponse);
+  assert.equal(
+    principalResponse.status,
+    200,
+    "An active Customer principal device session must bypass the public SMS boundary.",
+  );
+  assert.equal(principalBody.ok, true);
+  assert.equal(principalBody.booker_profile.email, "william@prestigelimo.sg");
+  assert.deepEqual(principalBody.travelers.map((traveler) => traveler.id), [901]);
+  assert.equal(principalMock.client.operations.length, 0);
+
+  setEnv({
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
+    SUPABASE_URL: supabaseUrlSentinel,
+  });
+  installMockClient(trustedProfileSeed, {
+    portalBoundary: principalMock.portalBoundary,
+    principalAccessResult: {
+      error: "Customer app access is required.",
+      ok: false,
+      status: 403,
+    },
+  });
+  const revokedPrincipalResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-booking-memory?limit=2", {
+      headers: {
+        cookie: `${sessionCookieName}=${principalSessionToken}`,
+        referer: "http://localhost/book",
+        "x-prestige-customer-purpose": "customer-booking-memory-read",
+      },
+    }),
+  );
+  assert.equal(
+    revokedPrincipalResponse.status,
+    403,
+    "A revoked or inactive Customer principal session must retain public verification.",
+  );
+
+  setEnv({
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
+    SUPABASE_URL: supabaseUrlSentinel,
+  });
+  installMockClient(trustedProfileSeed, {
+    portalBoundary: principalMock.portalBoundary,
+    principalAccessResult: {
+      data: {
+        memberships: [
+          {
+            booker_id: 55,
+            company_id: 7,
+            customer_account_reference: customerAccountReference,
+            membership_role: "managing_pa",
+            traveler_id: 901,
+            verified_boss_name: "Traveller One",
+          },
+          {
+            booker_id: 88,
+            company_id: 9,
+            customer_account_reference: "77777777-7777-4777-8777-777777777777",
+            membership_role: "managing_pa",
+            traveler_id: 903,
+            verified_boss_name: "Other Account Traveller",
+          },
+        ],
+        normalized_email: "pa@example.com",
+        principal_id: principalId,
+        principal_role: "pa",
+      },
+      ok: true,
+    },
+  });
+  const ambiguousPrincipalResponse = await harness.route.GET(
+    new Request("http://localhost/api/customer-booking-memory?limit=2", {
+      headers: {
+        cookie: `${sessionCookieName}=${principalSessionToken}`,
+        referer: "http://localhost/book",
+        "x-prestige-customer-purpose": "customer-booking-memory-read",
+      },
+    }),
+  );
+  assert.equal(
+    ambiguousPrincipalResponse.status,
+    403,
+    "A principal spanning more than one verified account root must fail closed instead of guessing.",
+  );
 
   validEnv();
   const cookieRouteMock = installMockClient(seedBookingMemoryRows());

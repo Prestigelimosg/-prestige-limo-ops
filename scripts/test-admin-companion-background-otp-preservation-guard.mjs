@@ -40,7 +40,7 @@ const enrollmentStart = app.indexOf("const completeMandatoryEnrollment", unlockS
 assert.ok(unlockStart >= 0 && enrollmentStart > unlockStart, "Admin unlock callback must remain in place");
 const unlockSource = app.slice(unlockStart, enrollmentStart);
 assert.ok(
-  unlockSource.includes('setScreenMode(unlocked ? "web" : "locked")'),
+  unlockSource.includes('setAdminScreenMode(unlocked ? "web" : "locked")'),
   "A cancelled or failed Face ID check must remain locked and only success may reveal the WebView",
 );
 assert.equal(
@@ -57,6 +57,7 @@ assert.equal(
 for (const phrase of [
   "transitionAdminBiometricAppState",
   'if (biometricAction === "lock")',
+  'if (biometricAction === "reveal") setAdminScreenMode("web")',
   'if (biometricAction === "unlock") void unlockAdminApp()',
   'if (isProtectedAdminUrl(request.url) && !biometricEnabled)',
   "return biometricEnabled && screenMode === \"web\"",

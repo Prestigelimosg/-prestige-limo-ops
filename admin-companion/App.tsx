@@ -35,6 +35,7 @@ import {
   beginAdminBiometricAttempt,
   createAdminBiometricLifecycle,
   finishAdminBiometricAttempt,
+  readAdminBiometricMonotonicTimeMs,
   transitionAdminBiometricAppState,
 } from "./src/admin-biometric-lifecycle";
 import {
@@ -104,6 +105,7 @@ export default function App() {
   const biometricLifecycleRef = useRef(
     createAdminBiometricLifecycle(AppState.currentState),
   );
+  const screenModeRef = useRef<ScreenMode>("checking");
   const nativeBridgeBusyRef = useRef(false);
   const pendingNativeActionRef = useRef<"register" | "unregister" | null>(null);
   const pendingNativeContextRef = useRef<"badge_reset" | "sign_out" | "toggle" | null>(null);
@@ -118,6 +120,11 @@ export default function App() {
   const webViewLoadFailurePendingRef = useRef(false);
   const webViewLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const webViewRef = useRef<WebView>(null);
+
+  const setAdminScreenMode = useCallback((nextScreenMode: ScreenMode) => {
+    screenModeRef.current = nextScreenMode;
+    setScreenMode(nextScreenMode);
+  }, []);
 
   const clearAdminWebViewLoadTimeout = useCallback(() => {
     if (!webViewLoadTimeoutRef.current) return;
@@ -186,16 +193,16 @@ export default function App() {
     const attemptId = beginAdminBiometricAttempt(biometricLifecycleRef.current);
     if (attemptId === null) return;
 
-    setScreenMode("checking");
+    setAdminScreenMode("checking");
     const unlocked = await authenticateAdminAppUnlock().catch(() => false);
     const currentAttempt = finishAdminBiometricAttempt(
       biometricLifecycleRef.current,
       attemptId,
     );
     if (currentAttempt) {
-      setScreenMode(unlocked ? "web" : "locked");
+      setAdminScreenMode(unlocked ? "web" : "locked");
     }
-  }, []);
+  }, [setAdminScreenMode]);
 
   const completeMandatoryEnrollment = useCallback(async (protectedUrl: string) => {
     const attemptId = beginAdminBiometricAttempt(biometricLifecycleRef.current);
@@ -203,7 +210,7 @@ export default function App() {
 
     pendingProtectedUrlRef.current = protectedUrl;
     setNotice("");
-    setScreenMode("checking");
+    setAdminScreenMode("checking");
     const enabled = await enableAdminBiometricUnlock().catch(() => false);
     const currentAttempt = finishAdminBiometricAttempt(
       biometricLifecycleRef.current,
@@ -212,7 +219,7 @@ export default function App() {
     if (!currentAttempt) return;
 
     if (!enabled) {
-      setScreenMode("enrollment-required");
+      setAdminScreenMode("enrollment-required");
       return;
     }
 
@@ -221,8 +228,8 @@ export default function App() {
     setCurrentUrl(protectedUrl);
     setNavigationKey((current) => current + 1);
     setNotice("Face ID now protects verified Prestige Limo Ops access on this iPhone.");
-    setScreenMode("web");
-  }, []);
+    setAdminScreenMode("web");
+  }, [setAdminScreenMode]);
 
   useEffect(() => {
     let mounted = true;
@@ -238,7 +245,7 @@ export default function App() {
       if (!mounted) return;
 
       if (!nextInstallationId) {
-        setScreenMode("locked");
+        setAdminScreenMode("locked");
         return;
       }
       const nextPermission = permission.granted
@@ -254,13 +261,13 @@ export default function App() {
       void Notifications.setBadgeCountAsync(0).catch(() => false);
       setNavigationKey((current) => current + 1);
       if (!enabled) {
-        setScreenMode("web");
+        setAdminScreenMode("web");
         return;
       }
 
       const attemptId = beginAdminBiometricAttempt(biometricLifecycleRef.current);
       if (attemptId === null) {
-        setScreenMode("locked");
+        setAdminScreenMode("locked");
         return;
       }
       const unlocked = await authenticateAdminAppUnlock().catch(() => false);
@@ -268,12 +275,14 @@ export default function App() {
         biometricLifecycleRef.current,
         attemptId,
       );
-      if (mounted && currentAttempt) setScreenMode(unlocked ? "web" : "locked");
+      if (mounted && currentAttempt) {
+        setAdminScreenMode(unlocked ? "web" : "locked");
+      }
     }
 
     void preparePrivacyLock();
     return () => { mounted = false; };
-  }, []);
+  }, [setAdminScreenMode]);
 
   useEffect(() => {
     return () => clearAdminWebViewLoadTimeout();
@@ -287,13 +296,15 @@ export default function App() {
         biometricLifecycleRef.current,
         nextState,
         biometricEnabledRef.current,
+        readAdminBiometricMonotonicTimeMs(),
+        screenModeRef.current === "web",
       );
 
       if (nextState !== "active") {
         clearAdminWebViewLoadTimeout();
       }
       if (biometricAction === "lock") {
-        setScreenMode("locked");
+        setAdminScreenMode("locked");
       }
 
       if (returningToForeground) {
@@ -321,12 +332,14 @@ export default function App() {
           setNotificationEnabled(false);
         });
       }
+      if (biometricAction === "reveal") setAdminScreenMode("web");
       if (biometricAction === "unlock") void unlockAdminApp();
     });
 
     return () => subscription.remove();
   }, [
     clearAdminWebViewLoadTimeout,
+    setAdminScreenMode,
     unlockAdminApp,
   ]);
 
@@ -353,7 +366,7 @@ export default function App() {
 
       pendingDashboardOpenRef.current = true;
       if (biometricEnabled) {
-        setScreenMode("locked");
+        setAdminScreenMode("locked");
         void unlockAdminApp();
       } else if (installationId) {
         setCurrentUrl(`${productionOrigin}${request.openTarget}`);
@@ -379,7 +392,7 @@ export default function App() {
     }
 
     return () => subscription.remove();
-  }, [biometricEnabled, installationId, unlockAdminApp]);
+  }, [biometricEnabled, installationId, setAdminScreenMode, unlockAdminApp]);
 
   useEffect(() => {
     if (

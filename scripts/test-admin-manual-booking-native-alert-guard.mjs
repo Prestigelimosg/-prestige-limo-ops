@@ -13,7 +13,7 @@ const [dashboard, route, helper, nativeNotifications, adminConfigSource, ledger,
   ]);
 
 const adminConfig = JSON.parse(adminConfigSource).expo;
-assert.equal(adminConfig.ios.buildNumber, "6", "The repaired Admin binary must advance only to Build 6");
+assert.equal(adminConfig.ios.buildNumber, "7", "The Admin return-grace binary must advance only to Build 7");
 
 const saveStart = dashboard.indexOf("async function saveBooking(");
 const saveEnd = dashboard.indexOf("function bookingRecordReferenceCandidates", saveStart);
@@ -87,6 +87,7 @@ assert.match(
 );
 assert.match(ledger, /Admin Manual Save Native Alert And Face ID Acceptance Repair/);
 assert.match(ledger, /Admin TestFlight Build 6 Release Checkpoint/);
+assert.match(ledger, /Admin TestFlight Build 7 60-Second Return Grace Release Checkpoint/);
 assert.ok(
   preactivation.includes("scripts/test-admin-manual-booking-native-alert-guard.mjs"),
   "The manual Admin booking native-alert guard must run in preactivation.",

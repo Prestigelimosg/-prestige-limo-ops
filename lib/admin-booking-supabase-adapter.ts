@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type {
   AdminBookingAuditInput,
+  AdminCustomerAccountCollisionCandidate,
   AdminBookingListOptions,
   AdminBookingPersistenceInput,
   AdminBookingPersistenceRecord,
@@ -121,6 +122,8 @@ const safeUpdateConflictError =
   "Booking changed on another device. Reload the exact saved booking before updating.";
 const safeCustomerIdentityConflictError =
   "Verified customer identity matches multiple customer accounts. Review the existing customer profiles before saving.";
+const safeCustomerCanonicalMatchReviewError =
+  "Detected similar customer/company name";
 const safeExistingCrmIdentitySelectionError =
   "Select the existing verified Company, Booker, and Traveller before saving. No new customer folder was created.";
 const safePersonalCustomerChoiceError =
@@ -221,6 +224,105 @@ function customerPortalScopedDisplayName(booking: AdminBookingRecordInput) {
   return `${accountName} / ${scopeParts.length ? scopeParts.join(" / ") : "Unassigned customer contact"}`.slice(
     0,
     maxTextLength,
+  );
+}
+
+const canonicalCustomerCompanyIgnoredTokens = new Set([
+  "co",
+  "company",
+  "corp",
+  "corporation",
+  "gmbh",
+  "group",
+  "inc",
+  "limited",
+  "llc",
+  "llp",
+  "ltd",
+  "pte",
+  "sdn",
+  "sg",
+  "singapore",
+]);
+
+function canonicalCustomerCompanyAccountName(value: unknown) {
+  let accountName = textOrNull(value) || "";
+  let bracketMatch = accountName.match(/^(.+?)\s+\[[^\]]+\]$/);
+
+  while (bracketMatch?.[1]) {
+    const baseAccountName = textOrNull(bracketMatch[1]) || "";
+
+    if (!baseAccountName || baseAccountName === accountName) {
+      break;
+    }
+
+    accountName = baseAccountName;
+    bracketMatch = accountName.match(/^(.+?)\s+\[[^\]]+\]$/);
+  }
+
+  const scopedDisplayMatch = accountName.match(
+    /^(.+?)\s+\/\s+(?:booker|passenger|booker email|booker phone):/i,
+  );
+
+  if (scopedDisplayMatch?.[1]) {
+    accountName = textOrNull(scopedDisplayMatch[1]) || accountName;
+  }
+
+  const normalized = accountName
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  const withoutCompanyTokens = normalized
+    .split(" ")
+    .filter((token) => token && !canonicalCustomerCompanyIgnoredTokens.has(token))
+    .join(" ")
+    .trim();
+
+  return withoutCompanyTokens || normalized;
+}
+
+function customerRecordIsActive(row: UnknownRecord) {
+  const statuses = [
+    textOrNull(row.status)?.toLocaleLowerCase(),
+    textOrNull(row.account_status)?.toLocaleLowerCase(),
+  ].filter((status): status is string => Boolean(status));
+
+  return statuses.length > 0 && statuses.every((status) => status === "active");
+}
+
+function customerAccountCollisionReviewFailure<T>(
+  candidates: AdminCustomerAccountCollisionCandidate[],
+): AdminBookingResult<T> {
+  return {
+    customer_account_collision_review: {
+      candidates,
+      code: "customer_account_collision_review_required",
+    },
+    error: safeCustomerCanonicalMatchReviewError,
+    ok: false,
+    status: 409,
+  };
+}
+
+function customerAccountCollisionCandidateIds(
+  candidates: AdminCustomerAccountCollisionCandidate[],
+) {
+  return candidates
+    .map((candidate) => Number(candidate.customer_id))
+    .filter((customerId) => Number.isSafeInteger(customerId) && customerId > 0)
+    .sort((first, second) => first - second);
+}
+
+function sameCustomerAccountCollisionCandidateIds(
+  first: number[],
+  second: number[],
+) {
+  return (
+    first.length === second.length &&
+    first.every((customerId, index) => customerId === second[index])
   );
 }
 
@@ -1421,11 +1523,13 @@ async function findOrCreateCustomerId(
   actor: AdminBookingPersistenceAdapterActor,
   hotelAgencyFolderCreate: AdminBookingPersistenceInput["hotel_agency_folder_create"] = null,
   personalCustomerFolderCreate: AdminBookingPersistenceInput["personal_customer_folder_create"] = null,
+  customerAccountCollisionResolution: AdminBookingPersistenceInput["customer_account_collision_resolution"] = null,
 ): Promise<AdminBookingResult<DbIdentifier>> {
   const verifiedCustomerId = dbIdentifierOrNull(booking.customer_id);
   const verifiedCompanyId = dbIdentifierOrNull(booking.company_id);
   const verifiedBookerId = dbIdentifierOrNull(booking.booker_id);
   const verifiedTravelerId = dbIdentifierOrNull(booking.traveler_id);
+  let forceCreateCanonicalCustomer = false;
 
   if (hotelAgencyFolderCreate) {
     const requestedAgencyName = textOrNull(hotelAgencyFolderCreate.company_name);
@@ -1769,19 +1873,178 @@ async function findOrCreateCustomerId(
       }
     }
 
-    if (verifiedCustomerIds.size === 1) {
-      return {
-        data: Array.from(verifiedCustomerIds.values())[0],
-        ok: true,
-      };
-    }
-
     if (verifiedCustomerIds.size > 1) {
       return {
         error: safeCustomerIdentityConflictError,
         ok: false,
         status: 409,
       };
+    }
+
+    const verifiedTupleCustomerId = Array.from(verifiedCustomerIds.values())[0] || null;
+
+    if (verifiedTupleCustomerId) {
+      if (
+        customerAccountCollisionResolution?.action === "create_new" ||
+        (customerAccountCollisionResolution?.action === "merge" &&
+          String(customerAccountCollisionResolution.selected_customer_id || "") !==
+            String(verifiedTupleCustomerId))
+      ) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      if (
+        verifiedCustomerId &&
+        String(verifiedCustomerId) !== String(verifiedTupleCustomerId)
+      ) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return {
+        data: verifiedTupleCustomerId,
+        ok: true,
+      };
+    }
+
+    if (verifiedCustomerId) {
+      if (customerAccountCollisionResolution) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      const { data: selectedCustomerRows, error: selectedCustomerError } = await client
+        .from("customers")
+        .select("id, status, account_status")
+        .eq("id", verifiedCustomerId)
+        .limit(2);
+
+      if (selectedCustomerError) {
+        return safeAdapterFailure(safeSaveError, 500, selectedCustomerError, "customer_lookup");
+      }
+
+      const selectedCustomers = asArray(selectedCustomerRows);
+      const selectedCustomer = asRecord(selectedCustomers[0]);
+
+      if (
+        selectedCustomers.length !== 1 ||
+        String(dbIdentifierOrNull(selectedCustomer.id) || "") !== String(verifiedCustomerId) ||
+        !customerRecordIsActive(selectedCustomer)
+      ) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return {
+        data: verifiedCustomerId,
+        ok: true,
+      };
+    }
+
+    const requestedCompanyAccountKey = canonicalCustomerCompanyAccountName(
+      booking.customer_display_name,
+    );
+
+    if (requestedCompanyAccountKey) {
+      const { data: customerRows, error: customerRowsError } = await client
+        .from("customers")
+        .select("id, display_name, status, account_status")
+        .limit(1001);
+
+      if (customerRowsError) {
+        return safeAdapterFailure(safeSaveError, 500, customerRowsError, "customer_lookup");
+      }
+
+      if (asArray(customerRows).length > 1000) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      const canonicalCustomerMatches = asArray(customerRows).flatMap((row) => {
+        const customer = asRecord(row);
+        const customerId = dbIdentifierOrNull(customer.id);
+        const numericCustomerId = Number(customerId);
+        const customerAccount = textOrNull(customer.display_name)?.slice(0, 220) || "";
+
+        return (
+          customerId &&
+          Number.isSafeInteger(numericCustomerId) &&
+          numericCustomerId > 0 &&
+          customerAccount &&
+          customerRecordIsActive(customer) &&
+          canonicalCustomerCompanyAccountName(customer.display_name) ===
+            requestedCompanyAccountKey
+        )
+          ? [{ customer_account: customerAccount, customer_id: numericCustomerId }]
+          : [];
+      });
+
+      if (canonicalCustomerMatches.length > 20) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      if (canonicalCustomerMatches.length > 0) {
+        const candidates = canonicalCustomerMatches.sort(
+          (first, second) => Number(first.customer_id) - Number(second.customer_id),
+        );
+        const currentCandidateIds = customerAccountCollisionCandidateIds(candidates);
+        const reviewedCandidateIds = [
+          ...(customerAccountCollisionResolution?.reviewed_customer_ids || []),
+        ].sort((first, second) => first - second);
+
+        if (
+          !customerAccountCollisionResolution ||
+          !sameCustomerAccountCollisionCandidateIds(
+            currentCandidateIds,
+            reviewedCandidateIds,
+          )
+        ) {
+          return customerAccountCollisionReviewFailure(candidates);
+        }
+
+        if (customerAccountCollisionResolution.action === "merge") {
+          const selectedCustomerId = Number(
+            customerAccountCollisionResolution.selected_customer_id,
+          );
+
+          if (!currentCandidateIds.includes(selectedCustomerId)) {
+            return customerAccountCollisionReviewFailure(candidates);
+          }
+
+          return {
+            data: selectedCustomerId,
+            ok: true,
+          };
+        }
+
+        forceCreateCanonicalCustomer = true;
+      } else if (customerAccountCollisionResolution) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
     }
   }
 
@@ -2013,11 +2276,13 @@ async function findOrCreateCustomerId(
   }
 
   const displayName = customerPortalScopedDisplayName(booking);
-  const { data: existingRows, error: existingError } = await client
-    .from("customers")
-    .select("id")
-    .eq("display_name", displayName)
-    .limit(1);
+  const { data: existingRows, error: existingError } = forceCreateCanonicalCustomer
+    ? { data: [], error: null }
+    : await client
+        .from("customers")
+        .select("id")
+        .eq("display_name", displayName)
+        .limit(1);
 
   if (existingError) {
     return safeAdapterFailure(safeSaveError, 500, existingError, "customer_lookup");
@@ -2318,6 +2583,7 @@ export async function createAdminBookingThroughSupabaseAdapter(
     actor,
     input.hotel_agency_folder_create,
     input.personal_customer_folder_create,
+    input.customer_account_collision_resolution,
   );
 
   if (!customerIdResult.ok) {

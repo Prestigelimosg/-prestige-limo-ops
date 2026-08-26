@@ -44,7 +44,7 @@ const [appPage, customersPage, portalPage, bookPage, hourlyHelper, pricing, bill
 
 const saveBookingSection = sectionBetween(
   appPage,
-  "async function saveBooking()",
+  "async function saveBooking(",
   "function bookingRecordReferenceCandidates",
 );
 const saveOperationalSnapshotSection = sectionBetween(
@@ -54,8 +54,8 @@ const saveOperationalSnapshotSection = sectionBetween(
 );
 const updateAppliedSnapshotSection = sectionBetween(
   appPage,
-  "async function updateAppliedAdminBookingOperationalSnapshot()",
-  "async function updateAdminCustomerRequestReviewDecision",
+  "async function updateAppliedAdminBookingOperationalSnapshot(",
+  "function getDispatchCopyText",
 );
 const serviceChangePromptSection = sectionBetween(
   appPage,

@@ -95,6 +95,11 @@ assertIncludes(
   "formatTravelerBillingAccountLabel(companyAccount, travelerName)",
   "Save + CRM persisted customer account must be scoped by passenger/traveler when company is present",
 );
+assertIncludes(
+  appSource,
+  "display_name: clean(bookingValue.name) || customerDisplayName",
+  "explicit personal customer creation must use the canonical passenger name once",
+);
 assertExcludes(
   appSource,
   'const safeCompany = clean(companyAccount) || "Customer Account";',
@@ -219,7 +224,7 @@ assertIncludes(
 );
 
 const saveBookingSection = appSource.slice(
-  appSource.indexOf("async function saveBooking()"),
+  appSource.indexOf("async function saveBooking("),
   appSource.indexOf("function bookingRecordReferenceCandidates"),
 );
 assert.ok(saveBookingSection.includes("return null;"), "Save + CRM must stop before write when review is missing.");
@@ -249,12 +254,15 @@ assert.ok(
   "Lower operational snapshot save must block missing outbound pickup date/time before write.",
 );
 
+const updateSectionStart = appSource.indexOf(
+  "async function updateAppliedAdminBookingOperationalSnapshot(",
+);
 const updateSection = appSource.slice(
-  appSource.indexOf("async function updateAppliedAdminBookingOperationalSnapshot()"),
-  appSource.indexOf("async function updateAdminCustomerRequestReviewDecision"),
+  updateSectionStart,
+  appSource.indexOf("function getDispatchCopyText", updateSectionStart),
 );
 assert.ok(
-  updateSection.includes("resolveSaveCrmBillingIdentityAccountForSave();"),
+  updateSection.includes(": await resolveSaveCrmBillingIdentityAccountForSave();"),
   "Applied booking update must share billing identity guard.",
 );
 assert.ok(
@@ -296,6 +304,40 @@ assertIncludes(
   adminCustomerAccountsReadSource,
   "account_scope_key",
   "admin customer account safe record exposes scoped identity key for admin grouping",
+);
+
+for (const [source, fragment, label] of [
+  [appSource, "Detected similar customer/company name", "inline collision review wording"],
+  [appSource, 'data-admin-customer-account-collision-merge="true"', "wired Merge action"],
+  [appSource, 'data-admin-customer-account-collision-create-new="true"', "wired Create new action"],
+  [appSource, "reviewed_customer_ids: reviewedAdminCustomerAccountCollisionIds(review)", "bounded reviewed candidate IDs"],
+  [appSource, "selected_customer_id: review.selectedCustomerId", "exact Merge candidate ID"],
+  [appSource, "bookingKey: adminCustomerAccountCollisionBookingKey(bookingForSave)", "post-CRM enriched collision-review identity key"],
+  [appSource, "activeCustomerAccountCollisionReviewForRetry", "exact-key collision retry gate"],
+  [appSource, "activeCustomerAccountCollisionReviewForRetry.billingIdentityResolution", "previously successful billing resolution reuse"],
+  [appSource, ": await resolveSaveCrmBillingIdentityAccountForSave();", "normal Save + CRM billing preflight preservation"],
+  [adminBookingPersistenceSource, '"customer_account_collision_resolution"', "create payload collision resolution allowlist"],
+  [adminBookingPersistenceSource, 'action: "create_new" | "merge"', "strict collision actions"],
+  [adminBookingAdapterSource, "canonicalCustomerCompanyAccountName", "deterministic canonical collision detector"],
+  [adminBookingAdapterSource, "sameCustomerAccountCollisionCandidateIds", "server candidate-set race check"],
+  [adminBookingAdapterSource, "forceCreateCanonicalCustomer", "one-request explicit Create new override"],
+  [adminBookingsRouteSource, "customer_account_collision_review", "typed safe collision review response"],
+]) {
+  assertIncludes(source, fragment, label);
+}
+
+assertExcludes(
+  adminBookingPersistenceSource.slice(
+    adminBookingPersistenceSource.indexOf("const updatePayloadTopLevelFields"),
+    adminBookingPersistenceSource.indexOf("const customerBookingRequestFields"),
+  ),
+  "customer_account_collision_resolution",
+  "Update + Cal collision-resolution field",
+);
+assertExcludes(
+  adminBookingAdapterSource,
+  "billingIdentityTokenWithinOneEdit",
+  "fuzzy edit-distance customer merge",
 );
 
 console.log("Save + CRM billing identity review guard passed.");

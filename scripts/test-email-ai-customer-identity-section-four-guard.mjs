@@ -113,6 +113,32 @@ assert.match(
   "Email AI recommendation must load the established customer profiles and agency folders before selecting",
 );
 
+const explicitNewCustomerChoiceStart = adminPage.indexOf(
+  "function chooseAdminDispatchNewCustomerType",
+);
+const explicitNewCustomerChoiceEnd = adminPage.indexOf(
+  "\n  const ",
+  explicitNewCustomerChoiceStart + 1,
+);
+assert.ok(
+  explicitNewCustomerChoiceStart >= 0 &&
+    explicitNewCustomerChoiceEnd > explicitNewCustomerChoiceStart,
+  "The established explicit new-customer chooser must remain present",
+);
+const explicitNewCustomerChoiceBlock = adminPage.slice(
+  explicitNewCustomerChoiceStart,
+  explicitNewCustomerChoiceEnd,
+);
+for (const fragment of [
+  "adminEmailAiCustomerRecommendationRevisionRef.current += 1;",
+  "setAdminEmailAiCustomerProfileSuggestion(null);",
+]) {
+  assert.ok(
+    explicitNewCustomerChoiceBlock.includes(fragment),
+    `Explicit new-customer selection must invalidate the prior Email AI recommendation with ${fragment}`,
+  );
+}
+
 for (const fragment of [
   'data-customer-folder-section-four-edit="true"',
   'data-customer-folder-selected-identity-resolver="true"',

@@ -221,8 +221,10 @@ async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
   const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
+  const nativePushBadgePath = path.join(tempDir, "lib/native-push-badge-count.js");
   const principalPath = path.join(tempDir, "lib/customer-principal-access.js");
 
+  await mkdir(path.dirname(nativePushBadgePath), { recursive: true });
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
@@ -245,6 +247,10 @@ async function writeMockModules(tempDir) {
   await writeFile(
     webPushPath,
     "module.exports = { setVapidDetails() {}, async sendNotification() {} };",
+  );
+  await writeFile(
+    nativePushBadgePath,
+    "exports.reserveNativePushBadgeCount = async () => null; exports.releaseNativePushBadgeCount = async () => false; exports.resetNativePushBadgeCount = async () => false;",
   );
   await writeFile(
     principalPath,

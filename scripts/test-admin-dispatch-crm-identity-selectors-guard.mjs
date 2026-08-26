@@ -89,6 +89,33 @@ for (const fragment of [
   "Retry customer list",
 ]) assert.ok(app.includes(fragment), `Missing unified account identity preservation ${fragment}`);
 
+const loadedUnassignedCorporateOptionStart = app.indexOf(
+  "if (\n    !clean(booking.customerId) &&\n    booking.companyId &&",
+);
+const loadedUnassignedCorporateOptionEnd = app.indexOf(
+  "adminDispatchCustomerAccountOptions.sort",
+  loadedUnassignedCorporateOptionStart + 1,
+);
+assert.ok(
+  loadedUnassignedCorporateOptionStart >= 0 &&
+    loadedUnassignedCorporateOptionEnd > loadedUnassignedCorporateOptionStart,
+  "The unified chooser must retain its bounded loaded/unassigned corporate option",
+);
+const loadedUnassignedCorporateOptionBlock = app.slice(
+  loadedUnassignedCorporateOptionStart,
+  loadedUnassignedCorporateOptionEnd,
+);
+assert.ok(
+  loadedUnassignedCorporateOptionBlock.includes(
+    'searchText: `${loadedCompanyName} ${loadedBookerName}`.toLocaleLowerCase(),',
+  ),
+  "The company-only loaded identity search must use only its current company/label evidence",
+);
+assert.ok(
+  !loadedUnassignedCorporateOptionBlock.includes("clean(booking.name)"),
+  "An unverified draft passenger must not become searchable verified account identity",
+);
+
 assert.ok(
   !app.includes('data-admin-dispatch-corporate-pair-applying="true"'),
   "The unified chooser must not silently auto-apply a lone passenger",
@@ -162,6 +189,10 @@ for (const fragment of [
 
 for (const fragment of [
   "unified Customer Account search keeps agency, corporate, and personal identity tuples",
+  'assert.equal(emailAiCompanyFallbackState.selectedKey, "corporate:55:unassigned")',
+  'assert.equal(emailAiCompanyFallbackState.companyId, "55")',
+  "Customer Account passenger quick search",
+  'assert.deepEqual(unifiedCustomerQuickSearchState, ["corporate:55:5501"])',
   "one possible passenger match asks Admin before selection",
   "multiple possible passenger matches remain a candidate list",
   "different person keeps the account but clears the verified Traveller",

@@ -59,6 +59,11 @@ for (const fragment of [
   'data-copy-preview="customerCopy"',
   'data-copy-copy-button="customerCopy"',
   'data-copy-edit-button="customerCopy"',
+  "Message text for Copy / Email / WhatsApp / SMS",
+  "{customerCopyText}",
+  'data-admin-customer-driver-details-email-review-item="true"',
+  'data-admin-customer-driver-details-whatsapp-disabled-send-item="true"',
+  'data-admin-customer-driver-details-sms-disabled-send-item="true"',
 ]) {
   assertIncludes(appSource, fragment, `existing Customer Copy control ${fragment}`);
 }
@@ -66,7 +71,14 @@ for (const fragment of [
 for (const fragment of [
   '"CUSTOMER BOOKING DETAILS"',
   '"DRIVER DETAILS"',
-  "`Passenger name: ${clean(booking.name)}`",
+  "const customerCopySavedPassengerName =",
+  "cleanReferenceText(appliedAdminBookingSnapshot?.booking_reference) === bookingReference",
+  "clean(appliedAdminBookingSnapshot?.passenger_name)",
+  "cleanReferenceText(dispatchReleaseLoadedBookingRecord?.booking_reference) === bookingReference",
+  "clean(dispatchReleaseLoadedBookingRecord?.passenger_name)",
+  "const customerCopyPassengerName =",
+  "clean(booking.name) || customerCopySavedPassengerName;",
+  "`Passenger name: ${customerCopyPassengerName || \"Passenger not set\"}`",
   "`Booking reference: ${dispatchPublicBookingReference}`",
   "`Service: ${serviceType}`",
   "`Pickup date: ${formatDate(booking.date)}`",
@@ -118,6 +130,9 @@ for (const forbidden of [
   "RESEND_API_KEY",
   "Resend",
   "`Passenger: ${clean(booking.name)}`",
+  "booking.booker",
+  "booking.company",
+  "booking.bookerEmail",
   "Customer/passenger/traveler name:",
 ]) {
   assertExcludes(customerCopyGenerator, forbidden, "Customer Copy generator forbidden content");

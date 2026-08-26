@@ -15,7 +15,7 @@ const [dashboard, route, helper, nativeNotifications, adminConfigSource, ledger,
 const adminConfig = JSON.parse(adminConfigSource).expo;
 assert.equal(adminConfig.ios.buildNumber, "6", "The repaired Admin binary must advance only to Build 6");
 
-const saveStart = dashboard.indexOf("async function saveBooking()");
+const saveStart = dashboard.indexOf("async function saveBooking(");
 const saveEnd = dashboard.indexOf("function bookingRecordReferenceCandidates", saveStart);
 assert.ok(saveStart >= 0 && saveEnd > saveStart, "Save + CRM source boundary must remain available");
 const saveSource = dashboard.slice(saveStart, saveEnd);

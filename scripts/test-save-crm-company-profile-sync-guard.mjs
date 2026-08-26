@@ -96,7 +96,7 @@ assert.match(
 );
 
 const saveBookingSection = appSource.slice(
-  appSource.indexOf("async function saveBooking()"),
+  appSource.indexOf("async function saveBooking("),
   appSource.indexOf("function bookingRecordReferenceCandidates"),
 );
 

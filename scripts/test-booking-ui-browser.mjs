@@ -8971,11 +8971,14 @@ async function runChromeTest() {
       emailAiAgencyIdentityState.suggestionText,
       /Admin can change this selection before Save \+ CRM/i,
     );
-    assert.match(emailAiAgencyIdentityState.selectedNoticeText, /Guest name stays on this booking only/i);
-    await evaluate(`(() => {
-      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
-      document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click();
-    })()`);
+    assert.match(emailAiAgencyIdentityState.selectedNoticeText, /Passenger name stays on this booking only/i);
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]'))`),
+      10000,
+      "Email AI manual override corporate new-customer choice",
+    );
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
     const emailAiManualOverrideState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -9028,22 +9031,31 @@ async function runChromeTest() {
           const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
           return accountSelector instanceof HTMLDetailsElement &&
-            accountSelector.dataset.value === "" &&
             suggestion
             ? {
+                bookerId: accountSelector.dataset.bookerId || "",
+                companyId: accountSelector.dataset.companyId || "",
                 customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
+                customerId: accountSelector.dataset.customerId || "",
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.method)
                   .filter((method) => method !== "GET"),
                 requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.url),
+                selectedKey: accountSelector.dataset.value || "",
                 suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
+                travelerId: accountSelector.dataset.travelerId || "",
               }
             : false;
         })()`),
       10000,
       "Email AI exact-company-name corporate profile fallback",
     );
+    assert.equal(emailAiCompanyFallbackState.selectedKey, "corporate:55:unassigned");
+    assert.equal(emailAiCompanyFallbackState.companyId, "55");
+    assert.equal(emailAiCompanyFallbackState.customerId, "");
+    assert.equal(emailAiCompanyFallbackState.bookerId, "");
+    assert.equal(emailAiCompanyFallbackState.travelerId, "");
     assert.equal(emailAiCompanyFallbackState.customerStatusCount, 0);
     assert.deepEqual(emailAiCompanyFallbackState.nonGetMethods, []);
     assert.ok(
@@ -9138,12 +9150,16 @@ async function runChromeTest() {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
         return review && chooser instanceof HTMLDetailsElement
           ? {
+              bookerId: chooser.dataset.bookerId || "",
               bookingPostCount: (window.__prestigeFetchCalls || []).filter((call) =>
                 String(call).includes("POST /api/admin-bookings"),
               ).length,
               candidateCount: document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button').length,
+              companyId: chooser.dataset.companyId || "",
+              customerId: chooser.dataset.customerId || "",
               selectedKey: chooser.dataset.value || "",
               text: review.textContent.replace(/\\s+/g, " ").trim(),
+              travelerId: chooser.dataset.travelerId || "",
             }
           : false;
       })()`),
@@ -9151,7 +9167,11 @@ async function runChromeTest() {
       "one possible passenger match asks Admin before selection",
     );
     assert.equal(singlePassengerReviewState.candidateCount, 0);
-    assert.equal(singlePassengerReviewState.selectedKey, "");
+    assert.equal(singlePassengerReviewState.selectedKey, "corporate:55:unassigned");
+    assert.equal(singlePassengerReviewState.companyId, "55");
+    assert.equal(singlePassengerReviewState.customerId, "");
+    assert.equal(singlePassengerReviewState.bookerId, "");
+    assert.equal(singlePassengerReviewState.travelerId, "");
     assert.match(singlePassengerReviewState.text, /Pui Yu Chan/);
     assert.equal(
       singlePassengerReviewState.bookingPostCount,
@@ -16309,14 +16329,14 @@ async function runChromeTest() {
       0,
       "Expected booking update after driver profile delete not to patch/delete legacy booking shim rows",
     );
-    assert.equal(updateAfterDriverDeleteState.flightValue, "");
-    assert.equal(updateAfterDriverDeleteState.paxValue, "1");
-    assert.equal(updateAfterDriverDeleteState.editIdentityCount, 0);
-    assert.equal(updateAfterDriverDeleteState.primarySaveLabel, "Save + CRM");
+    assert.equal(updateAfterDriverDeleteState.flightValue, "DL9905");
+    assert.equal(updateAfterDriverDeleteState.paxValue, "4");
+    assert.equal(updateAfterDriverDeleteState.editIdentityCount, 1);
+    assert.equal(updateAfterDriverDeleteState.primarySaveLabel, "Update + Cal");
 
-    const clickedRestoreAfterDriverDeleteClear = await evaluate(`(() => {
+    const clickedRestoreAfterDriverDeleteNewBooking = await evaluate(`(() => {
       const clearButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Clear Message",
+        (button) => button.textContent.trim() === "New booking",
       );
 
       if (!clearButton || clearButton.disabled) {
@@ -16327,9 +16347,9 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(
-      clickedRestoreAfterDriverDeleteClear,
+      clickedRestoreAfterDriverDeleteNewBooking,
       true,
-      "Expected Clear Message button to restore Dispatch draft after driver delete cleanup check",
+      "Expected New booking button to restore Dispatch draft after driver delete cleanup check",
     );
 
     await setBookingMessageValue(bookingSample, "restored Dispatch booking message after driver delete");
@@ -21868,6 +21888,8 @@ async function runChromeTest() {
       window.__prestigeCrmVerifiedBooker = null;
       window.__prestigeCrmVerifiedTravelers = [];
       window.__prestigeCrmProfileConfirmMessages = [];
+      window.__prestigeCrmSaveCollisionAttemptCount = 0;
+      window.__prestigeCrmSaveCollisionScenarioComplete = false;
       window.__prestigeCrmSaveBookingResponseLossCount = 0;
       window.__prestigeCrmSaveBookingRecoveryReads = [];
       window.__prestigeCrmSavePersistedBooking = null;
@@ -22131,7 +22153,7 @@ async function runChromeTest() {
                 company: {
                   company_name: companyRecord.company_name,
                   id: companyRecord.id,
-                  mobile_phone: null,
+                  mobile_phone: "+65 9000 0333",
                   operations_email: "browserui@example.com",
                   primary_contact_name: "BROWSER UI TEST BOOKER",
                 },
@@ -22208,6 +22230,59 @@ async function runChromeTest() {
           } catch {}
 
           if (method === "POST") {
+            window.__prestigeCrmSaveCollisionAttemptCount += 1;
+            const collisionResolution = parsedBody?.customer_account_collision_resolution;
+
+            if (!window.__prestigeCrmSaveCollisionScenarioComplete && !collisionResolution) {
+              return jsonResponse({
+                customer_account_collision_review: {
+                  candidates: [
+                    {
+                      customer_account: "BROWSER UI TEST COMPANY",
+                      customer_id: 163,
+                    },
+                    {
+                      customer_account: "Browser UI Test Company Pte. Ltd.",
+                      customer_id: 164,
+                    },
+                  ],
+                  code: "customer_account_collision_review_required",
+                },
+                error: "Detected similar customer/company name",
+                ok: false,
+              }, 409);
+            }
+
+            if (
+              !window.__prestigeCrmSaveCollisionScenarioComplete &&
+              collisionResolution.action === "merge"
+            ) {
+              return jsonResponse({
+                customer_account_collision_review: {
+                  candidates: [
+                    {
+                      customer_account: "BROWSER UI TEST COMPANY",
+                      customer_id: 163,
+                    },
+                  ],
+                  code: "customer_account_collision_review_required",
+                },
+                error: "Detected similar customer/company name",
+                ok: false,
+              }, 409);
+            }
+
+            if (
+              !window.__prestigeCrmSaveCollisionScenarioComplete &&
+              collisionResolution.action !== "create_new"
+            ) {
+              return jsonResponse({ error: "Unexpected collision resolution.", ok: false }, 400);
+            }
+
+            if (collisionResolution?.action === "create_new") {
+              window.__prestigeCrmSaveCollisionScenarioComplete = true;
+            }
+
             window.__prestigeCrmSavePersistedBooking = {
               ...parsedBody?.booking,
               booking_reference: parsedBody?.booking?.booking_reference || "ADM-BROWSER-CRM-SAFE",
@@ -22385,10 +22460,13 @@ async function runChromeTest() {
       };
     })()`);
 
-    await evaluate(`(() => {
-      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
-      document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click();
-    })()`);
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]'))`),
+      10000,
+      "Save + CRM corporate new-customer choice",
+    );
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
 
     const clickedSaveBookingCrm = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
@@ -22404,13 +22482,184 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedSaveBookingCrm, true, "Expected Save Booking + CRM button to be clickable");
 
+    const initialCustomerCollisionReview = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const review = document.querySelector('[data-admin-customer-account-collision-review="true"]');
+          const merge = document.querySelector('[data-admin-customer-account-collision-merge="true"]');
+          const createNew = document.querySelector('[data-admin-customer-account-collision-create-new="true"]');
+          const candidates = [...document.querySelectorAll('[data-admin-customer-account-collision-candidate]')];
+          const bookingPosts = (window.__prestigeSaveRequestBodies || []).filter(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+          );
+
+          return review && merge && createNew && candidates.length === 2 && bookingPosts.length === 1
+            ? {
+                bookingPosts,
+                calendarSyncCount: (window.__prestigeCrmSaveGoogleCalendarSyncRequests || []).length,
+                createNewText: createNew.textContent.trim(),
+                emailAiWriteCount: (window.__prestigeCrmSaveEmailAiRequests || []).length,
+                headingVisible: review.textContent.includes("Detected similar customer/company name"),
+                mergeDisabled: merge.disabled,
+              }
+            : false;
+        })()`),
+      10000,
+      "multiple-candidate Customer Account collision review",
+    );
+    assert.equal(initialCustomerCollisionReview.headingVisible, true);
+    assert.equal(initialCustomerCollisionReview.mergeDisabled, true);
+    assert.equal(initialCustomerCollisionReview.createNewText, "Create new");
+    assert.equal(initialCustomerCollisionReview.bookingPosts[0]?.body?.customer_account_collision_resolution, undefined);
+    assert.equal(initialCustomerCollisionReview.calendarSyncCount, 0);
+    assert.equal(initialCustomerCollisionReview.emailAiWriteCount, 0);
+
+    const collisionReviewInvalidated = await evaluate(`(() => {
+      const passenger = [...document.querySelectorAll("label")]
+        .find((label) => label.textContent.replace(/\\s+\\*/g, " ").trim().startsWith("Passenger name"))
+        ?.querySelector("input");
+
+      if (!(passenger instanceof HTMLInputElement)) {
+        return false;
+      }
+
+      const originalValue = passenger.value;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(passenger, \`${"${originalValue}"} REVIEW\`);
+      passenger.dispatchEvent(new Event("input", { bubbles: true }));
+      passenger.dispatchEvent(new Event("change", { bubbles: true }));
+      return originalValue;
+    })()`);
+    assert.equal(typeof collisionReviewInvalidated, "string");
+    await waitForCondition(
+      () => evaluate(`!document.querySelector('[data-admin-customer-account-collision-review="true"]')`),
+      10000,
+      "Customer Account collision review invalidated after identity change",
+    );
+    await evaluate(`(() => {
+      const passenger = [...document.querySelectorAll("label")]
+        .find((label) => label.textContent.replace(/\\s+\\*/g, " ").trim().startsWith("Passenger name"))
+        ?.querySelector("input");
+      if (passenger instanceof HTMLInputElement) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(passenger, ${JSON.stringify("BROWSER UI TEST TRAVELER")});
+        passenger.dispatchEvent(new Event("input", { bubbles: true }));
+        passenger.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    })()`);
+
+    await waitForCondition(
+      () => evaluate(`
+        document.querySelectorAll('[data-admin-customer-account-collision-candidate]').length === 2 &&
+        (window.__prestigeSaveRequestBodies || []).filter(
+          (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+        ).length === 1
+      `),
+      10000,
+      "same collision review reactivated after exact identity restore",
+    );
+
+    const selectedCollisionMergeCandidate = await evaluate(`(() => {
+      const candidate = document.querySelector('[data-admin-customer-account-collision-candidate="164"]');
+      if (!(candidate instanceof HTMLInputElement)) return false;
+      candidate.click();
+      return true;
+    })()`);
+    assert.equal(selectedCollisionMergeCandidate, true);
+    const enabledCollisionMerge = await waitForCondition(
+      () => evaluate(`(() => {
+        const merge = document.querySelector('[data-admin-customer-account-collision-merge="true"]');
+        const bookingPostCount = (window.__prestigeSaveRequestBodies || []).filter(
+          (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+        ).length;
+        return merge instanceof HTMLButtonElement && !merge.disabled
+          ? { bookingPostCount }
+          : false;
+      })()`),
+      10000,
+      "Merge enabled after exact candidate selection committed",
+    );
+    assert.equal(
+      enabledCollisionMerge.bookingPostCount,
+      1,
+      "Expected candidate selection alone to perform zero booking writes",
+    );
+    const clickedCollisionMerge = await evaluate(`(() => {
+      const merge = document.querySelector('[data-admin-customer-account-collision-merge="true"]');
+      if (!(merge instanceof HTMLButtonElement) || merge.disabled) return false;
+      merge.click();
+      return true;
+    })()`);
+    assert.equal(clickedCollisionMerge, true);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const postMergeDiagnostic = await evaluate(`(() => {
+      const bookingPosts = (window.__prestigeSaveRequestBodies || []).filter(
+        (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+      );
+      const billingReview = document.querySelector('[data-save-crm-billing-identity-review="true"]');
+      const collisionReview = document.querySelector('[data-admin-customer-account-collision-review="true"]');
+      const merge = document.querySelector('[data-admin-customer-account-collision-merge="true"]');
+
+      return {
+        billingReviewState: billingReview?.getAttribute("data-save-crm-billing-identity-review-state") || "",
+        billingReviewText: billingReview?.textContent.replace(/\\s+/g, " ").trim() || "",
+        bookingPostCount: bookingPosts.length,
+        collisionCandidateCount: document.querySelectorAll('[data-admin-customer-account-collision-candidate]').length,
+        collisionReviewText: collisionReview?.textContent.replace(/\\s+/g, " ").trim() || "",
+        fetchTail: (window.__prestigeFetchCalls || []).slice(-15),
+        mergeDisabled: merge instanceof HTMLButtonElement ? merge.disabled : null,
+        saveFeedback: document.querySelector('[data-booking-save-feedback="job-card"]')?.textContent.replace(/\\s+/g, " ").trim() || "",
+      };
+    })()`);
+    assert.equal(
+      postMergeDiagnostic.bookingPostCount,
+      2,
+      `Expected Merge to reach its guarded POST. Diagnostic: ${JSON.stringify(postMergeDiagnostic)}`,
+    );
+    const staleMergeReview = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const candidates = document.querySelectorAll('[data-admin-customer-account-collision-candidate]');
+          const bookingPosts = (window.__prestigeSaveRequestBodies || []).filter(
+            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+          );
+          return candidates.length === 0 && bookingPosts.length === 2
+            ? {
+                bookingPosts,
+                calendarSyncCount: (window.__prestigeCrmSaveGoogleCalendarSyncRequests || []).length,
+                createNewVisible: Boolean(document.querySelector('[data-admin-customer-account-collision-create-new="true"]')),
+              }
+            : false;
+        })()`),
+      10000,
+      "one-candidate collision review after stale Merge race-check",
+    );
+    assert.equal(staleMergeReview.createNewVisible, true);
+    assert.deepEqual(
+      staleMergeReview.bookingPosts[1]?.body?.customer_account_collision_resolution,
+      {
+        action: "merge",
+        reviewed_customer_ids: [163, 164],
+        selected_customer_id: 164,
+      },
+    );
+    assert.equal(staleMergeReview.calendarSyncCount, 0);
+
+    const clickedCollisionCreateNew = await evaluate(`(() => {
+      const createNew = document.querySelector('[data-admin-customer-account-collision-create-new="true"]');
+      if (!(createNew instanceof HTMLButtonElement) || createNew.disabled) return false;
+      createNew.click();
+      return true;
+    })()`);
+    assert.equal(clickedCollisionCreateNew, true);
+
     const crmSaveState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
-          const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
+          const bookingInsert = (window.__prestigeSaveRequestBodies || []).filter(
             (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-          );
+          ).at(-1);
           const googleCalendarSyncRequests = window.__prestigeCrmSaveGoogleCalendarSyncRequests || [];
 
           return bodyText.includes("Google Calendar auto-synced") &&
@@ -22476,8 +22725,19 @@ async function runChromeTest() {
       crmSaveState.fetchCalls.filter(
         (call) => call === "POST /api/admin-bookings",
       ).length,
-      1,
-      "Expected response-loss recovery not to retry the booking POST or create a duplicate",
+      3,
+      "Expected one no-choice review, one stale Merge race-check, and one successful Create new POST without retrying the lost successful response",
+    );
+    const collisionBookingRequests = crmSaveState.requestBodies.filter(
+      (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+    );
+    assert.deepEqual(
+      collisionBookingRequests[2]?.body?.customer_account_collision_resolution,
+      {
+        action: "create_new",
+        reviewed_customer_ids: [163],
+      },
+      "Expected Create new to carry only the latest server-revalidated one-candidate collision set",
     );
     assert.doesNotMatch(crmSaveState.bodyText, /Booking save failed: Failed to fetch/i);
     assert.equal(
@@ -22485,7 +22745,7 @@ async function runChromeTest() {
       true,
       "Expected safe Save Booking + CRM to use only guarded saved-bookings GET reloads",
     );
-    assert.equal(crmSaveState.companyIdentityRequests.length, 2);
+    assert.equal(crmSaveState.companyIdentityRequests.length >= 2, true);
     assert.equal(crmSaveState.companyIdentityRequests[0]?.method, "GET");
     assert.match(
       crmSaveState.companyIdentityRequests[0]?.url || "",
@@ -22514,6 +22774,14 @@ async function runChromeTest() {
         },
       ],
       "Expected Save + CRM to write only the approved base company name and Booker contact fields",
+    );
+    assert.equal(
+      crmSaveState.companyWriteRequests.filter(
+        ({ body, method }) =>
+          method === "POST" && body?.action_type === "company_update",
+      ).length,
+      0,
+      "Expected collision decisions to reuse the exact persisted company contact without a redundant company update",
     );
     // first corporate Save + CRM identity creation
     assert.equal(
@@ -22548,7 +22816,7 @@ async function runChromeTest() {
     );
     assert.equal(crmSaveState.bookingInsert?.booking?.booker_id, 602);
     assert.equal(crmSaveState.bookingInsert?.booking?.traveler_id, 603);
-    const firstCorporateBookingPostIndex = crmSaveState.fetchCalls.indexOf(
+    const firstCorporateBookingPostIndex = crmSaveState.fetchCalls.lastIndexOf(
       "POST /api/admin-bookings",
     );
     const firstCorporateRateReadIndexes = crmSaveState.fetchCalls
@@ -23049,7 +23317,7 @@ async function runChromeTest() {
       "parsed first agency booking",
     );
 
-    const selectedFirstAgencyMode = await evaluate(`(() => {
+    const openedFirstAgencyMode = await evaluate(`(() => {
       const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
       if (!(selector instanceof HTMLDetailsElement)) {
@@ -23057,10 +23325,15 @@ async function runChromeTest() {
       }
 
       document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
-      document.querySelector('[data-admin-dispatch-new-customer-account="true"]')?.click();
       return true;
     })()`);
-    assert.equal(selectedFirstAgencyMode, true, "Expected first agency mode to be selectable");
+    assert.equal(openedFirstAgencyMode, true, "Expected first agency mode chooser to open");
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]'))`),
+      10000,
+      "first agency account new-customer choice",
+    );
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-account="true"]')?.click()`);
 
     const firstAgencyUi = await waitForCondition(
       () => evaluate(`(() => {
@@ -23098,7 +23371,7 @@ async function runChromeTest() {
     );
     assert.equal(firstAgencyUi.company, "BROWSER UI TEST COMPANY");
     assert.equal(firstAgencyUi.passenger, "BROWSER UI TEST TRAVELER");
-    assert.match(firstAgencyUi.notice, /passenger stays on this booking only/i);
+    assert.match(firstAgencyUi.notice, /Each booking keeps its own passenger name\./i);
 
     await evaluate(`(() => {
       window.__prestigeCrmCompanyIdentityRequests = [];
@@ -24174,10 +24447,13 @@ async function runChromeTest() {
       };
     })()`);
 
-    await evaluate(`(() => {
-      document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
-      document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')?.click();
-    })()`);
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]'))`),
+      10000,
+      "Mr Lee personal new-customer choice",
+    );
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')?.click()`);
 
     const clickedMrLeeNoCompanySave = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(

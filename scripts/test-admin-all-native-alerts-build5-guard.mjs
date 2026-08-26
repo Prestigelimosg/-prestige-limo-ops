@@ -20,6 +20,8 @@ const [
 ]);
 
 const allAdminNativeAlertTypes = [
+  "admin_booking_created",
+  "admin_urgent_booking_created",
   "new_booking_request",
   "urgent_booking_request",
   "customer_booking_amendment",
@@ -88,7 +90,7 @@ for (const fragment of [
 const admin = JSON.parse(adminConfigSource).expo;
 const customer = JSON.parse(customerConfigSource).expo;
 const driver = JSON.parse(driverConfigSource).expo;
-assert.equal(admin.ios.buildNumber, "5", "Admin all-alert acceptance requires Build 5");
+assert.equal(admin.ios.buildNumber, "6", "Admin acceptance repair requires Build 6");
 assert.equal(customer.ios.buildNumber, "9", "Customer Build 9 must remain unchanged");
 assert.equal(driver.ios.buildNumber, "16", "Driver Build 16 must remain unchanged");
 

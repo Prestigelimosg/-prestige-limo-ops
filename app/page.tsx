@@ -22305,6 +22305,9 @@ export default function Home() {
             headers: {
               "Content-Type": "application/json",
               "x-prestige-admin-purpose": "admin-booking-persistence",
+              ...(bookingPayload.legLabel === "outbound"
+                ? { "x-prestige-admin-native-alert": "primary-manual-create" }
+                : {}),
             },
             method: "POST",
           });
@@ -48618,8 +48621,8 @@ export default function Home() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-950">Codex Review &amp; Admin App Notifications</h3>
-                <p className="hidden text-xs text-slate-600 sm:block sm:text-sm">
-                  Internal admin inbox only. External messages are not sent from here.
+                <p className="text-xs text-slate-600 sm:text-sm">
+                  Push ON registers this device for automatic alerts. This button does not send an alert.
                 </p>
               </div>
               <div

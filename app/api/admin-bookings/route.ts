@@ -18,6 +18,7 @@ import {
   createCustomerDriverAppNotification,
   type CustomerDriverAppNotificationSafeRecord,
 } from "../../../lib/customer-driver-app-notification-persistence";
+import { sendAdminManualBookingCreatedDevicePushAlert } from "../../../lib/admin-device-push-notification";
 
 export const dynamic = "force-dynamic";
 
@@ -154,6 +155,29 @@ function adminBookingReferenceFromRequest(request: Request) {
 
 function normalizedToken(value: unknown) {
   return clean(value).replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+}
+
+function shouldSendManualBookingCreatedAlert(
+  request: Request,
+  booking: AdminBookingPersistenceRecord,
+) {
+  return (
+    request.headers.get("x-prestige-admin-native-alert") === "primary-manual-create" &&
+    normalizedToken(booking.source_channel) === "admin_dashboard"
+  );
+}
+
+async function maybeSendManualBookingCreatedAlert(
+  request: Request,
+  booking: AdminBookingPersistenceRecord,
+) {
+  if (!shouldSendManualBookingCreatedAlert(request, booking)) return;
+
+  try {
+    await sendAdminManualBookingCreatedDevicePushAlert(booking);
+  } catch {
+    // A saved Admin booking must not fail because native push is unavailable.
+  }
 }
 
 function customerRequestDecisionNotificationCopy(requestReviewStatus: string) {
@@ -351,6 +375,8 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return adminBookingFailureResponse(result);
     }
+
+    await maybeSendManualBookingCreatedAlert(request, result.data);
 
     return Response.json({
       ok: true,

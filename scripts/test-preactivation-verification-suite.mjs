@@ -414,6 +414,10 @@ const guardChecks = [
     script: "scripts/test-admin-all-native-alerts-build5-guard.mjs",
   },
   {
+    label: "admin manual booking native alert guard",
+    script: "scripts/test-admin-manual-booking-native-alert-guard.mjs",
+  },
+  {
     label: "Admin Companion iOS Build 2 release guard",
     script: "scripts/test-admin-companion-ios-build2-release-guard.mjs",
   },
@@ -512,6 +516,10 @@ const guardChecks = [
   {
     label: "Admin iPhone companion background OTP preservation guard",
     script: "scripts/test-admin-companion-background-otp-preservation-guard.mjs",
+  },
+  {
+    label: "Admin biometric single-flight guard",
+    script: "scripts/test-admin-biometric-single-flight-guard.mjs",
   },
   {
     label: "Admin iPhone companion WebView recovery guard",

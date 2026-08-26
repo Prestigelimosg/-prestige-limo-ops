@@ -161,6 +161,8 @@ type AdminDevicePushPayload = {
 };
 
 export type AdminDevicePushEventType =
+  | "admin_booking_created"
+  | "admin_urgent_booking_created"
   | "new_booking_request"
   | "urgent_booking_request"
   | "customer_booking_amendment"
@@ -651,6 +653,14 @@ const adminDevicePushEventCopy: Record<
   AdminDevicePushEventType,
   Pick<AdminDevicePushPayload, "body" | "title">
 > = {
+  admin_booking_created: {
+    body: "New job saved. Open Dashboard to review.",
+    title: "New job saved",
+  },
+  admin_urgent_booking_created: {
+    body: "Urgent job saved. Open Dashboard to review.",
+    title: "Urgent job saved",
+  },
   customer_booking_amendment: {
     body: "Customer amendment request received. Open Dashboard to review.",
     title: "Customer amendment request",
@@ -1031,6 +1041,24 @@ export async function sendAdminNewBookingDevicePushAlert(
       adminReviewRequiredStatus.toLowerCase()
       ? "urgent_booking_request"
       : "new_booking_request";
+
+  return sendAdminDevicePushAlert(eventType, options);
+}
+
+export async function sendAdminManualBookingCreatedDevicePushAlert(
+  booking: AdminBookingPersistenceRecord,
+  options: AdminDevicePushAlertOptions = {},
+): Promise<AdminNewBookingDevicePushAlertResult> {
+  if (!isUsableBooking(booking)) {
+    return blockedAlertResult("invalid_booking");
+  }
+
+  const eventType =
+    typeof booking.short_notice_review_status === "string" &&
+    booking.short_notice_review_status.trim().toLowerCase() ===
+      "admin review required"
+      ? "admin_urgent_booking_created"
+      : "admin_booking_created";
 
   return sendAdminDevicePushAlert(eventType, options);
 }

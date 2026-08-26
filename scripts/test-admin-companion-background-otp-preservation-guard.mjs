@@ -55,10 +55,9 @@ assert.equal(
 );
 
 for (const phrase of [
-  'else if (nextState !== "active" && biometricEnabled)',
-  'setScreenMode("locked")',
-  'if (!returningToForeground || !biometricEnabled) return',
-  "void unlockAdminApp()",
+  "transitionAdminBiometricAppState",
+  'if (biometricAction === "lock")',
+  'if (biometricAction === "unlock") void unlockAdminApp()',
   'if (isProtectedAdminUrl(request.url) && !biometricEnabled)',
   "return biometricEnabled && screenMode === \"web\"",
   'key={`prestige-admin-webview-${navigationKey}`}',

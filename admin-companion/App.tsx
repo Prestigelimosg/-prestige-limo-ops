@@ -32,6 +32,12 @@ import {
   readOrCreateAdminInstallationId,
 } from "./src/admin-installation";
 import {
+  beginAdminBiometricAttempt,
+  createAdminBiometricLifecycle,
+  finishAdminBiometricAttempt,
+  transitionAdminBiometricAppState,
+} from "./src/admin-biometric-lifecycle";
+import {
   forgetAdminNativeNotificationToken,
   nativeAdminNotificationOpenRequest,
   readAdminNativeNotificationToken,
@@ -94,8 +100,10 @@ export default function App() {
   const [screenMode, setScreenMode] = useState<ScreenMode>("checking");
   const [webViewLoadState, setWebViewLoadState] =
     useState<AdminWebViewLoadState>("loading");
-  const biometricPromptBusyRef = useRef(false);
-  const biometricResumePendingRef = useRef(false);
+  const biometricEnabledRef = useRef(false);
+  const biometricLifecycleRef = useRef(
+    createAdminBiometricLifecycle(AppState.currentState),
+  );
   const nativeBridgeBusyRef = useRef(false);
   const pendingNativeActionRef = useRef<"register" | "unregister" | null>(null);
   const pendingNativeContextRef = useRef<"badge_reset" | "sign_out" | "toggle" | null>(null);
@@ -175,38 +183,45 @@ export default function App() {
   }, [recoverAdminWebView]);
 
   const unlockAdminApp = useCallback(async () => {
-    if (biometricPromptBusyRef.current) return;
-    biometricPromptBusyRef.current = true;
+    const attemptId = beginAdminBiometricAttempt(biometricLifecycleRef.current);
+    if (attemptId === null) return;
+
     setScreenMode("checking");
-    try {
-      const unlocked = await authenticateAdminAppUnlock().catch(() => false);
+    const unlocked = await authenticateAdminAppUnlock().catch(() => false);
+    const currentAttempt = finishAdminBiometricAttempt(
+      biometricLifecycleRef.current,
+      attemptId,
+    );
+    if (currentAttempt) {
       setScreenMode(unlocked ? "web" : "locked");
-    } finally {
-      biometricPromptBusyRef.current = false;
     }
   }, []);
 
   const completeMandatoryEnrollment = useCallback(async (protectedUrl: string) => {
-    if (biometricPromptBusyRef.current) return;
+    const attemptId = beginAdminBiometricAttempt(biometricLifecycleRef.current);
+    if (attemptId === null) return;
+
     pendingProtectedUrlRef.current = protectedUrl;
-    biometricPromptBusyRef.current = true;
     setNotice("");
     setScreenMode("checking");
-    try {
-      const enabled = await enableAdminBiometricUnlock().catch(() => false);
-      if (!enabled) {
-        setScreenMode("enrollment-required");
-        return;
-      }
+    const enabled = await enableAdminBiometricUnlock().catch(() => false);
+    const currentAttempt = finishAdminBiometricAttempt(
+      biometricLifecycleRef.current,
+      attemptId,
+    );
+    if (!currentAttempt) return;
 
-      setBiometricEnabled(true);
-      setCurrentUrl(protectedUrl);
-      setNavigationKey((current) => current + 1);
-      setNotice("Face ID now protects verified Prestige Limo Ops access on this iPhone.");
-      setScreenMode("web");
-    } finally {
-      biometricPromptBusyRef.current = false;
+    if (!enabled) {
+      setScreenMode("enrollment-required");
+      return;
     }
+
+    biometricEnabledRef.current = true;
+    setBiometricEnabled(true);
+    setCurrentUrl(protectedUrl);
+    setNavigationKey((current) => current + 1);
+    setNotice("Face ID now protects verified Prestige Limo Ops access on this iPhone.");
+    setScreenMode("web");
   }, []);
 
   useEffect(() => {
@@ -232,6 +247,7 @@ export default function App() {
           ? "denied"
           : "undetermined";
       setInstallationId(nextInstallationId);
+      biometricEnabledRef.current = enabled;
       setBiometricEnabled(enabled);
       setNotificationEnabled(Boolean(savedNotificationToken) && nextPermission === "granted");
       setNotificationPermission(nextPermission);
@@ -242,10 +258,17 @@ export default function App() {
         return;
       }
 
-      biometricPromptBusyRef.current = true;
+      const attemptId = beginAdminBiometricAttempt(biometricLifecycleRef.current);
+      if (attemptId === null) {
+        setScreenMode("locked");
+        return;
+      }
       const unlocked = await authenticateAdminAppUnlock().catch(() => false);
-      biometricPromptBusyRef.current = false;
-      if (mounted) setScreenMode(unlocked ? "web" : "locked");
+      const currentAttempt = finishAdminBiometricAttempt(
+        biometricLifecycleRef.current,
+        attemptId,
+      );
+      if (mounted && currentAttempt) setScreenMode(unlocked ? "web" : "locked");
     }
 
     void preparePrivacyLock();
@@ -257,17 +280,19 @@ export default function App() {
   }, [clearAdminWebViewLoadTimeout]);
 
   useEffect(() => {
-    let previousState = AppState.currentState;
     const subscription = AppState.addEventListener("change", (nextState) => {
-      const returningToForeground = previousState !== "active" && nextState === "active";
-      previousState = nextState;
+      const returningToForeground =
+        biometricLifecycleRef.current.appState !== "active" && nextState === "active";
+      const biometricAction = transitionAdminBiometricAppState(
+        biometricLifecycleRef.current,
+        nextState,
+        biometricEnabledRef.current,
+      );
 
       if (nextState !== "active") {
         clearAdminWebViewLoadTimeout();
       }
-      if (nextState !== "active" && biometricPromptBusyRef.current) {
-        biometricResumePendingRef.current = true;
-      } else if (nextState !== "active" && biometricEnabled) {
+      if (biometricAction === "lock") {
         setScreenMode("locked");
       }
 
@@ -296,17 +321,11 @@ export default function App() {
           setNotificationEnabled(false);
         });
       }
-      if (!returningToForeground || !biometricEnabled) return;
-      if (biometricResumePendingRef.current) {
-        biometricResumePendingRef.current = false;
-        return;
-      }
-      if (!biometricPromptBusyRef.current) void unlockAdminApp();
+      if (biometricAction === "unlock") void unlockAdminApp();
     });
 
     return () => subscription.remove();
   }, [
-    biometricEnabled,
     clearAdminWebViewLoadTimeout,
     unlockAdminApp,
   ]);

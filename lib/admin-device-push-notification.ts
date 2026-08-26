@@ -1,5 +1,6 @@
 import "server-only";
 
+import { after } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webPush, { type PushSubscription } from "web-push";
 
@@ -9,6 +10,7 @@ import {
   releaseNativePushBadgeCount,
   reserveNativePushBadgeCount,
   resetNativePushBadgeCount,
+  type NativePushBadgeReservation,
 } from "./native-push-badge-count";
 
 export const adminDevicePushNotificationVersion =
@@ -30,6 +32,7 @@ const adminNativePushSubscriptionSource = "admin_native_ios";
 const adminNativePushSubscriptionSentinel = "native_expo_push_token";
 const adminBrowserPushSubscriptionSource = "admin_dashboard";
 const expoPushEndpoint = "https://exp.host/--/api/v2/push/send";
+const expoPushReceiptEndpoint = "https://exp.host/--/api/v2/push/getReceipts";
 const adminNativeDeviceLabelPrefix = "admin-native-ios:";
 
 const requiredEnvNames = [
@@ -195,7 +198,10 @@ type AdminDevicePushAlertOptions = {
   nativePushSender?: (
     expoPushToken: string,
     payload: AdminNativeDevicePushPayload,
-  ) => Promise<void>;
+  ) => Promise<AdminNativePushTicket | void>;
+  nativePushFetcher?: typeof fetch;
+  nativeReceiptFetcher?: typeof fetch;
+  nativeReceiptScheduler?: (task: () => Promise<void>) => void;
   subscriptionLoader?: () => Promise<PushSubscription[]>;
   pushSender?: AdminDevicePushSender;
   vehiclePlate?: unknown;
@@ -212,6 +218,22 @@ type AdminNativeDevicePushPayload = {
   sound: "default";
   title: "Prestige Limo Ops";
 };
+
+type AdminNativePushTicket = {
+  ticketReceiptId: string;
+};
+
+type AdminNativePushReceipt =
+  | {
+      status: "error";
+      errorCode: string | null;
+    }
+  | {
+      status: "ok";
+    }
+  | {
+      status: "pending";
+    };
 
 type LoadedAdminDevicePushSubscription = {
   channel: "native_ios" | "web";
@@ -911,7 +933,7 @@ async function sendNativePush(
   expoPushToken: string,
   payload: AdminNativeDevicePushPayload,
   fetcher: typeof fetch = fetch,
-): Promise<void> {
+): Promise<AdminNativePushTicket> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), adminDevicePushProviderTimeoutMs);
   try {
@@ -928,7 +950,8 @@ async function sendNativePush(
     const ticket = Array.isArray(body?.data)
       ? parseRecord(body.data[0])
       : parseRecord(body?.data);
-    if (!response.ok || ticket?.status !== "ok") {
+    const ticketReceiptId = safeText(ticket?.id, 256);
+    if (!response.ok || ticket?.status !== "ok" || !ticketReceiptId) {
       const error = new Error("Native Admin push provider rejected the request.") as Error & {
         statusCode?: number;
       };
@@ -937,9 +960,75 @@ async function sendNativePush(
         : response.status || 502;
       throw error;
     }
+    return { ticketReceiptId };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function loadAdminNativePushReceipt(
+  ticketReceiptId: string,
+  fetcher: typeof fetch = fetch,
+): Promise<AdminNativePushReceipt> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), adminDevicePushProviderTimeoutMs);
+  try {
+    const response = await fetcher(expoPushReceiptEndpoint, {
+      body: JSON.stringify({ ids: [ticketReceiptId] }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error("Native Admin push receipt request failed.");
+    }
+
+    const body = parseRecord(await response.json().catch(() => null));
+    const receipts = parseRecord(body?.data);
+    const receipt = parseRecord(receipts?.[ticketReceiptId]);
+    if (!receipt) {
+      return { status: "pending" };
+    }
+    if (receipt.status === "ok") {
+      return { status: "ok" };
+    }
+    if (receipt.status === "error") {
+      return {
+        errorCode: safeText(parseRecord(receipt.details)?.error, 120),
+        status: "error",
+      };
+    }
+    return { status: "pending" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function writeAdminNativePushEvidence(
+  evidenceType:
+    | "admin_native_push_ticket_accepted"
+    | "admin_native_push_receipt_error"
+    | "admin_native_push_receipt_ok"
+    | "admin_native_push_receipt_pending",
+  eventType: AdminNativeDevicePushEventType,
+  ticketReceiptId: string,
+  errorCode?: string | null,
+) {
+  const evidence = {
+    component: adminDevicePushNotificationVersion,
+    event: evidenceType,
+    event_type: eventType,
+    receipt_id: ticketReceiptId,
+    ...(errorCode ? { error_code: errorCode } : {}),
+  };
+  if (evidenceType === "admin_native_push_receipt_error") {
+    console.warn("[admin-native-push]", evidence);
+    return;
+  }
+  console.info("[admin-native-push]", evidence);
 }
 
 function getPushProviderStatusCode(error: unknown): number | null {
@@ -1004,6 +1093,92 @@ async function recordSubscriptionSendFailure(
       .eq("endpoint", endpoint);
   } catch {
     // A stale-device health update must not block alerts to other devices.
+  }
+}
+
+function scheduleAdminNativePushReceiptEvidence(input: {
+  badgeClient: Pick<SupabaseClient, "from"> | null;
+  badgeReservation: NativePushBadgeReservation | null;
+  config: AdminDevicePushConfig;
+  eventType: AdminNativeDevicePushEventType;
+  receiptFetcher?: typeof fetch;
+  receiptScheduler?: (task: () => Promise<void>) => void;
+  shouldRecordSubscriptionHealth: boolean;
+  subscriptionEndpoint: string;
+  ticketReceiptId: string;
+}) {
+  const receiptTask = async () => {
+    let receipt: AdminNativePushReceipt;
+    try {
+      receipt = await loadAdminNativePushReceipt(
+        input.ticketReceiptId,
+        input.receiptFetcher,
+      );
+    } catch {
+      writeAdminNativePushEvidence(
+        "admin_native_push_receipt_pending",
+        input.eventType,
+        input.ticketReceiptId,
+        "receipt_request_failed",
+      );
+      return;
+    }
+
+    if (receipt.status === "pending") {
+      writeAdminNativePushEvidence(
+        "admin_native_push_receipt_pending",
+        input.eventType,
+        input.ticketReceiptId,
+      );
+      return;
+    }
+
+    if (receipt.status === "ok") {
+      writeAdminNativePushEvidence(
+        "admin_native_push_receipt_ok",
+        input.eventType,
+        input.ticketReceiptId,
+      );
+      if (input.shouldRecordSubscriptionHealth) {
+        await recordSubscriptionSendSuccess(input.config, input.subscriptionEndpoint);
+      }
+      return;
+    }
+
+    writeAdminNativePushEvidence(
+      "admin_native_push_receipt_error",
+      input.eventType,
+      input.ticketReceiptId,
+      receipt.errorCode,
+    );
+    if (input.badgeReservation && input.badgeClient) {
+      await releaseNativePushBadgeCount(
+        input.badgeClient,
+        input.badgeReservation,
+      ).catch(() => false);
+    }
+    if (input.shouldRecordSubscriptionHealth) {
+      const receiptError = new Error("Native Admin push receipt was rejected.") as Error & {
+        statusCode?: number;
+      };
+      receiptError.statusCode = receipt.errorCode === "DeviceNotRegistered" ? 410 : 502;
+      await recordSubscriptionSendFailure(
+        input.config,
+        input.subscriptionEndpoint,
+        receiptError,
+      );
+    }
+  };
+
+  try {
+    (input.receiptScheduler ?? ((task) => after(task)))(receiptTask);
+  } catch {
+    writeAdminNativePushEvidence(
+      "admin_native_push_receipt_pending",
+      input.eventType,
+      input.ticketReceiptId,
+      "receipt_schedule_failed",
+    );
   }
 }
 
@@ -1145,7 +1320,8 @@ export async function sendAdminDevicePushAlert(
       subscription.channel === "native_ios"
         ? nativePayload
           ? () =>
-              (options.nativePushSender ?? sendNativePush)(
+              (options.nativePushSender ?? ((expoPushToken, pushPayload) =>
+                sendNativePush(expoPushToken, pushPayload, options.nativePushFetcher)))(
                 subscription.endpoint,
                 badgeReservation
                   ? { ...nativePayload, badge: badgeReservation.count }
@@ -1158,9 +1334,34 @@ export async function sendAdminDevicePushAlert(
     }
     providerRequestCount += 1;
     try {
-      await sendProviderRequest();
+      const providerResult = await sendProviderRequest();
       successfulRequestCount += 1;
-      if (shouldRecordSubscriptionHealth) {
+      const nativeTicket =
+        subscription.channel === "native_ios" &&
+        providerResult &&
+        typeof providerResult === "object" &&
+        "ticketReceiptId" in providerResult &&
+        typeof providerResult.ticketReceiptId === "string"
+          ? providerResult as AdminNativePushTicket
+          : null;
+      if (nativeTicket) {
+        writeAdminNativePushEvidence(
+          "admin_native_push_ticket_accepted",
+          nativeEventType,
+          nativeTicket.ticketReceiptId,
+        );
+        scheduleAdminNativePushReceiptEvidence({
+          badgeClient,
+          badgeReservation,
+          config,
+          eventType: nativeEventType,
+          receiptFetcher: options.nativeReceiptFetcher,
+          receiptScheduler: options.nativeReceiptScheduler,
+          shouldRecordSubscriptionHealth,
+          subscriptionEndpoint: subscription.endpoint,
+          ticketReceiptId: nativeTicket.ticketReceiptId,
+        });
+      } else if (shouldRecordSubscriptionHealth) {
         await recordSubscriptionSendSuccess(config, subscription.endpoint);
       }
     } catch (error) {

@@ -105,6 +105,7 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const nativePushBadgePath = path.join(tempDir, "lib/native-push-badge-count.js");
   const principalPath = path.join(tempDir, "lib/customer-principal-access.js");
+  const nextServerPath = path.join(tempDir, "node_modules/next/server.js");
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
   const webPushPath = path.join(tempDir, "node_modules/web-push/index.js");
@@ -123,6 +124,7 @@ async function writeMockModules(tempDir) {
 
   await mkdir(path.dirname(nativePushBadgePath), { recursive: true });
   await mkdir(path.dirname(principalPath), { recursive: true });
+  await mkdir(path.dirname(nextServerPath), { recursive: true });
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(webPushPath), { recursive: true });
@@ -139,6 +141,10 @@ async function writeMockModules(tempDir) {
       "exports.resolveCustomerPrincipalSessionToken = () => null;",
       "exports.assertActiveCustomerPrincipalSession = async () => ({ error: 'not used by legacy contract', ok: false, status: 403 });",
     ].join("\n"),
+  );
+  await writeFile(
+    nextServerPath,
+    "exports.after = () => { throw new Error('Next after is not used by the Admin booking adapter contract.'); };",
   );
   await writeFile(serverOnlyPath, "");
   await writeFile(

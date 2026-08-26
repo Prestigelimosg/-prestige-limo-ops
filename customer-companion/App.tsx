@@ -28,6 +28,7 @@ import {
   beginCustomerBiometricAttempt,
   createCustomerBiometricLifecycle,
   finishCustomerBiometricAttempt,
+  readCustomerBiometricMonotonicTimeMs,
   transitionCustomerBiometricAppState,
 } from "./src/customer-biometric-lifecycle";
 import {
@@ -152,6 +153,7 @@ export default function App() {
   const [nativeAlertsPreferenceReady, setNativeAlertsPreferenceReady] = useState(false);
   const [nativeRegistration, setNativeRegistration] = useState<CustomerNativeRegistration | null>(null);
   const [loadedCustomerWebView, setLoadedCustomerWebView] = useState({ url: "", sequence: 0 });
+  const [customerWebViewMounted, setCustomerWebViewMounted] = useState(false);
   const appMountedRef = useRef(true);
   const biometricAvailableRef = useRef(false);
   const biometricEnabledRef = useRef(false);
@@ -201,6 +203,7 @@ export default function App() {
   const setCustomerUnlockState = useCallback((nextState: UnlockState) => {
     unlockStateRef.current = nextState;
     setUnlockState(nextState);
+    if (nextState === "ready") setCustomerWebViewMounted(true);
 
     const pendingUrl = pendingCustomerUniversalLinkRef.current;
     if (nextState === "ready" && pendingUrl) {
@@ -474,10 +477,13 @@ export default function App() {
         biometricLifecycleRef.current,
         nextState,
         biometricEnabledRef.current,
+        readCustomerBiometricMonotonicTimeMs(),
+        unlockStateRef.current === "ready",
       );
       if (action === "lock") {
         setCustomerUnlockState("locked");
       }
+      if (action === "reveal") setCustomerUnlockState("ready");
       if (action === "unlock") void unlockCustomerApp();
       if (nextState === "active") {
         void Notifications.getBadgeCountAsync().then((count) => {
@@ -537,132 +543,141 @@ export default function App() {
     }
   }, [biometricAvailable, biometricEnabled]);
 
-  if (unlockState !== "ready" || !nativeAlertsPreferenceReady) {
-    return (
-      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <SafeAreaView style={styles.lockedSafeArea}>
-          <StatusBar style="dark" />
-          <Image
-            alt="Prestige SG"
-            accessibilityIgnoresInvertColors
-            source={prestigeIcon}
-            style={styles.lockedLogo}
-          />
-          <Text style={styles.lockedTitle}>Prestige SG</Text>
-          <Text style={styles.lockedText}>Your booking information is protected.</Text>
-          {unlockState === "locked" ? (
-            biometricAvailable && !biometricEnabled ? (
-              <>
-                <Pressable accessibilityRole="button" onPress={enableFaceId} style={styles.unlockButton}>
-                  <Text style={styles.unlockButtonText}>Enable Face ID</Text>
-                </Pressable>
-                {notice ? <Text style={styles.lockedText}>{notice}</Text> : null}
-              </>
-            ) : (
-              <>
-                <Pressable accessibilityRole="button" onPress={unlockCustomerApp} style={styles.unlockButton}>
-                  <Text style={styles.unlockButtonText}>Unlock Prestige SG</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setActiveTab("bookings");
-                    setCurrentUrl(`${customerTabUrl("bookings").replace("/my-bookings", "/customer-access/sign-in")}?installation=${encodeURIComponent(installationId)}`);
-                    setCustomerUnlockState("ready");
-                  }}
-                  style={styles.pinButton}
-                >
-                  <Text style={styles.pinButtonText}>Use 6-digit PIN</Text>
-                </Pressable>
-              </>
-            )
-          ) : (
-            <Text style={styles.checkingText}>
-              {unlockState === "checking" ? "Checking Face ID…" : "Preparing Prestige SG…"}
-            </Text>
-          )}
-        </SafeAreaView>
-      </SafeAreaProvider>
-    );
-  }
+  const webLayerLocked = unlockState !== "ready" || !nativeAlertsPreferenceReady;
+  const customerWebViewCanMount =
+    customerWebViewMounted && nativeAlertsPreferenceReady;
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+      <View style={styles.root}>
         <StatusBar style="dark" />
-        <View style={styles.header}>
-          <Image
-            alt="Prestige SG"
-            accessibilityIgnoresInvertColors
-            source={prestigeIcon}
-            style={styles.logo}
-          />
-          <View style={styles.headerText}>
-            <Text style={styles.brand}>Prestige SG</Text>
-          </View>
-          {!biometricEnabled && biometricAvailable ? (
-            <Pressable accessibilityRole="button" onPress={enableFaceId} style={styles.faceIdButton}>
-              <Text style={styles.faceIdButtonText}>Enable Face ID</Text>
-            </Pressable>
-          ) : biometricEnabled ? (
-            <Text style={styles.protectedLabel}>Face ID protected</Text>
-          ) : null}
+        <View
+          accessibilityElementsHidden={webLayerLocked}
+          importantForAccessibility={webLayerLocked ? "no-hide-descendants" : "auto"}
+          pointerEvents={webLayerLocked ? "none" : "auto"}
+          style={[styles.webLayer, webLayerLocked ? styles.hiddenWebLayer : null]}
+        >
+          <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+            <View style={styles.header}>
+              <Image
+                alt="Prestige SG"
+                accessibilityIgnoresInvertColors
+                source={prestigeIcon}
+                style={styles.logo}
+              />
+              <View style={styles.headerText}>
+                <Text style={styles.brand}>Prestige SG</Text>
+              </View>
+              {!biometricEnabled && biometricAvailable ? (
+                <Pressable accessibilityRole="button" onPress={enableFaceId} style={styles.faceIdButton}>
+                  <Text style={styles.faceIdButtonText}>Enable Face ID</Text>
+                </Pressable>
+              ) : biometricEnabled ? (
+                <Text style={styles.protectedLabel}>Face ID protected</Text>
+              ) : null}
+            </View>
+            {notice ? (
+              <View accessibilityRole="alert" style={styles.notice}>
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            ) : null}
+            {customerWebViewCanMount ? (
+              <WebView
+                allowsBackForwardNavigationGestures
+                cacheEnabled
+                domStorageEnabled
+                javaScriptEnabled
+                key="prestige-customer-webview"
+                ref={webViewRef}
+                injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; true;` : undefined}
+                mixedContentMode="never"
+                onMessage={handleCustomerNativeBridgeMessage}
+                onNavigationStateChange={updateNavigation}
+                onLoadEnd={(event) => {
+                  const loadedUrl = event.nativeEvent.url;
+                  setLoadedCustomerWebView((previous) => ({
+                    sequence: previous.sequence + 1,
+                    url: loadedUrl,
+                  }));
+                }}
+                onShouldStartLoadWithRequest={allowNavigation}
+                originWhitelist={["https://app.prestigelimo.sg"]}
+                pullToRefreshEnabled
+                setSupportMultipleWindows={false}
+                sharedCookiesEnabled
+                source={{ uri: currentUrl }}
+                style={styles.webView}
+                thirdPartyCookiesEnabled={false}
+              />
+            ) : null}
+            <View style={styles.tabBar}>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === "book" }}
+                onPress={() => selectTab("book")}
+                style={[styles.tab, activeTab === "book" && styles.activeTab]}
+              >
+                <Text style={[styles.tabText, activeTab === "book" && styles.activeTabText]}>
+                  Request a Ride
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === "bookings" }}
+                onPress={() => selectTab("bookings")}
+                style={[styles.tab, activeTab === "bookings" && styles.activeTab]}
+              >
+                <Text style={[styles.tabText, activeTab === "bookings" && styles.activeTabText]}>
+                  My Bookings
+                </Text>
+              </Pressable>
+            </View>
+          </SafeAreaView>
         </View>
-        {notice ? (
-          <View accessibilityRole="alert" style={styles.notice}>
-            <Text style={styles.noticeText}>{notice}</Text>
-          </View>
+        {webLayerLocked ? (
+          <SafeAreaView style={[styles.lockedSafeArea, styles.lockOverlay]}>
+            <Image
+              alt="Prestige SG"
+              accessibilityIgnoresInvertColors
+              source={prestigeIcon}
+              style={styles.lockedLogo}
+            />
+            <Text style={styles.lockedTitle}>Prestige SG</Text>
+            <Text style={styles.lockedText}>Your booking information is protected.</Text>
+            {unlockState === "locked" ? (
+              biometricAvailable && !biometricEnabled ? (
+                <>
+                  <Pressable accessibilityRole="button" onPress={enableFaceId} style={styles.unlockButton}>
+                    <Text style={styles.unlockButtonText}>Enable Face ID</Text>
+                  </Pressable>
+                  {notice ? <Text style={styles.lockedText}>{notice}</Text> : null}
+                </>
+              ) : (
+                <>
+                  <Pressable accessibilityRole="button" onPress={unlockCustomerApp} style={styles.unlockButton}>
+                    <Text style={styles.unlockButtonText}>Unlock Prestige SG</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setActiveTab("bookings");
+                      setCurrentUrl(`${customerTabUrl("bookings").replace("/my-bookings", "/customer-access/sign-in")}?installation=${encodeURIComponent(installationId)}`);
+                      setCustomerUnlockState("ready");
+                    }}
+                    style={styles.pinButton}
+                  >
+                    <Text style={styles.pinButtonText}>Use 6-digit PIN</Text>
+                  </Pressable>
+                </>
+              )
+            ) : (
+              <Text style={styles.checkingText}>
+                {unlockState === "checking" ? "Checking Face ID…" : "Preparing Prestige SG…"}
+              </Text>
+            )}
+          </SafeAreaView>
         ) : null}
-        <WebView
-          allowsBackForwardNavigationGestures
-          cacheEnabled
-          domStorageEnabled
-          javaScriptEnabled
-          key="prestige-customer-webview"
-          ref={webViewRef}
-          injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; true;` : undefined}
-          mixedContentMode="never"
-          onMessage={handleCustomerNativeBridgeMessage}
-          onNavigationStateChange={updateNavigation}
-          onLoadEnd={(event) => {
-            const loadedUrl = event.nativeEvent.url;
-            setLoadedCustomerWebView((previous) => ({
-              sequence: previous.sequence + 1,
-              url: loadedUrl,
-            }));
-          }}
-          onShouldStartLoadWithRequest={allowNavigation}
-          originWhitelist={["https://app.prestigelimo.sg"]}
-          pullToRefreshEnabled
-          setSupportMultipleWindows={false}
-          sharedCookiesEnabled
-          source={{ uri: currentUrl }}
-          style={styles.webView}
-          thirdPartyCookiesEnabled={false}
-        />
-        <View style={styles.tabBar}>
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === "book" }}
-            onPress={() => selectTab("book")}
-            style={[styles.tab, activeTab === "book" && styles.activeTab]}
-          >
-            <Text style={[styles.tabText, activeTab === "book" && styles.activeTabText]}>
-              Request a Ride
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === "bookings" }}
-            onPress={() => selectTab("bookings")}
-            style={[styles.tab, activeTab === "bookings" && styles.activeTab]}
-          >
-            <Text style={[styles.tabText, activeTab === "bookings" && styles.activeTabText]}>
-              My Bookings
-            </Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      </View>
     </SafeAreaProvider>
   );
 }
@@ -685,21 +700,25 @@ const styles = StyleSheet.create({
   faceIdButtonText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   header: { alignItems: "center", backgroundColor: colors.white, borderBottomColor: colors.border, borderBottomWidth: 1, flexDirection: "row", minHeight: 46, paddingHorizontal: 12, paddingVertical: 4 },
   headerText: { flex: 1, marginLeft: 8 },
+  hiddenWebLayer: { opacity: 0 },
   lockedLogo: { borderRadius: 22, height: 88, width: 88 },
   lockedSafeArea: { alignItems: "center", backgroundColor: colors.background, flex: 1, justifyContent: "center", padding: 24 },
   lockedText: { color: colors.muted, fontSize: 15, marginTop: 8, textAlign: "center" },
   lockedTitle: { color: colors.ink, fontSize: 25, fontWeight: "700", marginTop: 18 },
+  lockOverlay: { ...StyleSheet.absoluteFill, backgroundColor: colors.background, zIndex: 10 },
   logo: { borderRadius: 6, height: 30, width: 30 },
   notice: { backgroundColor: "#fff8e7", borderBottomColor: "#e8d6a8", borderBottomWidth: 1, paddingHorizontal: 14, paddingVertical: 8 },
   noticeText: { color: "#6b4f16", fontSize: 12, lineHeight: 17 },
   pinButton: { borderColor: colors.border, borderRadius: 10, borderWidth: 1, marginTop: 10, minWidth: 210, paddingHorizontal: 18, paddingVertical: 12 },
   pinButtonText: { color: colors.ink, fontSize: 14, fontWeight: "700", textAlign: "center" },
   protectedLabel: { color: colors.muted, fontSize: 11, fontWeight: "600" },
+  root: { backgroundColor: colors.background, flex: 1 },
   safeArea: { backgroundColor: colors.white, flex: 1 },
   tab: { alignItems: "center", borderTopColor: "transparent", borderTopWidth: 2, flex: 1, justifyContent: "center", minHeight: 52, paddingHorizontal: 8 },
   tabBar: { backgroundColor: colors.white, borderTopColor: colors.border, borderTopWidth: 1, flexDirection: "row" },
   tabText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   unlockButton: { backgroundColor: colors.ink, borderRadius: 10, marginTop: 24, minWidth: 210, paddingHorizontal: 18, paddingVertical: 13 },
   unlockButtonText: { color: colors.white, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  webLayer: { flex: 1 },
   webView: { backgroundColor: colors.background, flex: 1 },
 });

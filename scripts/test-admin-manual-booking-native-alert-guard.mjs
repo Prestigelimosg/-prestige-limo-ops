@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [dashboard, route, helper, nativeNotifications, ledger, preactivation] =
+const [dashboard, route, helper, nativeNotifications, adminConfigSource, ledger, preactivation] =
   await Promise.all([
     readFile("app/page.tsx", "utf8"),
     readFile("app/api/admin-bookings/route.ts", "utf8"),
     readFile("lib/admin-device-push-notification.ts", "utf8"),
     readFile("admin-companion/src/admin-native-notifications.ts", "utf8"),
+    readFile("admin-companion/app.json", "utf8"),
     readFile("docs/current-implementation-ledger.md", "utf8"),
     readFile("scripts/test-preactivation-verification-suite.mjs", "utf8"),
   ]);
+
+const adminConfig = JSON.parse(adminConfigSource).expo;
+assert.equal(adminConfig.ios.buildNumber, "6", "The repaired Admin binary must advance only to Build 6");
 
 const saveStart = dashboard.indexOf("async function saveBooking()");
 const saveEnd = dashboard.indexOf("function bookingRecordReferenceCandidates", saveStart);
@@ -82,6 +86,7 @@ assert.match(
   "The one existing Push switch must explain its automatic-registration purpose on iPhone.",
 );
 assert.match(ledger, /Admin Manual Save Native Alert And Face ID Acceptance Repair/);
+assert.match(ledger, /Admin TestFlight Build 6 Release Checkpoint/);
 assert.ok(
   preactivation.includes("scripts/test-admin-manual-booking-native-alert-guard.mjs"),
   "The manual Admin booking native-alert guard must run in preactivation.",

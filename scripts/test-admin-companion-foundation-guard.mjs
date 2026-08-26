@@ -36,7 +36,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.scheme, "prestige-admin");
 assert.deepEqual(config.platforms, ["ios"]);
 assert.equal(config.ios.version, "1.0.0");
-assert.equal(config.ios.buildNumber, "5");
+assert.equal(config.ios.buildNumber, "6");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.admin");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Limo Ops");

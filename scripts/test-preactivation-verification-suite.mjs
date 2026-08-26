@@ -406,6 +406,10 @@ const guardChecks = [
     script: "scripts/test-admin-device-push-notification-guard.mjs",
   },
   {
+    label: "admin native Expo receipt evidence guard",
+    script: "scripts/test-admin-native-push-receipt-evidence-guard.mjs",
+  },
+  {
     label: "admin complete native alert and Driver plate guard",
     script: "scripts/test-admin-native-ack-push-notification-guard.mjs",
   },

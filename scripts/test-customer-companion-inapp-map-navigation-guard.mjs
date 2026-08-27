@@ -120,7 +120,7 @@ for (const forbidden of ['originWhitelist={["*"]}', 'originWhitelist={["https://
 }
 
 const config = JSON.parse(configSource).expo;
-assert.equal(config.ios.buildNumber, "11", "The redirect-repaired Customer binary must be exact Build 11.");
+assert.equal(config.ios.buildNumber, "12", "The final repaired Customer binary must be exact Build 12.");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.extra?.eas?.projectId, "ce71ff91-7f71-4297-bcef-edf420f94316");
 

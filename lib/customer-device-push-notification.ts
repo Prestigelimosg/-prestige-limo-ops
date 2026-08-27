@@ -735,6 +735,17 @@ async function loadNativeAudienceForBooking(
   return { driverPlateNumber, publicBookingReference, tokens };
 }
 
+export async function customerNativeAudienceReadyForBooking(
+  client: CustomerDevicePushClient,
+  bookingReference: string,
+) {
+  const safeBookingReference = safeText(bookingReference, 120);
+  if (!safeBookingReference) return false;
+
+  const audience = await loadNativeAudienceForBooking(client, safeBookingReference);
+  return Boolean(audience && audience.tokens.length > 0);
+}
+
 async function sendNativeExpoAlert(
   token: string,
   bookingReference: string,

@@ -60,7 +60,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "11");
+assert.equal(config.ios.buildNumber, "12");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.deepEqual(

@@ -163,7 +163,7 @@ try {
         pickup_at: "2026-06-08T09:00:00.000Z",
         pickup_location: "Changi Airport",
         public_booking_reference: "SAFE-00001",
-        service_type: "Airport Arrival",
+        service_type: "MNG",
         updated_at: "2026-06-08T01:30:00.000Z",
       },
     ],
@@ -188,12 +188,31 @@ try {
       pickupDateTime: "8 June 2026, 17:00",
       pickupLocation: "Changi Airport",
       publicBookingReference: "SAFE-00001",
-      serviceType: "Airport Arrival",
+      serviceType: "Arrival",
       status: "Confirmed",
       vehicleType: "To confirm",
     },
   ]);
   assertNoVisibleLeak(mapped, "safe mapped booking");
+
+  const codedServiceLabels = mapCustomerSavedBookingsPayload({
+    ok: true,
+    saved_bookings: ["MNG", "DEP", "TRF", "DSP"].map((serviceType, index) => ({
+      booking_reference: `SAFE-PORTAL-SERVICE-${index + 1}`,
+      service_type: serviceType,
+    })),
+  });
+
+  assert.deepEqual(
+    codedServiceLabels?.map((booking) => booking.serviceType),
+    ["Arrival", "Departure", "City Transfer", "Hourly"],
+    "Customer surfaces must expand canonical service codes to the exact owner-approved full labels.",
+  );
+  assert.doesNotMatch(
+    JSON.stringify(codedServiceLabels),
+    /\b(?:MNG|DEP|TRF|DSP)\b/,
+    "Customer mapped booking display must not expose canonical service short codes.",
+  );
 
   const codedVehicleLabels = mapCustomerSavedBookingsPayload({
     ok: true,

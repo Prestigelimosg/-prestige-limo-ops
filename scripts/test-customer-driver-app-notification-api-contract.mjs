@@ -29,6 +29,7 @@ const unsafeNotificationLeakPattern =
   /contact_phone|contact_email|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|payout|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|telegram|whatsapp|sms|email_payload|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret|token_hash|raw_token|driver_job_link_id|event_key|source_surface|actor_label/i;
 const sourceFiles = [
   "lib/customer-runtime-session-map.ts",
+  "lib/customer-device-push-notification.ts",
   "lib/driver-device-push-notification.ts",
   "lib/customer-driver-app-notification-persistence.ts",
   "lib/customer-portal-access-account.ts",
@@ -43,6 +44,7 @@ const sourceFiles = [
   "app/api/customer-app-notifications/route.ts",
   "app/api/customer-driver-quick-replies/route.ts",
   "app/api/driver-job/[token]/notifications/route.ts",
+  "app/api/driver-job/[token]/quick-replies/route.ts",
 ];
 const originalEnv = {
   DRIVER_JOB_LINK_MODE: process.env.DRIVER_JOB_LINK_MODE,
@@ -69,6 +71,8 @@ const originalEnv = {
     process.env.PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED,
   PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE:
     process.env.PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE,
+  PRESTIGE_CUSTOMER_DEVICE_PUSH_ENABLED:
+    process.env.PRESTIGE_CUSTOMER_DEVICE_PUSH_ENABLED,
   PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
     process.env.PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST,
   PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED:
@@ -119,6 +123,7 @@ function validEnv() {
     PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_RUNTIME_MODE: "one-customer",
     PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_ENABLED: "true",
     PRESTIGE_CUSTOMER_DRIVER_QUICK_REPLIES_MODE: "controlled-runtime",
+    PRESTIGE_CUSTOMER_DEVICE_PUSH_ENABLED: "false",
     PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ACCOUNT_ALLOWLIST:
       "customer-runtime-account-001",
     PRESTIGE_CUSTOMER_PORTAL_ACCESS_LINK_ENABLED: "true",
@@ -277,6 +282,9 @@ async function loadHarness() {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
     customerRoute: require(path.join(tempDir, "app/api/customer-app-notifications/route.js")),
     customerQuickReplyRoute: require(path.join(tempDir, "app/api/customer-driver-quick-replies/route.js")),
+    driverQuickReplyRoute: require(
+      path.join(tempDir, "app/api/driver-job/[token]/quick-replies/route.js"),
+    ),
     driverRoute: require(path.join(tempDir, "app/api/driver-job/[token]/notifications/route.js")),
     notificationPersistence: require(
       path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
@@ -302,6 +310,16 @@ class MockSupabaseQuery {
       column,
       type: "eq",
       value,
+    });
+
+    return this;
+  }
+
+  in(column, values) {
+    this.filters.push({
+      column,
+      type: "in",
+      value: [...values],
     });
 
     return this;
@@ -409,6 +427,10 @@ class MockSupabaseClient {
       [notificationTable]: [],
       bookings: [],
       customer_access_accounts: [],
+      customer_access_devices: [],
+      customer_access_memberships: [],
+      customer_access_principals: [],
+      customer_device_push_subscriptions: [],
       driver_job_status_events: [],
       driver_job_links: [],
     };
@@ -440,6 +462,10 @@ class MockSupabaseClient {
 
     if (filter.type === "is") {
       return row[filter.column] === null || row[filter.column] === undefined;
+    }
+
+    if (filter.type === "in") {
+      return filter.value.includes(row[filter.column]);
     }
 
     return row[filter.column] === filter.value;
@@ -589,6 +615,69 @@ function installMockClient(seed = {}, options = {}) {
   return mock;
 }
 
+function nativeCustomerAudienceSeed(bookingReference, customerId = "192") {
+  const bossPrincipalId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const paPrincipalId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const bossDeviceId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const paDeviceId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+  return {
+    bookings: [{
+      booking_reference: bookingReference,
+      booker_id: 26,
+      company_id: 53,
+      customer_id: customerId,
+      driver_plate_number: "QA10906",
+      public_booking_reference: "10906",
+      traveler_id: 40,
+    }],
+    customer_access_devices: [
+      { device_status: "active", id: bossDeviceId, principal_id: bossPrincipalId },
+      { device_status: "active", id: paDeviceId, principal_id: paPrincipalId },
+    ],
+    customer_access_memberships: [
+      {
+        booker_id: 26,
+        company_id: 53,
+        membership_role: "boss",
+        membership_status: "active",
+        principal_id: bossPrincipalId,
+        traveler_id: 40,
+      },
+      {
+        booker_id: 26,
+        company_id: 53,
+        membership_role: "managing_pa",
+        membership_status: "active",
+        principal_id: paPrincipalId,
+        traveler_id: 40,
+      },
+    ],
+    customer_access_principals: [
+      { id: bossPrincipalId, principal_status: "active" },
+      { id: paPrincipalId, principal_status: "active" },
+    ],
+    customer_device_push_subscriptions: [
+      {
+        delivery_channel: "native_expo",
+        device_id: bossDeviceId,
+        id: "customer-subscription-boss",
+        native_expo_token: "ExpoPushToken[customer_native_boss_10906]",
+        principal_id: bossPrincipalId,
+        subscription_status: "active",
+      },
+      {
+        delivery_channel: "native_expo",
+        device_id: paDeviceId,
+        id: "customer-subscription-pa",
+        native_expo_token: "ExpoPushToken[customer_native_pa_10906]",
+        principal_id: paPrincipalId,
+        subscription_status: "active",
+      },
+    ],
+  };
+}
+
 async function responseJson(response) {
   return {
     body: await response.json(),
@@ -646,6 +735,7 @@ try {
     cleanup,
     customerRoute,
     customerQuickReplyRoute,
+    driverQuickReplyRoute,
     driverRoute,
     notificationPersistence,
   } = await loadHarness();
@@ -841,14 +931,9 @@ try {
     );
 
     setEnv(validEnv());
-    const dashboardCustomerPostMock = installMockClient({
-      bookings: [
-        {
-          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
-          customer_id: "customer-runtime-account-001",
-        },
-      ],
-    });
+    const dashboardCustomerPostMock = installMockClient(
+      nativeCustomerAudienceSeed("BOOK-CUST-DRIVER-NOTIFY-001"),
+    );
     const dashboardCustomerPostResult = await responseJson(
       await adminRoute.POST(
         new Request("http://localhost/api/admin-customer-driver-app-notifications", {
@@ -890,12 +975,116 @@ try {
       1,
       "Expected exactly one dashboard-scoped customer-app notification insert.",
     );
+    for (const table of [
+      "customer_access_memberships",
+      "customer_access_principals",
+      "customer_access_devices",
+      "customer_device_push_subscriptions",
+    ]) {
+      assert.equal(
+        dashboardCustomerPostMock.client.selectHistory.some((entry) => entry.table === table),
+        true,
+        `Admin-to-customer readiness must resolve the exact active Customer native audience through ${table}.`,
+      );
+    }
     assert.equal(
       dashboardCustomerPostMock.client.selectHistory.some(
         (entry) => entry.table === "driver_job_links",
       ),
       false,
       "Admin-to-customer messages must not depend on or write through the driver-link lane.",
+    );
+
+    const principalAudienceDriverToken = "qa-10906-driver-quick-reply-token";
+    const principalAudienceDriverLinkId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    setEnv(validEnv());
+    const driverCustomerPostMock = installMockClient({
+      ...nativeCustomerAudienceSeed("BOOK-CUST-DRIVER-NOTIFY-001"),
+      driver_job_links: [{
+        booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+        expires_at: validDriverLinkExpiresAt,
+        id: principalAudienceDriverLinkId,
+        link_status: "active",
+        revoked_at: null,
+        token_hash: tokenHash(principalAudienceDriverToken),
+      }],
+      driver_job_status_events: [],
+    });
+    const driverCustomerPostResult = await responseJson(
+      await driverQuickReplyRoute.POST(
+        new Request(
+          `http://localhost/api/driver-job/${principalAudienceDriverToken}/quick-replies`,
+          {
+            body: JSON.stringify({
+              client_message_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+              message_text: "Testing back from driver",
+            }),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          },
+        ),
+        routeContext(principalAudienceDriverToken),
+      ),
+    );
+
+    assert.equal(
+      driverCustomerPostResult.status,
+      200,
+      "Exact active Customer principal audience must allow the scoped Driver token reply without the retired customer-id allowlist.",
+    );
+    assert.equal(driverCustomerPostResult.body.direction, "driver_to_customer");
+    assert.equal(driverCustomerPostResult.body.delivery_surface, "customer_app");
+    assert.equal(driverCustomerPostResult.body.external_send, false);
+    assert.equal(driverCustomerPostResult.body.provider_send, false);
+    assert.equal(
+      driverCustomerPostMock.client.insertHistory.length,
+      1,
+      "Driver-to-customer must save exactly one scoped customer-app outbox row before best-effort push.",
+    );
+
+    setEnv(validEnv());
+    const inactiveNativeAudienceSeed = nativeCustomerAudienceSeed(
+      "BOOK-CUST-DRIVER-NOTIFY-001",
+    );
+    inactiveNativeAudienceSeed.customer_device_push_subscriptions = [];
+    const inactiveNativeAudienceMock = installMockClient(inactiveNativeAudienceSeed);
+    const inactiveNativeAudienceResult = await responseJson(
+      await adminRoute.POST(
+        new Request("http://localhost/api/admin-customer-driver-app-notifications", {
+          body: JSON.stringify(
+            safeNotificationPayload({
+              delivery_surface: "customer_app",
+              driver_job_link_id: null,
+              event_key: "BOOK-CUST-DRIVER-NOTIFY-001:admin-customer-message:no-active-native-audience",
+              safe_context: {
+                audience: "admin_customer",
+                external_send: false,
+                provider_send: false,
+                recipient_role: "customer",
+                sender_role: "admin",
+                source: "today_jobs",
+              },
+              safe_message: "Please meet your driver at the hotel lobby for this booking.",
+              safe_title: "Message from dispatch",
+              workflow_area: "admin_customer_job_messages",
+            }),
+          ),
+          headers: validDashboardHeaders({
+            "content-type": "application/json",
+          }),
+          method: "POST",
+        }),
+      ),
+    );
+    assert.equal(
+      inactiveNativeAudienceResult.status,
+      403,
+      "Active principal membership without an active native device subscription must fail closed.",
+    );
+    assert.equal(
+      inactiveNativeAudienceMock.client.insertHistory.length,
+      0,
+      "A Customer-target message must not persist when the exact active native audience is not ready.",
     );
 
     setEnv(validEnv());

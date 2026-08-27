@@ -18,10 +18,20 @@ for (const expected of [
   '"x-prestige-customer-purpose": "customer-driver-quick-reply"',
   'result?.direction !== "customer_to_driver"',
   "customerQuickRepliesClosed",
-  "Boss and managing PA share this booking conversation.",
 ]) {
   assert.ok(source.includes(expected), `customer typed-message UI must retain ${expected}`);
 }
+
+assert.match(
+  source,
+  /<h3 className="text-sm font-semibold text-sky-950">Message Driver<\/h3>\s*<textarea/,
+  "Customer Message Driver must leave its retired explanatory area blank and continue directly to the established composer.",
+);
+assert.equal(
+  source.includes("Boss and managing PA share this booking conversation. The driver sees the verified Boss name."),
+  false,
+  "Customer Message Driver must not restore the retired explanatory sentence.",
+);
 
 for (const retiredTemplate of ["customer_at_lobby", "customer_running_late", "customer_wait_pickup", "customer_cannot_find_car"]) {
   assert.ok(!source.includes(`\"${retiredTemplate}\"`), `customer typed-message UI must retire fixed template ${retiredTemplate}`);

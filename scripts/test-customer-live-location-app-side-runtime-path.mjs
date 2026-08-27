@@ -102,7 +102,12 @@ function createQueryClient({
   statusRows = null,
 } = {}) {
   const calls = [];
-  const effectiveStatusRows = statusRows ?? bookingRows.map((booking) => ({
+  const effectiveBookingRows = bookingRows.map((booking) =>
+    Object.prototype.hasOwnProperty.call(booking, "pickup_at")
+      ? booking
+      : { ...booking, pickup_at: "2026-01-01T00:00:00.000Z" },
+  );
+  const effectiveStatusRows = statusRows ?? effectiveBookingRows.map((booking) => ({
     booking_reference: booking.booking_reference,
     occurred_at: "2026-06-25T10:00:00.000Z",
     status_value: "driver_otw",
@@ -144,7 +149,7 @@ function createQueryClient({
 
           if (table === "bookings") {
             return Promise.resolve({
-              data: filteredRows(bookingRows, query.filters).slice(0, count),
+              data: filteredRows(effectiveBookingRows, query.filters).slice(0, count),
               error: null,
             });
           }
@@ -273,6 +278,85 @@ try {
     stale_after: new Date(Date.now() + 120_000).toISOString(),
     updated_at: new Date(Date.now() - 5_000).toISOString(),
   };
+
+  const beforePickupWindowClient = createQueryClient({
+    accessRows: [
+      {
+        account_status: "active",
+        auth_user_id: authUserId,
+        customer_account_reference: accountReference,
+      },
+    ],
+    bookingRows: [
+      {
+        booking_reference: bookingReference,
+        customer_id: accountReference,
+        pickup_at: "2026-06-25T10:30:00.001Z",
+        route_type: "DEP",
+        service_type: "Departure",
+      },
+    ],
+    latestRows: [safeLatestPosition],
+    settingRow: baseSetting({ bookingReference }),
+  });
+  setCustomerLiveLocationMapRuntimeClientForTests(beforePickupWindowClient);
+  const beforePickupWindow = await handleCustomerLiveLocationMapRuntimeRequest({
+    boundary,
+    env: baseEnv({ accountReference, authUserId, sessionToken }),
+    nowMs: Date.parse("2026-06-25T10:00:00.000Z"),
+    request: customerRequest({ bookingReference, origin, sessionToken }),
+  });
+  assert.equal(beforePickupWindow.status, 200);
+  assert.equal(beforePickupWindow.body.ok, true);
+  assert.equal(beforePickupWindow.body.customerVisible, true);
+  assert.equal(beforePickupWindow.body.marker_count, 0);
+  assert.equal(
+    beforePickupWindow.body.reason,
+    "customer_live_location_map_outside_pickup_window",
+  );
+  assert.equal(
+    beforePickupWindowClient.calls.some(
+      (call) => call.table === "driver_job_status_events" ||
+        call.table === "driver_live_location_latest_positions",
+    ),
+    false,
+    "Outside-window reads must stop before status or coordinates are queried.",
+  );
+
+  for (const pickupAt of [
+    "2026-06-25T10:30:00.000Z",
+    "2026-06-25T10:29:59.999Z",
+  ]) {
+    const eligibleWindowClient = createQueryClient({
+      accessRows: [
+        {
+          account_status: "active",
+          auth_user_id: authUserId,
+          customer_account_reference: accountReference,
+        },
+      ],
+      bookingRows: [
+        {
+          booking_reference: bookingReference,
+          customer_id: accountReference,
+          pickup_at: pickupAt,
+          route_type: "DEP",
+          service_type: "Departure",
+        },
+      ],
+      latestRows: [safeLatestPosition],
+      settingRow: baseSetting({ bookingReference }),
+    });
+    setCustomerLiveLocationMapRuntimeClientForTests(eligibleWindowClient);
+    const eligibleWindow = await handleCustomerLiveLocationMapRuntimeRequest({
+      boundary,
+      env: baseEnv({ accountReference, authUserId, sessionToken }),
+      nowMs: Date.parse("2026-06-25T10:00:00.000Z"),
+      request: customerRequest({ bookingReference, origin, sessionToken }),
+    });
+    assert.equal(eligibleWindow.status, 200);
+    assert.equal(eligibleWindow.body.marker_count, 1);
+  }
 
   const client = createQueryClient({
     accessRows: [

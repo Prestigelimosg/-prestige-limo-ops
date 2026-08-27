@@ -81,9 +81,9 @@ export async function startDriverTracking(
       await Location.startLocationUpdatesAsync(DRIVER_LOCATION_TASK_NAME, {
         accuracy: Location.Accuracy.High,
         activityType: Location.ActivityType.AutomotiveNavigation,
-        deferredUpdatesDistance: 20,
+        deferredUpdatesDistance: 0,
         deferredUpdatesInterval: 15000,
-        distanceInterval: 20,
+        distanceInterval: 0,
         foregroundService: {
           killServiceOnDestroy: false,
           notificationBody: "Location is shared with Prestige dispatch for this assigned job.",

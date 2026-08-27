@@ -63,6 +63,8 @@ const forbiddenDriverTrackingFragments = [
 ];
 const driverLiveLocationPendingMessage =
   "Live location appears after the driver presses OTW and shares location.";
+const driverLiveLocationPickupWindowMessage =
+  "Live driver tracking becomes available after your driver is on the way and within 30 minutes of pickup.";
 
 function formatSingaporeDateTime(value: string) {
   const timestamp = Date.parse(value);
@@ -151,7 +153,9 @@ export function mapCustomerPortalDriverTrackingPayload(payload: unknown): Custom
   if (record.ok === true && record.customerVisible === true) {
     return {
       message:
-        reason === "customer_live_location_map_no_active_position"
+        reason === "customer_live_location_map_outside_pickup_window"
+          ? driverLiveLocationPickupWindowMessage
+          : reason === "customer_live_location_map_no_active_position"
           ? "Driver has not shared live location yet."
           : "Driver location is not ready yet.",
       status: "not_ready",

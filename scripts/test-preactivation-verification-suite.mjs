@@ -1263,6 +1263,14 @@ const guardChecks = [
     script: "scripts/test-driver-companion-background-location-foundation-guard.mjs",
   },
   {
+    label: "Driver Companion stationary background-location runtime guard",
+    script: "scripts/test-driver-companion-background-location-runtime-guard.mjs",
+  },
+  {
+    label: "Driver Companion 180-second biometric single-flight guard",
+    script: "scripts/test-driver-biometric-single-flight-guard.mjs",
+  },
+  {
     label: "Driver Companion safe summary display guard",
     script: "scripts/test-driver-companion-safe-summary-display-guard.mjs",
   },

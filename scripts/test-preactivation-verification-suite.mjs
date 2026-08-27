@@ -666,6 +666,10 @@ const guardChecks = [
     script: "scripts/test-public-driver-job-action-surface-guard.mjs",
   },
   {
+    label: "Driver private-job copy cleanup guard",
+    script: "scripts/test-driver-private-job-copy-cleanup-guard.mjs",
+  },
+  {
     label: "driver job details admin sync guard",
     script: "scripts/test-driver-job-details-admin-sync-guard.mjs",
   },

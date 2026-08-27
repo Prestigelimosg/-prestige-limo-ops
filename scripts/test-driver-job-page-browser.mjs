@@ -831,6 +831,15 @@ async function runChromeTest() {
           .sort((first, second) => first.top - second.top || first.left - second.left)
           .map((button) => button.text),
         workflowHandoff: {
+          afterReportIssue: (() => {
+            const reportIssue = document.querySelector("[data-driver-job-report-issue]");
+            const workflowHandoff = document.querySelector("[data-driver-job-workflow-handoff]");
+            return Boolean(
+              reportIssue &&
+              workflowHandoff &&
+              (reportIssue.compareDocumentPosition(workflowHandoff) & Node.DOCUMENT_POSITION_FOLLOWING),
+            );
+          })(),
           boundary: document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
           helper: document.querySelector("[data-driver-job-workflow-handoff-helper]")?.textContent.trim() || "",
           items: [...document.querySelectorAll("[data-driver-job-workflow-handoff-list] li")].map((item) =>
@@ -1678,6 +1687,11 @@ async function runChromeTest() {
     );
     assert.equal(validState.workflowHandoff.visible, true, "Expected public driver job workflow handoff guidance.");
     assert.equal(
+      validState.workflowHandoff.afterReportIssue,
+      true,
+      "Expected the one existing How this page works disclosure after Report Issue at the bottom.",
+    );
+    assert.equal(
       validState.workflowHandoff.summary,
       "How this page works",
       "Expected driver handoff to be compact/collapsible.",
@@ -1729,10 +1743,11 @@ async function runChromeTest() {
       ],
       "Expected safe driver issue dropdown choices.",
     );
+    assert.equal(validState.reportIssue.boundary, "", "Expected the retired Report Issue boundary copy to stay removed.");
     assert.equal(
-      validState.reportIssue.boundary,
-      "Internal app alert only. No external messages, live location, or photo upload.",
-      "Expected report issue boundary to block external sending and future-only features.",
+      validState.reportIssue.text.includes("Choose the issue and alert admin inside the app."),
+      false,
+      "Expected the retired Report Issue introductory copy to stay removed.",
     );
     assert.deepEqual(
       validState.primaryStepOrder.slice(0, 6),

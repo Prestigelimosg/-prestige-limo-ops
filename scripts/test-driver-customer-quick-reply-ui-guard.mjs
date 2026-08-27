@@ -18,10 +18,20 @@ for (const expected of [
   '/quick-replies`,',
   'result?.direction !== "driver_to_customer"',
   '["pob", "completed"].includes(workflowStatus)',
-  "The verified Boss and managing PA share this booking conversation, and admin can see it.",
 ]) {
   assert.ok(source.includes(expected), `driver typed-message UI must retain ${expected}`);
 }
+
+assert.match(
+  source,
+  /<h2 id="driver-customer-message-heading"[\s\S]{0,250}>\s*Message Customer\s*<\/h2>\s*<div[^>]+>\s*<textarea/,
+  "Driver Message Customer must leave its retired explanatory area blank and continue directly to the established composer.",
+);
+assert.equal(
+  source.includes("Type a message. The verified Boss and managing PA share this booking conversation, and admin can see it."),
+  false,
+  "Driver Message Customer must not restore the retired explanatory sentence.",
+);
 
 for (const retiredTemplate of ["driver_on_the_way", "driver_arrived", "driver_meet_pickup", "driver_waiting_nearby"]) {
   assert.ok(!source.includes(`\"${retiredTemplate}\"`), `driver typed-message UI must retire fixed template ${retiredTemplate}`);

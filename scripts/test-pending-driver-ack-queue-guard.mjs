@@ -68,7 +68,7 @@ assert.ok(
 );
 
 const dismissStart = app.indexOf("function dismissPendingDriverAckAlert");
-const dismissEnd = app.indexOf("function loadSelectedBooking", dismissStart);
+const dismissEnd = app.indexOf("async function loadExactAdminBookingPersistenceRecord", dismissStart);
 const dismissBlock = app.slice(dismissStart, dismissEnd);
 
 assert.ok(dismissStart > -1 && dismissEnd > dismissStart, "Exact-link dismiss helper is missing.");

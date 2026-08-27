@@ -10659,6 +10659,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The temporary Supabase/admin-dispatcher Preview targets were restored to Production-only after evidence. Production values were never read, printed, replaced, decrypted, committed, or sent to the browser; the restored credential-free Preview must fail closed again.
 
 ### Driver Live Location Consent Runtime Evidence Contract Guard Lock
+- The 27 Aug 2026 read-only Driver native-button audit found that this guard's page-wide timer denylist falsely matched the established visible-only Driver messages/updates refresh. The guard now applies its no-auto-start/timer/sendBeacon assertion only to the exact live-location request/share/stop/OTW handler and cleanup-effect slices; Driver runtime source, message refresh, GPS behavior, packages and workflow remain unchanged.
 - This is a docs/test-only guard for the future Driver Live Location driver-consent runtime evidence pass.
 - Share/Stop runtime wiring is server-gated by the driver live-location runtime policy plus an explicit Share Location click.
 - Current driver job pages must not auto-start sharing from page load or status buttons, and browser GPS is requested only after the server readiness check accepts the current driver job token.

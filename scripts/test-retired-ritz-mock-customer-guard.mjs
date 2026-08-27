@@ -69,15 +69,15 @@ for (const routeFragment of [
   );
 }
 
-for (const preservedCrmMatcherFragment of [
+for (const retiredMockDomainMatcherFragment of [
   '["marriott.com", "ritz-carlton"]',
   '["ritzcarlton.com", "ritz-carlton"]',
   '["ritzcarlton.com.sg", "ritz-carlton"]',
 ]) {
   assert.equal(
-    dispatchPage.includes(preservedCrmMatcherFragment),
-    true,
-    `existing CRM/domain matcher must remain unchanged: ${preservedCrmMatcherFragment}`,
+    dispatchPage.includes(retiredMockDomainMatcherFragment),
+    false,
+    `retired mock-only domain matcher must remain absent: ${retiredMockDomainMatcherFragment}`,
   );
 }
 

@@ -59,7 +59,13 @@ assert.doesNotMatch(
 for (const fragment of [
   "companyId: body.companyId",
   "bookerId: body.bookerId",
-  "linkRevision: account.data.link_revision",
+  "issueCustomerPrincipalInvitation(",
+  "memberships: rawMemberships.map((membership) => ({",
+  "principalRole: body.principalRole,",
+  "const url = result.data.invitation_url_path",
+  "accessStatus: result.data.access_status,",
+  "principalId: result.data.principal_id,",
+  'version: "customer-principal-invitation-v1",',
 ]) {
   includes(adminLinkRoute, fragment);
 }

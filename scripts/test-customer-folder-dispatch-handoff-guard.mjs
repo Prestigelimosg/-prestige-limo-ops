@@ -229,7 +229,7 @@ for (const fragment of [
   "const responseReference = targetBooking",
   "responseReference !== safeTargetBookingReference",
   "bookingRecordPersistedReference(currentBooking) !== safeTargetBookingReference",
-  "loadSelectedBooking(targetBooking, { focusCustomerCopy: true });",
+  "void loadSelectedBooking(targetBooking, {\n        adminBookingRecordOverride: targetBooking,\n        focusCustomerCopy: true,\n      });",
 ]) {
   assertIncludes(appPage, fragment, `dispatch handoff app source ${fragment}`);
 }

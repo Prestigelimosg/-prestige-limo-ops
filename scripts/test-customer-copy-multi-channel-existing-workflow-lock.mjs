@@ -229,7 +229,14 @@ for (const fragment of [
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   "navigator.clipboard.writeText(",
-  "customerDriverDetailsWithPortalLinkText(messageText, portalUrl, booking.bookingType)",
+  "const accessResult = await createCustomerDriverDetailsPortalLink();",
+  "if (accessResult.accessUpdated)",
+  "const portalUrl = accessResult.portalUrl;",
+  '"PRESTIGE SG ACCESS INVITATION",',
+  '"Use this private invitation once to verify your email and create your 6-digit PIN:",',
+  '"This invitation expires in 30 minutes.",',
+  'text: "PA access is already active and now covers every verified Boss under this PA. No new invitation or PIN reset was created.",',
+  'text: "Active PA access updated.",',
   "portalUrl,",
   "Paste/send manually; no provider message was sent.",
   "external_send: false",
@@ -248,6 +255,7 @@ for (const forbidden of [
   /sendAdminCustomerDriverDetailsEmail\s*\(/,
   /adminWhatsAppCustomerDriverDetailsSendDisabledApiPath/,
   /adminSmsCustomerDriverDetailsSendDisabledApiPath/,
+  /customerDriverDetailsWithPortalLinkText\s*\(/,
 ]) {
   assertExcludes(customerPortalLinkCopyHandler, forbidden, "customer app link copy handler");
 }

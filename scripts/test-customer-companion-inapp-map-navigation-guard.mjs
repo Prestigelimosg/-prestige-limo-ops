@@ -45,6 +45,19 @@ assert.equal(
 );
 assert.equal(navigation.shouldAllowCustomerMapEmbedNavigation(exactEmbed, undefined), false);
 
+const exactGoogleRedirect =
+  "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s1.3271117,103.855347!6i16";
+assert.equal(
+  navigation.shouldAllowCustomerMapEmbedNavigation(exactGoogleRedirect, false),
+  true,
+  "The exact same-frame Google embed redirect observed on physical Build 10 must remain in-app.",
+);
+assert.equal(
+  navigation.shouldAllowCustomerMapEmbedNavigation(exactGoogleRedirect, true),
+  false,
+  "The Google embed redirect must never become a top-level Customer page.",
+);
+
 for (const rejectedUrl of [
   "http://www.google.com/maps?q=1.3521,103.8198&z=16&output=embed",
   "https://maps.google.com/maps?q=1.3521,103.8198&z=16&output=embed",
@@ -54,6 +67,12 @@ for (const rejectedUrl of [
   "https://www.google.com/maps?q=1.3521,103.8198&z=15&output=embed",
   "https://www.google.com/maps?q=1.3521,103.8198&z=16&output=embed&next=https://example.com",
   "https://www.google.com/maps?q=1.3521,103.8198&z=16&output=embed#outside",
+  "https://www.google.com/maps/embed?origin=outside&pb=!1m3!2m1!1s1.3271117,103.855347!6i16",
+  "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s91,103.855347!6i16",
+  "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s1.3271117,181!6i16",
+  "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s1.3271117,103.855347!6i15",
+  "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s1.3271117,103.855347!6i16&next=https://example.com",
+  "https://www.google.com/maps/embed?origin=mfe&pb=!1m3!2m1!1s1.3271117,103.855347!6i16#outside",
   "https://www.google.com.evil.example/maps?q=1.3521,103.8198&z=16&output=embed",
 ]) {
   assert.equal(
@@ -80,7 +99,7 @@ for (const forbidden of ['originWhitelist={["*"]}', 'originWhitelist={["https://
 }
 
 const config = JSON.parse(configSource).expo;
-assert.equal(config.ios.buildNumber, "10", "The repaired Customer binary must be exact Build 10.");
+assert.equal(config.ios.buildNumber, "11", "The redirect-repaired Customer binary must be exact Build 11.");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.extra?.eas?.projectId, "ce71ff91-7f71-4297-bcef-edf420f94316");
 
@@ -90,6 +109,10 @@ assert.equal(
   "The exact Customer native map navigation guard must run in preactivation.",
 );
 for (const phrase of [
+  "### Customer Native Google Embed Redirect Repair And Build 11 Preflight (2026-08-27)",
+  "Build 10 physical acceptance failed",
+  "`/maps/embed?origin=mfe&pb=...`",
+  "No paid Build 11 may start until every prebuild check passes",
   "### Customer Native In-App Driver Map And Build 10 Repair (2026-08-27)",
   "must remain inside the Customer app",
   "top-level Google navigation remains blocked",

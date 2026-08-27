@@ -138,17 +138,15 @@ assertIncludes(travelerCombinedPayload, "updated_at", "Traveler combined legacy 
 const legacyCompanyInsert = sliceBetween(
   appPage,
   "function buildLegacyCompanyRateOverrideInsertPayload",
-  "function buildLegacyTravelerRateOverrideInsertPayload",
-);
-const legacyTravelerInsert = sliceBetween(
-  appPage,
-  "function buildLegacyTravelerRateOverrideInsertPayload",
   "function statusClass",
 );
 assertIncludes(legacyCompanyInsert, "buildCompanyCrmIdentityContactPayload", "Legacy company insert identity split");
 assertIncludes(legacyCompanyInsert, "buildCompanyRateOverridePayload", "Legacy company insert rate split");
-assertIncludes(legacyTravelerInsert, "buildTravelerCrmIdentityContactPayload", "Legacy traveler insert identity split");
-assertIncludes(legacyTravelerInsert, "buildTravelerRateOverridePayload", "Legacy traveler insert rate split");
+assertExcludes(
+  appPage,
+  "function buildLegacyTravelerRateOverrideInsertPayload",
+  "retired legacy traveler insert helper",
+);
 
 const saveRateOverride = sliceBetween(
   appPage,

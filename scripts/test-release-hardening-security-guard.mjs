@@ -163,7 +163,7 @@ assertIncludes(
   "existing Driver Portal navigation link count",
 );
 for (const fragment of [
-  '"/google-calendar",\n  "/privacy",\n  "/terms",\n  "/driver-portal",',
+  '"/driver-portal",\n  "/google-calendar",\n  "/privacy",\n  "/terms",',
   'countOccurrences(driverPage, "<Link"), 4',
   'formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName);',
 ]) {

@@ -120,7 +120,11 @@ assertIncludes(saveRateOverride, "buildCompanyCustomerRatesRuntimeWritePayload",
 assertIncludes(saveRateOverride, "buildTravelerCustomerRatesRuntimeWritePayload", "Traveler customer rates runtime payload call");
 assertIncludes(saveRateOverride, "const hasCustomerRateOverrides", "Customer rate override presence check");
 assertIncludes(saveRateOverride, "|| !hasCustomerRateOverrides", "Driver-only company save skips customer_rates runtime call");
-assertIncludes(saveRateOverride, "hasCustomerRateOverrides\n            ? await saveCustomerRatesRuntime", "Driver-only traveler save skips customer_rates runtime call");
+assert.match(
+  saveRateOverride,
+  /const travelerCustomerRatesRuntime = hasCustomerRateOverrides\s*\? await saveCustomerRatesRuntime\(/,
+  "Driver-only traveler save must conditionally call the customer_rates runtime boundary",
+);
 assertIncludes(saveRateOverride, "includeCustomerRates: !companyCustomerRatesRuntime.saved", "Company legacy customer_rates overwrite guard");
 assertIncludes(saveRateOverride, "includeCustomerRates: !travelerCustomerRatesRuntime.saved", "Traveler legacy customer_rates overwrite guard");
 assertBefore(saveRateOverride, "const companyCustomerRatesRuntime", "const companyUpdate", "Company customer_rates runtime ordering");

@@ -107,7 +107,8 @@ for (const phrase of [
   "Public customer/driver client navigation is guarded across `/book`, `/my-bookings`, `/driver-job/[token]`, and the driver job demo page.",
   "This navigation guard remains default-deny. The later owner-approved Driver Personal Google Calendar lane adds only one bounded source-level exception; it does not approve deployment, Production migration/env configuration, or a live provider write without the separate activation approval recorded in that lane.",
   "`/book` may keep only the existing internal customer portal link to `/my-bookings`.",
-  "`/my-bookings` may keep only the existing internal New Booking Request link to `/book`.",
+  "`/my-bookings` may keep only the existing internal New Booking Request link to `/book` and the exact native-session recovery link to `/customer-access/sign-in`.",
+  "`/my-bookings` may use exactly one same-origin `window.location.assign(\"/customer-access/sign-in\")` only after the existing Customer principal logout request completes.",
   "`/driver-job/[token]` may use exactly one imperative navigation only after its existing token-scoped calendar POST returns a URL validated as HTTPS host `accounts.google.com` and path `/o/oauth2/v2/auth`; the driver job demo page has no such exception.",
   "`/driver-job/[token]` may also keep only the three same-tab public Google Calendar information links to `/google-calendar`, `/privacy`, and `/terms`; no booking or token value may enter those hrefs.",
   "Public client pages must not otherwise call `window.open`, imperative navigation helpers, `mailto:`, `tel:`, SMS/WhatsApp deep links, external HTTP URLs, `/api/admin*`, `/api/customer-portal-sessions`, or `/api/admin-saved-bookings`. The Google exception cannot accept another host, protocol, path, raw anchor, app deep link, admin link, or session-issue link.",
@@ -143,9 +144,23 @@ assertIncludes(
   'data-customer-portal-book-request-link="true"',
   "/my-bookings book request link data marker",
 );
-assert.deepEqual(hrefValues(customerPortalPage), ["/book"], "/my-bookings public href allowlist");
-assert.equal(countOccurrences(customerPortalPage, "<Link"), 1, "/my-bookings public Link count");
-assert.equal(countOccurrences(customerPortalPage, "</Link>"), 1, "/my-bookings public Link closing count");
+assertIncludes(
+  customerPortalPage,
+  'data-customer-native-session-sign-in="true"',
+  "/my-bookings native-session recovery link data marker",
+);
+assert.deepEqual(
+  hrefValues(customerPortalPage),
+  ["/book", "/customer-access/sign-in"],
+  "/my-bookings public href allowlist",
+);
+assert.equal(countOccurrences(customerPortalPage, "<Link"), 2, "/my-bookings public Link count");
+assert.equal(countOccurrences(customerPortalPage, "</Link>"), 2, "/my-bookings public Link closing count");
+assert.equal(
+  countOccurrences(customerPortalPage, 'window.location.assign("/customer-access/sign-in")'),
+  1,
+  "/my-bookings exact same-origin logout recovery navigation count",
+);
 for (const fragment of [
   "function readCustomerPortalBookingDeepLink()",
   "new URLSearchParams(window.location.search)",
@@ -189,11 +204,17 @@ const driverJobPageWithoutGoogleConsent = driverJobPage
   .replace('url.hostname === "accounts.google.com"', "")
   .replace('url.pathname === "/o/oauth2/v2/auth"', "")
   .replace("window.location.assign(calendarNavigationUrl)", "");
+const customerPortalPageWithoutSignInRecovery = customerPortalPage.replace(
+  'window.location.assign("/customer-access/sign-in")',
+  "",
+);
 
 for (const [path, sourceValue] of publicPagePaths.map((path) => [path, files[path]])) {
   const source = path === "app/driver-job/[token]/page.tsx"
     ? driverJobPageWithoutGoogleConsent
-    : sourceValue;
+    : path === "app/my-bookings/page.tsx"
+      ? customerPortalPageWithoutSignInRecovery
+      : sourceValue;
   assertExcludes(source, /<a\b/i, `${path} raw anchor tags`);
   assertExcludes(source, /\btarget=/i, `${path} target attribute`);
   assertExcludes(source, forbiddenNavigationPattern, `${path} imperative navigation`);

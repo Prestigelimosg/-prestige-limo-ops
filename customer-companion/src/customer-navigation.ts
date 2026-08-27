@@ -132,7 +132,6 @@ export function shouldAllowCustomerMapEmbedNavigation(
     const requested = new URL(requestedUrl);
     if (
       requested.origin !== "https://www.google.com" ||
-      requested.pathname !== "/maps" ||
       requested.hash ||
       requested.username ||
       requested.password
@@ -141,21 +140,40 @@ export function shouldAllowCustomerMapEmbedNavigation(
     }
 
     const queryKeys = [...requested.searchParams.keys()];
-    if (
-      queryKeys.length !== 3 ||
-      queryKeys.some((key) => key !== "q" && key !== "z" && key !== "output") ||
-      requested.searchParams.getAll("q").length !== 1 ||
-      requested.searchParams.getAll("z").length !== 1 ||
-      requested.searchParams.getAll("output").length !== 1 ||
-      requested.searchParams.get("z") !== "16" ||
-      requested.searchParams.get("output") !== "embed"
-    ) {
+    let coordinateValue: string | null = null;
+    if (requested.pathname === "/maps") {
+      if (
+        queryKeys.length !== 3 ||
+        queryKeys.some((key) => key !== "q" && key !== "z" && key !== "output") ||
+        requested.searchParams.getAll("q").length !== 1 ||
+        requested.searchParams.getAll("z").length !== 1 ||
+        requested.searchParams.getAll("output").length !== 1 ||
+        requested.searchParams.get("z") !== "16" ||
+        requested.searchParams.get("output") !== "embed"
+      ) {
+        return false;
+      }
+      coordinateValue = requested.searchParams.get("q");
+    } else if (requested.pathname === "/maps/embed") {
+      if (
+        queryKeys.length !== 2 ||
+        queryKeys.some((key) => key !== "origin" && key !== "pb") ||
+        requested.searchParams.getAll("origin").length !== 1 ||
+        requested.searchParams.getAll("pb").length !== 1 ||
+        requested.searchParams.get("origin") !== "mfe"
+      ) {
+        return false;
+      }
+      coordinateValue = requested.searchParams
+        .get("pb")
+        ?.match(/^!1m3!2m1!1s(-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?)!6i16$/)?.[1] ?? null;
+    } else {
       return false;
     }
 
-    const coordinateMatch = requested.searchParams
-      .get("q")
-      ?.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+    const coordinateMatch = coordinateValue?.match(
+      /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/,
+    );
     if (!coordinateMatch) return false;
 
     const latitude = Number(coordinateMatch[1]);

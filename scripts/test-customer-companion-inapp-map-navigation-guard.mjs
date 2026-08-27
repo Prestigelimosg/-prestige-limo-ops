@@ -94,6 +94,11 @@ for (const phrase of [
   "must remain inside the Customer app",
   "top-level Google navigation remains blocked",
   "App Store Connect app `6802691447`",
+  "EAS build `a4ac3fae-4154-431a-a10d-856638e575b5`",
+  "signed IPA SHA-256 is `e7e423d66aa7f39cbec5ce604ec61dc29d4a2a4bb991f71bc23f07a1c4c949c0`",
+  "EAS submission, `32675b3f-7d2c-489a-8ea6-5ac1e1c27030`",
+  "Build 10 ID `d3dee321-a78f-45df-a33c-4fb3ce5b7d6f`",
+  "independent provider readback reports `IN_BETA_TESTING`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `Ledger must retain ${phrase}`);
 }

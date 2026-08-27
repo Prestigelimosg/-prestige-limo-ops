@@ -150,6 +150,12 @@ for (const phrase of [
   "live GPS continued while the phone was locked and that Pickup Risk worked on that iPhone",
   "Customer 30-Minute Tracking Gate And Driver Build 17 Repairs",
   "only Driver `ios.buildNumber` advances from processed Build 16 to `17`",
+  "2e04a122-c005-47ef-9aba-e11eb5c03dbf",
+  "e9efaf28-615c-4631-bd0d-92f4a3e4eb9d",
+  "24e47f73455c5493376ae47e5017e4ae908477ed866c99911ac40c5b5a3ec34d",
+  "internal state `IN_BETA_TESTING`",
+  "Build 17 acceptance remains pending",
+  "Reusable QA booking `10906`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

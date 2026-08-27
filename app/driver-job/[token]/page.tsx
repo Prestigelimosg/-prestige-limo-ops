@@ -2688,14 +2688,14 @@ export default function DriverJobPage() {
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
           <PublicAppBuildMarker />
-          <p
-            className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
-            data-driver-job-mobile-web-note="true"
-          >
-            {embeddedDriverApp
-              ? "Prestige Driver job card. Keep this link private and use it only for this assigned job."
-              : "Mobile web driver card. Keep this link private and use it only for this assigned job."}
-          </p>
+          {!embeddedDriverApp ? (
+            <p
+              className="border-l-2 border-sky-300 bg-sky-50/70 px-3 py-1.5 text-sm font-medium leading-6 text-sky-950"
+              data-driver-job-mobile-web-note="true"
+            >
+              Mobile web driver card. Keep this link private and use it only for this assigned job.
+            </p>
+          ) : null}
         </header>
 
         {pageState.kind === "loading" ? (
@@ -2751,89 +2751,6 @@ export default function DriverJobPage() {
                 ))}
               </dl>
             </section>
-
-            <details
-              className="order-[88] rounded-md border border-stone-200 bg-white p-2.5"
-              data-driver-job-workflow-handoff="true"
-            >
-              <summary
-                className="cursor-pointer text-sm font-semibold text-slate-900"
-                data-driver-job-workflow-handoff-summary="true"
-              >
-                How this page works
-              </summary>
-              <p
-                className="mt-2 text-sm font-medium leading-6 text-slate-600"
-                data-driver-job-workflow-handoff-helper="true"
-              >
-                This is the driver page for this assigned job.
-              </p>
-              <ul
-                className="mt-2 grid gap-1.5 text-sm font-medium leading-6 text-slate-700"
-                data-driver-job-workflow-handoff-list="true"
-              >
-                {embeddedDriverApp ? (
-                  <>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      This private job stays inside Prestige Driver.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Tap Save & Acknowledge Job after confirming driver and vehicle details.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Tap OTW to save status and start native background location sharing.
-                    </li>
-                  </>
-                ) : (
-                  <>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      {"Open the private link in Safari. Tap Save & Acknowledge Job."}
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Install Driver Portal from your browser for best results.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Add to Home Screen from this acknowledged page.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Open Driver Portal from your Home Screen.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Already installed before saving? Add it again from this acknowledged page.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      Tap Enable Job Alerts. Allow notifications.
-                    </li>
-                    <li className="border-l-2 border-slate-200 pl-3">
-                      WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.
-                    </li>
-                  </>
-                )}
-                <li className="border-l-2 border-slate-200 pl-3">
-                  {embeddedDriverApp
-                    ? "Use Stop Sharing when native background location is no longer needed."
-                    : "Tap OTW to save status and start sharing. Allow location."}
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Allow camera/photos only for OTS photo.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Review pickup time, pickup place, drop-off, route, and job notes before starting.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Use the status buttons only when ready.
-                </li>
-                <li className="border-l-2 border-slate-200 pl-3">
-                  Use Report Issue when admin needs an in-app alert.
-                </li>
-              </ul>
-              <p
-                className="mt-2 text-sm font-semibold leading-6 text-slate-700"
-                data-driver-job-workflow-handoff-boundary="true"
-              >
-                Private account and internal compensation details are not shown here.
-              </p>
-            </details>
 
             <section
               className="order-[90] space-y-2"
@@ -2910,9 +2827,6 @@ export default function DriverJobPage() {
                 Message Customer
               </h2>
               <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-2.5">
-                <p className="text-sm font-medium text-sky-950">
-                  Type a message. The verified Boss and managing PA share this booking conversation, and admin can see it.
-                </p>
                 <textarea
                   className="min-h-24 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm text-slate-950"
                   data-driver-customer-message-composer="true"
@@ -3218,10 +3132,6 @@ export default function DriverJobPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="space-y-0.5">
                       <h3 className="text-sm font-semibold text-sky-950">OTS Photo to Admin</h3>
-                      <p className="text-xs font-semibold leading-5 text-sky-900">
-                        Send one arrival photo after OTS. Admin sees it inside Dispatch.
-                        Large phone photos are reduced automatically before sending.
-                      </p>
                     </div>
                     <span
                       className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200"
@@ -3287,12 +3197,6 @@ export default function DriverJobPage() {
                       {driverOtsPhotoProof.feedback.text}
                     </p>
                   ) : null}
-                  <p
-                    className="text-xs font-semibold leading-5 text-sky-900"
-                    data-driver-job-ots-photo-proof-boundary="true"
-                  >
-                    Admin-only proof. No customer message or external send is created from here.
-                  </p>
                 </div>
               ) : null}
               <div
@@ -3589,9 +3493,6 @@ export default function DriverJobPage() {
             >
               <div className="space-y-1">
                 <h2 className="text-base font-semibold text-amber-950">Report Issue</h2>
-                <p className="text-sm font-medium leading-6 text-amber-900">
-                  Choose the issue and alert admin inside the app.
-                </p>
               </div>
               <label className="block space-y-1 text-sm font-semibold text-amber-950">
                 <span>Issue type</span>
@@ -3632,10 +3533,90 @@ export default function DriverJobPage() {
                   </p>
                 ) : null}
               </div>
-              <p className="text-xs font-semibold leading-5 text-amber-900" data-driver-job-report-issue-boundary="true">
-                Internal app alert only. No external messages, live location, or photo upload.
-              </p>
             </section>
+
+            <details
+              className="order-[94] rounded-md border border-stone-200 bg-white p-2.5"
+              data-driver-job-workflow-handoff="true"
+            >
+              <summary
+                className="cursor-pointer text-sm font-semibold text-slate-900"
+                data-driver-job-workflow-handoff-summary="true"
+              >
+                How this page works
+              </summary>
+              <p
+                className="mt-2 text-sm font-medium leading-6 text-slate-600"
+                data-driver-job-workflow-handoff-helper="true"
+              >
+                This is the driver page for this assigned job.
+              </p>
+              <ul
+                className="mt-2 grid gap-1.5 text-sm font-medium leading-6 text-slate-700"
+                data-driver-job-workflow-handoff-list="true"
+              >
+                {embeddedDriverApp ? (
+                  <>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      This private job stays inside Prestige Driver.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap Save & Acknowledge Job after confirming driver and vehicle details.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap OTW to save status and start native background location sharing.
+                    </li>
+                  </>
+                ) : (
+                  <>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      {"Open the private link in Safari. Tap Save & Acknowledge Job."}
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Install Driver Portal from your browser for best results.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Add to Home Screen from this acknowledged page.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Open Driver Portal from your Home Screen.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Already installed before saving? Add it again from this acknowledged page.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      Tap Enable Job Alerts. Allow notifications.
+                    </li>
+                    <li className="border-l-2 border-slate-200 pl-3">
+                      WhatsApp links open in Safari. Driver Portal and job alerts open the installed app.
+                    </li>
+                  </>
+                )}
+                <li className="border-l-2 border-slate-200 pl-3">
+                  {embeddedDriverApp
+                    ? "Use Stop Sharing when native background location is no longer needed."
+                    : "Tap OTW to save status and start sharing. Allow location."}
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Allow camera/photos only for OTS photo.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Review pickup time, pickup place, drop-off, route, and job notes before starting.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Use the status buttons only when ready.
+                </li>
+                <li className="border-l-2 border-slate-200 pl-3">
+                  Use Report Issue when admin needs an in-app alert.
+                </li>
+              </ul>
+              <p
+                className="mt-2 text-sm font-semibold leading-6 text-slate-700"
+                data-driver-job-workflow-handoff-boundary="true"
+              >
+                Private account and internal compensation details are not shown here.
+              </p>
+            </details>
           </>
         ) : null}
       </div>

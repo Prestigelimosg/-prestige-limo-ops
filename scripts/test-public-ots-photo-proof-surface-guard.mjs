@@ -414,8 +414,13 @@ for (const path of publicClientPaths) {
       );
       assertIncludes(
         source,
-        "Admin-only proof. No customer message or external send is created from here.",
-        "approved driver OTS photo proof boundary",
+        "result.proof?.customerVisible !== false",
+        "approved driver OTS photo proof customer privacy response guard",
+      );
+      assertIncludes(
+        source,
+        "result.proof?.external_send !== false",
+        "approved driver OTS photo proof no-external-send response guard",
       );
       continue;
     }

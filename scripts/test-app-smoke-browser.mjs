@@ -672,6 +672,7 @@ const customerPortalSavedBookingsApiPattern = /\/api\/customer-saved-bookings(?:
 const customerPortalChangeRequestApiPattern = /\/api\/customer-booking-change-requests(?:[/?#]|$)/i;
 const customerPortalDevicePushApiPattern = /\/api\/customer-device-push-subscriptions(?:[/?#]|$)/i;
 const customerPortalInvoicesApiPattern = /\/api\/customer-invoices(?:[/?#]|$)/i;
+const customerPrincipalAccessApiPattern = /\/api\/customer-principal-access(?:[/?#]|$)/i;
 const customerPortalTripUpdatesApiPattern = /\/api\/customer-app-notifications(?:[/?#]|$)/i;
 const combineAllowedRuntimePatterns = (...patterns) =>
   new RegExp(patterns.map((pattern) => pattern.source).join("|"), "i");
@@ -739,6 +740,7 @@ const customerPortalRuntimeAllowedPattern = withAllowedRuntimeCalls(
     customerPortalChangeRequestApiPattern,
     customerPortalDevicePushApiPattern,
     customerPortalInvoicesApiPattern,
+    customerPrincipalAccessApiPattern,
     customerPortalTripUpdatesApiPattern,
   ),
   exactCustomerBookingRscPrefetchCall,
@@ -3976,6 +3978,12 @@ async function runChromeTest() {
             const corporateIdentityConfirmMessages =
               window.__adminCorporateIdentityConfirmMessages || [];
             const corporateRequestSequence = window.__adminCorporateRequestSequence || [];
+            const driverJobLinkCreateFocused = document.activeElement?.matches(
+              '[data-create-driver-job-link-button="true"]',
+            ) === true;
+            const driverJobLinkHandoffVisible = Boolean(
+              document.querySelector('[data-driver-job-link-handoff-notice="true"]'),
+            );
             const matchingPatchCalls = calls.filter(
               (call) => call.method === "PATCH" && call.body?.booking?.pickup_location === "Updated Ops Pickup",
             );
@@ -3986,6 +3994,8 @@ async function runChromeTest() {
               !feedback.includes("Customer booking request accepted: LOADED-OPS-001") ||
               !feedback.includes("Google Calendar auto-synced") ||
               !feedback.includes("customer app confirmation queued") ||
+              !driverJobLinkCreateFocused ||
+              !driverJobLinkHandoffVisible ||
               !body
             ) {
               return false;
@@ -4017,6 +4027,8 @@ async function runChromeTest() {
               corporateIdentityConfirmMessages,
               corporateRequestSequence,
               customerNotificationCalls,
+              driverJobLinkCreateFocused,
+              driverJobLinkHandoffVisible,
               feedback,
               forbiddenKeys: keys.filter((key) => forbiddenKeyPattern.test(key)),
               matchingPatchCalls: matchingPatchCalls.length,
@@ -4173,7 +4185,19 @@ async function runChromeTest() {
         false,
         "Expected the accepted customer request feedback to leave the pending-review state",
       );
-      assert.equal(updateState.appliedReference, "", "Expected successful update to clear edit identity");
+      assert.deepEqual(
+        {
+          appliedReference: updateState.appliedReference,
+          driverJobLinkCreateFocused: updateState.driverJobLinkCreateFocused,
+          driverJobLinkHandoffVisible: updateState.driverJobLinkHandoffVisible,
+        },
+        {
+          appliedReference: "LOADED-OPS-001",
+          driverJobLinkCreateFocused: true,
+          driverJobLinkHandoffVisible: true,
+        },
+        "Expected successful no-return update to retain the exact edit identity and focus the existing Driver Job Link handoff",
+      );
 
       const agencyAcceptBaseline = await evaluate(`(() => ({
         calendarWrites: (window.__adminBookingCalendarSyncCalls || []).filter(
@@ -36908,6 +36932,12 @@ async function runChromeTest() {
             const button = document.querySelector(
               '[data-customer-driver-details-acknowledgement="saved-booking-001"]',
             );
+            const messageComposer = document.querySelector(
+              '[data-customer-driver-message-composer="saved-booking-001"]',
+            );
+            const messageSend = document.querySelector(
+              '[data-customer-driver-message-send="saved-booking-001"]',
+            );
 
             return card && button?.textContent.trim() === "Acknowledge driver details"
               ? {
@@ -36916,7 +36946,11 @@ async function runChromeTest() {
                     window.__customerPortalDriverDetailsAcknowledgementCalls || []
                   ).length,
                   cardText: card.textContent.replace(/\s+/g, " ").trim(),
-                  driverReplyCount: document.querySelectorAll(
+                  messageComposerHeight: messageComposer?.getBoundingClientRect().height || 0,
+                  messageComposerPlaceholder: messageComposer?.getAttribute("placeholder") || "",
+                  messageSendHeight: messageSend?.getBoundingClientRect().height || 0,
+                  messageSendText: messageSend?.textContent.trim() || "",
+                  retiredDriverReplyCount: document.querySelectorAll(
                     '[data-customer-driver-quick-reply]',
                   ).length,
                 }
@@ -36933,9 +36967,24 @@ async function runChromeTest() {
         "Expected loading and viewing driver details not to acknowledge them",
       );
       assert.equal(
-        driverDetailsAcknowledgementReadyState.driverReplyCount,
-        4,
-        "Expected the separate customer-to-driver quick replies to remain unchanged",
+        driverDetailsAcknowledgementReadyState.retiredDriverReplyCount,
+        0,
+        "Expected the retired fixed customer-to-driver quick replies to stay absent",
+      );
+      assert.deepEqual(
+        {
+          composerPlaceholder: driverDetailsAcknowledgementReadyState.messageComposerPlaceholder,
+          composerVisible: driverDetailsAcknowledgementReadyState.messageComposerHeight > 0,
+          sendText: driverDetailsAcknowledgementReadyState.messageSendText,
+          sendVisible: driverDetailsAcknowledgementReadyState.messageSendHeight > 0,
+        },
+        {
+          composerPlaceholder: "Type a message to the driver",
+          composerVisible: true,
+          sendText: "Send to driver",
+          sendVisible: true,
+        },
+        "Expected the established typed Message Driver composer and send control",
       );
 
       const acknowledgementClicked = await evaluate(`(() => {
@@ -37859,6 +37908,15 @@ async function runChromeTest() {
             visible: Boolean(document.querySelector("[data-driver-job-status-timing-evidence]")),
           },
           driverWorkflowHandoff: {
+            afterReportIssue: (() => {
+              const reportIssue = document.querySelector("[data-driver-job-report-issue]");
+              const workflowHandoff = document.querySelector("[data-driver-job-workflow-handoff]");
+              return Boolean(
+                reportIssue &&
+                workflowHandoff &&
+                (reportIssue.compareDocumentPosition(workflowHandoff) & Node.DOCUMENT_POSITION_FOLLOWING),
+              );
+            })(),
             boundary:
               document.querySelector("[data-driver-job-workflow-handoff-boundary]")?.textContent.trim() || "",
             helper: document.querySelector("[data-driver-job-workflow-handoff-helper]")?.textContent.trim() || "",
@@ -38292,6 +38350,11 @@ async function runChromeTest() {
         `${viewport.label}: expected compact driver workflow handoff guidance`,
       );
       assert.equal(
+        initialState.driverWorkflowHandoff.afterReportIssue,
+        true,
+        `${viewport.label}: expected How this page works after Report Issue at the bottom`,
+      );
+      assert.equal(
         initialState.driverWorkflowHandoff.summary,
         "How this page works",
         `${viewport.label}: expected compact/collapsible driver page help`,
@@ -38362,8 +38425,8 @@ async function runChromeTest() {
       assert.equal(initialState.reportIssue.submitText, "Alert Admin", `${viewport.label}: expected Alert Admin button`);
       assert.equal(
         initialState.reportIssue.boundary,
-        "Internal app alert only. No external messages, live location, or photo upload.",
-        `${viewport.label}: expected report issue to remain internal-app only`,
+        "",
+        `${viewport.label}: expected retired report issue boundary copy to stay removed`,
       );
       assert.equal(initialState.statusTiming.visible, true, `${viewport.label}: expected compact status timing evidence`);
       assert.deepEqual(initialState.statusTiming.controls, [], `${viewport.label}: expected status timing evidence to be read-only`);

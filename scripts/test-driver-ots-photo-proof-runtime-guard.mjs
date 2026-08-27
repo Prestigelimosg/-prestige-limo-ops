@@ -140,11 +140,26 @@ for (const fragment of [
   "new FormData",
   'formData.append("photo", preparedPhoto.blob, preparedPhoto.fileName)',
   'response.status === 413 ? "too_large"',
-  "Large phone photos are reduced automatically before sending.",
-  "Admin-only proof. No customer message or external send is created from here.",
 ]) {
   assertIncludes(driverPage, fragment, `driver page approved OTS fragment: ${fragment}`);
 }
+
+for (const retiredCopy of [
+  "Send one arrival photo after OTS. Admin sees it inside Dispatch.",
+  "Large phone photos are reduced automatically before sending.",
+  "Admin-only proof. No customer message or external send is created from here.",
+]) {
+  assert.equal(
+    driverPage.includes(retiredCopy),
+    false,
+    `driver OTS photo UI must keep approved static help copy removed: ${retiredCopy}`,
+  );
+}
+assert.equal(
+  driverPage.includes('data-driver-job-ots-photo-proof-boundary="true"'),
+  false,
+  "driver OTS photo UI must remove only its retired static boundary paragraph",
+);
 
 assert.match(
   driverOtsApprovedSurface,

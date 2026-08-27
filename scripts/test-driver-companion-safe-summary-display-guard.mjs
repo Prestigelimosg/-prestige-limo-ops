@@ -15,8 +15,13 @@ const embeddedDriverPageSource = await readFile(
 
 assert.match(
   embeddedDriverPageSource,
-  /embeddedDriverApp\s*\?\s*"Prestige Driver job card\. Keep this link private and use it only for this assigned job\."\s*:\s*"Mobile web driver card\. Keep this link private and use it only for this assigned job\."/,
-  "The verified embedded app must identify the in-app Prestige Driver card while ordinary browser wording stays unchanged",
+  /!embeddedDriverApp\s*\?\s*\([\s\S]{0,600}data-driver-job-mobile-web-note="true"[\s\S]{0,400}Mobile web driver card\. Keep this link private and use it only for this assigned job\.[\s\S]{0,100}<\/p>[\s\S]{0,40}\)\s*:\s*null/,
+  "The verified embedded app must omit the retired blue note while ordinary browser privacy wording stays unchanged",
+);
+assert.equal(
+  embeddedDriverPageSource.includes("Prestige Driver job card. Keep this link private and use it only for this assigned job."),
+  false,
+  "The verified embedded app must not restore the retired native blue-note copy",
 );
 assert.match(
   embeddedDriverPageSource,

@@ -70,6 +70,7 @@ const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxControlledCustomerRuntimeAllowlistEntries = 5;
+const customerLiveLocationPickupWindowMs = 30 * 60 * 1000;
 const supportedCustomerRuntimeSessionMapEntryCounts = new Set([2, 3, 5]);
 const forbiddenSafeTextPattern =
   /api[_ -]?key|billing|cookie|customer[_ -]?email|customer[_ -]?phone|customer[_ -]?price|debug|driver[_ -]?payout|finance|internal|invoice|jwt|parser|password|payment|paynow|payout|pdf|raw[_ -]?token|secret|service[_ -]?role|token[_ -]?hash/i;
@@ -365,7 +366,7 @@ function customerSavedBookingsAuthEnabled(env: CustomerLiveLocationMapEnv) {
   );
 }
 
-function normalizeLatestPosition(row: UnknownRecord) {
+function normalizeLatestPosition(row: UnknownRecord, nowMs: number) {
   const latitude = asFiniteNumber(row.latitude);
   const longitude = asFiniteNumber(row.longitude);
   const bookingReference = safeReference(row.booking_reference);
@@ -379,7 +380,7 @@ function normalizeLatestPosition(row: UnknownRecord) {
   }
 
   const staleAt = new Date(staleAfter).getTime();
-  const isStale = Number.isFinite(staleAt) ? Date.now() >= staleAt : true;
+  const isStale = Number.isFinite(staleAt) ? nowMs >= staleAt : true;
   const driverLocationStatus =
     sharingState !== "active" ? "not_sharing" : isStale ? "offline" : "live";
 
@@ -401,6 +402,28 @@ function normalizeLatestPosition(row: UnknownRecord) {
     stale_after: staleAfter,
     updated_at: updatedAt,
   };
+}
+
+function verifyCustomerPickupWindow({
+  nowMs,
+  pickupAt,
+}: {
+  nowMs: number;
+  pickupAt: string;
+}) {
+  const pickupAtMs = Date.parse(pickupAt);
+
+  if (!Number.isFinite(nowMs) || nowMs < 0 || !Number.isFinite(pickupAtMs)) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_pickup_window_not_ready",
+      status: 503,
+    } as const;
+  }
+
+  return nowMs < pickupAtMs - customerLiveLocationPickupWindowMs
+    ? ({ ok: false, outsideWindow: true } as const)
+    : ({ ok: true } as const);
 }
 
 type NormalizedLatestPosition = NonNullable<
@@ -460,6 +483,7 @@ function assertRuntimeScope({
 type CustomerLiveLocationRuntimePolicy = {
   accountReference: string;
   allowedBookingReferences: string[];
+  pickupAt: string;
   source: "app_side_runtime_setting" | "env_evidence";
   staleAfterSeconds: number;
 };
@@ -475,15 +499,17 @@ type CustomerLiveLocationRuntimePolicyResult =
       status: number;
     };
 
-function envEvidenceRuntimePolicy({
+async function envEvidenceRuntimePolicy({
   accountReference,
   bookingReference,
+  client,
   env,
 }: {
   accountReference: string;
   bookingReference: string;
+  client: CustomerLiveLocationMapClient;
   env: CustomerLiveLocationMapEnv;
-}): CustomerLiveLocationRuntimePolicyResult {
+}): Promise<CustomerLiveLocationRuntimePolicyResult> {
   const scoped = assertRuntimeScope({
     accountReference,
     bookingReference,
@@ -494,6 +520,28 @@ function envEvidenceRuntimePolicy({
     return scoped;
   }
 
+  const { data, error } = await client
+    .from(bookingsTable)
+    .select("booking_reference, pickup_at")
+    .eq("booking_reference", bookingReference)
+    .limit(2);
+  const pickupAt = cleanText(
+    asRecord(
+      (Array.isArray(data) ? data : []).find(
+        (row) => safeReference(asRecord(row).booking_reference) === bookingReference,
+      ),
+    ).pickup_at,
+    80,
+  );
+
+  if (error || !pickupAt) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_pickup_window_not_ready",
+      status: 503,
+    };
+  }
+
   return {
     ok: true,
     policy: {
@@ -502,6 +550,7 @@ function envEvidenceRuntimePolicy({
         env,
         "PRESTIGE_CUSTOMER_LIVE_LOCATION_MAP_ALLOWED_BOOKING_REFERENCES",
       ),
+      pickupAt,
       source: "env_evidence",
       staleAfterSeconds: positiveIntegerEnv(
         env,
@@ -760,6 +809,7 @@ async function readAppSideRuntimePolicy({
       policy: {
         accountReference: bookingScope.accountReference,
         allowedBookingReferences: [bookingReference],
+        pickupAt: bookingScope.pickupAt,
         source: "app_side_runtime_setting",
         staleAfterSeconds: positiveIntegerEnv(
           env,
@@ -777,6 +827,7 @@ async function readAppSideRuntimePolicy({
     policy: {
       accountReference: bookingScope.accountReference,
       allowedBookingReferences: [bookingReference],
+      pickupAt: bookingScope.pickupAt,
       source: "app_side_runtime_setting",
       staleAfterSeconds:
         runtimeSettingNumber(
@@ -864,6 +915,7 @@ async function verifyCustomerBookingScope({
   | {
       accountReference: string;
       ok: true;
+      pickupAt: string;
     }
   | {
       ok: false;
@@ -874,7 +926,7 @@ async function verifyCustomerBookingScope({
   const { data, error } = await client
     .from(bookingsTable)
     .select(
-      "booking_reference, customer_id, company_id, booker_id, traveler_id, route_type, service_type",
+      "booking_reference, customer_id, company_id, booker_id, traveler_id, pickup_at, route_type, service_type",
     )
     .eq("booking_reference", bookingReference)
     .limit(5);
@@ -935,19 +987,31 @@ async function verifyCustomerBookingScope({
     };
   }
 
+  const pickupAt = cleanText(booking.pickup_at, 80);
+  if (!pickupAt) {
+    return {
+      ok: false,
+      reason: "customer_live_location_map_pickup_window_not_ready",
+      status: 503,
+    };
+  }
+
   return {
     accountReference: matchedAccountReference,
     ok: true,
+    pickupAt,
   };
 }
 
 export async function handleCustomerLiveLocationMapRuntimeRequest({
   boundary,
   env = process.env,
+  nowMs = Date.now(),
   request,
 }: {
   boundary: CustomerLiveLocationMapBoundary;
   env?: CustomerLiveLocationMapEnv;
+  nowMs?: number;
   request: Request;
 }) {
   if (!boundary.ok || !boundary.sameOrigin || !boundary.sessionPresent) {
@@ -969,9 +1033,10 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
   const runtimeMode = customerRuntimeGateMode(env);
   const policy =
     runtimeMode === "evidence"
-      ? envEvidenceRuntimePolicy({
+      ? await envEvidenceRuntimePolicy({
           accountReference,
           bookingReference,
+          client: clientResult.client,
           env,
         })
       : await readAppSideRuntimePolicy({
@@ -982,6 +1047,37 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
 
   if (!policy.ok) {
     return blockedResult(policy.reason, policy.status);
+  }
+
+  const pickupWindow = verifyCustomerPickupWindow({
+    nowMs,
+    pickupAt: policy.policy.pickupAt,
+  });
+
+  if (!pickupWindow.ok) {
+    if (!("outsideWindow" in pickupWindow)) {
+      return blockedResult(pickupWindow.reason, pickupWindow.status);
+    }
+
+    return {
+      body: {
+        active_driver_marker: null,
+        booking_reference_label: "scoped",
+        customerVisible: true,
+        external_send: false,
+        gpsCaptureEnabled: false,
+        liveMapEnabled: false,
+        locationStorageEnabled: false,
+        map_rendered: false,
+        marker_count: 0,
+        no_op: true,
+        ok: true,
+        reason: "customer_live_location_map_outside_pickup_window",
+        stale_after_seconds: policy.policy.staleAfterSeconds,
+        version: customerLiveLocationMapRuntimeVersion,
+      },
+      status: 200,
+    };
   }
 
   const trackingStatus = await verifyCustomerTrackingStatus({
@@ -1009,8 +1105,10 @@ export async function handleCustomerLiveLocationMapRuntimeRequest({
   }
 
   const markerCandidate = Array.isArray(data)
-    ? data.map(asRecord).map(normalizeLatestPosition).filter(isNormalizedLatestPosition)[0] ||
-      null
+    ? data
+        .map(asRecord)
+        .map((row) => normalizeLatestPosition(row, nowMs))
+        .filter(isNormalizedLatestPosition)[0] || null
     : null;
   const marker = markerCandidate?.driver_location_status === "live" && !markerCandidate.is_stale
     ? markerCandidate

@@ -49,6 +49,13 @@ import {
   readOrCreateDriverInstallationId,
 } from "./src/driver-installation";
 import {
+  beginDriverBiometricAttempt,
+  createDriverBiometricLifecycle,
+  finishDriverBiometricAttempt,
+  readDriverBiometricMonotonicTimeMs,
+  transitionDriverBiometricAppState,
+} from "./src/driver-biometric-lifecycle";
+import {
   forgetNativeNotificationToken,
   loadNativeDriverJob,
   nativeDriverJobHandoffUrl,
@@ -116,8 +123,12 @@ export default function App() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
-  const biometricPromptBusyRef = useRef(false);
-  const biometricResumePendingRef = useRef(false);
+  const [driverWebViewMounted, setDriverWebViewMounted] = useState(false);
+  const biometricEnabledRef = useRef(false);
+  const biometricLifecycleRef = useRef(
+    createDriverBiometricLifecycle(AppState.currentState),
+  );
+  const unlockStateRef = useRef<"checking" | "ready" | "locked">("checking");
   const bridgeBusyRef = useRef(false);
   const badgeNotificationHandledRef = useRef("");
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
@@ -125,17 +136,29 @@ export default function App() {
   const pendingOauthTokenRef = useRef("");
   const webViewRef = useRef<WebView>(null);
 
+  const setDriverUnlockState = useCallback(
+    (nextState: "checking" | "ready" | "locked") => {
+      unlockStateRef.current = nextState;
+      setUnlockState(nextState);
+      if (nextState === "ready") setDriverWebViewMounted(true);
+    },
+    [],
+  );
+
   const unlockDriverApp = useCallback(async () => {
-    if (biometricPromptBusyRef.current) return;
-    biometricPromptBusyRef.current = true;
-    setUnlockState("checking");
-    try {
-      const unlocked = await authenticateDriverAppUnlock().catch(() => false);
-      setUnlockState(unlocked ? "ready" : "locked");
-    } finally {
-      biometricPromptBusyRef.current = false;
+    const attemptId = beginDriverBiometricAttempt(biometricLifecycleRef.current);
+    if (attemptId === null) return;
+
+    setDriverUnlockState("checking");
+    const unlocked = await authenticateDriverAppUnlock().catch(() => false);
+    const currentAttempt = finishDriverBiometricAttempt(
+      biometricLifecycleRef.current,
+      attemptId,
+    );
+    if (currentAttempt) {
+      setDriverUnlockState(unlocked ? "ready" : "locked");
     }
-  }, []);
+  }, [setDriverUnlockState]);
 
   useEffect(() => {
     let mounted = true;
@@ -149,50 +172,54 @@ export default function App() {
         ]);
         if (!mounted) return;
 
+        biometricEnabledRef.current = biometricEnabled;
         setBiometricEnabled(biometricEnabled);
         setNotificationEnabled(Boolean(notificationToken));
         setInstallationId(nextInstallationId);
         if (!biometricEnabled) {
-          setUnlockState("ready");
+          setDriverUnlockState("ready");
           return;
         }
 
-        biometricPromptBusyRef.current = true;
+        const attemptId = beginDriverBiometricAttempt(biometricLifecycleRef.current);
+        if (attemptId === null) {
+          setDriverUnlockState("locked");
+          return;
+        }
         const unlocked = await authenticateDriverAppUnlock().catch(() => false);
-        biometricPromptBusyRef.current = false;
-        if (mounted) setUnlockState(unlocked ? "ready" : "locked");
+        const currentAttempt = finishDriverBiometricAttempt(
+          biometricLifecycleRef.current,
+          attemptId,
+        );
+        if (mounted && currentAttempt) {
+          setDriverUnlockState(unlocked ? "ready" : "locked");
+        }
       } catch {
-        biometricPromptBusyRef.current = false;
-        if (mounted) setUnlockState("locked");
+        if (mounted) setDriverUnlockState("locked");
       }
     }
 
     void prepareInstallation();
     return () => { mounted = false; };
-  }, []);
+  }, [setDriverUnlockState]);
 
   useEffect(() => {
-    let previousState = AppState.currentState;
     const subscription = AppState.addEventListener("change", (nextState) => {
-      const returningToForeground = previousState !== "active" && nextState === "active";
-      previousState = nextState;
-      if (nextState !== "active" && biometricPromptBusyRef.current) {
-        biometricResumePendingRef.current = true;
-      }
-      if (!returningToForeground) return;
-      if (biometricResumePendingRef.current) {
-        biometricResumePendingRef.current = false;
-        return;
-      }
-      if (biometricPromptBusyRef.current) return;
+      const action = transitionDriverBiometricAppState(
+        biometricLifecycleRef.current,
+        nextState,
+        biometricEnabledRef.current,
+        readDriverBiometricMonotonicTimeMs(),
+        unlockStateRef.current === "ready",
+      );
 
-      void isDriverBiometricUnlockEnabled().then((enabled) => {
-        if (enabled) void unlockDriverApp();
-      });
+      if (action === "lock") setDriverUnlockState("locked");
+      if (action === "reveal") setDriverUnlockState("ready");
+      if (action === "unlock") void unlockDriverApp();
     });
 
     return () => subscription.remove();
-  }, [unlockDriverApp]);
+  }, [setDriverUnlockState, unlockDriverApp]);
 
   const receiveDriverJobUrl = useCallback(async (
     incomingUrl: string,
@@ -495,10 +522,25 @@ export default function App() {
         }
 
         if (request.type === "native_biometrics_enable") {
-          biometricPromptBusyRef.current = true;
-          const enabled = await enableDriverBiometricUnlock();
-          biometricPromptBusyRef.current = false;
-          if (enabled) setBiometricEnabled(true);
+          const attemptId = beginDriverBiometricAttempt(
+            biometricLifecycleRef.current,
+          );
+          if (attemptId === null) {
+            webViewRef.current?.injectJavaScript(
+              driverNativeBiometricResultScript({ ok: false }),
+            );
+            return;
+          }
+          const enabled = await enableDriverBiometricUnlock().catch(() => false);
+          const currentAttempt = finishDriverBiometricAttempt(
+            biometricLifecycleRef.current,
+            attemptId,
+          );
+          if (!currentAttempt) return;
+          if (enabled) {
+            biometricEnabledRef.current = true;
+            setBiometricEnabled(true);
+          }
           webViewRef.current?.injectJavaScript(
             driverNativeBiometricResultScript({ ok: enabled }),
           );
@@ -584,9 +626,6 @@ export default function App() {
           ok: request.type === "tracking_stop" || result.active,
         });
       } catch (error) {
-        if (request.type === "native_biometrics_enable") {
-          biometricPromptBusyRef.current = false;
-        }
         if (error instanceof DriverJobRequestError && error.terminal) {
           await stopTrackingAfterTerminalResponse();
         }
@@ -705,85 +744,103 @@ export default function App() {
     setCanGoBack(navigation.canGoBack);
   }, []);
 
+  const webLayerLocked = unlockState !== "ready";
+
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <SafeAreaView
-        edges={["top", "right", "bottom", "left"]}
-        style={styles.safeArea}
-      >
+      <View style={styles.root}>
         <StatusBar style="dark" />
-        <View style={styles.roleBar}>
-          <View>
-            <Text style={styles.eyebrow}>PRESTIGE LIMO</Text>
-            <Text style={styles.title}>Prestige Driver</Text>
-          </View>
-          <View style={screen.active ? styles.activePill : styles.inactivePill}>
-            <Text style={styles.pillText}>
-              {screen.active ? "TRACKING ON" : "TRACKING OFF"}
-            </Text>
-          </View>
+        <View
+          accessibilityElementsHidden={webLayerLocked}
+          importantForAccessibility={webLayerLocked ? "no-hide-descendants" : "auto"}
+          pointerEvents={webLayerLocked ? "none" : "auto"}
+          style={[styles.webLayer, webLayerLocked ? styles.hiddenWebLayer : null]}
+        >
+          <SafeAreaView
+            edges={["top", "right", "bottom", "left"]}
+            style={styles.safeArea}
+          >
+            <View style={styles.roleBar}>
+              <View>
+                <Text style={styles.eyebrow}>PRESTIGE LIMO</Text>
+                <Text style={styles.title}>Prestige Driver</Text>
+              </View>
+              <View style={screen.active ? styles.activePill : styles.inactivePill}>
+                <Text style={styles.pillText}>
+                  {screen.active ? "TRACKING ON" : "TRACKING OFF"}
+                </Text>
+              </View>
+            </View>
+
+            {driverWebViewMounted && screen.jobUrl ? (
+              <WebView
+                key={screen.navigationKey}
+                ref={webViewRef}
+                allowFileAccess
+                allowsBackForwardNavigationGestures
+                geolocationEnabled={false}
+                injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(
+                  installationId,
+                  biometricEnabled,
+                  notificationEnabled,
+                  screen.openTarget,
+                )}
+                javaScriptCanOpenWindowsAutomatically={false}
+                mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+                onMessage={handleBridgeMessage}
+                onNavigationStateChange={updateNavigationState}
+                onShouldStartLoadWithRequest={shouldStartNavigation}
+                originWhitelist={[productionOrigin]}
+                setSupportMultipleWindows={false}
+                sharedCookiesEnabled
+                source={{
+                  ...(webViewRequestHeadersRef.current
+                    ? { headers: webViewRequestHeadersRef.current }
+                    : {}),
+                  uri: currentWebViewUrlRef.current || screen.jobUrl,
+                }}
+                style={styles.webView}
+              />
+            ) : driverWebViewMounted ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Open your private Driver Job Link</Text>
+                <Text style={styles.emptyMessage}>{screen.message}</Text>
+                <Text style={styles.emptyHelp}>
+                  The safe job card, acknowledgement, Calendar, messages, status
+                  reporting, OTS photo and issue controls will stay inside this app.
+                  Tracking does not start automatically. Force-quitting the app,
+                  switching off Location Services, or revoking permission can stop
+                  updates after you start sharing.
+                </Text>
+              </View>
+            ) : null}
+          </SafeAreaView>
         </View>
 
-        {unlockState === "locked" ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Prestige Driver is locked</Text>
-            <Text style={styles.emptyMessage}>
-              Use Face ID to unlock this approved Driver installation.
-            </Text>
-            <Button onPress={() => void unlockDriverApp()} title="Unlock with Face ID" />
-          </View>
-        ) : unlockState === "checking" || !installationId ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Securing Prestige Driver…</Text>
-          </View>
-        ) : screen.jobUrl ? (
-          <WebView
-            key={screen.navigationKey}
-            ref={webViewRef}
-            allowFileAccess
-            allowsBackForwardNavigationGestures
-            geolocationEnabled={false}
-            injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(
-              installationId,
-              biometricEnabled,
-              notificationEnabled,
-              screen.openTarget,
+        {webLayerLocked ? (
+          <SafeAreaView style={styles.lockOverlay}>
+            {unlockState === "locked" ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Prestige Driver is locked</Text>
+                <Text style={styles.emptyMessage}>
+                  Use Face ID to unlock this approved Driver installation.
+                </Text>
+                <Button onPress={() => void unlockDriverApp()} title="Unlock with Face ID" />
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Securing Prestige Driver…</Text>
+              </View>
             )}
-            javaScriptCanOpenWindowsAutomatically={false}
-            mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
-            onMessage={handleBridgeMessage}
-            onNavigationStateChange={updateNavigationState}
-            onShouldStartLoadWithRequest={shouldStartNavigation}
-            originWhitelist={[productionOrigin]}
-            setSupportMultipleWindows={false}
-            sharedCookiesEnabled
-            source={{
-              ...(webViewRequestHeadersRef.current
-                ? { headers: webViewRequestHeadersRef.current }
-                : {}),
-              uri: currentWebViewUrlRef.current || screen.jobUrl,
-            }}
-            style={styles.webView}
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Open your private Driver Job Link</Text>
-            <Text style={styles.emptyMessage}>{screen.message}</Text>
-            <Text style={styles.emptyHelp}>
-              The safe job card, acknowledgement, Calendar, messages, status
-              reporting, OTS photo and issue controls will stay inside this app.
-              Tracking does not start automatically. Force-quitting the app,
-              switching off Location Services, or revoking permission can stop
-              updates after you start sharing.
-            </Text>
-          </View>
-        )}
-      </SafeAreaView>
+          </SafeAreaView>
+        ) : null}
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { backgroundColor: "#f8fafc", flex: 1 },
   safeArea: { backgroundColor: "#f8fafc", flex: 1 },
   roleBar: {
     alignItems: "center",
@@ -802,6 +859,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   title: { color: "#0f172a", fontSize: 17, fontWeight: "800" },
+  hiddenWebLayer: { opacity: 0 },
+  lockOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    justifyContent: "center",
+    zIndex: 10,
+  },
   activePill: {
     backgroundColor: "#ccfbf1",
     borderRadius: 999,
@@ -821,6 +886,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   webView: { backgroundColor: "#f8fafc", flex: 1 },
+  webLayer: { flex: 1 },
   emptyState: {
     alignSelf: "center",
     backgroundColor: "#ffffff",

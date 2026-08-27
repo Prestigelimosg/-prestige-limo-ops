@@ -47,8 +47,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "16",
-  "The approved sixteenth TestFlight build number must be explicit",
+  "17",
+  "The approved seventeenth TestFlight build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -148,6 +148,8 @@ for (const phrase of [
   "d2ccdb5d-298f-44e6-b244-2fca96e83ab9",
   "Apple successfully processed `1.0.0 - 11`",
   "live GPS continued while the phone was locked and that Pickup Risk worked on that iPhone",
+  "Customer 30-Minute Tracking Gate And Driver Build 17 Repairs",
+  "only Driver `ios.buildNumber` advances from processed Build 16 to `17`",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

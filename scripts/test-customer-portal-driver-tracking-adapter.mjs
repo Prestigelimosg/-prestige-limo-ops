@@ -100,6 +100,21 @@ try {
 
   assert.deepEqual(
     mapCustomerPortalDriverTrackingPayload({
+      customerVisible: true,
+      marker_count: 0,
+      ok: true,
+      reason: "customer_live_location_map_outside_pickup_window",
+    }),
+    {
+      message:
+        "Live driver tracking becomes available after your driver is on the way and within 30 minutes of pickup.",
+      status: "not_ready",
+    },
+    "Outside-window reads must explain the complete OTW plus 30-minute customer rule.",
+  );
+
+  assert.deepEqual(
+    mapCustomerPortalDriverTrackingPayload({
       customerVisible: false,
       ok: false,
     }),

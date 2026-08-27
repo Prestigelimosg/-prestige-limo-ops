@@ -28,6 +28,18 @@ The Dashboard `Today's Jobs` Driver Reports completion workflow is specifically 
 
 The Driver Calendar system is a separate established workflow. Do not change its action, OAuth, event, credential, route, or UI behavior while diagnosing or repairing Driver Reports or admin completion.
 
+# Owner-locked Driver and Customer Apple native apps — fresh approval required
+
+The accepted Apple-native baselines are Driver Build 17 in `driver-companion/` and Customer Build 12 in `customer-companion/`. This lock covers those two native projects only: their native source, configuration, package and lockfile, permissions, entitlements, native bridges, EAS, TestFlight and App Store release identity. It does not broadly lock remote web pages, APIs, Admin, invoice or billing surfaces.
+
+All Codex agents are read-only by default for these two native projects. Before any edit, every Codex agent must ask for and receive fresh, explicit Admin/Owner approval for the exact bounded native-app task. There is no permanent designated engineer. No agent may self-appoint, infer or reuse authority from a prior approval, transfer authority automatically, perform an automatic handoff, or treat another engineer's unavailability as permission. An unapproved replacement remains read-only.
+
+After fresh approval, only the engineer whom the Admin/Owner permits may perform that exact bound, and only after the exact defect is first reproduced in the approved runtime surface. The repair must include a focused regression guard, implementation-ledger evidence, complete no-cost native, privacy, release and downstream-consumer checks, and an exact reviewed diff. Opportunistic cleanup, redesign, dependency changes, release-number changes, new native lanes, or unrelated improvements are forbidden.
+
+An authorized native repair must preserve every established remote-page and API consumer used by that wrapper, including authentication, navigation, notifications and badges, messaging, GPS/tracking, Calendar handoffs and privacy boundaries. Paid EAS builds, TestFlight or App Store mutations, Production deployments and data or provider writes each require separate exact action-time approval; approval to diagnose or edit source does not authorize any of those actions.
+
+This is a repository governance instruction and regression contract for Codex. It does not create an operating-system or GitHub access-control lock, so it cannot technically prevent a human or tool with filesystem or repository credentials from bypassing it. Codex must therefore enforce the read-only default and fresh exact Admin/Owner approval rule itself.
+
 # Owner-locked Pending Driver ACK Queue — do not duplicate
 
 The Dispatch `Pending for Driver ACK Queue` replaces only the former selected-booking `Waiting for driver` header pill. Preserve one queue directly below the complete existing Dispatch Driver Job Link section. Driver Reports remains unchanged inside the Driver Job Link section above the queue. Do not restore the old pill or add another queue, acknowledgement panel, API, table, notification sender, push lane, route, or polling store.

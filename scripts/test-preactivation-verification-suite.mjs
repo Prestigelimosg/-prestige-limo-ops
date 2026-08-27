@@ -430,6 +430,10 @@ const guardChecks = [
     script: "scripts/test-native-apple-badge-testflight-release-guard.mjs",
   },
   {
+    label: "Driver and Customer native owner governance lock guard",
+    script: "scripts/test-driver-customer-native-owner-governance-lock.mjs",
+  },
+  {
     label: "customer device push notification guard",
     script: "scripts/test-customer-device-push-notification-guard.mjs",
   },

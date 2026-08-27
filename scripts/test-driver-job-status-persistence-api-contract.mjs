@@ -16,6 +16,7 @@ const sourceFiles = [
   "lib/driver-account-device-lock.ts",
   "lib/driver-job-status-persistence.ts",
   "lib/driver-device-push-notification.ts",
+  "lib/native-push-badge-count.ts",
   "lib/driver-portal-session.ts",
   "lib/driver-job-link-production.ts",
   "app/api/driver-job/[token]/route.ts",

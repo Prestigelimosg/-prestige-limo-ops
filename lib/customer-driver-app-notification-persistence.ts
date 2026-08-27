@@ -32,6 +32,7 @@ import {
   assertActiveCustomerPrincipalSession,
   resolveCustomerPrincipalSessionToken,
 } from "./customer-principal-access";
+import { customerNativeAudienceReadyForBooking } from "./customer-device-push-notification";
 
 export const customerDriverAppNotificationPersistenceVersion =
   "stage-customer-driver-app-notification-api-v1";
@@ -2037,7 +2038,12 @@ async function assertControlledCustomerAppNotificationWriteAllowed(
       return gate;
     }
 
-    if (!customerAccountAllowedByControlledRuntime(customerAccountReference, gate.data)) {
+    const customerAudienceReady =
+      input.workflow_area === "admin_customer_job_messages"
+        ? await customerNativeAudienceReadyForBooking(client, input.booking_reference)
+        : customerAccountAllowedByControlledRuntime(customerAccountReference, gate.data);
+
+    if (!customerAudienceReady) {
       return customerAppNotificationsRequireAuthResult();
     }
   }
@@ -3221,7 +3227,12 @@ export async function sendDriverQuickReplyToCustomer(
     return customerDriverQuickReplyError(accountReference.error, accountReference.status);
   }
 
-  if (!customerAccountAllowedByControlledRuntime(accountReference.data, runtimeGate.data)) {
+  if (
+    !(await customerNativeAudienceReadyForBooking(
+      clientResult.data,
+      linkResult.data.booking_reference,
+    ))
+  ) {
     return customerDriverQuickReplyError(customerAuthRequiredError, 403);
   }
 

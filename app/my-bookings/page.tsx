@@ -2571,9 +2571,6 @@ export default function CustomerPortalPage() {
                           data-customer-shared-conversation={expandedBooking.id}
                         >
                           <h3 className="text-sm font-semibold text-sky-950">Message Driver</h3>
-                          <p className="mt-1 text-xs font-medium text-sky-900">
-                            Boss and managing PA share this booking conversation. The driver sees the verified Boss name.
-                          </p>
                           <textarea
                             className="mt-2 min-h-24 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm text-slate-950"
                             data-customer-driver-message-composer={expandedBooking.id}
@@ -2610,37 +2607,22 @@ export default function CustomerPortalPage() {
                         </div>
                       ) : null}
                       <div
-                        aria-labelledby="customer-driver-tracking-title"
+                        aria-labelledby="customer-trip-updates-title customer-driver-tracking-title"
                         className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3"
                         data-customer-portal-driver-tracking={expandedBooking.id}
                         data-customer-portal-trip-updates={expandedBooking.id}
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
-                            <h3 className="text-sm font-semibold text-sky-950" id="customer-driver-tracking-title">
-                              Driver Tracking
-                            </h3>
-                            <p className="text-xs text-sky-900" data-customer-portal-trip-updates-title="true">
+                            <h3
+                              className="text-sm font-semibold text-sky-950"
+                              data-customer-portal-trip-updates-title="true"
+                              id="customer-trip-updates-title"
+                            >
                               Trip Updates
-                            </p>
+                            </h3>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            {driverDetails ? (
-                              <button
-                                className={[
-                                  "min-h-10 rounded-md border px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
-                                  isTrackingActive
-                                    ? "border-slate-300 bg-white text-slate-800 hover:border-slate-500"
-                                    : "border-sky-700 bg-sky-700 text-white hover:bg-sky-800",
-                                ].join(" ")}
-                                data-customer-portal-driver-tracking-toggle={expandedBooking.id}
-                                disabled={isCheckingDriverTracking || isCheckingTripUpdates}
-                                onClick={() => handleTrackDriver(expandedBooking)}
-                                type="button"
-                              >
-                                {isTrackingActive ? "Close tracking" : "Track driver"}
-                              </button>
-                            ) : null}
                             <button
                               className="min-h-10 rounded-md border border-sky-700 bg-white px-3 py-1.5 text-sm font-semibold text-sky-900 transition enabled:hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                               data-customer-portal-trip-updates-refresh={expandedBooking.id}
@@ -2655,6 +2637,79 @@ export default function CustomerPortalPage() {
                               {isCheckingTripUpdates || isCheckingDriverTracking ? "Checking..." : "Refresh"}
                             </button>
                           </div>
+                        </div>
+
+                        {tripUpdates ? (
+                          <div className="mt-3" data-customer-portal-trip-updates-state={tripUpdates.status}>
+                            {tripUpdates.message ? (
+                              <p
+                                className={[
+                                  "rounded-md border px-2.5 py-2 text-sm font-medium",
+                                  tripUpdates.status === "ready"
+                                    ? "border-emerald-200 bg-white text-emerald-950"
+                                    : tripUpdates.status === "empty"
+                                      ? "border-sky-200 bg-white text-sky-950"
+                                      : "border-amber-200 bg-amber-50 text-amber-950",
+                                ].join(" ")}
+                                data-customer-portal-trip-updates-message={expandedBooking.id}
+                              >
+                                {tripUpdates.message}
+                              </p>
+                            ) : null}
+                            {tripUpdates.updates.length > 0 ? (
+                              <ul
+                                className={tripUpdates.message ? "mt-2 grid gap-2" : "grid gap-2"}
+                                data-customer-portal-trip-update-list={expandedBooking.id}
+                              >
+                                {tripUpdates.updates.map((update) => (
+                                  <li
+                                    className="rounded-md border border-sky-100 bg-white px-3 py-2 text-sm"
+                                    data-customer-portal-trip-update-row={expandedBooking.id}
+                                    key={`${update.id}-${update.title}`}
+                                  >
+                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                      <div>
+                                        <p className="font-semibold text-slate-950">{update.title}</p>
+                                        <p className="mt-1 text-slate-700">{update.message}</p>
+                                      </div>
+                                      <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-900">
+                                        {update.status}
+                                      </span>
+                                    </div>
+                                    {update.createdAt ? (
+                                      <p className="mt-2 text-xs text-slate-500">{update.createdAt}</p>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-xs text-sky-900">
+                            Trip updates appear here after the driver starts reporting.
+                          </p>
+                        )}
+
+                        <div className="mt-4 flex flex-col gap-3 border-t border-sky-200 pt-3 sm:flex-row sm:items-start sm:justify-between">
+                          <h3 className="text-sm font-semibold text-sky-950" id="customer-driver-tracking-title">
+                            Driver Tracking
+                          </h3>
+                          {driverDetails ? (
+                            <button
+                              className={[
+                                "min-h-10 rounded-md border px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+                                isTrackingActive
+                                  ? "border-slate-300 bg-white text-slate-800 hover:border-slate-500"
+                                  : "border-sky-700 bg-sky-700 text-white hover:bg-sky-800",
+                              ].join(" ")}
+                              data-customer-portal-driver-tracking-toggle={expandedBooking.id}
+                              disabled={isCheckingDriverTracking || isCheckingTripUpdates}
+                              onClick={() => handleTrackDriver(expandedBooking)}
+                              type="button"
+                            >
+                              {isTrackingActive ? "Close tracking" : "Track driver"}
+                            </button>
+                          ) : null}
                         </div>
 
                         {isTrackingActive ? (
@@ -2733,51 +2788,6 @@ export default function CustomerPortalPage() {
                           </p>
                         ) : null}
 
-                        {tripUpdates ? (
-                          <div className="mt-3" data-customer-portal-trip-updates-state={tripUpdates.status}>
-                            <p
-                              className={[
-                                "rounded-md border px-2.5 py-2 text-sm font-medium",
-                                tripUpdates.status === "ready"
-                                  ? "border-emerald-200 bg-white text-emerald-950"
-                                  : tripUpdates.status === "empty"
-                                    ? "border-sky-200 bg-white text-sky-950"
-                                    : "border-amber-200 bg-amber-50 text-amber-950",
-                              ].join(" ")}
-                              data-customer-portal-trip-updates-message={expandedBooking.id}
-                            >
-                              {tripUpdates.message}
-                            </p>
-                            {tripUpdates.updates.length > 0 ? (
-                              <ul className="mt-2 grid gap-2" data-customer-portal-trip-update-list={expandedBooking.id}>
-                                {tripUpdates.updates.map((update) => (
-                                  <li
-                                    className="rounded-md border border-sky-100 bg-white px-3 py-2 text-sm"
-                                    data-customer-portal-trip-update-row={expandedBooking.id}
-                                    key={`${update.id}-${update.title}`}
-                                  >
-                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                                      <div>
-                                        <p className="font-semibold text-slate-950">{update.title}</p>
-                                        <p className="mt-1 text-slate-700">{update.message}</p>
-                                      </div>
-                                      <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-900">
-                                        {update.status}
-                                      </span>
-                                    </div>
-                                    {update.createdAt ? (
-                                      <p className="mt-2 text-xs text-slate-500">{update.createdAt}</p>
-                                    ) : null}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <p className="mt-3 text-xs text-sky-900">
-                            Trip updates appear here after the driver starts reporting.
-                          </p>
-                        )}
                       </div>
                     </section>
                   );

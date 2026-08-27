@@ -326,6 +326,17 @@ function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
 
   const driverDetails = toCustomerPortalDriverDetails(record.customer_driver_details);
 
+  const storedServiceType = safeText(record.service_type, 120) || "";
+  const customerServiceType =
+    ({
+      MNG: "Arrival",
+      DEP: "Departure",
+      TRF: "City Transfer",
+      DSP: "Hourly",
+    } as const)[storedServiceType.toUpperCase() as "MNG" | "DEP" | "TRF" | "DSP"] ||
+    storedServiceType ||
+    "Service to confirm";
+
   return {
     ...(driverDetails ? { driverDetails } : {}),
     dropoffLocation: safeText(record.dropoff_location) || "Drop-off to confirm",
@@ -334,7 +345,7 @@ function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
     pickupDateTime: formatPickupDateTime(record.pickup_at),
     pickupLocation: safeText(record.pickup_location) || "Pickup to confirm",
     publicBookingReference,
-    serviceType: safeText(record.service_type, 120) || "Service to confirm",
+    serviceType: customerServiceType,
     status: safeStatus(record.customer_facing_status),
     vehicleType: "To confirm",
   };

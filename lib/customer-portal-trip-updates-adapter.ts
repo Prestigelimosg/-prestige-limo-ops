@@ -236,7 +236,7 @@ export function mapCustomerPortalTripUpdatesPayload(
   }
 
   return {
-    message: "Latest driver trip updates are shown below.",
+    message: "",
     status: "ready",
     updates,
   };

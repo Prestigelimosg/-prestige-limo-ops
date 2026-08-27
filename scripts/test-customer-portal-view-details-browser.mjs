@@ -63,7 +63,7 @@ const savedBookingsPayload = {
     pickup_at: upcomingPickupAt(index + 1),
     pickup_location: index % 2 === 0 ? "Marina Bay Sands" : "Orchard Hotel Singapore",
     public_booking_reference: String(99101 + index),
-    service_type: index % 2 === 0 ? "Airport Departure" : "Point-to-Point Transfer",
+    service_type: ["MNG", "DEP", "TRF", "DSP"][index % 4],
     updated_at: new Date().toISOString(),
   })),
   version: "customer-view-details-browser-fixture",
@@ -358,6 +358,8 @@ async function main() {
     assert.equal(expandedState.detailText.includes("Booking Details"), true);
     assert.equal(expandedState.detailText.includes("Driver Tracking"), true);
     assert.equal(expandedState.detailText.includes("Trip Updates"), true);
+    assert.equal(expandedState.detailText.includes("Departure"), true);
+    assert.equal(/\bDEP\b/.test(expandedState.detailText), false);
     assert.equal(expandedState.detailHasDriverDetails, false);
     assert.equal(expandedState.detailHasTracking, true);
     assert.equal(expandedState.documentWidth, expandedState.viewportWidth);
@@ -442,12 +444,16 @@ async function main() {
           const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-001"]');
           const map = detail?.querySelector('[data-customer-portal-driver-tracking-map]');
           const messageComposer = detail?.querySelector('[data-customer-driver-message-composer]');
+          const redundantReadyMessage = Array.from(
+            detail?.querySelectorAll('[data-customer-portal-trip-updates-message]') || [],
+          ).some((node) => node.textContent?.includes("Latest driver trip updates are shown below."));
+          const tripUpdatesState = detail?.querySelector('[data-customer-portal-trip-updates-state]');
           const trackingPanel = detail?.querySelector('[data-customer-portal-driver-tracking-panel]');
           const trackingSection = detail?.querySelector('[data-customer-portal-driver-tracking]');
           const mapRect = map?.getBoundingClientRect();
           const panelRect = trackingPanel?.getBoundingClientRect();
 
-          if (!map || !mapRect || !panelRect || !messageComposer || !trackingSection) {
+          if (!map || !mapRect || !panelRect || !messageComposer || !trackingSection || !tripUpdatesState) {
             return false;
           }
 
@@ -462,6 +468,9 @@ async function main() {
             mapReceivesPointerHit: hitElement === map,
             messageBeforeTracking:
               Boolean(messageComposer.compareDocumentPosition(trackingSection) & Node.DOCUMENT_POSITION_FOLLOWING),
+            redundantReadyMessage,
+            tripUpdatesBeforeTrackingPanel:
+              Boolean(tripUpdatesState.compareDocumentPosition(trackingPanel) & Node.DOCUMENT_POSITION_FOLLOWING),
             pointerEvents: mapStyle.pointerEvents,
             tabIndex: map.tabIndex,
           };
@@ -474,6 +483,8 @@ async function main() {
       mapContainedByPanel: true,
       mapReceivesPointerHit: false,
       messageBeforeTracking: true,
+      redundantReadyMessage: false,
+      tripUpdatesBeforeTrackingPanel: true,
       pointerEvents: "none",
       tabIndex: -1,
     });

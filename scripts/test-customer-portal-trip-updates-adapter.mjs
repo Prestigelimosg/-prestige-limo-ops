@@ -61,6 +61,11 @@ try {
   });
 
   assert.equal(mapped.status, "ready");
+  assert.equal(
+    mapped.message,
+    "",
+    "A ready Trip Updates list must not repeat a redundant sentence above the visible update cards.",
+  );
   assert.equal(mapped.updates.length, 1);
   assert.equal(mapped.updates[0].createdAt, "06 Jul 2026, 19:57 SGT");
   assert.equal(

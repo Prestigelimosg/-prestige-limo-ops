@@ -542,6 +542,24 @@ for (const fragment of [
 ]) {
   assertIncludes(detailBlock, fragment, `/my-bookings safe detail binding ${fragment}`);
 }
+for (const [earlier, later, label] of [
+  [
+    'data-customer-driver-message-composer={expandedBooking.id}',
+    'data-customer-portal-trip-updates-state={tripUpdates.status}',
+    "Message Driver composer before Trip Updates",
+  ],
+  [
+    'data-customer-portal-trip-updates-state={tripUpdates.status}',
+    'data-customer-portal-driver-tracking-panel={expandedBooking.id}',
+    "Trip Updates before Driver Tracking map panel",
+  ],
+]) {
+  assert.equal(
+    detailBlock.indexOf(earlier) < detailBlock.indexOf(later),
+    true,
+    `/my-bookings must keep ${label}.`,
+  );
+}
 assertExcludes(
   detailBlock,
   "data-customer-portal-driver-tracking-placeholder",
@@ -618,7 +636,12 @@ for (const fragment of [
   "safeText(record.dropoff_location) || \"Drop-off to confirm\"",
   "safeText(record.passenger_name) || \"Passenger to confirm\"",
   "safeText(record.pickup_location) || \"Pickup to confirm\"",
-  "safeText(record.service_type, 120) || \"Service to confirm\"",
+  'MNG: "Arrival"',
+  'DEP: "Departure"',
+  'TRF: "City Transfer"',
+  'DSP: "Hourly"',
+  "storedServiceType ||",
+  '"Service to confirm"',
   "toCustomerPortalDriverDetails(record.customer_driver_details)",
   "customerVehicleDisplayLabel(record.car_type)",
   'cleaned.toUpperCase() === "AVF"',

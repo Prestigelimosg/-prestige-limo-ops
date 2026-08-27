@@ -127,6 +127,7 @@ export function shouldAllowCustomerMapEmbedNavigation(
   isTopFrame: boolean | undefined,
 ) {
   if (isTopFrame !== false) return false;
+  if (requestedUrl === "about:blank") return true;
 
   try {
     const requested = new URL(requestedUrl);

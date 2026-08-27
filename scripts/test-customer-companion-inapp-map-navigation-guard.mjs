@@ -58,7 +58,28 @@ assert.equal(
   "The Google embed redirect must never become a top-level Customer page.",
 );
 
+const exactIframeBootstrap = "about:blank";
+assert.equal(
+  navigation.shouldAllowCustomerMapEmbedNavigation(exactIframeBootstrap, false),
+  true,
+  "The harmless exact non-top-frame iframe bootstrap observed after a rendered Google map must remain in-app.",
+);
+assert.equal(
+  navigation.shouldAllowCustomerMapEmbedNavigation(exactIframeBootstrap, true),
+  false,
+  "The same blank URL must never become a top-level Customer page.",
+);
+assert.equal(
+  navigation.shouldAllowCustomerMapEmbedNavigation(exactIframeBootstrap, undefined),
+  false,
+  "An iframe bootstrap without explicit non-top-frame evidence must fail closed.",
+);
+
 for (const rejectedUrl of [
+  "about:srcdoc",
+  "data:text/html,Prestige",
+  "javascript:void(0)",
+  "file:///private/tmp/prestige.html",
   "http://www.google.com/maps?q=1.3521,103.8198&z=16&output=embed",
   "https://maps.google.com/maps?q=1.3521,103.8198&z=16&output=embed",
   "https://www.google.com/maps/search/?api=1&query=1.3521,103.8198",
@@ -109,6 +130,10 @@ assert.equal(
   "The exact Customer native map navigation guard must run in preactivation.",
 );
 for (const phrase of [
+  "### Customer Native Rendered-Map False Warning Repair (2026-08-27)",
+  "exact non-top-frame `about:blank` iframe bootstrap requests",
+  "`No blocked navigation`",
+  "75218a1daa757b55903fab537bc4a21abb7d707622b1084a6cba9a0c63927010",
   "### Customer Native Google Embed Redirect Repair And Build 11 Preflight (2026-08-27)",
   "Build 10 physical acceptance failed",
   "`/maps/embed?origin=mfe&pb=...`",

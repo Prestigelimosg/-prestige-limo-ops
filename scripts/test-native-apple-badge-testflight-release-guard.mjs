@@ -55,6 +55,15 @@ for (const phrase of [
   "c0b20e3f-bb6b-45cc-8e31-c27519d8aa61",
   "No real notification",
   "No external testing, App Review submission, or public release",
+  "4171a603010e9bf53ff6961225dd765d67370a8a",
+  "dpl_AufYdPAfK1BEzsyT21FBGCc92bLC",
+  "b2b97b87-8a7b-420c-9f93-22efcc699eee",
+  "1a29432e9f3bdee43e17d7ec57fa6fd0ba77b88a",
+  "3fc78b198a71c8b53c9d91928d527a8e5220bb071225c79f9c26653a336fd267",
+  "e5da7d88-048c-45be-9673-df9d3d32681b",
+  "b42ea290-492b-472f-bcd1-72a154d9523d",
+  "1 Tester · 12 Builds",
+  "No second build, submission, group or tester mutation occurred",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `The implementation ledger must include ${phrase}`);
 }

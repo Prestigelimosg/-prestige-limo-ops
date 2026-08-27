@@ -222,8 +222,11 @@ includes(
 );
 includes(
   "nativeApp",
-  "if (enabled) setBiometricEnabled(true)",
-  "successful Face ID setup state update",
+  `if (enabled) {
+            biometricEnabledRef.current = true;
+            setBiometricEnabled(true);
+          }`,
+  "successful Face ID setup lifecycle and render state update",
 );
 excludes(
   "portalPage",
@@ -231,29 +234,30 @@ excludes(
   "duplicate browser Face ID setup storage",
 );
 for (const fragment of [
-  "const biometricResumePendingRef = useRef(false);",
-  'nextState !== "active" && biometricPromptBusyRef.current',
-  "biometricResumePendingRef.current = true;",
-  "if (biometricResumePendingRef.current) {",
-  "biometricResumePendingRef.current = false;",
+  "const biometricEnabledRef = useRef(false);",
+  "createDriverBiometricLifecycle(AppState.currentState)",
+  "biometricEnabledRef.current = biometricEnabled;",
+  "transitionDriverBiometricAppState(",
+  'if (action === "lock") setDriverUnlockState("locked");',
+  'if (action === "reveal") setDriverUnlockState("ready");',
+  'if (action === "unlock") void unlockDriverApp();',
 ]) {
   includes(
     "nativeApp",
     fragment,
-    `Face ID prompt foreground-loop suppression ${fragment}`,
+    `Face ID lifecycle integration ${fragment}`,
   );
 }
-includes(
-  "nativeApp",
-  "if (enabled) void unlockDriverApp();",
-  "genuine later foreground Face ID unlock",
-);
-assert.equal(
-  sources.nativeApp.indexOf("if (biometricResumePendingRef.current) {") <
-    sources.nativeApp.indexOf("if (enabled) void unlockDriverApp();"),
-  true,
-  "Face ID prompt resume must be consumed before a genuine foreground unlock is started.",
-);
+for (const retiredFragment of [
+  "biometricPromptBusyRef",
+  "biometricResumePendingRef",
+]) {
+  excludes(
+    "nativeApp",
+    new RegExp(retiredFragment),
+    `retired Face ID lifecycle flag ${retiredFragment}`,
+  );
+}
 
 for (const sourceKey of ["account", "accountRoute", "authRoute", "installation"]) {
   excludes(

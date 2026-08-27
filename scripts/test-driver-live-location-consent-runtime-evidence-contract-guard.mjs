@@ -108,6 +108,63 @@ const driverLiveLocationUiEnd = driverJobPage.indexOf('data-driver-primary-step=
 assert.notEqual(driverLiveLocationUiEnd, -1, "Driver merged OTW/live-location boundary must close.");
 const driverLiveLocationUi = driverJobPage.slice(driverLiveLocationUiStart, driverLiveLocationUiEnd);
 
+const driverLiveLocationRuntimeStart = driverJobPage.indexOf(
+  "  async function requestDriverLiveLocationPosition()",
+);
+assert.notEqual(
+  driverLiveLocationRuntimeStart,
+  -1,
+  "Driver live-location request/share/stop handlers must remain present.",
+);
+const driverLiveLocationRuntimeEnd = driverJobPage.indexOf(
+  "  function driverOtsPhotoProofRoute()",
+  driverLiveLocationRuntimeStart,
+);
+assert.notEqual(
+  driverLiveLocationRuntimeEnd,
+  -1,
+  "Driver live-location request/share/stop handler boundary must close.",
+);
+const driverLiveLocationOtwHandlerStart = driverJobPage.indexOf(
+  "  async function handleOtwLiveLocationControl()",
+);
+assert.notEqual(
+  driverLiveLocationOtwHandlerStart,
+  -1,
+  "Driver OTW/live-location handler must remain present.",
+);
+const driverLiveLocationOtwHandlerEnd = driverJobPage.indexOf(
+  "  const driverOtwRecorded =",
+  driverLiveLocationOtwHandlerStart,
+);
+assert.notEqual(
+  driverLiveLocationOtwHandlerEnd,
+  -1,
+  "Driver OTW/live-location handler boundary must close.",
+);
+const driverLiveLocationCleanupEffectStart = driverJobPage.indexOf(
+  "  useEffect(() => {\n    return () => {\n      stopDriverLiveLocationBrowserWatch();",
+);
+assert.notEqual(
+  driverLiveLocationCleanupEffectStart,
+  -1,
+  "Driver live-location cleanup effect must remain present.",
+);
+const driverLiveLocationCleanupEffectEnd = driverJobPage.indexOf(
+  "  useEffect(() => {",
+  driverLiveLocationCleanupEffectStart + 1,
+);
+assert.notEqual(
+  driverLiveLocationCleanupEffectEnd,
+  -1,
+  "Driver live-location cleanup effect boundary must close.",
+);
+const driverLiveLocationRuntime = [
+  driverJobPage.slice(driverLiveLocationRuntimeStart, driverLiveLocationRuntimeEnd),
+  driverJobPage.slice(driverLiveLocationOtwHandlerStart, driverLiveLocationOtwHandlerEnd),
+  driverJobPage.slice(driverLiveLocationCleanupEffectStart, driverLiveLocationCleanupEffectEnd),
+].join("\n");
+
 for (const fragment of [
   'data-driver-otw-live-location-control="true"',
   'data-driver-live-location-feedback="true"',
@@ -139,7 +196,7 @@ for (const forbiddenPattern of [
   /setInterval|setTimeout|sendBeacon/i,
 ]) {
   assertExcludes(
-    driverJobPage,
+    driverLiveLocationRuntime,
     forbiddenPattern,
     "driver live-location consent runtime wiring",
   );

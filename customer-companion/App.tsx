@@ -36,6 +36,7 @@ import {
   customerTabUrl,
   customerUniversalLinkUrl,
   isAllowedNativeContactUrl,
+  shouldAllowCustomerMapEmbedNavigation,
   shouldAllowCustomerWebViewNavigation,
   type CustomerTab,
 } from "./src/customer-navigation";
@@ -517,8 +518,9 @@ export default function App() {
     setNotice("");
   }, []);
 
-  const allowNavigation = useCallback((request: { url: string }) => {
+  const allowNavigation = useCallback((request: { url: string; isTopFrame?: boolean }) => {
     if (shouldAllowCustomerWebViewNavigation(request.url)) return true;
+    if (shouldAllowCustomerMapEmbedNavigation(request.url, request.isTopFrame)) return true;
 
     if (isAllowedNativeContactUrl(request.url)) {
       void Linking.openURL(request.url).catch(() => {
@@ -601,7 +603,7 @@ export default function App() {
                   }));
                 }}
                 onShouldStartLoadWithRequest={allowNavigation}
-                originWhitelist={["https://app.prestigelimo.sg"]}
+                originWhitelist={["https://app.prestigelimo.sg", "https://www.google.com"]}
                 pullToRefreshEnabled
                 setSupportMultipleWindows={false}
                 sharedCookiesEnabled

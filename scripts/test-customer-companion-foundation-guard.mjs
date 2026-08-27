@@ -60,7 +60,7 @@ assert.equal(config.userInterfaceStyle, "light");
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.customer");
 assert.equal(config.ios.supportsTablet, false);
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige SG");
-assert.equal(config.ios.buildNumber, "9");
+assert.equal(config.ios.buildNumber, "10");
 assert.equal(config.ios.infoPlist.NSFaceIDUsageDescription.includes("Prestige SG"), true);
 assert.equal(config.ios.config.usesNonExemptEncryption, false);
 assert.deepEqual(
@@ -87,12 +87,12 @@ for (const dependency of [
 
 assert.equal(
   packageJson.dependencies.expo,
-  "~57.0.15",
+  "~57.0.17",
   "The Customer iOS app must use the supported Expo 57 patch line without the Hermes V1 memory regression",
 );
 assert.equal(
   packageJson.dependencies["react-native"],
-  "0.86.2",
+  "0.86.3",
   "The Customer iOS app must use the React Native patch containing the repaired Hermes runtime",
 );
 

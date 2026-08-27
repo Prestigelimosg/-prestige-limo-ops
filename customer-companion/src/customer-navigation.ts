@@ -122,6 +122,57 @@ export function shouldAllowCustomerWebViewNavigation(requestedUrl: string) {
   );
 }
 
+export function shouldAllowCustomerMapEmbedNavigation(
+  requestedUrl: string,
+  isTopFrame: boolean | undefined,
+) {
+  if (isTopFrame !== false) return false;
+
+  try {
+    const requested = new URL(requestedUrl);
+    if (
+      requested.origin !== "https://www.google.com" ||
+      requested.pathname !== "/maps" ||
+      requested.hash ||
+      requested.username ||
+      requested.password
+    ) {
+      return false;
+    }
+
+    const queryKeys = [...requested.searchParams.keys()];
+    if (
+      queryKeys.length !== 3 ||
+      queryKeys.some((key) => key !== "q" && key !== "z" && key !== "output") ||
+      requested.searchParams.getAll("q").length !== 1 ||
+      requested.searchParams.getAll("z").length !== 1 ||
+      requested.searchParams.getAll("output").length !== 1 ||
+      requested.searchParams.get("z") !== "16" ||
+      requested.searchParams.get("output") !== "embed"
+    ) {
+      return false;
+    }
+
+    const coordinateMatch = requested.searchParams
+      .get("q")
+      ?.match(/^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/);
+    if (!coordinateMatch) return false;
+
+    const latitude = Number(coordinateMatch[1]);
+    const longitude = Number(coordinateMatch[2]);
+    return (
+      Number.isFinite(latitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      Number.isFinite(longitude) &&
+      longitude >= -180 &&
+      longitude <= 180
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function customerUniversalLinkUrl(value: string) {
   const requested = parseProductionUrl(value);
   return requested

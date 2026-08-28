@@ -57,7 +57,7 @@ for (const phrase of [
   "Open customer booking requests are surfaced on the Dashboard command centre and above Recent Bookings only when the saved booking carries the customer request source markers; a `CUST-` reference alone does not create a new-request badge because older test/demo rows can share that prefix.",
   "The new-request badge open/closed check reads `status`, `admin_internal_status`, `customer_facing_status`, and `request_review_status`, so approved, declined, confirmed, released, cancelled, completed, and closed customer request rows do not remain counted as new.",
   "Customer request rows with past pickup times are excluded from the new-request badge, so stale pending test/demo requests do not keep a live mobile alert alive.",
-  "Dispatch is the default admin landing tab; Dashboard shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, and routes each row to the existing Dispatch Driver Job Link handoff.",
+  "Dashboard is the default admin landing tab and shows a compact `Urgent Booking Requests` alert only for open customer requests and saved Driver TBC jobs inside the 1-hour pickup monitor window, routing each row to the existing Dispatch Driver Job Link handoff.",
   "Dashboard initial Load Bookings completion only writes the global status message while the operator is still on Dashboard, so a delayed read cannot overwrite Rates or other tab feedback after navigation.",
   "The Dashboard request row is the review handoff point for open customer requests outside the 1-hour dispatch window. `Review Job Card` loads the exact already-saved request into the existing Dispatch form and focuses the existing Job Card Preview; it does not create another page, table, draft row, booking write, or job-card storage lane.",
   "The existing saved booking record remains the durable queue item, so more than three requests stay in the same guarded saved-bookings source while the compact review panel shows the first five and reports the full open count.",
@@ -205,8 +205,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";',
-  "Dispatch default and invoice-settings Company route selection",
+  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dashboard";',
+  "Dashboard default and invoice-settings Company route selection",
 );
 assertIncludes(appPage, "useState<AppTab>(initialTab)", "Dashboard default tab state");
 assertIncludes(
@@ -929,6 +929,11 @@ const activeJobDriverStatusStateSelector = sliceBetween(
   "function activeJobDriverStatusReadStateForBooking",
   "function pickupRiskStateForActiveJob",
 );
+const activeJobDriverAutoRefreshBlock = sliceBetween(
+  appPage,
+  "!dashboardDriverJobAutoRefreshEnabled",
+  'const bookingReferences = pendingDriverAckQueueReferenceKey.split("|").filter(Boolean);',
+);
 assertIncludes(
   activeJobDriverStatusStateSelector,
   "const selectedDriverStatusState",
@@ -969,11 +974,29 @@ assertIncludes(
   'data-admin-multi-driver-active-jobs-auto-refresh="true"',
   "Today's Jobs driver report auto-refresh indicator",
 );
-assertIncludes(
-  appPage,
-  "window.setInterval(() => {\n      for (const bookingReference of bookingReferences) {\n        void refreshDashboardDriverJobStatusRead(bookingReference);\n        void refreshDashboardDriverOtsPhotoProofRead(bookingReference);\n      }\n    }, 10 * 1000);",
-  "Dispatch driver report and OTS photo proof read-only auto-refresh interval",
+assert.equal(
+  activeJobDriverAutoRefreshBlock.match(/window\.setInterval\(/g)?.length,
+  1,
+  "Today's Jobs must retain one established auto-refresh interval",
 );
+for (const [fragment, label] of [
+  ["void refreshDashboardDriverJobStatusRead(bookingReference);", "Driver status read"],
+  ["void refreshDashboardDriverOtsPhotoProofRead(bookingReference);", "OTS photo read"],
+  ["void refreshAdminTodayJobMessageHistory(bookingReference);", "unified message-history read"],
+  ["}, 10 * 1000);", "10-second interval"],
+  ['window.addEventListener("focus", refreshVisibleAdminMessageHistories);', "focus refresh"],
+  ['document.addEventListener("visibilitychange", refreshVisibleAdminMessageHistories);', "visibility refresh"],
+  ['window.addEventListener("pageshow", refreshVisibleAdminMessageHistories);', "page-show refresh"],
+  ['window.removeEventListener("focus", refreshVisibleAdminMessageHistories);', "focus cleanup"],
+  ['document.removeEventListener("visibilitychange", refreshVisibleAdminMessageHistories);', "visibility cleanup"],
+  ['window.removeEventListener("pageshow", refreshVisibleAdminMessageHistories);', "page-show cleanup"],
+]) {
+  assertIncludes(
+    activeJobDriverAutoRefreshBlock,
+    fragment,
+    `Today's Jobs auto-refresh ${label}`,
+  );
+}
 assertIncludes(
   appPage,
   "const intervalId = window.setInterval(() => {\n      void refreshDashboardDriverJobLinksRead(bookingReferences);\n    }, 10 * 1000);",

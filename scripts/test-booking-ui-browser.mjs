@@ -3575,6 +3575,15 @@ async function runChromeTest() {
       await setFieldValueByLabel("Paste Booking Message", value, description);
     };
 
+    const initialTabState = await evaluate(`(() => ({
+      selectedTab: [...document.querySelectorAll("button[role='tab']")]
+        .find((button) => button.getAttribute("aria-selected") === "true")
+        ?.textContent.trim() || "",
+      tabLabels: [...document.querySelectorAll("button[role='tab']")].map((button) => button.textContent.trim()),
+    }))()`);
+    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Company", "Rates"]);
+    assert.equal(initialTabState.selectedTab, "Dashboard");
+
     await clickTab("Dispatch", "Create Job Card");
 
     await waitForCondition(
@@ -3584,14 +3593,10 @@ async function runChromeTest() {
       10000,
       "booking parse controls",
     );
-    const initialTabState = await evaluate(`(() => ({
-      selectedTab: [...document.querySelectorAll("button[role='tab']")]
-        .find((button) => button.getAttribute("aria-selected") === "true")
-        ?.textContent.trim() || "",
-      tabLabels: [...document.querySelectorAll("button[role='tab']")].map((button) => button.textContent.trim()),
-    }))()`);
-    assert.deepEqual(initialTabState.tabLabels, ["Dispatch", "Dashboard", "Bookings", "Drivers", "Completed", "Company", "Rates"]);
-    assert.equal(initialTabState.selectedTab, "Dispatch");
+    const manuallySelectedDispatchTab = await evaluate(
+      `document.querySelector('[data-app-tab="dispatch"]')?.getAttribute("aria-selected") || ""`,
+    );
+    assert.equal(manuallySelectedDispatchTab, "true");
 
     const dispatchWorkflowOrder = await evaluate(`(() => {
       const expectedSteps = [

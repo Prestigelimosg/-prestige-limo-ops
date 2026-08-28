@@ -162,6 +162,58 @@ assertIncludes(appSource, 'data-save-crm-billing-identity-review="true"', "visib
 assertIncludes(appSource, 'data-save-crm-billing-identity-confirm="true"', "visible admin confirmation button");
 assertIncludes(
   appSource,
+  "type PendingSaveCrmBillingIdentityIntent",
+  "booking-keyed pending Save + CRM billing review intent",
+);
+assertIncludes(
+  appSource,
+  "const pendingSaveCrmBillingIdentityIntentRef =",
+  "pending intent data ref instead of an unsafe callback",
+);
+assertIncludes(
+  appSource,
+  "const continuingSaveCrmBillingIdentityIntentRef = useRef<string | null>(null);",
+  "synchronous one-shot confirmation lock",
+);
+const billingIdentityConfirmationSection = appSource.slice(
+  appSource.indexOf("function confirmSaveCrmBillingIdentityReview"),
+  appSource.indexOf("async function fetchRecentAdminBookingPersistenceRecordsForBillingIdentity"),
+);
+assertIncludes(
+  billingIdentityConfirmationSection,
+  "pendingIntent?.bookingKey === currentBookingKey && pendingIntent.reviewKey === review.key",
+  "exact booking and review key continuation check",
+);
+assertIncludes(
+  billingIdentityConfirmationSection,
+  "continuingSaveCrmBillingIdentityIntentRef.current === continuationKey",
+  "same-tick duplicate confirmation stop",
+);
+assertIncludes(
+  billingIdentityConfirmationSection,
+  "pendingSaveCrmBillingIdentityIntentRef.current = null;\n    continuingSaveCrmBillingIdentityIntentRef.current = continuationKey;",
+  "one-shot pending intent consumption before save continuation",
+);
+assertIncludes(
+  billingIdentityConfirmationSection,
+  "void saveBooking(undefined, {\n      billingIdentityConfirmation: confirmation,\n      pendingBillingIdentityIntent: currentIntent,",
+  "confirmation continues the same pending Save + CRM without a second button click",
+);
+assertIncludes(
+  billingIdentityConfirmationSection,
+  ".finally(() => {",
+  "failed or completed continuation releases the synchronous retry lock",
+);
+assertExcludes(
+  appSource.slice(
+    appSource.indexOf("type PendingSaveCrmBillingIdentityIntent"),
+    appSource.indexOf("type SaveBookingOptions"),
+  ),
+  "callback",
+  "retained executable callback in pending intent",
+);
+assertIncludes(
+  appSource,
   "displayedSaveCrmBillingIdentityMessage",
   "visible billing identity message derived from current review",
 );
@@ -231,6 +283,39 @@ assert.ok(saveBookingSection.includes("return null;"), "Save + CRM must stop bef
 assert.ok(
   saveBookingSection.includes("if (!validateBooking())"),
   "Save + CRM must run validation before persistence writes.",
+);
+assert.ok(
+  saveBookingSection.includes(
+    "pendingBillingIdentityIntent.bookingKey !== pendingBillingIdentityBookingKey ||",
+  ) &&
+    saveBookingSection.includes(
+      "pendingBillingIdentityIntent.reviewKey !== saveCrmBillingIdentityReview?.key",
+    ),
+  "Auto-continuation must reject a stale booking or billing review before persistence.",
+);
+assert.ok(
+  saveBookingSection.includes(
+    "billingIdentityConfirmation: options?.billingIdentityConfirmation,",
+  ),
+  "Auto-continuation must pass only the exact confirmed billing identity into the established resolver.",
+);
+assert.ok(
+  saveBookingSection.includes(
+    "const resolvedBillingIdentityAccountOverride =\n      options?.billingIdentityConfirmation?.accountLabel ?? saveCrmBillingIdentityAccountOverride;",
+  ),
+  "One Save + CRM invocation must resolve its billing identity account override exactly once.",
+);
+assert.ok(
+  saveBookingSection.includes(
+    "const bookingSaveGuardKey = getBookingSaveGuardKey(\n      appliedAdminBookingSnapshotReference,\n      resolvedBillingIdentityAccountOverride,",
+  ),
+  "In-flight and successful-save comparison must start with the resolved invocation billing identity.",
+);
+assert.ok(
+  saveBookingSection.includes(
+    "key: getBookingSaveGuardKey(\n          primarySavedBookingReference,\n          resolvedBillingIdentityAccountOverride,",
+  ),
+  "Successful-save identity must retain the same resolved invocation billing identity across the pre-confirmation render closure.",
 );
 assert.ok(
   saveBookingSection.includes("clean(billingIdentityResolution.accountLabel) ||\n        saveCrmDefaultCustomerAccount(booking)"),

@@ -14745,7 +14745,7 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
 }
 
 export default function Home() {
-  const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";
+  const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dashboard";
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const bookingFormRef = useRef(booking);

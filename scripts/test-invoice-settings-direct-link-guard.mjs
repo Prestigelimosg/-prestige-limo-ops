@@ -35,8 +35,8 @@ assertIncludes(
 );
 assertIncludes(
   adminPage,
-  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dispatch";',
-  "Invoice settings must open Company while normal visits still open Dispatch.",
+  'const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dashboard";',
+  "Invoice settings must open Company while normal visits open Dashboard.",
 );
 assertIncludes(
   adminPage,

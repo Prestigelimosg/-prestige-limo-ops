@@ -113,6 +113,8 @@ const loadedSavedBookingFixture = {
   job_card:
     "VAN DEP\n28 May 2026, 0945hrs\nFlight: SQ999\nRaffles Hotel Singapore > Changi Airport T2\nPassenger: LOADED SAVED TRAVELER\nPax: 3",
   status: "confirmed",
+  admin_internal_status: "confirmed",
+  customer_facing_status: "confirmed",
   driver_id: null,
   driver_name: "LOADED SAVED DRIVER",
   driver_contact: "+65 8888 0000",
@@ -16924,6 +16926,7 @@ async function runChromeTest() {
       };
       window.__prestigeWorkflowStatusRequests = [];
       window.__prestigeWorkflowStatuses = window.__prestigeWorkflowStatuses || {};
+      window.__prestigeAdminBookingExactReadRequests = [];
       window.__prestigeCustomerDriverDetailsEmailReviewItemRequests = [];
       window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests = [];
       window.__prestigeCustomerDriverDetailsEmailSendGateOpen = false;
@@ -16939,6 +16942,16 @@ async function runChromeTest() {
             return {};
           }
         })();
+
+        if (String(target).includes("/api/admin-bookings?")) {
+          const url = new URL(String(target), window.location.origin);
+
+          window.__prestigeAdminBookingExactReadRequests.push({
+            headers,
+            method,
+            search: url.search,
+          });
+        }
 
         if (String(target).includes("/api/admin-email-activation-preflight-setup")) {
           window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
@@ -18340,6 +18353,8 @@ async function runChromeTest() {
 
           return {
             bodyText,
+            adminBookingExactReadRequests:
+              window.__prestigeAdminBookingExactReadRequests || [],
             aiDraftExists: Boolean(document.querySelector("[data-ai-assist-draft='true']")),
             aiFeedbackExists: Boolean(document.querySelector("[data-ai-assist-feedback='true']")),
             completedCloseoutRequests: window.__prestigeCompletedCloseoutRequests || [],
@@ -18710,6 +18725,7 @@ async function runChromeTest() {
       "Expected Customer Copy to keep the internal booking key hidden",
     );
     const expectedLoadedBookingFetchCalls = [
+      "GET /api/admin-bookings?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
@@ -18746,6 +18762,23 @@ async function runChromeTest() {
       [...loadedBookingFetchCallSet].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
       `Expected Load this booking to make only guarded read GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
+    );
+    assert.deepEqual(
+      loadedBookingState.adminBookingExactReadRequests.map((request) => ({
+        hasSessionTokenHeader: Boolean(request.headers["x-prestige-admin-session-token"]),
+        method: request.method,
+        purpose: request.headers["x-prestige-admin-purpose"] || "",
+        search: request.search,
+      })),
+      [
+        {
+          hasSessionTokenHeader: false,
+          method: "GET",
+          purpose: "admin-booking-persistence",
+          search: "?booking_reference=ui-cleanup-load-fixture",
+        },
+      ],
+      "Expected saved booking load to make one exact guarded Admin booking GET",
     );
     assert.deepEqual(
       loadedBookingState.adminDriverJobLinkRequests.map((request) => ({
@@ -24501,38 +24534,31 @@ async function runChromeTest() {
       }
 
       choiceButton.click();
+      choiceButton.click();
       return true;
     })()`);
-    assert.equal(confirmedMrLeeNewCustomer, true, "Expected explicit new personal customer choice to be clickable");
-
-    const retriedMrLeeNoCompanySave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(retriedMrLeeNoCompanySave, true, "Expected confirmed Mr Lee save to be clickable");
+    assert.equal(
+      confirmedMrLeeNewCustomer,
+      true,
+      "Expected explicit new personal customer choice to continue the pending Save + CRM",
+    );
 
     const mrLeeNoCompanySaveState = await waitForCondition(
       async () => {
         const candidateState = await evaluate(`(() => {
           const bodyText = document.body.innerText;
-          const bookingInsert = (window.__prestigeMrLeeSaveRequestBodies || []).find(
+          const bookingInserts = (window.__prestigeMrLeeSaveRequestBodies || []).filter(
             (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
           );
+          const bookingInsert = bookingInserts[0];
           const googleCalendarSyncRequests = window.__prestigeMrLeeSaveGoogleCalendarSyncRequests || [];
 
           return bodyText.includes("Google Calendar auto-synced") &&
-            bookingInsert &&
+            bookingInserts.length === 1 &&
             googleCalendarSyncRequests.length === 1
             ? {
                 bodyText,
+                bookingPostCount: bookingInserts.length,
                 fetchCalls: window.__prestigeFetchCalls || [],
                 googleCalendarSyncRequests,
                 requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
@@ -24553,6 +24579,11 @@ async function runChromeTest() {
       mrLeeNoCompanySaveState.unhandledSupabaseCalls,
       [],
       `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
+    );
+    assert.equal(
+      mrLeeNoCompanySaveState.bookingPostCount,
+      1,
+      "Expected double confirmation to continue the pending Save + CRM exactly once without a second Save click",
     );
     assert.equal(
       mrLeeNoCompanySaveState.savedBookingReadRequests.every(({ method }) => method === "GET"),
@@ -24621,6 +24652,39 @@ async function runChromeTest() {
     assert.doesNotMatch(
       mrLeeNoCompanySaveState.bodyText,
       /CRM update failed|Booking saved successfully:/i,
+    );
+
+    const clickedUnchangedMrLeePostSuccessSave = await evaluate(`(() => {
+      const saveButton = [...document.querySelectorAll("button")].find(
+        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
+      );
+
+      if (!saveButton || saveButton.disabled) {
+        return false;
+      }
+
+      saveButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedUnchangedMrLeePostSuccessSave,
+      true,
+      "Expected the unchanged post-success Save + CRM action to remain safely callable",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const unchangedMrLeePostSuccessRequestState = await evaluate(`(() => ({
+      bookingPostCount: (window.__prestigeMrLeeSaveRequestBodies || []).filter(
+        (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+      ).length,
+      googleCalendarSyncCount: (window.__prestigeMrLeeSaveGoogleCalendarSyncRequests || []).length,
+    }))()`);
+    assert.deepEqual(
+      unchangedMrLeePostSuccessRequestState,
+      {
+        bookingPostCount: 1,
+        googleCalendarSyncCount: 1,
+      },
+      "Expected an unchanged post-success action to create no duplicate booking POST or Calendar continuation",
     );
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);

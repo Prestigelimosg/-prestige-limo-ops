@@ -2482,6 +2482,16 @@ type SaveCrmBillingIdentityConfirmation = {
   travelerName: string;
 };
 
+type PendingSaveCrmBillingIdentityIntent = {
+  bookingKey: string;
+  reviewKey: string;
+};
+
+type SaveBookingOptions = {
+  billingIdentityConfirmation?: SaveCrmBillingIdentityConfirmation;
+  pendingBillingIdentityIntent?: PendingSaveCrmBillingIdentityIntent;
+};
+
 type SaveCrmBillingIdentityAccountResolution =
   | {
       accountLabel: string | null;
@@ -14934,6 +14944,9 @@ export default function Home() {
     useState<AdminCustomerRequestStatusFilter>(adminCustomerRequestAllStatusFilter);
   const [saveCrmBillingIdentityConfirmation, setSaveCrmBillingIdentityConfirmation] =
     useState<SaveCrmBillingIdentityConfirmation | null>(null);
+  const pendingSaveCrmBillingIdentityIntentRef =
+    useRef<PendingSaveCrmBillingIdentityIntent | null>(null);
+  const continuingSaveCrmBillingIdentityIntentRef = useRef<string | null>(null);
   const [saveCrmBillingIdentityMessage, setSaveCrmBillingIdentityMessage] =
     useState<Message | null>(null);
   const [adminCustomerAccountCollisionReview, setAdminCustomerAccountCollisionReview] =
@@ -18346,7 +18359,7 @@ export default function Home() {
                 ? `Billing identity review required. Select the existing verified CRM identity, or explicitly choose Create New Customer for ${saveCrmBillingIdentityReview.accountLabel}.`
                 : `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${saveCrmBillingIdentityReview.conflictingTravelerNames.join(
                     ", ",
-                  )}. Confirm ${saveCrmBillingIdentityReview.accountLabel}, then Save + CRM again.`
+                  )}. Confirm ${saveCrmBillingIdentityReview.accountLabel} to continue Save + CRM.`
               : saveCrmBillingIdentityMessage.text,
         }
       : saveCrmBillingIdentityMessage;
@@ -18372,7 +18385,10 @@ export default function Home() {
       ? serviceChangePriceReviewConfirmation
       : null;
 
-  function getBookingSaveGuardKey(appliedReferenceOverride = appliedAdminBookingSnapshotReference) {
+  function getBookingSaveGuardKey(
+    appliedReferenceOverride = appliedAdminBookingSnapshotReference,
+    billingIdentityAccountOverride = saveCrmBillingIdentityAccountOverride,
+  ) {
     const normalizedBooking = Object.fromEntries(
       Object.entries(booking).map(([key, value]) => [key, clean(value)]),
     );
@@ -18380,7 +18396,7 @@ export default function Home() {
     return JSON.stringify({
       appliedSnapshotReference: clean(appliedReferenceOverride),
       booking: normalizedBooking,
-      billingIdentityAccount: saveCrmBillingIdentityAccountOverride,
+      billingIdentityAccount: billingIdentityAccountOverride,
       jobCard,
       pricing: draftPricing,
       route,
@@ -19821,6 +19837,8 @@ export default function Home() {
       preserveAdminEmailAiReview?: boolean;
     } = {},
   ) {
+    pendingSaveCrmBillingIdentityIntentRef.current = null;
+    setSaveCrmBillingIdentityConfirmation(null);
     loadedBookingIdRef.current = "";
     appliedAdminBookingSnapshotReferenceRef.current = "";
     adminBookingCreateIntentRef.current = options.explicitNewBooking === true;
@@ -20176,12 +20194,52 @@ export default function Home() {
       travelerName: review.travelerName,
     } satisfies SaveCrmBillingIdentityConfirmation;
 
+    const currentBookingKey = getBookingSaveGuardKey(
+      appliedAdminBookingSnapshotReference,
+      "",
+    );
+    const pendingIntent = pendingSaveCrmBillingIdentityIntentRef.current;
+    const currentIntent =
+      pendingIntent?.bookingKey === currentBookingKey && pendingIntent.reviewKey === review.key
+        ? pendingIntent
+        : null;
+
+    if (pendingIntent && !currentIntent) {
+      pendingSaveCrmBillingIdentityIntentRef.current = null;
+    }
+
+    const continuationKey = currentIntent
+      ? JSON.stringify(currentIntent)
+      : "";
+
+    if (
+      continuationKey &&
+      continuingSaveCrmBillingIdentityIntentRef.current === continuationKey
+    ) {
+      return;
+    }
+
     setSaveCrmBillingIdentityConfirmation(confirmation);
     setSaveCrmBillingIdentityReviewMessage({
       tone: "success",
       text: confirmation.personalCustomerCreateConfirmed
         ? `New personal customer confirmed: ${confirmation.accountLabel}. Save + CRM will stop if an existing CRM Traveller matches.`
         : `Billing identity reviewed. Save + CRM will use customer account ${confirmation.accountLabel}.`,
+    });
+
+    if (!currentIntent) {
+      return;
+    }
+
+    pendingSaveCrmBillingIdentityIntentRef.current = null;
+    continuingSaveCrmBillingIdentityIntentRef.current = continuationKey;
+    void saveBooking(undefined, {
+      billingIdentityConfirmation: confirmation,
+      pendingBillingIdentityIntent: currentIntent,
+    }).finally(() => {
+      if (continuingSaveCrmBillingIdentityIntentRef.current === continuationKey) {
+        continuingSaveCrmBillingIdentityIntentRef.current = null;
+      }
     });
   }
 
@@ -20233,7 +20291,10 @@ export default function Home() {
     }
   }
 
-  async function resolveSaveCrmBillingIdentityAccountForSave(): Promise<SaveCrmBillingIdentityAccountResolution> {
+  async function resolveSaveCrmBillingIdentityAccountForSave(options?: {
+    billingIdentityConfirmation?: SaveCrmBillingIdentityConfirmation;
+    pendingBookingKey?: string;
+  }): Promise<SaveCrmBillingIdentityAccountResolution> {
     const recentRecords = await fetchRecentAdminBookingPersistenceRecordsForBillingIdentity();
     const review = buildSaveCrmBillingIdentityReview(booking, [
       ...recentRecords,
@@ -20266,14 +20327,28 @@ export default function Home() {
       };
     }
 
-    if (saveCrmBillingIdentityConfirmation?.key !== review.key) {
+    const activeConfirmation =
+      options?.billingIdentityConfirmation?.key === review.key
+        ? options.billingIdentityConfirmation
+        : saveCrmBillingIdentityConfirmation?.key === review.key
+          ? saveCrmBillingIdentityConfirmation
+          : null;
+
+    if (!activeConfirmation) {
+      if (options?.pendingBookingKey) {
+        pendingSaveCrmBillingIdentityIntentRef.current = {
+          bookingKey: options.pendingBookingKey,
+          reviewKey: review.key,
+        };
+      }
+
       const message = {
         tone: "error",
         text: review.personalCustomerChoiceRequired
           ? `Billing identity review required. Select the existing verified CRM identity, or explicitly choose Create New Customer for ${review.accountLabel}.`
           : `Billing identity review required. Existing traveler(s) under this billing/contact identity: ${review.conflictingTravelerNames.join(
               ", ",
-            )}. Confirm ${review.accountLabel}, then Save + CRM again.`,
+            )}. Confirm ${review.accountLabel} to continue Save + CRM.`,
       } satisfies Message;
 
       setSaveCrmBillingIdentityReviewMessage(message);
@@ -20285,10 +20360,10 @@ export default function Home() {
     }
 
     return {
-      accountLabel: saveCrmBillingIdentityConfirmation.accountLabel,
+      accountLabel: activeConfirmation.accountLabel,
       ok: true,
       personalCustomerCreateConfirmed:
-        saveCrmBillingIdentityConfirmation.personalCustomerCreateConfirmed,
+        activeConfirmation.personalCustomerCreateConfirmed,
     };
   }
 
@@ -22243,6 +22318,7 @@ export default function Home() {
 
   async function saveBooking(
     customerAccountCollisionResolution?: AdminCustomerAccountCollisionResolution,
+    options?: SaveBookingOptions,
   ): Promise<AdminBookingPersistenceRecord | null> {
     setAdminBookingPersistenceMessage(null);
 
@@ -22288,7 +22364,33 @@ export default function Home() {
       return null;
     }
 
-    const bookingSaveGuardKey = getBookingSaveGuardKey();
+    const pendingBillingIdentityBookingKey = getBookingSaveGuardKey(
+      appliedAdminBookingSnapshotReference,
+      "",
+    );
+    const pendingBillingIdentityIntent = options?.pendingBillingIdentityIntent;
+
+    if (
+      pendingBillingIdentityIntent &&
+      (pendingBillingIdentityIntent.bookingKey !== pendingBillingIdentityBookingKey ||
+        pendingBillingIdentityIntent.reviewKey !== saveCrmBillingIdentityReview?.key)
+    ) {
+      const staleReviewMessage = {
+        tone: "error",
+        text: "Billing identity review is no longer current. Save + CRM again to review the latest booking details.",
+      } satisfies Message;
+
+      setMessage(staleReviewMessage);
+      setBookingSaveMessage(staleReviewMessage);
+      return null;
+    }
+
+    const resolvedBillingIdentityAccountOverride =
+      options?.billingIdentityConfirmation?.accountLabel ?? saveCrmBillingIdentityAccountOverride;
+    const bookingSaveGuardKey = getBookingSaveGuardKey(
+      appliedAdminBookingSnapshotReference,
+      resolvedBillingIdentityAccountOverride,
+    );
     const activeSavedBookingReference =
       cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
       cleanReferenceText(appliedAdminBookingSnapshotReference) ||
@@ -22333,7 +22435,10 @@ export default function Home() {
 
     const billingIdentityResolution = activeCustomerAccountCollisionReviewForRetry
       ? activeCustomerAccountCollisionReviewForRetry.billingIdentityResolution
-      : await resolveSaveCrmBillingIdentityAccountForSave();
+      : await resolveSaveCrmBillingIdentityAccountForSave({
+          billingIdentityConfirmation: options?.billingIdentityConfirmation,
+          pendingBookingKey: pendingBillingIdentityBookingKey,
+        });
 
     if (!billingIdentityResolution.ok) {
       return null;
@@ -22640,7 +22745,10 @@ export default function Home() {
       setAdminBookingPersistenceMessage(savedMessage);
       lastSuccessfulBookingSaveRef.current = {
         bookingId: primarySavedBookingReference,
-        key: getBookingSaveGuardKey(primarySavedBookingReference),
+        key: getBookingSaveGuardKey(
+          primarySavedBookingReference,
+          resolvedBillingIdentityAccountOverride,
+        ),
         record: primarySavedBooking,
       };
       await completeActiveAdminEmailAiReviewAfterSave();

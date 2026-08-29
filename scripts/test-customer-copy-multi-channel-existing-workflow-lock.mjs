@@ -143,16 +143,10 @@ for (const fragment of [
   'data-customer-live-location-helper="true"',
   'data-admin-customer-driver-details-email-review-item="true"',
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
-  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
   'data-admin-customer-driver-details-customer-in-app-send-action="true"',
-  'data-admin-customer-driver-details-manual-channel-note="true"',
   'data-admin-email-activation-preflight-status="true"',
   'onClick={sendAdminCustomerDriverDetailsEmail}',
-  'onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}',
-  "WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.",
-  'data-admin-customer-driver-details-email-recipient="true"',
-  "Email recipient:",
-  'adminCustomerDriverDetailsEmailReviewCustomerEmail || "Not set"',
+  "const adminCustomerDriverDetailsEmailReviewCustomerEmail = clean(booking.bookerEmail);",
   "SMS/WA off",
   "Email gate off",
   "Send In-App",
@@ -170,12 +164,9 @@ for (const [fragment, expectedCount] of [
   ['data-copy-preview="customerCopy"', 1],
   ['data-customer-live-location-helper="true"', 1],
   ['data-admin-customer-driver-details-email-review-item="true"', 1],
-  ['data-admin-customer-driver-details-email-recipient="true"', 1],
   ['data-admin-customer-driver-details-email-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-email-send-gate-open=', 1],
-  ['data-admin-customer-driver-details-sms-disabled-send-action="true"', 1],
   ['data-admin-customer-driver-details-customer-in-app-send-action="true"', 1],
-  ['data-admin-customer-driver-details-manual-channel-note="true"', 1],
   ['data-admin-email-activation-preflight-status="true"', 1],
 ]) {
   assert.equal(countOccurrences(appPage, fragment), expectedCount);
@@ -184,12 +175,9 @@ for (const [fragment, expectedCount] of [
 
 for (const fragment of [
   'data-admin-customer-driver-details-email-review-item="true"',
-  'data-admin-customer-driver-details-email-recipient="true"',
   'data-admin-customer-driver-details-copy-with-portal-link="true"',
   'data-admin-customer-driver-details-email-disabled-send-action="true"',
-  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
   'data-admin-customer-driver-details-customer-in-app-send-action="true"',
-  'data-admin-customer-driver-details-manual-channel-note="true"',
   'data-admin-email-activation-preflight-status="true"',
 ]) {
   assertExcludes(appOutsideCustomerCopy, fragment, `Customer Copy fragment outside section ${fragment}`);
@@ -200,6 +188,18 @@ assertExcludes(
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
   "removed extra visible Customer driver-details WhatsApp button",
 );
+for (const fragment of [
+  'data-admin-customer-driver-details-sms-disabled-send-item="true"',
+  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  'data-admin-customer-driver-details-email-review-label="true"',
+  'data-admin-customer-driver-details-manual-channel-note="true"',
+  'data-admin-customer-driver-details-email-recipient="true"',
+  "Customer booking details.",
+  "WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.",
+  "Email recipient:",
+]) {
+  assertExcludes(customerCopySection, fragment, `removed visible Customer Copy noise ${fragment}`);
+}
 assertIncludes(
   appPage,
   'async function checkAdminCustomerDriverDetailsMessageDisabledSend(',

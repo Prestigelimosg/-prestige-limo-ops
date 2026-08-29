@@ -1109,6 +1109,16 @@ async function runChromeTest() {
         "public driver details save and acknowledgement",
       );
 
+      await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const rememberedLinks = window.__driverDeviceAlertTest?.rememberedLinks || [];
+            return rememberedLinks.length === 1 ? rememberedLinks : false;
+          })()`),
+        5000,
+        "acknowledged Driver Job link device-local persistence",
+      );
+
       const afterSaveState = await pageState();
       assert.ok(savedState.savedText.includes("Confirmed driver and vehicle details"));
       assert.equal(
@@ -2052,8 +2062,18 @@ async function runChromeTest() {
       "Saved & Acknowledged",
       "?embedded=1",
     );
+    const embeddedAcknowledgedReloadNativeMessages = await waitForCondition(
+      () => evaluate(`(() => {
+        const messages = window.__driverNativeBridgeMessages || [];
+        return messages.some((message) => message.type === "native_notifications_register")
+          ? messages
+          : false;
+      })()`),
+      5000,
+      "acknowledged embedded Driver native notification bridge request",
+    );
     assert.deepEqual(
-      embeddedAcknowledgedReloadState.deviceAlerts.nativeBridgeMessages,
+      embeddedAcknowledgedReloadNativeMessages,
       [{ type: "native_notifications_register" }],
       "An already-acknowledged job reopened inside Prestige Driver must request the existing native notification registration once.",
     );

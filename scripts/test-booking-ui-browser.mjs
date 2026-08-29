@@ -2024,7 +2024,7 @@ function assertBookingUiState(state) {
       disabledSendExternalSend: "false",
       disabledSendLoadedReference: "",
       disabledSendSendingEnabled: "false",
-      label: "Waiting for complete driver details",
+      labelCount: 0,
       loadedReference: "",
       readState: "idle",
       readyState: "blocked",
@@ -4342,11 +4342,8 @@ async function runChromeTest() {
             item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-loaded-reference") || "",
           disabledSendSendingEnabled:
             item?.getAttribute("data-admin-customer-driver-details-email-disabled-send-sending-enabled") || "",
-          label:
-            item
-              ?.querySelector("[data-admin-customer-driver-details-email-review-label='true']")
-              ?.textContent.replace(/\\s+/g, " ")
-              .trim() || "",
+          labelCount:
+            item?.querySelectorAll("[data-admin-customer-driver-details-email-review-label='true']").length || 0,
           loadedReference:
             item?.getAttribute("data-admin-customer-driver-details-email-review-loaded-reference") || "",
           readState:
@@ -18889,6 +18886,37 @@ async function runChromeTest() {
       customerCopyEmailDisabledSendState.requests,
       [],
       "Closed-gate Customer Copy UI must not POST the provider send action",
+    );
+
+    const customerCopyVisibleChannelControls = await evaluate(`(() => {
+      const section = document.querySelector("[data-dispatch-workflow-step='customer-whatsapp-copy']");
+
+      return {
+        email: section?.querySelectorAll("[data-admin-customer-driver-details-email-disabled-send-action='true']").length || 0,
+        inApp: section?.querySelectorAll("[data-admin-customer-driver-details-customer-in-app-send-action='true']").length || 0,
+        manualCopy: section?.querySelectorAll("[data-copy-copy-button='customerCopy']").length || 0,
+        manualNote: section?.querySelectorAll("[data-admin-customer-driver-details-manual-channel-note='true']").length || 0,
+        emailRecipient: section?.querySelectorAll("[data-admin-customer-driver-details-email-recipient='true']").length || 0,
+        readinessLabel: section?.querySelectorAll("[data-admin-customer-driver-details-email-review-label='true']").length || 0,
+        redundantSubtitle: [...(section?.querySelectorAll("p") || [])].filter((node) => node.textContent.trim() === "Customer booking details.").length,
+        smsAction: section?.querySelectorAll("[data-admin-customer-driver-details-sms-disabled-send-action='true']").length || 0,
+        smsItem: section?.querySelectorAll("[data-admin-customer-driver-details-sms-disabled-send-item='true']").length || 0,
+      };
+    })()`);
+    assert.deepEqual(
+      customerCopyVisibleChannelControls,
+      {
+        email: 1,
+        inApp: 1,
+        manualCopy: 1,
+        manualNote: 0,
+        emailRecipient: 0,
+        readinessLabel: 0,
+        redundantSubtitle: 0,
+        smsAction: 0,
+        smsItem: 0,
+      },
+      "Customer Copy must keep Email, Send In-App and manual Copy while the blocked SMS pseudo-button stays absent",
     );
 
     const openedMockEmailGate = await evaluate(`(() => {

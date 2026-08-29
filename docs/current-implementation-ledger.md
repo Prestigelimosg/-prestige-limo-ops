@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-32d351b7 Add Company Booker account schema
+03f64987 Complete Company Booker customer accounts
 
 Latest pushed main/staging runtime checkpoint:
 32d351b7 Add Company Booker account schema

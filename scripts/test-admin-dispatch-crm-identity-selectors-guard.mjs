@@ -179,6 +179,9 @@ for (const fragment of [
   "travelerId: adminDispatchVerifiedIdentityId(record.traveler_id)",
   "accountCreationApproved",
   "No existing account is linked to this Booker.",
+  "hasVerifiedCompanyBookerIdentity",
+  "!travelerName && !hasVerifiedCompanyBookerIdentity",
+  "Enter the Booker / PA name before saving this corporate booking.",
   "loadSaveCrmAgencyCustomerClassification",
   "This customer request is missing its exact verified customer or company.",
   "if (!updateIsHotelAgencyBooking && !updateBookerId)",
@@ -187,6 +190,15 @@ for (const fragment of [
   "bookerId: String(corporateIdentityResolution.bookerId)",
   "travelerId: corporateIdentityResolution.travelerId",
 ]) assert.ok(app.includes(fragment), `Missing first corporate Save + CRM identity handoff ${fragment}`);
+
+assert.ok(
+  !app.includes("Enter both Booker / PA name and Passenger name before saving this corporate booking."),
+  "Passenger must not remain part of the Company + Booker account-identity gate",
+);
+assert.ok(
+  app.includes('warnings.push("Passenger name missing")'),
+  "Passenger must remain booking-specific release-readiness evidence",
+);
 
 assert.ok(
   app.includes("customerId: account.customerId") &&
@@ -266,6 +278,8 @@ for (const fragment of [
   "checking passenger-specific repeat account selection",
   "known account with booking-specific passenger and no identity prompt",
   "different passenger keeps the approved account without another prompt",
+  "verified Company + Booker Save + CRM account gate",
+  "The focused Company + Booker probe must perform zero booking writes",
   "single Company + Booker new-customer choice",
   "new-customer path selection",
   "assert.equal(bookingPosts.length, 0)",

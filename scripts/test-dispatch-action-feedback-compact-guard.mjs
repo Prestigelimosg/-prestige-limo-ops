@@ -121,13 +121,18 @@ for (const fragment of [
   '"Emailed"',
   '"Email blocked"',
   '"WhatsApp checked"',
-  '"SMS checked"',
   '"In-App queued"',
   '"Created"',
   '"Revoked"',
 ]) {
   assertIncludes(actionFeedbackStateBlock + dispatchCopyUiBlock, fragment, `button result fragment ${fragment}`);
 }
+
+assertExcludes(
+  dispatchCopyUiBlock,
+  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  "removed blocked Customer Copy SMS pseudo-button",
+);
 
 for (const fragment of [
   'data-dispatch-compact-panel="manual-extra-charges"',

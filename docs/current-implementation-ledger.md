@@ -1,16 +1,28 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-f2218e76 Decouple customer app link from trip readiness
+d4afcd43 Simplify Customer Copy actions
 
 Latest pushed main/staging runtime checkpoint:
-f2218e76 Decouple customer app link from trip readiness
+d4afcd43 Simplify Customer Copy actions
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 c06f7abc Merge pull request #432 from Prestigelimosg/codex/admin-dashboard-default
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Verified Company + Booker Save + CRM Passenger Boundary (2026-08-30)
+
+- A direct light-mode fail-first browser test selected one exact verified Company + Booker Customer Account with no Traveller identity, supplied the existing ordinary trip fields and clicked the actual `Save + CRM`. The unchanged runtime blocked before any booking write with `Passenger/traveler name is required before Save + CRM can choose the billing account`, proving Passenger still incorrectly gated the account/profile lane.
+- The established billing-identity review now skips its Passenger/Traveller requirement only when both exact verified `company_id` and `booker_id` are already selected. The corporate resolver likewise requires only the verified Booker for account identity. Passenger remains booking-specific release-readiness evidence, clears unverified `traveler_id`, and does not create, identify, select or price the Customer Account.
+- First-time or ambiguous Company + Booker profile review, typed-name/contact suggestion boundaries, ordinary booking/trip validation and all existing Save + CRM persistence/reload/reset behavior remain unchanged. The focused browser test stops deliberately at a mocked Company-profile read after proving the account gate passed, performs zero booking writes, and requires no Passenger/Boss billing-identity review.
+- Full-gate diagnosis separately reproduced that the Driver Job browser assertions completed but the Node process could remain alive after the raw Chrome `SIGTERM` wait timed out, because the captured Chrome stderr pipe stayed open. The existing test harness now uses the shared bounded terminate/escalate helper and explicitly destroys only that captured pipe after Chrome cleanup; Driver page/runtime/native, push, badge, GPS, Calendar, status, message and provider behavior are byte-unchanged.
+- The final PA-scope protection batch reproduced one test-only assertion failure identically on unchanged `origin/main`: its exact access-account select string predated the established `principal_cutover_at` and `legacy_link_revoked_at` fields. The guard now requires those two existing cutover fields in their exact current safe read order; customer access, session, privacy and runtime source are unchanged.
+- The same unchanged-main comparison proved the Company Profile sync guard still named the retired generic/agency new-account choices even though the established browser suite now enforces the single `Create Company + Booker Account` path. Only that guard's UI and browser-evidence fragments are aligned to the current Company+Booker choice, field retention and pre-write fail-closed coverage; Company Profile, booking, CRM and Calendar runtime are unchanged.
+- The complete preactivation suite also reproduced its compact action-feedback guard's obsolete visible `SMS checked` requirement identically on unchanged `origin/main`, after PR `#437` removed that blocked Customer Copy pseudo-button. That guard now explicitly rejects the retired SMS action selector instead; the disabled SMS route, ordinary Copy fallback and all notification runtime remain unchanged.
+- The ledger source-of-truth gate then reproduced the top clean/pushed runtime pointer lagging one already-merged application commit on unchanged `origin/main`. Both runtime pointers now identify exact current runtime commit `d4afcd43 Simplify Customer Copy actions`; the older remote-deployment evidence line is preserved without making a new deployment claim.
+- Rates, invoice layout/workflow, DSP/hourly calculations, Calendar, push/badge/fanout, Customer/Driver/native source, messaging, GPS, provider, schema and data lanes are unchanged. Protection remains in the existing Admin Dispatch CRM identity guard and Customer Account browser suite.
 
 ## Customer Copy Visible Noise And SMS Pseudo-Button Cleanup (2026-08-30)
 

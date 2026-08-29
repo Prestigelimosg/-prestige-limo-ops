@@ -246,8 +246,6 @@ for (const [label, pattern] of [
   ["email gated-send action", /data-admin-customer-driver-details-email-disabled-send-action="true"/g],
   ["email gated-send status", /data-admin-customer-driver-details-email-disabled-send-status="true"/g],
   ["whatsapp disabled-send status", /data-admin-customer-driver-details-whatsapp-disabled-send-status="true"/g],
-  ["sms disabled-send item", /data-admin-customer-driver-details-sms-disabled-send-item="true"/g],
-  ["sms disabled-send action", /data-admin-customer-driver-details-sms-disabled-send-action="true"/g],
   ["sms disabled-send status", /data-admin-customer-driver-details-sms-disabled-send-status="true"/g],
 ]) {
   assert.equal(countMatches(appSource, pattern), 1, `${label} must exist exactly once.`);
@@ -258,21 +256,26 @@ for (const [label, pattern] of [
 assert.equal(
   customerCopySection.includes("data-admin-customer-driver-details-email-disabled-send-action") &&
     !customerCopySection.includes("Customer driver details WhatsApp") &&
-    customerCopySection.includes("Customer driver details SMS") &&
-    appSource.includes("Email customer") &&
-    appSource.includes("Review WhatsApp to customer") &&
-    appSource.includes("Review SMS to customer"),
+    appSource.includes("Email customer"),
   true,
-  "Customer Copy must keep compact Email and SMS controls while the extra visible WhatsApp button stays removed.",
+  "Customer Copy must keep the compact Email control while the parked WhatsApp/SMS provider handlers remain protected.",
 );
 for (const fragment of [
   'data-admin-customer-driver-details-whatsapp-disabled-send-item="true"',
   'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
+  'data-admin-customer-driver-details-sms-disabled-send-item="true"',
+  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  'data-admin-customer-driver-details-email-review-label="true"',
+  'data-admin-customer-driver-details-manual-channel-note="true"',
+  'data-admin-customer-driver-details-email-recipient="true"',
+  "Customer booking details.",
+  "WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.",
+  "Email recipient:",
 ]) {
   assert.equal(
     appSource.includes(fragment),
     false,
-    `Customer Copy must not render the removed extra WhatsApp control ${fragment}.`,
+    `Customer Copy must not render the removed visible noise ${fragment}.`,
   );
 }
 for (const fragment of [

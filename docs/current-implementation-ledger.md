@@ -1,16 +1,24 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-03f64987 Complete Company Booker customer accounts
+f2218e76 Decouple customer app link from trip readiness
 
 Latest pushed main/staging runtime checkpoint:
-03f64987 Complete Company Booker customer accounts
+f2218e76 Decouple customer app link from trip readiness
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 c06f7abc Merge pull request #432 from Prestigelimosg/codex/admin-dashboard-default
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Customer Copy Visible Noise And SMS Pseudo-Button Cleanup (2026-08-30)
+
+- The established Customer Copy section no longer renders the redundant `Customer booking details.` subtitle, the three-state readiness label line, the manual WhatsApp/SMS helper sentence, the `Email recipient:` status line, or the blocked/no-op SMS pseudo-button. This is visible-copy/control cleanup only.
+- The existing readiness result and Email gating still determine whether Email and Send In-App are enabled; the verified Booker email is still resolved and submitted through the existing Email handler. The admin-gated readiness API retains its three-state result for internal gating and diagnostics. The parked SMS GET-only route, handler and no-live protections remain unchanged and cannot send.
+- `Copy`, `Edit`, `Email`, `Send In-App`, `Copy Booking Invite`, `Copy + App Link`, message preview/disclosure, the live-location helper and all Copy/app-link success or error feedback remain in their existing locations with their existing handlers. Ordinary Copy remains the manual external fallback.
+- Focused source guards and Booking UI/app-smoke browser coverage require the removed visible strings and SMS selectors to stay absent while preserving the established Email, Send In-App, Copy, app-link, access, notification and privacy boundaries. No push/badge/native, automatic Driver ACK, Calendar, invoice, billing, payment, payout, DSP, GPS, provider, schema or data behavior is changed.
+- The complete mocked Driver browser gate reproduced on untouched `origin/main` with two different immediate empty bridge-state assertions even though Driver route, native and test sources were byte-identical. The existing browser harness now waits only for the already-required asynchronous service-worker remembered-link and embedded native-notification bridge results before asserting them; no Driver runtime, native bridge, push registration or notification behavior changed.
 
 ## Saved Customer App Link Independent Of Trip Readiness (2026-08-29)
 

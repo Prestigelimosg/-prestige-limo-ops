@@ -114,11 +114,14 @@ for (const fragment of [
 
 assert.equal(
   customerCopyUi.indexOf('data-admin-customer-driver-details-email-disabled-send-action="true"') <
-    customerCopyUi.indexOf('data-admin-customer-driver-details-sms-disabled-send-action="true"') &&
-    customerCopyUi.indexOf('data-admin-customer-driver-details-sms-disabled-send-action="true"') <
-      customerCopyUi.indexOf('data-admin-customer-driver-details-customer-in-app-send-action="true"'),
+    customerCopyUi.indexOf('data-admin-customer-driver-details-customer-in-app-send-action="true"'),
   true,
-  "Customer In-App button must stay in the existing compact Customer Copy action row after review controls.",
+  "Customer In-App button must stay in the existing compact Customer Copy action row after Email.",
+);
+assertExcludes(
+  customerCopyUi,
+  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  "removed blocked SMS pseudo-button",
 );
 assertExcludes(
   customerCopyUi,

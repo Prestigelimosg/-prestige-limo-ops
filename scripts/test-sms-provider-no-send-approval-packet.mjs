@@ -191,7 +191,16 @@ assertIncludes(
   'const adminSmsCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-sms-customer-driver-details-send-disabled-setup";',
   "Customer Copy SMS disabled-send route",
 );
-assertIncludes(appPage, 'checkAdminCustomerDriverDetailsMessageDisabledSend("sms")', "Customer Copy SMS disabled-send action");
+assertIncludes(
+  appPage,
+  "async function checkAdminCustomerDriverDetailsMessageDisabledSend(",
+  "preserved parked SMS disabled-send handler",
+);
+assertExcludes(
+  appPage,
+  'data-admin-customer-driver-details-sms-disabled-send-action="true"',
+  "removed visible SMS pseudo-button",
+);
 assertExcludes(
   appPage,
   "/api/admin-sms-customer-driver-details-preview-readiness-setup",

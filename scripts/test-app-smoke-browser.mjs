@@ -7202,11 +7202,9 @@ async function runChromeTest() {
                       ?.querySelector("[data-admin-customer-driver-details-email-review-action]")
                       ?.textContent.replace(/\\s+/g, " ")
                       .trim() || "",
-                  label:
+                  labelCount:
                     customerEmailReviewItem
-                      ?.querySelector("[data-admin-customer-driver-details-email-review-label]")
-                      ?.textContent.replace(/\\s+/g, " ")
-                      .trim() || "",
+                      ?.querySelectorAll("[data-admin-customer-driver-details-email-review-label]").length || 0,
                   readyState:
                     customerEmailReviewItem?.getAttribute(
                       "data-admin-customer-driver-details-email-review-ready-state",
@@ -7300,7 +7298,7 @@ async function runChromeTest() {
           state.customerEmailReviewItem,
           {
             action: "Email",
-            label: "No driver assigned",
+            labelCount: 0,
             readyState: "blocked",
             readyStatus: "Blocked",
             sendState: "SMS/WA off",

@@ -29284,11 +29284,6 @@ export default function Home() {
   const adminCustomerDriverDetailsEmailReviewReady =
     Boolean(adminCustomerDriverDetailsEmailReviewItem.customerEmailReady) ||
     clean(adminCustomerDriverDetailsEmailReviewItem.readiness_status) === "ready";
-  const adminCustomerDriverDetailsReadinessLabel = !dispatchReleaseDriverName
-    ? "No driver assigned"
-    : dispatchReleaseDriverReady
-      ? "Customer driver details ready"
-      : "Waiting for complete driver details";
   const adminCustomerDriverDetailsEmailReviewSendDisabled =
     adminCustomerDriverDetailsEmailReviewItem.sendingEnabled !== true &&
     adminCustomerDriverDetailsEmailReviewItem.external_send !== true;
@@ -29701,13 +29696,6 @@ export default function Home() {
       : adminCustomerDriverDetailsDisabledSendFallbackState(
           "Disabled SMS send is setup-only.",
         );
-  const adminCustomerDriverDetailsSmsDisabledSendCanCall =
-    Boolean(adminCustomerDriverDetailsEmailReviewBookingReference) &&
-    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus !== "loading";
-  const adminCustomerDriverDetailsSmsDisabledSendActionLabel =
-    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "loading"
-      ? "Checking disabled send"
-      : "Review SMS to customer";
   const adminCustomerDriverDetailsSmsDisabledSendStatusText =
     adminCustomerDriverDetailsDisabledSendStatusText(
       adminCustomerDriverDetailsSmsDisabledSendDisplayState,
@@ -35072,26 +35060,6 @@ export default function Home() {
         : adminCustomerDriverDetailsWhatsAppLoaded
           ? "WhatsApp checked"
           : "WhatsApp";
-  const adminCustomerDriverDetailsSmsLoaded =
-    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "loaded";
-  const adminCustomerDriverDetailsSmsSent =
-    adminCustomerDriverDetailsSmsLoaded &&
-    adminCustomerDriverDetailsSmsDisabledSendDisplayState.sendingEnabled &&
-    adminCustomerDriverDetailsSmsDisabledSendDisplayState.external_send;
-  const adminCustomerDriverDetailsSmsButtonTone: Message["tone"] | null =
-    adminCustomerDriverDetailsSmsLoaded
-      ? "success"
-      : adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "error"
-        ? "error"
-        : null;
-  const adminCustomerDriverDetailsSmsButtonLabel =
-    adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus === "loading"
-      ? "Checking SMS"
-      : adminCustomerDriverDetailsSmsSent
-        ? "SMS sent"
-        : adminCustomerDriverDetailsSmsLoaded
-          ? "SMS checked"
-          : "SMS";
   const adminCustomerDriverDetailsCustomerInAppSent =
     adminCustomerDriverDetailsCustomerInAppDisplayState.actionStatus === "loaded";
   const adminCustomerDriverDetailsCustomerInAppButtonTone: Message["tone"] | null =
@@ -46643,7 +46611,6 @@ export default function Home() {
               <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Customer Copy</h2>
-                  <p className="text-xs text-slate-500">Customer booking details.</p>
                 </div>
                 <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
                   <div
@@ -46810,25 +46777,6 @@ export default function Home() {
               >
                 <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
-                    <span
-                      className="block truncate font-semibold"
-                      data-admin-customer-driver-details-email-review-label="true"
-                    >
-                      {adminCustomerDriverDetailsReadinessLabel}
-                    </span>
-                    <p
-                      className="mt-0.5 text-[10px] font-semibold leading-4 text-emerald-800"
-                      data-admin-customer-driver-details-manual-channel-note="true"
-                    >
-                      WhatsApp/SMS are off in-app. Use Copy, then send manually outside the app.
-                    </p>
-                    <p
-                      className="mt-1 min-w-0 break-all text-[10px] leading-4 text-emerald-900"
-                      data-admin-customer-driver-details-email-recipient="true"
-                    >
-                      <span className="font-semibold">Email recipient:</span>{" "}
-                      {adminCustomerDriverDetailsEmailReviewCustomerEmail || "Not set"}
-                    </p>
                     <div className="mt-1 flex min-w-0 flex-row flex-wrap items-center gap-1.5">
                       <button
                         aria-label={adminCustomerDriverDetailsEmailDisabledSendActionLabel}
@@ -46846,40 +46794,6 @@ export default function Home() {
                         type="button"
                       >
                         {adminCustomerDriverDetailsEmailButtonLabel}
-                      </button>
-                      <button
-                        aria-label="Customer driver details SMS - Review SMS to customer"
-                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
-                          actionFeedbackButtonClass(
-                            adminCustomerDriverDetailsSmsButtonTone,
-                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
-                          )
-                        }`}
-                        data-admin-customer-driver-details-sms-disabled-send-action="true"
-                        data-admin-customer-driver-details-sms-disabled-send-action-state={
-                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.actionStatus
-                        }
-                        data-admin-customer-driver-details-sms-disabled-send-external-send={
-                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.external_send
-                            ? "true"
-                            : "false"
-                        }
-                        data-admin-customer-driver-details-sms-disabled-send-item="true"
-                        data-admin-customer-driver-details-sms-disabled-send-label="true"
-                        data-admin-customer-driver-details-sms-disabled-send-loaded-reference={
-                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.loadedReference
-                        }
-                        data-admin-customer-driver-details-sms-disabled-send-sending-enabled={
-                          adminCustomerDriverDetailsSmsDisabledSendDisplayState.sendingEnabled
-                            ? "true"
-                            : "false"
-                        }
-                        disabled={!adminCustomerDriverDetailsSmsDisabledSendCanCall}
-                        onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("sms")}
-                        title={adminCustomerDriverDetailsSmsDisabledSendActionLabel}
-                        type="button"
-                      >
-                        {adminCustomerDriverDetailsSmsButtonLabel}
                       </button>
                       <button
                         aria-label="Send Customer In-App update to the customer"

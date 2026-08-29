@@ -18,9 +18,17 @@ assert.equal(
   true,
   "Customer Copy must render the account-aware helper.",
 );
+const appLinkReadinessSlice = appPage.slice(
+  appPage.indexOf("const customerDriverDetailsPortalLinkCopyReady ="),
+  appPage.indexOf("const dispatchReleaseDriverDispatchHasPlaceholder ="),
+);
+
 for (const fragment of [
   "const customerDriverDetailsPortalLinkCopyReady =",
-  'clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS")',
+  "customerDriverDetailsPortalBookingReference &&",
+  "customerDriverDetailsPortalAccountReference &&",
+  "customerDriverDetailsPortalCompanyId &&",
+  "customerDriverDetailsPortalBookerId",
   "if (!customerDriverDetailsPortalLinkCopyReady)",
   "!customerDriverDetailsPortalLinkCopyReady ||",
 ]) {
@@ -30,5 +38,11 @@ for (const fragment of [
     `Customer app-link readiness must include ${fragment}`,
   );
 }
+
+assert.doesNotMatch(
+  appLinkReadinessSlice,
+  /dispatchReleaseTripComplete|customerCopyText|dispatchReleaseDriverReady/,
+  "Saved-booking customer app-link readiness must be independent of trip, route, vehicle and driver readiness.",
+);
 
 console.log("Admin customer app-link readiness helper guard passed");

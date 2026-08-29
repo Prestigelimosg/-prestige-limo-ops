@@ -260,8 +260,11 @@ async function writeMockModules(tempDir) {
   await writeFile(
     principalPath,
     [
-      "exports.resolveCustomerPrincipalSessionToken = () => null;",
-      "exports.assertActiveCustomerPrincipalSession = async () => ({ error: 'not used by legacy contract', ok: false, status: 403 });",
+      "exports.resolveCustomerPrincipalSessionToken = (token) => globalThis.__prestigeCustomerNotificationPrincipalSessions?.has(token) ? { principal_id: token.slice(-12) } : null;",
+      "exports.assertActiveCustomerPrincipalSession = async (token) => {",
+      "  const context = globalThis.__prestigeCustomerNotificationPrincipalSessions?.get(token);",
+      "  return context ? { data: context, ok: true } : { error: 'Customer app access is required.', ok: false, status: 403 };",
+      "};",
     ].join("\n"),
   );
 }
@@ -1510,6 +1513,99 @@ try {
       "Expected acknowledgement without the prior exact-booking admin send to fail without a write.",
     );
 
+    const rootPrincipalToken = "customer_principal_v1.booker-root-notifications";
+    const wrongRootPrincipalToken = "customer_principal_v1.wrong-booker-notifications";
+    globalThis.__prestigeCustomerNotificationPrincipalSessions = new Map([
+      [
+        rootPrincipalToken,
+        {
+          memberships: [{
+            booker_id: 26,
+            company_id: 53,
+            customer_account_reference: "customer-runtime-account-001",
+            membership_role: "managing_pa",
+            traveler_id: null,
+            verified_boss_name: "Verified Booker",
+          }],
+          normalized_email: "booker@example.test",
+          principal_id: "11111111-1111-4111-8111-111111111111",
+          principal_role: "pa",
+        },
+      ],
+      [
+        wrongRootPrincipalToken,
+        {
+          memberships: [{
+            booker_id: 27,
+            company_id: 53,
+            customer_account_reference: "other-account",
+            membership_role: "managing_pa",
+            traveler_id: null,
+            verified_boss_name: "Other Booker",
+          }],
+          normalized_email: "other@example.test",
+          principal_id: "22222222-2222-4222-8222-222222222222",
+          principal_role: "pa",
+        },
+      ],
+    ]);
+    setEnv(validEnv());
+    const rootPrincipalReadMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+          delivery_surface: "customer_app",
+          id: "notification-root-booker-visible",
+          notification_type: "trip_update",
+          safe_message: "Shared booking message.",
+          safe_title: "Driver reply",
+          workflow_area: "driver_customer_job_messages",
+        }),
+      ],
+      bookings: [{
+        booking_reference: "BOOK-CUST-DRIVER-NOTIFY-001",
+        booker_id: 26,
+        company_id: 53,
+        customer_id: "customer-runtime-account-001",
+        traveler_id: 41,
+      }],
+    });
+    const rootPrincipalRead = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?booking_reference=BOOK-CUST-DRIVER-NOTIFY-001&limit=5&page=1",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings?booking=BOOK-CUST-DRIVER-NOTIFY-001",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(rootPrincipalRead.status, 200);
+    assert.equal(rootPrincipalRead.body.notifications.length, 1);
+    assert.equal(rootPrincipalRead.body.notifications[0].safe_message, "Shared booking message.");
+    assert.equal(rootPrincipalReadMock.client.insertHistory.length, 0);
+
+    const wrongRootPrincipalRead = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?booking_reference=BOOK-CUST-DRIVER-NOTIFY-001&limit=5&page=1",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings?booking=BOOK-CUST-DRIVER-NOTIFY-001",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": wrongRootPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(wrongRootPrincipalRead.status, 403);
+    assert.equal(
+      rootPrincipalReadMock.client.selectHistory.filter((entry) => entry.table === notificationTable).length,
+      1,
+      "A wrong Company+Booker root must stop before another notification-history read.",
+    );
+
     setEnv(validEnv());
     const customerPortalReadMock = installMockClient({
       [notificationTable]: [
@@ -2235,4 +2331,5 @@ try {
 } finally {
   restoreEnv();
   delete globalThis.__prestigeCustomerDriverAppNotificationApiMock;
+  delete globalThis.__prestigeCustomerNotificationPrincipalSessions;
 }

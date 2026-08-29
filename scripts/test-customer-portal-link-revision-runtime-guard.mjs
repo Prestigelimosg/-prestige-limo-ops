@@ -235,6 +235,20 @@ try {
   );
   assert.equal(staleLegacy.ok, false, "A pre-revision link must not revive after account rotation.");
 
+  const cutover = await harness.accessAccount.assertActiveCustomerPortalAccessAccount(
+    accountReference,
+    readClient({ ...activeRow, legacy_link_revoked_at: currentRevision }),
+    {
+      issuedAt: currentSession.data.issued_at,
+      linkRevision: currentSession.data.link_revision,
+    },
+  );
+  assert.equal(
+    cutover.ok,
+    false,
+    "A legacy permanent link must be blocked after exact principal activation cutover even when its old revision still matches.",
+  );
+
   const revoked = await harness.accessAccount.assertActiveCustomerPortalAccessAccount(
     accountReference,
     readClient({ ...activeRow, account_status: "revoked" }),

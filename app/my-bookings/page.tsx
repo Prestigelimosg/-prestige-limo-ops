@@ -486,6 +486,12 @@ export default function CustomerPortalPage() {
         });
         const payload = await response.json().catch(() => null);
         const role = payload?.data?.principal_role;
+        const rootMembership = Array.isArray(payload?.data?.memberships)
+          ? payload.data.memberships.some((entry: unknown) => {
+              const row = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+              return row.traveler_id === null && Number(row.company_id) > 0 && Number(row.booker_id) > 0;
+            })
+          : false;
         const bosses = Array.isArray(payload?.data?.memberships)
           ? payload.data.memberships
               .map((entry: unknown) => {
@@ -498,9 +504,14 @@ export default function CustomerPortalPage() {
               })
               .filter((entry: unknown): entry is { traveler_id: number; verified_boss_name: string } => Boolean(entry))
           : [];
-        if (response.ok && payload?.ok === true && (role === "pa" || role === "boss") && bosses.length > 0) {
+        if (
+          response.ok &&
+          payload?.ok === true &&
+          (role === "pa" || role === "boss") &&
+          (rootMembership || bosses.length > 0)
+        ) {
           setCustomerPrincipalAccess({ managed_bosses: bosses, principal_role: role, status: "principal" });
-          setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
+          if (bosses[0]) setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
           setActiveSection((current) => current === "Invoices" ? "Upcoming" : current);
           return;
         }

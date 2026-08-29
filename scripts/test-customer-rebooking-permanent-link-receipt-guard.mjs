@@ -57,11 +57,15 @@ assert.doesNotMatch(
   "portal account creation must not target the partial booker index as an upsert conflict column",
 );
 for (const fragment of [
-  "companyId: body.companyId",
-  "bookerId: body.bookerId",
+  "company_id: body.companyId",
+  "id: body.bookerId",
+  "booker.data.customer_id !== Number(body.customerAccountReference)",
   "issueCustomerPrincipalInvitation(",
-  "memberships: rawMemberships.map((membership) => ({",
-  "principalRole: body.principalRole,",
+  "email: booker.data.email",
+  "bookerId: booker.data.id",
+  "companyId: booker.data.company_id",
+  "travelerId: null",
+  'principalRole: "pa",',
   "const url = result.data.invitation_url_path",
   "accessStatus: result.data.access_status,",
   "principalId: result.data.principal_id,",
@@ -69,6 +73,11 @@ for (const fragment of [
 ]) {
   includes(adminLinkRoute, fragment);
 }
+assert.doesNotMatch(
+  files[adminLinkRoute],
+  /email:\s*body\.|principalRole:\s*body\.|memberships:\s*rawMemberships/,
+  "saved-booking activation must not trust a browser-supplied recipient, role, or membership scope",
+);
 for (const fragment of [
   "booker_profile",
   "travelers",

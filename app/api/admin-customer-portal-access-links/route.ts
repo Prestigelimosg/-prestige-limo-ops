@@ -1,4 +1,5 @@
 import { resolveAdminCustomerInvoiceBoundary } from "../../../lib/admin-customer-invoice-boundary";
+import { findAdminBooker } from "../../../lib/admin-bookers";
 import {
   ensureAdminCustomerPortalAccessAccount,
   revokeAdminCustomerPortalAccessAccount,
@@ -52,11 +53,31 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody(request);
+    const booker = await findAdminBooker(
+      {
+        company_id: body.companyId,
+        id: body.bookerId,
+      },
+      boundary.actor,
+    );
+    if (
+      !booker.ok ||
+      !booker.data ||
+      booker.data.customer_id !== Number(body.customerAccountReference) ||
+      !booker.data.booker_name ||
+      !booker.data.email
+    ) {
+      return safeErrorResponse({
+        error: "Customer app link requires one exact verified Booker account with a saved email.",
+        status: 409,
+      });
+    }
+
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
-        agencyCustomerAccount: body.agencyCustomerAccount,
-        bookerId: body.bookerId,
-        companyId: body.companyId,
+        agencyCustomerAccount: false,
+        bookerId: booker.data.id,
+        companyId: booker.data.company_id,
         customerAccountReference: body.customerAccountReference,
         safeDisplayLabel: body.safeDisplayLabel,
       },
@@ -67,15 +88,17 @@ export async function POST(request: Request) {
       return safeErrorResponse(account);
     }
 
-    const rawMemberships = Array.isArray(body.memberships) ? body.memberships : [];
     const result = await issueCustomerPrincipalInvitation(
       {
-        email: body.email,
-        memberships: rawMemberships.map((membership) => ({
-          ...(membership !== null && typeof membership === "object" ? membership : {}),
+        email: booker.data.email,
+        memberships: [{
+          bookerId: booker.data.id,
+          companyId: booker.data.company_id,
           customerAccountReference: account.data.customer_account_reference,
-        })),
-        principalRole: body.principalRole,
+          travelerId: null,
+          verifiedBossName: booker.data.booker_name,
+        }],
+        principalRole: "pa",
       },
       boundary.actor,
     );
@@ -90,7 +113,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       accessStatus: result.data.access_status,
-      accessAction: "Manage Access",
+      accessAction: "Copy + App Link",
       accountStatus: account.data.account_status,
       customerAccountReference: account.data.customer_account_reference,
       expiresAt: result.data.expires_at,

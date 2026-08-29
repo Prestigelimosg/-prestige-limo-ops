@@ -415,6 +415,7 @@ try {
   };
   const bossPrincipalToken = "customer_principal_v1.boss-live-map";
   const paPrincipalToken = "customer_principal_v1.pa-live-map";
+  const bookerRootPrincipalToken = "customer_principal_v1.booker-root-live-map";
   const wrongTravelerPrincipalToken = "customer_principal_v1.wrong-traveler-live-map";
   const wrongBookerPrincipalToken = "customer_principal_v1.wrong-booker-live-map";
   const wrongCompanyPrincipalToken = "customer_principal_v1.wrong-company-live-map";
@@ -440,6 +441,14 @@ try {
       {
         memberships: [{ ...principalMembership, membership_role: "managing_pa" }],
         normalized_email: "pa@example.test",
+        principal_role: "pa",
+      },
+    ],
+    [
+      bookerRootPrincipalToken,
+      {
+        memberships: [{ ...principalMembership, membership_role: "managing_pa", traveler_id: null }],
+        normalized_email: "booker@example.test",
         principal_role: "pa",
       },
     ],
@@ -498,6 +507,7 @@ try {
   for (const [role, principalToken] of [
     ["Boss", bossPrincipalToken],
     ["PA", paPrincipalToken],
+    ["Booker root", bookerRootPrincipalToken],
   ]) {
     const principalRead = await handleCustomerLiveLocationMapRuntimeRequest({
       boundary,

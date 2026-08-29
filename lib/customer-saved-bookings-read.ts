@@ -74,7 +74,7 @@ export type CustomerSavedBookingsReadResult = {
   access?: {
     managed_bosses: Array<{ traveler_id: number; verified_boss_name: string }>;
     principal_role: "boss" | "pa";
-    selected_traveler_id: number;
+    selected_traveler_id: number | null;
   };
   pagination: {
     has_next_page: boolean;
@@ -1166,6 +1166,22 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
       : customerSavedBookingsAuthRequiredResult<never>();
     if (!principalAccess.ok) return customerSavedBookingsAuthRequiredResult();
 
+    const bookerRoot = principalAccess.data.memberships.find(
+      (entry) => entry.traveler_id === null,
+    );
+    if (bookerRoot) {
+      return {
+        data: {
+          booker_email: principalAccess.data.normalized_email,
+          booker_id: bookerRoot.booker_id,
+          company_id: bookerRoot.company_id,
+          customer_account_reference: bookerRoot.customer_account_reference,
+          traveler_id: null,
+          traveler_name: null,
+        },
+        ok: true,
+      };
+    }
     const requestedTravelerId = verifiedIdentityId(travelerIdInput);
     const selectedTravelerId = requestedTravelerId ||
       (principalAccess.data.memberships.length === 1
@@ -1340,21 +1356,30 @@ export async function loadCustomerSavedBookings(
       ? await assertActiveCustomerPrincipalSession(context.principal_session_token)
       : customerSavedBookingsAuthRequiredResult<never>();
     if (!principalAccess.ok) return customerSavedBookingsAuthRequiredResult();
+    const bookerRoot = principalAccess.data.memberships.find(
+      (entry) => entry.traveler_id === null,
+    );
     const selectedTravelerId = parsed.data.traveler_id ||
       (principalAccess.data.memberships.length === 1
         ? principalAccess.data.memberships[0].traveler_id
         : null);
-    const membership = selectedTravelerId
+    const membership = bookerRoot || (selectedTravelerId
       ? principalAccess.data.memberships.find((entry) => entry.traveler_id === selectedTravelerId)
-      : null;
+      : null);
     if (!membership) return customerSavedBookingsAuthRequiredResult();
+    const bookingFilters: CustomerSavedBookingsAccountFilter[] = bookerRoot
+      ? [
+          { column: "company_id", method: "eq", value: String(membership.company_id) },
+          { column: "booker_id", method: "eq", value: String(membership.booker_id) },
+        ]
+      : [
+          { column: "company_id", method: "eq", value: String(membership.company_id) },
+          { column: "booker_id", method: "eq", value: String(membership.booker_id) },
+          { column: "traveler_id", method: "eq", value: String(membership.traveler_id) },
+        ];
     const bookingRowsResult = await readCustomerSavedBookingRows(
       clientResult.data,
-      [
-        { column: "company_id", method: "eq", value: String(membership.company_id) },
-        { column: "booker_id", method: "eq", value: String(membership.booker_id) },
-        { column: "traveler_id", method: "eq", value: String(membership.traveler_id) },
-      ],
+      bookingFilters,
       parsed.data,
     );
     if (!bookingRowsResult.ok) return bookingRowsResult;
@@ -1368,12 +1393,14 @@ export async function loadCustomerSavedBookings(
     return {
       data: {
         access: {
-          managed_bosses: principalAccess.data.memberships.map((entry) => ({
-            traveler_id: entry.traveler_id,
-            verified_boss_name: entry.verified_boss_name,
-          })),
+          managed_bosses: principalAccess.data.memberships
+            .filter((entry): entry is typeof entry & { traveler_id: number } => entry.traveler_id !== null)
+            .map((entry) => ({
+              traveler_id: entry.traveler_id,
+              verified_boss_name: entry.verified_boss_name,
+            })),
           principal_role: principalAccess.data.principal_role,
-          selected_traveler_id: membership.traveler_id,
+          selected_traveler_id: bookerRoot ? null : membership.traveler_id,
         },
         pagination: {
           has_next_page: rows.length > parsed.data.limit,

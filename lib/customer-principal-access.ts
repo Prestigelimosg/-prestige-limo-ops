@@ -69,7 +69,7 @@ export type CustomerPrincipalMembership = {
   company_id: number;
   customer_account_reference: string;
   membership_role: MembershipRole;
-  traveler_id: number;
+  traveler_id: number | null;
   verified_boss_name: string;
 };
 
@@ -252,6 +252,23 @@ function inviteMembership(value: unknown, role: PrincipalRole): CustomerPrincipa
   };
 }
 
+function bookerRootMembership(value: unknown): CustomerPrincipalMembership | null {
+  const input = asRecord(value) as InviteMembershipInput;
+  const companyId = positiveId(input.companyId);
+  const bookerId = positiveId(input.bookerId);
+  const customerAccountReference = safeAccountReference(input.customerAccountReference);
+  const verifiedBookerName = text(input.verifiedBossName, 160);
+  if (!companyId || !bookerId || !customerAccountReference || !verifiedBookerName) return null;
+  return {
+    booker_id: bookerId,
+    company_id: companyId,
+    customer_account_reference: customerAccountReference,
+    membership_role: "managing_pa",
+    traveler_id: null,
+    verified_boss_name: verifiedBookerName,
+  };
+}
+
 function parseInviteInput(input: unknown) {
   const body = asRecord(input) as InviteInput;
   const email = normalizedEmail(body.email);
@@ -268,6 +285,46 @@ function parseInviteInput(input: unknown) {
   }
   if (principalRole === "boss" && memberships.length !== 1) return null;
   return { email, memberships, principalRole };
+}
+
+function parseBookerRootInviteInput(input: unknown) {
+  const body = asRecord(input) as InviteInput;
+  const email = normalizedEmail(body.email);
+  const rawMemberships = asArray(body.memberships);
+  const membership = rawMemberships.length === 1
+    ? bookerRootMembership(rawMemberships[0])
+    : null;
+  return email && body.principalRole === "pa" && membership
+    ? { email, memberships: [membership], principalRole: "pa" as const }
+    : null;
+}
+
+async function persistBookerRootMembership(
+  client: PrincipalClient,
+  membership: CustomerPrincipalMembership,
+  principalId: string,
+) {
+  const { data: existingRows, error: existingError } = await client
+    .from(membershipTable)
+    .select("id")
+    .eq("principal_id", principalId)
+    .eq("company_id", membership.company_id)
+    .eq("booker_id", membership.booker_id)
+    .is("traveler_id", null)
+    .limit(2);
+  const rows = asArray(existingRows);
+  const existingId = uuid(asRecord(rows[0]).id);
+  if (existingError || rows.length > 1) return false;
+  const payload = {
+    ...membership,
+    membership_status: "active",
+    principal_id: principalId,
+    revoked_at: null,
+  };
+  const { error } = existingId
+    ? await client.from(membershipTable).update(payload).eq("id", existingId)
+    : await client.from(membershipTable).insert(payload);
+  return !error;
 }
 
 export async function hashCustomerPin(pin: string) {
@@ -304,7 +361,7 @@ export async function issueCustomerPrincipalInvitation(
   if (!adminMayIssue(actor)) {
     return principalFailure("Only Owner Admin may manage Customer app access.", 403);
   }
-  const parsed = parseInviteInput(input);
+  const parsed = parseBookerRootInviteInput(input) || parseInviteInput(input);
   const clientResult = principalClient();
   if (!parsed) return principalFailure("Customer access invitation details are invalid.", 400);
   if (!clientResult.ok) return principalFailure("Customer access configuration is not ready.", 503);
@@ -312,6 +369,44 @@ export async function issueCustomerPrincipalInvitation(
   const client = clientResult.data;
   const verifiedMemberships: CustomerPrincipalMembership[] = [];
   for (const membership of parsed.memberships) {
+    if (membership.traveler_id === null) {
+      const [{ data: accountRows, error: accountError }, { data: bookerRows, error: bookerError }] =
+        await Promise.all([
+          client
+            .from("customer_access_accounts")
+            .select("customer_account_reference, company_id, booker_id, account_status")
+            .eq("customer_account_reference", membership.customer_account_reference)
+            .eq("company_id", membership.company_id)
+            .eq("booker_id", membership.booker_id)
+            .eq("account_status", "active")
+            .limit(1),
+          client
+            .from("bookers")
+            .select("id, company_id, customer_id, booker_name")
+            .eq("id", membership.booker_id)
+            .eq("company_id", membership.company_id)
+            .limit(1),
+        ]);
+      const account = asRecord(asArray(accountRows)[0]);
+      const booker = asRecord(asArray(bookerRows)[0]);
+      const verifiedBookerName = text(booker.booker_name, 160);
+      if (
+        accountError ||
+        bookerError ||
+        safeAccountReference(account.customer_account_reference) !== membership.customer_account_reference ||
+        positiveId(booker.id) !== membership.booker_id ||
+        positiveId(booker.company_id) !== membership.company_id ||
+        positiveId(booker.customer_id) !== positiveId(membership.customer_account_reference) ||
+        !verifiedBookerName
+      ) {
+        return principalFailure(
+          "Customer access invitation requires an exact verified CRM scope.",
+          409,
+        );
+      }
+      verifiedMemberships.push({ ...membership, verified_boss_name: verifiedBookerName });
+      continue;
+    }
     const [{ data: accountRows, error: accountError }, { data: travelerRows, error: travelerError }] =
       await Promise.all([
         client
@@ -358,11 +453,14 @@ export async function issueCustomerPrincipalInvitation(
     }
     if (roots.size !== 1) {
       return principalFailure(
-        "One PA invitation must use one exact verified company and booker scope.",
+        "One Booker invitation must use one exact verified company and booker scope.",
         409,
       );
     }
     const root = [...roots.values()][0];
+    if (root.traveler_id === null) {
+      verifiedMemberships.splice(0, verifiedMemberships.length, root);
+    } else {
     const { data: travelerRows, error: travelerError } = await client
       .from("travelers")
       .select("id, company_id, booker_id, traveler_name")
@@ -390,6 +488,7 @@ export async function issueCustomerPrincipalInvitation(
       );
     }
     verifiedMemberships.splice(0, verifiedMemberships.length, ...allVerifiedBosses);
+    }
   }
   const { data: existingRows, error: existingError } = await client
     .from(principalAccessTable)
@@ -432,17 +531,19 @@ export async function issueCustomerPrincipalInvitation(
         409,
       );
     }
-    const { error: membershipError } = await client.from(membershipTable).upsert(
-      verifiedMemberships.map((membership) => ({
-        ...membership,
-        membership_status: "active",
-        principal_id: principalId,
-        revoked_at: null,
-      })),
-      { onConflict: "principal_id,company_id,booker_id,traveler_id" },
-    );
-    if (membershipError) {
-      return principalFailure("PA access update failed safely.", 500);
+    if (requestedRoot.traveler_id !== null) {
+      const { error: membershipError } = await client.from(membershipTable).upsert(
+        verifiedMemberships.map((membership) => ({
+          ...membership,
+          membership_status: "active",
+          principal_id: principalId,
+          revoked_at: null,
+        })),
+        { onConflict: "principal_id,company_id,booker_id,traveler_id" },
+      );
+      if (membershipError) {
+        return principalFailure("PA access update failed safely.", 500);
+      }
     }
     return {
       data: {
@@ -865,16 +966,16 @@ export async function completeCustomerPrincipalActivation(
     ? asArray(asRecord(claimedInvitation).membership_scope)
         .map((entry) => {
           const row = asRecord(entry);
-          return inviteMembership(
-            {
-              bookerId: row.booker_id,
-              companyId: row.company_id,
-              customerAccountReference: row.customer_account_reference,
-              travelerId: row.traveler_id,
-              verifiedBossName: row.verified_boss_name,
-            },
-            principalRole,
-          );
+          const membershipInput = {
+            bookerId: row.booker_id,
+            companyId: row.company_id,
+            customerAccountReference: row.customer_account_reference,
+            travelerId: row.traveler_id,
+            verifiedBossName: row.verified_boss_name,
+          };
+          return principalRole === "pa" && row.traveler_id === null
+            ? bookerRootMembership(membershipInput)
+            : inviteMembership(membershipInput, principalRole);
         })
         .filter((entry): entry is CustomerPrincipalMembership => Boolean(entry))
     : [];
@@ -890,16 +991,23 @@ export async function completeCustomerPrincipalActivation(
       409,
     );
   }
-  const { error: membershipError } = await client.from(membershipTable).upsert(
-    scopedMemberships.map((membership) => ({
-      ...membership,
-      membership_status: "active",
-      principal_id: invite.principalId,
-      revoked_at: null,
-    })),
-    { onConflict: "principal_id,company_id,booker_id,traveler_id" },
-  );
-  if (membershipError) {
+  const rootMembership = scopedMemberships.length === 1 && scopedMemberships[0].traveler_id === null
+    ? scopedMemberships[0]
+    : null;
+  const membershipSaved = rootMembership
+    ? await persistBookerRootMembership(client, rootMembership, invite.principalId)
+    : !(
+        await client.from(membershipTable).upsert(
+          scopedMemberships.map((membership) => ({
+            ...membership,
+            membership_status: "active",
+            principal_id: invite.principalId,
+            revoked_at: null,
+          })),
+          { onConflict: "principal_id,company_id,booker_id,traveler_id" },
+        )
+      ).error;
+  if (!membershipSaved) {
     return principalFailure<CustomerPrincipalDeviceSessionResult>(
       "Customer activation failed safely.",
       500,
@@ -982,17 +1090,28 @@ export async function assertActiveCustomerPrincipalSession(
     .select("company_id, booker_id, traveler_id, customer_account_reference, membership_role, membership_status, verified_boss_name")
     .eq("principal_id", session.principal_id).eq("membership_status", "active");
   const memberships = asArray(membershipRows)
-    .map((row) => inviteMembership({
-      bookerId: asRecord(row).booker_id,
-      companyId: asRecord(row).company_id,
-      customerAccountReference: asRecord(row).customer_account_reference,
-      travelerId: asRecord(row).traveler_id,
-      verifiedBossName: asRecord(row).verified_boss_name,
-    }, role))
+    .map((row) => {
+      const record = asRecord(row);
+      const membershipInput = {
+        bookerId: record.booker_id,
+        companyId: record.company_id,
+        customerAccountReference: record.customer_account_reference,
+        travelerId: record.traveler_id,
+        verifiedBossName: record.verified_boss_name,
+      };
+      return role === "pa" && record.traveler_id === null
+        ? bookerRootMembership(membershipInput)
+        : inviteMembership(membershipInput, role);
+    })
     .filter((value): value is CustomerPrincipalMembership => Boolean(value));
   if (memberships.length === 0) return principalFailure("Customer app access is required.", 403);
   let effectiveMemberships = memberships;
-  if (role === "pa") {
+  const bookerRoot = role === "pa"
+    ? memberships.find((membership) => membership.traveler_id === null)
+    : null;
+  if (bookerRoot) {
+    effectiveMemberships = [bookerRoot];
+  } else if (role === "pa") {
     const roots = new Map<string, CustomerPrincipalMembership>();
     for (const membership of memberships) {
       roots.set(

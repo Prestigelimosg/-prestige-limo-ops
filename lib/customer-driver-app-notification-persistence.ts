@@ -2100,7 +2100,7 @@ async function loadCustomerAppNotificationsForControlledRuntime(
       (membership) =>
         membership.company_id === companyId &&
         membership.booker_id === bookerId &&
-        membership.traveler_id === travelerId,
+        (membership.traveler_id === null || membership.traveler_id === travelerId),
     );
     if (
       safeIdentifier(booking.booking_reference, maxBookingReferenceLength) !==
@@ -2618,7 +2618,7 @@ async function assertQuickReplyCustomerBookingScope(
       (entry) =>
         entry.company_id === Number(booking.company_id) &&
         entry.booker_id === Number(booking.booker_id) &&
-        entry.traveler_id === Number(booking.traveler_id),
+        (entry.traveler_id === null || entry.traveler_id === Number(booking.traveler_id)),
     );
     if (
       safeIdentifier(booking.booking_reference, maxBookingReferenceLength) !==

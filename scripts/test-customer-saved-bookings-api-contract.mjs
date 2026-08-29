@@ -170,8 +170,11 @@ async function writeMockModules(tempDir) {
   await writeFile(
     principalPath,
     [
-      "exports.resolveCustomerPrincipalSessionToken = () => null;",
-      "exports.assertActiveCustomerPrincipalSession = async () => ({ error: 'not used by legacy contract', ok: false, status: 403 });",
+      "exports.resolveCustomerPrincipalSessionToken = (token) => globalThis.__prestigeCustomerSavedBookingsPrincipalSessions?.has(token) ? { principal_id: 'root-principal' } : null;",
+      "exports.assertActiveCustomerPrincipalSession = async (token) => {",
+      "  const context = globalThis.__prestigeCustomerSavedBookingsPrincipalSessions?.get(token);",
+      "  return context ? { data: context, ok: true } : { error: 'Customer app access is required.', ok: false, status: 403 };",
+      "};",
     ].join("\n"),
   );
 }
@@ -409,6 +412,8 @@ function seedSavedBookingRows() {
         admin_finance_note: "must not leak",
         admin_internal_status: "confirmed",
         booking_reference: "CUST-SAVED-001",
+        booker_id: "26",
+        company_id: "53",
         contact_email: "must-not-return@example.com",
         contact_phone: "+6590000000",
         created_at: "2026-06-08T01:00:00.000Z",
@@ -428,11 +433,14 @@ function seedSavedBookingRows() {
         pickup_at: "2026-06-08T09:00:00.000Z",
         pickup_location: "Changi Airport",
         service_type: "arrival",
+        traveler_id: "40",
         updated_at: "2026-06-08T01:30:00.000Z",
         vehicle_type_or_category: "Mercedes E-Class",
       },
       {
         booking_reference: "CUST-SAVED-002",
+        booker_id: "26",
+        company_id: "53",
         customer_facing_status: "completed",
         customer_id: customerAccountReference,
         dropoff_location: "Fullerton Hotel",
@@ -440,6 +448,7 @@ function seedSavedBookingRows() {
         pickup_at: "2026-06-09T09:00:00.000Z",
         pickup_location: "Marina Bay Sands",
         service_type: "transfer",
+        traveler_id: "41",
         updated_at: "2026-06-08T01:10:00.000Z",
       },
       {
@@ -466,6 +475,8 @@ function seedSavedBookingRows() {
       },
       {
         booking_reference: "OTHER-CUSTOMER-001",
+        booker_id: "27",
+        company_id: "53",
         customer_facing_status: "confirmed",
         customer_id: "55555555-5555-4555-8555-555555555555",
         dropoff_location: "Other dropoff",
@@ -473,6 +484,7 @@ function seedSavedBookingRows() {
         pickup_at: "2026-06-09T09:00:00.000Z",
         pickup_location: "Other pickup",
         service_type: "transfer",
+        traveler_id: "40",
         updated_at: "2026-06-08T02:10:00.000Z",
       },
     ],
@@ -609,6 +621,58 @@ try {
     ).status,
     400,
     "Oversized limit should be rejected.",
+  );
+
+  const rootPrincipalToken = "customer_principal_v1.booker-root-saved-bookings";
+  globalThis.__prestigeCustomerSavedBookingsPrincipalSessions = new Map([
+    [
+      rootPrincipalToken,
+      {
+        memberships: [{
+          booker_id: 26,
+          company_id: 53,
+          customer_account_reference: customerAccountReference,
+          membership_role: "managing_pa",
+          traveler_id: null,
+          verified_boss_name: "Verified Booker",
+        }],
+        normalized_email: "booker@example.test",
+        principal_id: "root-principal",
+        principal_role: "pa",
+      },
+    ],
+  ]);
+  validEnv();
+  const rootPrincipalMock = installMockClient(seedSavedBookingRows());
+  const rootPrincipalRead = await harness.read.loadCustomerSavedBookings(
+    new URLSearchParams("limit=10&page=1"),
+    {
+      auth_user_id: "root-principal",
+      mode: "principal-device-session",
+      principal_id: "root-principal",
+      principal_session_token: rootPrincipalToken,
+      runtime_gate: {
+        account_allowlist: new Set([customerAccountReference]),
+        mode: "one-customer",
+      },
+      source_surface: "customer_api",
+    },
+  );
+  assert.equal(rootPrincipalRead.ok, true);
+  assert.deepEqual(
+    rootPrincipalRead.data.saved_bookings.map((booking) => booking.booking_reference).sort(),
+    ["CUST-SAVED-001", "CUST-SAVED-002"],
+    "One exact Company+Booker root must read its bookings across booking-specific Travellers only.",
+  );
+  assert.deepEqual(rootPrincipalMock.client.selectHistory[0].filters, [
+    { column: "company_id", value: "53" },
+    { column: "booker_id", value: "26" },
+    { column: "pickup_at", method: "gte", value: historyWindowStartIso },
+  ]);
+  assert.equal(
+    rootPrincipalMock.client.selectHistory[0].filters.some((filter) => filter.column === "traveler_id"),
+    false,
+    "Booker-root reads must not use the booking-specific Traveller as account identity.",
   );
 
   setEnv({});
@@ -1130,6 +1194,7 @@ try {
 } finally {
   restoreEnv();
   delete globalThis.__prestigeCustomerSavedBookingsApiMock;
+  delete globalThis.__prestigeCustomerSavedBookingsPrincipalSessions;
   await harness.cleanup();
 }
 

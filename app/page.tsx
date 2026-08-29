@@ -5338,6 +5338,10 @@ function buildSaveCrmBillingIdentityReview(
       adminDispatchVerifiedIdentityId(bookingValue.bookerId) ||
       adminDispatchVerifiedIdentityId(bookingValue.travelerId),
   );
+  const hasVerifiedCompanyBookerIdentity = Boolean(
+    adminDispatchVerifiedIdentityId(bookingValue.companyId) &&
+      adminDispatchVerifiedIdentityId(bookingValue.bookerId),
+  );
   const personalCustomerChoiceRequired = !rawCompanyAccount && !hasVerifiedIdentity;
 
   if (!companyAccount && currentBookerTokens.length === 0) {
@@ -5369,7 +5373,7 @@ function buildSaveCrmBillingIdentityReview(
     ? uniqueRelatedTravelerNames.filter((name) => !billingIdentityMatches(name, travelerName))
     : uniqueRelatedTravelerNames;
 
-  const needsTravelerName = !travelerName;
+  const needsTravelerName = !travelerName && !hasVerifiedCompanyBookerIdentity;
 
   if (!needsTravelerName && !personalCustomerChoiceRequired) {
     return null;
@@ -7350,9 +7354,9 @@ async function resolveSaveCrmCorporateIdentityForSave(
 
   const bookerName = clean(bookingValue.booker);
 
-  if (!bookerName || !clean(bookingValue.name)) {
+  if (!bookerName) {
     return {
-      message: "Enter both Booker / PA name and Passenger name before saving this corporate booking.",
+      message: "Enter the Booker / PA name before saving this corporate booking.",
       ok: false,
     };
   }

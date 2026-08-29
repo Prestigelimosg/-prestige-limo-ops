@@ -355,6 +355,7 @@ class MockSupabaseClient {
       booking_route_points: [],
       booking_service_items: [],
       bookings: [],
+      bookers: [],
       customer_contacts: [],
       customers: [],
       companies: [],
@@ -365,6 +366,7 @@ class MockSupabaseClient {
       booking_route_points: 1,
       booking_service_items: 1,
       bookings: 1,
+      bookers: 1,
       customer_contacts: 1,
       customers: 1,
       companies: 1,
@@ -1136,6 +1138,11 @@ try {
     display_name: "Nomura Singapore Limited / Booker: Mavis Lam / Passenger: Mr Jwalant Nanavati",
     id: 171,
     status: "active",
+  });
+  verifiedIdentityReuseMock.client.tables.bookers.push({
+    company_id: 38,
+    customer_id: 171,
+    id: 77,
   });
   verifiedIdentityReuseMock.client.tables.bookings.push({
     booker_id: 77,

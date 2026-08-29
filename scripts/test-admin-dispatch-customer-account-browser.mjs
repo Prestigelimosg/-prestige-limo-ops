@@ -116,6 +116,7 @@ async function main() {
           { requestStage: "Request", urlPattern: "*/api/admin-rate-setup*" },
           { requestStage: "Request", urlPattern: "*/api/admin-customer-accounts*" },
           { requestStage: "Request", urlPattern: "*/api/admin-bookers*" },
+          { requestStage: "Request", urlPattern: "*/api/admin-companies-crm-identity*" },
           { requestStage: "Request", urlPattern: "*/api/admin-bookings*" },
         ],
       }),
@@ -167,6 +168,14 @@ async function main() {
               ok: true,
             }
           : { booker: null, ok: true };
+      } else if (
+        requestUrl.pathname === "/api/admin-companies-crm-identity" &&
+        method === "GET"
+      ) {
+        responseBody = {
+          error: "Verified Company + Booker account gate passed; focused probe stopped before any write.",
+          ok: false,
+        };
       } else if (requestUrl.pathname === "/api/admin-bookings" && method === "POST") {
         bookingPosts.push(request.postData || "");
         responseBody = { error: "Focused browser test blocks booking writes.", ok: false };
@@ -285,6 +294,84 @@ async function main() {
       customerId: "551",
       travelerId: "",
     });
+    const preparedDirectSave = await evaluate(`(() => {
+      const normalize = (value) => (value || "").replace(/\\s+\\*/g, " ").trim();
+      const setField = (labelText, value) => {
+        const label = [...document.querySelectorAll("label")].find(
+          (candidate) => normalize(candidate.querySelector("span")?.textContent) === labelText,
+        );
+        const input = label?.querySelector("input");
+        if (!(input instanceof HTMLInputElement)) return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      };
+
+      return [
+        setField("Passenger name", ""),
+        setField("Pickup date", "2026-09-01"),
+        setField("Pickup time", "10:00"),
+        setField("Pickup", "QA Pickup"),
+        setField("Drop-off", "QA Drop-off"),
+      ].every(Boolean);
+    })()`);
+    assert.equal(preparedDirectSave, true, "Expected direct Save + CRM probe fields");
+    await waitForCondition(
+      async () => evaluate(`(() => {
+        const valueFor = (labelText) => [...document.querySelectorAll("label")]
+          .find((candidate) => (candidate.querySelector("span")?.textContent || "").replace(/\\s+\\*/g, " ").trim() === labelText)
+          ?.querySelector("input")?.value || "";
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return chooser?.dataset.bookerId === "5502" &&
+          valueFor("Pickup date") === "2026-09-01" &&
+          valueFor("Pickup time") === "10:00" &&
+          valueFor("Pickup") === "QA Pickup" &&
+          valueFor("Drop-off") === "QA Drop-off" &&
+          valueFor("Passenger name") === "";
+      })()`),
+      10000,
+      "direct Save + CRM local field state",
+    );
+    const clickedDirectSave = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(candidate.textContent.trim()),
+      );
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedDirectSave, true, "Expected direct Save + CRM click");
+    const directSaveState = await waitForCondition(
+      async () => evaluate(`(() => {
+        const feedback = document.querySelector('[data-booking-save-feedback="job-card"]')
+          ?.textContent.replace(/\\s+/g, " ").trim() || "";
+        return feedback.includes("Verified Company + Booker account gate passed")
+          ? {
+              billingReview: document.querySelector('[data-save-crm-billing-identity-review="true"]')
+                ?.textContent.replace(/\\s+/g, " ").trim() || "",
+              feedback,
+            }
+          : false;
+      })()`),
+      10000,
+      "verified Company + Booker Save + CRM account gate",
+    );
+    assert.equal(directSaveState.billingReview, "");
+    assert.doesNotMatch(directSaveState.feedback, /Passenger|Traveller|Traveler|Boss/);
+    assert.equal(bookingPosts.length, 0, "The focused Company + Booker probe must perform zero booking writes");
+    await waitForCondition(
+      async () => evaluate(`(() => {
+        const button = [...document.querySelectorAll("button")].find(
+          (candidate) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(candidate.textContent.trim()),
+        );
+        return button instanceof HTMLButtonElement && !button.disabled;
+      })()`),
+      10000,
+      "Save + CRM recovery after focused account-gate stop",
+    );
+
     await search("Mavis Lam");
     reporter.step("checking passenger-specific repeat account selection");
 
@@ -301,7 +388,9 @@ async function main() {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
         const passenger = document.querySelector('input[placeholder="Passenger name"]');
         const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
-        return chooser?.dataset.bookerId === "5501" &&
+        return chooser instanceof HTMLDetailsElement &&
+          !chooser.open &&
+          chooser.dataset.bookerId === "5501" &&
           chooser?.dataset.customerId === "550" &&
           passenger?.value === "Mr Jwalant Nanavati" &&
           !review

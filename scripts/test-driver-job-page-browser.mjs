@@ -9,7 +9,7 @@ import {
   navigateAndWaitForBodyText,
   normalizeConsoleMessages,
   normalizeErrorMessage,
-  waitForChildExit,
+  terminateChildProcess,
   waitForChromeDebugPort,
   waitForChromePageTarget,
   waitForCondition,
@@ -2784,8 +2784,8 @@ async function runChromeTest() {
       await client.close();
     }
 
-    chrome.kill("SIGTERM");
-    await waitForChildExit(chrome);
+    await terminateChildProcess(chrome);
+    chrome.stderr.destroy();
     await rm(userDataDir, { force: true, recursive: true }).catch(() => {});
   }
 }

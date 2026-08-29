@@ -28801,9 +28801,12 @@ export default function Home() {
     dispatchReleaseDriverReady &&
     clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS") &&
     !dispatchReleaseCustomerCopyHasPlaceholder;
-  const customerDriverDetailsPortalLinkCopyReady =
-    dispatchReleaseTripComplete &&
-    clean(customerCopyText).startsWith("CUSTOMER BOOKING DETAILS");
+  const customerDriverDetailsPortalLinkCopyReady = Boolean(
+    customerDriverDetailsPortalBookingReference &&
+      customerDriverDetailsPortalAccountReference &&
+      customerDriverDetailsPortalCompanyId &&
+      customerDriverDetailsPortalBookerId,
+  );
   const dispatchReleaseDriverDispatchHasPlaceholder =
     /\bTBC\b|Pickup > Drop-off|Date TBC|Time TBC/i.test(driverDispatchCopyText);
   const dispatchReleaseDriverDispatchHasFinanceLine = /payout\s*:/i.test(driverDispatchCopyText);

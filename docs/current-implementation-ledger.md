@@ -12,6 +12,12 @@ c06f7abc Merge pull request #432 from Prestigelimosg/codex/admin-dashboard-defau
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+## Saved Customer App Link Independent Of Trip Readiness (2026-08-29)
+
+- The saved-booking `Copy + App Link` action is eligible from one persisted booking reference plus its exact verified `customer_id + company_id + booker_id`. It no longer requires route, flight, vehicle, passenger-count, driver or Dispatch trip-readiness fields. The existing server route still re-reads the exact Booker relationship and requires that Booker's saved verified email before it can create an access account or one-use invitation.
+- Fail-first focused and mocked-browser evidence reproduced the old block by clearing Pickup locally on an already-saved Company + Booker booking: the action became disabled even though no Calendar request was made. The focused readiness guard now rejects trip, customer-copy and driver-readiness dependencies; browser coverage requires the saved action to remain enabled with the Calendar-call count unchanged.
+- Save + CRM validation and the separate Operations Calendar eligibility, sync, event identity and provider behavior are unchanged. The access handler, one-use 30-minute invitation, exact Booker recipient, local clipboard-only result and no-provider-send boundary are also unchanged. No Calendar, push/badge, native, invoice, DSP/pricing, payment, payout, GPS, provider, schema or data lane is added or modified.
+
 ## Customer Driver Details Readiness Label (2026-08-29)
 
 - Owner-visible installed Admin evidence on exact Production build `c90a8d02` proved the Customer Copy readiness title was static: a blank unsaved draft displayed `Customer driver details ready` beside `Driver not assigned`, while loaded booking `10911` with complete safe driver name, contact, plate and vehicle correctly displayed the ready title and matching safe details.

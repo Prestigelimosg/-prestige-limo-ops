@@ -3916,6 +3916,43 @@ async function runChromeTest() {
         })()`);
       };
 
+      const customerAppLinkCalendarCallBaseline = await evaluate(
+        `(window.__adminBookingCalendarSyncCalls || []).length`,
+      );
+      await fillDispatchBookingField("Pickup", "");
+      const incompleteTripCustomerAppLinkState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const button = document.querySelector(
+              "[data-admin-customer-driver-details-copy-with-portal-link='true']",
+            );
+            const pickupLabel = [...document.querySelectorAll(
+              "[data-dispatch-workflow-step='pickup-dropoff-vehicle'] label",
+            )].find((label) => label.querySelector("span")?.textContent.trim() === "Pickup");
+            const pickup = pickupLabel?.querySelector("input")?.value || "";
+
+            return button && pickup === ""
+              ? {
+                  calendarCalls: (window.__adminBookingCalendarSyncCalls || []).length,
+                  disabled: button.disabled,
+                  label: button.textContent.replace(/\\s+/g, " ").trim(),
+                }
+              : false;
+          })()`),
+        10000,
+        "saved Company Booker customer app-link independent of incomplete trip",
+      );
+      assert.deepEqual(
+        incompleteTripCustomerAppLinkState,
+        {
+          calendarCalls: customerAppLinkCalendarCallBaseline,
+          disabled: false,
+          label: "Copy + App Link",
+        },
+        "Expected saved Company + Booker Copy + App Link to remain available without trip or Calendar readiness",
+      );
+      await fillDispatchBookingField("Pickup", "Loaded Ops Pickup");
+
       for (const [labelText, value] of [
         ["Pickup", "Updated Ops Pickup"],
         ["Extra stop location", "Updated Ops Stop"],

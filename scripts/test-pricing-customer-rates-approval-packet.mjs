@@ -127,23 +127,28 @@ const saveRateOverride = sliceBetween(
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
 for (const [label, source] of [
   ["Parked rate override save", saveRateOverride],
   ["Parked company rate override remove", removeCompanyRateOverride],
-  ["Parked traveler rate override remove", removeBossRateOverride],
 ]) {
   assertIncludes(source, "adminLegacyDataClient", label);
   assertIncludes(source, "customer_rates", label);
   assertIncludes(source, "driver_payout_rules", label);
 }
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Customer Account rate override save");
+assertExcludes(saveRateOverride, "adminLegacyTables.travelers", "Customer Account rate save must not target travellers");
+assertIncludes(removeBookerRateOverride, "saveCustomerRatesRuntime", "Customer Account rate override remove");
+assertIncludes(removeBookerRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account remove payload");
+assertExcludes(removeBookerRateOverride, "adminLegacyDataClient", "Customer Account rate remove must not use legacy writes");
+assertExcludes(removeBookerRateOverride, "driver_payout_rules", "Customer Account rate remove must preserve Company payout");
 
 for (const fragment of [
   "export function resolvePricing",

@@ -41,6 +41,9 @@ const requiredLedgerPhrases = [
 ];
 
 const allowedSelectedColumns = new Set([
+  "booking_service_items.item_type",
+  "booking_service_items.notes",
+  "booking_service_items.quantity",
   "booking_reference",
   "booker_id",
   "bookers.booker_name",
@@ -87,6 +90,7 @@ const allowedSelectedColumns = new Set([
   "flight_no",
   "id",
   "job_card",
+  "luggage_count",
   "midnight_payout",
   "midnight_surcharge",
   "pax",

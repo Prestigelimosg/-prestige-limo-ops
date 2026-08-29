@@ -56,11 +56,6 @@ const [appPage, aiParseRoute, adminSavedBookingsRoute, ledger, preactivationSuit
 const companyCrmPayload = sliceBetween(
   appPage,
   "function buildCompanyCrmIdentityContactPayload",
-  "function buildTravelerCrmIdentityContactPayload",
-);
-const travelerCrmPayload = sliceBetween(
-  appPage,
-  "function buildTravelerCrmIdentityContactPayload",
   "function crmRuntimeRecordId",
 );
 const companyRatePayload = sliceBetween(
@@ -71,16 +66,11 @@ const companyRatePayload = sliceBetween(
 const travelerRatePayload = sliceBetween(
   appPage,
   "function buildTravelerRateOverridePayload",
-  "function buildLegacyCompanyRateOverrideInsertPayload",
+  "function buildCompanyCustomerRateOverridePayload",
 );
 const legacyCompanyRateOverrideInsertPayload = sliceBetween(
   appPage,
   "function buildLegacyCompanyRateOverrideInsertPayload",
-  "function buildLegacyTravelerRateOverrideInsertPayload",
-);
-const legacyTravelerRateOverrideInsertPayload = sliceBetween(
-  appPage,
-  "function buildLegacyTravelerRateOverrideInsertPayload",
   "function statusClass",
 );
 const crmRuntimeClientHelper = sliceBetween(
@@ -96,11 +86,11 @@ const saveRateOverride = sliceBetween(
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
@@ -122,12 +112,11 @@ for (const phrase of [
   assertIncludes(ledgerSection, phrase, `CRM identity/rate override payload split ledger phrase: ${phrase}`);
 }
 
-for (const [label, source] of [
-  ["Company CRM identity/contact payload", companyCrmPayload],
-  ["Traveler CRM identity/contact payload", travelerCrmPayload],
-]) {
-  assertExcludes(source, forbiddenCrmPayloadPattern, label);
-}
+assertExcludes(
+  companyCrmPayload,
+  forbiddenCrmPayloadPattern,
+  "Company CRM identity/contact payload",
+);
 
 for (const [label, source] of [
   ["Company rate override payload", companyRatePayload],
@@ -141,8 +130,12 @@ for (const [label, source] of [
 }
 
 assertIncludes(companyCrmPayload, "company_name", "Company CRM identity/contact payload");
-assertIncludes(travelerCrmPayload, "company_id", "Traveler CRM identity/contact payload");
-assertIncludes(travelerCrmPayload, "traveler_name", "Traveler CRM identity/contact payload");
+assertExcludes(appPage, "function buildTravelerCrmIdentityContactPayload", "Retired traveler CRM payload helper");
+assertExcludes(
+  appPage,
+  "function buildLegacyTravelerRateOverrideInsertPayload",
+  "Retired legacy traveler insert helper",
+);
 assertIncludes(crmRuntimeClientHelper, "saveCompanyTravelerCrmIdentityContactRuntime", "CRM runtime client helper");
 assertIncludes(
   crmRuntimeClientHelper,
@@ -162,35 +155,25 @@ assertIncludes(
   "buildCompanyRateOverridePayload",
   "Legacy company rate override insert composition",
 );
-assertIncludes(
-  legacyTravelerRateOverrideInsertPayload,
-  "buildTravelerCrmIdentityContactPayload",
-  "Legacy traveler rate override insert composition",
-);
-assertIncludes(
-  legacyTravelerRateOverrideInsertPayload,
-  "buildTravelerRateOverridePayload",
-  "Legacy traveler rate override insert composition",
-);
-
-assertIncludes(saveRateOverride, "buildLegacyCompanyRateOverrideInsertPayload", "Parked legacy override save");
-assertIncludes(saveRateOverride, "buildLegacyTravelerRateOverrideInsertPayload", "Parked legacy override save");
-assertIncludes(saveRateOverride, "saveCompanyTravelerCrmIdentityContactRuntime", "CRM identity/contact runtime split");
-assertIncludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "CRM identity/contact runtime split");
-assertIncludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "CRM identity/contact runtime split");
+assertExcludes(saveRateOverride, "buildLegacyCompanyRateOverrideInsertPayload", "Normal Rates save must not create Company identity");
+assertExcludes(saveRateOverride, "buildLegacyTravelerRateOverrideInsertPayload", "Retired traveler insert fallback");
+assertExcludes(saveRateOverride, "saveCompanyTravelerCrmIdentityContactRuntime", "Normal Rates save must not write CRM identity/contact");
+assertExcludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "Normal Rates save must not build Company identity/contact");
+assertExcludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "Retired traveler identity creation split");
 assertIncludes(saveRateOverride, "buildCompanyRateOverridePayload", "Parked legacy override save");
-assertIncludes(saveRateOverride, "buildTravelerRateOverridePayload", "Parked legacy override save");
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account rate save");
 assertIncludes(saveRateOverride, "adminLegacyDataClient", "Parked legacy override save");
 assertIncludes(saveRateOverride, "adminLegacyTables.companies", "Parked legacy company write path");
-assertIncludes(saveRateOverride, "adminLegacyTables.travelers", "Parked legacy traveler write path");
+assertExcludes(saveRateOverride, "adminLegacyTables.travelers", "Normal Customer Account rate save must not target travellers");
 
 assertIncludes(removeCompanyRateOverride, "buildCompanyRateOverridePayload", "Parked company override remove");
 assertIncludes(removeCompanyRateOverride, "adminLegacyDataClient", "Parked company override remove");
 assertIncludes(removeCompanyRateOverride, "adminLegacyTables.companies", "Parked company override remove");
 
-assertIncludes(removeBossRateOverride, "buildTravelerRateOverridePayload", "Parked boss/name override remove");
-assertIncludes(removeBossRateOverride, "adminLegacyDataClient", "Parked boss/name override remove");
-assertIncludes(removeBossRateOverride, "adminLegacyTables.travelers", "Parked boss/name override remove");
+assertIncludes(removeBookerRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account override remove");
+assertIncludes(removeBookerRateOverride, "saveCustomerRatesRuntime", "Exact Customer Account override remove");
+assertExcludes(removeBookerRateOverride, "adminLegacyDataClient", "Customer Account override remove must not use legacy writes");
+assertExcludes(removeBookerRateOverride, "driver_payout_rules", "Customer Account override remove must preserve Company payout");
 
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM safe route");
 assertExcludes(saveBooking, "/api/admin-saved-bookings", "Save Booking + CRM safe route");

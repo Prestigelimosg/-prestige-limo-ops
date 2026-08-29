@@ -148,10 +148,15 @@ for (const fragment of [
   "customer_rates",
   "driver_payout_rules",
   "buildCompanyRateOverridePayload",
-  "buildTravelerRateOverridePayload",
+  "buildCompanyDriverPayoutRulesRuntimeWritePayload",
 ]) {
   assertIncludes(saveRateOverride, fragment, `Parked rate override payout fragment: ${fragment}`);
 }
+assertExcludes(
+  saveRateOverride,
+  "buildTravelerRateOverridePayload",
+  "Customer Account rate save must not route Company payout through Traveller identity",
+);
 
 const loadDrivers = sliceBetween(appPage, "async function loadDrivers", "async function fetchDriverAssignmentDisplayDriverRecords");
 const saveDriverProfile = sliceBetween(appPage, "async function saveDriverProfile", "async function deleteDriverProfile");

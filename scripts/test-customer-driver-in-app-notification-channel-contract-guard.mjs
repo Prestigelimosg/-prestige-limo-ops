@@ -117,10 +117,14 @@ for (const fragment of [
   'data-copy-copy-button="customerCopy"',
   'data-copy-edit-button="customerCopy"',
   'data-admin-customer-driver-details-email-review-item="true"',
-  'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
 ]) {
   assertIncludes(appPage, fragment, `existing compact Customer Copy control ${fragment}`);
 }
+assertExcludes(
+  appPage,
+  'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
+  "retired visible WhatsApp pseudo-button",
+);
 
 for (const fragment of [
   'customerDriverAppNotificationSurfaces = ["customer_app", "driver_app"]',

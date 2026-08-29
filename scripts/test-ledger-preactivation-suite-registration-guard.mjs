@@ -4,15 +4,17 @@ import { readFile } from "node:fs/promises";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-ledger-preactivation-suite-registration-guard.mjs";
+const telegramAbsenceGuardPath = "scripts/test-telegram-application-absence-guard.mjs";
 const ledgerSectionHeading = "### Ledger Pre-Activation Suite Registration Guard Lock";
 
 function assertIncludes(source, fragment, label = fragment) {
   assert.equal(source.includes(fragment), true, `${label} must include ${fragment}.`);
 }
 
-const [ledger, preactivationSuite] = await Promise.all([
+const [ledger, preactivationSuite, telegramAbsenceGuard] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
+  readFile(telegramAbsenceGuardPath, "utf8"),
 ]);
 
 const registrationLines = ledger
@@ -28,11 +30,22 @@ const registrationLines = ledger
 const promisedScripts = [
   ...new Set(
     registrationLines
-      .flatMap((line) => [...line.matchAll(/scripts\/[A-Za-z0-9_.\/-]+\.mjs/g)])
+      .map((line) => line.slice(0, line.indexOf(preactivationSuitePath)))
+      .flatMap((claim) => [...claim.matchAll(/scripts\/[A-Za-z0-9_.\/-]+\.mjs/g)])
       .map((match) => match[0])
       .filter((script) => script !== preactivationSuitePath),
   ),
 ].sort();
+
+const retiredPromisedScripts = new Set(
+  [...telegramAbsenceGuard.matchAll(/"(scripts\/[^"\n]+\.mjs)"/g)].map(
+    (match) => match[1],
+  ),
+);
+
+const activePromisedScripts = promisedScripts.filter(
+  (script) => !retiredPromisedScripts.has(script),
+);
 
 assert.equal(
   promisedScripts.length >= 60,
@@ -40,7 +53,9 @@ assert.equal(
   `Expected at least 60 ledger preactivation suite registration promises; found ${promisedScripts.length}.`,
 );
 
-const missingScripts = promisedScripts.filter((script) => !preactivationSuite.includes(script));
+const missingScripts = activePromisedScripts.filter(
+  (script) => !preactivationSuite.includes(script),
+);
 
 assert.deepEqual(
   missingScripts,
@@ -55,5 +70,10 @@ assertIncludes(
   "ledger registration guard script registration wording",
 );
 assertIncludes(preactivationSuite, guardScript, "preactivation suite registration guard entry");
+assertIncludes(
+  preactivationSuite,
+  telegramAbsenceGuardPath,
+  "Telegram replacement absence guard registration",
+);
 
 console.log("ledger preactivation suite registration guard passed");

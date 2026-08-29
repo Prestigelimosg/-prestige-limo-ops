@@ -44,6 +44,7 @@ const sourceFiles = [
   "lib/singapore-pickup-display.ts",
   "lib/customer-runtime-session-map.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/customer-device-push-notification.ts",
   "lib/driver-device-push-notification.ts",
   "lib/customer-booking-receipt-email.ts",
   "lib/customer-portal-access-account.ts",
@@ -276,6 +277,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  is(column, value) {
+    this.filters.push({ column, operator: "is", value });
+
+    return this;
+  }
+
   ilike(column, value) {
     this.filters.push({ column, operator: "ilike", value });
 
@@ -350,6 +357,14 @@ class MockSupabaseClient {
       booking_route_points: [],
       booking_service_items: [],
       bookings: [],
+      bookers: [
+        {
+          booker_name: "Jennifer",
+          company_id: 31,
+          customer_id: null,
+          id: 24,
+        },
+      ],
       customer_driver_app_notification_outbox: [],
       customer_contacts: [],
       customers: [],
@@ -361,6 +376,7 @@ class MockSupabaseClient {
       booking_route_points: 1,
       booking_service_items: 1,
       bookings: 1,
+      bookers: 25,
       customer_driver_app_notification_outbox: 1,
       customer_contacts: 1,
       customers: 1,
@@ -646,7 +662,9 @@ class MockSupabaseClient {
   applyFilters(rows, filters) {
     return rows.filter((row) =>
       filters.every((filter) =>
-        filter.operator === "ilike"
+        filter.operator === "is"
+          ? (filter.value === null ? row[filter.column] == null : row[filter.column] === filter.value)
+          : filter.operator === "ilike"
           ? String(row[filter.column] ?? "").toLocaleLowerCase() ===
             String(filter.value ?? "").toLocaleLowerCase()
           : String(row[filter.column]) === String(filter.value),
@@ -1101,18 +1119,9 @@ try {
   assertCreatedClient(createMock);
   assertSixTableCreateMapping(createMock);
 
-  const selectedLegacyCorporatePayload = persistence.parseAdminBookingPersistencePayload(
-    canonicalCorporateAdminPayload(),
-  );
-  const selectedLegacyCorporateMock = installMockClient({
-    bookings: [
-      {
-        booker_id: null,
-        company_id: null,
-        customer_id: 163,
-        id: 179,
-        traveler_id: null,
-      },
+  const mappedBookerMock = installMockClient({
+    bookers: [
+      { booker_name: "Jennifer", company_id: 31, customer_id: 163, id: 24 },
     ],
     customers: [
       {
@@ -1123,34 +1132,80 @@ try {
       },
     ],
   });
-  const selectedLegacyCorporateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
-    selectedLegacyCorporatePayload.data,
+  const mappedBookerResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(
+      canonicalCorporateAdminPayload({
+        booking: { passenger_name: "Different Passenger", traveler_id: null },
+      }),
+    ).data,
     adminAudit(),
     adminActor(),
   );
 
-  assert.equal(selectedLegacyCorporatePayload.ok, true);
-  assert.equal(selectedLegacyCorporateResult.ok, true);
-  assert.equal(
-    insertedOperation(selectedLegacyCorporateMock.client, "bookings")?.payload?.customer_id,
-    163,
-    "An explicitly selected active legacy Customer Account must remain the booking customer when the verified tuple has no prior mapping.",
-  );
-  assert.equal(
-    insertedOperations(selectedLegacyCorporateMock.client, "customers").length,
-    0,
-    "Respecting the explicitly selected active legacy Customer Account must not create a duplicate customer.",
+  assert.equal(mappedBookerResult.ok, true);
+  assert.equal(insertedOperation(mappedBookerMock.client, "bookings")?.payload?.customer_id, 163);
+  assert.equal(insertedOperations(mappedBookerMock.client, "customers").length, 0);
+
+  const firstReviewMock = installMockClient({
+    customers: [
+      {
+        account_status: "active",
+        display_name: "Unrelated same display words",
+        id: 163,
+        status: "active",
+      },
+    ],
+  });
+  const firstReviewResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(
+      canonicalCorporateAdminPayload({ booking: { customer_id: null } }),
+    ).data,
+    adminAudit(),
+    adminActor(),
   );
 
-  const sameTupleCorporateMock = installMockClient({
-    bookings: [
-      {
-        booker_id: 24,
-        company_id: 31,
-        customer_id: 163,
-        id: 179,
-        traveler_id: 38,
+  assert.equal(firstReviewResult.ok, false);
+  assert.equal(firstReviewResult.status, 409);
+  assert.deepEqual(firstReviewResult.customer_account_collision_review, {
+    candidates: [],
+    code: "customer_account_collision_review_required",
+  });
+  assert.equal(insertedOperations(firstReviewMock.client, "customers").length, 0);
+  assert.equal(insertedOperations(firstReviewMock.client, "bookings").length, 0);
+
+  const createFirstAccountMock = installMockClient();
+  const createFirstAccountPayload = persistence.parseAdminBookingPersistencePayload(
+    canonicalCorporateAdminPayload({
+      booking: { customer_id: null },
+      customer_account_collision_resolution: {
+        action: "create_new",
+        reviewed_customer_ids: [],
       },
+    }),
+  );
+  const createFirstAccountResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    createFirstAccountPayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(createFirstAccountPayload.ok, true);
+  assert.equal(createFirstAccountResult.ok, true);
+  const firstCustomerId = insertedOperation(
+    createFirstAccountMock.client,
+    "bookings",
+  )?.payload?.customer_id;
+  assert.ok(firstCustomerId);
+  assert.equal(createFirstAccountMock.client.tables.bookers[0].customer_id, firstCustomerId);
+  assert.equal(
+    insertedOperation(createFirstAccountMock.client, "customers")?.payload?.display_name,
+    "Dimensions International College / Booker: Jennifer",
+  );
+
+  const differentBookerMock = installMockClient({
+    bookers: [
+      { booker_name: "Jennifer", company_id: 31, customer_id: 163, id: 24 },
+      { booker_name: "Second Booker", company_id: 31, customer_id: null, id: 25 },
     ],
     customers: [
       {
@@ -1161,103 +1216,69 @@ try {
       },
     ],
   });
-  const sameTupleCorporateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
-    persistence.parseAdminBookingPersistencePayload(canonicalCorporateAdminPayload()).data,
-    adminAudit(),
-    adminActor(),
-  );
-
-  assert.equal(sameTupleCorporateResult.ok, true);
-  assert.equal(
-    insertedOperation(sameTupleCorporateMock.client, "bookings")?.payload?.customer_id,
-    163,
-  );
-  assert.equal(insertedOperations(sameTupleCorporateMock.client, "customers").length, 0);
-
-  const conflictingTupleCorporateMock = installMockClient({
-    bookings: [
-      {
-        booker_id: 24,
-        company_id: 31,
-        customer_id: 191,
-        id: 220,
-        traveler_id: 38,
-      },
-    ],
-    customers: [
-      {
-        account_status: "active",
-        display_name: "Dimensions International College / Booker: Jennifer",
-        id: 163,
-        status: "active",
-      },
-      {
-        account_status: "active",
-        display_name: "Dimensions International College / Booker: Jennifer / Passenger: Mr Tan",
-        id: 191,
-        status: "active",
-      },
-    ],
-  });
-  const conflictingTupleCorporateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
-    persistence.parseAdminBookingPersistencePayload(canonicalCorporateAdminPayload()).data,
-    adminAudit(),
-    adminActor(),
-  );
-
-  assert.equal(conflictingTupleCorporateResult.ok, false);
-  assert.equal(conflictingTupleCorporateResult.status, 409);
-  assert.match(conflictingTupleCorporateResult.error, /verified customer identity/i);
-  assert.equal(insertedOperations(conflictingTupleCorporateMock.client, "customers").length, 0);
-  assert.equal(insertedOperations(conflictingTupleCorporateMock.client, "bookings").length, 0);
-
-  const unselectedCanonicalCollisionPayload = canonicalCorporateAdminPayload({
-    booking: { customer_id: null },
-  });
-  const unselectedCanonicalCollisionMock = installMockClient({
-    customers: [
-      {
-        account_status: "active",
-        display_name:
-          "Dimensions International College Pte. Ltd. / Booker: Previous Contact / Passenger: Previous Passenger",
-        id: 163,
-        status: "active",
-      },
-    ],
-  });
-  const unselectedCanonicalCollisionResult =
-    await adapter.createAdminBookingThroughSupabaseAdapter(
-      persistence.parseAdminBookingPersistencePayload(unselectedCanonicalCollisionPayload).data,
-      adminAudit(),
-      adminActor(),
-    );
-
-  assert.equal(unselectedCanonicalCollisionResult.ok, false);
-  assert.equal(unselectedCanonicalCollisionResult.status, 409);
-  assert.equal(
-    unselectedCanonicalCollisionResult.error,
-    "Detected similar customer/company name",
-  );
-  assert.deepEqual(
-    unselectedCanonicalCollisionResult.customer_account_collision_review,
-    {
-      candidates: [
-        {
-          customer_account:
-            "Dimensions International College Pte. Ltd. / Booker: Previous Contact / Passenger: Previous Passenger",
-          customer_id: 163,
+  const differentBookerResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(
+      canonicalCorporateAdminPayload({
+        booking: {
+          booker_id: 25,
+          contact_display_name: "Second Booker",
+          customer_id: null,
+          passenger_name: "Any Passenger",
+          traveler_id: null,
         },
-      ],
-      code: "customer_account_collision_review_required",
-    },
+        customer_account_collision_resolution: {
+          action: "create_new",
+          reviewed_customer_ids: [],
+        },
+      }),
+    ).data,
+    adminAudit(),
+    adminActor(),
   );
-  assert.equal(insertedOperations(unselectedCanonicalCollisionMock.client, "customers").length, 0);
-  assert.equal(insertedOperations(unselectedCanonicalCollisionMock.client, "bookings").length, 0);
 
-  const mergeCanonicalCollisionMock = installMockClient({
-    customers: clone(unselectedCanonicalCollisionMock.client.tables.customers),
+  assert.equal(differentBookerResult.ok, true);
+  const differentBookerCustomerId = insertedOperation(
+    differentBookerMock.client,
+    "bookings",
+  )?.payload?.customer_id;
+  assert.ok(differentBookerCustomerId);
+  assert.notEqual(differentBookerCustomerId, 163);
+  assert.equal(differentBookerMock.client.tables.bookers[1].customer_id, differentBookerCustomerId);
+
+  const legacyCandidateMock = installMockClient({
+    bookings: [
+      { booker_id: 24, company_id: 31, customer_id: 163, id: 179, traveler_id: 38 },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        display_name: "Dimensions International College / Booker: Jennifer",
+        id: 163,
+        status: "active",
+      },
+    ],
   });
-  const mergeCanonicalCollisionResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+  const legacyCandidateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(
+      canonicalCorporateAdminPayload({ booking: { customer_id: null } }),
+    ).data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(legacyCandidateResult.ok, false);
+  assert.deepEqual(
+    legacyCandidateResult.customer_account_collision_review?.candidates.map(
+      (candidate) => candidate.customer_id,
+    ),
+    [163],
+  );
+
+  const useLegacyAccountMock = installMockClient({
+    bookings: clone(legacyCandidateMock.client.tables.bookings),
+    customers: clone(legacyCandidateMock.client.tables.customers),
+  });
+  const useLegacyAccountResult = await adapter.createAdminBookingThroughSupabaseAdapter(
     persistence.parseAdminBookingPersistencePayload(
       canonicalCorporateAdminPayload({
         booking: { customer_id: null },
@@ -1272,73 +1293,32 @@ try {
     adminActor(),
   );
 
-  assert.equal(mergeCanonicalCollisionResult.ok, true);
-  assert.equal(
-    insertedOperation(mergeCanonicalCollisionMock.client, "bookings")?.payload?.customer_id,
-    163,
-  );
-  assert.equal(insertedOperations(mergeCanonicalCollisionMock.client, "customers").length, 0);
+  assert.equal(useLegacyAccountResult.ok, true);
+  assert.equal(useLegacyAccountMock.client.tables.bookers[0].customer_id, 163);
+  assert.equal(insertedOperation(useLegacyAccountMock.client, "bookings")?.payload?.customer_id, 163);
 
-  const createNewCanonicalCollisionMock = installMockClient({
-    customers: clone(unselectedCanonicalCollisionMock.client.tables.customers),
-  });
-  const createNewCanonicalCollisionResult = await adapter.createAdminBookingThroughSupabaseAdapter(
-    persistence.parseAdminBookingPersistencePayload(
-      canonicalCorporateAdminPayload({
-        booking: { customer_id: null },
-        customer_account_collision_resolution: {
-          action: "create_new",
-          reviewed_customer_ids: [163],
-        },
-      }),
-    ).data,
-    adminAudit(),
-    adminActor(),
-  );
-
-  assert.equal(createNewCanonicalCollisionResult.ok, true);
-  assert.equal(insertedOperations(createNewCanonicalCollisionMock.client, "customers").length, 1);
-  assert.notEqual(
-    insertedOperation(createNewCanonicalCollisionMock.client, "bookings")?.payload?.customer_id,
-    163,
-  );
-
-  const replayCreateNewCollisionMock = installMockClient({
+  const ambiguousBookerMock = installMockClient({
+    bookings: [
+      { booker_id: 24, company_id: 31, customer_id: 163, id: 179, traveler_id: 38 },
+      { booker_id: 24, company_id: 31, customer_id: 191, id: 220, traveler_id: 39 },
+    ],
     customers: [
-      ...clone(unselectedCanonicalCollisionMock.client.tables.customers),
-      {
-        account_status: "active",
-        display_name:
-          "Dimensions International College / Booker: Jennifer / Passenger: Mr Tan",
-        id: 191,
-        status: "active",
-      },
+      { account_status: "active", display_name: "Account A", id: 163, status: "active" },
+      { account_status: "active", display_name: "Account B", id: 191, status: "active" },
     ],
   });
-  const replayCreateNewCollisionResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+  const ambiguousBookerResult = await adapter.createAdminBookingThroughSupabaseAdapter(
     persistence.parseAdminBookingPersistencePayload(
-      canonicalCorporateAdminPayload({
-        booking: { customer_id: null },
-        customer_account_collision_resolution: {
-          action: "create_new",
-          reviewed_customer_ids: [163],
-        },
-      }),
+      canonicalCorporateAdminPayload({ booking: { customer_id: null } }),
     ).data,
     adminAudit(),
     adminActor(),
   );
 
-  assert.equal(replayCreateNewCollisionResult.ok, false);
-  assert.equal(replayCreateNewCollisionResult.status, 409);
-  assert.deepEqual(
-    replayCreateNewCollisionResult.customer_account_collision_review?.candidates.map(
-      (candidate) => candidate.customer_id,
-    ),
-    [163, 191],
-  );
-  assert.equal(insertedOperations(replayCreateNewCollisionMock.client, "customers").length, 0);
-  assert.equal(insertedOperations(replayCreateNewCollisionMock.client, "bookings").length, 0);
+  assert.equal(ambiguousBookerResult.ok, false);
+  assert.equal(ambiguousBookerResult.status, 409);
+  assert.match(ambiguousBookerResult.error, /verified customer identity/i);
+  assert.equal(insertedOperations(ambiguousBookerMock.client, "bookings").length, 0);
 
   const malformedCreateNewWithSelection =
     persistence.parseAdminBookingPersistencePayload(

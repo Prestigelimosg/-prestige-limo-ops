@@ -429,20 +429,21 @@ assertIncludes(
 assertIncludes(crmRuntimeClientHelper, "JSON.stringify(payload)", "CRM runtime client helper payload");
 assertIncludes(crmRuntimeClientHelper, '"x-prestige-admin-purpose"', "CRM runtime client helper admin boundary");
 assertIncludes(crmRuntimeClientHelper, "isCrmRuntimeWriteBlockedNoOp", "CRM runtime helper closed-gate no-op handling");
-assertIncludes(saveRateOverrideSource, "saveCompanyTravelerCrmIdentityContactRuntime", "Rate override CRM identity split");
-assertIncludes(saveRateOverrideSource, "buildCompanyCrmIdentityContactPayload", "Rate override company identity split");
-assertIncludes(saveRateOverrideSource, "buildTravelerCrmIdentityContactPayload", "Rate override traveler identity split");
-assertIncludes(saveRateOverrideSource, "buildCompanyRateOverridePayload", "Rate override company rate lane");
-assertIncludes(saveRateOverrideSource, "buildTravelerRateOverridePayload", "Rate override traveler rate lane");
-assertIncludes(
+assertExcludes(saveRateOverrideSource, "saveCompanyTravelerCrmIdentityContactRuntime", "Rates must not write CRM identity/contact");
+assertExcludes(saveRateOverrideSource, "buildCompanyCrmIdentityContactPayload", "Rates must not create Company identity");
+assertExcludes(
   saveRateOverrideSource,
-  "buildLegacyCompanyRateOverrideInsertPayload",
-  "Gate-closed company fallback preserves current rate override behavior",
+  "buildTravelerCrmIdentityContactPayload",
+  "Retired rate override traveler identity creation split",
 );
-assertIncludes(
+assertIncludes(saveRateOverrideSource, "buildCompanyRateOverridePayload", "Rate override company rate lane");
+assertIncludes(saveRateOverrideSource, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account rate lane");
+assertExcludes(saveRateOverrideSource, "buildTravelerRateOverridePayload", "Rates must not write Traveller rate identity");
+assertExcludes(saveRateOverrideSource, "buildLegacyCompanyRateOverrideInsertPayload", "Rates must not create Company identity");
+assertExcludes(
   saveRateOverrideSource,
   "buildLegacyTravelerRateOverrideInsertPayload",
-  "Gate-closed traveler fallback preserves current rate override behavior",
+  "Retired gate-closed traveler insert fallback",
 );
 assertExcludes(crmRuntimeClientHelper, /customer_rates|driver_payout_rules|customer_price|driver_payout|rate_override|pricing|payout|payment|billing|invoice|pdf|provider|auth_session|live_location|photo|calendar|internal_admin|admin_notes|debug_payload|secret|api_key|access_token/i, "CRM runtime client helper");
 assertExcludes(saveBookingSource, routePathFragment, "Save Booking + CRM must not call CRM runtime write route");

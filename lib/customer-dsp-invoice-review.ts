@@ -9,6 +9,12 @@ import {
 } from "./pricing";
 
 export type CustomerInvoiceRateSetupRecord = {
+  bookers?: Array<{
+    company_id?: number | null;
+    customer_id?: number | null;
+    customer_rates?: RateRules | null;
+    id?: number | null;
+  }>;
   companies?: Array<{
     card_option_default_enabled?: boolean | null;
     customer_rates?: RateRules | null;
@@ -38,8 +44,10 @@ export type CustomerDspInvoiceReviewInput = {
   actualMinutes: number | null | undefined;
   billingEndedAt?: string | null | undefined;
   billingStartedAt?: string | null | undefined;
+  bookerId?: number | null | undefined;
   childSeatCount: number | null | undefined;
   companyId: number | null | undefined;
+  customerId?: number | null | undefined;
   extraStopCount: number | null | undefined;
   pickupAt: string | null | undefined;
   travelerId: number | null | undefined;
@@ -248,12 +256,27 @@ export function calculateCustomerInvoiceRateReview(
   }
   const companyRecord =
     rateSetup.companies?.find((company) => company.id === input.companyId) || null;
-  const travelerRecord =
-    rateSetup.travelers?.find(
-      (traveler) =>
-        traveler.id === input.travelerId &&
-        (!input.companyId || traveler.company_id === input.companyId),
-    ) || null;
+  const approvedBookerRateRecord =
+    input.companyId && input.bookerId && input.customerId
+      ? rateSetup.bookers?.find(
+          (booker) =>
+            booker.id === input.bookerId &&
+            booker.company_id === input.companyId &&
+            booker.customer_id === input.customerId,
+        ) || null
+      : null;
+  const legacyTravelerRateRecord = approvedBookerRateRecord
+    ? null
+    : rateSetup.travelers?.find(
+        (traveler) =>
+          traveler.id === input.travelerId &&
+          (!input.companyId || traveler.company_id === input.companyId),
+      ) || null;
+  const customerRateRecord = approvedBookerRateRecord
+    ? { ...approvedBookerRateRecord, customer_rate_source: "account" as const }
+    : legacyTravelerRateRecord
+      ? { ...legacyTravelerRateRecord, customer_rate_source: "legacy_traveler" as const }
+      : null;
   const resolvedRateSettings = rateSettings(rateSetup);
   const resolvedPricing = resolvePricing(
     {
@@ -265,7 +288,7 @@ export function calculateCustomerInvoiceRateReview(
       vehicleType: input.vehicleType || "AVF",
     },
     companyRecord || {},
-    travelerRecord,
+    customerRateRecord,
     resolvedRateSettings,
   );
   if (bookingType !== "DSP") {

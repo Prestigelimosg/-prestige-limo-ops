@@ -31,6 +31,7 @@ for (const fragment of [
   "dbIdentifierOrNull(booking.customer_id)",
   "dbIdentifierOrNull(booking.company_id)",
   "dbIdentifierOrNull(booking.booker_id)",
+  "bindExactBookerCustomerAccount",
 ]) {
   assert.ok(persistenceAdapter.includes(fragment), `Verified PA persistence must include ${fragment}`);
 }

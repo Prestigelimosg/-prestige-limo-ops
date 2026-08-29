@@ -50,26 +50,30 @@ export function AdminSignInForm({
   }
 
   useEffect(() => {
-    if (recoveryInitializedRef.current) return;
-    recoveryInitializedRef.current = true;
+    const initializeRecoveryTimer = window.setTimeout(() => {
+      if (recoveryInitializedRef.current) return;
+      recoveryInitializedRef.current = true;
 
-    const recoveryFragment = new URLSearchParams(window.location.hash.slice(1));
-    if (recoveryFragment.get("type") !== "recovery") {
-      setMode("sign_in");
-      return;
-    }
+      const recoveryFragment = new URLSearchParams(window.location.hash.slice(1));
+      if (recoveryFragment.get("type") !== "recovery") {
+        setMode("sign_in");
+        return;
+      }
 
-    const accessToken = recoveryFragment.get("access_token") || "";
-    const refreshToken = recoveryFragment.get("refresh_token") || "";
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    if (!accessToken || !refreshToken) {
-      setMode("invalid_recovery");
-      return;
-    }
+      const accessToken = recoveryFragment.get("access_token") || "";
+      const refreshToken = recoveryFragment.get("refresh_token") || "";
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      if (!accessToken || !refreshToken) {
+        setMode("invalid_recovery");
+        return;
+      }
 
-    recoveryAccessTokenRef.current = accessToken;
-    recoveryRefreshTokenRef.current = refreshToken;
-    setMode("recover_pin");
+      recoveryAccessTokenRef.current = accessToken;
+      recoveryRefreshTokenRef.current = refreshToken;
+      setMode("recover_pin");
+    }, 0);
+
+    return () => window.clearTimeout(initializeRecoveryTimer);
   }, []);
 
   useEffect(() => {

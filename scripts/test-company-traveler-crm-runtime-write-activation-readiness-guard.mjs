@@ -353,13 +353,14 @@ assertExcludes(
 );
 
 const saveRateOverride = sliceBetween(appPage, "async function saveRateOverride", "async function removeCompanyRateOverride");
-assertIncludes(saveRateOverride, "saveCompanyTravelerCrmIdentityContactRuntime", "rate override flow CRM identity split");
-assertIncludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "rate override flow company CRM payload");
-assertIncludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "rate override flow traveler CRM payload");
+assertExcludes(saveRateOverride, "saveCompanyTravelerCrmIdentityContactRuntime", "Rates must not write CRM identity/contact");
+assertExcludes(saveRateOverride, "buildCompanyCrmIdentityContactPayload", "Rates must not create Company identity");
+assertExcludes(saveRateOverride, "buildTravelerCrmIdentityContactPayload", "retired rate override traveler CRM payload");
 assertIncludes(saveRateOverride, "buildCompanyRateOverridePayload", "rate override lane remains separate");
-assertIncludes(saveRateOverride, "buildTravelerRateOverridePayload", "traveler rate override lane remains separate");
-assertIncludes(saveRateOverride, "buildLegacyCompanyRateOverrideInsertPayload", "closed-gate company legacy fallback");
-assertIncludes(saveRateOverride, "buildLegacyTravelerRateOverrideInsertPayload", "closed-gate traveler legacy fallback");
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "exact Customer Account rate lane");
+assertExcludes(saveRateOverride, "buildTravelerRateOverridePayload", "Rates must not write Traveller rate identity");
+assertExcludes(saveRateOverride, "buildLegacyCompanyRateOverrideInsertPayload", "Rates must not create Company identity");
+assertExcludes(saveRateOverride, "buildLegacyTravelerRateOverrideInsertPayload", "retired closed-gate traveler legacy fallback");
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM safe endpoint remains unchanged");

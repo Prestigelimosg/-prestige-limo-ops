@@ -90,6 +90,7 @@ export async function GET(request: Request) {
     }
 
     return Response.json({
+      bookers: result.data.bookers,
       companies: result.data.companies,
       ok: true,
       settings: result.data.settings,

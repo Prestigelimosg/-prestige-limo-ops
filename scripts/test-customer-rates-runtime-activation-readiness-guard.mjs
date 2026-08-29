@@ -9,6 +9,8 @@ const aiParseRoutePath = "app/api/ai-parse/route.ts";
 const adminBookingsRoutePath = "app/api/admin-bookings/route.ts";
 const adminSavedBookingsRoutePath = "app/api/admin-saved-bookings/route.ts";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const bookerRatesMigrationPath =
+  "supabase/migrations/20260829071011_booker_customer_rates.sql";
 
 const guardScript = "scripts/test-customer-rates-runtime-activation-readiness-guard.mjs";
 const routePathFragment = "/api/admin-customer-rates-runtime-write-action";
@@ -92,6 +94,7 @@ const [
   adminBookingsRoute,
   adminSavedBookingsRoute,
   preactivationSuite,
+  bookerRatesMigration,
 ] = await Promise.all([
   readFile(ledgerPath, "utf8"),
   readFile(routePath, "utf8"),
@@ -101,7 +104,14 @@ const [
   readFile(adminBookingsRoutePath, "utf8"),
   readFile(adminSavedBookingsRoutePath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
+  readFile(bookerRatesMigrationPath, "utf8"),
 ]);
+
+assert.match(
+  bookerRatesMigration,
+  /^begin;\s+set local lock_timeout = '5s';\s+alter table public\.bookers\s+add column if not exists customer_rates jsonb not null default '\{\}'::jsonb;\s+commit;\s*$/,
+  "Booker customer-rate migration must add only the exact additive customer_rates column.",
+);
 
 const ledgerSection = sectionBetween(
   ledger,
@@ -199,12 +209,15 @@ assertIncludes(helperSource, "reason: \"write_gate_closed\"", "Customer rates cl
 assertIncludes(helperSource, "no_op: true", "Customer rates no-op default");
 assertIncludes(
   helperSource,
-  "const targetTable = contract.action_scope === \"company\" ? \"companies\" : \"travelers\";",
+  "const targetTable = contract.action_scope === \"booker\" ? \"bookers\" : \"companies\";",
   "Customer rates table scope",
 );
 assertIncludes(helperSource, ".from(targetTable)", "Customer rates scoped table access");
 assertIncludes(helperSource, ".update(writePayload(contract.customer_rates))", "Customer rates safe payload update");
 assertIncludes(helperSource, ".eq(\"id\", contract.id as number)", "Customer rates id-scoped update");
+assertIncludes(helperSource, "if (contract.action_scope === \"booker\")", "Customer rates exact Booker scope");
+assertIncludes(helperSource, ".eq(\"company_id\", contract.company_id as number)", "Customer rates Booker Company scope");
+assertIncludes(helperSource, ".eq(\"customer_id\", contract.customer_id as number)", "Customer rates Booker Customer scope");
 assertIncludes(helperSource, ".select(customerRatesWriteSelect)", "Customer rates safe select call");
 assertExcludes(helperSource, "adminLegacyDataClient", "Customer rates helper legacy data client");
 assertExcludes(helperSource, "adminLegacyTables", "Customer rates helper legacy table shim");

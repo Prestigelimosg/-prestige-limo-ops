@@ -22,9 +22,9 @@ type RuntimeWriteReason =
   | "unsafe_or_unknown_fields"
   | "write_gate_closed";
 type CustomerRatesActionType =
-  | "company_customer_rates_update"
-  | "traveler_customer_rates_update";
-type CustomerRatesActionScope = "company" | "traveler";
+  | "booker_customer_rates_update"
+  | "company_customer_rates_update";
+type CustomerRatesActionScope = "booker" | "company";
 type SafeFailureCategory = AdminBookingPersistenceSafeErrorCategory | "client_init_failed";
 type UnknownRecord = Record<string, unknown>;
 
@@ -212,12 +212,12 @@ function writeGateOpen() {
 }
 
 function actionScope(actionType: CustomerRatesActionType | null): CustomerRatesActionScope | null {
-  if (actionType === "company_customer_rates_update") {
-    return "company";
+  if (actionType === "booker_customer_rates_update") {
+    return "booker";
   }
 
-  if (actionType === "traveler_customer_rates_update") {
-    return "traveler";
+  if (actionType === "company_customer_rates_update") {
+    return "company";
   }
 
   return null;
@@ -305,11 +305,13 @@ function buildContract(input: unknown) {
   const record = asRecord(input);
   const requestedAction = textOrNull(record.action_type);
   const action: CustomerRatesActionType | null =
-    requestedAction === "company_customer_rates_update" ||
-    requestedAction === "traveler_customer_rates_update"
+    requestedAction === "booker_customer_rates_update" ||
+    requestedAction === "company_customer_rates_update"
       ? requestedAction
       : null;
   const id = positiveInteger(record.id);
+  const companyId = positiveInteger(record.company_id);
+  const customerId = positiveInteger(record.customer_id);
   const invalidFields: string[] = [];
   const unknownFields: string[] = [];
   const forbiddenFields = collectForbiddenFields(record);
@@ -327,8 +329,19 @@ function buildContract(input: unknown) {
     invalidFields.push("id");
   }
 
+  if (action === "booker_customer_rates_update") {
+    if (!companyId) {
+      invalidFields.push("company_id");
+    }
+    if (!customerId) {
+      invalidFields.push("customer_id");
+    }
+  } else if (record.company_id !== undefined || record.customer_id !== undefined) {
+    invalidFields.push("company_id", "customer_id");
+  }
+
   for (const key of Object.keys(record)) {
-    if (!["action_type", "customer_rates", "id"].includes(key)) {
+    if (!["action_type", "company_id", "customer_id", "customer_rates", "id"].includes(key)) {
       unknownFields.push(key);
     }
   }
@@ -344,12 +357,14 @@ function buildContract(input: unknown) {
   return {
     action_scope: actionScope(action),
     action_type: action,
+    company_id: companyId,
     customer_rate_field_names: Object.entries(customerRateFields.customerRates).flatMap(([bookingType, rate]) =>
       typeof rate === "number"
         ? [bookingType]
         : Object.keys(asRecord(rate)).map((vehicleType) => `${bookingType}.${vehicleType}`),
     ),
     customer_rates: customerRateFields.customerRates,
+    customer_id: customerId,
     forbidden_fields_present: forbiddenFields,
     id,
     invalid_fields: [...new Set(invalidFields)],
@@ -515,11 +530,19 @@ export async function executeAdminCustomerRatesRuntimeWriteAction(
     });
   }
 
-  const targetTable = contract.action_scope === "company" ? "companies" : "travelers";
-  const { data, error } = await client
+  const targetTable = contract.action_scope === "booker" ? "bookers" : "companies";
+  let writeQuery = client
     .from(targetTable)
     .update(writePayload(contract.customer_rates))
-    .eq("id", contract.id as number)
+    .eq("id", contract.id as number);
+
+  if (contract.action_scope === "booker") {
+    writeQuery = writeQuery
+      .eq("company_id", contract.company_id as number)
+      .eq("customer_id", contract.customer_id as number);
+  }
+
+  const { data, error } = await writeQuery
     .select(customerRatesWriteSelect)
     .single();
 

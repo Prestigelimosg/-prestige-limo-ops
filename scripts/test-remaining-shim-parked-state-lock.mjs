@@ -80,18 +80,22 @@ for (const fragment of [
 for (const fragment of [
   ".from(adminLegacyTables.rateSettings)",
   ".from(adminLegacyTables.companies)",
-  ".from(adminLegacyTables.travelers)",
   ".from(adminLegacyTables.drivers)",
   "async function saveDefaultRates",
   "async function saveRateOverride",
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
   "async function saveDriverProfile",
   "async function deleteDriverProfile",
 ]) {
   assertIncludes(appPage, fragment, `Parked legacy call site ${fragment}`);
 }
+assertExcludes(
+  appPage,
+  ".from(adminLegacyTables.travelers)",
+  "Normal Customer Account Rates must not retain the retired direct Traveller write shim",
+);
 
 assertIncludes(appPage, "customer_rates: customerRates", "Parked default customer rates save");
 assertIncludes(appPage, "driver_payout_rules: driverPayoutRules", "Parked default driver payout rules save");

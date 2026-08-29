@@ -17,26 +17,15 @@ for (const fragment of [
   'data-admin-dispatch-customer-account-select="true"',
   'data-admin-dispatch-customer-account-search="true"',
   'data-admin-dispatch-customer-account-option={account.key}',
-  'data-admin-dispatch-customer-account-match-review="true"',
-  'data-admin-dispatch-customer-account-use-existing="true"',
-  'data-admin-dispatch-customer-account-different-person="true"',
-  'data-admin-dispatch-customer-account-review-cancel="true"',
   'data-admin-dispatch-customer-account-create="true"',
   'data-admin-dispatch-new-customer-choice="true"',
-  'data-admin-dispatch-new-customer-account="true"',
   'data-admin-dispatch-new-customer-corporate="true"',
-  'data-admin-dispatch-new-customer-personal="true"',
   "adminDispatchFilteredCustomerAccountOptions",
   "adminDispatchCustomerAccountSearch",
   "selectAdminDispatchCustomerAccount",
-  "confirmAdminDispatchExistingPassenger",
-  "confirmAdminDispatchDifferentPassenger",
   "hasVerifiedCustomerIdentity",
   "Choose an existing Customer Account or use Create New Customer",
   'adminDispatchNewCustomerType === "corporate"',
-  'adminDispatchNewCustomerType === "personal"',
-  'adminDispatchNewCustomerType !== "personal"',
-  "setAdminDispatchCustomerAccountMatchReview(null)",
   "setAdminDispatchNewCustomerType(null)",
   'data-admin-dispatch-customer-list-retry="true"',
   "adminDispatchCustomerListAutoLoadAttemptedRef",
@@ -47,12 +36,27 @@ for (const fragment of [
   "billingIdentityPossibleMatch",
   "accountTravelers",
   "passengerSearchText",
-  "CRM Traveller #",
   "adminDispatchCustomerAccountSelectionLocked",
   'md:w-[calc((100%_-_1rem)/3)]',
   "rateCompanies",
+  "rateBookers",
   "rateTravelers",
 ]) assert.ok(app.includes(fragment), `Missing ${fragment}`);
+
+for (const forbiddenFragment of [
+  'data-admin-dispatch-new-customer-account="true"',
+  'data-admin-dispatch-new-customer-personal="true"',
+  'data-admin-email-ai-use-repeated-customer="true"',
+  "applyAdminEmailAiRepeatedCustomerCandidate",
+  '`corporate:${companyId}:unassigned`',
+  "New personal customer selected",
+  "Customer account — many passengers",
+]) {
+  assert.ok(
+    !app.includes(forbiddenFragment),
+    `Future bookings must not expose retired customer-identity choice ${forbiddenFragment}`,
+  );
+}
 
 assert.ok(
   !app.includes('data-admin-dispatch-agency-folder-select="true"'),
@@ -76,21 +80,21 @@ assert.ok(
 );
 
 for (const fragment of [
-  "adminDispatchAgencyCompanyIds",
-  "adminDispatchAgencyCompanyIds.has(companyId)",
+  "adminDispatchLegacyAgencyAccountOptions",
+  "loadedLegacyAgencyAccount",
+  "Boolean(clean(appliedAdminBookingSnapshotReference))",
   "`corporate:${companyId}:${bookerId}`",
   "existing.travelers.push(traveler)",
   'customerId: account.customerId',
   'bookerId: account.bookerId',
   'companyId: account.companyId',
-  'travelerId: traveler ? String(traveler.id) : ""',
-  'customerId: type === "account" ? adminDispatchCreateAgencyFolderValue : ""',
-  'company: type === "personal" ? "" : current.company',
+  'travelerId: ""',
+  "Choose or create the exact Company + Booker Customer Account before Save + CRM.",
   "Retry customer list",
 ]) assert.ok(app.includes(fragment), `Missing unified account identity preservation ${fragment}`);
 
 const loadedUnassignedCorporateOptionStart = app.indexOf(
-  "if (\n    !clean(booking.customerId) &&\n    booking.companyId &&",
+  "if (\n    clean(appliedAdminBookingSnapshotReference) &&\n    booking.companyId &&",
 );
 const loadedUnassignedCorporateOptionEnd = app.indexOf(
   "adminDispatchCustomerAccountOptions.sort",
@@ -104,6 +108,12 @@ assert.ok(
 const loadedUnassignedCorporateOptionBlock = app.slice(
   loadedUnassignedCorporateOptionStart,
   loadedUnassignedCorporateOptionEnd,
+);
+assert.ok(
+  loadedUnassignedCorporateOptionBlock.includes(
+    "clean(appliedAdminBookingSnapshotReference)",
+  ),
+  "A legacy Company-only identity may appear only for an exact loaded saved booking",
 );
 assert.ok(
   loadedUnassignedCorporateOptionBlock.includes(
@@ -136,28 +146,71 @@ assert.ok(!app.includes('data-admin-dispatch-traveler-identity-select="true"'));
 assert.ok(!/parseBookingMessageForState[\s\S]{0,1500}companyId/.test(app));
 assert.ok(rateSetupRead.includes('"id, company_id, booker_id, booker_name, traveler_name'));
 assert.ok(rateSetupRead.includes("booker_id: positiveIntegerOrNull(record.booker_id)"));
+assert.ok(rateSetupRead.includes('const bookerSelect = "id, company_id, customer_id, booker_name, customer_rates"'));
+assert.ok(rateSetupRead.includes("bookers: asArray(bookersResult.data)"));
+
+const emailAiSuggestionStart = app.indexOf("function applyAdminEmailAiCustomerProfileRecommendation");
+const emailAiSuggestionEnd = app.indexOf("async function loadRates", emailAiSuggestionStart + 1);
+assert.ok(
+  emailAiSuggestionStart >= 0 && emailAiSuggestionEnd > emailAiSuggestionStart,
+  "Missing bounded Email-AI Customer Account suggestion handler",
+);
+const emailAiSuggestionBlock = app.slice(emailAiSuggestionStart, emailAiSuggestionEnd);
+assert.ok(
+  emailAiSuggestionBlock.includes("This is a suggestion only. Choose the exact Company + Booker Customer Account before Save + CRM."),
+  "Email-AI matching must tell Admin that no account was selected",
+);
+for (const forbiddenFragment of ["setBooking(", "companyId:", "customerId:", "bookerId:", "travelerId:"]) {
+  assert.ok(
+    !emailAiSuggestionBlock.includes(forbiddenFragment),
+    `Email-AI suggestion must never bind account identity through ${forbiddenFragment}`,
+  );
+}
 
 for (const fragment of [
   "resolveSaveCrmCorporateIdentityForSave",
-  "Create or reuse this verified Booker + Traveller under",
+  "Approve this Company + Booker Customer Account",
   "loadSaveCrmCorporateIdentityRows",
   "loadSaveCrmBookerById",
   "findOrCreateSaveCrmBooker",
-  "linkSaveCrmTravelerToBooker",
   "bookerId: adminDispatchVerifiedIdentityId(record.booker_id)",
   "companyId: adminDispatchVerifiedIdentityId(record.company_id)",
   "customerId: adminDispatchVerifiedIdentityId(record.customer_id)",
   "travelerId: adminDispatchVerifiedIdentityId(record.traveler_id)",
-  "if (!currentBookerId && currentTravelerId)",
-  "The selected Booker + Traveller pair no longer matches this exact company and booking.",
+  "accountCreationApproved",
+  "No existing account is linked to this Booker.",
   "loadSaveCrmAgencyCustomerClassification",
   "This customer request is missing its exact verified customer or company.",
   "if (!updateIsHotelAgencyBooking && !updateBookerId)",
   "`verified company ${updateCompanyId}`",
   "companyId: String(corporateIdentityResolution.companyId)",
   "bookerId: String(corporateIdentityResolution.bookerId)",
-  "travelerId: String(corporateIdentityResolution.travelerId)",
+  "travelerId: corporateIdentityResolution.travelerId",
 ]) assert.ok(app.includes(fragment), `Missing first corporate Save + CRM identity handoff ${fragment}`);
+
+assert.ok(
+  app.includes("customerId: account.customerId") &&
+    app.includes("Use existing account"),
+  "Company + Booker selection and first-time review must carry the durable Customer account identity",
+);
+assert.ok(
+  !app.includes("Create or reuse this verified Booker + Traveller under"),
+  "A different passenger must not reopen Customer account identity approval",
+);
+for (const fragment of [
+  'data-admin-dispatch-customer-account-match-review="true"',
+  'data-admin-dispatch-customer-account-use-existing="true"',
+  'data-admin-dispatch-customer-account-different-person="true"',
+  'data-admin-dispatch-customer-account-review-cancel="true"',
+  "confirmAdminDispatchExistingPassenger",
+  "confirmAdminDispatchDifferentPassenger",
+  "setAdminDispatchCustomerAccountMatchReview",
+]) {
+  assert.ok(
+    !app.includes(fragment),
+    `Verified Company + Booker selection must not retain passenger identity prompt ${fragment}`,
+  );
+}
 
 assert.ok(
   app.includes("existingCustomerId &&") &&
@@ -177,53 +230,53 @@ assert.ok(
 
 for (const fragment of [
   "first corporate Save + CRM identity creation",
-  "Expected first corporate save to ask once before creating verified identities",
+  "Expected first corporate save to ask once for the Company and once for the new Company + Booker account",
   "Expected first corporate save to create one verified Booker",
-  "Expected first corporate save to create and link one verified Traveller",
+  "Expected the booking-specific passenger not to create or link a durable Traveller profile",
   "Expected first corporate booking POST to carry the verified identity tuple",
-  "Expected the saved corporate pair to reload before the booking POST",
+  "Expected the saved Company + Booker identity to reload before the booking POST",
+  "Expected a newly appeared server candidate to re-open review after the explicit empty-candidate creation decision",
+  "Expected final creation to carry the latest server-revalidated exact candidate set",
 ]) assert.ok(
   bookingUiBrowser.includes(fragment),
   `Missing visible first corporate Save + CRM coverage ${fragment}`,
 );
 
 for (const fragment of [
-  "unified Customer Account search keeps agency, corporate, and personal identity tuples",
-  'assert.equal(emailAiCompanyFallbackState.selectedKey, "corporate:55:unassigned")',
-  'assert.equal(emailAiCompanyFallbackState.companyId, "55")',
+  "unified Customer Account search keeps Company + Booker identity tuples",
+  'assert.equal(emailAiCompanyFallbackState.selectedKey, "")',
+  'assert.equal(emailAiCompanyFallbackState.companyId, "")',
   "Customer Account passenger quick search",
   'assert.deepEqual(unifiedCustomerQuickSearchState, ["corporate:55:5501"])',
-  "one possible passenger match asks Admin before selection",
-  "multiple possible passenger matches remain a candidate list",
-  "different person keeps the account but clears the verified Traveller",
-  "no Customer Account review choice sends a booking POST",
+  "known Company + Booker selection without a passenger identity prompt",
+  "different passenger keeps the approved Company + Booker account without another prompt",
 ]) assert.ok(
   bookingUiBrowser.includes(fragment),
   `Missing visible unified Customer Account coverage ${fragment}`,
 );
 
 for (const fragment of [
-  '"agency:174:41"',
+  '"corporate:41:4101"',
   '"corporate:55:5501"',
+  '"corporate:55:5502"',
+  "approved Booker account remains selectable without a Traveller row",
+  'bookerId: "5502"',
+  'customerId: "551"',
   "Customer Account bar must retain the previous one-column Customer width",
-  "one passenger review",
-  "multiple passenger candidates",
-  "different passenger account state",
-  "explicit new-customer choices",
+  "checking passenger-specific repeat account selection",
+  "known account with booking-specific passenger and no identity prompt",
+  "different passenger keeps the approved account without another prompt",
+  "single Company + Booker new-customer choice",
   "new-customer path selection",
   "assert.equal(bookingPosts.length, 0)",
   'search("Kim Passenger")',
   'search("Mr Jwalent Nanavati")',
-  "CRM Traveller #55002",
-  "CRM Traveller #55003",
 ]) assert.ok(
   customerAccountBrowser.includes(fragment),
   `Missing focused Customer Account browser coverage ${fragment}`,
 );
 for (const handler of [
   "selectAdminDispatchCustomerAccount",
-  "confirmAdminDispatchExistingPassenger",
-  "confirmAdminDispatchDifferentPassenger",
   "chooseAdminDispatchNewCustomerType",
 ]) {
   const start = app.indexOf(`function ${handler}`);
@@ -240,13 +293,13 @@ assert.ok(
 
 for (const fragment of [
   "visible public customer request Accept + Cal identity handoff",
-  "Expected public customer request Accept + Cal to carry the verified identity tuple",
-  "Expected public customer request Accept + Cal to ask once before saving the new Traveller",
+  "Expected public customer request Accept + Cal to keep the passenger booking-specific",
+  "Expected the approved Company + Booker account not to reopen identity review for its booking-specific passenger",
   "Expected public customer request Accept + Cal to reuse its verified Booker",
-  "Expected public customer request Accept + Cal to create only the missing Traveller",
-  "Expected public customer request Accept + Cal to link the exact Traveller once",
+  "Expected public customer request Accept + Cal not to create a Traveller from booking-specific passenger text",
+  "Expected public customer request Accept + Cal not to link a Traveller from booking-specific passenger text",
   "Expected public customer request Accept + Cal not to duplicate its verified Booker",
-  "Expected the public customer request pair to reload before Accept + Cal PATCH",
+  "Expected the public customer request Company + Booker account and booking-specific passenger evidence to reload before Accept + Cal PATCH",
   "Expected public Hotel / Tour Agency Accept + Cal not to call a Booker or Traveller writer",
   "Expected public Hotel / Tour Agency Accept + Cal not to ask for a corporate identity pair",
   "Expected public Hotel / Tour Agency Accept + Cal to keep the one unchanged Calendar sync",

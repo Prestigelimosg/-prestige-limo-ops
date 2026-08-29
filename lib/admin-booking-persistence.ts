@@ -998,7 +998,6 @@ function parseAdminBookingOperationalPayload(
   if (hasCustomerAccountCollisionResolution) {
     const uniqueReviewedCustomerIds = new Set(reviewedCustomerIds);
     const reviewedCustomerIdsAreValid =
-      reviewedCustomerIds.length > 0 &&
       reviewedCustomerIds.length <= 20 &&
       reviewedCustomerIds.every((customerId) => customerId !== null && customerId > 0) &&
       uniqueReviewedCustomerIds.size === reviewedCustomerIds.length;

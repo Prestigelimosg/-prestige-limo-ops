@@ -195,7 +195,8 @@ function assertRatesState(state) {
   assert.match(state.visibleText, /\bRates\b/);
   assert.match(state.visibleText, /Saved Rate Overrides/);
   assert.match(state.visibleText, /Company Overrides/);
-  assert.match(state.visibleText, /Boss \/ Name Overrides/);
+  assert.match(state.visibleText, /Customer Account Overrides/);
+  assert.doesNotMatch(state.visibleText, /Boss \/ Name Overrides/);
   assert.ok(state.buttonLabels.includes("Load Rates"));
   assert.ok(state.buttonLabels.includes("Save Defaults"));
   assert.ok(state.buttonLabels.includes("Save Override"));
@@ -205,9 +206,9 @@ function assertRatesState(state) {
     "Expected one customer override input for every service and vehicle combination",
   );
   assert.equal(
-    state.travelerOverrideControlTag,
+    state.customerAccountControlTag,
     "SELECT",
-    "Expected Boss / Name to use the exact existing-Traveller selector",
+    "Expected Customer Account to use one Company + Booker selector",
   );
   assert.ok(
     state.visibleText.includes("Rates loaded.") || state.visibleText.includes("Load failed:"),
@@ -511,8 +512,8 @@ async function runChromeTest() {
       customerOverrideInputCount: await evaluate(
         `document.querySelectorAll("[data-override-vehicle-customer-rates='true'] input[aria-label$='customer override']").length`,
       ),
-      travelerOverrideControlTag: await evaluate(
-        `document.querySelector("[data-rate-override-traveler-id='true']")?.tagName || ""`,
+      customerAccountControlTag: await evaluate(
+        `document.querySelector("[data-rate-customer-account='true']")?.tagName || ""`,
       ),
       visibleText: await evaluate(`document.body.innerText`),
     };
@@ -692,6 +693,70 @@ async function runChromeTest() {
       };
     })()`);
 
+    await evaluate(`(() => {
+      window.__prestigeRateValidationAccount = {
+        bookers: [
+          {
+            booker_name: "VALIDATION BOOKER",
+            company_id: 9001,
+            customer_id: 9201,
+            customer_rates: {},
+            id: 9101,
+          },
+        ],
+        companies: [
+          {
+            card_option_default_enabled: false,
+            company_name: "VALIDATION COMPANY",
+            customer_rates: {},
+            domain: null,
+            driver_payout_rules: {},
+            id: 9001,
+            transzend_excel_privacy: false,
+          },
+        ],
+        travelers: [],
+      };
+      const priorFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const target = args[0]?.url || args[0];
+        const method = args[1]?.method || args[0]?.method || "GET";
+
+        if (String(target).includes("/api/admin-rate-setup") && method === "GET") {
+          return new Response(JSON.stringify({
+            ...window.__prestigeRateValidationAccount,
+            ok: true,
+            settings: null,
+            version: "test-admin-rate-setup-read",
+          }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        return priorFetch(...args);
+      };
+    })()`);
+
+    const clickedValidationRatesReload = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Load Rates",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedValidationRatesReload, true, "Expected validation Customer Account reload");
+    await waitForCondition(
+      () => evaluate(`document.querySelector("[data-rate-customer-account='true']")?.options.length === 2`),
+      10000,
+      "validation Customer Account option",
+    );
+
     const preparedBlankOverride = await evaluate(`(() => {
       const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
       const setLabeledInput = (labelText, value) => {
@@ -725,8 +790,7 @@ async function runChromeTest() {
         return input.value === value;
       };
 
-      return setLabeledInput("Company / Account", "BLANK RATE SAFETY TEST") &&
-        setLabeledInput("Boss / Name", "") &&
+      return setLabeledInput("Customer Account", "9001:9101") &&
         setCustomerOverrideInput("MNG / Arrival E / AVF customer override", "") &&
         setCustomerOverrideInput("DEP / Departure E / AVF customer override", "") &&
         setCustomerOverrideInput("TRF / Transfer E / AVF customer override", "") &&
@@ -827,7 +891,7 @@ async function runChromeTest() {
         return input.value === value;
       };
 
-      return setLabeledInput("Company / Account", "NEGATIVE RATE SAFETY TEST") &&
+      return setLabeledInput("Customer Account", "9001:9101") &&
         setCustomerOverrideInput("MNG / Arrival E / AVF customer override", "-5");
     })()`);
     assert.equal(preparedNegativeOverride, true, "Expected negative rate override test fields to be editable");
@@ -896,6 +960,7 @@ async function runChromeTest() {
           },
         ],
         travelers: [],
+        runtimeCalls: [],
         updateCalls: [],
         unexpectedCalls: [],
       };
@@ -910,10 +975,9 @@ async function runChromeTest() {
         const target = args[0]?.url || args[0];
         const url = String(target);
         const method = args[1]?.method || args[0]?.method || "GET";
+        const store = window.__prestigeRateDuplicateStore;
 
         if (url.includes("/api/admin-rate-setup") && method === "GET") {
-          const store = window.__prestigeRateDuplicateStore;
-
           return jsonResponse({
             companies: store.companies,
             ok: true,
@@ -937,11 +1001,26 @@ async function runChromeTest() {
           });
         }
 
+        if (
+          url.includes("/api/admin-customer-rates-runtime-write-action") &&
+          method === "POST"
+        ) {
+          const payload = JSON.parse(args[1]?.body || "{}");
+          store.runtimeCalls.push({ method, payload, url });
+          return jsonResponse({
+            database_client_enabled: false,
+            no_op: true,
+            ok: false,
+            reason: "write_gate_closed",
+            status: "blocked",
+            write_enabled: false,
+            write_gate_open: false,
+          }, 503);
+        }
+
         if (!url.includes("/rest/v1/")) {
           return originalFetch(...args);
         }
-
-        const store = window.__prestigeRateDuplicateStore;
 
         if (url.includes("/rest/v1/companies") && method === "PATCH") {
           const payload = JSON.parse(args[1]?.body || "{}");
@@ -978,6 +1057,28 @@ async function runChromeTest() {
     );
 
     const saveDuplicateCompanyOverride = async (customerRate) => {
+      if (customerRate === 90) {
+        const clickedLoadCompanyOverride = await evaluate(`(() => {
+          const row = document.querySelector("[data-rate-company-override-row='9001']");
+          const button = [...(row?.querySelectorAll("button") || [])].find(
+            (candidate) => candidate.textContent.trim() === "Load for editing",
+          );
+
+          if (!button || button.disabled) {
+            return false;
+          }
+
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clickedLoadCompanyOverride, true, "Expected existing Company fallback to load for editing");
+        await waitForCondition(
+          () => evaluate(`document.querySelector('input[aria-label="MNG / Arrival E / AVF customer override"]')?.value === "85"`),
+          10000,
+          "existing Company fallback editor",
+        );
+      }
+
       const preparedDuplicateOverride = await evaluate(`(() => {
         const normalizeLabel = (value) => (value || "").replace(/\\*/g, "").replace(/\\s+/g, " ").trim();
         const setLabeledInput = (labelText, value) => {
@@ -1024,9 +1125,7 @@ async function runChromeTest() {
           return input.checked === checked;
         };
 
-        return setLabeledInput("Company / Account", "DUPLICATE RATE SAFETY TEST") &&
-          setLabeledInput("Boss / Name", "") &&
-          setCheckbox('[data-rate-card-option-default="true"]', true) &&
+        return setCheckbox('[data-rate-card-option-default="true"]', true) &&
           setCustomerOverrideInput("MNG / Arrival E / AVF customer override", ${JSON.stringify(String(customerRate))}) &&
           setCustomerOverrideInput("DEP / Departure E / AVF customer override", "") &&
           setCustomerOverrideInput("TRF / Transfer E / AVF customer override", "") &&
@@ -1064,6 +1163,7 @@ async function runChromeTest() {
         { avf: String(customerRate), combi: "", s: "", vvv: "" },
         "Expected an E/AVF account override not to populate S, VVV, or COMBI editor cells",
       );
+      await sleep(250);
 
       const clickedDuplicateOverrideSave = await evaluate(`(() => {
         const saveOverrideButton = [...document.querySelectorAll("button")].find(
@@ -1140,16 +1240,30 @@ async function runChromeTest() {
             ).length,
             rowCount: rows.length,
             rowText: rows[0].innerText,
+            runtimeCalls: window.__prestigeRateDuplicateStore?.runtimeCalls || [],
             updateCalls: window.__prestigeRateDuplicateStore?.updateCalls || [],
             unexpectedCalls: window.__prestigeRateDuplicateStore?.unexpectedCalls || [],
           };
         })()`),
-      10000,
+      30000,
       "second duplicate rate override save refresh",
     );
     assert.equal(duplicateSaveState.rowCount, 1, "Expected same company override to appear once after repeated saves");
     assert.match(duplicateSaveState.rowText, /Customer: MNG E \/ AVF 95\.00/);
     assert.match(duplicateSaveState.rowText, /Card default: On/);
+    assert.equal(
+      duplicateSaveState.runtimeCalls.length,
+      2,
+      `Expected repeated same-company saves to pass the typed Company boundary twice, got ${duplicateSaveState.runtimeCalls.length}`,
+    );
+    assert.ok(
+      duplicateSaveState.runtimeCalls.every(
+        (call) =>
+          call.method === "POST" &&
+          call.payload?.action_type === "company_customer_rates_update",
+      ),
+      `Expected repeated Company saves to use the exact typed Company action, got ${JSON.stringify(duplicateSaveState.runtimeCalls)}`,
+    );
     assert.equal(
       duplicateSaveState.updateCalls.length,
       2,
@@ -1352,6 +1466,11 @@ async function runChromeTest() {
             readyState: document.readyState,
             buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
             bodyText: document.body?.innerText?.slice(0, 1000) || "",
+            rateTestState: window.__prestigeRateDuplicateStore || null,
+            companyOverrideRows: [...document.querySelectorAll("[data-rate-company-override-row]")].map(
+              (row) => row.innerText,
+            ),
+            rateFeedback: document.querySelector("[data-rate-feedback='override']")?.textContent || "",
           })`,
           returnByValue: true,
         });

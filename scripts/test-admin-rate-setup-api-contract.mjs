@@ -214,6 +214,7 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookers: [],
       companies: [],
       rate_settings: [],
       travelers: [],
@@ -294,6 +295,15 @@ try {
   try {
     setEnv(validEnv());
     const successMock = installMockClient({
+      bookers: [
+        {
+          booker_name: "Safe Booker",
+          company_id: 10,
+          customer_id: 30,
+          customer_rates: { MNG: 91, OTHER: 999 },
+          id: 25,
+        },
+      ],
       companies: [
         {
           card_option_default_enabled: true,
@@ -345,6 +355,15 @@ try {
 
     assert.equal(success.status, 200);
     assert.equal(success.body.ok, true);
+    assert.deepEqual(success.body.bookers, [
+      {
+        booker_name: "Safe Booker",
+        company_id: 10,
+        customer_id: 30,
+        customer_rates: { MNG: 91 },
+        id: 25,
+      },
+    ]);
     assert.equal(success.body.settings.customer_rates.HIDDEN, undefined);
     assert.equal(success.body.companies[0].card_option_default_enabled, true);
     assert.equal(success.body.travelers[0].card_option_default_enabled, false);
@@ -376,6 +395,12 @@ try {
           selectedColumns:
             "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled",
           table: "companies",
+        },
+        {
+          filters: [],
+          orderBy: [{ column: "booker_name", options: { ascending: true } }],
+          selectedColumns: "id, company_id, customer_id, booker_name, customer_rates",
+          table: "bookers",
         },
         {
           filters: [],

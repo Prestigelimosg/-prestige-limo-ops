@@ -245,8 +245,6 @@ for (const [label, pattern] of [
   ["email review item", /data-admin-customer-driver-details-email-review-item="true"/g],
   ["email gated-send action", /data-admin-customer-driver-details-email-disabled-send-action="true"/g],
   ["email gated-send status", /data-admin-customer-driver-details-email-disabled-send-status="true"/g],
-  ["whatsapp disabled-send item", /data-admin-customer-driver-details-whatsapp-disabled-send-item="true"/g],
-  ["whatsapp disabled-send action", /data-admin-customer-driver-details-whatsapp-disabled-send-action="true"/g],
   ["whatsapp disabled-send status", /data-admin-customer-driver-details-whatsapp-disabled-send-status="true"/g],
   ["sms disabled-send item", /data-admin-customer-driver-details-sms-disabled-send-item="true"/g],
   ["sms disabled-send action", /data-admin-customer-driver-details-sms-disabled-send-action="true"/g],
@@ -259,14 +257,24 @@ for (const [label, pattern] of [
 
 assert.equal(
   customerCopySection.includes("data-admin-customer-driver-details-email-disabled-send-action") &&
-    customerCopySection.includes("Customer driver details WhatsApp") &&
+    !customerCopySection.includes("Customer driver details WhatsApp") &&
     customerCopySection.includes("Customer driver details SMS") &&
     appSource.includes("Email customer") &&
     appSource.includes("Review WhatsApp to customer") &&
     appSource.includes("Review SMS to customer"),
   true,
-  "Customer Copy must keep compact Email, WhatsApp, and SMS controls.",
+  "Customer Copy must keep compact Email and SMS controls while the extra visible WhatsApp button stays removed.",
 );
+for (const fragment of [
+  'data-admin-customer-driver-details-whatsapp-disabled-send-item="true"',
+  'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
+]) {
+  assert.equal(
+    appSource.includes(fragment),
+    false,
+    `Customer Copy must not render the removed extra WhatsApp control ${fragment}.`,
+  );
+}
 for (const fragment of [
   'data-customer-copy-readable-summary="true"',
   'data-dispatch-compact-panel="customer-copy-message-text"',

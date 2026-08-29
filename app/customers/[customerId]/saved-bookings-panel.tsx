@@ -1089,11 +1089,13 @@ export function CustomerFolderSavedBookingsPanel({
           const calculation = calculateCustomerInvoiceRateReview(
             {
               actualMinutes,
+              bookerId: inlineEditIdentityId(booking.booker_id),
               billingEndedAt: billingEndAt,
               billingStartedAt: billingStartAt,
               bookingType,
               childSeatCount: booking.child_seat_count,
               companyId: booking.company_id,
+              customerId: inlineEditIdentityId(booking.customer_id),
               extraStopCount: booking.extra_stop_count,
               pickupAt: booking.pickup_at,
               travelerId: booking.traveler_id,

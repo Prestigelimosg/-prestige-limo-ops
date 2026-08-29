@@ -292,7 +292,7 @@ for (const fragment of [
 
 for (const fragment of [
   "The admin Customer Copy Email/WhatsApp/SMS customer driver-details workflow already exists in the current app.",
-  "Do not rebuild it as duplicate Email, WhatsApp, SMS, or Telegram workflow sectors.",
+  "Do not rebuild it as duplicate Email, WhatsApp, or SMS workflow sectors.",
   "Email may be triggered only by explicit admin click through `POST /api/admin-customer-driver-details-email-send-action`, using the gated Resend helper and allowlist safeguards.",
   "SMS and WhatsApp remain parked setup-only/no-op for now.",
 ]) {

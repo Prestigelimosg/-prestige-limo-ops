@@ -25,6 +25,20 @@ const companies = [
   { company_name: "Kim Hyun Soo", domain: null, id: 41 },
   { company_name: "Nomura Singapore Limited", domain: null, id: 55 },
 ];
+const bookers = [
+  {
+    booker_name: "Mavis Lam",
+    company_id: 55,
+    customer_id: 550,
+    id: 5501,
+  },
+  {
+    booker_name: "No Traveller Booker",
+    company_id: 55,
+    customer_id: 551,
+    id: 5502,
+  },
+];
 const travelers = [
   {
     booker_id: 4101,
@@ -101,6 +115,7 @@ async function main() {
         patterns: [
           { requestStage: "Request", urlPattern: "*/api/admin-rate-setup*" },
           { requestStage: "Request", urlPattern: "*/api/admin-customer-accounts*" },
+          { requestStage: "Request", urlPattern: "*/api/admin-bookers*" },
           { requestStage: "Request", urlPattern: "*/api/admin-bookings*" },
         ],
       }),
@@ -126,7 +141,7 @@ async function main() {
       let responseBody = null;
 
       if (requestUrl.pathname === "/api/admin-rate-setup" && method === "GET") {
-        responseBody = { companies, ok: true, settings: null, travelers };
+        responseBody = { bookers, companies, ok: true, settings: null, travelers };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "GET") {
         responseBody = {
           accounts: [{
@@ -138,6 +153,20 @@ async function main() {
           }],
           ok: true,
         };
+      } else if (requestUrl.pathname === "/api/admin-bookers" && method === "GET") {
+        const booker = bookers.find(
+          (candidate) => String(candidate.id) === requestUrl.searchParams.get("id"),
+        );
+        responseBody = booker
+          ? {
+              booker: {
+                ...booker,
+                email: null,
+                phone: null,
+              },
+              ok: true,
+            }
+          : { booker: null, ok: true };
       } else if (requestUrl.pathname === "/api/admin-bookings" && method === "POST") {
         bookingPosts.push(request.postData || "");
         responseBody = { error: "Focused browser test blocks booking writes.", ok: false };
@@ -157,6 +186,8 @@ async function main() {
     });
 
     await navigateWithLoadEvent(client, appUrl);
+    await waitForSelector(evaluate, '[data-app-tab="dispatch"]', "Dispatch tab");
+    await evaluate(`document.querySelector('[data-app-tab="dispatch"]')?.click()`);
     await waitForSelector(
       evaluate,
       '[data-admin-dispatch-customer-account-select="true"]',
@@ -173,7 +204,7 @@ async function main() {
         const keys = options.map((option) => option.getAttribute("data-admin-dispatch-customer-account-option"));
         const summaryWidth = chooser.querySelector("summary")?.getBoundingClientRect().width || 0;
         const sectorWidth = chooser.closest('[data-admin-dispatch-crm-identity-selectors="true"]')?.getBoundingClientRect().width || 0;
-        return options.length === 2 && keys.includes("agency:174:41") ? {
+        return options.length === 3 && keys.includes("corporate:41:4101") ? {
           keys,
           legacyCount: document.querySelectorAll('[data-admin-dispatch-agency-folder-select="true"], [data-admin-dispatch-corporate-customer-select="true"], [data-admin-dispatch-corporate-pair-select="true"]').length,
           listOverflowY: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-options="true"]')).overflowY,
@@ -184,7 +215,11 @@ async function main() {
       10000,
       "exact unified account options",
     );
-    assert.deepEqual(initialState.keys.sort(), ["agency:174:41", "corporate:55:5501"]);
+    assert.deepEqual(initialState.keys.sort(), [
+      "corporate:41:4101",
+      "corporate:55:5501",
+      "corporate:55:5502",
+    ]);
     assert.equal(initialState.legacyCount, 0);
     assert.equal(initialState.listOverflowY, "auto");
     assert.match(initialState.searchBackground, /255, 255, 255/);
@@ -193,7 +228,7 @@ async function main() {
       "Customer Account bar must retain the previous one-column Customer width",
     );
 
-    const search = async (value) => {
+    const searchKeys = async (value, expectedCount) => {
       await evaluate(`(() => {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
         const input = document.querySelector('[data-admin-dispatch-customer-account-search="true"]');
@@ -209,75 +244,87 @@ async function main() {
         async () => evaluate(`(() => {
           const input = document.querySelector('[data-admin-dispatch-customer-account-search="true"]');
           const options = [...document.querySelectorAll('[data-admin-dispatch-customer-account-option]')];
-          return input?.value === ${JSON.stringify(value)} && options.length === 1
-            ? options[0].getAttribute("data-admin-dispatch-customer-account-option")
+          return input?.value === ${JSON.stringify(value)} && options.length === ${expectedCount}
+            ? options.map((option) => option.getAttribute("data-admin-dispatch-customer-account-option"))
             : false;
         })()`),
         10000,
         `account search ${value}`,
       );
     };
+    const search = async (value) => (await searchKeys(value, 1))[0];
 
-    assert.equal(await search("Kim Hyun Soo"), "agency:174:41");
-    assert.equal(await search("Kim Passenger"), "agency:174:41");
-    assert.equal(await search("Nomura"), "corporate:55:5501");
+    assert.equal(await search("Kim Hyun Soo"), "corporate:41:4101");
+    assert.equal(await search("Kim Passenger"), "corporate:41:4101");
+    assert.deepEqual(
+      (await searchKeys("Nomura", 2)).sort(),
+      ["corporate:55:5501", "corporate:55:5502"],
+    );
     assert.equal(await search("Mavis Lam"), "corporate:55:5501");
     assert.equal(await search("Mr Jwalent Nanavati"), "corporate:55:5501");
-    reporter.step("checking explicit passenger review");
-
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click()`);
-    const oneMatch = await waitForCondition(
-      async () => evaluate(`(() => {
-        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
-        return review ? {
-          candidateListCount: document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button').length,
-          text: review.textContent.replace(/\\s+/g, " ").trim(),
-        } : false;
-      })()`),
-      10000,
-      "one passenger review",
-    );
-    assert.equal(oneMatch.candidateListCount, 0);
-    assert.match(oneMatch.text, /Mr Jwalant Nanavati/);
-    assert.equal(bookingPosts.length, 0);
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-review-cancel="true"]')?.click()`);
-    const cancelledState = await evaluate(`(() => {
-      const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-      return {
-        bookerId: chooser?.dataset.bookerId || "",
-        companyId: chooser?.dataset.companyId || "",
-        travelerId: chooser?.dataset.travelerId || "",
-      };
-    })()`);
-    assert.deepEqual(cancelledState, { bookerId: "", companyId: "", travelerId: "" });
-
-    await search("Mr Jwalant Nanavati");
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click()`);
-    await waitForSelector(
-      evaluate,
-      '[data-admin-dispatch-customer-account-use-existing="true"]',
-      "use existing passenger action",
-    );
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-use-existing="true"]')?.click()`);
-    const acceptedState = await waitForCondition(
+    assert.equal(await search("No Traveller Booker"), "corporate:55:5502");
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5502"]')?.click()`);
+    const noTravelerAccountState = await waitForCondition(
       async () => evaluate(`(() => {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        return chooser?.dataset.travelerId === "55001" ? {
-          bookerId: chooser.dataset.bookerId,
-          companyId: chooser.dataset.companyId,
-          customerId: chooser.dataset.customerId,
-          travelerId: chooser.dataset.travelerId,
-        } : false;
+        return chooser?.dataset.bookerId === "5502" && chooser?.dataset.customerId === "551"
+          ? {
+              bookerId: chooser.dataset.bookerId,
+              companyId: chooser.dataset.companyId,
+              customerId: chooser.dataset.customerId,
+              travelerId: chooser.dataset.travelerId || "",
+            }
+          : false;
       })()`),
       10000,
-      "accepted exact passenger tuple",
+      "approved Booker account remains selectable without a Traveller row",
     );
-    assert.deepEqual(acceptedState, {
+    assert.deepEqual(noTravelerAccountState, {
+      bookerId: "5502",
+      companyId: "55",
+      customerId: "551",
+      travelerId: "",
+    });
+    await search("Mavis Lam");
+    reporter.step("checking passenger-specific repeat account selection");
+
+    await evaluate(`(() => {
+      const input = document.querySelector('input[placeholder="Passenger name"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "Mr Jwalant Nanavati");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+      input?.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click()`);
+    const firstPassengerState = await waitForCondition(
+      async () => evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        const passenger = document.querySelector('input[placeholder="Passenger name"]');
+        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
+        return chooser?.dataset.bookerId === "5501" &&
+          chooser?.dataset.customerId === "550" &&
+          passenger?.value === "Mr Jwalant Nanavati" &&
+          !review
+          ? {
+              bookerId: chooser.dataset.bookerId,
+              companyId: chooser.dataset.companyId,
+              customerId: chooser.dataset.customerId,
+              passenger: passenger.value,
+              travelerId: chooser.dataset.travelerId || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "known account with booking-specific passenger and no identity prompt",
+    );
+    assert.deepEqual(firstPassengerState, {
       bookerId: "5501",
       companyId: "55",
-      customerId: "",
-      travelerId: "55001",
+      customerId: "550",
+      passenger: "Mr Jwalant Nanavati",
+      travelerId: "",
     });
+    assert.equal(bookingPosts.length, 0);
 
     await evaluate(`(() => {
       const input = document.querySelector('input[placeholder="Passenger name"]');
@@ -288,42 +335,59 @@ async function main() {
     })()`);
     await search("Mavis Lam");
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click()`);
-    const multipleMatches = await waitForCondition(
-      async () => evaluate(`(() => {
-        const candidates = [...document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button')];
-        const text = candidates.map((candidate) => candidate.textContent.replace(/\\s+/g, " ").trim()).join(" | ");
-        return candidates.length === 2 && text.includes("CRM Traveller #55002") && text.includes("CRM Traveller #55003");
-      })()`),
-      10000,
-      "distinguishable multiple passenger candidates",
-    );
-    assert.equal(multipleMatches, true);
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-different-person="true"]')?.click()`);
-    const differentPersonState = await waitForCondition(
+    const differentPassengerState = await waitForCondition(
       async () => evaluate(`(() => {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        return chooser?.dataset.bookerId === "5501" && chooser?.dataset.travelerId === ""
-          ? { bookerId: chooser.dataset.bookerId, companyId: chooser.dataset.companyId }
+        const passenger = document.querySelector('input[placeholder="Passenger name"]');
+        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
+        return chooser?.dataset.bookerId === "5501" &&
+          chooser?.dataset.customerId === "550" &&
+          passenger?.value === "Alex Tan" &&
+          !review
+          ? {
+              bookerId: chooser.dataset.bookerId,
+              companyId: chooser.dataset.companyId,
+              customerId: chooser.dataset.customerId,
+              passenger: passenger.value,
+              travelerId: chooser.dataset.travelerId || "",
+            }
           : false;
       })()`),
       10000,
-      "different passenger account state",
+      "different passenger keeps the approved account without another prompt",
     );
-    assert.deepEqual(differentPersonState, { bookerId: "5501", companyId: "55" });
+    assert.deepEqual(differentPassengerState, {
+      bookerId: "5501",
+      companyId: "55",
+      customerId: "550",
+      passenger: "Alex Tan",
+      travelerId: "",
+    });
     assert.equal(bookingPosts.length, 0);
 
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
     const createChoices = await waitForCondition(
-      async () => evaluate(`(() => ({
-        account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
-        corporate: Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')),
-        personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
-      }))()`),
+      async () => evaluate(`(() => {
+        const corporate = document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]');
+        if (!(corporate instanceof HTMLButtonElement)) return false;
+        const state = {
+          account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
+          corporate: true,
+          corporateDisabled: corporate.disabled,
+          personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
+        };
+        if (!corporate.disabled) corporate.click();
+        return state;
+      })()`),
       10000,
-      "explicit new-customer choices",
+      "single Company + Booker new-customer choice",
     );
-    assert.deepEqual(createChoices, { account: true, corporate: true, personal: true });
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
+    assert.deepEqual(createChoices, {
+      account: false,
+      corporate: true,
+      corporateDisabled: false,
+      personal: false,
+    });
     assert.equal(
       await waitForCondition(
         async () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]'))`),
@@ -332,33 +396,6 @@ async function main() {
       ),
       true,
     );
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')?.click()`);
-    const personalChoiceState = await waitForCondition(
-      async () => evaluate(`(() => {
-        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        const company = document.querySelector('input[placeholder="Company / Account"]');
-        return document.querySelector('[data-admin-dispatch-new-customer-type="personal"]')
-          ? { company: company?.value || "", customerId: chooser?.dataset.customerId || "" }
-          : false;
-      })()`),
-      10000,
-      "personal new-customer choice",
-    );
-    assert.deepEqual(personalChoiceState, { company: "", customerId: "" });
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-account="true"]')?.click()`);
-    const accountChoiceState = await waitForCondition(
-      async () => evaluate(`(() => {
-        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        return document.querySelector('[data-admin-dispatch-new-customer-type="account"]')
-          ? chooser?.dataset.customerId || false
-          : false;
-      })()`),
-      10000,
-      "account-folder new-customer choice",
-    );
-    assert.equal(accountChoiceState, "create-new-hotel-tour-agency");
     assert.equal(bookingPosts.length, 0);
 
     console.log(JSON.stringify(reporter.summary({

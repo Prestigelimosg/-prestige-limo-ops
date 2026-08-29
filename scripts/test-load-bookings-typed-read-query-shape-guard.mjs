@@ -26,6 +26,9 @@ const unsafeNonSelectedSourcePattern =
   /payment|billing|invoice|pdf|provider|send_state|send_log|auth|live_location|location_url|photo|calendar|internal_admin|admin_notes|parser_debug|debug_payload|mock_archive|mock_qa|service_role|server_secret|secret|api_key|access_token|raw_token/i;
 
 const safeSelectedColumns = new Set([
+  "booking_service_items.item_type",
+  "booking_service_items.notes",
+  "booking_service_items.quantity",
   "booking_reference",
   "booker_id",
   "bookers.booker_name",
@@ -55,6 +58,7 @@ const safeSelectedColumns = new Set([
   "flight_no",
   "id",
   "job_card",
+  "luggage_count",
   "pax",
   "passenger_name",
   "passenger_phone",

@@ -94,17 +94,17 @@ assertIncludes(appPage, "\"x-prestige-admin-purpose\": adminLegacyDataPurpose", 
 const companyRuntimePayload = sliceBetween(
   appPage,
   "function buildCompanyCustomerRatesRuntimeWritePayload",
-  "function buildTravelerCustomerRatesRuntimeWritePayload",
+  "function buildBookerCustomerRatesRuntimeWritePayload",
 );
-const travelerRuntimePayload = sliceBetween(
+const bookerRuntimePayload = sliceBetween(
   appPage,
-  "function buildTravelerCustomerRatesRuntimeWritePayload",
+  "function buildBookerCustomerRatesRuntimeWritePayload",
   "function buildCompanyDriverPayoutRulesRuntimeWritePayload",
 );
 
 for (const [label, source] of [
   ["Company customer_rates runtime payload", companyRuntimePayload],
-  ["Traveler customer_rates runtime payload", travelerRuntimePayload],
+  ["Booker customer_rates runtime payload", bookerRuntimePayload],
 ]) {
   assertIncludes(source, "customer_rates", label);
   assertExcludes(source, /driverPayout|driver_payout|payout|payment|billing|invoice|pdf|provider|auth|location|photo|calendar|internal|debug|secret/i, label);
@@ -117,42 +117,39 @@ const saveRateOverride = sliceBetween(
 );
 assertIncludes(saveRateOverride, "saveCustomerRatesRuntime", "Rate override customer rates runtime call");
 assertIncludes(saveRateOverride, "buildCompanyCustomerRatesRuntimeWritePayload", "Company customer rates runtime payload call");
-assertIncludes(saveRateOverride, "buildTravelerCustomerRatesRuntimeWritePayload", "Traveler customer rates runtime payload call");
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Booker customer rates runtime payload call");
 assertIncludes(saveRateOverride, "const hasCustomerRateOverrides", "Customer rate override presence check");
-assertIncludes(saveRateOverride, "|| !hasCustomerRateOverrides", "Driver-only company save skips customer_rates runtime call");
 assert.match(
   saveRateOverride,
-  /const travelerCustomerRatesRuntime = hasCustomerRateOverrides\s*\? await saveCustomerRatesRuntime\(/,
-  "Driver-only traveler save must conditionally call the customer_rates runtime boundary",
+  /const customerRatesRuntime = hasCustomerRateOverrides\s*\? await saveCustomerRatesRuntime\(/,
+  "Customer-rate writes must call the typed boundary only when customer rates are present",
 );
-assertIncludes(saveRateOverride, "includeCustomerRates: !companyCustomerRatesRuntime.saved", "Company legacy customer_rates overwrite guard");
-assertIncludes(saveRateOverride, "includeCustomerRates: !travelerCustomerRatesRuntime.saved", "Traveler legacy customer_rates overwrite guard");
-assertBefore(saveRateOverride, "const companyCustomerRatesRuntime", "const companyUpdate", "Company customer_rates runtime ordering");
-assertBefore(saveRateOverride, "const travelerCustomerRatesRuntime", "const travelerUpdate", "Traveler customer_rates runtime ordering");
+assertIncludes(saveRateOverride, "!isCustomerAccountOverride && !customerRatesRuntime.saved", "Company-only legacy customer_rates overwrite guard");
+assertIncludes(saveRateOverride, "isCustomerAccountOverride && !customerRatesRuntime.saved", "Booker rate write must fail closed when the typed boundary is unavailable");
+assertBefore(saveRateOverride, "const customerRatesRuntime", "const companyUpdate", "Customer rates runtime ordering");
 assertIncludes(saveRateOverride, "adminLegacyTables.companies", "Company legacy payout fallback remains parked");
-assertIncludes(saveRateOverride, "adminLegacyTables.travelers", "Traveler legacy payout fallback remains parked");
 assertIncludes(saveRateOverride, "driver_payout_rules", "Driver payout rules remain outside customer_rates payloads");
+assertExcludes(saveRateOverride, "adminLegacyTables.travelers", "Normal save must not write legacy traveler rates");
+assertExcludes(saveRateOverride, "buildTravelerCustomerRatesRuntimeWritePayload", "Normal save must not write legacy traveler rates");
 
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
-for (const [label, source] of [
-  ["Company override remove", removeCompanyRateOverride],
-  ["Traveler override remove", removeBossRateOverride],
-]) {
-  assertIncludes(source, "saveCustomerRatesRuntime", `${label} customer_rates clear call`);
-  assertIncludes(source, "customerRates: {}", `${label} customer_rates clear payload`);
-  assertIncludes(source, "includeCustomerRates: !", `${label} legacy customer_rates clear fallback`);
-  assertIncludes(source, "driverPayoutRules: {}", `${label} parked payout clear remains explicit`);
-}
+assertIncludes(removeCompanyRateOverride, "saveCustomerRatesRuntime", "Company override customer_rates clear call");
+assertIncludes(removeCompanyRateOverride, "customerRates: {}", "Company override customer_rates clear payload");
+assertIncludes(removeCompanyRateOverride, "includeCustomerRates: !", "Company legacy customer_rates clear fallback");
+assertIncludes(removeCompanyRateOverride, "driverPayoutRules: {}", "Company parked payout clear remains explicit");
+assertIncludes(removeBookerRateOverride, "saveCustomerRatesRuntime", "Booker override customer_rates clear call");
+assertIncludes(removeBookerRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Booker override exact identity clear payload");
+assertExcludes(removeBookerRateOverride, "driverPayoutRules: {}", "Booker rate clear must not clear Company driver payouts");
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM endpoint");
@@ -163,8 +160,37 @@ assertExcludes(aiParseRoute, routePathFragment, "Parser route customer_rates run
 assertExcludes(adminBookingsRoute, routePathFragment, "Admin bookings route customer_rates runtime separation");
 assertExcludes(adminSavedBookingsRoute, routePathFragment, "Admin saved bookings route customer_rates runtime separation");
 assertExcludes(companyRuntimePayload, /driver_payout|payout|paynow|pay_now/i, "Company customer_rates runtime payload remains payout-free");
-assertExcludes(travelerRuntimePayload, /driver_payout|payout|paynow|pay_now/i, "Traveler customer_rates runtime payload remains payout-free");
+assertExcludes(bookerRuntimePayload, /driver_payout|payout|paynow|pay_now/i, "Booker customer_rates runtime payload remains payout-free");
 
 assertIncludes(preactivationSuite, guardScript, "Preactivation customer rates runtime app wiring guard registration");
+
+const currentRatesSection = sectionBetween(
+  ledger,
+  "## Company + Booker Customer Rate Identity (2026-08-29)",
+  "\n## ",
+);
+for (const phrase of [
+  "Customer rate identity is the exact verified Company ID + Booker ID pair.",
+  "Booker rates override Company rates, which override the global defaults.",
+  "Traveller rates are legacy compatibility only when an approved Company + Booker account is absent.",
+  "Passenger, Boss, display name, email and phone never select or authorize a customer rate.",
+  "Driver payout, invoice layout/workflow, DSP billing rules, Calendar, push/badges and native apps remain unchanged.",
+]) {
+  assertIncludes(currentRatesSection, phrase, `Company + Booker rate ledger phrase: ${phrase}`);
+}
+
+assertIncludes(appPage, "function buildBookerCustomerRatesRuntimeWritePayload", "Booker customer-rate payload");
+assertIncludes(appPage, 'action_type: "booker_customer_rates_update"', "Booker customer-rate action");
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Booker rate save wiring");
+assertIncludes(saveRateOverride, "selectedDraftBooker", "Exact selected Booker rate identity");
+assertIncludes(saveRateOverride, "positiveId(bookerRecord.company_id) === companyId", "Booker Company ownership check");
+assertIncludes(saveRateOverride, "positiveId(selectedDraftBooker?.customer_id)", "Approved Booker account check");
+assertExcludes(saveRateOverride, "buildTravelerCustomerRatesRuntimeWritePayload", "Traveller customer-rate write retired from normal save");
+
+const ratesUi = sliceBetween(appPage, '<h3 className="text-base font-semibold">Customer Account Rates</h3>', '{activeTab === "dashboard"');
+assertIncludes(ratesUi, "Customer Account", "Human Customer Account chooser");
+assertIncludes(ratesUi, "Company · Booker", "Customer Account display contract");
+assertExcludes(ratesUi, "Boss / Name (existing Traveller)", "Passenger must not be customer-rate identity");
+assertExcludes(ratesUi, "Boss / Name Overrides", "Legacy traveller rates remain hidden");
 
 console.log("customer_rates runtime app wiring guard passed");

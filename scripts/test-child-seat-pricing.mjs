@@ -148,7 +148,7 @@ const companyVehicleOverridePricing = resolvePricing(
 assert.equal(companyVehicleOverridePricing.customerRate, 140);
 assert.equal(companyVehicleOverridePricing.pricingSource, "company");
 
-const travelerVehicleOverridePricing = resolvePricing(
+const legacyTravelerVehicleOverridePricing = resolvePricing(
   {
     bookingType: "TRF",
     vehicle: "S",
@@ -158,13 +158,17 @@ const travelerVehicleOverridePricing = resolvePricing(
     childSeatCount: "",
   },
   { customer_rates: { TRF: { S: 90 } }, driver_payout_rules: {} },
-  { customer_rates: { TRF: { S: 105 } }, driver_payout_rules: {} },
+  {
+    customer_rate_source: "legacy_traveler",
+    customer_rates: { TRF: { S: 105 } },
+    driver_payout_rules: {},
+  },
   initialRateSettings,
   null,
 );
 
-assert.equal(travelerVehicleOverridePricing.customerRate, 105);
-assert.equal(travelerVehicleOverridePricing.pricingSource, "boss");
+assert.equal(legacyTravelerVehicleOverridePricing.customerRate, 105);
+assert.equal(legacyTravelerVehicleOverridePricing.pricingSource, "legacy_traveler");
 
 for (const [bookingType, expectedByVehicle] of Object.entries({
   MNG: { AVF: 85, S: 180, VVV: 95, Combi: 105 },

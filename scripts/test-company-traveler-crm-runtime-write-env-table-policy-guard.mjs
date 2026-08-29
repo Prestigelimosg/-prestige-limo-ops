@@ -293,30 +293,31 @@ const saveRateOverrideBlock = sliceBetween(
   "async function saveRateOverride",
   "async function removeCompanyRateOverride",
 );
-assertIncludes(
+assertExcludes(
   saveRateOverrideBlock,
   "saveCompanyTravelerCrmIdentityContactRuntime",
-  "rate override flow CRM runtime split",
+  "Rates must not write CRM identity/contact",
 );
 assertIncludes(
   saveRateOverrideBlock,
   "buildCompanyRateOverridePayload",
   "rate override flow keeps rate lane separate",
 );
-assertIncludes(
+assertExcludes(
   saveRateOverrideBlock,
   "buildTravelerRateOverridePayload",
-  "rate override flow keeps traveler rate lane separate",
+  "Rates must not write Traveller rate identity",
 );
-assertIncludes(
+assertExcludes(
   saveRateOverrideBlock,
   "buildLegacyCompanyRateOverrideInsertPayload",
-  "closed-gate company fallback preserved",
+  "Rates must not create Company identity",
 );
-assertIncludes(
+assertIncludes(saveRateOverrideBlock, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account rate lane");
+assertExcludes(
   saveRateOverrideBlock,
   "buildLegacyTravelerRateOverrideInsertPayload",
-  "closed-gate traveler fallback preserved",
+  "retired closed-gate traveler insert fallback",
 );
 
 const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");

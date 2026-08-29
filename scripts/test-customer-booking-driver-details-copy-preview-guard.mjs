@@ -62,10 +62,16 @@ for (const fragment of [
   "Message text for Copy / Email / WhatsApp / SMS",
   "{customerCopyText}",
   'data-admin-customer-driver-details-email-review-item="true"',
-  'data-admin-customer-driver-details-whatsapp-disabled-send-item="true"',
   'data-admin-customer-driver-details-sms-disabled-send-item="true"',
 ]) {
   assertIncludes(appSource, fragment, `existing Customer Copy control ${fragment}`);
+}
+
+for (const fragment of [
+  'data-admin-customer-driver-details-whatsapp-disabled-send-item="true"',
+  'data-admin-customer-driver-details-whatsapp-disabled-send-action="true"',
+]) {
+  assertExcludes(appSource, fragment, `removed visible Customer Copy WhatsApp control ${fragment}`);
 }
 
 for (const fragment of [

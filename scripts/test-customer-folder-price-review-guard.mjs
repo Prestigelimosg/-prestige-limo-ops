@@ -467,19 +467,39 @@ try {
   assert.equal(companyOverrideReview?.amountCents, 7200);
   assert.equal(companyOverrideReview?.customerRateSource, "company");
 
-  const travelerOverrideSetup = {
+  const bookerOverrideSetup = {
     ...companyOverrideSetup,
-    travelers: [
-      { company_id: 26, customer_rates: { DEP: { AVF: 73 } }, id: 22 },
+    bookers: [
+      { company_id: 26, customer_id: 163, customer_rates: { DEP: { AVF: 73 } }, id: 12 },
     ],
   };
-  const travelerOverrideReview = calculateCustomerInvoiceRateReview(
-    exactIdentityInput,
-    travelerOverrideSetup,
+  const bookerOverrideReview = calculateCustomerInvoiceRateReview(
+    { ...exactIdentityInput, bookerId: 12, customerId: 163 },
+    bookerOverrideSetup,
   );
-  assert.equal(travelerOverrideReview?.rateCents, 7300);
-  assert.equal(travelerOverrideReview?.amountCents, 7300);
-  assert.equal(travelerOverrideReview?.customerRateSource, "boss");
+  assert.equal(bookerOverrideReview?.rateCents, 7300);
+  assert.equal(bookerOverrideReview?.amountCents, 7300);
+  assert.equal(bookerOverrideReview?.customerRateSource, "account");
+
+  const approvedAccountIgnoresTravelerRate = calculateCustomerInvoiceRateReview(
+    { ...exactIdentityInput, bookerId: 12, customerId: 163 },
+    {
+      ...bookerOverrideSetup,
+      travelers: [{ company_id: 26, customer_rates: { DEP: { AVF: 99 } }, id: 22 }],
+    },
+  );
+  assert.equal(approvedAccountIgnoresTravelerRate?.rateCents, 7300);
+  assert.equal(approvedAccountIgnoresTravelerRate?.customerRateSource, "account");
+
+  const legacyTravelerFallback = calculateCustomerInvoiceRateReview(
+    exactIdentityInput,
+    {
+      ...companyOverrideSetup,
+      travelers: [{ company_id: 26, customer_rates: { DEP: { AVF: 74 } }, id: 22 }],
+    },
+  );
+  assert.equal(legacyTravelerFallback?.rateCents, 7400);
+  assert.equal(legacyTravelerFallback?.customerRateSource, "legacy_traveler");
 
   const orchardDepartureSetup = {
     companies: [{ customer_rates: {}, id: 48 }],

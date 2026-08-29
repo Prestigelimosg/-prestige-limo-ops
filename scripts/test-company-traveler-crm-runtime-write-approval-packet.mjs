@@ -129,18 +129,17 @@ const saveRateOverride = sliceBetween(
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
 for (const [label, source] of [
   ["Parked rate override save", saveRateOverride],
   ["Parked company override remove", removeCompanyRateOverride],
-  ["Parked traveler override remove", removeBossRateOverride],
 ]) {
   assertIncludes(source, "adminLegacyDataClient", label);
   assertIncludes(source, "customer_rates", label);
@@ -150,36 +149,40 @@ for (const [label, source] of [
     assertExcludes(source, setupRouteFragment, `${label} setup route wiring`);
   }
 }
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account rate write");
+assertExcludes(saveRateOverride, "adminLegacyTables.travelers", "Normal Customer Account rate write must not target travellers");
+assertIncludes(removeBookerRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Customer Account rate remove");
+assertExcludes(removeBookerRateOverride, "adminLegacyDataClient", "Customer Account rate remove must not use legacy writes");
+assertExcludes(removeBookerRateOverride, "driver_payout_rules", "Customer Account rate remove must preserve Company payout");
 
 for (const fragment of [
   "buildCompanyCrmIdentityContactPayload",
-  "buildTravelerCrmIdentityContactPayload",
   "buildCompanyRateOverridePayload",
   "buildTravelerRateOverridePayload",
   "buildLegacyCompanyRateOverrideInsertPayload",
-  "buildLegacyTravelerRateOverrideInsertPayload",
 ]) {
   assertIncludes(appPage, fragment, `CRM/rate payload split helper ${fragment}`);
 }
 
+assertExcludes(
+  appPage,
+  "function buildTravelerCrmIdentityContactPayload",
+  "Retired new traveler CRM identity payload helper",
+);
+assertExcludes(
+  appPage,
+  "function buildLegacyTravelerRateOverrideInsertPayload",
+  "Retired legacy traveler insert helper",
+);
+
 const legacyCompanyInsert = sliceBetween(
   appPage,
   "function buildLegacyCompanyRateOverrideInsertPayload",
-  "function buildLegacyTravelerRateOverrideInsertPayload",
-);
-const legacyTravelerInsert = sliceBetween(
-  appPage,
-  "function buildLegacyTravelerRateOverrideInsertPayload",
   "function statusClass",
 );
 
-for (const [label, source] of [
-  ["Legacy company insert", legacyCompanyInsert],
-  ["Legacy traveler insert", legacyTravelerInsert],
-]) {
-  assertIncludes(source, "CrmIdentityContactPayload", label);
-  assertIncludes(source, "RateOverridePayload", label);
-}
+assertIncludes(legacyCompanyInsert, "CrmIdentityContactPayload", "Legacy company insert");
+assertIncludes(legacyCompanyInsert, "RateOverridePayload", "Legacy company insert");
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM safe endpoint");

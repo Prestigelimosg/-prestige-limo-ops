@@ -292,6 +292,7 @@ class MockClient {
         {
           booker_name: "Safe Booker",
           company_id: 7,
+          customer_id: null,
           email: "safe@example.invalid",
           id: 101,
           phone: "90000000",

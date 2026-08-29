@@ -107,18 +107,17 @@ const saveRateOverride = sliceBetween(
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
 for (const [label, source] of [
   ["Parked rate override save", saveRateOverride],
   ["Parked company rate override remove", removeCompanyRateOverride],
-  ["Parked boss/name rate override remove", removeBossRateOverride],
 ]) {
   assertIncludes(source, "adminLegacyDataClient", label);
   assertIncludes(source, "customer_rates", label);
@@ -126,17 +125,22 @@ for (const [label, source] of [
 }
 
 assertIncludes(saveRateOverride, "adminLegacyTables.companies", "Parked company rate override save");
-assertIncludes(saveRateOverride, "adminLegacyTables.travelers", "Parked traveler rate override save");
+assertIncludes(saveRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Customer Account rate override save");
+assertExcludes(saveRateOverride, "adminLegacyTables.travelers", "Customer Account rate save must not target travellers");
 assertIncludes(
   removeCompanyRateOverride,
   "adminLegacyTables.companies",
   "Parked company rate override remove",
 );
 assertIncludes(
-  removeBossRateOverride,
-  "adminLegacyTables.travelers",
-  "Parked traveler rate override remove",
+  removeBookerRateOverride,
+  "buildBookerCustomerRatesRuntimeWritePayload",
+  "Customer Account rate override remove",
 );
+assertIncludes(removeBookerRateOverride, "saveCustomerRatesRuntime", "Customer Account rate override remove");
+assertExcludes(removeBookerRateOverride, "adminLegacyDataClient", "Customer Account rate remove must not use legacy writes");
+assertExcludes(removeBookerRateOverride, "adminLegacyTables.travelers", "Customer Account rate remove must not target travellers");
+assertExcludes(removeBookerRateOverride, "driver_payout_rules", "Customer Account rate remove must preserve Company payout");
 
 assertIncludes(legacyRoute, "companies: new Set", "Legacy route parked companies family");
 assertIncludes(legacyRoute, "travelers: new Set", "Legacy route parked travelers family");

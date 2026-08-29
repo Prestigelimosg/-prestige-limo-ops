@@ -570,6 +570,7 @@ type RateSettingsRecord = {
 };
 
 type AdminRateSetupReadResponse = {
+  bookers?: SaveCrmBookerRecord[];
   companies?: CompanyRecord[];
   error?: string;
   ok?: boolean;
@@ -2428,12 +2429,6 @@ type AdminDispatchCustomerAccountOption = {
   travelers: TravelerRecord[];
 };
 
-type AdminDispatchCustomerAccountMatchReview = {
-  account: AdminDispatchCustomerAccountOption;
-  candidates: TravelerRecord[];
-  selectedTravelerId: string;
-};
-
 type AdminDispatchNewCustomerType = "account" | "corporate" | "personal";
 
 type AdminEmailAiCustomerProfileRecommendation =
@@ -2661,6 +2656,8 @@ type ParsedDebugBooking = BookingForm & {
 };
 
 type RateOverrideDraft = {
+  bookerId: string;
+  companyId: string;
   companyName: string;
   bossName: string;
   travelerId: string;
@@ -2833,6 +2830,8 @@ function dispatchSummaryUppercaseField(label: string): AdminOperationalUppercase
 }
 
 const initialRateOverrideDraft: RateOverrideDraft = {
+  bookerId: "",
+  companyId: "",
   companyName: "",
   bossName: "",
   travelerId: "",
@@ -6376,8 +6375,10 @@ type CompanyTravelerCrmRuntimeWriteResponse = {
 };
 
 type CustomerRatesRuntimeWritePayload = {
-  action_type: "company_customer_rates_update" | "traveler_customer_rates_update";
+  action_type: "booker_customer_rates_update" | "company_customer_rates_update";
+  company_id?: number;
   customer_rates: RateRules;
+  customer_id?: number;
   id: number;
 };
 
@@ -6957,6 +6958,8 @@ async function resolveSaveCrmCompanyProfileForSave(
 type SaveCrmBookerRecord = {
   booker_name?: string | null;
   company_id?: number | string | null;
+  customer_id?: number | string | null;
+  customer_rates?: RateRules | null;
   email?: string | null;
   id?: number | string | null;
   phone?: string | null;
@@ -6974,7 +6977,8 @@ type SaveCrmCorporateIdentityResolution =
       bookerName: string;
       companyId: number;
       ok: true;
-      travelerId: number;
+      accountCreationApproved: boolean;
+      travelerId: number | null;
     }
   | {
       message: string;
@@ -7115,6 +7119,7 @@ async function loadSaveCrmBookerById(companyId: number, bookerId: number) {
 async function findOrCreateSaveCrmBooker(
   companyId: number,
   bookingValue: BookingForm,
+  createApproved: boolean,
 ) {
   const bookerName = clean(bookingValue.booker);
   const bookerEmail = clean(bookingValue.bookerEmail).toLowerCase();
@@ -7147,6 +7152,13 @@ async function findOrCreateSaveCrmBooker(
       companyId,
       bookerName,
     );
+
+    if (createApproved) {
+      throw new Error(
+        "A matching Booker appeared before the new account could be created. Select the exact existing Customer Account and review it before saving; nothing was created.",
+      );
+    }
+
     const savedEmail = clean(booker.email).toLowerCase();
     const savedContact = clean(booker.phone);
 
@@ -7192,6 +7204,10 @@ async function findOrCreateSaveCrmBooker(
     }
 
     return booker;
+  }
+
+  if (!createApproved) {
+    return null;
   }
 
   const createResponse = await fetch(adminBookersApiPath, {
@@ -7332,148 +7348,73 @@ async function resolveSaveCrmCorporateIdentityForSave(
   const currentBookerId = adminDispatchVerifiedIdentityId(bookingValue.bookerId);
   const currentTravelerId = adminDispatchVerifiedIdentityId(bookingValue.travelerId);
 
-  if (currentBookerId && currentTravelerId) {
-    const currentRows = await loadSaveCrmCorporateIdentityRows(companyId);
-    const verifiedPair = currentRows.find(
-      (traveler) =>
-        adminDispatchVerifiedIdentityId(traveler.id) === currentTravelerId &&
-        adminDispatchVerifiedIdentityId(traveler.company_id) === companyId &&
-        adminDispatchVerifiedIdentityId(traveler.booker_id) === currentBookerId &&
-        saveCrmComparableIdentityValue(traveler.traveler_name) ===
-          saveCrmComparableIdentityValue(bookingValue.name) &&
-        saveCrmComparableIdentityValue(traveler.booker_name) ===
-          saveCrmComparableIdentityValue(bookingValue.booker),
-    );
+  const bookerName = clean(bookingValue.booker);
 
-    if (!verifiedPair) {
-      throw new Error(
-        "The selected Booker + Traveller pair no longer matches this exact company and booking. Reload CRM identities before saving; no booking was changed.",
-      );
-    }
-
-    return {
-      bookerId: currentBookerId,
-      bookerName: clean(bookingValue.booker),
-      companyId,
-      ok: true,
-      travelerId: currentTravelerId,
-    };
-  }
-
-  if (!currentBookerId && currentTravelerId) {
-    return {
-      message: "The booking has a verified Traveller without its verified Booker. Reload CRM identities and select the exact pair before saving.",
-      ok: false,
-    };
-  }
-
-  const existingBooker = currentBookerId
-    ? await loadSaveCrmBookerById(companyId, currentBookerId)
-    : null;
-  const identityBookingValue = existingBooker
-    ? {
-        ...bookingValue,
-        booker: clean(existingBooker.booker_name),
-      }
-    : bookingValue;
-  const bookerName = clean(identityBookingValue.booker);
-  const travelerName = clean(bookingValue.name);
-
-  if (!bookerName || !travelerName) {
+  if (!bookerName || !clean(bookingValue.name)) {
     return {
       message: "Enter both Booker / PA name and Passenger name before saving this corporate booking.",
       ok: false,
     };
   }
+  let accountCreationApproved = false;
+  let booker = currentBookerId
+    ? await loadSaveCrmBookerById(companyId, currentBookerId)
+    : await findOrCreateSaveCrmBooker(companyId, bookingValue, false);
 
-  if (
-    !window.confirm(
-      `Create or reuse this verified Booker + Traveller under ${companyName}? Booker: ${bookerName}. Traveller: ${travelerName}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change driver, payment, or agency guests. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
-    )
-  ) {
+  if (!currentBookerId && booker) {
     return {
-      message: "Save cancelled before creating or reusing the verified Booker + Traveller. No booking was saved.",
+      message: "A Booker with this name already exists under the Company. Select the exact Customer Account before saving; names alone cannot choose an account.",
       ok: false,
     };
   }
 
-  const currentRows = await loadSaveCrmCorporateIdentityRows(companyId);
-  const matchingTravelers = currentRows.filter(
-    (traveler) =>
-      saveCrmComparableIdentityValue(traveler.traveler_name) ===
-      saveCrmComparableIdentityValue(travelerName),
-  );
+  if (!booker) {
+    if (
+      !window.confirm(
+        `Approve this Company + Booker Customer Account? Company: ${companyName}. Booker: ${bookerName}. This creates the account only after your approval. It does not create an invoice, send a message, or change driver or payment. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
+      )
+    ) {
+      return {
+        message: "Save cancelled before creating the Company + Booker Customer Account. No booking was saved.",
+        ok: false,
+      };
+    }
 
-  if (matchingTravelers.length > 1) {
-    throw new Error(
-      "More than one verified Traveller matches this company and name. Review the customer profile before retrying; no booking was saved.",
-    );
+    booker = await findOrCreateSaveCrmBooker(companyId, bookingValue, true);
+    accountCreationApproved = true;
   }
 
-  const matchingTraveler = matchingTravelers[0] ?? null;
-  const existingLinkedBookerId = adminDispatchVerifiedIdentityId(matchingTraveler?.booker_id);
-  const existingLinkedBookerName = clean(matchingTraveler?.booker_name);
-
-  if (
-    existingLinkedBookerId &&
-    saveCrmComparableIdentityValue(existingLinkedBookerName) !==
-      saveCrmComparableIdentityValue(bookerName)
-  ) {
-    throw new Error(
-      "That Traveller is already linked to another verified Booker. Review the customer profile before retrying; no booking was saved.",
-    );
+  if (!booker) {
+    throw new Error("The verified Booker returned no safe record. No booking was saved.");
   }
 
-  const booker =
-    existingBooker ||
-    (await findOrCreateSaveCrmBooker(companyId, identityBookingValue));
   const bookerId = adminDispatchVerifiedIdentityId(booker.id);
 
   if (!bookerId) {
     throw new Error("The verified Booker returned no safe ID. No booking was saved.");
   }
 
-  if (existingLinkedBookerId && existingLinkedBookerId !== bookerId) {
-    throw new Error(
-      "That Traveller is already linked to another verified Booker. Review the customer profile before retrying; no booking was saved.",
-    );
-  }
-
-  const travelerId =
-    adminDispatchVerifiedIdentityId(matchingTraveler?.id) ||
-    (await createSaveCrmTraveler(companyId, identityBookingValue));
-
-  await linkSaveCrmTravelerToBooker(
-    companyId,
-    bookerId,
-    travelerId,
-    identityBookingValue,
-  );
-
   const verifiedRows = await loadSaveCrmCorporateIdentityRows(companyId);
-  const verifiedPair = verifiedRows.find(
+  const verifiedTraveler = currentTravelerId
+    ? verifiedRows.find(
     (traveler) =>
-      adminDispatchVerifiedIdentityId(traveler.id) === travelerId &&
+      adminDispatchVerifiedIdentityId(traveler.id) === currentTravelerId &&
       adminDispatchVerifiedIdentityId(traveler.company_id) === companyId &&
       adminDispatchVerifiedIdentityId(traveler.booker_id) === bookerId &&
       saveCrmComparableIdentityValue(traveler.traveler_name) ===
-        saveCrmComparableIdentityValue(travelerName) &&
+        saveCrmComparableIdentityValue(bookingValue.name) &&
       saveCrmComparableIdentityValue(traveler.booker_name) ===
         saveCrmComparableIdentityValue(bookerName),
-  );
-
-  if (!verifiedPair) {
-    throw new Error(
-      "The saved Booker + Traveller pair could not be verified before the booking write. No booking was saved; review the customer profile before retrying.",
-    );
-  }
+      )
+    : null;
 
   return {
+    accountCreationApproved,
     bookerId,
     bookerName,
     companyId,
     ok: true,
-    travelerId,
+    travelerId: adminDispatchVerifiedIdentityId(verifiedTraveler?.id),
   };
 }
 
@@ -7850,14 +7791,18 @@ function buildCompanyCustomerRatesRuntimeWritePayload(
   };
 }
 
-function buildTravelerCustomerRatesRuntimeWritePayload(
+function buildBookerCustomerRatesRuntimeWritePayload(
   id: number,
+  companyId: number,
+  customerId: number,
   customerRates: RateRules,
 ): CustomerRatesRuntimeWritePayload {
   return {
-    action_type: "traveler_customer_rates_update",
+    action_type: "booker_customer_rates_update",
+    company_id: companyId,
+    customer_id: customerId,
     id,
-    ...buildTravelerCustomerRateOverridePayload({ customerRates }),
+    ...buildCompanyCustomerRateOverridePayload({ customerRates }),
   };
 }
 
@@ -11097,7 +11042,6 @@ function adminCustomerAccountCollisionReviewFromResponse(
   if (
     review?.code !== "customer_account_collision_review_required" ||
     !Array.isArray(review.candidates) ||
-    review.candidates.length === 0 ||
     review.candidates.length > 20
   ) {
     return null;
@@ -14891,14 +14835,13 @@ export default function Home() {
   const [rateOverrideDraft, setRateOverrideDraft] =
     useState<RateOverrideDraft>(initialRateOverrideDraft);
   const [rateCompanies, setRateCompanies] = useState<CompanyRecord[]>([]);
+  const [rateBookers, setRateBookers] = useState<SaveCrmBookerRecord[]>([]);
   const [rateTravelers, setRateTravelers] = useState<TravelerRecord[]>([]);
   const [adminDispatchAgencyFolders, setAdminDispatchAgencyFolders] =
     useState<AdminDispatchAgencyFolder[]>([]);
   const [adminDispatchAgencyFoldersLoaded, setAdminDispatchAgencyFoldersLoaded] = useState(false);
   const [adminDispatchAgencyFoldersError, setAdminDispatchAgencyFoldersError] = useState("");
   const [adminDispatchCustomerAccountSearch, setAdminDispatchCustomerAccountSearch] = useState("");
-  const [adminDispatchCustomerAccountMatchReview, setAdminDispatchCustomerAccountMatchReview] =
-    useState<AdminDispatchCustomerAccountMatchReview | null>(null);
   const [adminDispatchNewCustomerChoiceOpen, setAdminDispatchNewCustomerChoiceOpen] =
     useState(false);
   const [adminDispatchNewCustomerType, setAdminDispatchNewCustomerType] =
@@ -18302,12 +18245,37 @@ export default function Home() {
 
   const draftPricing = useMemo(() => {
     const safeCompany = normalizeCompanyAccount(booking.company, booking.bookerEmail);
-    const matchingCompany = rateCompanies.find(
-      (company) => clean(company.company_name).toLowerCase() === safeCompany.toLowerCase(),
-    );
-    const matchingTraveler = rateTravelers.find(
-      (traveler) => clean(traveler.traveler_name).toLowerCase() === clean(booking.name).toLowerCase(),
-    );
+    const verifiedCompanyId = positiveId(booking.companyId);
+    const verifiedBookerId = positiveId(booking.bookerId);
+    const verifiedCustomerId = positiveId(booking.customerId);
+    const verifiedTravelerId = positiveId(booking.travelerId);
+    const matchingCompany = verifiedCompanyId
+      ? rateCompanies.find((company) => company.id === verifiedCompanyId)
+      : rateCompanies.find(
+          (company) => clean(company.company_name).toLowerCase() === safeCompany.toLowerCase(),
+        );
+    const matchingBooker =
+      verifiedCompanyId && verifiedBookerId && verifiedCustomerId
+        ? rateBookers.find(
+            (booker) =>
+              positiveId(booker.id) === verifiedBookerId &&
+              positiveId(booker.company_id) === verifiedCompanyId &&
+              positiveId(booker.customer_id) === verifiedCustomerId,
+          ) ?? null
+        : null;
+    const legacyMatchingTraveler =
+      !matchingBooker && verifiedTravelerId
+        ? rateTravelers.find(
+            (traveler) =>
+              traveler.id === verifiedTravelerId &&
+              (!verifiedCompanyId || traveler.company_id === verifiedCompanyId),
+          ) ?? null
+        : null;
+    const customerRateRecord = matchingBooker
+      ? { ...matchingBooker, customer_rate_source: "account" as const }
+      : legacyMatchingTraveler
+        ? { ...legacyMatchingTraveler, customer_rate_source: "legacy_traveler" as const }
+        : null;
     const bookingDriverId = clean(booking.driverId);
     const bookingDriverName = clean(booking.driverName).toLowerCase();
     const matchingDriver = drivers.find(
@@ -18318,7 +18286,7 @@ export default function Home() {
     const pricing = resolvePricing(
       booking,
       matchingCompany ?? blankCompanyRecord(safeCompany),
-      matchingTraveler ?? null,
+      customerRateRecord,
       rateSettings,
       matchingDriver ?? null,
     );
@@ -18331,7 +18299,7 @@ export default function Home() {
         clean(booking.driverPayoutOverride) || booking.savedDriverPayoutAmount,
       ),
     };
-  }, [booking, drivers, rateCompanies, rateSettings, rateTravelers]);
+  }, [booking, drivers, rateBookers, rateCompanies, rateSettings, rateTravelers]);
 
   const saveCrmBillingIdentitySourceRecords = useMemo(
     () => [
@@ -18491,32 +18459,38 @@ export default function Home() {
       ),
     [rateCompanies, rateOverrideListMessages.company?.recordId],
   );
-  const displayedBossOverrideRecords = useMemo(
+  const displayedBookerOverrideRecords = useMemo(
     () =>
-      rateTravelers.filter(
-        (travelerRecord) =>
-          hasRateOverrideValues(travelerRecord) ||
-          rateOverrideListMessages.boss?.recordId === travelerRecord.id,
+      rateBookers.filter(
+        (bookerRecord) =>
+          hasCustomerRateOverrideValues(
+            normalizeCustomerRateRules(bookerRecord.customer_rates),
+          ) || rateOverrideListMessages.boss?.recordId === positiveId(bookerRecord.id),
       ),
-    [rateTravelers, rateOverrideListMessages.boss?.recordId],
+    [rateBookers, rateOverrideListMessages.boss?.recordId],
   );
-  const rateOverrideCompany = useMemo(
+  const rateOverrideCustomerAccountOptions = useMemo(
     () =>
-      rateCompanies.find(
-        (companyRecord) =>
-          clean(companyRecord.company_name).toLowerCase() ===
-          clean(rateOverrideDraft.companyName).toLowerCase(),
-      ) ?? null,
-    [rateCompanies, rateOverrideDraft.companyName],
-  );
-  const rateOverrideTravelerOptions = useMemo(
-    () =>
-      rateOverrideCompany
-        ? rateTravelers.filter(
-            (travelerRecord) => travelerRecord.company_id === rateOverrideCompany.id,
-          )
-        : [],
-    [rateOverrideCompany, rateTravelers],
+      rateBookers
+        .filter(
+          (bookerRecord) =>
+            positiveId(bookerRecord.id) &&
+            positiveId(bookerRecord.company_id) &&
+            positiveId(bookerRecord.customer_id),
+        )
+        .map((bookerRecord) => {
+          const company = rateCompanies.find(
+            (companyRecord) => companyRecord.id === positiveId(bookerRecord.company_id),
+          );
+
+          return {
+            booker: bookerRecord,
+            company,
+            label: `${clean(company?.company_name) || "Company"} · ${clean(bookerRecord.booker_name) || "Booker"}`,
+          };
+        })
+        .sort((first, second) => first.label.localeCompare(second.label)),
+    [rateBookers, rateCompanies],
   );
   const assignableDriverAssignmentDisplayDrivers = useMemo(
     () => driverAssignmentDisplayDrivers.filter(isAssignableDriver),
@@ -19851,7 +19825,6 @@ export default function Home() {
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
     setAdminDispatchCustomerAccountSearch("");
-    setAdminDispatchCustomerAccountMatchReview(null);
     setAdminDispatchNewCustomerChoiceOpen(false);
     setAdminDispatchNewCustomerType(null);
     if (adminDispatchCustomerAccountChooserRef.current) {
@@ -20096,26 +20069,12 @@ export default function Home() {
     }
 
     if (
-      adminDispatchNewCustomerType === "corporate" &&
-      !saveCrmExplicitCompanyAccount(booking)
+      !clean(appliedAdminBookingSnapshotReference) &&
+      (!saveCrmExplicitCompanyAccount(booking) || !clean(booking.booker))
     ) {
       const saveMessage = {
         tone: "error",
-        text: "Company + Booker / PA needs an exact Company / Account name before Save + CRM.",
-      } satisfies Message;
-
-      setMessage(saveMessage);
-      setBookingSaveMessage(saveMessage);
-      return false;
-    }
-
-    if (
-      adminDispatchNewCustomerType === "personal" &&
-      saveCrmExplicitCompanyAccount(booking)
-    ) {
-      const saveMessage = {
-        tone: "error",
-        text: "Personal customer requires Company / Account to stay blank. Choose Company + Booker / PA for a company booking.",
+        text: "Choose or create the exact Company + Booker Customer Account before Save + CRM.",
       } satisfies Message;
 
       setMessage(saveMessage);
@@ -21105,20 +21064,12 @@ export default function Home() {
       return;
     }
 
-    setBooking((current) => ({
-      ...current,
-      bookerId: "",
-      company: recommendation.companyName || current.company,
-      companyId: String(recommendation.companyId),
-      customerId: recommendation.kind === "agency" ? recommendation.customerId : "",
-      travelerId: "",
-    }));
     setAdminEmailAiCustomerProfileSuggestion({
-      tone: "success",
+      tone: "info",
       text:
-        `Suggested from the app customer profile: ${recommendation.profileName} ` +
+        `Possible Customer Account: ${recommendation.profileName} ` +
         `(${recommendation.kind}, exact ${recommendation.matchBasis} match). ` +
-        "Admin can change this selection before Save + CRM.",
+        "This is a suggestion only. Choose the exact Company + Booker Customer Account before Save + CRM.",
     });
   }
 
@@ -21207,6 +21158,7 @@ export default function Home() {
           driver_payout_rules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
         })),
       );
+      setRateBookers(responseBody.bookers ?? []);
       setRateTravelers(
         (responseBody.travelers ?? []).map((travelerRecord) => ({
           ...travelerRecord,
@@ -21364,25 +21316,20 @@ export default function Home() {
 
   async function saveRateOverride() {
     setRateMessageTarget("override");
-
-    if (!adminLegacyDataClient) {
-      setMessage({
-        tone: "error",
-        text: "Save rate override failed: Admin data API is not available.",
-      });
-      return;
-    }
-
-    const companyName = clean(rateOverrideDraft.companyName);
-    const travelerId = positiveId(rateOverrideDraft.travelerId);
-    const selectedDraftTraveler = travelerId
-      ? rateTravelers.find((travelerRecord) => travelerRecord.id === travelerId) ?? null
+    const companyId = positiveId(rateOverrideDraft.companyId);
+    const bookerId = positiveId(rateOverrideDraft.bookerId);
+    const selectedDraftCompany = companyId
+      ? rateCompanies.find((companyRecord) => companyRecord.id === companyId) ?? null
       : null;
-    const selectedDraftCompany = rateCompanies.find(
-      (companyRecord) =>
-        clean(companyRecord.company_name).toLowerCase() === companyName.toLowerCase(),
-    );
-    const bossName = clean(selectedDraftTraveler?.traveler_name);
+    const selectedDraftBooker = bookerId
+      ? rateBookers.find(
+          (bookerRecord) =>
+            positiveId(bookerRecord.id) === bookerId &&
+            positiveId(bookerRecord.company_id) === companyId,
+        ) ?? null
+      : null;
+    const customerId = positiveId(selectedDraftBooker?.customer_id);
+    const companyName = clean(selectedDraftCompany?.company_name);
     const invalidRateLabels = getNonPositiveRateOverrideLabels(
       rateOverrideDraft.customerRates,
       rateOverrideDraft.driverPayoutRules,
@@ -21395,37 +21342,20 @@ export default function Home() {
       formatOverrideSummary(overrideCustomerRates, overrideDriverPayoutRules).hasOverrides ||
       rateOverrideDraft.cardOptionDefaultTouched;
     const companyCardOptionDefaultForWrite =
-      !bossName && rateOverrideDraft.cardOptionDefaultTouched
-        ? rateOverrideDraft.cardOptionDefaultEnabled
-        : undefined;
-    const travelerCardOptionDefaultForWrite =
-      bossName && rateOverrideDraft.cardOptionDefaultTouched
+      rateOverrideDraft.cardOptionDefaultTouched
         ? rateOverrideDraft.cardOptionDefaultEnabled
         : undefined;
 
-    if (!companyName && !bossName) {
-      setMessage({
-        tone: "error",
-        text: "Save rate override failed: Enter a company/account or boss/name before saving overrides.",
-      });
-      return;
-    }
-
-    if (rateOverrideDraft.travelerId && (!travelerId || !selectedDraftTraveler || !bossName)) {
-      setMessage({
-        tone: "error",
-        text: "Save rate override failed: Select one existing Traveller from this company before saving a Traveller override.",
-      });
-      return;
-    }
+    const isCustomerAccountOverride = Boolean(bookerId);
 
     if (
-      travelerId &&
-      (!selectedDraftCompany || selectedDraftTraveler?.company_id !== selectedDraftCompany.id)
+      !companyId ||
+      !selectedDraftCompany ||
+      (isCustomerAccountOverride && (!customerId || !selectedDraftBooker))
     ) {
       setMessage({
         tone: "error",
-        text: "Save rate override failed: Select one existing Traveller from this company before saving a Traveller override.",
+        text: "Save rate override failed: Select one verified Customer Account or load one existing Company override before saving.",
       });
       return;
     }
@@ -21450,221 +21380,87 @@ export default function Home() {
     setRateAction("override");
     setMessage({ tone: "info", text: "Saving rate override..." });
 
-    let companyOverrideSaved = false;
-    const shouldDeferCompanyCustomerRatesToRuntime = !bossName && hasCustomerRateOverrides;
-    const shouldDeferCompanyDriverPayoutToRuntime = !bossName && hasDriverPayoutOverrides;
-
     try {
-      let company: CompanyRecord | null = rateCompanies.find(
-        (companyRecord) => clean(companyRecord.company_name).toLowerCase() === companyName.toLowerCase(),
-      ) ?? null;
-      let companyIdentitySynced = false;
+      const mergedCustomerRates = {
+        ...normalizeCustomerRateRules(
+          isCustomerAccountOverride
+            ? selectedDraftBooker?.customer_rates
+            : selectedDraftCompany.customer_rates,
+        ),
+        ...overrideCustomerRates,
+      };
+      const customerRatesRuntime = hasCustomerRateOverrides
+        ? await saveCustomerRatesRuntime(
+            isCustomerAccountOverride
+              ? buildBookerCustomerRatesRuntimeWritePayload(
+                  bookerId as number,
+                  companyId,
+                  customerId as number,
+                  mergedCustomerRates,
+                )
+              : buildCompanyCustomerRatesRuntimeWritePayload(companyId, mergedCustomerRates),
+          )
+        : { ok: true as const, saved: false };
 
-      if (!company) {
-        const existingCompany = await adminLegacyDataClient
-          .from(adminLegacyTables.companies)
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
-          .ilike("company_name", companyName || "Internal Account")
-          .limit(1)
-          .maybeSingle();
-
-        if (existingCompany.error) {
-          throw new Error(existingCompany.error.message);
-        }
-
-        company = existingCompany.data as CompanyRecord | null;
+      if (
+        !customerRatesRuntime.ok ||
+        (hasCustomerRateOverrides && isCustomerAccountOverride && !customerRatesRuntime.saved)
+      ) {
+        throw new Error(
+          customerRatesRuntime.ok
+            ? `${isCustomerAccountOverride ? "Customer Account" : "Company"} rates are not ready to save on this server.`
+            : customerRatesRuntime.errorMessage,
+        );
       }
 
-      if (!company) {
-        const companyIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
-          action_type: "company_create",
-          ...buildCompanyCrmIdentityContactPayload(companyName || "Internal Account"),
-        });
-
-        if (!companyIdentity.ok) {
-          throw new Error(companyIdentity.errorMessage);
-        }
-
-        if (companyIdentity.recordId) {
-          company = {
-            card_option_default_enabled: false,
-            company_name: companyName || "Internal Account",
-            customer_rates: {},
-            domain: null,
-            driver_payout_rules: {},
-            id: companyIdentity.recordId,
-            transzend_excel_privacy: rateOverrideDraft.transzendExcelPrivacy,
-          };
-          companyIdentitySynced = true;
-        }
-      }
-
-      if (!company) {
-        const createdCompany = await adminLegacyDataClient
-          .from(adminLegacyTables.companies)
-          .insert(buildLegacyCompanyRateOverrideInsertPayload({
-            cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
-            companyName: companyName || "Internal Account",
-            customerRates: bossName ? {} : overrideCustomerRates,
-            driverPayoutRules: bossName ? {} : overrideDriverPayoutRules,
-            includeCustomerRates: !shouldDeferCompanyCustomerRatesToRuntime,
-            includeDriverPayoutRules: !shouldDeferCompanyDriverPayoutToRuntime,
-            transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
-          }))
-          .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
-          .single();
-
-        if (createdCompany.error) {
-          throw new Error(createdCompany.error.message);
-        }
-
-        company = createdCompany.data as CompanyRecord;
-      } else if (!companyIdentitySynced) {
-        const companyIdentity = await saveCompanyTravelerCrmIdentityContactRuntime({
-          action_type: "company_update",
-          id: company.id,
-          ...buildCompanyCrmIdentityContactPayload(clean(company.company_name) || companyName || "Internal Account"),
-        });
-
-        if (!companyIdentity.ok) {
-          throw new Error(companyIdentity.errorMessage);
-        }
-      }
-
-      const mergedCompanyRates = bossName
-        ? normalizeCustomerRateRules(company.customer_rates)
-        : {
-            ...normalizeCustomerRateRules(company.customer_rates),
-            ...overrideCustomerRates,
-          };
-      const mergedCompanyPayouts = bossName
-        ? normalizeDriverPayoutRules(company.driver_payout_rules)
-        : {
-            ...normalizeDriverPayoutRules(company.driver_payout_rules),
-            ...overrideDriverPayoutRules,
-          };
-      const companyCustomerRatesRuntime = bossName
-        || !hasCustomerRateOverrides
-        ? { ok: true as const, saved: false }
-        : await saveCustomerRatesRuntime(
-            buildCompanyCustomerRatesRuntimeWritePayload(company.id, mergedCompanyRates),
-          );
-
-      if (!companyCustomerRatesRuntime.ok) {
-        throw new Error(companyCustomerRatesRuntime.errorMessage);
-      }
-
-      const companyDriverPayoutRulesRuntime = bossName
-        || !hasDriverPayoutOverrides
+      const mergedCompanyPayouts = {
+        ...normalizeDriverPayoutRules(selectedDraftCompany.driver_payout_rules),
+        ...overrideDriverPayoutRules,
+      };
+      const companyDriverPayoutRulesRuntime = !hasDriverPayoutOverrides
         ? { ok: true as const, saved: false }
         : await saveDriverPayoutRulesRuntime(
-            buildCompanyDriverPayoutRulesRuntimeWritePayload(company.id, mergedCompanyPayouts),
+            buildCompanyDriverPayoutRulesRuntimeWritePayload(companyId, mergedCompanyPayouts),
           );
 
       if (!companyDriverPayoutRulesRuntime.ok) {
         throw new Error(companyDriverPayoutRulesRuntime.errorMessage);
       }
 
-      const companyUpdate = await adminLegacyDataClient
-        .from(adminLegacyTables.companies)
-        .update(
-          buildCompanyRateOverridePayload({
-            cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
-            customerRates: mergedCompanyRates,
-            driverPayoutRules: mergedCompanyPayouts,
-            includeCustomerRates: !companyCustomerRatesRuntime.saved,
-            includeDriverPayoutRules: !companyDriverPayoutRulesRuntime.saved,
-            transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
-            updatedAt: new Date().toISOString(),
-          }),
-        )
-        .eq("id", company.id)
-        .select("id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled")
-        .single();
-
-      if (companyUpdate.error) {
-        throw new Error(companyUpdate.error.message);
-      }
-
-      companyOverrideSaved = true;
-
-      if (bossName) {
-        if (!travelerId || selectedDraftTraveler?.company_id !== company.id) {
-          throw new Error(
-            "Select one existing Traveller from this company before saving a Traveller override.",
-          );
-        }
-
-        const existingTraveler = await adminLegacyDataClient
-          .from(adminLegacyTables.travelers)
-          .select("id, company_id, traveler_name, booker_id, customer_rates, driver_payout_rules, card_option_default_enabled")
-          .eq("id", travelerId)
-          .eq("company_id", company.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (existingTraveler.error) {
-          throw new Error(existingTraveler.error.message);
-        }
-
-        if (!existingTraveler.data) {
-          throw new Error(
-            "Select one existing Traveller from this company before saving a Traveller override.",
-          );
-        }
-
-        const traveler = existingTraveler.data as TravelerRecord;
-        const mergedTravelerRates = {
-          ...normalizeCustomerRateRules(traveler.customer_rates),
-          ...overrideCustomerRates,
-        };
-        const mergedTravelerPayouts = {
-          ...normalizeDriverPayoutRules(traveler.driver_payout_rules),
-          ...overrideDriverPayoutRules,
-        };
-        const travelerCustomerRatesRuntime = hasCustomerRateOverrides
-          ? await saveCustomerRatesRuntime(
-              buildTravelerCustomerRatesRuntimeWritePayload(traveler.id, mergedTravelerRates),
-            )
-          : { ok: true as const, saved: false };
-
-        if (!travelerCustomerRatesRuntime.ok) {
-          throw new Error(travelerCustomerRatesRuntime.errorMessage);
-        }
-
-        const travelerDriverPayoutRulesRuntime = hasDriverPayoutOverrides
-          ? await saveDriverPayoutRulesRuntime(
-              buildTravelerDriverPayoutRulesRuntimeWritePayload(traveler.id, mergedTravelerPayouts),
-            )
-          : { ok: true as const, saved: false };
-
-        if (!travelerDriverPayoutRulesRuntime.ok) {
-          throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
-        }
-
-        const travelerUpdate = await adminLegacyDataClient
-          .from(adminLegacyTables.travelers)
+      if (
+        adminLegacyDataClient &&
+        (companyCardOptionDefaultForWrite !== undefined ||
+          (!isCustomerAccountOverride && hasCustomerRateOverrides && !customerRatesRuntime.saved) ||
+          hasDriverPayoutOverrides ||
+          rateOverrideDraft.transzendExcelPrivacy !== Boolean(selectedDraftCompany.transzend_excel_privacy))
+      ) {
+        const companyUpdate = await adminLegacyDataClient
+          .from(adminLegacyTables.companies)
           .update(
-            buildTravelerRateOverridePayload({
-              cardOptionDefaultEnabled: travelerCardOptionDefaultForWrite,
-              customerRates: mergedTravelerRates,
-              driverPayoutRules: mergedTravelerPayouts,
-              includeCustomerRates: !travelerCustomerRatesRuntime.saved,
-              includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
+            buildCompanyRateOverridePayload({
+              cardOptionDefaultEnabled: companyCardOptionDefaultForWrite,
+              customerRates: mergedCustomerRates,
+              driverPayoutRules: mergedCompanyPayouts,
+              includeCustomerRates:
+                !isCustomerAccountOverride && !customerRatesRuntime.saved,
+              includeDriverPayoutRules: !companyDriverPayoutRulesRuntime.saved,
+              transzendExcelPrivacy: rateOverrideDraft.transzendExcelPrivacy,
               updatedAt: new Date().toISOString(),
             }),
           )
-          .eq("id", traveler.id);
+          .eq("id", companyId);
 
-        if (travelerUpdate.error) {
-          throw new Error(travelerUpdate.error.message);
+        if (companyUpdate.error) {
+          throw new Error(companyUpdate.error.message);
         }
       }
 
       setRateOverrideDraft({
-        companyName: companyName || "Internal Account",
-        bossName,
-        travelerId: travelerId ? String(travelerId) : "",
+        bookerId: bookerId ? String(bookerId) : "",
+        companyId: String(companyId),
+        companyName,
+        bossName: "",
+        travelerId: "",
         cardOptionDefaultEnabled: rateOverrideDraft.cardOptionDefaultEnabled,
         cardOptionDefaultTouched: false,
         customerRates: overrideCustomerRates,
@@ -21681,15 +21477,10 @@ export default function Home() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown rate save error.";
-      const partialSaveWarning =
-        companyOverrideSaved && bossName
-          ? " Company override may already be saved; reload rates and review before relying on this boss/name override."
-          : "";
-
       setMessage({
         tone: "error",
         text: formatRatesSetupError(
-          `${errorMessage}${partialSaveWarning}`,
+          errorMessage,
           "Save rate override failed: ",
         ),
       });
@@ -21767,22 +21558,16 @@ export default function Home() {
             : candidate,
         ),
       );
-      setRateOverrideDraft((current) => {
-        const currentCompany = clean(current.companyName).toLowerCase();
-        const removedCompany = clean(companyRecord.company_name).toLowerCase();
-
-        if (current.bossName || currentCompany !== removedCompany) {
-          return current;
-        }
-
-        return {
-          ...current,
-          cardOptionDefaultEnabled: false,
-          cardOptionDefaultTouched: false,
-          customerRates: {},
-          driverPayoutRules: {},
-        };
-      });
+      setRateOverrideDraft((current) =>
+        positiveId(current.companyId) === companyRecord.id
+          ? {
+              ...current,
+              cardOptionDefaultEnabled: false,
+              cardOptionDefaultTouched: false,
+              driverPayoutRules: {},
+            }
+          : current,
+      );
       setRateOverrideListMessages((current) => ({
         ...current,
         company: { tone: "success", text: `${companyName} override removed.`, recordId: companyRecord.id },
@@ -21804,21 +21589,27 @@ export default function Home() {
     }
   }
 
-  async function removeBossRateOverride(travelerRecord: TravelerRecord) {
-    const bossName = clean(travelerRecord.traveler_name) || "this boss/name";
+  async function removeBookerRateOverride(bookerRecord: SaveCrmBookerRecord) {
+    const bookerId = positiveId(bookerRecord.id);
+    const companyId = positiveId(bookerRecord.company_id);
+    const customerId = positiveId(bookerRecord.customer_id);
+    const companyRecord = rateCompanies.find((candidate) => candidate.id === companyId) ?? null;
+    const accountLabel = `${clean(companyRecord?.company_name) || "Company"} · ${
+      clean(bookerRecord.booker_name) || "Booker"
+    }`;
 
     setRateOverrideListMessages((current) => ({
       ...current,
-      boss: { tone: "info", text: `Removing ${bossName} override...`, recordId: travelerRecord.id },
+      boss: { tone: "info", text: `Removing ${accountLabel} rate override...`, recordId: bookerId || undefined },
     }));
 
-    if (!adminLegacyDataClient) {
+    if (!bookerId || !companyId || !customerId) {
       setRateOverrideListMessages((current) => ({
         ...current,
         boss: {
           tone: "error",
-          text: "Remove override failed: Admin data API is not available.",
-          recordId: travelerRecord.id,
+          text: "Remove override failed: Customer Account identity is incomplete.",
+          recordId: bookerId || undefined,
         },
       }));
       return;
@@ -21828,69 +21619,41 @@ export default function Home() {
     setRateAction("remove-override");
 
     try {
-      const travelerCustomerRatesRuntime = await saveCustomerRatesRuntime(
-        buildTravelerCustomerRatesRuntimeWritePayload(travelerRecord.id, {}),
+      const runtimeResult = await saveCustomerRatesRuntime(
+        buildBookerCustomerRatesRuntimeWritePayload(bookerId, companyId, customerId, {}),
       );
 
-      if (!travelerCustomerRatesRuntime.ok) {
-        throw new Error(travelerCustomerRatesRuntime.errorMessage);
+      if (!runtimeResult.ok || !runtimeResult.saved) {
+        throw new Error(
+          runtimeResult.ok
+            ? "Customer Account rates are not ready to save on this server."
+            : runtimeResult.errorMessage,
+        );
       }
 
-      const travelerDriverPayoutRulesRuntime = await saveDriverPayoutRulesRuntime(
-        buildTravelerDriverPayoutRulesRuntimeWritePayload(travelerRecord.id, {}),
-      );
-
-      if (!travelerDriverPayoutRulesRuntime.ok) {
-        throw new Error(travelerDriverPayoutRulesRuntime.errorMessage);
-      }
-
-      const { error } = await adminLegacyDataClient
-        .from(adminLegacyTables.travelers)
-        .update(buildTravelerRateOverridePayload({
-          cardOptionDefaultEnabled: null,
-          customerRates: {},
-          driverPayoutRules: {},
-          includeCustomerRates: !travelerCustomerRatesRuntime.saved,
-          includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved,
-          updatedAt: new Date().toISOString(),
-        }))
-        .eq("id", travelerRecord.id);
-
-      if (error) {
-        throw new Error(formatSupabaseError(error));
-      }
-
-      setRateTravelers((current) =>
+      setRateBookers((current) =>
         current.map((candidate) =>
-          candidate.id === travelerRecord.id
-            ? {
-                ...candidate,
-                card_option_default_enabled: null,
-                customer_rates: {},
-                driver_payout_rules: {},
-              }
+          positiveId(candidate.id) === bookerId
+            ? { ...candidate, customer_rates: {} }
             : candidate,
         ),
       );
-      setRateOverrideDraft((current) => {
-        const currentBoss = clean(current.bossName).toLowerCase();
-        const removedBoss = clean(travelerRecord.traveler_name).toLowerCase();
-
-        if (currentBoss !== removedBoss) {
-          return current;
-        }
-
-        return {
-          ...current,
-          cardOptionDefaultEnabled: false,
-          cardOptionDefaultTouched: false,
-          customerRates: {},
-          driverPayoutRules: {},
-        };
-      });
+      setRateOverrideDraft((current) =>
+        positiveId(current.bookerId) === bookerId
+          ? {
+              ...current,
+              cardOptionDefaultTouched: false,
+              customerRates: {},
+            }
+          : current,
+      );
       setRateOverrideListMessages((current) => ({
         ...current,
-        boss: { tone: "success", text: `${bossName} override removed.`, recordId: travelerRecord.id },
+        boss: {
+          tone: "success",
+          text: `${accountLabel} rate override removed.`,
+          recordId: bookerId,
+        },
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown override remove error.";
@@ -21900,7 +21663,7 @@ export default function Home() {
         boss: {
           tone: "error",
           text: formatRatesSetupError(errorMessage, "Remove override failed: "),
-          recordId: travelerRecord.id,
+          recordId: bookerId,
         },
       }));
     } finally {
@@ -22525,7 +22288,9 @@ export default function Home() {
               booker: corporateIdentityResolution.bookerName,
               bookerId: String(corporateIdentityResolution.bookerId),
               companyId: String(corporateIdentityResolution.companyId),
-              travelerId: String(corporateIdentityResolution.travelerId),
+              travelerId: corporateIdentityResolution.travelerId
+                ? String(corporateIdentityResolution.travelerId)
+                : "",
             }
           : {}),
       };
@@ -22541,7 +22306,9 @@ export default function Home() {
                 booker: corporateIdentityResolution.bookerName,
                 bookerId: String(corporateIdentityResolution.bookerId),
                 companyId: String(corporateIdentityResolution.companyId),
-                travelerId: String(corporateIdentityResolution.travelerId),
+                travelerId: corporateIdentityResolution.travelerId
+                  ? String(corporateIdentityResolution.travelerId)
+                  : "",
               }
             : {}),
         }));
@@ -22574,9 +22341,18 @@ export default function Home() {
         },
       );
 
-      if (customerAccountCollisionResolution && bookingPayloads[0]) {
+      const effectiveCustomerAccountCollisionResolution =
+        customerAccountCollisionResolution ||
+        (corporateIdentityResolution?.accountCreationApproved
+          ? {
+              action: "create_new" as const,
+              reviewed_customer_ids: [],
+            }
+          : null);
+
+      if (effectiveCustomerAccountCollisionResolution && bookingPayloads[0]) {
         bookingPayloads[0].payload.customer_account_collision_resolution =
-          customerAccountCollisionResolution;
+          effectiveCustomerAccountCollisionResolution;
       }
       const savedBookings: Array<{
         bookingValue: BookingForm;
@@ -22672,7 +22448,7 @@ export default function Home() {
           });
           const reviewMessage = {
             tone: "info",
-            text: "Detected similar customer/company name. Choose Merge or Create new before Save + CRM continues.",
+            text: "Approve this Company + Booker Customer Account. Use the existing account or create a new account before Save + CRM continues.",
           } satisfies Message;
 
           setMessage(reviewMessage);
@@ -27612,36 +27388,7 @@ export default function Home() {
           ? "new"
           : "ambiguous";
 
-  function applyAdminEmailAiRepeatedCustomerCandidate() {
-    if (!adminEmailAiRepeatedCustomerCandidate) {
-      return;
-    }
-
-    const company = rateCompanies.find(
-      (candidate) => candidate.id === adminEmailAiRepeatedCustomerCandidate.company_id,
-    );
-
-    setBooking((current) => ({
-      ...current,
-      booker: clean(adminEmailAiRepeatedCustomerCandidate.booker_name) || current.booker,
-      bookerId: String(adminEmailAiRepeatedCustomerCandidate.booker_id),
-      company: clean(company?.company_name) || current.company,
-      companyId: String(adminEmailAiRepeatedCustomerCandidate.company_id),
-      customerId: "",
-      name: clean(adminEmailAiRepeatedCustomerCandidate.traveler_name) || current.name,
-      travelerId: String(adminEmailAiRepeatedCustomerCandidate.id),
-    }));
-    setMessage({
-      tone: "success",
-      text:
-        "Repeated customer selected from the verified CRM chain. Review the company, PA / booker, traveller, and booking details before Save + CRM.",
-    });
-  }
-
-  const adminDispatchAgencyCompanyIds = new Set(
-    adminDispatchAgencyFolderOptions.map((account) => account.companyId).filter(Boolean),
-  );
-  const adminDispatchCustomerAccountOptions: AdminDispatchCustomerAccountOption[] =
+  const adminDispatchLegacyAgencyAccountOptions: AdminDispatchCustomerAccountOption[] =
     adminDispatchAgencyFolderOptions.map((account) => {
       const companyName =
         clean(rateCompanies.find((company) => String(company.id) === account.companyId)?.company_name) ||
@@ -27670,17 +27417,57 @@ export default function Home() {
         travelers: accountTravelers,
       };
     });
+  const adminDispatchCustomerAccountOptions: AdminDispatchCustomerAccountOption[] = [];
   const adminDispatchCorporateAccountGroups = new Map<
     string,
     AdminDispatchCustomerAccountOption
   >();
+
+  for (const booker of rateBookers) {
+    const companyId = String(adminDispatchVerifiedIdentityId(booker.company_id) || "");
+    const bookerId = String(adminDispatchVerifiedIdentityId(booker.id) || "");
+
+    if (!companyId || !bookerId) {
+      continue;
+    }
+
+    const companyName =
+      clean(rateCompanies.find((company) => String(company.id) === companyId)?.company_name) ||
+      `Company ${companyId}`;
+    const bookerName = clean(booker.booker_name) || `Booker ${bookerId}`;
+    const accountTravelers = rateTravelers.filter(
+      (traveler) =>
+        String(adminDispatchVerifiedIdentityId(traveler.company_id) || "") === companyId &&
+        String(adminDispatchVerifiedIdentityId(traveler.booker_id) || "") === bookerId,
+    );
+    const passengerSearchText = accountTravelers
+      .map((traveler) => clean(traveler.traveler_name))
+      .filter(Boolean)
+      .join(" ");
+
+    adminDispatchCorporateAccountGroups.set(`corporate:${companyId}:${bookerId}`, {
+      bookerId,
+      bookerName,
+      companyId,
+      companyName,
+      customerId: String(adminDispatchVerifiedIdentityId(booker.customer_id) || ""),
+      key: `corporate:${companyId}:${bookerId}`,
+      kind: "corporate",
+      label: bookerName,
+      searchText: `${companyName} ${bookerName} ${passengerSearchText}`.toLocaleLowerCase(),
+      secondaryLabel: accountTravelers.length > 0
+        ? `${companyName} · ${accountTravelers.length} passenger${accountTravelers.length === 1 ? "" : "s"}`
+        : `${companyName} · Customer account`,
+      travelers: accountTravelers,
+    });
+  }
 
   for (const traveler of rateTravelers) {
     const companyId = String(adminDispatchVerifiedIdentityId(traveler.company_id) || "");
     const bookerId = String(adminDispatchVerifiedIdentityId(traveler.booker_id) || "");
     const travelerId = String(adminDispatchVerifiedIdentityId(traveler.id) || "");
 
-    if (!companyId || !bookerId || !travelerId || adminDispatchAgencyCompanyIds.has(companyId)) {
+    if (!companyId || !bookerId || !travelerId) {
       continue;
     }
 
@@ -27692,8 +27479,10 @@ export default function Home() {
     const existing = adminDispatchCorporateAccountGroups.get(key);
 
     if (existing) {
-      existing.travelers.push(traveler);
-      existing.searchText += ` ${clean(traveler.traveler_name).toLocaleLowerCase()}`;
+      if (!existing.travelers.some((candidate) => String(candidate.id) === travelerId)) {
+        existing.travelers.push(traveler);
+        existing.searchText += ` ${clean(traveler.traveler_name).toLocaleLowerCase()}`;
+      }
       existing.secondaryLabel = `${companyName} · ${existing.travelers.length} passenger${
         existing.travelers.length === 1 ? "" : "s"
       }`;
@@ -27715,38 +27504,20 @@ export default function Home() {
     });
   }
 
-  for (const company of rateCompanies) {
-    const companyId = String(adminDispatchVerifiedIdentityId(company.id) || "");
-
-    if (
-      !companyId ||
-      adminDispatchAgencyCompanyIds.has(companyId) ||
-      [...adminDispatchCorporateAccountGroups.values()].some(
-        (account) => account.companyId === companyId,
-      )
-    ) {
-      continue;
-    }
-
-    const companyName = clean(company.company_name) || `Company ${companyId}`;
-    adminDispatchCorporateAccountGroups.set(`corporate:${companyId}:unassigned`, {
-      bookerId: "",
-      bookerName: "",
-      companyId,
-      companyName,
-      customerId: "",
-      key: `corporate:${companyId}:unassigned`,
-      kind: "corporate",
-      label: companyName,
-      searchText: companyName.toLocaleLowerCase(),
-      secondaryLabel: "Company · Booker / PA not set",
-      travelers: [],
-    });
-  }
-
   adminDispatchCustomerAccountOptions.push(...adminDispatchCorporateAccountGroups.values());
+  const loadedLegacyAgencyAccount = adminDispatchLegacyAgencyAccountOptions.find(
+    (account) =>
+      Boolean(clean(appliedAdminBookingSnapshotReference)) &&
+      !booking.bookerId &&
+      account.customerId === booking.customerId &&
+      account.companyId === booking.companyId,
+  );
+
+  if (loadedLegacyAgencyAccount) {
+    adminDispatchCustomerAccountOptions.push(loadedLegacyAgencyAccount);
+  }
   if (
-    !clean(booking.customerId) &&
+    clean(appliedAdminBookingSnapshotReference) &&
     booking.companyId &&
     !adminDispatchCustomerAccountOptions.some(
       (account) =>
@@ -27769,7 +27540,7 @@ export default function Home() {
       bookerName: loadedBookerName,
       companyId: booking.companyId,
       companyName: loadedCompanyName,
-      customerId: "",
+      customerId: booking.customerId,
       key: `corporate:${booking.companyId}:${booking.bookerId || "unassigned"}`,
       kind: "corporate",
       label: loadedBookerName || loadedCompanyName,
@@ -27802,8 +27573,7 @@ export default function Home() {
     adminDispatchCustomerAccountOptions.find((account) =>
       account.kind === "agency"
         ? account.customerId === booking.customerId && account.companyId === booking.companyId
-        : !clean(booking.customerId) &&
-          account.companyId === booking.companyId &&
+        : account.companyId === booking.companyId &&
           (account.bookerId ? account.bookerId === booking.bookerId : !booking.bookerId),
     ) ?? null;
   const adminDispatchSelectedCustomerAccountName = adminDispatchCreatingAgencyFolder
@@ -27812,14 +27582,10 @@ export default function Home() {
   const adminDispatchCustomerAccountSelectionLocked = Boolean(
     clean(appliedAdminBookingSnapshotReference),
   );
-  function applyAdminDispatchCustomerAccount(
-    account: AdminDispatchCustomerAccountOption,
-    traveler: TravelerRecord | null = null,
-  ) {
+  function applyAdminDispatchCustomerAccount(account: AdminDispatchCustomerAccountOption) {
     adminEmailAiCustomerRecommendationRevisionRef.current += 1;
     setAdminEmailAiCustomerProfileSuggestion(null);
     setAdminDispatchCustomerAccountSearch("");
-    setAdminDispatchCustomerAccountMatchReview(null);
     setAdminDispatchNewCustomerChoiceOpen(false);
     setAdminDispatchNewCustomerType(null);
     if (adminDispatchCustomerAccountChooserRef.current) {
@@ -27844,13 +27610,12 @@ export default function Home() {
       bookerId: account.bookerId,
       company: account.companyName || current.company,
       companyId: account.companyId,
-      customerId: "",
-      name: traveler ? clean(traveler.traveler_name) || current.name : current.name,
-      travelerId: traveler ? String(traveler.id) : "",
+      customerId: account.customerId,
+      travelerId: "",
     }));
   }
 
-  function selectAdminDispatchCustomerAccount(account: AdminDispatchCustomerAccountOption) {
+  async function selectAdminDispatchCustomerAccount(account: AdminDispatchCustomerAccountOption) {
     if (adminDispatchCustomerAccountSelectionLocked) {
       return;
     }
@@ -27860,50 +27625,33 @@ export default function Home() {
       return;
     }
 
-    const passengerMatchText = clean(booking.name) || clean(adminDispatchCustomerAccountSearch);
-    const candidates = passengerMatchText
-      ? account.travelers.filter((traveler) =>
-          billingIdentityPossibleMatch(traveler.traveler_name, passengerMatchText),
-        )
-      : [];
+    let resolvedAccount = account;
 
-    if (candidates.length > 0) {
-      setAdminDispatchCustomerAccountMatchReview({
-        account,
-        candidates,
-        selectedTravelerId: candidates.length === 1 ? String(candidates[0].id) : "",
-      });
-      if (adminDispatchCustomerAccountChooserRef.current) {
-        adminDispatchCustomerAccountChooserRef.current.open = false;
+    if (adminDispatchVerifiedIdentityId(account.bookerId)) {
+      try {
+        const booker = await loadSaveCrmBookerById(
+          Number(account.companyId),
+          Number(account.bookerId),
+        );
+        resolvedAccount = {
+          ...account,
+          customerId: adminDispatchVerifiedIdentityId(booker.customer_id)
+            ? String(booker.customer_id)
+            : "",
+        };
+      } catch (error) {
+        setMessage({
+          tone: "error",
+          text:
+            error instanceof Error
+              ? error.message
+              : "The Customer Account could not be verified. Nothing was selected.",
+        });
+        return;
       }
-      return;
     }
 
-    applyAdminDispatchCustomerAccount(account);
-  }
-
-  function confirmAdminDispatchExistingPassenger() {
-    if (adminDispatchCustomerAccountSelectionLocked || !adminDispatchCustomerAccountMatchReview) {
-      return;
-    }
-
-    const traveler = adminDispatchCustomerAccountMatchReview.candidates.find(
-      (candidate) => String(candidate.id) === adminDispatchCustomerAccountMatchReview.selectedTravelerId,
-    );
-
-    if (!traveler) {
-      return;
-    }
-
-    applyAdminDispatchCustomerAccount(adminDispatchCustomerAccountMatchReview.account, traveler);
-  }
-
-  function confirmAdminDispatchDifferentPassenger() {
-    if (adminDispatchCustomerAccountSelectionLocked || !adminDispatchCustomerAccountMatchReview) {
-      return;
-    }
-
-    applyAdminDispatchCustomerAccount(adminDispatchCustomerAccountMatchReview.account);
+    applyAdminDispatchCustomerAccount(resolvedAccount);
   }
 
   function chooseAdminDispatchNewCustomerType(type: AdminDispatchNewCustomerType) {
@@ -42674,91 +42422,13 @@ export default function Home() {
                       : " Enter or review this booking's passenger before Save + CRM."}
                   </p>
                 ) : null}
-                {adminDispatchNewCustomerType ? (
+                {adminDispatchNewCustomerType === "corporate" ? (
                   <p
                     className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-semibold text-sky-900 md:col-span-3"
                     data-admin-dispatch-new-customer-type={adminDispatchNewCustomerType}
                   >
-                    {adminDispatchNewCustomerType === "account"
-                      ? "New customer account selected: one account may hold many booking-specific passengers."
-                      : adminDispatchNewCustomerType === "corporate"
-                        ? "New Company + Booker / PA selected: enter the exact company, Booker and passenger details."
-                        : "New personal customer selected: Company stays blank and Billing Identity Review must be confirmed before Save + CRM."}
+                    New Company + Booker selected: enter the exact company, Booker and passenger details.
                   </p>
-                ) : null}
-                {adminDispatchCustomerAccountMatchReview ? (
-                  <div
-                    className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 md:col-span-3"
-                    data-admin-dispatch-customer-account-match-review="true"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Review possible existing passenger"
-                  >
-                    <p className="font-bold">Possible existing passenger found</p>
-                    <p className="mt-1 font-medium">
-                      Account: {adminDispatchCustomerAccountMatchReview.account.label} · Company: {adminDispatchCustomerAccountMatchReview.account.companyName} · Booker: {adminDispatchCustomerAccountMatchReview.account.bookerName || "Not set"}.
-                    </p>
-                    {adminDispatchCustomerAccountMatchReview.candidates.length > 1 ? (
-                      <div className="mt-2 grid gap-1" data-admin-dispatch-customer-account-match-candidates="true">
-                        {adminDispatchCustomerAccountMatchReview.candidates.map((candidate) => (
-                          <button
-                            aria-pressed={
-                              String(candidate.id) ===
-                              adminDispatchCustomerAccountMatchReview.selectedTravelerId
-                            }
-                            className="rounded border border-amber-300 bg-white px-2 py-1.5 text-left font-semibold hover:bg-amber-100 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-white"
-                            disabled={adminDispatchCustomerAccountSelectionLocked}
-                            key={candidate.id}
-                            onClick={() =>
-                              setAdminDispatchCustomerAccountMatchReview((current) =>
-                                current
-                                  ? { ...current, selectedTravelerId: String(candidate.id) }
-                                  : current,
-                              )
-                            }
-                            type="button"
-                          >
-                            {clean(candidate.traveler_name)} · {clean(candidate.booker_name)} · CRM Traveller #{candidate.id}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 font-bold">
-                        Passenger: {clean(adminDispatchCustomerAccountMatchReview.candidates[0]?.traveler_name)}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        className="h-8 rounded-md bg-emerald-800 px-3 font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-                        data-admin-dispatch-customer-account-use-existing="true"
-                        disabled={
-                          adminDispatchCustomerAccountSelectionLocked ||
-                          !adminDispatchCustomerAccountMatchReview.selectedTravelerId
-                        }
-                        onClick={confirmAdminDispatchExistingPassenger}
-                        type="button"
-                      >
-                        Yes — Use Existing
-                      </button>
-                      <button
-                        className="h-8 rounded-md border border-amber-500 bg-white px-3 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
-                        data-admin-dispatch-customer-account-different-person="true"
-                        disabled={adminDispatchCustomerAccountSelectionLocked}
-                        onClick={confirmAdminDispatchDifferentPassenger}
-                        type="button"
-                      >
-                        No — Different Person
-                      </button>
-                      <button
-                        className="h-8 rounded-md border border-slate-300 bg-white px-3 font-bold text-slate-700"
-                        data-admin-dispatch-customer-account-review-cancel="true"
-                        onClick={() => setAdminDispatchCustomerAccountMatchReview(null)}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 ) : null}
                 {adminDispatchNewCustomerChoiceOpen ? (
                   <div
@@ -42773,30 +42443,12 @@ export default function Home() {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
                         className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
-                        data-admin-dispatch-new-customer-account="true"
-                        disabled={adminDispatchCustomerAccountSelectionLocked}
-                        onClick={() => chooseAdminDispatchNewCustomerType("account")}
-                        type="button"
-                      >
-                        Customer account — many passengers
-                      </button>
-                      <button
-                        className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
                         data-admin-dispatch-new-customer-corporate="true"
                         disabled={adminDispatchCustomerAccountSelectionLocked}
                         onClick={() => chooseAdminDispatchNewCustomerType("corporate")}
                         type="button"
                       >
-                        Company + Booker / PA
-                      </button>
-                      <button
-                        className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
-                        data-admin-dispatch-new-customer-personal="true"
-                        disabled={adminDispatchCustomerAccountSelectionLocked}
-                        onClick={() => chooseAdminDispatchNewCustomerType("personal")}
-                        type="button"
-                      >
-                        Personal customer
+                        Create Company + Booker Account
                       </button>
                       <button
                         className="rounded-md border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700"
@@ -42841,23 +42493,18 @@ export default function Home() {
                       </>
                     ) : adminEmailAiCustomerStatus === "repeated" &&
                       adminEmailAiRepeatedCustomerCandidate ? (
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p>Repeated customer</p>
-                          <p className="font-medium">
-                            {clean(adminEmailAiRepeatedCustomerCandidate.traveler_name)} ·{" "}
-                            {clean(adminEmailAiRepeatedCustomerCandidate.booker_name)}. Confirm the
-                            exact verified CRM chain before saving.
-                          </p>
-                        </div>
-                        <button
-                          className="h-8 shrink-0 rounded-md border border-emerald-700 bg-white px-3 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
-                          data-admin-email-ai-use-repeated-customer="true"
-                          onClick={applyAdminEmailAiRepeatedCustomerCandidate}
-                          type="button"
-                        >
-                          Use repeated customer
-                        </button>
+                      <div>
+                        <p>Possible Customer Account</p>
+                        <p className="font-medium">
+                          {clean(adminEmailAiRepeatedCustomerCandidate.booker_name)} ·{" "}
+                          {clean(
+                            rateCompanies.find(
+                              (company) =>
+                                company.id === adminEmailAiRepeatedCustomerCandidate.company_id,
+                            )?.company_name,
+                          ) || "Company"}. This is a suggestion only. Choose the exact Company +
+                          Booker Customer Account before Save + CRM.
+                        </p>
                       </div>
                     ) : adminEmailAiCustomerStatus === "new" ? (
                       <>
@@ -46722,10 +46369,12 @@ export default function Home() {
                       data-admin-customer-account-collision-review="true"
                     >
                       <p className="uppercase tracking-wide">
-                        Detected similar customer/company name
+                        Approve this Company + Booker Customer Account
                       </p>
                       <p className="mt-1 font-medium normal-case tracking-normal">
-                        Review the existing account before this Save + CRM creates or uses a customer folder. Nothing is merged automatically.
+                        {activeAdminCustomerAccountCollisionReview.candidates.length > 0
+                          ? "Detected similar customer/company name. Choose the exact existing account or create a separate new account. Nothing is merged automatically."
+                          : "No existing account is linked to this Booker. Approve creating the first account before Save + CRM continues."}
                       </p>
                       <div className="mt-2 grid gap-1">
                         {activeAdminCustomerAccountCollisionReview.candidates.map(
@@ -46781,7 +46430,7 @@ export default function Home() {
                           }
                           type="button"
                         >
-                          Merge
+                          Use existing account
                         </button>
                         <button
                           className="h-8 rounded border border-amber-300 bg-white px-3 text-[11px] font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
@@ -46794,7 +46443,7 @@ export default function Home() {
                           }
                           type="button"
                         >
-                          Create new
+                          Create new account
                         </button>
                       </div>
                     </div>
@@ -47227,40 +46876,6 @@ export default function Home() {
                         type="button"
                       >
                         {adminCustomerDriverDetailsEmailButtonLabel}
-                      </button>
-                      <button
-                        aria-label="Customer driver details WhatsApp - Review WhatsApp to customer"
-                        className={`inline-flex min-h-7 w-auto shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-1 text-left text-xs font-semibold transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-500 ${
-                          actionFeedbackButtonClass(
-                            adminCustomerDriverDetailsWhatsAppButtonTone,
-                            "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:text-emerald-950",
-                          )
-                        }`}
-                        data-admin-customer-driver-details-whatsapp-disabled-send-action="true"
-                        data-admin-customer-driver-details-whatsapp-disabled-send-action-state={
-                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.actionStatus
-                        }
-                        data-admin-customer-driver-details-whatsapp-disabled-send-external-send={
-                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.external_send
-                            ? "true"
-                            : "false"
-                        }
-                        data-admin-customer-driver-details-whatsapp-disabled-send-item="true"
-                        data-admin-customer-driver-details-whatsapp-disabled-send-label="true"
-                        data-admin-customer-driver-details-whatsapp-disabled-send-loaded-reference={
-                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.loadedReference
-                        }
-                        data-admin-customer-driver-details-whatsapp-disabled-send-sending-enabled={
-                          adminCustomerDriverDetailsWhatsAppDisabledSendDisplayState.sendingEnabled
-                            ? "true"
-                            : "false"
-                        }
-                        disabled={!adminCustomerDriverDetailsWhatsAppDisabledSendCanCall}
-                        onClick={() => checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")}
-                        title={adminCustomerDriverDetailsWhatsAppDisabledSendActionLabel}
-                        type="button"
-                      >
-                        {adminCustomerDriverDetailsWhatsAppButtonLabel}
                       </button>
                       <button
                         aria-label="Customer driver details SMS - Review SMS to customer"
@@ -48617,49 +48232,53 @@ export default function Home() {
           </div>
 
           <div className="mt-6 border-t border-stone-200 pt-5">
-            <h3 className="text-base font-semibold">Company / Boss Overrides</h3>
-            <div className="mt-3 grid gap-3 lg:grid-cols-5">
-              <label>
-                <span className="mb-1 block text-sm font-medium text-slate-700">Company / Account</span>
-                <input
-                  className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                  onChange={(event) =>
-                    setRateOverrideDraft((current) => ({
-                      ...current,
-                      bossName: "",
-                      companyName: event.target.value,
-                      travelerId: "",
-                    }))
-                  }
-                  placeholder="Tiger Global"
-                  value={rateOverrideDraft.companyName}
-                />
-              </label>
-              <label>
-                <span className="mb-1 block text-sm font-medium text-slate-700">
-                  Boss / Name (existing Traveller)
-                </span>
+            <h3 className="text-base font-semibold">Customer Account Rates</h3>
+            <div className="mt-3 grid gap-3 lg:grid-cols-4">
+              <label className="lg:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">Customer Account</span>
                 <select
                   className="h-10 w-full rounded-md border border-stone-300 px-3 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                  data-rate-override-traveler-id="true"
-                  disabled={!rateOverrideCompany}
+                  data-rate-customer-account="true"
                   onChange={(event) => {
-                    const travelerId = event.target.value;
-                    const traveler = rateOverrideTravelerOptions.find(
-                      (candidate) => String(candidate.id) === travelerId,
+                    const selected = rateOverrideCustomerAccountOptions.find(
+                      (option) =>
+                        `${positiveId(option.booker.company_id)}:${positiveId(option.booker.id)}` ===
+                        event.target.value,
                     );
-                    setRateOverrideDraft((current) => ({
-                      ...current,
-                      bossName: clean(traveler?.traveler_name),
-                      travelerId,
-                    }));
+                    const companyRecord = selected?.company ?? null;
+                    const bookerRecord = selected?.booker ?? null;
+
+                    if (!companyRecord || !bookerRecord) {
+                      setRateOverrideDraft(initialRateOverrideDraft);
+                      return;
+                    }
+
+                    setRateOverrideDraft({
+                      bookerId: String(positiveId(bookerRecord.id) || ""),
+                      companyId: String(positiveId(companyRecord.id) || ""),
+                      companyName: clean(companyRecord.company_name),
+                      bossName: "",
+                      travelerId: "",
+                      cardOptionDefaultEnabled: Boolean(companyRecord.card_option_default_enabled),
+                      cardOptionDefaultTouched: false,
+                      customerRates: normalizeCustomerRateRules(bookerRecord.customer_rates),
+                      driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
+                      transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
+                    });
                   }}
-                  value={rateOverrideDraft.travelerId}
+                  value={
+                    rateOverrideDraft.companyId && rateOverrideDraft.bookerId
+                      ? `${positiveId(rateOverrideDraft.companyId)}:${positiveId(rateOverrideDraft.bookerId)}`
+                      : ""
+                  }
                 >
-                  <option value="">Company-wide override</option>
-                  {rateOverrideTravelerOptions.map((travelerRecord) => (
-                    <option key={travelerRecord.id} value={String(travelerRecord.id)}>
-                      {clean(travelerRecord.traveler_name) || `Traveller ${travelerRecord.id}`}
+                  <option value="">Select Company · Booker</option>
+                  {rateOverrideCustomerAccountOptions.map((option) => (
+                    <option
+                      key={`${positiveId(option.booker.company_id)}:${positiveId(option.booker.id)}`}
+                      value={`${positiveId(option.booker.company_id)}:${positiveId(option.booker.id)}`}
+                    >
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -48693,7 +48312,7 @@ export default function Home() {
                 <span>
                   Invoice card option on by default
                   <span className="block text-[11px] font-normal text-slate-500">
-                    Company applies to all its invoices. Boss / Name may override it.
+                    Company applies to all its invoices.
                   </span>
                 </span>
               </label>
@@ -48828,6 +48447,8 @@ export default function Home() {
                                 disabled={savingRates}
                                 onClick={() =>
                                   setRateOverrideDraft({
+                                    bookerId: "",
+                                    companyId: String(companyRecord.id),
                                     companyName: clean(companyRecord.company_name),
                                     bossName: "",
                                     travelerId: "",
@@ -48870,83 +48491,84 @@ export default function Home() {
                 </div>
 
                 <div className="rounded-md border border-stone-200 bg-stone-50 p-3">
-                  <h4 className="text-sm font-semibold text-slate-800">Boss / Name Overrides</h4>
+                  <h4 className="text-sm font-semibold text-slate-800">Customer Account Overrides</h4>
                   <div className="mt-2 max-h-56 space-y-2 overflow-auto">
                     {!ratesLoaded ? (
-                      <p className="text-sm text-slate-500">Load rates to view saved boss/name overrides.</p>
-                    ) : displayedBossOverrideRecords.length === 0 ? (
-                      <p className="text-sm text-slate-500">No boss/name overrides found.</p>
+                      <p className="text-sm text-slate-500">Load rates to view saved Customer Account overrides.</p>
+                    ) : displayedBookerOverrideRecords.length === 0 ? (
+                      <p className="text-sm text-slate-500">No Customer Account overrides found.</p>
                     ) : (
-                      displayedBossOverrideRecords.map((travelerRecord) => {
+                      displayedBookerOverrideRecords.map((bookerRecord) => {
+                        const bookerId = positiveId(bookerRecord.id);
                         const companyRecord = rateCompanies.find(
-                          (company) => company.id === travelerRecord.company_id,
+                          (company) => company.id === positiveId(bookerRecord.company_id),
                         );
                         const rowMessage =
-                          rateOverrideListMessages.boss?.recordId === travelerRecord.id
+                          rateOverrideListMessages.boss?.recordId === bookerId
                             ? rateOverrideListMessages.boss
                             : null;
-                        const hasOverrideValues = hasRateOverrideValues(travelerRecord);
+                        const hasOverrideValues = hasCustomerRateOverrideValues(
+                          normalizeCustomerRateRules(bookerRecord.customer_rates),
+                        );
 
                         if (!hasOverrideValues && rowMessage) {
                           return (
                             <div
                               className={`rounded-md border px-3 py-2 text-sm ${statusClass(rowMessage.tone)}`}
-                              data-rate-feedback="boss-overrides"
-                              key={`boss-message-${travelerRecord.id}`}
+                              data-rate-feedback="customer-account-overrides"
+                              key={`customer-account-message-${bookerId}`}
                             >
                               {rowMessage.text}
                             </div>
                           );
                         }
 
-                        const summary = formatOverrideSummary(
-                          travelerRecord.customer_rates,
-                          travelerRecord.driver_payout_rules,
-                        );
+                        const summary = formatOverrideSummary(bookerRecord.customer_rates, {});
 
                         return (
                           <div
                             className="rounded-md border border-stone-200 bg-white p-3 text-sm"
-                            data-rate-boss-override-row={travelerRecord.id}
-                            key={travelerRecord.id}
+                            data-rate-customer-account-override-row={bookerId}
+                            key={bookerId}
                           >
-                            <p className="font-medium">{travelerRecord.traveler_name}</p>
-                            <p className="text-xs text-slate-500">
-                              {clean(companyRecord?.company_name) || "Internal Account"}
+                            <p className="font-medium">
+                              {clean(companyRecord?.company_name) || "Company"} ·{" "}
+                              {clean(bookerRecord.booker_name) || "Booker"}
                             </p>
                             <p className="text-xs text-slate-600">{summary.customerText}</p>
-                            <p className="text-xs text-slate-600">{summary.driverText}</p>
-                            <p className="text-xs text-slate-600">
-                              {cardOptionDefaultSummary(travelerRecord, companyRecord)}
-                            </p>
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
                               <button
                                 className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                                disabled={savingRates}
-                                onClick={() =>
+                                disabled={savingRates || !companyRecord}
+                                onClick={() => {
+                                  if (!companyRecord) {
+                                    return;
+                                  }
+
                                   setRateOverrideDraft({
-                                    companyName: clean(companyRecord?.company_name),
-                                    bossName: clean(travelerRecord.traveler_name),
-                                    travelerId: String(travelerRecord.id),
-                                    cardOptionDefaultEnabled:
-                                      typeof travelerRecord.card_option_default_enabled === "boolean"
-                                        ? travelerRecord.card_option_default_enabled
-                                        : Boolean(companyRecord?.card_option_default_enabled),
+                                    bookerId: String(bookerId || ""),
+                                    companyId: String(companyRecord.id),
+                                    companyName: clean(companyRecord.company_name),
+                                    bossName: "",
+                                    travelerId: "",
+                                    cardOptionDefaultEnabled: Boolean(
+                                      companyRecord.card_option_default_enabled,
+                                    ),
                                     cardOptionDefaultTouched: false,
-                                    customerRates: normalizeCustomerRateRules(travelerRecord.customer_rates),
-                                    driverPayoutRules: normalizeDriverPayoutRules(travelerRecord.driver_payout_rules),
-                                    transzendExcelPrivacy: Boolean(companyRecord?.transzend_excel_privacy),
-                                  })
-                                }
+                                    customerRates: normalizeCustomerRateRules(bookerRecord.customer_rates),
+                                    driverPayoutRules: normalizeDriverPayoutRules(companyRecord.driver_payout_rules),
+                                    transzendExcelPrivacy: Boolean(companyRecord.transzend_excel_privacy),
+                                  });
+                                }}
                                 type="button"
                               >
                                 Load for editing
                               </button>
                               <button
                                 className="h-9 rounded-md border border-red-200 px-3 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-red-300"
-                                data-rate-boss-remove={travelerRecord.id}
+                                data-rate-customer-account-remove={bookerId}
                                 disabled={savingRates}
-                                onClick={() => removeBossRateOverride(travelerRecord)}
+                                onClick={() => removeBookerRateOverride(bookerRecord)}
                                 type="button"
                               >
                                 {rateAction === "remove-override" ? "Removing..." : "Remove override"}
@@ -48955,7 +48577,7 @@ export default function Home() {
                             {rowMessage ? (
                               <div
                                 className={`mt-2 rounded-md border px-3 py-2 text-sm ${statusClass(rowMessage.tone)}`}
-                                data-rate-feedback="boss-overrides"
+                                data-rate-feedback="customer-account-overrides"
                               >
                                 {rowMessage.text}
                               </div>

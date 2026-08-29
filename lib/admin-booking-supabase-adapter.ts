@@ -1517,6 +1517,117 @@ async function insertRowsWithFallback(
   return client.from(table).insert(cumulativePayload);
 }
 
+async function resolveExactBookerCustomerAccount(
+  client: SupabaseClient,
+  verifiedCompanyId: DbIdentifier,
+  verifiedBookerId: DbIdentifier,
+): Promise<AdminBookingResult<DbIdentifier | null>> {
+  const { data, error } = await client
+    .from("bookers")
+    .select("id, company_id, customer_id")
+    .eq("company_id", verifiedCompanyId)
+    .eq("id", verifiedBookerId)
+    .limit(2);
+
+  if (error) {
+    return safeAdapterFailure(safeSaveError, 500, error, "customer_lookup");
+  }
+
+  const rows = asArray(data);
+  const booker = asRecord(rows[0]);
+
+  if (
+    rows.length !== 1 ||
+    String(dbIdentifierOrNull(booker.id) || "") !== String(verifiedBookerId) ||
+    String(dbIdentifierOrNull(booker.company_id) || "") !== String(verifiedCompanyId)
+  ) {
+    return {
+      error: safeCustomerIdentityConflictError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  const customerId = dbIdentifierOrNull(booker.customer_id);
+
+  if (!customerId) {
+    return { data: null, ok: true };
+  }
+
+  const { data: customerRows, error: customerError } = await client
+    .from("customers")
+    .select("id, status, account_status")
+    .eq("id", customerId)
+    .limit(2);
+
+  if (customerError) {
+    return safeAdapterFailure(safeSaveError, 500, customerError, "customer_lookup");
+  }
+
+  const customers = asArray(customerRows);
+  const customer = asRecord(customers[0]);
+
+  if (
+    customers.length !== 1 ||
+    String(dbIdentifierOrNull(customer.id) || "") !== String(customerId) ||
+    !customerRecordIsActive(customer)
+  ) {
+    return {
+      error: safeCustomerIdentityConflictError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return { data: customerId, ok: true };
+}
+
+async function bindExactBookerCustomerAccount(
+  client: SupabaseClient,
+  verifiedCompanyId: DbIdentifier,
+  verifiedBookerId: DbIdentifier,
+  verifiedCustomerId: DbIdentifier,
+): Promise<AdminBookingResult<DbIdentifier>> {
+  const { data, error } = await client
+    .from("bookers")
+    .update({ customer_id: verifiedCustomerId })
+    .eq("company_id", verifiedCompanyId)
+    .eq("id", verifiedBookerId)
+    .is("customer_id", null)
+    .select("id, company_id, customer_id")
+    .maybeSingle();
+
+  if (!error) {
+    const updated = asRecord(data);
+
+    if (
+      String(dbIdentifierOrNull(updated.id) || "") === String(verifiedBookerId) &&
+      String(dbIdentifierOrNull(updated.company_id) || "") === String(verifiedCompanyId) &&
+      String(dbIdentifierOrNull(updated.customer_id) || "") === String(verifiedCustomerId)
+    ) {
+      return { data: verifiedCustomerId, ok: true };
+    }
+  }
+
+  const resolved = await resolveExactBookerCustomerAccount(
+    client,
+    verifiedCompanyId,
+    verifiedBookerId,
+  );
+
+  if (resolved.ok && String(resolved.data || "") === String(verifiedCustomerId)) {
+    return { data: verifiedCustomerId, ok: true };
+  }
+
+  return error
+    ? safeAdapterFailure(safeSaveError, 500, error, "customer_lookup")
+    : {
+        error: safeCustomerIdentityConflictError,
+        ok: false,
+        status: 409,
+      };
+}
+
 async function findOrCreateCustomerId(
   client: SupabaseClient,
   booking: AdminBookingRecordInput,
@@ -1530,6 +1641,8 @@ async function findOrCreateCustomerId(
   const verifiedBookerId = dbIdentifierOrNull(booking.booker_id);
   const verifiedTravelerId = dbIdentifierOrNull(booking.traveler_id);
   let forceCreateCanonicalCustomer = false;
+  let exactBookerAccountDisplayName: string | null = null;
+  let exactBookerAccountNeedsBinding = false;
 
   if (hotelAgencyFolderCreate) {
     const requestedAgencyName = textOrNull(hotelAgencyFolderCreate.company_name);
@@ -1841,23 +1954,77 @@ async function findOrCreateCustomerId(
     verifiedCompanyId &&
     verifiedBookerId
   ) {
-    return {
-      data: verifiedCustomerId,
-      ok: true,
-    };
+    const existingAccount = await resolveExactBookerCustomerAccount(
+      client,
+      verifiedCompanyId,
+      verifiedBookerId,
+    );
+
+    if (!existingAccount.ok) {
+      return existingAccount;
+    }
+
+    if (existingAccount.data) {
+      return String(existingAccount.data) === String(verifiedCustomerId)
+        ? { data: existingAccount.data, ok: true }
+        : { error: safeCustomerIdentityConflictError, ok: false, status: 409 };
+    }
+
+    return bindExactBookerCustomerAccount(
+      client,
+      verifiedCompanyId,
+      verifiedBookerId,
+      verifiedCustomerId,
+    );
   }
 
-  const hasCompleteCorporateIdentity = Boolean(
-    verifiedCompanyId && verifiedBookerId && verifiedTravelerId,
-  );
+  if (verifiedCompanyId && verifiedBookerId) {
+    const companyName = textOrNull(booking.customer_display_name);
+    const bookerName = textOrNull(booking.contact_display_name);
 
-  if (hasCompleteCorporateIdentity) {
+    if (!companyName || !bookerName) {
+      return {
+        error: safeCustomerIdentityConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    exactBookerAccountDisplayName = `${companyName} / Booker: ${bookerName}`.slice(
+      0,
+      maxTextLength,
+    );
+    const exactBookerAccount = await resolveExactBookerCustomerAccount(
+      client,
+      verifiedCompanyId,
+      verifiedBookerId,
+    );
+
+    if (!exactBookerAccount.ok) {
+      return exactBookerAccount;
+    }
+
+    if (exactBookerAccount.data) {
+      if (
+        customerAccountCollisionResolution ||
+        (verifiedCustomerId &&
+          String(verifiedCustomerId) !== String(exactBookerAccount.data))
+      ) {
+        return {
+          error: safeCustomerIdentityConflictError,
+          ok: false,
+          status: 409,
+        };
+      }
+
+      return { data: exactBookerAccount.data, ok: true };
+    }
+
     const { data: verifiedIdentityRows, error: verifiedIdentityError } = await client
       .from("bookings")
       .select("customer_id")
       .eq("company_id", verifiedCompanyId)
-      .eq("booker_id", verifiedBookerId)
-      .eq("traveler_id", verifiedTravelerId);
+      .eq("booker_id", verifiedBookerId);
 
     if (verifiedIdentityError) {
       return safeAdapterFailure(safeSaveError, 500, verifiedIdentityError, "customer_lookup");
@@ -1881,14 +2048,30 @@ async function findOrCreateCustomerId(
       };
     }
 
-    const verifiedTupleCustomerId = Array.from(verifiedCustomerIds.values())[0] || null;
+    const accountCandidates: AdminCustomerAccountCollisionCandidate[] = [];
 
-    if (verifiedTupleCustomerId) {
+    for (const customerId of verifiedCustomerIds.values()) {
+      const { data: customerRows, error: customerError } = await client
+        .from("customers")
+        .select("id, display_name, status, account_status")
+        .eq("id", customerId)
+        .limit(2);
+
+      if (customerError) {
+        return safeAdapterFailure(safeSaveError, 500, customerError, "customer_lookup");
+      }
+
+      const customers = asArray(customerRows);
+      const customer = asRecord(customers[0]);
+      const numericCustomerId = Number(dbIdentifierOrNull(customer.id));
+      const customerAccount = textOrNull(customer.display_name)?.slice(0, 220) || "";
+
       if (
-        customerAccountCollisionResolution?.action === "create_new" ||
-        (customerAccountCollisionResolution?.action === "merge" &&
-          String(customerAccountCollisionResolution.selected_customer_id || "") !==
-            String(verifiedTupleCustomerId))
+        customers.length !== 1 ||
+        !Number.isSafeInteger(numericCustomerId) ||
+        numericCustomerId <= 0 ||
+        !customerAccount ||
+        !customerRecordIsActive(customer)
       ) {
         return {
           error: safeCustomerIdentityConflictError,
@@ -1897,155 +2080,54 @@ async function findOrCreateCustomerId(
         };
       }
 
-      if (
-        verifiedCustomerId &&
-        String(verifiedCustomerId) !== String(verifiedTupleCustomerId)
-      ) {
-        return {
-          error: safeCustomerIdentityConflictError,
-          ok: false,
-          status: 409,
-        };
+      accountCandidates.push({
+        customer_account: customerAccount,
+        customer_id: numericCustomerId,
+      });
+    }
+
+    accountCandidates.sort(
+      (first, second) => Number(first.customer_id) - Number(second.customer_id),
+    );
+    const currentCandidateIds = customerAccountCollisionCandidateIds(accountCandidates);
+    const reviewedCandidateIds = [
+      ...(customerAccountCollisionResolution?.reviewed_customer_ids || []),
+    ].sort((first, second) => first - second);
+
+    if (
+      !customerAccountCollisionResolution ||
+      !sameCustomerAccountCollisionCandidateIds(currentCandidateIds, reviewedCandidateIds)
+    ) {
+      return customerAccountCollisionReviewFailure(accountCandidates);
+    }
+
+    if (customerAccountCollisionResolution.action === "merge") {
+      const selectedCustomerId = Number(
+        customerAccountCollisionResolution.selected_customer_id,
+      );
+
+      if (!currentCandidateIds.includes(selectedCustomerId)) {
+        return customerAccountCollisionReviewFailure(accountCandidates);
       }
 
-      return {
-        data: verifiedTupleCustomerId,
-        ok: true,
-      };
+      return bindExactBookerCustomerAccount(
+        client,
+        verifiedCompanyId,
+        verifiedBookerId,
+        selectedCustomerId,
+      );
     }
 
     if (verifiedCustomerId) {
-      if (customerAccountCollisionResolution) {
-        return {
-          error: safeCustomerIdentityConflictError,
-          ok: false,
-          status: 409,
-        };
-      }
-
-      const { data: selectedCustomerRows, error: selectedCustomerError } = await client
-        .from("customers")
-        .select("id, status, account_status")
-        .eq("id", verifiedCustomerId)
-        .limit(2);
-
-      if (selectedCustomerError) {
-        return safeAdapterFailure(safeSaveError, 500, selectedCustomerError, "customer_lookup");
-      }
-
-      const selectedCustomers = asArray(selectedCustomerRows);
-      const selectedCustomer = asRecord(selectedCustomers[0]);
-
-      if (
-        selectedCustomers.length !== 1 ||
-        String(dbIdentifierOrNull(selectedCustomer.id) || "") !== String(verifiedCustomerId) ||
-        !customerRecordIsActive(selectedCustomer)
-      ) {
-        return {
-          error: safeCustomerIdentityConflictError,
-          ok: false,
-          status: 409,
-        };
-      }
-
       return {
-        data: verifiedCustomerId,
-        ok: true,
+        error: safeCustomerIdentityConflictError,
+        ok: false,
+        status: 409,
       };
     }
 
-    const requestedCompanyAccountKey = canonicalCustomerCompanyAccountName(
-      booking.customer_display_name,
-    );
-
-    if (requestedCompanyAccountKey) {
-      const { data: customerRows, error: customerRowsError } = await client
-        .from("customers")
-        .select("id, display_name, status, account_status")
-        .limit(1001);
-
-      if (customerRowsError) {
-        return safeAdapterFailure(safeSaveError, 500, customerRowsError, "customer_lookup");
-      }
-
-      if (asArray(customerRows).length > 1000) {
-        return {
-          error: safeCustomerIdentityConflictError,
-          ok: false,
-          status: 409,
-        };
-      }
-
-      const canonicalCustomerMatches = asArray(customerRows).flatMap((row) => {
-        const customer = asRecord(row);
-        const customerId = dbIdentifierOrNull(customer.id);
-        const numericCustomerId = Number(customerId);
-        const customerAccount = textOrNull(customer.display_name)?.slice(0, 220) || "";
-
-        return (
-          customerId &&
-          Number.isSafeInteger(numericCustomerId) &&
-          numericCustomerId > 0 &&
-          customerAccount &&
-          customerRecordIsActive(customer) &&
-          canonicalCustomerCompanyAccountName(customer.display_name) ===
-            requestedCompanyAccountKey
-        )
-          ? [{ customer_account: customerAccount, customer_id: numericCustomerId }]
-          : [];
-      });
-
-      if (canonicalCustomerMatches.length > 20) {
-        return {
-          error: safeCustomerIdentityConflictError,
-          ok: false,
-          status: 409,
-        };
-      }
-
-      if (canonicalCustomerMatches.length > 0) {
-        const candidates = canonicalCustomerMatches.sort(
-          (first, second) => Number(first.customer_id) - Number(second.customer_id),
-        );
-        const currentCandidateIds = customerAccountCollisionCandidateIds(candidates);
-        const reviewedCandidateIds = [
-          ...(customerAccountCollisionResolution?.reviewed_customer_ids || []),
-        ].sort((first, second) => first - second);
-
-        if (
-          !customerAccountCollisionResolution ||
-          !sameCustomerAccountCollisionCandidateIds(
-            currentCandidateIds,
-            reviewedCandidateIds,
-          )
-        ) {
-          return customerAccountCollisionReviewFailure(candidates);
-        }
-
-        if (customerAccountCollisionResolution.action === "merge") {
-          const selectedCustomerId = Number(
-            customerAccountCollisionResolution.selected_customer_id,
-          );
-
-          if (!currentCandidateIds.includes(selectedCustomerId)) {
-            return customerAccountCollisionReviewFailure(candidates);
-          }
-
-          return {
-            data: selectedCustomerId,
-            ok: true,
-          };
-        }
-
-        forceCreateCanonicalCustomer = true;
-      } else if (customerAccountCollisionResolution) {
-        return {
-          error: safeCustomerIdentityConflictError,
-          ok: false,
-          status: 409,
-        };
-      }
-    }
+    exactBookerAccountNeedsBinding = true;
+    forceCreateCanonicalCustomer = true;
   }
 
   if (verifiedCustomerId && !verifiedCompanyId) {
@@ -2275,7 +2357,7 @@ async function findOrCreateCustomerId(
     }
   }
 
-  const displayName = customerPortalScopedDisplayName(booking);
+  const displayName = exactBookerAccountDisplayName || customerPortalScopedDisplayName(booking);
   const { data: existingRows, error: existingError } = forceCreateCanonicalCustomer
     ? { data: [], error: null }
     : await client
@@ -2291,10 +2373,9 @@ async function findOrCreateCustomerId(
   const existingId = dbIdentifierOrNull(asRecord(asArray(existingRows)[0]).id);
 
   if (existingId) {
-    return {
-      ok: true,
-      data: existingId,
-    };
+    return exactBookerAccountNeedsBinding && verifiedCompanyId && verifiedBookerId
+      ? bindExactBookerCustomerAccount(client, verifiedCompanyId, verifiedBookerId, existingId)
+      : { ok: true, data: existingId };
   }
 
   const { data: insertedRow, error: insertError } = await insertRowAndSelectIdWithFallback(
@@ -2315,10 +2396,9 @@ async function findOrCreateCustomerId(
     return safeAdapterFailure(safeSaveError, 500, insertError, "customer_lookup");
   }
 
-  return {
-    ok: true,
-    data: insertedId,
-  };
+  return exactBookerAccountNeedsBinding && verifiedCompanyId && verifiedBookerId
+    ? bindExactBookerCustomerAccount(client, verifiedCompanyId, verifiedBookerId, insertedId)
+    : { ok: true, data: insertedId };
 }
 
 async function ensureCustomerContact(

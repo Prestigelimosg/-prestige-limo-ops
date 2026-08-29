@@ -1735,6 +1735,7 @@ async function runChromeTest() {
                 booker: {
                   booker_name: "Loaded Ops Booker",
                   company_id: 33,
+                  customer_id: 9165,
                   email: "loaded-ops@example.com",
                   id: 17,
                   phone: "+65 8000 1000",
@@ -4083,19 +4084,15 @@ async function runChromeTest() {
       assert.equal(updateState.body.booking.booker_id, 17);
       assert.equal(
         updateState.body.booking.traveler_id,
-        30,
-        `Expected public customer request Accept + Cal to carry the verified identity tuple. Calls: ${JSON.stringify(
+        null,
+        `Expected public customer request Accept + Cal to keep the passenger booking-specific. Calls: ${JSON.stringify(
           updateState.corporateIdentityCalls,
         )}`,
       );
       assert.equal(
         updateState.corporateIdentityConfirmMessages.length,
-        1,
-        "Expected public customer request Accept + Cal to ask once before saving the new Traveller",
-      );
-      assert.match(
-        updateState.corporateIdentityConfirmMessages[0],
-        /Create or reuse this verified Booker \+ Traveller under Loaded Ops Customer/,
+        0,
+        "Expected the approved Company + Booker account not to reopen identity review for its booking-specific passenger",
       );
       assert.equal(
         updateState.corporateIdentityCalls.filter(
@@ -4108,8 +4105,8 @@ async function runChromeTest() {
         updateState.corporateIdentityCalls.filter(
           (call) => call.method === "POST" && call.body?.action_type === "traveler_create",
         ).length,
-        1,
-        "Expected public customer request Accept + Cal to create only the missing Traveller",
+        0,
+        "Expected public customer request Accept + Cal not to create a Traveller from booking-specific passenger text",
       );
       assert.equal(
         updateState.corporateIdentityCalls.filter(
@@ -4117,8 +4114,8 @@ async function runChromeTest() {
             call.method === "PATCH" &&
             call.url.includes("/api/admin-legacy-data/rest/v1/travelers"),
         ).length,
-        1,
-        "Expected public customer request Accept + Cal to link the exact Traveller once",
+        0,
+        "Expected public customer request Accept + Cal not to link a Traveller from booking-specific passenger text",
       );
       assert.equal(
         updateState.corporateIdentityCalls.filter(
@@ -4137,15 +4134,20 @@ async function runChromeTest() {
       const publicAcceptBookingPatchIndex = updateState.corporateRequestSequence.findIndex(
         (call) => call === "PATCH /api/admin-bookings",
       );
+      const publicAcceptBookerReadIndex = updateState.corporateRequestSequence.findIndex(
+        (call) => call === "GET /api/admin-bookers?id=17",
+      );
       const publicAcceptRateReadIndexes = updateState.corporateRequestSequence
         .map((call, index) => ({ call, index }))
         .filter(({ call }) => call === "GET /api/admin-rate-setup")
         .map(({ index }) => index);
       assert.equal(
-        publicAcceptRateReadIndexes.length >= 2 &&
+        publicAcceptBookerReadIndex >= 0 &&
+          publicAcceptBookerReadIndex < publicAcceptBookingPatchIndex &&
+          publicAcceptRateReadIndexes.length >= 1 &&
           publicAcceptRateReadIndexes.at(-1) < publicAcceptBookingPatchIndex,
         true,
-        "Expected the public customer request pair to reload before Accept + Cal PATCH",
+        "Expected the public customer request Company + Booker account and booking-specific passenger evidence to reload before Accept + Cal PATCH",
       );
       assert.equal(
         updateState.calendarSyncCalls.filter((call) => call.method === "POST").length,
@@ -35853,6 +35855,9 @@ async function runChromeTest() {
             visible: Boolean(cancellationIntakeRect && cancellationIntakeRect.width > 0 && cancellationIntakeRect.height > 0),
           },
           activeMonthLabel: document.querySelector("[data-customer-portal-active-month]")?.textContent.trim() || "",
+          customerAlertsControlVisible: Boolean(
+            document.querySelector("[data-customer-alerts-control='true']"),
+          ),
           currentMonthActive: currentMonthButton?.getAttribute("data-active") === "true",
           monthGroupsVisible: Boolean(document.querySelector("[data-customer-portal-month-groups]")),
           monthLabels: monthButtons.map((button) => button.textContent.trim()),
@@ -36136,7 +36141,10 @@ async function runChromeTest() {
       const initialState = await waitForCondition(
         async () => {
           const candidateState = await readCustomerPortalState();
-          return candidateState.showingText === "Showing 1-10 of 12 bookings" ? candidateState : false;
+          return candidateState.showingText === "Showing 1-10 of 12 bookings" &&
+            candidateState.customerAlertsControlVisible
+            ? candidateState
+            : false;
         },
         10000,
         "customer portal saved bookings API rows",

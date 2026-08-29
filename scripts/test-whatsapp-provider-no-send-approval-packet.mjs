@@ -189,7 +189,16 @@ assertIncludes(
   'const adminWhatsAppCustomerDriverDetailsSendDisabledApiPath =\n  "/api/admin-whatsapp-customer-driver-details-send-disabled-setup";',
   "Customer Copy WhatsApp disabled-send route",
 );
-assertIncludes(appPage, 'checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")', "Customer Copy WhatsApp disabled-send action");
+assertIncludes(
+  appPage,
+  "async function checkAdminCustomerDriverDetailsMessageDisabledSend(",
+  "parked Customer Copy disabled-send helper",
+);
+assertExcludes(
+  appPage,
+  'checkAdminCustomerDriverDetailsMessageDisabledSend("whatsapp")',
+  "removed visible Customer Copy WhatsApp disabled-send action",
+);
 assertExcludes(
   appPage,
   "/api/admin-whatsapp-customer-driver-details-preview-readiness-setup",

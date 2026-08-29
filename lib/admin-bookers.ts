@@ -13,6 +13,7 @@ export const adminBookersVersion = "admin-bookers-api-v1";
 export type AdminBookerRecord = {
   booker_name: string | null;
   company_id: number;
+  customer_id: number | null;
   email: string | null;
   id: number;
   phone: string | null;
@@ -21,7 +22,7 @@ export type AdminBookerRecord = {
 type UnknownRecord = Record<string, unknown>;
 type AdminBookersClient = Pick<SupabaseClient, "from">;
 
-const adminBookerSelect = "id, company_id, booker_name, email, phone";
+const adminBookerSelect = "id, company_id, customer_id, booker_name, email, phone";
 const safeBlockedError = "Admin booker records require a verified internal boundary.";
 const safeConfigError = "Admin booker records are not configured on this server.";
 const safeReadError = "Admin booker lookup failed safely.";
@@ -283,6 +284,7 @@ function toAdminBookerRecord(value: unknown): AdminBookerRecord | null {
   return {
     booker_name: safeName(record.booker_name),
     company_id: companyId,
+    customer_id: positiveInteger(record.customer_id),
     email: safeContact(record.email),
     id,
     phone: safeContact(record.phone),

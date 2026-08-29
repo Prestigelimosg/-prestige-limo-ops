@@ -156,18 +156,17 @@ const saveRateOverride = sliceBetween(
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
 for (const [label, source] of [
   ["Parked rate override save", saveRateOverride],
   ["Parked company rate override remove", removeCompanyRateOverride],
-  ["Parked traveler rate override remove", removeBossRateOverride],
 ]) {
   assertIncludes(source, "adminLegacyDataClient", label);
   assertIncludes(source, "customer_rates", label);
@@ -175,9 +174,10 @@ for (const [label, source] of [
 }
 
 assertIncludes(saveRateOverride, "adminLegacyTables.companies", "Parked company override save");
-assertIncludes(saveRateOverride, "adminLegacyTables.travelers", "Parked traveler override save");
 assertIncludes(removeCompanyRateOverride, "adminLegacyTables.companies", "Parked company override remove");
-assertIncludes(removeBossRateOverride, "adminLegacyTables.travelers", "Parked traveler override remove");
+assertIncludes(removeBookerRateOverride, "buildBookerCustomerRatesRuntimeWritePayload", "Exact Booker override remove");
+assertExcludes(removeBookerRateOverride, "adminLegacyDataClient", "Booker customer rate clear must not use legacy traveler writes");
+assertExcludes(saveRateOverride, "adminLegacyTables.travelers", "Normal override save must not use legacy traveler writes");
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM endpoint");

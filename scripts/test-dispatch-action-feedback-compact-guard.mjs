@@ -143,7 +143,7 @@ for (const fragment of [
   'className="flex max-w-full flex-wrap items-center justify-end gap-2"',
   'className="flex items-center rounded-md border border-red-100 bg-red-50/70 p-1"',
   "h-8 whitespace-nowrap rounded px-2.5 text-[11px]",
-  'className="mb-2 inline-flex max-w-full rounded-full',
+  'className="mb-2 flex w-full rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 sm:inline-flex sm:w-auto sm:rounded-full"',
 ]) {
   assertIncludes(dispatchCopyUiBlock, fragment, `compact dispatch fragment ${fragment}`);
 }
@@ -281,7 +281,7 @@ for (const fragment of [
   "safe_error_category",
   "safe_error_operation",
   "markAdminBookingAsActiveForUpdates(primarySavedBookingReference, primarySavedBooking);",
-  "key: getBookingSaveGuardKey(primarySavedBookingReference)",
+  "key: getBookingSaveGuardKey(\n          primarySavedBookingReference,\n          resolvedBillingIdentityAccountOverride,",
 ]) {
   assertIncludes(saveBookingBlock, fragment, `Save Booking + CRM preflight fragment ${fragment}`);
 }

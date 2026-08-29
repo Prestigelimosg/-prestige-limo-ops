@@ -8688,6 +8688,23 @@ async function runChromeTest() {
           return jsonResponse({ company: null, ok: true });
         }
         if (method === "GET" && url.pathname === "/api/admin-bookers") {
+          if (
+            window.__prestigeEmailAiCustomerRecommendationMode === "company-corporate" &&
+            window.__prestigeAllowBookerIdentityRead === true &&
+            url.searchParams.get("id") === "5501"
+          ) {
+            return jsonResponse({
+              booker: {
+                booker_name: "Alson",
+                company_id: 55,
+                customer_id: 550,
+                email: null,
+                id: 5501,
+                phone: null,
+              },
+              ok: true,
+            });
+          }
           if (window.__prestigeEmailAiCustomerRecommendationMode === "booker-email-agency") {
             return jsonResponse({
               booker: {
@@ -8939,18 +8956,21 @@ async function runChromeTest() {
           const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
           return selector instanceof HTMLDetailsElement &&
-            selector.dataset.value === "agency:174:41" &&
-            selectedNotice &&
+            selector.dataset.value === "" &&
+            !selectedNotice &&
             suggestion
             ? {
+                bookerId: selector.dataset.bookerId || "",
+                companyId: selector.dataset.companyId || "",
+                customerId: selector.dataset.customerId || "",
                 customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.method)
                   .filter((method) => method !== "GET"),
                 requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.url),
-                selectedNoticeText: selectedNotice.textContent.replace(/\\s+/g, " ").trim(),
                 suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
+                travelerId: selector.dataset.travelerId || "",
               }
             : false;
         })()`),
@@ -8960,7 +8980,17 @@ async function runChromeTest() {
     assert.equal(
       emailAiAgencyIdentityState.customerStatusCount,
       0,
-      "Expected agency mode to suppress the contradictory corporate customer banner",
+      "Expected suggestion-only matching to avoid a contradictory customer banner",
+    );
+    assert.deepEqual(
+      {
+        bookerId: emailAiAgencyIdentityState.bookerId,
+        companyId: emailAiAgencyIdentityState.companyId,
+        customerId: emailAiAgencyIdentityState.customerId,
+        travelerId: emailAiAgencyIdentityState.travelerId,
+      },
+      { bookerId: "", companyId: "", customerId: "", travelerId: "" },
+      "Expected Email-AI matching not to bind any durable Customer Account ID",
     );
     assert.deepEqual(
       emailAiAgencyIdentityState.nonGetMethods,
@@ -8976,9 +9006,8 @@ async function runChromeTest() {
     assert.match(emailAiAgencyIdentityState.suggestionText, /exact email match/i);
     assert.match(
       emailAiAgencyIdentityState.suggestionText,
-      /Admin can change this selection before Save \+ CRM/i,
+      /suggestion only.*Choose the exact Company \+ Booker Customer Account before Save \+ CRM/i,
     );
-    assert.match(emailAiAgencyIdentityState.selectedNoticeText, /Passenger name stays on this booking only/i);
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
     await waitForCondition(
       () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]'))`),
@@ -9058,8 +9087,8 @@ async function runChromeTest() {
       10000,
       "Email AI exact-company-name corporate profile fallback",
     );
-    assert.equal(emailAiCompanyFallbackState.selectedKey, "corporate:55:unassigned");
-    assert.equal(emailAiCompanyFallbackState.companyId, "55");
+    assert.equal(emailAiCompanyFallbackState.selectedKey, "");
+    assert.equal(emailAiCompanyFallbackState.companyId, "");
     assert.equal(emailAiCompanyFallbackState.customerId, "");
     assert.equal(emailAiCompanyFallbackState.bookerId, "");
     assert.equal(emailAiCompanyFallbackState.travelerId, "");
@@ -9099,14 +9128,13 @@ async function runChromeTest() {
     assert.equal(
       unifiedCustomerAccountListState.createButton,
       true,
-      "unified Customer Account search keeps agency, corporate, and personal identity tuples",
+      "unified Customer Account search keeps Company + Booker identity tuples",
     );
     assert.equal(unifiedCustomerAccountListState.legacySelectorCount, 0);
-    assert.ok(
-      unifiedCustomerAccountListState.accountOptions.some(
-        (option) => option.key === "agency:161:601" && option.text.includes("BROWSER UI TEST AGENCY"),
-      ),
-      "Expected one unified list to retain the exact account-folder tuple",
+    assert.equal(
+      unifiedCustomerAccountListState.accountOptions.some((option) => option.key.startsWith("agency:")),
+      false,
+      "Expected legacy agency-only rows not to be selectable for a future booking",
     );
     assert.ok(
       unifiedCustomerAccountListState.accountOptions.some(
@@ -9146,66 +9174,43 @@ async function runChromeTest() {
     );
     assert.deepEqual(unifiedCustomerQuickSearchState, ["corporate:55:5501"]);
 
-    const openedSinglePassengerReview = await evaluate(`(() => {
+    const selectedKnownBooker = await evaluate(`(() => {
+      window.__prestigeAllowBookerIdentityRead = true;
       document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click();
       return true;
     })()`);
-    assert.equal(openedSinglePassengerReview, true);
-    const singlePassengerReviewState = await waitForCondition(
+    assert.equal(selectedKnownBooker, true);
+    const selectedKnownBookerState = await waitForCondition(
       () => evaluate(`(() => {
-        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        return review && chooser instanceof HTMLDetailsElement
+        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
+        const passenger = [...document.querySelectorAll("label")]
+          .find((label) => label.textContent.replace(/\\s+\\*/g, " ").trim().startsWith("Passenger name"))
+          ?.querySelector("input");
+        return !review && chooser instanceof HTMLDetailsElement &&
+          chooser.dataset.value === "corporate:55:5501" && passenger?.value === "Pui Yu Chan"
           ? {
               bookerId: chooser.dataset.bookerId || "",
               bookingPostCount: (window.__prestigeFetchCalls || []).filter((call) =>
                 String(call).includes("POST /api/admin-bookings"),
               ).length,
-              candidateCount: document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button').length,
               companyId: chooser.dataset.companyId || "",
               customerId: chooser.dataset.customerId || "",
-              selectedKey: chooser.dataset.value || "",
-              text: review.textContent.replace(/\\s+/g, " ").trim(),
+              passenger: passenger.value,
               travelerId: chooser.dataset.travelerId || "",
             }
           : false;
       })()`),
       10000,
-      "one possible passenger match asks Admin before selection",
+      "known Company + Booker selection without a passenger identity prompt",
     );
-    assert.equal(singlePassengerReviewState.candidateCount, 0);
-    assert.equal(singlePassengerReviewState.selectedKey, "corporate:55:unassigned");
-    assert.equal(singlePassengerReviewState.companyId, "55");
-    assert.equal(singlePassengerReviewState.customerId, "");
-    assert.equal(singlePassengerReviewState.bookerId, "");
-    assert.equal(singlePassengerReviewState.travelerId, "");
-    assert.match(singlePassengerReviewState.text, /Pui Yu Chan/);
-    assert.equal(
-      singlePassengerReviewState.bookingPostCount,
-      0,
-      "no Customer Account review choice sends a booking POST",
-    );
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-use-existing="true"]')?.click()`);
-    const acceptedPassengerState = await waitForCondition(
-      () => evaluate(`(() => {
-        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        return chooser instanceof HTMLDetailsElement && chooser.dataset.value === "corporate:55:5501"
-          ? {
-              bookerId: chooser.dataset.bookerId || "",
-              companyId: chooser.dataset.companyId || "",
-              customerId: chooser.dataset.customerId || "",
-              travelerId: chooser.dataset.travelerId || "",
-            }
-          : false;
-      })()`),
-      10000,
-      "confirmed exact Customer Account identity tuple",
-    );
-    assert.deepEqual(acceptedPassengerState, {
+    assert.deepEqual(selectedKnownBookerState, {
       bookerId: "5501",
+      bookingPostCount: 0,
       companyId: "55",
-      customerId: "",
-      travelerId: "55001",
+      customerId: "550",
+      passenger: "Pui Yu Chan",
+      travelerId: "",
     });
 
     await evaluate(`(() => {
@@ -9220,39 +9225,34 @@ async function runChromeTest() {
       if (chooser instanceof HTMLDetailsElement) chooser.open = true;
       document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]')?.click();
     })()`);
-    const multiplePassengerReviewState = await waitForCondition(
-      () => evaluate(`(() => {
-        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
-        const candidates = document.querySelectorAll('[data-admin-dispatch-customer-account-match-candidates="true"] button');
-        return review && candidates.length === 2
-          ? {
-              pressedCount: [...candidates].filter((candidate) => candidate.getAttribute("aria-pressed") === "true").length,
-              text: review.textContent.replace(/\\s+/g, " ").trim(),
-            }
-          : false;
-      })()`),
-      10000,
-      "multiple possible passenger matches remain a candidate list",
-    );
-    assert.equal(multiplePassengerReviewState.pressedCount, 0);
-    assert.match(multiplePassengerReviewState.text, /Alex Tan/);
-    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-different-person="true"]')?.click()`);
-    const differentPassengerState = await waitForCondition(
+    const differentPassengerSameAccountState = await waitForCondition(
       () => evaluate(`(() => {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        return chooser instanceof HTMLDetailsElement &&
-          chooser.dataset.value === "corporate:55:5501" &&
-          chooser.dataset.travelerId === ""
+        const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
+        const passenger = [...document.querySelectorAll("label")]
+          .find((label) => label.textContent.replace(/\\s+\\*/g, " ").trim().startsWith("Passenger name"))
+          ?.querySelector("input");
+        return !review && chooser instanceof HTMLDetailsElement &&
+          chooser.dataset.value === "corporate:55:5501" && passenger?.value === "Alex Tan"
           ? {
               bookerId: chooser.dataset.bookerId || "",
               companyId: chooser.dataset.companyId || "",
+              customerId: chooser.dataset.customerId || "",
+              passenger: passenger.value,
+              travelerId: chooser.dataset.travelerId || "",
             }
           : false;
       })()`),
       10000,
-      "different person keeps the account but clears the verified Traveller",
+      "different passenger keeps the approved Company + Booker account without another prompt",
     );
-    assert.deepEqual(differentPassengerState, { bookerId: "5501", companyId: "55" });
+    assert.deepEqual(differentPassengerSameAccountState, {
+      bookerId: "5501",
+      companyId: "55",
+      customerId: "550",
+      passenger: "Alex Tan",
+      travelerId: "",
+    });
 
     await evaluate(`(() => {
       document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
@@ -9266,7 +9266,7 @@ async function runChromeTest() {
       10000,
       "explicit new Customer Account type choice",
     );
-    assert.deepEqual(newCustomerChoiceState, { account: true, corporate: true, personal: true });
+    assert.deepEqual(newCustomerChoiceState, { account: false, corporate: true, personal: false });
     await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-cancel="true"]')?.click()`);
 
     const startedEmailAiBookerEmailOnly = await evaluate(`(() => {
@@ -9298,15 +9298,19 @@ async function runChromeTest() {
           const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
 
           return accountSelector instanceof HTMLDetailsElement &&
-            accountSelector.dataset.value === "agency:174:41" &&
+            accountSelector.dataset.value === "" &&
             suggestion
             ? {
+                bookerId: accountSelector.dataset.bookerId || "",
+                companyId: accountSelector.dataset.companyId || "",
+                customerId: accountSelector.dataset.customerId || "",
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.method)
                   .filter((method) => method !== "GET"),
                 requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.url),
                 suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
+                travelerId: accountSelector.dataset.travelerId || "",
               }
             : false;
         })()`),
@@ -9314,6 +9318,16 @@ async function runChromeTest() {
       "Email AI exact Booker email app-profile agency suggestion",
     );
     assert.deepEqual(emailAiBookerEmailOnlyState.nonGetMethods, []);
+    assert.deepEqual(
+      {
+        bookerId: emailAiBookerEmailOnlyState.bookerId,
+        companyId: emailAiBookerEmailOnlyState.companyId,
+        customerId: emailAiBookerEmailOnlyState.customerId,
+        travelerId: emailAiBookerEmailOnlyState.travelerId,
+      },
+      { bookerId: "", companyId: "", customerId: "", travelerId: "" },
+      "Expected exact Booker email matching to remain suggestion-only",
+    );
     assert.ok(
       emailAiBookerEmailOnlyState.requestUrls.some((url) =>
         url.includes("operations_email=hyunsoostar%40hotmail.com"),
@@ -21879,6 +21893,7 @@ async function runChromeTest() {
       const bookerRecord = {
         id: savedBooking.booker_id,
         company_id: savedBooking.company_id,
+        customer_id: 161,
         booker_name: savedBooking.bookers.booker_name,
         email: savedBooking.bookers.email,
         phone: savedBooking.bookers.phone,
@@ -22140,6 +22155,9 @@ async function runChromeTest() {
 
         if (url.includes("/api/admin-rate-setup") && method === "GET") {
           return jsonResponse({
+            bookers: window.__prestigeCrmVerifiedBooker
+              ? [window.__prestigeCrmVerifiedBooker]
+              : [],
             companies: [companyRecord],
             ok: true,
             settings: null,
@@ -22271,7 +22289,17 @@ async function runChromeTest() {
             window.__prestigeCrmSaveCollisionAttemptCount += 1;
             const collisionResolution = parsedBody?.customer_account_collision_resolution;
 
-            if (!window.__prestigeCrmSaveCollisionScenarioComplete && !collisionResolution) {
+            if (
+              !window.__prestigeCrmSaveCollisionScenarioComplete &&
+              (
+                !collisionResolution ||
+                (
+                  collisionResolution.action === "create_new" &&
+                  Array.isArray(collisionResolution.reviewed_customer_ids) &&
+                  collisionResolution.reviewed_customer_ids.length === 0
+                )
+              )
+            ) {
               return jsonResponse({
                 customer_account_collision_review: {
                   candidates: [
@@ -22547,8 +22575,15 @@ async function runChromeTest() {
     );
     assert.equal(initialCustomerCollisionReview.headingVisible, true);
     assert.equal(initialCustomerCollisionReview.mergeDisabled, true);
-    assert.equal(initialCustomerCollisionReview.createNewText, "Create new");
-    assert.equal(initialCustomerCollisionReview.bookingPosts[0]?.body?.customer_account_collision_resolution, undefined);
+    assert.equal(initialCustomerCollisionReview.createNewText, "Create new account");
+    assert.deepEqual(
+      initialCustomerCollisionReview.bookingPosts[0]?.body?.customer_account_collision_resolution,
+      {
+        action: "create_new",
+        reviewed_customer_ids: [],
+      },
+      "Expected a newly appeared server candidate to re-open review after the explicit empty-candidate creation decision",
+    );
     assert.equal(initialCustomerCollisionReview.calendarSyncCount, 0);
     assert.equal(initialCustomerCollisionReview.emailAiWriteCount, 0);
 
@@ -22825,12 +22860,12 @@ async function runChromeTest() {
     assert.equal(
       crmSaveState.companyProfileConfirmMessages.length,
       2,
-      "Expected first corporate save to ask once before creating verified identities",
+      "Expected first corporate save to ask once for the Company and once for the new Company + Booker account",
     );
     assert.match(crmSaveState.companyProfileConfirmMessages[0], /Create and link the new CRM company profile/);
     assert.match(
       crmSaveState.companyProfileConfirmMessages[1],
-      /Create or reuse this verified Booker \+ Traveller under BROWSER UI TEST COMPANY/,
+      /Approve this Company \+ Booker Customer Account\? Company: BROWSER UI TEST COMPANY\. Booker: BROWSER UI TEST BOOKER/,
     );
     assert.equal(
       crmSaveState.fetchCalls.filter(
@@ -22844,8 +22879,8 @@ async function runChromeTest() {
         ({ body, method }) =>
           method === "POST" && body?.action_type === "traveler_create",
       ).length,
-      1,
-      "Expected first corporate save to create and link one verified Traveller",
+      0,
+      "Expected the booking-specific passenger not to create or link a durable Traveller profile",
     );
     assert.equal(
       crmSaveState.bookingInsert?.booking?.company_id,
@@ -22853,7 +22888,15 @@ async function runChromeTest() {
       "Expected first corporate booking POST to carry the verified identity tuple",
     );
     assert.equal(crmSaveState.bookingInsert?.booking?.booker_id, 602);
-    assert.equal(crmSaveState.bookingInsert?.booking?.traveler_id, 603);
+    assert.equal(crmSaveState.bookingInsert?.booking?.traveler_id, null);
+    assert.deepEqual(
+      crmSaveState.bookingInsert?.customer_account_collision_resolution,
+      {
+        action: "create_new",
+        reviewed_customer_ids: [163],
+      },
+      "Expected final creation to carry the latest server-revalidated exact candidate set",
+    );
     const firstCorporateBookingPostIndex = crmSaveState.fetchCalls.lastIndexOf(
       "POST /api/admin-bookings",
     );
@@ -22865,7 +22908,7 @@ async function runChromeTest() {
       firstCorporateRateReadIndexes.length >= 2 &&
         firstCorporateRateReadIndexes.at(-1) < firstCorporateBookingPostIndex,
       true,
-      "Expected the saved corporate pair to reload before the booking POST",
+      "Expected the saved Company + Booker identity to reload before the booking POST",
     );
     assert.deepEqual(
       crmSaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
@@ -22891,7 +22934,7 @@ async function runChromeTest() {
             call.includes("/api/admin-saved-addresses")),
       ),
       [],
-      "Expected first corporate save to use only the established typed Booker/Traveller writers",
+      "Expected first corporate save to use only the established typed Booker writer and no legacy direct writes",
     );
     assert.deepEqual(
       crmSaveState.calendarRequests,
@@ -23110,7 +23153,7 @@ async function runChromeTest() {
     );
 
     await clickTab("Dispatch", "Dispatcher Intake");
-    const startedAgencyBooking = await evaluate(`(() => {
+    const resetCompanyBookerBooking = await evaluate(`(() => {
       const newBookingButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "New booking",
       );
@@ -23122,195 +23165,8 @@ async function runChromeTest() {
       newBookingButton.click();
       return true;
     })()`);
-    assert.equal(startedAgencyBooking, true, "Expected a clean new booking before the agency-folder test");
-
-    await setBookingMessageValue(bookingSample, "agency-folder booking message");
-    const parsedAgencyBooking = await evaluate(`(() => {
-      const parseButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Create Job Card",
-      );
-
-      if (!parseButton || parseButton.disabled) {
-        return false;
-      }
-
-      parseButton.click();
-      return true;
-    })()`);
-    assert.equal(parsedAgencyBooking, true, "Expected the agency-folder booking to parse");
-
-    await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(extractStateScript);
-
-        return candidateState?.fields?.company === "BROWSER UI TEST COMPANY" &&
-          candidateState?.fields?.flight === "SQ333"
-          ? candidateState
-          : false;
-      },
-      10000,
-      "parsed agency-folder booking",
-    );
-
-    const retriedAgencyCustomerList = await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-      if (
-        selector instanceof HTMLDetailsElement &&
-        document.querySelector('[data-admin-dispatch-customer-account-option="agency:161:601"]')
-      ) {
-        return "already-loaded";
-      }
-      const retryButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "Retry customer list",
-      );
-
-      if (!retryButton || retryButton.disabled) {
-        return false;
-      }
-
-      retryButton.click();
-      return "retried";
-    })()`);
-    assert.ok(
-      ["already-loaded", "retried"].includes(retriedAgencyCustomerList),
-      "Expected the active agency list to be reused or one visible retry to reload it",
-    );
-
-    await waitForCondition(
-      () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-
-        return selector instanceof HTMLDetailsElement &&
-          document.querySelector('[data-admin-dispatch-customer-account-create="true"]') &&
-          document.querySelector('[data-admin-dispatch-customer-account-option="agency:161:601"]')
-          ? true
-          : false;
-      })()`),
-      10000,
-      "active linked agency folder option",
-    );
-
-    const selectedAgencyFolderState = await evaluate(`(() => {
-      const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-
-      if (!(selector instanceof HTMLDetailsElement)) {
-        return false;
-      }
-
-      document.querySelector('[data-admin-dispatch-customer-account-option="agency:161:601"]')?.click();
-
-      return true;
-    })()`);
-    assert.equal(selectedAgencyFolderState, true, "Expected one agency folder to be selectable");
-
-    const simplifiedAgencyUi = await waitForCondition(
-      () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        const selectedNotice = document.querySelector('[data-admin-dispatch-agency-folder-selected="true"]');
-
-        return selector instanceof HTMLDetailsElement && selector.dataset.value === "agency:161:601" && selectedNotice
-          ? {
-              customerAccountSelectors: document.querySelectorAll('[data-admin-dispatch-customer-account-select="true"]').length,
-              corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
-              corporatePairSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-pair-select="true"]').length,
-              text: selectedNotice.textContent || "",
-            }
-          : false;
-      })()`),
-      10000,
-      "one-selector agency UI",
-    );
-    assert.deepEqual(
-      {
-        customerAccountSelectors: simplifiedAgencyUi.customerAccountSelectors,
-        corporateCustomerSelectors: simplifiedAgencyUi.corporateCustomerSelectors,
-        corporatePairSelectors: simplifiedAgencyUi.corporatePairSelectors,
-      },
-      { customerAccountSelectors: 1, corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
-      "Expected an account booking to keep only the unified customer choice",
-    );
-    assert.match(simplifiedAgencyUi.text, /Passenger name stays on this booking only/);
-
-    await evaluate(`(() => {
-      window.__prestigeCrmCompanyIdentityRequests = [];
-      window.__prestigeCrmCompanyWriteRequests = [];
-      window.__prestigeCrmSaveBookingRecoveryReads = [];
-      window.__prestigeCrmSaveBookingResponseLossCount = 0;
-      window.__prestigeCrmSavePersistedBooking = null;
-      window.__prestigeSaveRequestBodies = [];
-    })()`);
-    const clickedAgencySave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedAgencySave, true, "Expected the one-selector agency booking to save");
-
-    const agencySaveState = await waitForCondition(
-      () => evaluate(`(() => {
-        const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
-          (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-        );
-
-        return bookingInsert && window.__prestigeCrmSaveBookingResponseLossCount === 1
-          ? {
-              bookingInsert: bookingInsert.body,
-              companyIdentityRequests: window.__prestigeCrmCompanyIdentityRequests || [],
-              companyWriteRequests: window.__prestigeCrmCompanyWriteRequests || [],
-              fetchCalls: window.__prestigeFetchCalls || [],
-              recoveryReads: window.__prestigeCrmSaveBookingRecoveryReads || [],
-            }
-          : false;
-      })()`),
-      10000,
-      "one-selector agency Save + CRM",
-    );
-    assert.equal(agencySaveState.bookingInsert?.booking?.customer_id, 161);
-    assert.equal(agencySaveState.bookingInsert?.booking?.company_id, 601);
-    assert.equal(agencySaveState.bookingInsert?.booking?.booker_id, null);
-    assert.equal(agencySaveState.bookingInsert?.booking?.traveler_id, null);
-    assert.equal(agencySaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
-    assert.deepEqual(agencySaveState.companyWriteRequests, []);
-    assert.equal(
-      agencySaveState.fetchCalls.some(
-        (call) => call === "GET /api/admin-customer-accounts?limit=1000",
-      ),
-      true,
-      "Expected existing agency Save + CRM to freshly verify the exact agency folder before any corporate identity writer",
-    );
-    assert.equal(agencySaveState.companyIdentityRequests.length, 1);
-    assert.match(agencySaveState.companyIdentityRequests[0]?.url || "", /[?&]id=601/);
-    assert.equal(
-      agencySaveState.recoveryReads.filter(
-        (request) =>
-          request.bookingReference ===
-          agencySaveState.bookingInsert?.booking?.booking_reference,
-      ).length,
-      1,
-      "Expected one exact response-loss recovery read for the submitted agency booking",
-    );
-
-    const resetAgencyBooking = await evaluate(`(() => {
-      const newBookingButton = [...document.querySelectorAll("button")].find(
-        (button) => button.textContent.trim() === "New booking",
-      );
-
-      if (!newBookingButton || newBookingButton.disabled) {
-        return false;
-      }
-
-      newBookingButton.click();
-      return true;
-    })()`);
-    assert.equal(resetAgencyBooking, true, "Expected New booking to clear the agency-folder selection");
-    const resetAgencyUi = await waitForCondition(
+    assert.equal(resetCompanyBookerBooking, true, "Expected New booking to clear the Customer Account selection");
+    const resetCompanyBookerUi = await waitForCondition(
       () => evaluate(`(() => {
         const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
@@ -23323,12 +23179,12 @@ async function runChromeTest() {
           : false;
       })()`),
       10000,
-      "New booking agency reset",
+      "New booking Customer Account reset",
     );
-    assert.deepEqual(resetAgencyUi, { customerAccountSelectors: 1, corporateCustomerSelectors: 0, selectedNotices: 0 });
+    assert.deepEqual(resetCompanyBookerUi, { customerAccountSelectors: 1, corporateCustomerSelectors: 0, selectedNotices: 0 });
 
-    await setBookingMessageValue(bookingSample, "first agency booking message");
-    const parsedFirstAgencyBooking = await evaluate(`(() => {
+    await setBookingMessageValue(bookingSample, "future Company + Booker booking message");
+    const parsedFutureCompanyBookerBooking = await evaluate(`(() => {
       const parseButton = [...document.querySelectorAll("button")].find(
         (button) => button.textContent.trim() === "Create Job Card",
       );
@@ -23340,7 +23196,7 @@ async function runChromeTest() {
       parseButton.click();
       return true;
     })()`);
-    assert.equal(parsedFirstAgencyBooking, true, "Expected the first agency booking to parse");
+    assert.equal(parsedFutureCompanyBookerBooking, true, "Expected the future Company + Booker booking to parse");
 
     await waitForCondition(
       async () => {
@@ -23352,10 +23208,10 @@ async function runChromeTest() {
           : false;
       },
       10000,
-      "parsed first agency booking",
+      "parsed future Company + Booker booking",
     );
 
-    const openedFirstAgencyMode = await evaluate(`(() => {
+    const openedFutureCompanyBookerMode = await evaluate(`(() => {
       const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
 
       if (!(selector instanceof HTMLDetailsElement)) {
@@ -23365,27 +23221,46 @@ async function runChromeTest() {
       document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click();
       return true;
     })()`);
-    assert.equal(openedFirstAgencyMode, true, "Expected first agency mode chooser to open");
-    await waitForCondition(
-      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]'))`),
-      10000,
-      "first agency account new-customer choice",
-    );
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-account="true"]')?.click()`);
+    assert.equal(openedFutureCompanyBookerMode, true, "Expected the future Customer Account chooser to open");
+    const futureCustomerChoiceState = await waitForCondition(
+      () => evaluate(`(() => {
+        const corporate = document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]');
 
-    const firstAgencyUi = await waitForCondition(
+        return corporate
+          ? {
+              account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
+              corporate: true,
+              label: corporate.textContent.trim(),
+              personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
+            }
+          : false;
+      })()`),
+      10000,
+      "future Company + Booker-only new-customer choice",
+    );
+    assert.deepEqual(futureCustomerChoiceState, {
+      account: false,
+      corporate: true,
+      label: "Create Company + Booker Account",
+      personal: false,
+    });
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
+
+    const futureCompanyBookerUi = await waitForCondition(
       () => evaluate(`(() => {
         const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        const notice = document.querySelector('[data-admin-dispatch-agency-folder-create="true"]');
+        const notice = document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]');
         const companyInput = document.querySelector('input[placeholder="Company / Account"]');
+        const bookerInput = document.querySelector('input[placeholder="Booker"]');
         const passengerInput = document.querySelector('input[placeholder="Passenger name"]');
 
         return selector instanceof HTMLDetailsElement &&
-          selector.dataset.customerId === "create-new-hotel-tour-agency" &&
           notice &&
           companyInput instanceof HTMLInputElement &&
+          bookerInput instanceof HTMLInputElement &&
           passengerInput instanceof HTMLInputElement
           ? {
+              booker: bookerInput.value,
               company: companyInput.value,
               customerAccountSelectors: document.querySelectorAll('[data-admin-dispatch-customer-account-select="true"]').length,
               corporateCustomerSelectors: document.querySelectorAll('[data-admin-dispatch-corporate-customer-select="true"]').length,
@@ -23396,101 +23271,21 @@ async function runChromeTest() {
           : false;
       })()`),
       10000,
-      "first agency light-mode UI",
+      "future Company + Booker light-mode UI",
     );
     assert.deepEqual(
       {
-        customerAccountSelectors: firstAgencyUi.customerAccountSelectors,
-        corporateCustomerSelectors: firstAgencyUi.corporateCustomerSelectors,
-        corporatePairSelectors: firstAgencyUi.corporatePairSelectors,
+        customerAccountSelectors: futureCompanyBookerUi.customerAccountSelectors,
+        corporateCustomerSelectors: futureCompanyBookerUi.corporateCustomerSelectors,
+        corporatePairSelectors: futureCompanyBookerUi.corporatePairSelectors,
       },
       { customerAccountSelectors: 1, corporateCustomerSelectors: 0, corporatePairSelectors: 0 },
-      "Expected first account mode to keep one unified customer choice",
+      "Expected the future Company + Booker mode to keep one unified customer choice",
     );
-    assert.equal(firstAgencyUi.company, "BROWSER UI TEST COMPANY");
-    assert.equal(firstAgencyUi.passenger, "BROWSER UI TEST TRAVELER");
-    assert.match(firstAgencyUi.notice, /Each booking keeps its own passenger name\./i);
-
-    await evaluate(`(() => {
-      window.__prestigeCrmCompanyIdentityRequests = [];
-      window.__prestigeCrmCompanyWriteRequests = [];
-      window.__prestigeCrmSaveBookingRecoveryReads = [];
-      window.__prestigeCrmSaveBookingResponseLossCount = 0;
-      window.__prestigeCrmSavePersistedBooking = null;
-      window.__prestigeSaveRequestBodies = [];
-    })()`);
-    const clickedFirstAgencySave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(clickedFirstAgencySave, true, "Expected first agency Save + CRM to run");
-
-    const firstAgencySaveState = await waitForCondition(
-      () => evaluate(`(() => {
-        const bookingInsert = (window.__prestigeSaveRequestBodies || []).find(
-          (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-        );
-
-        return bookingInsert && window.__prestigeCrmSaveBookingResponseLossCount === 1
-          ? {
-              bookingInsert: bookingInsert.body,
-              companyWriteRequests: window.__prestigeCrmCompanyWriteRequests || [],
-              recoveryReads: window.__prestigeCrmSaveBookingRecoveryReads || [],
-            }
-          : false;
-      })()`),
-      10000,
-      "first agency Save + CRM",
-    );
-    assert.equal(
-      firstAgencySaveState.bookingInsert?.hotel_agency_folder_create?.company_name,
-      "BROWSER UI TEST COMPANY",
-    );
-    assert.equal(firstAgencySaveState.bookingInsert?.booking?.customer_id, null);
-    assert.equal(firstAgencySaveState.bookingInsert?.booking?.company_id, 601);
-    assert.equal(firstAgencySaveState.bookingInsert?.booking?.booker_id, null);
-    assert.equal(firstAgencySaveState.bookingInsert?.booking?.traveler_id, null);
-    assert.equal(firstAgencySaveState.bookingInsert?.booking?.passenger_name, "BROWSER UI TEST TRAVELER");
-    assert.equal(firstAgencySaveState.companyWriteRequests.length, 1);
-    assert.equal(firstAgencySaveState.companyWriteRequests[0]?.body?.action_type, "company_create");
-    assert.equal(firstAgencySaveState.companyWriteRequests[0]?.body?.company_name, "BROWSER UI TEST COMPANY");
-    assert.equal(
-      firstAgencySaveState.recoveryReads.filter(
-        (request) =>
-          request.bookingReference ===
-          firstAgencySaveState.bookingInsert?.booking?.booking_reference,
-      ).length,
-      1,
-      "Expected one exact response-loss recovery read for the first agency booking",
-    );
-
-    const clearedFirstAgencyMode = await waitForCondition(
-      () => evaluate(`(() => {
-        const selector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
-        const companyInput = document.querySelector('input[placeholder="Company / Account"]');
-        const passengerInput = document.querySelector('input[placeholder="Passenger name"]');
-
-        return selector instanceof HTMLDetailsElement &&
-          companyInput instanceof HTMLInputElement &&
-          passengerInput instanceof HTMLInputElement &&
-          selector.dataset.customerId === "" &&
-          companyInput.value === "" &&
-          passengerInput.value === ""
-          ? true
-          : false;
-      })()`),
-      10000,
-      "successful first agency save reset",
-    );
-    assert.equal(clearedFirstAgencyMode, true, "Expected successful Save + CRM to clear first agency mode");
+    assert.equal(futureCompanyBookerUi.company, "BROWSER UI TEST COMPANY");
+    assert.equal(futureCompanyBookerUi.booker, "BROWSER UI TEST BOOKER");
+    assert.equal(futureCompanyBookerUi.passenger, "BROWSER UI TEST TRAVELER");
+    assert.match(futureCompanyBookerUi.notice, /New Company \+ Booker selected/i);
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);
     await evaluate(`window.confirm = window.__prestigeOriginalConfirm || window.confirm`);
@@ -24486,12 +24281,27 @@ async function runChromeTest() {
     })()`);
 
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
-    await waitForCondition(
-      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]'))`),
+    const mrLeeNewCustomerChoiceState = await waitForCondition(
+      () => evaluate(`(() => {
+        const corporate = document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]');
+
+        return corporate
+          ? {
+              account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
+              corporate: true,
+              personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
+            }
+          : false;
+      })()`),
       10000,
-      "Mr Lee personal new-customer choice",
+      "Mr Lee Company + Booker-only new-customer choice",
     );
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')?.click()`);
+    assert.deepEqual(mrLeeNewCustomerChoiceState, {
+      account: false,
+      corporate: true,
+      personal: false,
+    });
+    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
 
     const clickedMrLeeNoCompanySave = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
@@ -24507,189 +24317,34 @@ async function runChromeTest() {
     })()`);
     assert.equal(clickedMrLeeNoCompanySave, true, "Expected Mr Lee no-company save button to be clickable");
 
-    const mrLeeCustomerChoiceState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const choiceButton = document.querySelector('[data-save-crm-personal-customer-create="true"]');
-          const bookingPosts = (window.__prestigeMrLeeSaveRequestBodies || []).filter(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-          );
-
-          return choiceButton && document.body.innerText.includes("No verified CRM customer is selected")
-            ? {
-                bookingPostCount: bookingPosts.length,
-                buttonLabel: choiceButton.textContent.trim(),
-              }
-            : false;
-        })()`),
-      10000,
-      "Mr Lee explicit existing-versus-new customer choice",
-    );
-
-    assert.deepEqual(mrLeeCustomerChoiceState, {
-      bookingPostCount: 0,
-      buttonLabel: "Create New Customer",
-    });
-
-    const confirmedMrLeeNewCustomer = await evaluate(`(() => {
-      const choiceButton = document.querySelector('[data-save-crm-personal-customer-create="true"]');
-
-      if (!choiceButton || choiceButton.disabled) {
-        return false;
-      }
-
-      choiceButton.click();
-      choiceButton.click();
-      return true;
-    })()`);
-    assert.equal(
-      confirmedMrLeeNewCustomer,
-      true,
-      "Expected explicit new personal customer choice to continue the pending Save + CRM",
-    );
-
     const mrLeeNoCompanySaveState = await waitForCondition(
-      async () => {
-        const candidateState = await evaluate(`(() => {
-          const bodyText = document.body.innerText;
-          const bookingInserts = (window.__prestigeMrLeeSaveRequestBodies || []).filter(
-            (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-          );
-          const bookingInsert = bookingInserts[0];
-          const googleCalendarSyncRequests = window.__prestigeMrLeeSaveGoogleCalendarSyncRequests || [];
+      () => evaluate(`(() => {
+        const bodyText = document.body.innerText;
+        const bookingInserts = (window.__prestigeMrLeeSaveRequestBodies || []).filter(
+          (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
+        );
+        const googleCalendarSyncRequests = window.__prestigeMrLeeSaveGoogleCalendarSyncRequests || [];
 
-          return bodyText.includes("Google Calendar auto-synced") &&
-            bookingInserts.length === 1 &&
-            googleCalendarSyncRequests.length === 1
-            ? {
-                bodyText,
-                bookingPostCount: bookingInserts.length,
-                fetchCalls: window.__prestigeFetchCalls || [],
-                googleCalendarSyncRequests,
-                requestBodies: window.__prestigeMrLeeSaveRequestBodies || [],
-                savedBookingReadRequests: window.__prestigeAdminSavedBookingReadRequests || [],
-                unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
-                bookingInsert: bookingInsert?.body || null,
-              }
-            : false;
-        })()`);
-
-        return candidateState || false;
-      },
+        return bodyText.includes("Choose or create the exact Company + Booker Customer Account before Save + CRM.")
+          ? {
+              bookingPostCount: bookingInserts.length,
+              googleCalendarSyncCount: googleCalendarSyncRequests.length,
+              unhandledSupabaseCalls: window.__prestigeUnhandledSupabaseCalls || [],
+            }
+          : false;
+      })()`),
       10000,
-      "Mr Lee no-company successful save",
+      "Mr Lee no-company fail-closed save",
     );
 
     assert.deepEqual(
-      mrLeeNoCompanySaveState.unhandledSupabaseCalls,
-      [],
-      `Expected Mr Lee no-company save to mock every Supabase call, got ${mrLeeNoCompanySaveState.unhandledSupabaseCalls.join(", ")}`,
-    );
-    assert.equal(
-      mrLeeNoCompanySaveState.bookingPostCount,
-      1,
-      "Expected double confirmation to continue the pending Save + CRM exactly once without a second Save click",
-    );
-    assert.equal(
-      mrLeeNoCompanySaveState.savedBookingReadRequests.every(({ method }) => method === "GET"),
-      true,
-      "Expected Mr Lee no-company safe save to use only guarded saved-bookings GET reloads",
-    );
-    assert.deepEqual(
-      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("GET ") && call.includes("/rest/v1/bookings")),
-      [],
-      "Expected Mr Lee no-company post-save reload not to read bookings through the legacy admin data shim",
-    );
-    assert.deepEqual(
-      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/rest/v1/bookings")),
-      [],
-      "Expected Mr Lee no-company save not to create bookings through the legacy admin data shim",
-    );
-    assert.deepEqual(
-      mrLeeNoCompanySaveState.fetchCalls.filter((call) => call.startsWith("POST ") && call.includes("/api/admin-saved-bookings")),
-      [],
-      "Expected Mr Lee no-company save not to POST to the legacy admin saved booking API",
-    );
-    assertNoForbiddenAdminBookingRequestFields(
-      mrLeeNoCompanySaveState.bookingInsert,
-      "safe Mr Lee no-company Save Booking + CRM request",
-    );
-    assert.equal(mrLeeNoCompanySaveState.googleCalendarSyncRequests.length, 1);
-    assert.equal(
-      mrLeeNoCompanySaveState.googleCalendarSyncRequests[0]?.headers?.["x-prestige-admin-purpose"],
-      "admin-booking-persistence",
-    );
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.route_type, "DEP");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.service_type, "DEP");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.vehicle_type_or_category, "AVF");
-    assert.ok(
-      String(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_datetime || "").includes("2026-05-20"),
-      "Expected safe Mr Lee browser fixture to preserve pickup date in the operational payload",
-    );
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pickup_location, "10 Scotts Road");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.dropoff_location, "Changi Airport");
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.passenger_name, mrLeeSaveTravelerName);
-    assert.deepEqual(mrLeeNoCompanySaveState.bookingInsert?.personal_customer_folder_create, {
-      display_name: mrLeeSaveTravelerName,
-    });
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.pax_count, 2);
-    assert.equal(mrLeeNoCompanySaveState.bookingInsert?.booking?.luggage_count, 3);
-    assert.equal(
-      mrLeeNoCompanySaveState.fetchCalls.some(
-        (call) => call.includes("/rest/v1/companies") && call.startsWith("POST "),
-      ),
-      false,
-      "Expected blank Company / Account not to create a fake company",
-    );
-    assert.equal(
-      mrLeeNoCompanySaveState.fetchCalls.some(
-        (call) =>
-          (call.includes("/api/admin-bookers") || call.includes("/rest/v1/travelers")) &&
-          call.startsWith("POST "),
-      ),
-      false,
-      "Expected blank Company / Account not to create CRM booker/traveler records",
-    );
-    assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved successfully\. CRM update failed/i);
-    assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Booking saved, but CRM update failed/i);
-    assert.doesNotMatch(mrLeeNoCompanySaveState.bodyText, /Company:\s*(?:Mr Lee|Internal Account|Draft)/i);
-
-    assert.doesNotMatch(
-      mrLeeNoCompanySaveState.bodyText,
-      /CRM update failed|Booking saved successfully:/i,
-    );
-
-    const clickedUnchangedMrLeePostSuccessSave = await evaluate(`(() => {
-      const saveButton = [...document.querySelectorAll("button")].find(
-        (button) => /^(Save \\+ CRM|Save Booking \\+ CRM)$/.test(button.textContent.trim()),
-      );
-
-      if (!saveButton || saveButton.disabled) {
-        return false;
-      }
-
-      saveButton.click();
-      return true;
-    })()`);
-    assert.equal(
-      clickedUnchangedMrLeePostSuccessSave,
-      true,
-      "Expected the unchanged post-success Save + CRM action to remain safely callable",
-    );
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const unchangedMrLeePostSuccessRequestState = await evaluate(`(() => ({
-      bookingPostCount: (window.__prestigeMrLeeSaveRequestBodies || []).filter(
-        (entry) => entry.method === "POST" && String(entry.url).includes("/api/admin-bookings"),
-      ).length,
-      googleCalendarSyncCount: (window.__prestigeMrLeeSaveGoogleCalendarSyncRequests || []).length,
-    }))()`);
-    assert.deepEqual(
-      unchangedMrLeePostSuccessRequestState,
+      mrLeeNoCompanySaveState,
       {
-        bookingPostCount: 1,
-        googleCalendarSyncCount: 1,
+        bookingPostCount: 0,
+        googleCalendarSyncCount: 0,
+        unhandledSupabaseCalls: [],
       },
-      "Expected an unchanged post-success action to create no duplicate booking POST or Calendar continuation",
+      "Expected a future booking without Company + Booker to fail before booking, CRM, or Calendar writes",
     );
 
     await evaluate(`window.fetch = window.__prestigeOriginalFetch || window.fetch`);

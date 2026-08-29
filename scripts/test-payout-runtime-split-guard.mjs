@@ -101,11 +101,11 @@ const travelerCustomerPayload = sliceBetween(
 const companyCustomerRuntimePayload = sliceBetween(
   appPage,
   "function buildCompanyCustomerRatesRuntimeWritePayload",
-  "function buildTravelerCustomerRatesRuntimeWritePayload",
+  "function buildBookerCustomerRatesRuntimeWritePayload",
 );
-const travelerCustomerRuntimePayload = sliceBetween(
+const bookerCustomerRuntimePayload = sliceBetween(
   appPage,
-  "function buildTravelerCustomerRatesRuntimeWritePayload",
+  "function buildBookerCustomerRatesRuntimeWritePayload",
   "function buildCompanyDriverPayoutRulesRuntimeWritePayload",
 );
 const companyDriverPayoutPayload = sliceBetween(
@@ -133,7 +133,7 @@ for (const [label, source] of [
   ["Company customer rate payload", companyCustomerPayload],
   ["Traveler customer rate payload", travelerCustomerPayload],
   ["Company customer_rates runtime payload", companyCustomerRuntimePayload],
-  ["Traveler customer_rates runtime payload", travelerCustomerRuntimePayload],
+  ["Booker customer_rates runtime payload", bookerCustomerRuntimePayload],
 ]) {
   assertIncludes(source, "customer_rates", label);
   assertExcludes(source, /driverPayout|driver_payout|payout|paynow|pay_now/i, label);
@@ -168,11 +168,11 @@ const saveRateOverride = sliceBetween(
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
@@ -180,29 +180,20 @@ assertIncludes(saveRateOverride, "saveCustomerRatesRuntime", "Customer rates run
 assertIncludes(saveRateOverride, "driver_payout_rules", "Payout rules remain explicit in legacy override flow");
 assertIncludes(saveRateOverride, "saveDriverPayoutRulesRuntime", "Payout runtime call remains guarded separately");
 assertIncludes(saveRateOverride, "buildCompanyRateOverridePayload", "Company combined legacy payload remains explicit");
-assertIncludes(saveRateOverride, "buildTravelerRateOverridePayload", "Traveler combined legacy payload remains explicit");
 assertBefore(
   saveRateOverride,
-  "const companyCustomerRatesRuntime",
+  "const customerRatesRuntime",
   "const companyUpdate = await adminLegacyDataClient",
-  "Company customer_rates runtime before legacy payout fallback",
-);
-assertBefore(
-  saveRateOverride,
-  "const travelerCustomerRatesRuntime",
-  "const travelerUpdate = await adminLegacyDataClient",
-  "Traveler customer_rates runtime before legacy payout fallback",
+  "Customer rates runtime before legacy Company payout fallback",
 );
 
-for (const [label, source] of [
-  ["Company override remove", removeCompanyRateOverride],
-  ["Traveler override remove", removeBossRateOverride],
-]) {
-  assertIncludes(source, "saveCustomerRatesRuntime", `${label} customer_rates runtime clear`);
-  assertIncludes(source, "saveDriverPayoutRulesRuntime", `${label} payout runtime clear`);
-  assertIncludes(source, "driverPayoutRules: {}", `${label} parked payout clear remains explicit`);
-  assertIncludes(source, "adminLegacyDataClient", `${label} payout remains on legacy fallback`);
-}
+assertIncludes(removeCompanyRateOverride, "saveCustomerRatesRuntime", "Company override customer_rates runtime clear");
+assertIncludes(removeCompanyRateOverride, "saveDriverPayoutRulesRuntime", "Company override payout runtime clear");
+assertIncludes(removeCompanyRateOverride, "driverPayoutRules: {}", "Company parked payout clear remains explicit");
+assertIncludes(removeCompanyRateOverride, "adminLegacyDataClient", "Company payout remains on legacy fallback");
+assertIncludes(removeBookerRateOverride, "saveCustomerRatesRuntime", "Booker customer_rates runtime clear");
+assertExcludes(removeBookerRateOverride, "saveDriverPayoutRulesRuntime", "Booker rate clear must not change Company payout");
+assertExcludes(removeBookerRateOverride, "driverPayoutRules: {}", "Booker rate clear must not clear Company payout");
 
 const customerRatesRuntimeWritePayload = sliceBetween(
   customerRatesRuntimeHelper,

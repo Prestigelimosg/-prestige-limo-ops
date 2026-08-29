@@ -41,15 +41,6 @@ function sliceBetween(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-function assertBefore(source, earlier, later, label) {
-  const earlierIndex = source.indexOf(earlier);
-  const laterIndex = source.indexOf(later);
-
-  assert.notEqual(earlierIndex, -1, `${label} missing earlier marker: ${earlier}`);
-  assert.notEqual(laterIndex, -1, `${label} missing later marker: ${later}`);
-  assert.ok(earlierIndex < laterIndex, `${label} must keep ${earlier} before ${later}.`);
-}
-
 const [
   appPage,
   aiParseRoute,
@@ -100,58 +91,33 @@ const saveRateOverride = sliceBetween(
   "async function saveRateOverride",
   "async function removeCompanyRateOverride",
 );
-const legacyCompanyCreate = sliceBetween(
-  saveRateOverride,
-  "const createdCompany = await adminLegacyDataClient",
-  "} else if (!companyIdentitySynced) {",
-);
-
-assertIncludes(
-  saveRateOverride,
-  "const shouldDeferCompanyCustomerRatesToRuntime = !bossName && hasCustomerRateOverrides;",
-  "Company create customer_rates deferral decision",
-);
-assertIncludes(
-  legacyCompanyCreate,
-  "includeCustomerRates: !shouldDeferCompanyCustomerRatesToRuntime",
-  "Company create omits customer_rates before runtime boundary",
-);
-assertBefore(
-  saveRateOverride,
-  "const createdCompany = await adminLegacyDataClient",
-  "const companyCustomerRatesRuntime",
-  "Company create then customer_rates runtime call",
-);
-assertIncludes(
-  saveRateOverride,
-  "includeCustomerRates: !companyCustomerRatesRuntime.saved",
-  "Company legacy fallback only writes customer_rates when runtime did not save",
-);
-
 for (const fragment of [
-  "const travelerId = positiveId(rateOverrideDraft.travelerId);",
-  '.eq("id", travelerId)',
-  '.eq("company_id", company.id)',
-  '.select("id, company_id, traveler_name, booker_id, customer_rates, driver_payout_rules, card_option_default_enabled")',
-  "Select one existing Traveller from this company before saving a Traveller override.",
+  "const companyId = positiveId(rateOverrideDraft.companyId);",
+  "const bookerId = positiveId(rateOverrideDraft.bookerId);",
+  "const customerId = positiveId(selectedDraftBooker?.customer_id);",
+  "buildBookerCustomerRatesRuntimeWritePayload(",
+  "buildCompanyCustomerRatesRuntimeWritePayload(companyId, mergedCustomerRates)",
+  "includeCustomerRates:",
+  "!isCustomerAccountOverride && !customerRatesRuntime.saved",
 ]) {
-  assertIncludes(saveRateOverride, fragment, "Verified Traveller rate-override identity");
+  assertIncludes(saveRateOverride, fragment, "Verified Customer Account rate-override identity");
 }
 assertExcludes(
   saveRateOverride,
-  'action_type: "traveler_create"',
-  "Rates override save must not create a Traveller identity",
+  "const createdCompany = await adminLegacyDataClient",
+  "Rates override save must not create a Company identity",
 );
 assertExcludes(
   saveRateOverride,
-  '.ilike("traveler_name", bossName)',
-  "Rates override save must not resolve a Traveller from typed display text",
+  "adminLegacyTables.travelers",
+  "Rates override save must not target a Traveller identity",
 );
 assertIncludes(
   appPage,
-  'data-rate-override-traveler-id="true"',
-  "Existing Rates override panel exact Traveller selector",
+  'data-rate-customer-account="true"',
+  "Existing Rates exact Customer Account selector",
 );
+assertExcludes(appPage, 'data-rate-override-traveler-id="true"', "Normal Rates UI must not expose Traveller rate identity");
 
 const saveBooking = sliceBetween(appPage, "async function saveBooking", "async function loadBookings");
 assertIncludes(saveBooking, 'fetch("/api/admin-bookings"', "Save Booking + CRM endpoint");

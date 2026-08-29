@@ -18,6 +18,8 @@ const source = Object.fromEntries(await Promise.all(
 ));
 
 for (const phrase of [
+  "window.setTimeout(() => {",
+  "window.clearTimeout(initializeRecoveryTimer)",
   'recoveryFragment.get("type") !== "recovery"',
   'recoveryFragment.get("access_token")',
   'recoveryFragment.get("refresh_token")',
@@ -33,6 +35,15 @@ for (const phrase of [
 ]) {
   assert.ok(source.client.includes(phrase), `Admin PIN recovery UI missing: ${phrase}`);
 }
+const recoveryInitializerStart = source.client.indexOf("useEffect(() => {");
+const recoveryTimerStart = source.client.indexOf("window.setTimeout(() => {", recoveryInitializerStart);
+const recoveryModeUpdate = source.client.indexOf('setMode("sign_in")', recoveryInitializerStart);
+assert.ok(recoveryInitializerStart >= 0, "Admin recovery initializer effect must exist");
+assert.ok(recoveryTimerStart > recoveryInitializerStart, "Admin recovery initialization must defer to a cancellable browser task");
+assert.ok(
+  recoveryModeUpdate > recoveryTimerStart,
+  "Admin recovery mode updates must not run synchronously inside the mount effect",
+);
 for (const forbidden of [
   "localStorage",
   "sessionStorage",

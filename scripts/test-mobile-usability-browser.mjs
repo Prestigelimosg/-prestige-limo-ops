@@ -4484,6 +4484,8 @@ async function runChromeTest() {
         `${viewport.label}: expected admin access hub links to stay compact and touchable`,
       );
 
+      await clickTab("Dispatch");
+
       const internalQaMockArchiveDefaultState = await waitForCondition(
         () =>
           evaluate(`(() => {

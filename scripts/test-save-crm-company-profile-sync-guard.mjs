@@ -69,7 +69,7 @@ assert.match(
 );
 for (const disclosure of [
   `Create and link the new CRM company profile "${"${requestedCompanyName}"}" using this booking's Booker contact? This does not create an invoice, change rates, or send a message. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
-  `Create or reuse this verified Booker + Traveller under ${"${companyName}"}? Booker: ${"${bookerName}"}. Traveller: ${"${travelerName}"}. This saves the pair to the customer profile and links it to this booking. It does not create an invoice, send a message, change driver, payment, or agency guests. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
+  `Approve this Company + Booker Customer Account? Company: ${"${companyName}"}. Booker: ${"${bookerName}"}. This creates the account only after your approval. It does not create an invoice, send a message, or change driver or payment. Saving a complete booking also syncs it to the existing private Operations Calendar with no attendees or guest email (sendUpdates=none).`,
 ]) {
   assert.ok(
     appSource.includes(disclosure),

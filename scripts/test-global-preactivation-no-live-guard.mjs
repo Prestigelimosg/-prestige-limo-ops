@@ -45,6 +45,12 @@ const separatelyGuardedPostRouteFiles = new Map([
     "scripts/test-admin-customer-driver-details-email-send-action-api-contract.mjs",
   ],
 ]);
+const separatelyGuardedReviewPatchRouteFiles = new Map([
+  [
+    "app/api/admin-email-ai-intake/route.ts",
+    "scripts/test-admin-email-ai-intake-guard.mjs",
+  ],
+]);
 const separatelyGuardedRuntimeRouteFiles = new Map([
   [
     "app/api/admin-live-location-runtime/route.ts",
@@ -176,6 +182,29 @@ assert.ok(routeFiles.length > 0, "Global guard must find completed setup route f
 
 for (const routeFile of routeFiles) {
   const source = await readFile(routeFile, "utf8");
+
+  if (separatelyGuardedReviewPatchRouteFiles.has(routeFile)) {
+    assert.match(source, /export async function GET/, `${routeFile} must expose its guarded GET read.`);
+    assert.match(source, /export async function PATCH/, `${routeFile} must expose its guarded PATCH review.`);
+    assert.equal(
+      /export async function (POST|PUT|DELETE)/.test(source),
+      false,
+      `${routeFile} must not expose extra live activation verbs.`,
+    );
+    assertIncludes(source, "resolveAdminDispatcherBoundary", `${routeFile} admin dispatcher boundary`);
+    assertIncludes(
+      source,
+      'allowServerSessionRoleMethodsWithoutRequestToken: ["PATCH"]',
+      `${routeFile} guarded server-session review method`,
+    );
+    assert.equal(
+      directLiveActivationPattern.test(source),
+      false,
+      `${routeFile} must not contain direct browser/provider live activation calls.`,
+    );
+    await fileExists(separatelyGuardedReviewPatchRouteFiles.get(routeFile));
+    continue;
+  }
 
   if (separatelyGuardedPostRouteFiles.has(routeFile)) {
     assert.match(source, /export async function POST/, `${routeFile} must expose its guarded POST action.`);

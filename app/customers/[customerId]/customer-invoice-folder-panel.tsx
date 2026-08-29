@@ -40,6 +40,7 @@ type InvoiceEditLineItem = {
 };
 type IssuedInvoiceDspSavedBooking = {
   booking_reference?: string | null;
+  booker_id?: number | null;
   child_seat_count?: number | null;
   company_id?: number | null;
   customer_id?: number | string | null;
@@ -193,9 +194,13 @@ function calculateIssuedInvoiceDspLine(
   return calculateCustomerInvoiceRateReview(
     {
       actualMinutes: timeRange.actualMinutes,
+      bookerId: context.booking.booker_id,
       bookingType: "DSP",
       childSeatCount: context.booking.child_seat_count,
       companyId: context.booking.company_id,
+      customerId: Number.isSafeInteger(Number(context.booking.customer_id))
+        ? Number(context.booking.customer_id)
+        : null,
       extraStopCount: context.booking.extra_stop_count,
       pickupAt: context.booking.pickup_at,
       travelerId: context.booking.traveler_id,

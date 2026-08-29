@@ -59,6 +59,7 @@ export type DspCustomerInvoiceAmountCalculation = {
 };
 
 type PricingRecord = {
+  customer_rate_source?: "account" | "legacy_traveler" | null;
   customer_rates?: RateRules | null;
   driver_payout_rules?: DriverPayoutRules | null;
 };
@@ -309,7 +310,7 @@ export function resolvePricing(
   let pricingSource = "default";
 
   if (customerRate !== null) {
-    pricingSource = "boss";
+    pricingSource = nameRecord?.customer_rate_source || "account";
   } else if (hasRateRules(company.customer_rates)) {
     customerRate = rateFromRules(company.customer_rates, bookingType, vehicleType);
 

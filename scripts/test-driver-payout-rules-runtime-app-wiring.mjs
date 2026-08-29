@@ -161,35 +161,34 @@ const saveRateOverride = sliceBetween(
 assertIncludes(saveRateOverride, "const hasDriverPayoutOverrides", "Driver payout override presence check");
 assertIncludes(saveRateOverride, "saveDriverPayoutRulesRuntime", "Rate override payout runtime call");
 assertIncludes(saveRateOverride, "buildCompanyDriverPayoutRulesRuntimeWritePayload", "Company payout runtime payload call");
-assertIncludes(saveRateOverride, "buildTravelerDriverPayoutRulesRuntimeWritePayload", "Traveler payout runtime payload call");
-assertIncludes(saveRateOverride, "|| !hasDriverPayoutOverrides", "Driver-only company save skips payout runtime when empty");
+assertIncludes(saveRateOverride, "!hasDriverPayoutOverrides", "Company payout runtime skips an empty override");
 assertIncludes(saveRateOverride, "includeDriverPayoutRules: !companyDriverPayoutRulesRuntime.saved", "Company legacy payout overwrite guard");
-assertIncludes(saveRateOverride, "includeDriverPayoutRules: !travelerDriverPayoutRulesRuntime.saved", "Traveler legacy payout overwrite guard");
 assertBefore(saveRateOverride, "const companyDriverPayoutRulesRuntime", "const companyUpdate", "Company payout runtime ordering");
-assertBefore(saveRateOverride, "const travelerDriverPayoutRulesRuntime", "const travelerUpdate", "Traveler payout runtime ordering");
-assertBefore(saveRateOverride, "let travelerDriverPayoutRulesRuntime", "const travelerInsert", "New traveler identity payout runtime ordering");
-assertBefore(saveRateOverride, "const createdTravelerDriverPayoutRulesRuntime", "const travelerCustomerRatesFallback", "Created traveler payout runtime fallback ordering");
+assertExcludes(saveRateOverride, "buildTravelerDriverPayoutRulesRuntimeWritePayload", "Normal Customer Account save must not use Traveller payout identity");
+assertExcludes(saveRateOverride, "const travelerInsert", "Retired new traveler insert path");
+assertExcludes(
+  saveRateOverride,
+  "const createdTravelerDriverPayoutRulesRuntime",
+  "Retired created-traveler payout runtime path",
+);
 
 const removeCompanyRateOverride = sliceBetween(
   appPage,
   "async function removeCompanyRateOverride",
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
 );
-const removeBossRateOverride = sliceBetween(
+const removeBookerRateOverride = sliceBetween(
   appPage,
-  "async function removeBossRateOverride",
+  "async function removeBookerRateOverride",
   "async function loadDrivers",
 );
 
-for (const [label, source] of [
-  ["Company override remove", removeCompanyRateOverride],
-  ["Traveler override remove", removeBossRateOverride],
-]) {
-  assertIncludes(source, "saveDriverPayoutRulesRuntime", `${label} payout clear runtime call`);
-  assertIncludes(source, "driverPayoutRules: {}", `${label} payout clear payload`);
-  assertIncludes(source, "includeDriverPayoutRules: !", `${label} legacy payout clear fallback`);
-  assertIncludes(source, "saveCustomerRatesRuntime", `${label} customer_rates clear remains separate`);
-}
+assertIncludes(removeCompanyRateOverride, "saveDriverPayoutRulesRuntime", "Company override payout clear runtime call");
+assertIncludes(removeCompanyRateOverride, "driverPayoutRules: {}", "Company override payout clear payload");
+assertIncludes(removeCompanyRateOverride, "includeDriverPayoutRules: !", "Company legacy payout clear fallback");
+assertIncludes(removeCompanyRateOverride, "saveCustomerRatesRuntime", "Company customer_rates clear remains separate");
+assertExcludes(removeBookerRateOverride, "saveDriverPayoutRulesRuntime", "Booker rate clear must preserve Company payout");
+assertExcludes(removeBookerRateOverride, "driverPayoutRules: {}", "Booker rate clear must preserve Company payout values");
 
 const customerRatesRuntimeWritePayload = sliceBetween(
   customerRatesRuntimeHelper,

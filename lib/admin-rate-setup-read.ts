@@ -38,6 +38,14 @@ export type AdminRateSetupCompany = {
   transzend_excel_privacy: boolean | null;
 };
 
+export type AdminRateSetupBooker = {
+  booker_name: string | null;
+  company_id: number;
+  customer_id: number | null;
+  customer_rates: RateRules;
+  id: number;
+};
+
 export type AdminRateSetupTraveler = {
   booker_id: number | null;
   booker_name: string | null;
@@ -50,6 +58,7 @@ export type AdminRateSetupTraveler = {
 };
 
 export type AdminRateSetupReadResult = {
+  bookers: AdminRateSetupBooker[];
   companies: AdminRateSetupCompany[];
   settings: AdminRateSetupSettings | null;
   travelers: AdminRateSetupTraveler[];
@@ -69,6 +78,7 @@ const rateSettingsSelect =
   "customer_rates, driver_payout_rules, midnight_surcharge, extra_stop_surcharge, midnight_payout, extra_stop_payout, child_seat_customer_surcharge, child_seat_driver_payout";
 const companySelect =
   "id, company_name, domain, customer_rates, driver_payout_rules, transzend_excel_privacy, card_option_default_enabled";
+const bookerSelect = "id, company_id, customer_id, booker_name, customer_rates";
 const travelerSelect =
   "id, company_id, booker_id, booker_name, traveler_name, customer_rates, driver_payout_rules, card_option_default_enabled";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
@@ -475,6 +485,24 @@ function toRateSetupTraveler(row: unknown): AdminRateSetupTraveler | null {
   };
 }
 
+function toRateSetupBooker(row: unknown): AdminRateSetupBooker | null {
+  const record = asRecord(row);
+  const id = positiveIntegerOrNull(record.id);
+  const companyId = positiveIntegerOrNull(record.company_id);
+
+  if (!id || !companyId) {
+    return null;
+  }
+
+  return {
+    booker_name: textOrNull(record.booker_name),
+    company_id: companyId,
+    customer_id: positiveIntegerOrNull(record.customer_id),
+    customer_rates: rateRulesFromDb(record.customer_rates),
+    id,
+  };
+}
+
 export async function loadAdminRateSetup(
   actor: AdminBookingPersistenceAdapterActor,
 ): Promise<AdminBookingResult<AdminRateSetupReadResult>> {
@@ -484,7 +512,7 @@ export async function loadAdminRateSetup(
     return clientResult;
   }
 
-  const [settingsResult, companiesResult, travelersResult] = await Promise.all([
+  const [settingsResult, companiesResult, bookersResult, travelersResult] = await Promise.all([
     clientResult.data
       .from("rate_settings")
       .select(rateSettingsSelect)
@@ -496,12 +524,17 @@ export async function loadAdminRateSetup(
       .select(companySelect)
       .order("company_name", { ascending: true }),
     clientResult.data
+      .from("bookers")
+      .select(bookerSelect)
+      .order("booker_name", { ascending: true }),
+    clientResult.data
       .from("travelers")
       .select(travelerSelect)
       .order("traveler_name", { ascending: true }),
   ]);
 
-  const error = settingsResult.error || companiesResult.error || travelersResult.error;
+  const error =
+    settingsResult.error || companiesResult.error || bookersResult.error || travelersResult.error;
 
   if (error) {
     return safeAdapterFailure(safeRateSetupReadError, 500, error);
@@ -509,6 +542,9 @@ export async function loadAdminRateSetup(
 
   return {
     data: {
+      bookers: asArray(bookersResult.data)
+        .map(toRateSetupBooker)
+        .filter((booker): booker is AdminRateSetupBooker => Boolean(booker)),
       companies: asArray(companiesResult.data)
         .map(toRateSetupCompany)
         .filter((company): company is AdminRateSetupCompany => Boolean(company)),

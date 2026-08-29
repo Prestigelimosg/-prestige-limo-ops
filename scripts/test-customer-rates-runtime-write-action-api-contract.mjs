@@ -106,13 +106,15 @@ function safeInput(overrides = {}) {
   };
 }
 
-function travelerInput() {
+function bookerInput() {
   return safeInput({
-    action_type: "traveler_customer_rates_update",
+    action_type: "booker_customer_rates_update",
+    company_id: 26,
     customer_rates: {
       DSP: 65,
       TRF: 70,
     },
+    customer_id: 163,
     id: 88,
   });
 }
@@ -234,30 +236,35 @@ function mockedClient(calls) {
       return {
         update(payload) {
           calls.push({ payload });
-
-          return {
+          let recordId = null;
+          const query = {
             eq(column, id) {
               calls.push({ column, id });
 
-              return {
-                select(select) {
-                  calls.push({ select });
+              if (column === "id") {
+                recordId = id;
+              }
 
+              return query;
+            },
+            select(select) {
+              calls.push({ select });
+
+              return {
+                async single() {
                   return {
-                    async single() {
-                      return {
-                        data: {
-                          customer_rates: payload.customer_rates,
-                          id,
-                        },
-                        error: null,
-                      };
+                    data: {
+                      customer_rates: payload.customer_rates,
+                      id: recordId,
                     },
+                    error: null,
                   };
                 },
               };
             },
           };
+
+          return query;
         },
       };
     },
@@ -329,8 +336,8 @@ for (const forbiddenFragment of forbiddenFieldFragments) {
 
 assertIncludes(appPage, routePathFragment, "App page must call the gated customer rates runtime write route");
 assertIncludes(appPage, "saveCustomerRatesRuntime", "App page customer rates runtime helper");
-assertIncludes(appPage, "includeCustomerRates: !companyCustomerRatesRuntime.saved", "Company fallback customer_rates guard");
-assertIncludes(appPage, "includeCustomerRates: !travelerCustomerRatesRuntime.saved", "Traveler fallback customer_rates guard");
+assertIncludes(appPage, "!isCustomerAccountOverride && !customerRatesRuntime.saved", "Company-only fallback customer_rates guard");
+assertIncludes(appPage, "buildBookerCustomerRatesRuntimeWritePayload", "Booker exact-account customer_rates guard");
 assertExcludes(aiParseRoute, routePathFragment, "Parser route must not call customer rates runtime write route");
 assertExcludes(adminBookingsRoute, routePathFragment, "Admin bookings route must not call customer rates runtime write route");
 assertExcludes(adminSavedBookingsRoute, routePathFragment, "Admin saved bookings route must not call customer rates runtime write route");
@@ -415,13 +422,33 @@ try {
   ]);
   assert.equal(typeof companyCalls[1].payload.updated_at, "string", "Company save must stamp updated_at.");
 
-  const travelerCalls = [];
-  const savedTraveler = await executeAdminCustomerRatesRuntimeWriteAction(travelerInput(), serverActor, {
-    clientFactory: () => mockedClient(travelerCalls),
+  const bookerCalls = [];
+  const savedBooker = await executeAdminCustomerRatesRuntimeWriteAction(bookerInput(), serverActor, {
+    clientFactory: () => mockedClient(bookerCalls),
   });
-  assertSaved(savedTraveler, "Mocked traveler customer rates save", { DSP: 65, TRF: 70 });
-  assert.equal(travelerCalls[0].table, "travelers", "Traveler customer rates save must target travelers.");
-  assert.deepEqual(travelerCalls[1].payload.customer_rates, { DSP: 65, TRF: 70 });
+  assertSaved(savedBooker, "Mocked Booker customer rates save", { DSP: 65, TRF: 70 });
+  assert.equal(bookerCalls[0].table, "bookers", "Booker customer rates save must target bookers.");
+  assert.deepEqual(bookerCalls[1].payload.customer_rates, { DSP: 65, TRF: 70 });
+  assert.deepEqual(
+    bookerCalls.slice(2, 5),
+    [
+      { column: "id", id: 88 },
+      { column: "company_id", id: 26 },
+      { column: "customer_id", id: 163 },
+    ],
+    "Booker customer rates save must bind the exact Booker, Company and Customer Account IDs.",
+  );
+
+  const retiredTravelerWrite = await executeAdminCustomerRatesRuntimeWriteAction(
+    safeInput({ action_type: "traveler_customer_rates_update" }),
+    serverActor,
+    {
+      clientFactory() {
+        throw new Error("Retired traveller rate writes must be rejected before a DB client is created");
+      },
+    },
+  );
+  assertRejected(retiredTravelerWrite, ["action_type"], "Retired traveller customer-rate action");
 
   const clearCalls = [];
   const clearedCompany = await executeAdminCustomerRatesRuntimeWriteAction(

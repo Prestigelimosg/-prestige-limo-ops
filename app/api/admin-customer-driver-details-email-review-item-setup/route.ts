@@ -14,6 +14,22 @@ type AdminDispatcherBoundaryCheck =
   | { context: AdminDispatcherBoundaryContext; ok: true }
   | { ok: false; response: Response };
 
+function customerDriverDetailsReadinessLabel(missingRequirements: string[]) {
+  if (missingRequirements.includes("driver_name")) {
+    return "No driver assigned";
+  }
+
+  if (
+    missingRequirements.some((requirement) =>
+      ["driver_phone", "vehicle_plate", "vehicle_type"].includes(requirement),
+    )
+  ) {
+    return "Waiting for complete driver details";
+  }
+
+  return "Customer driver details ready";
+}
+
 function blockedResponse(error: string) {
   return Response.json(
     {
@@ -28,7 +44,7 @@ function blockedResponse(error: string) {
         customerEmailReady: false,
         external_send: false,
         item_key: "customer_driver_details_email",
-        label: "Customer driver details ready",
+        label: "No driver assigned",
         sendingEnabled: false,
         status: "blocked",
       },
@@ -61,7 +77,7 @@ function safeFailureResponse() {
         customerEmailReady: false,
         external_send: false,
         item_key: "customer_driver_details_email",
-        label: "Customer driver details ready",
+        label: "No driver assigned",
         sendingEnabled: false,
         status: "blocked",
       },
@@ -109,7 +125,7 @@ export async function GET(request: Request) {
         external_send: handoff.external_send,
         handoff_status: handoff.handoff_status,
         item_key: "customer_driver_details_email",
-        label: "Customer driver details ready",
+        label: customerDriverDetailsReadinessLabel(handoff.missing_requirements),
         missing_requirements: handoff.missing_requirements,
         preview: handoff.preview,
         readiness_status: handoff.customerEmailReady ? "ready" : "blocked",

@@ -2024,7 +2024,7 @@ function assertBookingUiState(state) {
       disabledSendExternalSend: "false",
       disabledSendLoadedReference: "",
       disabledSendSendingEnabled: "false",
-      label: "Customer driver details ready",
+      label: "Waiting for complete driver details",
       loadedReference: "",
       readState: "idle",
       readyState: "blocked",
@@ -6561,6 +6561,13 @@ async function runChromeTest() {
             url.searchParams.get("vehicle_plate") ? "" : "vehicle_plate",
           ].filter(Boolean);
           const customerEmailReady = missingRequirements.length === 0;
+          const customerDriverDetailsLabel = !url.searchParams.get("driver_name")
+            ? "No driver assigned"
+            : ["driver_phone", "vehicle_type", "vehicle_plate"].some((requirement) =>
+                missingRequirements.includes(requirement),
+              )
+              ? "Waiting for complete driver details"
+              : "Customer driver details ready";
 
           return new Response(
             JSON.stringify({
@@ -6575,7 +6582,7 @@ async function runChromeTest() {
                 disabled_send_status: "blocked",
                 external_send: false,
                 item_key: "customer_driver_details_email",
-                label: "Customer driver details ready",
+                label: customerDriverDetailsLabel,
                 missing_requirements: missingRequirements,
                 readiness_status: customerEmailReady ? "ready" : "blocked",
                 sendingEnabled: false,
@@ -17012,6 +17019,13 @@ async function runChromeTest() {
             url.searchParams.get("vehicle_plate") ? "" : "vehicle_plate",
           ].filter(Boolean);
           const customerEmailReady = missingRequirements.length === 0;
+          const customerDriverDetailsLabel = !url.searchParams.get("driver_name")
+            ? "No driver assigned"
+            : ["driver_phone", "vehicle_type", "vehicle_plate"].some((requirement) =>
+                missingRequirements.includes(requirement),
+              )
+              ? "Waiting for complete driver details"
+              : "Customer driver details ready";
 
           window.__prestigeFetchCalls.push(\`\${method} \${target}\`);
           window.__prestigeCustomerDriverDetailsEmailReviewItemRequests.push({
@@ -17038,7 +17052,7 @@ async function runChromeTest() {
                 disabled_send_status: "blocked",
                 external_send: false,
                 item_key: "customer_driver_details_email",
-                label: "Customer driver details ready",
+                label: customerDriverDetailsLabel,
                 missing_requirements: missingRequirements,
                 sendingEnabled: false,
               },

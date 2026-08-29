@@ -100,6 +100,8 @@ for (const fragment of [
   "resolveAdminDispatcherBoundary",
   "adminBookingPersistencePurpose",
   "export async function GET",
+  "No driver assigned",
+  "Waiting for complete driver details",
   "Customer driver details ready",
   "Review email to customer",
   "adminReviewRequired",
@@ -151,6 +153,7 @@ try {
   assert.equal(anonymous.external_send, false);
   assert.equal(anonymous.sendingEnabled, false);
   assert.equal(anonymous.reviewItem.actionLabel, "Review email to customer");
+  assert.equal(anonymous.reviewItem.label, "No driver assigned");
 
   const readyResponse = await harness.route.GET(
     new Request(
@@ -192,6 +195,28 @@ try {
     "Ready review item output must stay setup-only and customer-safe.",
   );
 
+  const incompleteDriverResponse = await harness.route.GET(
+    new Request(
+      apiUrl({
+        booking_reference: "PLO-REVIEW-002",
+        customer_email: "EA.Team+ClientB@example.com",
+        driver_ack_status: "driver_acknowledged",
+        driver_name: "Tan Driver",
+      }),
+      { headers: adminHeaders() },
+    ),
+  );
+  const incompleteDriver = await incompleteDriverResponse.json();
+
+  assert.equal(incompleteDriverResponse.status, 200);
+  assert.equal(incompleteDriver.reviewItem.label, "Waiting for complete driver details");
+  assert.equal(incompleteDriver.reviewItem.readiness_status, "blocked");
+  assert.deepEqual(incompleteDriver.reviewItem.missing_requirements, [
+    "driver_phone",
+    "vehicle_type",
+    "vehicle_plate",
+  ]);
+
   const blockedResponse = await harness.route.GET(
     new Request(
       apiUrl({
@@ -215,6 +240,7 @@ try {
   assert.equal(blocked.external_send, false);
   assert.equal(blocked.sendingEnabled, false);
   assert.equal(blocked.reviewItem.actionLabel, "Review email to customer");
+  assert.equal(blocked.reviewItem.label, "No driver assigned");
   assert.equal(blocked.reviewItem.readiness_status, "blocked");
   assert.equal(blocked.reviewItem.customerEmailReady, false);
   assert.equal(blocked.reviewItem.disabled_send_status, "blocked");

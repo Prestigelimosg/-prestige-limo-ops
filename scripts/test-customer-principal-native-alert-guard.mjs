@@ -25,6 +25,32 @@ const migrationName = readdirSync(join(root, "supabase/migrations"))
 assert.ok(migrationName, "customer principal/native-alert migration must be created by Supabase CLI");
 
 const migration = read(`supabase/migrations/${migrationName}`);
+const companyBookerRootMigrationName = readdirSync(join(root, "supabase/migrations"))
+  .filter((name) => name.endsWith("_customer_company_booker_root_access.sql"))
+  .sort()
+  .at(-1);
+
+assert.ok(
+  companyBookerRootMigrationName,
+  "Customer Company+Booker root-access migration must be created by Supabase CLI",
+);
+
+const companyBookerRootMigration = read(`supabase/migrations/${companyBookerRootMigrationName}`);
+assert.match(
+  companyBookerRootMigration,
+  /alter table public\.customer_access_memberships[\s\S]*?alter column traveler_id drop not null/i,
+  "New operational access must not require a booking-specific Traveller",
+);
+assert.match(
+  companyBookerRootMigration,
+  /create unique index customer_access_memberships_company_booker_root_key[\s\S]*?principal_id, company_id, booker_id[\s\S]*?where traveler_id is null/i,
+  "Each principal must have only one root membership for an exact Company+Booker scope",
+);
+assert.doesNotMatch(
+  companyBookerRootMigration,
+  /drop table|delete from|truncate|alter table public\.(?:customer_access_principals|customer_access_devices|customer_access_device_sessions|customer_device_push_subscriptions)/i,
+  "The additive root-access migration must preserve principals, devices, sessions, and push subscriptions",
+);
 const nativeTokenConflictRepairName = readdirSync(join(root, "supabase/migrations"))
   .filter((name) => name.endsWith("_customer_native_token_upsert_conflict.sql"))
   .sort()
@@ -135,8 +161,13 @@ assert.match(access, /15\s*\*\s*60/);
 assert.match(access, /membership_status/);
 assert.match(access, /device_status/);
 assert.match(access, /session_status/);
-assert.match(access, /One PA invitation must use one exact verified company and booker scope/);
-assert.match(access, /\.from\("travelers"\)[\s\S]*?\.eq\("company_id", root\.company_id\)[\s\S]*?\.eq\("booker_id", root\.booker_id\)/);
+assert.match(access, /One Booker invitation must use one exact verified company and booker scope/);
+assert.match(access, /traveler_id: null/);
+assert.match(
+  access,
+  /if \(root\.traveler_id === null\)[\s\S]*?verifiedMemberships\.splice\(0, verifiedMemberships\.length, root\)[\s\S]*?else[\s\S]*?PA access requires at least one exact verified Boss under that booker/,
+  "New Booker-root access must be additive while the accepted legacy PA/Boss graph remains readable",
+);
 assert.match(access, /access_status: "access_updated"/);
 assert.match(access, /existingPrincipal\.principal_status === "active"[\s\S]*?parsed\.principalRole === "pa"/);
 assert.match(access, /existingRoots\.size !== 1/);
@@ -147,7 +178,9 @@ assert.match(access, /SameSite=Lax/);
 assert.doesNotMatch(access, /device.{0,30}cap|maximum.{0,30}device|30-day|7-day/i);
 
 const adminAccess = read("app/api/admin-customer-portal-access-links/route.ts");
-assert.match(adminAccess, /Manage Access/);
+assert.match(adminAccess, /Copy \+ App Link/);
+assert.match(adminAccess, /findAdminBooker/);
+assert.match(adminAccess, /booker\.data\.customer_id/);
 assert.match(adminAccess, /invitation/i);
 assert.match(adminAccess, /revoke/i);
 assert.match(access, /"pa"/);
@@ -188,7 +221,28 @@ assert.match(messages, /actual_sender_principal_id/);
 assert.match(messages, /customer_display_sender_name/);
 assert.match(messages, /verifiedBossName/);
 assert.match(messages, /customer_to_driver/);
+assert.match(
+  messages,
+  /membership\.company_id === companyId[\s\S]*?membership\.booker_id === bookerId[\s\S]*?membership\.traveler_id === null \|\| membership\.traveler_id === travelerId/,
+  "Booker-root notification history reads must require the exact persisted Company+Booker while legacy Traveller memberships remain exact",
+);
 assert.doesNotMatch(messages, /Customer-to-admin|Admin-to-customer/);
+
+const savedBookings = read("lib/customer-saved-bookings-read.ts");
+assert.match(savedBookings, /const bookerRoot = principalAccess\.data\.memberships\.find/);
+assert.match(savedBookings, /entry\.traveler_id === null/);
+assert.match(savedBookings, /column: "company_id"[\s\S]*?column: "booker_id"/);
+assert.match(savedBookings, /column: "traveler_id"/);
+
+const liveLocation = read("lib/customer-live-location-map-runtime.ts");
+assert.match(
+  liveLocation,
+  /membership\.companyId === positiveInteger\(candidateBooking\.company_id\)[\s\S]*?membership\.bookerId === positiveInteger\(candidateBooking\.booker_id\)[\s\S]*?membership\.travelerId === null/,
+  "Booker-root live location must remain scoped to the exact persisted Company+Booker pair",
+);
+
+assert.match(myBookings, /const rootMembership = Array\.isArray\(payload\?\.data\?\.memberships\)/);
+assert.match(myBookings, /rootMembership \|\| bosses\.length > 0/);
 
 const ack = read("lib/driver-job-link-production.ts");
 assert.match(ack, /queueCustomerDriverDetailsReadyNotification/);

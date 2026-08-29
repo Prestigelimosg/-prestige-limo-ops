@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import ts from "typescript";
 
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -213,10 +217,24 @@ assert.equal(
 assert.deepEqual(exportedMethods(adminRoute), ["DELETE", "GET", "PATCH", "POST", "PUT"], "admin portal access route methods");
 assertIncludes(adminRoute, "resolveAdminCustomerInvoiceBoundary(request)", "admin portal access route boundary");
 assertIncludes(adminRoute, "ensureAdminCustomerPortalAccessAccount", "admin portal access route invite activation");
-assertIncludes(adminRoute, "agencyCustomerAccount: body.agencyCustomerAccount", "admin portal access route agency intent");
+assertIncludes(adminRoute, "findAdminBooker", "admin portal access route exact saved Booker lookup");
+assertIncludes(adminRoute, "id: body.bookerId", "admin portal access route exact Booker id lookup");
+assertIncludes(adminRoute, "company_id: body.companyId", "admin portal access route exact Company id lookup");
+assertIncludes(adminRoute, "booker.data.customer_id !== Number(body.customerAccountReference)", "admin portal access route validates exact Customer account binding before the access-account write");
+assertIncludes(adminRoute, "email: booker.data.email", "admin portal access route server-verified Booker email");
+assertIncludes(adminRoute, "principalRole: \"pa\"", "admin portal access route Booker principal role");
 assertIncludes(adminRoute, "revokeAdminCustomerPortalAccessAccount", "admin portal access route revoke action");
 assertIncludes(adminRoute, "issueCustomerPrincipalInvitation", "admin portal access route one-use invitation creation");
-assertIncludes(adminRoute, "memberships: rawMemberships.map", "admin portal access route verified membership handoff");
+assertIncludes(adminRoute, "travelerId: null", "admin portal access route Company and Booker root membership");
+assert.equal(
+  adminRoute.indexOf("const booker = await findAdminBooker(") <
+    adminRoute.indexOf("const account = await ensureAdminCustomerPortalAccessAccount("),
+  true,
+  "The exact Booker/Company/Customer relationship must be verified before the access-account write",
+);
+assertExcludes(adminRoute, "body.email", "admin portal access route must not trust a browser recipient email");
+assertExcludes(adminRoute, "body.principalRole", "admin portal access route must not trust a browser role");
+assertExcludes(adminRoute, "body.memberships", "admin portal access route must not trust browser membership scope");
 assertIncludes(adminRoute, "revokeCustomerPrincipalAccess", "admin portal access route principal revoke action");
 assertIncludes(adminRoute, 'action !== "revoke" && action !== "revoke_legacy"', "admin portal access route bounded revoke actions");
 assertExcludes(adminRoute, "createCustomerPortalAccessLinkToken", "admin portal access route retired permanent-link creation");
@@ -256,7 +274,6 @@ assertExcludes(publicAccessRoute, forbiddenCustomerPortalAccessSurfacePattern, "
 for (const fragment of [
   "adminCustomerPortalAccessLinksApiPath",
   "const customerDriverDetailsPortalAccountReference =",
-  "const customerDriverDetailsPortalAgencyAccount =",
   "cleanReferenceText(appliedAdminBookingSnapshot?.customer_id)",
   "cleanReferenceText(dispatchReleaseLoadedBookingRecord?.customer_id)",
   "cleanReferenceText(customerDriverDetailsPortalLastSavedRecord?.customer_id)",
@@ -265,8 +282,8 @@ for (const fragment of [
   'data-admin-customer-driver-details-copy-with-portal-link-external-send="false"',
   'data-admin-customer-driver-details-copy-with-portal-link-no-provider-send="true"',
   'data-admin-customer-driver-details-copy-with-portal-link-feedback="true"',
-  "Manage Access",
-  "Preparing access",
+  "Copy + App Link",
+  "Preparing link",
   "Invitation copied",
 ]) {
   assertIncludes(appPage, fragment, `dispatch customer app link ${fragment}`);
@@ -277,9 +294,8 @@ for (const fragment of [
   "if (!customerDriverDetailsPortalLinkCopyReady)",
   "fetch(adminCustomerPortalAccessLinksApiPath",
   "customerAccountReference,",
-  "principalRole: selectedRole,",
-  "memberships: [{",
-  "agencyCustomerAccount: customerDriverDetailsPortalAgencyAccount,",
+  "bookerId,",
+  "companyId,",
   "safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference",
   '"x-prestige-admin-purpose": adminLegacyDataPurpose',
   "navigator.clipboard.writeText(",
@@ -293,7 +309,7 @@ for (const fragment of [
 
 assertExcludes(
   customerPortalLinkCopyHandler,
-  /copyManualTelegramMessage\s*\(|telegram\.org|t\.me|chat_id|sendMessage|sendAdminCustomerDriverDetailsEmail\s*\(/i,
+  /window\.prompt|principalRole|memberships|travelerId|verifiedBossName|copyManualTelegramMessage\s*\(|telegram\.org|t\.me|chat_id|sendMessage|sendAdminCustomerDriverDetailsEmail\s*\(/i,
   "customer app link copy handler must not call provider/message sends",
 );
 assertExcludes(
@@ -306,10 +322,10 @@ assertIncludes(
   "!customerDriverDetailsPortalBookerId ||",
   "dispatch Customer access invitation requires the verified booker",
 );
-assertIncludes(
-  appPage,
+assertExcludes(
+  customerPortalLinkCopyHandler,
   "!adminDispatchVerifiedIdentityId(booking.travelerId)",
-  "dispatch Customer access invitation requires the verified traveller",
+  "dispatch Customer access invitation must not use the booking-specific traveller as account identity",
 );
 assertExcludes(
   customerFinderSection,
@@ -326,5 +342,112 @@ assertExcludes(portalClientSource, "`saved-${deepLink.bookingReference}`", "cust
 assertIncludes(portalClientSource, "setExpandedBookingId(targetBooking.id)", "customer portal booking deep-link opens detail");
 assertIncludes(portalClientSource, "setActiveTrackingBookingId(targetBooking.id)", "customer portal booking deep-link opens tracking");
 assertIncludes(portalClientSource, "refreshCustomerTrackingForBooking(targetBooking)", "customer portal booking deep-link loads driver reporting");
+
+function transpile(source, filename) {
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: filename,
+  }).outputText;
+}
+
+const routeHarnessDir = await mkdtemp(path.join(os.tmpdir(), "prestige-booker-app-link-route-"));
+try {
+  const routeOutput = path.join(routeHarnessDir, "app/api/admin-customer-portal-access-links/route.js");
+  await mkdir(path.dirname(routeOutput), { recursive: true });
+  await mkdir(path.join(routeHarnessDir, "lib"), { recursive: true });
+  await writeFile(routeOutput, transpile(adminRoute, adminRoutePath));
+  await writeFile(
+    path.join(routeHarnessDir, "lib/admin-customer-invoice-boundary.js"),
+    "exports.resolveAdminCustomerInvoiceBoundary = () => ({ data: null, ok: true, actor: { actor_label: 'Owner Admin', actor_role: 'admin', source_surface: 'admin_api' } });",
+  );
+  await writeFile(
+    path.join(routeHarnessDir, "lib/admin-bookers.js"),
+    "exports.findAdminBooker = async (input) => { const state = globalThis.__prestigeBookerAppLinkRoute; state.calls.push('booker'); state.bookerInput = input; return { data: state.booker, ok: true }; };",
+  );
+  await writeFile(
+    path.join(routeHarnessDir, "lib/customer-portal-access-account.js"),
+    [
+      "exports.ensureAdminCustomerPortalAccessAccount = async (input) => {",
+      "  const state = globalThis.__prestigeBookerAppLinkRoute; state.calls.push('account'); state.accountInput = input;",
+      "  return { data: { account_status: 'active', customer_account_reference: String(input.customerAccountReference) }, ok: true };",
+      "};",
+      "exports.revokeAdminCustomerPortalAccessAccount = async () => ({ data: { account_status: 'revoked', customer_account_reference: '194', version: 'v1' }, ok: true });",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(routeHarnessDir, "lib/customer-principal-access.js"),
+    [
+      "exports.issueCustomerPrincipalInvitation = async (input) => {",
+      "  const state = globalThis.__prestigeBookerAppLinkRoute; state.calls.push('invitation'); state.invitationInput = input;",
+      "  return { data: { access_status: 'invitation_created', expires_at: '2026-08-29T14:00:00.000Z', invitation_url_path: '/customer-access/activate?invite=safe', principal_id: '11111111-1111-4111-8111-111111111111' }, ok: true };",
+      "};",
+      "exports.revokeCustomerPrincipalAccess = async () => ({ data: { principal_id: '11111111-1111-4111-8111-111111111111', revoked: true }, ok: true });",
+    ].join("\n"),
+  );
+
+  const route = createRequire(import.meta.url)(routeOutput);
+  const state = {
+    booker: {
+      booker_name: "Verified Booker",
+      company_id: 53,
+      customer_id: 194,
+      email: "booker@example.test",
+      id: 26,
+      phone: null,
+    },
+    calls: [],
+  };
+  globalThis.__prestigeBookerAppLinkRoute = state;
+  const response = await route.POST(new Request("http://localhost/api/admin-customer-portal-access-links", {
+    body: JSON.stringify({
+      bookerId: 26,
+      companyId: 53,
+      customerAccountReference: "194",
+      email: "attacker@example.test",
+      memberships: [{ travelerId: 999 }],
+      principalRole: "boss",
+      safeDisplayLabel: "Verified account",
+    }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  }));
+  const responseBody = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(responseBody.accessAction, "Copy + App Link");
+  assert.deepEqual(state.calls, ["booker", "account", "invitation"]);
+  assert.deepEqual(state.bookerInput, { company_id: 53, id: 26 });
+  assert.deepEqual(state.invitationInput, {
+    email: "booker@example.test",
+    memberships: [{
+      bookerId: 26,
+      companyId: 53,
+      customerAccountReference: "194",
+      travelerId: null,
+      verifiedBossName: "Verified Booker",
+    }],
+    principalRole: "pa",
+  });
+
+  state.calls = [];
+  state.booker = { ...state.booker, customer_id: 195 };
+  const mismatchResponse = await route.POST(new Request("http://localhost/api/admin-customer-portal-access-links", {
+    body: JSON.stringify({ bookerId: 26, companyId: 53, customerAccountReference: "194" }),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  }));
+  assert.equal(mismatchResponse.status, 409);
+  assert.deepEqual(
+    state.calls,
+    ["booker"],
+    "A mismatched Customer/Company/Booker must stop before access-account or invitation writes.",
+  );
+} finally {
+  delete globalThis.__prestigeBookerAppLinkRoute;
+  await rm(routeHarnessDir, { force: true, recursive: true });
+}
 
 console.log("Customer portal access link guard passed");

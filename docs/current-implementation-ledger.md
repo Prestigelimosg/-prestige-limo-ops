@@ -4,13 +4,31 @@ Latest verified clean runtime checkpoint:
 03f64987 Complete Company Booker customer accounts
 
 Latest pushed main/staging runtime checkpoint:
-32d351b7 Add Company Booker account schema
+03f64987 Complete Company Booker customer accounts
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 c06f7abc Merge pull request #432 from Prestigelimosg/codex/admin-dashboard-default
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Customer Driver Details Readiness Label (2026-08-29)
+
+- Owner-visible installed Admin evidence on exact Production build `c90a8d02` proved the Customer Copy readiness title was static: a blank unsaved draft displayed `Customer driver details ready` beside `Driver not assigned`, while loaded booking `10911` with complete safe driver name, contact, plate and vehicle correctly displayed the ready title and matching safe details.
+- The established Customer Copy row now derives one truthful title from its existing driver-readiness result: no assigned driver name is `No driver assigned`; an assigned driver with incomplete contact, plate or vehicle details is `Waiting for complete driver details`; and the existing complete driver-details state remains `Customer driver details ready`. The existing admin-gated GET review item returns the same three-state title from its already-computed missing requirements.
+- This readiness repair does not change `Edit`, `Copy`, `Copy Booking Invite`, Email, SMS, Send In-App, the manual WhatsApp Copy fallback, automatic Driver ACK customer delivery or their handlers. The separately approved saved-booking access repair below replaces the test-era `Manage Access` control; the removed visible WhatsApp pseudo-button stays absent.
+- Focused fail-first evidence stopped on the missing `No driver assigned` route contract. The existing review-item API guard now executes no-driver, incomplete-driver and complete-driver cases; the existing Booking UI and app-smoke browser expectations protect incomplete and blank-draft labels. No native source, EAS build, booking/data write, provider send, Calendar, invoice, payment, payout, PayNow, push/badge or Customer/Driver workflow is part of this repair.
+
+## Booker-First Copy + App Link And Company+Booker Customer Access (2026-08-29)
+
+- Saved-booking Customer Copy now has one human `Copy + App Link` action. It requires the exact persisted `customer_id + company_id + booker_id`; the server re-reads that exact Booker and requires its saved Customer binding, name and email before any access-account write. The browser cannot submit a recipient email, role, Traveller, Passenger or membership scope.
+- A successful first action creates one 30-minute, one-use activation link for the exact verified Booker email and copies it locally. It sends no Email, SMS, WhatsApp, push or provider message. An already-active exact Booker returns a truthful active status and does not create another invitation, reset the PIN or touch devices, sessions or subscriptions.
+- New operational access is one nullable-Traveller root membership keyed by exact Company + Booker. Passenger/Traveller remains booking-specific. Root saved-booking, message-history and live-location reads require the booking's persisted Company and Booker to match exactly; another Company or Booker is blocked. Existing legacy PA/Boss Traveller memberships and multi-principal shared conversation/alert/badge fanout remain compatibility data and are not rewritten or removed.
+- Principal activation now enforces the existing legacy-link cutover columns: once exact principal activation records `legacy_link_revoked_at`, the old permanent portal token is rejected even if its historical revision still matches. Legacy account 174 remains readable until it actually cuts over; QA account 192, its principals, memberships, invitations, devices, sessions and subscriptions remain intact pending separate destructive approval.
+- The additive Supabase migration only makes `customer_access_memberships.traveler_id` nullable for `managing_pa` roots, adds one exact root uniqueness index and an active Company+Booker lookup index, and preserves all RLS/grants and existing rows. It does not delete or rewrite principals, memberships, devices, sessions, subscriptions or messages.
+- Push sender, recipient fanout, badge counts, subscription registration, Customer/Driver native source, Calendar, invoice, billing, payment, payout, PayNow, GPS writers/polling and provider sends are protected and unchanged. Focused schema, access-link, principal, saved-booking, message/privacy, live-location, cutover and browser guards must pass before schema or application publication.
+- The full preactivation restart stopped first on the permanent-link rebooking guard's obsolete browser-trusted Company/Booker and PA/Boss membership fragments. That same established guard now retains every legacy link-helper, account-revision, receipt and session compatibility check while requiring the current server-verified Booker email, exact Company + Booker root membership and fixed Booker-first role; it also rejects any browser-supplied recipient, role or membership scope. No receipt, booking-memory or legacy rebooking runtime changed for this guard-only alignment.
+- The restarted source-of-truth guard then proved the ledger's pushed-runtime line still pointed to the earlier schema commit after PR `#434` had merged the verified Company + Booker application runtime. The top pushed checkpoint is aligned only to the exact latest runtime commit reachable from current `origin/main`, `03f64987 Complete Company Booker customer accounts`; no deployment claim, Git history or application source is changed by this docs-only alignment.
 
 ## Future Booking Company + Booker Identity Boundary (2026-08-29)
 
@@ -7601,7 +7619,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Email now uses the existing approved gated POST route `POST /api/admin-customer-driver-details-email-send-action` from the same compact row.
 - WhatsApp and SMS remain parked on setup-only/no-op GET paths.
 - Customer In-App and Driver In-App remain explicit admin-selected in-app notification actions through `POST /api/admin-customer-driver-app-notifications`.
-- Copy + App Link remains explicit admin-selected manual clipboard preparation through the existing `POST /api/admin-customer-portal-access-links` route; it requires the saved booking `customer_id` / customer account reference and must not fall back to passenger, booker, company, or display names.
+- Copy + App Link remains explicit admin-selected manual clipboard preparation through the existing `POST /api/admin-customer-portal-access-links` route; it requires the exact saved `customer_id + company_id + booker_id`, resolves the saved Booker email server-side and must never infer access from Passenger/Traveller, typed names, phone or display labels.
 - Telegram application controls, routes, helpers, provider calls, and Telegram-specific planning documents are removed.
 - Any Telegram reintroduction requires a new explicit owner-approved lane.
 - SMS and WhatsApp sends remain parked unless separately approved.

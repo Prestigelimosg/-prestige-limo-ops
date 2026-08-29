@@ -1164,7 +1164,7 @@ function adminCustomerDriverDetailsEmailReviewFallbackItem(): AdminCustomerDrive
     disabled_send_status: "blocked",
     external_send: false,
     item_key: "customer_driver_details_email",
-    label: "Customer driver details ready",
+    label: "No driver assigned",
     readiness_status: "blocked",
     sendingEnabled: false,
     status: "setup_only",
@@ -25888,11 +25888,6 @@ export default function Home() {
     const customerAccountReference = customerDriverDetailsPortalAccountReference;
     const companyId = customerDriverDetailsPortalCompanyId;
     const bookerId = customerDriverDetailsPortalBookerId;
-    const travelerId = adminDispatchVerifiedIdentityId(booking.travelerId);
-    const verifiedTraveler = travelerId
-      ? rateTravelers.find((traveler) => String(traveler.id) === String(travelerId))
-      : null;
-    const verifiedBossName = clean(verifiedTraveler?.traveler_name);
 
     if (!bookingReference) {
       throw new Error("Load a saved booking before copying the customer app link.");
@@ -25906,36 +25901,15 @@ export default function Home() {
       throw new Error("Customer app link requires a saved CRM customer account. Use Save + CRM or load the saved booking first.");
     }
 
-    if (!companyId || !bookerId || !travelerId || !verifiedBossName) {
-      throw new Error("Customer app access requires a verified CRM company, booker, and traveller. Select all three and save the booking first.");
-    }
-
-    const selectedRole = window.prompt("Manage Access: type PA or Boss for this invitation.", "PA")?.trim().toLowerCase();
-    if (selectedRole !== "pa" && selectedRole !== "boss") {
-      throw new Error("Choose PA or Boss. No access invitation was created.");
-    }
-    const invitedEmail = window.prompt(
-      `Enter the separate verified email for this ${selectedRole === "pa" ? "PA" : "Boss"}.`,
-      selectedRole === "pa" ? clean(booking.bookerEmail).toLowerCase() : "",
-    )?.trim().toLowerCase();
-    if (!invitedEmail || !isValidEmail(invitedEmail)) {
-      throw new Error("A valid separate email is required. No access invitation was created.");
+    if (!companyId || !bookerId) {
+      throw new Error("Customer app link requires a verified Company and Booker. Save the customer account first.");
     }
 
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
       body: JSON.stringify({
-        agencyCustomerAccount: customerDriverDetailsPortalAgencyAccount,
         bookerId,
         companyId,
         customerAccountReference,
-        email: invitedEmail,
-        memberships: [{
-          bookerId,
-          companyId,
-          travelerId,
-          verifiedBossName,
-        }],
-        principalRole: selectedRole,
         safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
       }),
       cache: "no-store",
@@ -26049,12 +26023,12 @@ export default function Home() {
           portalLinkCopied: false,
           portalUrl: "",
           tone: "success",
-          text: "PA access is already active and now covers every verified Boss under this PA. No new invitation or PIN reset was created.",
+          text: "Customer app access is already active for this Booker. No new invitation or PIN reset was created.",
         });
         setCopyFeedback({
           target: "customerCopy",
           tone: "success",
-          text: "Active PA access updated.",
+          text: "Customer app access already active.",
         });
         return;
       }
@@ -28766,16 +28740,6 @@ export default function Home() {
     adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.booker_id) ||
     adminDispatchVerifiedIdentityId(dispatchReleaseLoadedBookingRecord?.booker_id) ||
     adminDispatchVerifiedIdentityId(customerDriverDetailsPortalLastSavedRecord?.booker_id);
-  const customerDriverDetailsPortalAgencyAccount = Boolean(
-    customerDriverDetailsPortalAccountReference &&
-      customerDriverDetailsPortalCompanyId &&
-      !customerDriverDetailsPortalBookerId &&
-      adminDispatchAgencyFolderOptions.some(
-        (account) =>
-          account.id === customerDriverDetailsPortalAccountReference &&
-          adminDispatchVerifiedIdentityId(account.companyId) === customerDriverDetailsPortalCompanyId,
-      ),
-  );
   const customerLiveLocationHelperText = customerDriverDetailsPortalAccountReference
     ? customerLiveLocation.helperText
     : "Save + CRM or load the saved booking first.";
@@ -29317,6 +29281,11 @@ export default function Home() {
   const adminCustomerDriverDetailsEmailReviewReady =
     Boolean(adminCustomerDriverDetailsEmailReviewItem.customerEmailReady) ||
     clean(adminCustomerDriverDetailsEmailReviewItem.readiness_status) === "ready";
+  const adminCustomerDriverDetailsReadinessLabel = !dispatchReleaseDriverName
+    ? "No driver assigned"
+    : dispatchReleaseDriverReady
+      ? "Customer driver details ready"
+      : "Waiting for complete driver details";
   const adminCustomerDriverDetailsEmailReviewSendDisabled =
     adminCustomerDriverDetailsEmailReviewItem.sendingEnabled !== true &&
     adminCustomerDriverDetailsEmailReviewItem.external_send !== true;
@@ -35043,11 +35012,11 @@ export default function Home() {
         : null;
   const customerDriverDetailsPortalLinkCopyButtonLabel =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info"
-      ? "Preparing access"
+      ? "Preparing link"
       : customerDriverDetailsPortalLinkCopyDisplayState?.portalLinkCopied
         ? "Invitation copied"
         : customerDriverDetailsPortalBookingReference
-          ? "Manage Access"
+          ? "Copy + App Link"
           : "Copy Booking Invite";
   const customerDriverDetailsPortalLinkCopyDisabled =
     customerDriverDetailsPortalLinkCopyDisplayState?.tone === "info" ||
@@ -35055,8 +35024,7 @@ export default function Home() {
       (!customerDriverDetailsPortalLinkCopyReady ||
         !customerDriverDetailsPortalAccountReference ||
         !customerDriverDetailsPortalCompanyId ||
-        !customerDriverDetailsPortalBookerId ||
-        !adminDispatchVerifiedIdentityId(booking.travelerId)));
+        !customerDriverDetailsPortalBookerId));
   const driverDispatchCopied =
     driverDispatchFeedback?.tone === "success" && /copied/i.test(driverDispatchFeedback.text);
   const jobCardEdited = jobCardFeedback?.tone === "success" && /edit saved/i.test(jobCardFeedback.text);
@@ -46843,8 +46811,7 @@ export default function Home() {
                       className="block truncate font-semibold"
                       data-admin-customer-driver-details-email-review-label="true"
                     >
-                      {clean(adminCustomerDriverDetailsEmailReviewItem.label) ||
-                        "Customer driver details ready"}
+                      {adminCustomerDriverDetailsReadinessLabel}
                     </span>
                     <p
                       className="mt-0.5 text-[10px] font-semibold leading-4 text-emerald-800"

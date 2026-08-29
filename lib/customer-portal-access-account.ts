@@ -19,6 +19,7 @@ export type CustomerPortalAccessAccountRecord = {
   company_id: number | null;
   booker_id: number | null;
   customer_account_reference: string;
+  legacy_link_revoked_at: string | null;
   link_revision: string;
   safe_display_label: string | null;
   version: typeof customerPortalAccessAccountVersion;
@@ -26,7 +27,7 @@ export type CustomerPortalAccessAccountRecord = {
 
 const customerPortalAccessAccountTable = "customer_access_accounts";
 const customerPortalAccessAccountSelect =
-  "customer_account_reference, account_status, safe_display_label, company_id, booker_id, updated_at";
+  "customer_account_reference, account_status, safe_display_label, company_id, booker_id, principal_cutover_at, legacy_link_revoked_at, updated_at";
 const safeConfigError = "Customer portal access account configuration is not ready.";
 const safeForbiddenError = "Customer portal access requires an active invited customer account.";
 const safeMutationError = "Customer portal access account update failed safely.";
@@ -235,6 +236,7 @@ function toRecord(row: Record<string, unknown>): CustomerPortalAccessAccountReco
     company_id: verifiedIdentityId(row.company_id),
     booker_id: verifiedIdentityId(row.booker_id),
     customer_account_reference: customerAccountReference,
+    legacy_link_revoked_at: safeLinkRevision(row.legacy_link_revoked_at),
     link_revision: linkRevision,
     safe_display_label: textOrNull(row.safe_display_label, 160),
     version: customerPortalAccessAccountVersion,
@@ -359,8 +361,9 @@ export async function assertActiveCustomerPortalAccessAccount(
     (expectedRevision
       ? record?.link_revision === expectedRevision
       : legacyRevisionStillCurrent);
+  const legacyLinkStillAllowed = !expectedLink || !record?.legacy_link_revoked_at;
 
-  return record?.account_status === "active" && linkStillCurrent
+  return record?.account_status === "active" && linkStillCurrent && legacyLinkStillAllowed
     ? {
         data: record,
         ok: true,

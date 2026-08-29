@@ -7129,6 +7129,9 @@ async function runChromeTest() {
               const customerEmailReviewItem = customerCopySection.querySelector(
                 "[data-admin-customer-driver-details-email-review-item]",
               );
+              const customerAccessAction = customerCopySection.querySelector(
+                "[data-admin-customer-driver-details-copy-with-portal-link]",
+              );
               const items = [...section.querySelectorAll("[data-admin-driver-acknowledgement-item]")].map((item) => {
                 const itemRect = item.getBoundingClientRect();
 
@@ -7183,6 +7186,7 @@ async function runChromeTest() {
                       .trim() || "",
                   visible: Boolean(customerEmailReviewItem),
                 },
+                customerAccessAction: customerAccessAction?.textContent.replace(/\s+/g, " ").trim() || "",
                 docClientWidth: document.documentElement.clientWidth,
                 docScrollWidth: document.documentElement.scrollWidth,
                 forbiddenPrivateText: [
@@ -7259,13 +7263,18 @@ async function runChromeTest() {
           state.customerEmailReviewItem,
           {
             action: "Email",
-            label: "Customer driver details ready",
+            label: "No driver assigned",
             readyState: "blocked",
             readyStatus: "Blocked",
             sendState: "SMS/WA off",
             visible: true,
           },
           `${viewport.label}: expected compact customer driver details row in Customer Copy`,
+        );
+        assert.equal(
+          state.customerAccessAction,
+          "Copy Booking Invite",
+          `${viewport.label}: blank first-booking flow must keep its separate one-use booking invitation`,
         );
         for (const expectedBoundaryText of [
           "UI/local-state",

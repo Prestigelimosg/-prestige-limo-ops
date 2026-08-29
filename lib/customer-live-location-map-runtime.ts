@@ -28,7 +28,7 @@ type CustomerRuntimePrincipalMembershipScope = {
   accountReference: string;
   bookerId: number;
   companyId: number;
-  travelerId: number;
+  travelerId: number | null;
 };
 
 type CustomerRuntimeScope =
@@ -209,7 +209,7 @@ function principalMembershipScopes(value: unknown) {
       const companyId = positiveInteger(row.company_id);
       const travelerId = positiveInteger(row.traveler_id);
 
-      if (!accountReference || !bookerId || !companyId || !travelerId) {
+      if (!accountReference || !bookerId || !companyId) {
         return null;
       }
 
@@ -949,7 +949,8 @@ async function verifyCustomerBookingScope({
           (membership) =>
             membership.companyId === positiveInteger(candidateBooking.company_id) &&
             membership.bookerId === positiveInteger(candidateBooking.booker_id) &&
-            membership.travelerId === positiveInteger(candidateBooking.traveler_id),
+            (membership.travelerId === null ||
+              membership.travelerId === positiveInteger(candidateBooking.traveler_id)),
         ) || null
       : null;
   const booking =

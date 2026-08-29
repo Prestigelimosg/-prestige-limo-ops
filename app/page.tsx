@@ -47272,10 +47272,10 @@ export default function Home() {
             ) : null}
 
             <section
-              className={`order-[55] min-w-0 rounded-md border p-3 transition ${
+              className={`order-[55] min-w-0 rounded-md border transition ${
                 pendingDriverAckQueueItems.length > 0
-                  ? "animate-pulse border-amber-400 bg-amber-50 motion-reduce:animate-none"
-                  : "border-emerald-200 bg-emerald-50"
+                  ? "animate-pulse border-amber-400 bg-amber-50 p-3 motion-reduce:animate-none"
+                  : "border-emerald-200 bg-emerald-50 px-3 py-2"
               }`}
               data-pending-driver-ack-queue="true"
               data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}
@@ -47285,18 +47285,22 @@ export default function Home() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-950">
+                  <h2
+                    className={`${pendingDriverAckQueueItems.length > 0 ? "text-lg" : "text-sm"} font-semibold text-slate-950`}
+                  >
                     Pending for Driver ACK Queue
                   </h2>
-                  <p className="text-xs text-slate-600">
-                    Newest active Driver Job Link for each exact booking. Link issued means created in this app.
-                  </p>
+                  {pendingDriverAckQueueItems.length > 0 ? (
+                    <p className="text-xs text-slate-600">
+                      Newest active Driver Job Link for each exact booking. Link issued means created in this app.
+                    </p>
+                  ) : null}
                 </div>
                 <span
-                  className={`inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-sm font-bold ${
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-bold ${
                     pendingDriverAckQueueItems.length > 0
-                      ? "border-amber-400 bg-white text-amber-950"
-                      : "border-emerald-300 bg-white text-emerald-900"
+                      ? "min-h-9 border-amber-400 bg-white text-amber-950"
+                      : "min-h-7 border-emerald-300 bg-white text-emerald-900"
                   }`}
                   data-pending-driver-ack-queue-count-badge="true"
                 >
@@ -47335,11 +47339,7 @@ export default function Home() {
                     </li>
                   ))}
                 </ol>
-              ) : (
-                <p className="mt-3 text-sm font-semibold text-emerald-900">
-                  No driver acknowledgements pending.
-                </p>
-              )}
+              ) : null}
             </section>
 
             <div className="order-[100]" data-dispatch-workflow-step="admin-lower-status">

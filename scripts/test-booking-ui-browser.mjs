@@ -11564,7 +11564,8 @@ async function runChromeTest() {
     );
     assert.equal(dispatchDriverJobAcknowledgedState.pulsing, "false");
     assert.match(dispatchDriverJobAcknowledgedState.text, /0 pending/);
-    assert.match(dispatchDriverJobAcknowledgedState.text, /No driver acknowledgements pending/);
+    assert.doesNotMatch(dispatchDriverJobAcknowledgedState.text, /Newest active Driver Job Link/);
+    assert.doesNotMatch(dispatchDriverJobAcknowledgedState.text, /No driver acknowledgements pending/);
 
     const clickedDriverJobLinkCopy = await evaluate(`(() => {
       const section = [...document.querySelectorAll("[data-dispatch-workflow-step='driver-job-link']")][0];

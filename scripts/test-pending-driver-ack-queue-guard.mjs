@@ -24,7 +24,7 @@ assert.ok(
 
 for (const fragment of [
   "Pending for Driver ACK Queue",
-  'className={`order-[55] min-w-0 rounded-md border p-3 transition',
+  'className={`order-[55] min-w-0 rounded-md border transition',
   'data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}',
   'data-pending-driver-ack-queue-pulsing=',
   'pendingDriverAckQueueItems.length > 0\n                  ? "animate-pulse',
@@ -37,7 +37,8 @@ for (const fragment of [
   'onClick={() => dismissPendingDriverAckAlert(item.linkId)}',
   "Dismiss this alert only. The driver job link remains active.",
   ">\n                        Close\n                      </button>",
-  "No driver acknowledgements pending.",
+  'pendingDriverAckQueueItems.length > 0 ? (',
+  'pendingDriverAckQueueItems.length > 0 ? "text-lg" : "text-sm"',
   "const pendingDriverAckQueueEligibleBookings = operationalBookings",
   ".filter((bookingRecord) => Boolean(getBookingDriverJobStatusReference(bookingRecord)))",
   "const pendingDriverAckQueueReferenceKey = pendingDriverAckQueueReferenceList.join(\"|\")",
@@ -62,6 +63,10 @@ const queueEnd = app.indexOf('data-dispatch-workflow-step="admin-lower-status"',
 const queueBlock = app.slice(queueStart, queueEnd);
 
 assert.ok(queueEnd > queueStart, "Pending queue block boundary is missing.");
+assert.ok(
+  !queueBlock.includes("No driver acknowledgements pending."),
+  "Zero pending state must stay one slim title-and-count row without a duplicate empty sentence.",
+);
 assert.ok(
   !queueBlock.includes(".slice("),
   "Queue must support every pending booking without a fixed two-or-three row cap.",
@@ -109,6 +114,8 @@ for (const fragment of [
   "const appUrl = app.appUrl;",
   "const chromeDebugPort = configuredChromeDebugPort || (await getFreePort());",
   "await stopProcessGroup(app.server);",
+  "await openDispatchTab();",
+  'button.textContent?.trim() === "Dispatch"',
   "two independent pending Driver ACK rows",
   "one exact alert dismissed while the second remains",
   "hard refresh retained exact-link dismissal",

@@ -7,10 +7,17 @@ Latest pushed main/staging runtime checkpoint:
 d4afcd43 Simplify Customer Copy actions
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-c06f7abc Merge pull request #432 from Prestigelimosg/codex/admin-dashboard-default
+19358121 Merge pull request #437 from Prestigelimosg/codex/customer-copy-remove-sms-pseudo-button
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Pending Driver ACK Queue Compact Zero State (2026-08-30)
+
+- When the existing Dispatch `Pending for Driver ACK Queue` has zero rows, it now renders one slim green row containing only the established title and `0 pending` badge. The explanatory `Newest active Driver Job Link...` sentence and duplicate `No driver acknowledgements pending.` empty-state sentence are hidden at zero. Any positive count retains the complete existing pulsing amber queue, explanatory sentence, every uncapped exact-link row, revision label and local-only `Close` control unchanged.
+- Complete read-only inspection proved a queue-row `Resend` action cannot safely recover or copy an issued private link: the safe Admin GET never returns the one-time token, while the established Driver Job Link POST creates a new link and inseparably performs the existing best-effort Driver native push attempt and temporary live-location authorization. No `Resend` control, new writer, route, token recovery, provider claim, revocation, expiry or acknowledgement behavior is added in this checkpoint. Any future shortcut must reuse the visible Driver Job Link setup lane under a separately chosen owner-approved meaning.
+- Fail-first source coverage rejected the missing compact branch before the presentation-only repair. The focused browser guard then reproduced the same initial queue timeout on untouched `origin/main`: the shared Admin root now opens Dashboard, but the older Dispatch-only guard never selected Dispatch. The guard now opens the established Dispatch tab after each hard navigation before asserting exact-link dismissal isolation and persistence; this changes no runtime or tab default.
+- Driver Job Link creation/copy/revoke, acknowledgement persistence, Driver Reports, explicit Admin completion, Operations and personal Driver Calendar, push/badge/native files, GPS writers/polling, booking, messaging, Customer access, invoice, billing, payment, payout, PayNow, provider, schema and Production data remain unchanged.
 
 ## Verified Company + Booker Save + CRM Passenger Boundary (2026-08-30)
 
@@ -31,6 +38,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Copy`, `Edit`, `Email`, `Send In-App`, `Copy Booking Invite`, `Copy + App Link`, message preview/disclosure, the live-location helper and all Copy/app-link success or error feedback remain in their existing locations with their existing handlers. Ordinary Copy remains the manual external fallback.
 - Focused source guards and Booking UI/app-smoke browser coverage require the removed visible strings and SMS selectors to stay absent while preserving the established Email, Send In-App, Copy, app-link, access, notification and privacy boundaries. No push/badge/native, automatic Driver ACK, Calendar, invoice, billing, payment, payout, DSP, GPS, provider, schema or data behavior is changed.
 - The complete mocked Driver browser gate reproduced on untouched `origin/main` with two different immediate empty bridge-state assertions even though Driver route, native and test sources were byte-identical. The existing browser harness now waits only for the already-required asynchronous service-worker remembered-link and embedded native-notification bridge results before asserting them; no Driver runtime, native bridge, push registration or notification behavior changed.
+- A later complete preactivation run reproduced one obsolete compact-feedback assertion identically on untouched `origin/main`: it still required the retired visible `SMS checked` button result after the approved SMS pseudo-button removal. That one test-only fragment is removed while the separate SMS disabled-route, no-live and Customer Copy absence guards continue protecting the blocked backend and absent UI; no runtime, handler, provider or notification behavior changed.
+- The same restart proved the ledger header still named the earlier app-link runtime and PR `#432` deployment after PR `#437` had already merged and deployed the Customer Copy cleanup. The header now records exact latest runtime `d4afcd43` and exact verified deployed merge `19358121`; Git history and Production state are unchanged by this documentation alignment.
 
 ## Saved Customer App Link Independent Of Trip Readiness (2026-08-29)
 

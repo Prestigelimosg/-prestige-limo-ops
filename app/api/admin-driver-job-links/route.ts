@@ -8,7 +8,8 @@ import {
   createAdminDriverJobLink,
   loadAdminDriverJobLinks,
   parseAdminDriverJobLinkCreatePayload,
-  parseAdminDriverJobLinkRevokePayload,
+  parseAdminDriverJobLinkActionPayload,
+  remindAdminDriverToAcknowledgeLink,
   revokeAdminDriverJobLink,
 } from "../../../lib/admin-driver-job-link-persistence";
 import { openAdminLiveLocationRuntimeControl } from "../../../lib/admin-live-location-runtime-control";
@@ -204,20 +205,40 @@ export async function PATCH(request: Request) {
       return boundary.response;
     }
 
-    const parsed = parseAdminDriverJobLinkRevokePayload(await readJsonBody(request));
+    const parsedAction = parseAdminDriverJobLinkActionPayload(await readJsonBody(request));
 
-    if (!parsed.ok) {
+    if (!parsedAction.ok) {
       return Response.json(
         {
-          error: parsed.error,
+          error: parsedAction.error,
           ok: false,
         },
-        { status: parsed.status },
+        { status: parsedAction.status },
       );
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await revokeAdminDriverJobLink(parsed.data, actor);
+    if (parsedAction.data.action === "remind_ack") {
+      const result = await remindAdminDriverToAcknowledgeLink(parsedAction.data, actor);
+
+      if (!result.ok) {
+        return Response.json(
+          {
+            error: result.error,
+            ok: false,
+            reason: result.reason,
+          },
+          { status: result.status },
+        );
+      }
+
+      return Response.json({
+        ...result.data,
+        ok: true,
+      });
+    }
+
+    const result = await revokeAdminDriverJobLink(parsedAction.data, actor);
 
     if (!result.ok) {
       return Response.json(

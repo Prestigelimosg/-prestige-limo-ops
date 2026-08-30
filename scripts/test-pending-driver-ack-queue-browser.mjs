@@ -217,7 +217,11 @@ function pageFixtureScript() {
       const target = args[0]?.url || args[0];
       const url = new URL(String(target), window.location.origin);
       const method = String(args[1]?.method || args[0]?.method || "GET").toUpperCase();
-      const request = { method, url: url.pathname + url.search };
+      const request = {
+        body: typeof args[1]?.body === "string" ? JSON.parse(args[1].body) : null,
+        method,
+        url: url.pathname + url.search,
+      };
       window.__prestigeAckQueueRequests.push(request);
 
       const json = (body, status = 200) =>
@@ -263,6 +267,24 @@ function pageFixtureScript() {
             total_link_count: links.length,
           },
           version: "pending-ack-close-browser-driver-links",
+        });
+      }
+
+      if (url.pathname === "/api/admin-driver-job-links" && method === "PATCH") {
+        const body = request.body || {};
+        if (
+          body.action !== "remind_ack" ||
+          body.driver_job_link_id !== firstLinkId ||
+          body.booking_reference !== "ACK-CLOSE-BOOKING-ONE"
+        ) {
+          return json({ error: "Unexpected reminder payload.", ok: false }, 400);
+        }
+        return json({
+          next_available_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          ok: true,
+          provider_accepted: true,
+          reminder_count: 1,
+          version: "admin-driver-ack-reminder-v1",
         });
       }
 
@@ -395,6 +417,42 @@ async function runChromeTest() {
     assert.deepEqual(initialQueue.ids, [firstLinkId, secondLinkId]);
     assert.match(initialQueue.text, /12001 · Reissued · Link issued/);
     assert.match(initialQueue.text, /12002 · New · Link issued/);
+
+    const reminderClicked = await evaluate(`(() => {
+      const button = document.querySelector("[data-pending-driver-ack-remind='${firstLinkId}']");
+      if (!button || button.disabled || button.textContent.trim() !== "Remind driver") return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(reminderClicked, true, "Expected the exact-link Remind driver action to be enabled.");
+    const reminderFeedback = await waitForCondition(
+      async () => {
+        const feedback = await evaluate(
+          `document.querySelector("[data-pending-driver-ack-reminder-message='${firstLinkId}']")?.textContent?.trim() || ""`,
+        );
+        return feedback === "Reminder request accepted; phone delivery is not guaranteed."
+          ? feedback
+          : false;
+      },
+      10000,
+      "native reminder accepted feedback",
+    );
+    assert.equal(
+      reminderFeedback,
+      "Reminder request accepted; phone delivery is not guaranteed.",
+    );
+    const reminderRequests = await evaluate(`window.__prestigeAckQueueRequests.filter(
+      (request) => request.method === "PATCH" && request.url === "/api/admin-driver-job-links"
+    )`);
+    assert.deepEqual(reminderRequests, [{
+      body: {
+        action: "remind_ack",
+        booking_reference: "ACK-CLOSE-BOOKING-ONE",
+        driver_job_link_id: firstLinkId,
+      },
+      method: "PATCH",
+      url: "/api/admin-driver-job-links",
+    }]);
 
     const requestsBeforeClose = await evaluate(`window.__prestigeAckQueueRequests.length`);
     const clickedClose = await evaluate(`(() => {

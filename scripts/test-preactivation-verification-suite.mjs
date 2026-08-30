@@ -150,6 +150,14 @@ const guardChecks = [
     script: "scripts/test-pending-driver-ack-queue-guard.mjs",
   },
   {
+    label: "pending Driver ACK native reminder guard",
+    script: "scripts/test-pending-driver-ack-reminder-guard.mjs",
+  },
+  {
+    label: "pending Driver ACK native reminder runtime guard",
+    script: "scripts/test-admin-driver-ack-reminder-runtime.mjs",
+  },
+  {
     label: "admin Day-of-Trip Dispatch Monitor existing workflow lock guard",
     script: "scripts/test-admin-day-of-trip-dispatch-monitor-existing-workflow-lock.mjs",
   },

@@ -992,6 +992,12 @@ type AdminDashboardDriverJobLinksReadState = {
   status: "error" | "idle" | "loaded" | "loading";
 };
 
+type PendingDriverAckReminderState = {
+  message: Message | null;
+  nextAvailableAt: string | null;
+  status: "idle" | "loading";
+};
+
 type CustomerDriverDetailsPortalLinkCopyState = Message & {
   external_send: false;
   loadedReference: string;
@@ -14818,6 +14824,9 @@ export default function Home() {
       linksByReference: {},
       status: "idle",
     });
+  const [pendingDriverAckReminderStates, setPendingDriverAckReminderStates] = useState<
+    Record<string, PendingDriverAckReminderState>
+  >({});
   const dashboardDriverJobLinksReadRequestRevisionRef = useRef(0);
   const dashboardDriverJobStatusAutoRequestedRef = useRef<Set<string>>(new Set());
   const [bookingsSearchTerm, setBookingsSearchTerm] = useState("");
@@ -22788,6 +22797,70 @@ export default function Home() {
 
       return nextBooking;
     });
+  }
+
+  async function remindPendingDriverAck(
+    driverJobLinkId: string,
+    bookingReference: string,
+  ) {
+    const exactLinkId = cleanReferenceText(driverJobLinkId);
+    const exactBookingReference = cleanReferenceText(bookingReference);
+    if (!exactLinkId || !exactBookingReference) {
+      return;
+    }
+
+    setPendingDriverAckReminderStates((current) => ({
+      ...current,
+      [exactLinkId]: {
+        message: { tone: "info", text: "Requesting one native reminder..." },
+        nextAvailableAt: current[exactLinkId]?.nextAvailableAt ?? null,
+        status: "loading",
+      },
+    }));
+
+    try {
+      const response = await fetch(adminDriverJobLinksApiPath, {
+        body: JSON.stringify({
+          action: "remind_ack",
+          booking_reference: exactBookingReference,
+          driver_job_link_id: exactLinkId,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || result.provider_accepted !== true) {
+        throw new Error(result?.error || "Driver reminder failed safely.");
+      }
+
+      setPendingDriverAckReminderStates((current) => ({
+        ...current,
+        [exactLinkId]: {
+          message: {
+            tone: "success",
+            text: "Reminder request accepted; phone delivery is not guaranteed.",
+          },
+          nextAvailableAt: cleanReferenceText(result.next_available_at) || null,
+          status: "idle",
+        },
+      }));
+    } catch (error) {
+      setPendingDriverAckReminderStates((current) => ({
+        ...current,
+        [exactLinkId]: {
+          message: {
+            tone: "error",
+            text: error instanceof Error ? error.message : "Driver reminder failed safely.",
+          },
+          nextAvailableAt: current[exactLinkId]?.nextAvailableAt ?? null,
+          status: "idle",
+        },
+      }));
+    }
   }
 
   async function loadBookings(
@@ -47320,22 +47393,60 @@ export default function Home() {
                       data-pending-driver-ack-queue-link-id={item.linkId}
                       key={item.linkId}
                     >
-                      <span>
-                        {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
-                        {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
-                          ? "Waiting"
-                          : `Waiting ${item.waitingMinutes} min`}
-                      </span>
-                      <button
-                        aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}
-                        className="min-h-11 shrink-0 rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
-                        data-pending-driver-ack-dismiss={item.linkId}
-                        onClick={() => dismissPendingDriverAckAlert(item.linkId)}
-                        title="Dismiss this alert only. The driver job link remains active."
-                        type="button"
-                      >
-                        Close
-                      </button>
+                      <div className="min-w-0">
+                        <span>
+                          {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
+                          {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
+                            ? "Waiting"
+                            : `Waiting ${item.waitingMinutes} min`}
+                        </span>
+                        {pendingDriverAckReminderStates[item.linkId]?.message ? (
+                          <p
+                            className={`mt-1 text-xs ${
+                              pendingDriverAckReminderStates[item.linkId].message?.tone === "error"
+                                ? "text-red-700"
+                                : pendingDriverAckReminderStates[item.linkId].message?.tone === "success"
+                                  ? "text-emerald-700"
+                                  : "text-slate-600"
+                            }`}
+                            data-pending-driver-ack-reminder-message={item.linkId}
+                          >
+                            {pendingDriverAckReminderStates[item.linkId].message?.text}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          aria-label={`Remind driver to acknowledge ${item.publicReference}`}
+                          className="min-h-11 rounded-md border border-amber-500 bg-amber-100 px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          data-pending-driver-ack-remind={item.linkId}
+                          disabled={
+                            item.waitingMinutes === null ||
+                            item.waitingMinutes < 15 ||
+                            pendingDriverAckReminderStates[item.linkId]?.status === "loading" ||
+                            (pendingDriverAckReminderStates[item.linkId]?.nextAvailableAt
+                              ? Date.parse(pendingDriverAckReminderStates[item.linkId].nextAvailableAt || "") > currentTimeMs
+                              : false)
+                          }
+                          onClick={() => void remindPendingDriverAck(item.linkId, item.bookingReference)}
+                          title="Send one native Driver app reminder. The existing Driver Job Link stays unchanged."
+                          type="button"
+                        >
+                          {pendingDriverAckReminderStates[item.linkId]?.status === "loading"
+                            ? "Reminding..."
+                            : "Remind driver"}
+                        </button>
+                        <button
+                          aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}
+                          className="min-h-11 rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
+                          data-pending-driver-ack-dismiss={item.linkId}
+                          onClick={() => dismissPendingDriverAckAlert(item.linkId)}
+                          title="Dismiss this alert only. The driver job link remains active."
+                          type="button"
+                        >
+                          Close
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ol>

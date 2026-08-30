@@ -1150,6 +1150,55 @@ try {
     ["NEW-PRIVATE-DRIVER-JOB-TOKEN", "/driver-job/", "PRIVATE-BOOKING-REFERENCE"],
     "native pre-ACK provider payload",
   );
+  let pendingAckNativeRequest = null;
+  let pendingAckWebSendCount = 0;
+  const pendingAckReminderAlert = await helper.sendDriverNativePendingAckReminder(
+    createMockClient({
+      acknowledged: false,
+      nativeHandoff: true,
+      subscriptions: [
+        {
+          auth: "native_expo_push_token",
+          endpoint: nativeExpoPushToken,
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+        {
+          auth: "web-auth",
+          endpoint: "https://push.example.test/subscription",
+          p256dh: "web-p256dh",
+          source_surface: "driver_job_acknowledgement",
+        },
+      ],
+    }),
+    {
+      driver_id: 8,
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async (expoToken, jobKey, openTarget, visibleBody) => {
+        pendingAckNativeRequest = { expoToken, jobKey, openTarget, visibleBody };
+      },
+      pushSender: async () => { pendingAckWebSendCount += 1; },
+    },
+  );
+  assert.equal(pendingAckReminderAlert.ok, true);
+  assert.equal(pendingAckReminderAlert.native_provider_accepted, true);
+  assert.equal(pendingAckReminderAlert.native_provider_request_count, 1);
+  assert.equal(pendingAckReminderAlert.provider_request_count, 1);
+  assert.equal(pendingAckWebSendCount, 0, "pending ACK reminder must never use browser Web Push");
+  assert.deepEqual(pendingAckNativeRequest, {
+    expoToken: nativeExpoPushToken,
+    jobKey: helper.opaqueDriverJobLinkKey("11111111-1111-4111-8111-111111111111"),
+    openTarget: null,
+    visibleBody: "Job acknowledgement needed. Tap to review.",
+  });
+  assertExcludes(
+    JSON.stringify(pendingAckNativeRequest),
+    ["NEW-PRIVATE-DRIVER-JOB-TOKEN", "/driver-job/", "PRIVATE-BOOKING-REFERENCE"],
+    "native pending-ACK reminder payload",
+  );
   let nativeWithoutAccountSendCount = 0;
   const nativeWithoutAccountAlert = await helper.sendDriverDevicePushAlertForNewJobLink(
     createMockClient({

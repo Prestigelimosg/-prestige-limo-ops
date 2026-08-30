@@ -4,13 +4,22 @@ Latest verified clean runtime checkpoint:
 d24f51e9 Add mobile Admin Details clear
 
 Latest pushed main/staging runtime checkpoint:
-0974e07b Add guarded Driver ACK reminders
+d24f51e9 Add mobile Admin Details clear
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-4d7a0268 Merge pull request #440 from Prestigelimosg/codex/pending-ack-remind-driver
+7f89b8ba Merge pull request #441 from Prestigelimosg/codex/admin-details-clear
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Company + Booker Active Access-Account Candidate Repair (2026-08-30)
+
+- Signed-in Production fail-first evidence on exact source `7f89b8ba2653c4eda75d368ef09912997788c859` selected Company `53` plus Booker `26` for QA Customer `192`. The exact active access account already carried all three verified IDs, while `bookers.customer_id` remained null and the pair had no prior booking. The established first-booking review therefore rendered `Use existing account` disabled and `Create new account` enabled. The draft remained `Not saved yet`, the saved count remained `52`, and no Customer, Booker, booking, access, notification, Calendar, invoice or provider write occurred.
+- The established Admin booking adapter now reads `customer_access_accounts` by the exact verified `company_id + booker_id` pair only when the durable Booker Customer link is null. Exactly one active access row with one valid positive Customer reference is unioned with the existing exact prior-booking evidence, and the existing active-Customer validation supplies the same existing review candidate. Names, email, phone, Passenger/Traveller text, Company labels and parser output remain non-evidence.
+- Matching access-account and exact prior-booking evidence deduplicates to one candidate. Disagreement, multiple exact rows, malformed identity, an inactive access row, an inactive/missing Customer or any other ambiguity fails closed before a Customer insert, Booker bind or booking write. When an active access pair already identifies a Customer, the existing `create_new` resolution is rejected before writes so it cannot split that identity.
+- The established `Use existing account` review and Booker-to-Customer bind writer remain the only confirmation path. No selector, panel, route, API, table, schema, migration, backfill or second writer is added. `app/page.tsx` is unchanged; the existing chooser continues presenting both explicit decisions, and neither decision writes before Admin confirmation.
+- Focused fail-first and passing protection is in `scripts/test-admin-booking-supabase-adapter-contract.mjs`, with the unchanged CRM selector, Save + CRM and visible light-mode Customer Account browser guards retained. The browser guard performed zero booking posts. QA Customer `192`, protected Customer `174`, all legacy/no-pair Customers and Booker `20` legacy rate precedence remain unchanged; any actual QA booking or Booker link is a separate action-time-approved Production write.
+- Rates, invoice layout/workflow, DSP billing, Calendar, push/badge/fanout, Customer access/session authorization, messaging, Driver, GPS, privacy, native apps, provider, payment, payout and PayNow lanes are unchanged.
 
 ## Admin Mobile Details Draft Clear (2026-08-30)
 

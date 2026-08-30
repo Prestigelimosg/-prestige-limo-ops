@@ -365,6 +365,7 @@ class MockSupabaseClient {
           id: 24,
         },
       ],
+      customer_access_accounts: [],
       customer_driver_app_notification_outbox: [],
       customer_contacts: [],
       customers: [],
@@ -377,6 +378,7 @@ class MockSupabaseClient {
       booking_service_items: 1,
       bookings: 1,
       bookers: 25,
+      customer_access_accounts: 1,
       customer_driver_app_notification_outbox: 1,
       customer_contacts: 1,
       customers: 1,
@@ -1172,6 +1174,225 @@ try {
   });
   assert.equal(insertedOperations(firstReviewMock.client, "customers").length, 0);
   assert.equal(insertedOperations(firstReviewMock.client, "bookings").length, 0);
+
+  const exactAccessCandidateSeed = {
+    bookers: [
+      { booker_name: "Owner PA Native Push Test", company_id: 53, customer_id: null, id: 26 },
+    ],
+    customer_access_accounts: [
+      {
+        account_status: "active",
+        booker_id: 26,
+        company_id: 53,
+        customer_account_reference: "192",
+        id: "qa-192-access-account",
+      },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        display_name: "Prestige Internal Native Push QA / Booker: Owner PA Native Push Test",
+        id: 192,
+        status: "active",
+      },
+    ],
+  };
+  const exactAccessCandidatePayload = persistence.parseAdminBookingPersistencePayload(
+    canonicalCorporateAdminPayload({
+      booking: {
+        booker_id: 26,
+        company_id: 53,
+        contact_display_name: "Owner PA Native Push Test",
+        customer_display_name: "Prestige Internal Native Push QA",
+        customer_id: null,
+        passenger_name: null,
+        traveler_id: null,
+      },
+    }),
+  );
+  const exactAccessCandidateMock = installMockClient(exactAccessCandidateSeed);
+  const exactAccessCandidateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    exactAccessCandidatePayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(exactAccessCandidatePayload.ok, true);
+  assert.equal(exactAccessCandidateResult.ok, false);
+  assert.equal(exactAccessCandidateResult.status, 409);
+  assert.deepEqual(exactAccessCandidateResult.customer_account_collision_review, {
+    candidates: [
+      {
+        customer_account: "Prestige Internal Native Push QA / Booker: Owner PA Native Push Test",
+        customer_id: 192,
+      },
+    ],
+    code: "customer_account_collision_review_required",
+  });
+  assert.equal(insertedOperations(exactAccessCandidateMock.client, "customers").length, 0);
+  assert.equal(insertedOperations(exactAccessCandidateMock.client, "bookings").length, 0);
+
+  const useExactAccessCandidateMock = installMockClient(exactAccessCandidateSeed);
+  const useExactAccessCandidateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(
+      canonicalCorporateAdminPayload({
+        booking: {
+          booker_id: 26,
+          company_id: 53,
+          contact_display_name: "Owner PA Native Push Test",
+          customer_display_name: "Prestige Internal Native Push QA",
+          customer_id: null,
+          passenger_name: null,
+          traveler_id: null,
+        },
+        customer_account_collision_resolution: {
+          action: "merge",
+          reviewed_customer_ids: [192],
+          selected_customer_id: 192,
+        },
+      }),
+    ).data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(useExactAccessCandidateResult.ok, true);
+  assert.equal(useExactAccessCandidateMock.client.tables.bookers[0].customer_id, 192);
+  assert.equal(
+    insertedOperation(useExactAccessCandidateMock.client, "bookings")?.payload?.customer_id,
+    192,
+  );
+  assert.equal(insertedOperations(useExactAccessCandidateMock.client, "customers").length, 0);
+
+  const splitExactAccessCandidateMock = installMockClient(exactAccessCandidateSeed);
+  const splitExactAccessCandidateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    persistence.parseAdminBookingPersistencePayload(
+      canonicalCorporateAdminPayload({
+        booking: {
+          booker_id: 26,
+          company_id: 53,
+          contact_display_name: "Owner PA Native Push Test",
+          customer_display_name: "Prestige Internal Native Push QA",
+          customer_id: null,
+          passenger_name: null,
+          traveler_id: null,
+        },
+        customer_account_collision_resolution: {
+          action: "create_new",
+          reviewed_customer_ids: [192],
+        },
+      }),
+    ).data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(splitExactAccessCandidateResult.ok, false);
+  assert.equal(splitExactAccessCandidateResult.status, 409);
+  assert.match(splitExactAccessCandidateResult.error, /verified customer identity/i);
+  assert.equal(insertedOperations(splitExactAccessCandidateMock.client, "customers").length, 0);
+  assert.equal(insertedOperations(splitExactAccessCandidateMock.client, "bookings").length, 0);
+
+  installMockClient({
+    ...exactAccessCandidateSeed,
+    bookings: [
+      { booker_id: 26, company_id: 53, customer_id: 192, id: 241, traveler_id: null },
+    ],
+  });
+  const matchingAccessAndBookingResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    exactAccessCandidatePayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(matchingAccessAndBookingResult.ok, false);
+  assert.deepEqual(
+    matchingAccessAndBookingResult.customer_account_collision_review?.candidates.map(
+      (candidate) => candidate.customer_id,
+    ),
+    [192],
+  );
+
+  const conflictingAccessAndBookingMock = installMockClient({
+    ...exactAccessCandidateSeed,
+    bookings: [
+      { booker_id: 26, company_id: 53, customer_id: 163, id: 242, traveler_id: null },
+    ],
+    customers: [
+      ...exactAccessCandidateSeed.customers,
+      { account_status: "active", display_name: "Conflicting Account", id: 163, status: "active" },
+    ],
+  });
+  const conflictingAccessAndBookingResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+    exactAccessCandidatePayload.data,
+    adminAudit(),
+    adminActor(),
+  );
+
+  assert.equal(conflictingAccessAndBookingResult.ok, false);
+  assert.equal(conflictingAccessAndBookingResult.status, 409);
+  assert.match(conflictingAccessAndBookingResult.error, /verified customer identity/i);
+  assert.equal(insertedOperations(conflictingAccessAndBookingMock.client, "bookings").length, 0);
+
+  for (const [label, customerAccessAccounts] of [
+    [
+      "multiple",
+      [
+        ...exactAccessCandidateSeed.customer_access_accounts,
+        {
+          account_status: "active",
+          booker_id: 26,
+          company_id: 53,
+          customer_account_reference: "193",
+          id: "qa-193-access-account",
+        },
+      ],
+    ],
+    [
+      "malformed",
+      [
+        {
+          account_status: "active",
+          booker_id: 26,
+          company_id: 53,
+          customer_account_reference: "not-a-customer-id",
+          id: "malformed-access-account",
+        },
+      ],
+    ],
+    [
+      "inactive",
+      [
+        {
+          account_status: "revoked",
+          booker_id: 26,
+          company_id: 53,
+          customer_account_reference: "192",
+          id: "inactive-access-account",
+        },
+      ],
+    ],
+  ]) {
+    const unsafeAccessCandidateMock = installMockClient({
+      ...exactAccessCandidateSeed,
+      customer_access_accounts: customerAccessAccounts,
+    });
+    const unsafeAccessCandidateResult = await adapter.createAdminBookingThroughSupabaseAdapter(
+      exactAccessCandidatePayload.data,
+      adminAudit(),
+      adminActor(),
+    );
+
+    assert.equal(unsafeAccessCandidateResult.ok, false, `${label} access evidence must fail`);
+    assert.equal(unsafeAccessCandidateResult.status, 409, `${label} access evidence status`);
+    assert.match(
+      unsafeAccessCandidateResult.error,
+      /verified customer identity/i,
+      `${label} access evidence error`,
+    );
+    assert.equal(insertedOperations(unsafeAccessCandidateMock.client, "customers").length, 0);
+    assert.equal(insertedOperations(unsafeAccessCandidateMock.client, "bookings").length, 0);
+  }
 
   const createFirstAccountMock = installMockClient();
   const createFirstAccountPayload = persistence.parseAdminBookingPersistencePayload(

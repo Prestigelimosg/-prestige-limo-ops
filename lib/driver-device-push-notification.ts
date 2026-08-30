@@ -131,6 +131,7 @@ type DriverDevicePushAlertInput = {
 type DriverNativePushOpenTarget = "messages";
 type DriverNativePushVisibleBody =
   | "Job update available"
+  | "Job acknowledgement needed. Tap to review."
   | "New job available. Tap to review."
   | "Pickup is in 1 hour. Open Driver Portal to review.";
 
@@ -893,6 +894,7 @@ async function sendPayloadToDriverSubscriptions(
   nativeVisibleBody: DriverNativePushVisibleBody = "Job update available",
   nativeJobKey: string | null = payload.target_path ? null : payload.job_key,
   requireSingleNativeSubscription = false,
+  nativeOnly = false,
 ): Promise<DriverDevicePushAlertResult> {
   const loaded = await loadActiveDriverSubscriptions(client, driverId);
   if (!loaded.ok) {
@@ -913,8 +915,10 @@ async function sendPayloadToDriverSubscriptions(
   ).length;
   const nativeIsEligible = Boolean(nativeJobKey) &&
     (!requireSingleNativeSubscription || nativeSubscriptionCount === 1);
-  const eligibleSubscriptions = loaded.subscriptions.filter(
-    (subscription) => subscription.channel === "web" || nativeIsEligible,
+  const eligibleSubscriptions = loaded.subscriptions.filter((subscription) =>
+    nativeOnly
+      ? subscription.channel === "native_ios" && nativeIsEligible
+      : subscription.channel === "web" || nativeIsEligible
   );
   if (eligibleSubscriptions.length === 0) {
     return alertResult("no_active_subscriptions", { enabled: true });
@@ -994,6 +998,61 @@ async function sendPayloadToDriverSubscriptions(
         providerRequestCount: eligibleSubscriptions.length,
         status: "failed",
       });
+}
+
+export async function sendDriverNativePendingAckReminder(
+  client: DriverDevicePushClient,
+  input: {
+    driver_id: unknown;
+    driver_job_link_id: string;
+  },
+  options: DriverDevicePushAlertOptions = {},
+): Promise<DriverDevicePushAlertResult> {
+  const env = options.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  const config = resolveProviderConfig(env);
+  if (!config) {
+    return alertResult(enabled ? "provider_not_configured" : "push_gate_closed", {
+      enabled,
+    });
+  }
+
+  const link = await resolveAlertDriverLink(client, {
+    booking_reference: null,
+    delivery_surface: "driver_app",
+    driver_job_link_id: input.driver_job_link_id,
+  });
+  const linkId = safeUuid(link?.id);
+  const driverId = safePositiveInteger(input.driver_id);
+  const linkDriverId = safePositiveInteger(link?.driver_id);
+  const nativeHandoffAvailable = Boolean(
+    safeText(asRecord(link?.safe_link_context).native_handoff_ciphertext, 1200),
+  );
+  if (
+    !link ||
+    !linkId ||
+    !driverId ||
+    linkDriverId !== driverId ||
+    linkWasAcknowledged(link) ||
+    !nativeHandoffAvailable ||
+    !(await driverHasActiveOnePhoneAccount(client, driverId))
+  ) {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+
+  const payload = safePayload(linkId);
+  return sendPayloadToDriverSubscriptions(
+    client,
+    driverId,
+    payload,
+    config,
+    options,
+    null,
+    "Job acknowledgement needed. Tap to review.",
+    payload.job_key,
+    true,
+    true,
+  );
 }
 
 export async function sendDriverDevicePushAlertForNewJobLink(

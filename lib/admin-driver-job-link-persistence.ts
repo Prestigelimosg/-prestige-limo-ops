@@ -19,6 +19,11 @@ import {
 } from "./driver-job-link";
 import { sealDriverNativeJobHandoffToken } from "./driver-native-job-handoff";
 import { sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
+import {
+  createAdminDriverAckReminder,
+  type AdminDriverAckReminderInput,
+  type AdminDriverAckReminderResult,
+} from "./admin-driver-ack-reminder";
 
 export const adminDriverJobLinkPersistenceVersion =
   "admin-driver-job-link-api-v1";
@@ -108,6 +113,10 @@ export type AdminDriverJobLinkRevokeInput = {
   driver_job_link_id: string;
 };
 
+export type AdminDriverJobLinkActionInput =
+  | ({ action: "remind_ack" } & AdminDriverAckReminderInput)
+  | ({ action: "revoke" } & AdminDriverJobLinkRevokeInput);
+
 type UnknownRecord = Record<string, unknown>;
 
 const maxBookingReferenceLength = 120;
@@ -156,6 +165,7 @@ const allowedSafePayloadFields = new Set([
   "waypoints",
 ]);
 const allowedRevokeFields = new Set(["driver_job_link_id"]);
+const allowedActionFields = new Set(["action", "booking_reference", "driver_job_link_id"]);
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedSourceSurfaces = new Set(["admin_api", "admin_dashboard", "migration", "system"]);
 const forbiddenDriverJobLinkFragments = [
@@ -705,6 +715,45 @@ export function parseAdminDriverJobLinkRevokePayload(
   };
 }
 
+export function parseAdminDriverJobLinkActionPayload(
+  value: unknown,
+): AdminBookingResult<AdminDriverJobLinkActionInput> {
+  const record = asRecord(value);
+
+  if (record.action === undefined) {
+    const revoke = parseAdminDriverJobLinkRevokePayload(record);
+    return revoke.ok
+      ? { data: { action: "revoke", ...revoke.data }, ok: true }
+      : revoke;
+  }
+  if (
+    unknownKeys(record, allowedActionFields, "driver_job_link_action").length > 0 ||
+    findForbiddenFieldNames(record).length > 0 ||
+    findForbiddenTextValues(record).length > 0
+  ) {
+    return forbiddenDriverJobLinkResult();
+  }
+
+  const driverJobLinkId = validUuid(record.driver_job_link_id);
+  const bookingReference = safeText(record.booking_reference, maxBookingReferenceLength);
+  if (record.action !== "remind_ack" || !driverJobLinkId || !bookingReference) {
+    return {
+      error: "Admin driver job link action payload is malformed.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return {
+    data: {
+      action: "remind_ack",
+      booking_reference: bookingReference,
+      driver_job_link_id: driverJobLinkId,
+    },
+    ok: true,
+  };
+}
+
 function configValueOrNull(value: string | undefined) {
   const trimmed = value?.trim();
 
@@ -1164,4 +1213,22 @@ export async function revokeAdminDriverJobLink(
     data: link,
     ok: true,
   };
+}
+
+export async function remindAdminDriverToAcknowledgeLink(
+  input: AdminDriverAckReminderInput,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminDriverAckReminderResult> {
+  const clientResult = getServerOnlyAdminDriverJobLinkSupabaseClient(actor);
+
+  if (!clientResult.ok) {
+    return {
+      error: clientResult.error,
+      ok: false,
+      reason: "persistence_failed",
+      status: clientResult.status === 409 ? 409 : 500,
+    };
+  }
+
+  return createAdminDriverAckReminder(clientResult.data, input, actor);
 }

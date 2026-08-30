@@ -19,6 +19,7 @@ const safeApiLeakPattern =
 const unsafeDriverJobLinkLeakPattern =
   /token_hash|raw_token|driver_job_token|safe_link_context|customer_price|quoted_price|rate_amount|driver_payout|paynow|invoice|payment|pdf|billing|finance|parser_debug|raw_ai|parser_prompt|live_location|proof|photo|notification|mock_archive|mock_qa|dev_workbench|internal_admin_note|admin_note|server_secret/i;
 const sourceFiles = [
+  "lib/admin-driver-ack-reminder.ts",
   "lib/admin-driver-job-link-persistence.ts",
   "lib/admin-live-location-runtime-control.ts",
   "lib/admin-booking-supabase-adapter.ts",
@@ -1068,6 +1069,35 @@ try {
   assert.equal(malformedRevoke.status, 400);
   assert.equal(malformedRevoke.body.ok, false);
   assertNoApiLeak(malformedRevoke, "malformed revoke");
+
+  assert.deepEqual(
+    harness.persistence.parseAdminDriverJobLinkActionPayload({
+      action: "remind_ack",
+      booking_reference: "JOB-LINK-CONTRACT-001",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+    }),
+    {
+      data: {
+        action: "remind_ack",
+        booking_reference: "JOB-LINK-CONTRACT-001",
+        driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      },
+      ok: true,
+    },
+    "exact reminder action must remain separate from the legacy revoke payload",
+  );
+  const malformedReminder = await readResponse(
+    await harness.route.PATCH(
+      requestWithJson("PATCH", "http://localhost/api/admin-driver-job-links", {
+        action: "remind_ack",
+        booking_reference: "JOB-LINK-CONTRACT-001",
+        driver_job_link_id: "not-a-uuid",
+      }),
+    ),
+  );
+  assert.equal(malformedReminder.status, 400);
+  assert.equal(malformedReminder.body.ok, false);
+  assertNoApiLeak(malformedReminder, "malformed reminder");
 } finally {
   delete globalThis.__prestigeAdminDriverJobLinkApiMock;
   restoreEnv();

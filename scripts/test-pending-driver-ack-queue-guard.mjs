@@ -36,7 +36,7 @@ for (const fragment of [
   'data-pending-driver-ack-dismiss={item.linkId}',
   'onClick={() => dismissPendingDriverAckAlert(item.linkId)}',
   "Dismiss this alert only. The driver job link remains active.",
-  ">\n                        Close\n                      </button>",
+  ">\n                          Close\n                        </button>",
   'pendingDriverAckQueueItems.length > 0 ? (',
   'pendingDriverAckQueueItems.length > 0 ? "text-lg" : "text-sm"',
   "const pendingDriverAckQueueEligibleBookings = operationalBookings",

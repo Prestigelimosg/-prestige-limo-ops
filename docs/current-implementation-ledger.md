@@ -4,13 +4,21 @@ Latest verified clean runtime checkpoint:
 1d7a9ac3 Compact empty Driver ACK queue
 
 Latest pushed main/staging runtime checkpoint:
-3962124f Fix Company Booker Save CRM passenger boundary
+1d7a9ac3 Compact empty Driver ACK queue
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-52846fa3 Merge pull request #438 from Prestigelimosg/codex/company-booker-save-crm-passenger-boundary
+37f01406 Merge pull request #439 from Prestigelimosg/codex/pending-ack-queue-compact-zero
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Pending Driver ACK Native Reminder — Local Only (2026-08-30)
+
+- Owner-approved local work adds one `Remind driver` action only to each positive `Pending for Driver ACK Queue` row. It does not add `Resend`, recover/reissue/revoke a private link, or claim that a notification was delivered. The zero-pending compact row and exact-link local-only `Close` behavior remain unchanged.
+- The existing verified Admin `PATCH /api/admin-driver-job-links` lane now distinguishes the original revoke payload from the exact `remind_ack` action. The server re-verifies the exact newest active, unexpired, unrevoked, unacknowledged link; matching nonterminal booking and driver; encrypted native handoff; active one-phone Driver account; and exactly one active `driver_native_ios` subscription before any provider request.
+- The first reminder is blocked until 15 minutes after exact link issue, later reminders are limited to one per 15 minutes, and each exact link is capped at three. A unique exact-link/time-bucket event key is reserved as an archived audit-only `customer_driver_app_notification_outbox` row before the provider call, so it cannot appear later as an in-app message. Provider copy is fixed to `Job acknowledgement needed. Tap to review.` and carries only the established opaque job key; browser Web Push, raw token, route, passenger, customer, contact, Calendar, GPS, invoice, billing, payment and payout data are excluded.
+- The current Driver native app handoff is reused without native source/config changes or EAS. Tapping the alert remains subject to the existing signed Driver session, installation/device binding, exact driver, newest-link, booking assignment and nonterminal checks before the server decrypts the private handoff. The reminder reuses the established native sender's badge reservation and delivery-health internals; existing alert callers retain their prior defaults.
+- Fail-first evidence was captured before runtime implementation because `lib/admin-driver-ack-reminder.ts` did not exist. Focused source/runtime coverage is in `scripts/test-pending-driver-ack-reminder-guard.mjs` and `scripts/test-admin-driver-ack-reminder-runtime.mjs`, with the existing native push, ACK queue, Driver Job Link API, completion and Calendar guards retained. The exact-worktree booking browser gate also reconfirmed the already-merged Customer Copy cleanup: the retired SMS pseudo-button and readiness label remain absent while Email, Copy, Edit, Invite, App Link, preview and live-location helper stay present. No live reminder was sent. This checkpoint is local only: no push, PR, merge, deployment, Production data write or native build is authorized or claimed.
 
 ## Pending Driver ACK Queue Compact Zero State (2026-08-30)
 

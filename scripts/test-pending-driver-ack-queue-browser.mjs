@@ -174,15 +174,20 @@ function pageFixtureScript() {
     const amendedLinkId = ${JSON.stringify(amendedLinkId)};
     const originalFetch = window.fetch.bind(window);
 
-    const makeLink = ({ bookingReference, id, jobCardKind }) => ({
+    const makeLink = ({ ackReminder, bookingReference, id, issuedAt, jobCardKind }) => ({
       booking_reference: bookingReference,
-      created_at: "2026-07-20T12:00:00.000Z",
+      created_at: issuedAt,
       expires_at: "2026-07-22T12:00:00.000Z",
       id,
-      issued_at: "2026-07-20T12:00:00.000Z",
+      issued_at: issuedAt,
       link_status: "active",
       revoked_at: null,
       safe_summary: {
+        ack_reminder: ackReminder || {
+          count: 0,
+          last_provider_accepted: null,
+          last_sent_at: null,
+        },
         acknowledged: false,
         acknowledged_at: null,
         assigned_driver: null,
@@ -199,13 +204,20 @@ function pageFixtureScript() {
 
       return [
         makeLink({
+          ackReminder: amendmentMode ? null : {
+            count: 1,
+            last_provider_accepted: true,
+            last_sent_at: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+          },
           bookingReference: "ACK-CLOSE-BOOKING-ONE",
           id: amendmentMode ? amendedLinkId : firstLinkId,
+          issuedAt: new Date(Date.now() - (amendmentMode ? 5 : 40) * 60 * 1000).toISOString(),
           jobCardKind: amendmentMode ? "amendment" : "reissued",
         }),
         makeLink({
           bookingReference: "ACK-CLOSE-BOOKING-TWO",
           id: secondLinkId,
+          issuedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
           jobCardKind: "new",
         }),
       ];
@@ -417,14 +429,16 @@ async function runChromeTest() {
     assert.deepEqual(initialQueue.ids, [firstLinkId, secondLinkId]);
     assert.match(initialQueue.text, /12001 · Reissued · Link issued/);
     assert.match(initialQueue.text, /12002 · New · Link issued/);
+    assert.match(initialQueue.text, /Remind again/);
+    assert.match(initialQueue.text, /Auto reminder scheduled/);
 
     const reminderClicked = await evaluate(`(() => {
       const button = document.querySelector("[data-pending-driver-ack-remind='${firstLinkId}']");
-      if (!button || button.disabled || button.textContent.trim() !== "Remind driver") return false;
+      if (!button || button.disabled || button.textContent.trim() !== "Remind again") return false;
       button.click();
       return true;
     })()`);
-    assert.equal(reminderClicked, true, "Expected the exact-link Remind driver action to be enabled.");
+    assert.equal(reminderClicked, true, "Expected manual Remind again only after the automatic first reminder cooldown.");
     const reminderFeedback = await waitForCondition(
       async () => {
         const feedback = await evaluate(

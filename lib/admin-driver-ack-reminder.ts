@@ -51,6 +51,7 @@ export type AdminDriverAckReminderResult =
       ok: false;
       reason:
         | "acknowledged"
+        | "automatic_already_attempted"
         | "cooldown"
         | "driver_mismatch"
         | "invalid_link"
@@ -67,7 +68,13 @@ export type AdminDriverAckReminderResult =
 type ReminderOptions = {
   now?: Date;
   sendNativeReminder?: typeof sendDriverNativePendingAckReminder;
+  trigger?: "automatic_first_reminder" | "manual";
 };
+
+type AdminDriverAckReminderActor = Pick<
+  AdminBookingPersistenceAdapterActor,
+  "actor_label" | "actor_role" | "source_surface"
+>;
 
 function record(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -130,11 +137,12 @@ function nextAvailableAt(nowMs: number): string {
 export async function createAdminDriverAckReminder(
   client: ReminderClient,
   input: AdminDriverAckReminderInput,
-  actor: AdminBookingPersistenceAdapterActor,
+  actor: AdminDriverAckReminderActor,
   options: ReminderOptions = {},
 ): Promise<AdminDriverAckReminderResult> {
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
+  const trigger = options.trigger ?? "manual";
   const { data: linkData, error: linkError } = await client
     .from("driver_job_links")
     .select(
@@ -237,6 +245,12 @@ export async function createAdminDriverAckReminder(
     return blocked("persistence_failed", "Reminder audit history could not be verified.", 500);
   }
   const audits = rows(auditData);
+  if (trigger === "automatic_first_reminder" && audits.length > 0) {
+    return blocked(
+      "automatic_already_attempted",
+      "The automatic first reminder was already attempted for this exact Driver Job Link.",
+    );
+  }
   if (audits.length >= maximumReminderCount) {
     return blocked("limit_reached", "This pending link already reached the maximum of three reminders.");
   }
@@ -262,10 +276,11 @@ export async function createAdminDriverAckReminder(
       safe_context: {
         reminder_attempt: reminderCount,
         reminder_kind: "native_pending_ack",
+        reminder_trigger: trigger,
       },
       safe_message: "Job acknowledgement needed. Tap to review.",
       safe_title: "Prestige Driver",
-      source_surface: "admin_api",
+      source_surface: actor.source_surface,
       updated_at: now.toISOString(),
       workflow_area: reminderWorkflowArea,
     })
@@ -295,6 +310,7 @@ export async function createAdminDriverAckReminder(
       safe_context: {
         reminder_attempt: reminderCount,
         reminder_kind: "native_pending_ack",
+        reminder_trigger: trigger,
         provider_accepted: providerAccepted,
         provider_reason: sendResult?.reason ?? "provider_failure",
       },

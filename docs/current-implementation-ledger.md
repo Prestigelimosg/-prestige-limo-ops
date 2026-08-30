@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-d24f51e9 Add mobile Admin Details clear
+d7abbcdb Repair Company Booker access candidate
 
 Latest pushed main/staging runtime checkpoint:
-d24f51e9 Add mobile Admin Details clear
+d7abbcdb Repair Company Booker access candidate
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-7f89b8ba Merge pull request #441 from Prestigelimosg/codex/admin-details-clear
+7c95816f Merge pull request #442 from Prestigelimosg/codex/company-booker-access-candidate-repair
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Automatic First Driver ACK Reminder (2026-08-30)
+
+- The owner confirmed the Driver physically received the initial new-job native alert for test booking `10916`, then approved one automatic follow-up reminder about 15 minutes after the exact Driver Job Link was issued only if that newest link remains active and unacknowledged. There is no automatic reminder at 30 or 45 minutes. Any later second or third recovery reminder remains an explicit Admin action in the established Pending Driver ACK Queue, subject to the existing 15-minute cooldown and three-reminder maximum.
+- One isolated authenticated Vercel Cron GET calls the established server-only reminder helper every minute. The runner selects only active, unrevoked, unexpired links issued at least 15 minutes earlier, rejects acknowledged or malformed records, and then reuses the existing exact-link reminder path, which re-verifies newest-link identity, the nonterminal matching booking/driver, encrypted native handoff, one active Driver app account and exactly one active native subscription immediately before the provider attempt. The schedule can therefore run roughly 15 to 16 minutes after issuance; it does not depend on an open Admin browser.
+- Exactly one automatic attempt is allowed for each exact Driver Job Link. Any existing reminder audit row for that link suppresses further automatic attempts, while the established unique reminder event key protects a simultaneous manual/automatic race. The automatic audit is explicitly marked `automatic_first_reminder` with the system actor. Provider rejection remains a recorded failed attempt rather than an automatic retry; after the existing cooldown Admin can use `Remind again` deliberately.
+- The existing queue now shows `Auto reminder scheduled` before 15 minutes, `Auto reminder processing` while the first server attempt is due, `Auto reminder sent` only from a provider-accepted audit, and later `Remind again` after cooldown. Its existing 10-second exact-link read refresh supplies safe reminder count, last attempt time and provider-accepted state; no browser timer, second queue, second sender, polling store, route, schema, migration or native build is added.
+- Before activation, read-only Production inventory found test booking `10916` / `ADM-20260830085118`, exact link `5c67ac27-4621-4132-a1cc-17865b861b34`, assigned Driver `17`, active and unacknowledged with zero reminders, as the only globally eligible link. This protects against a retroactive multi-driver reminder blast. The source checkpoint does not yet claim deployment, scheduler execution, provider acceptance or physical receipt of the follow-up.
+- Driver Job Link creation/copy/revoke, acknowledgement persistence, replacement-driver protection, Driver Reports, explicit Admin completion, Operations and personal Driver Calendar, Live Dispatch/GPS, booking and Company + Booker identity, Customer access/messaging, native app source, push/badge sender internals, Rates, invoice/billing/payment, payout and PayNow remain unchanged. Focused protection is in `scripts/test-driver-ack-auto-reminder-guard.mjs` and `scripts/test-driver-ack-auto-reminder-runtime.mjs`, registered beside the existing ACK reminder, queue, Driver Job Link API, completion, Calendar, native-push, privacy and staged-change guards.
 
 ## Company + Booker Active Access-Account Candidate Repair (2026-08-30)
 

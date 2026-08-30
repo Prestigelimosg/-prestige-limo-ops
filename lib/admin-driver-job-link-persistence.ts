@@ -60,6 +60,11 @@ export type AdminDriverJobLinkRecord = {
   link_status: AdminDriverJobLinkStatus;
   revoked_at: string | null;
   safe_summary: {
+    ack_reminder: {
+      count: number;
+      last_provider_accepted: boolean | null;
+      last_sent_at: string | null;
+    };
     acknowledged: boolean;
     acknowledged_at: string | null;
     assigned_driver: string | null;
@@ -924,6 +929,11 @@ function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecor
   const jobCardKind = textOrNull(context.job_card_kind);
 
   return {
+    ack_reminder: {
+      count: 0,
+      last_provider_accepted: null,
+      last_sent_at: null,
+    },
     acknowledged: Boolean(acknowledgedAt),
     acknowledged_at: acknowledgedAt,
     assigned_driver: safeText(payload.assigned_driver_name) || null,
@@ -1034,10 +1044,59 @@ export async function loadAdminDriverJobLinks(
     .map(normalizeDriverJobLinkRecord)
     .filter((link): link is AdminDriverJobLinkRecord => Boolean(link));
   const filteredLinks = filterLinks(links, parsed.data);
+  const paginatedLinks = paginateLinks(filteredLinks, parsed.data);
+  const paginatedLinkIds = paginatedLinks.map((link) => link.id);
+
+  if (paginatedLinkIds.length > 0) {
+    const { data: reminderData, error: reminderError } = await clientResult.data
+      .from("customer_driver_app_notification_outbox")
+      .select("driver_job_link_id, created_at, safe_context")
+      .in("driver_job_link_id", paginatedLinkIds)
+      .eq("workflow_area", "pending_driver_ack_reminder")
+      .order("created_at", { ascending: false })
+      .limit(parsed.data.limit * 3);
+
+    if (reminderError) {
+      return safeAdapterFailure(safeDriverJobLinkLoadError, 500, reminderError);
+    }
+
+    const summariesByLinkId = new Map<
+      string,
+      AdminDriverJobLinkRecord["safe_summary"]["ack_reminder"]
+    >();
+    for (const reminderRow of asArray(reminderData).map(asRecord)) {
+      const linkId = validUuid(reminderRow.driver_job_link_id);
+      if (!linkId || !paginatedLinkIds.includes(linkId)) {
+        continue;
+      }
+
+      const existing = summariesByLinkId.get(linkId);
+      const safeContext = asRecord(reminderRow.safe_context);
+      const createdAt = validDateText(reminderRow.created_at);
+      summariesByLinkId.set(linkId, {
+        count: (existing?.count ?? 0) + 1,
+        last_provider_accepted:
+          existing
+            ? existing.last_provider_accepted
+            : typeof safeContext.provider_accepted === "boolean"
+              ? safeContext.provider_accepted
+              : null,
+        last_sent_at: existing ? existing.last_sent_at : createdAt,
+      });
+    }
+
+    for (const link of paginatedLinks) {
+      link.safe_summary.ack_reminder = summariesByLinkId.get(link.id) ?? {
+        count: 0,
+        last_provider_accepted: null,
+        last_sent_at: null,
+      };
+    }
+  }
 
   return {
     data: {
-      links: paginateLinks(filteredLinks, parsed.data),
+      links: paginatedLinks,
       pagination: buildPagination(filteredLinks, parsed.data),
       version: adminDriverJobLinkPersistenceVersion,
     },

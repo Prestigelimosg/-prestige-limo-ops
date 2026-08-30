@@ -304,7 +304,22 @@ for (const fragment of [
 }
 
 const vercelConfigValue = JSON.parse(vercelConfig);
+assert.deepEqual(
+  vercelConfigValue.crons?.filter(
+    (entry) => entry.path === "/api/cron/codex-monthly-invoice-drafts",
+  ),
+  [
+    {
+      path: "/api/cron/codex-monthly-invoice-drafts",
+      schedule: "0 0 1 * *",
+    },
+  ],
+);
 assert.deepEqual(vercelConfigValue.crons, [
+  {
+    path: "/api/cron/driver-ack-auto-reminders",
+    schedule: "* * * * *",
+  },
   {
     path: "/api/cron/codex-monthly-invoice-drafts",
     schedule: "0 0 1 * *",

@@ -25331,6 +25331,18 @@ async function runChromeTest() {
     })()`);
 
     await clickTab("Dashboard", "Refresh Dashboard");
+    await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const button = [...document.querySelectorAll("button")].find(
+            (candidate) => candidate.textContent.trim() === "Refresh Dashboard",
+          );
+
+          return Boolean(button) && !button.disabled;
+        })()`),
+      10000,
+      "completed-only fixture Dashboard refresh readiness",
+    );
     const clickedEmptyStateDashboardRefresh = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(
         (candidate) => candidate.textContent.trim() === "Refresh Dashboard",

@@ -49,8 +49,37 @@ for (const fragment of [
   'Nothing saves automatically.',
   '{clean(booking.name) || "Passenger not set"} · {String(Number(clean(booking.pax)) || 1)} pax',
   '{clean(booking.pickup) || "Pickup not set"} → {clean(booking.dropoff) || "Drop-off not set"}',
+  'function resetAdminBookingDraft(nextStep: MobileDispatchBookingStep)',
+  'data-admin-mobile-booking-details-clear="true"',
+  'onClick={() => resetAdminBookingDraft("details")}',
 ]) {
   assert.equal(appPage.includes(fragment), true, `Mobile quick booking must include ${fragment}`);
+}
+
+assert.equal(
+  dispatchUi.includes('onClick={() => resetAdminBookingDraft("message")}'),
+  true,
+  "The established New booking action must reuse the same complete draft reset and return to Message.",
+);
+
+const mobileDetailsClearMarker = dispatchUi.indexOf(
+  'data-admin-mobile-booking-details-clear="true"',
+);
+assert.notEqual(mobileDetailsClearMarker, -1, "Missing mobile Details Clear marker");
+const mobileDetailsClear = dispatchUi.slice(
+  dispatchUi.lastIndexOf("<button", mobileDetailsClearMarker),
+  dispatchUi.indexOf("</button>", mobileDetailsClearMarker),
+);
+for (const fragment of [
+  'md:hidden',
+  'style={{ minHeight: 40, minWidth: 64 }}',
+  '>\n                  Clear',
+]) {
+  assert.equal(
+    mobileDetailsClear.includes(fragment),
+    true,
+    `The Details Clear action must remain one compact mobile-only control: ${fragment}`,
+  );
 }
 
 for (const fragment of [
@@ -187,6 +216,11 @@ assert.equal(
   ledger.includes("### Mobile Dispatch Quick Booking Focus"),
   true,
   "Implementation ledger must record the bounded mobile Dispatch change.",
+);
+assert.equal(
+  ledger.includes("## Admin Mobile Details Draft Clear"),
+  true,
+  "Implementation ledger must record the bounded mobile Details draft clear.",
 );
 
 console.log("Mobile Dispatch quick booking guard passed.");

@@ -4551,6 +4551,20 @@ async function runChromeTest() {
         `${viewport.label}: expected hidden archive not to create horizontal overflow`,
       );
 
+      if (viewport.width >= 768) {
+        const desktopDetailsClearVisible = await evaluate(`(() => {
+          const button = document.querySelector('[data-admin-mobile-booking-details-clear="true"]');
+          if (!button) return false;
+          const rect = button.getBoundingClientRect();
+          return getComputedStyle(button).display !== 'none' && rect.width > 0 && rect.height > 0;
+        })()`);
+        assert.equal(
+          desktopDetailsClearVisible,
+          false,
+          `${viewport.label}: expected mobile-only Details Clear hidden from tablet and desktop layouts`,
+        );
+      }
+
       if (viewport.width < 640) {
         await clickMobileDispatchStep("options");
         const mobileOptionsPlacement = await evaluate(`(() => {
@@ -4623,6 +4637,88 @@ async function runChromeTest() {
           true,
           `${viewport.label}: expected Route Extras & Child Seat immediately below Pickup / Drop-off in mobile Details`,
         );
+
+        const mobileDetailsClearPrepared = await evaluate(`(() => {
+          const normalizeLabel = (value) => (value || '').replace(/\\*/g, '').replace(/\\s+/g, ' ').trim();
+          const setField = (labelText, value) => {
+            const label = [...document.querySelectorAll('label')].find(
+              (candidate) => normalizeLabel(candidate.querySelector('span')?.textContent) === labelText,
+            );
+            const input = label?.querySelector('input');
+            if (!input) return false;
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+            setter?.call(input, value);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          };
+          window.__mobileUsabilityFetchCalls = [];
+          return setField('Company / Account', 'MOBILE CLEAR QA COMPANY') &&
+            setField('Passenger name', 'MOBILE CLEAR QA PASSENGER');
+        })()`);
+        assert.equal(
+          mobileDetailsClearPrepared,
+          true,
+          `${viewport.label}: expected mobile Details draft fields to accept local test values`,
+        );
+
+        const mobileDetailsClearBefore = await evaluate(`(() => {
+          const button = document.querySelector('[data-admin-mobile-booking-details-clear="true"]');
+          const rect = button?.getBoundingClientRect();
+          return {
+            height: Math.round(rect?.height || 0),
+            text: button?.textContent.trim() || '',
+            visible: Boolean(button && getComputedStyle(button).display !== 'none' && rect && rect.width > 0 && rect.height > 0),
+            width: Math.round(rect?.width || 0),
+          };
+        })()`);
+        assert.deepEqual(
+          mobileDetailsClearBefore,
+          { height: mobileDetailsClearBefore.height, text: 'Clear', visible: true, width: mobileDetailsClearBefore.width },
+          `${viewport.label}: expected one visible mobile Details Clear action`,
+        );
+        assert.equal(
+          mobileDetailsClearBefore.height >= 40 && mobileDetailsClearBefore.width >= 64,
+          true,
+          `${viewport.label}: expected mobile Details Clear to remain touch-friendly, got ${JSON.stringify(mobileDetailsClearBefore)}`,
+        );
+
+        const clickedMobileDetailsClear = await evaluate(`(() => {
+          const button = document.querySelector('[data-admin-mobile-booking-details-clear="true"]');
+          if (!button || button.disabled) return false;
+          button.click();
+          return true;
+        })()`);
+        assert.equal(clickedMobileDetailsClear, true, `${viewport.label}: expected mobile Details Clear click`);
+        const mobileDetailsClearResult = await waitForCondition(
+          () => evaluate(`(() => {
+            const normalizeLabel = (value) => (value || '').replace(/\\*/g, '').replace(/\\s+/g, ' ').trim();
+            const fieldValue = (labelText) => {
+              const label = [...document.querySelectorAll('label')].find(
+                (candidate) => normalizeLabel(candidate.querySelector('span')?.textContent) === labelText,
+              );
+              return label?.querySelector('input')?.value || '';
+            };
+            const mutationCalls = (window.__mobileUsabilityFetchCalls || []).filter(
+              (call) => !String(call).startsWith('GET '),
+            );
+            const state = {
+              company: fieldValue('Company / Account'),
+              editIdentityCount: document.querySelectorAll('[data-admin-booking-edit-identity="true"]').length,
+              mobileStep: document.querySelector('[data-dispatch-workflow="true"]')?.getAttribute('data-mobile-dispatch-step') || '',
+              mutationCalls,
+              passenger: fieldValue('Passenger name'),
+              saveLabel: document.querySelector('[data-job-card-save-toolbar="primary"] button')?.textContent.trim() || '',
+            };
+            return state.company === '' && state.passenger === '' ? state : false;
+          })()`),
+          10000,
+          `${viewport.label} mobile Details draft clear result`,
+        );
+        assert.deepEqual(mobileDetailsClearResult.mutationCalls, []);
+        assert.equal(mobileDetailsClearResult.editIdentityCount, 0);
+        assert.equal(mobileDetailsClearResult.mobileStep, 'details');
+        assert.equal(mobileDetailsClearResult.saveLabel, 'Save + CRM');
 
         await clickMobileDispatchStep("options");
 

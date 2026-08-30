@@ -176,6 +176,8 @@ try {
   assert.equal(insert.value.driver_job_link_id, linkId);
   assert.equal(insert.value.event_key, `pending-driver-ack-reminder:${linkId}:1`);
   assert.equal(insert.value.safe_message, "Job acknowledgement needed. Tap to review.");
+  assert.equal(insert.value.safe_context.reminder_trigger, "manual");
+  assert.equal(insert.value.source_surface, "admin_api");
   assert.equal(JSON.stringify(insert.value).includes("token"), false);
 
   sendCount = 0;
@@ -199,6 +201,25 @@ try {
   );
   assert.equal(cooldown.ok, false);
   assert.equal(cooldown.reason, "cooldown");
+
+  sendCount = 0;
+  const automaticAfterExisting = await helper.createAdminDriverAckReminder(
+    createMockClient({ audits: [{ created_at: "2026-08-30T10:00:00.000Z" }] }),
+    { booking_reference: bookingReference, driver_job_link_id: linkId },
+    {
+      actor_label: "Driver ACK scheduler",
+      actor_role: "system",
+      source_surface: "system",
+    },
+    {
+      now,
+      sendNativeReminder: async () => { sendCount += 1; },
+      trigger: "automatic_first_reminder",
+    },
+  );
+  assert.equal(automaticAfterExisting.ok, false);
+  assert.equal(automaticAfterExisting.reason, "automatic_already_attempted");
+  assert.equal(sendCount, 0);
 
   const capped = await helper.createAdminDriverAckReminder(
     createMockClient({

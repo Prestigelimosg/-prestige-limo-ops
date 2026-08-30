@@ -951,6 +951,11 @@ type AdminDriverJobLinkRecord = {
   link_status: "active" | "expired" | "revoked";
   revoked_at: string | null;
   safe_summary: {
+    ack_reminder?: {
+      count: number;
+      last_provider_accepted: boolean | null;
+      last_sent_at: string | null;
+    };
     acknowledged: boolean;
     acknowledged_at: string | null;
     assigned_driver: string | null;
@@ -30205,6 +30210,10 @@ export default function Home() {
                   issuedAt: link.issued_at,
                   jobCardKind: link.safe_summary.job_card_kind,
                   linkId: link.id,
+                  reminderCount: Math.max(0, link.safe_summary.ack_reminder?.count ?? 0),
+                  reminderLastProviderAccepted:
+                    link.safe_summary.ack_reminder?.last_provider_accepted ?? null,
+                  reminderLastSentAt: link.safe_summary.ack_reminder?.last_sent_at ?? null,
                   publicReference: bookingPublicReference(bookingRecord),
                   waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
                 }
@@ -47375,7 +47384,7 @@ export default function Home() {
                   </h2>
                   {pendingDriverAckQueueItems.length > 0 ? (
                     <p className="text-xs text-slate-600">
-                      Newest active Driver Job Link for each exact booking. Link issued means created in this app.
+                      Newest active Driver Job Link for each exact booking. Link issued means created in this app. First native reminder sends automatically after 15 minutes if still pending.
                     </p>
                   ) : null}
                 </div>
@@ -47432,8 +47441,11 @@ export default function Home() {
                           data-pending-driver-ack-remind={item.linkId}
                           disabled={
                             item.waitingMinutes === null ||
-                            item.waitingMinutes < 15 ||
+                            item.reminderCount === 0 ||
                             pendingDriverAckReminderStates[item.linkId]?.status === "loading" ||
+                            (item.reminderLastSentAt
+                              ? Date.parse(item.reminderLastSentAt) + 15 * 60 * 1000 > currentTimeMs
+                              : false) ||
                             (pendingDriverAckReminderStates[item.linkId]?.nextAvailableAt
                               ? Date.parse(pendingDriverAckReminderStates[item.linkId].nextAvailableAt || "") > currentTimeMs
                               : false)
@@ -47444,7 +47456,21 @@ export default function Home() {
                         >
                           {pendingDriverAckReminderStates[item.linkId]?.status === "loading"
                             ? "Reminding..."
-                            : "Remind driver"}
+                            : item.reminderCount === 0
+                              ? item.waitingMinutes !== null && item.waitingMinutes < 15
+                                ? "Auto reminder scheduled"
+                                : "Auto reminder processing"
+                              : (item.reminderLastSentAt &&
+                                    Date.parse(item.reminderLastSentAt) + 15 * 60 * 1000 > currentTimeMs) ||
+                                  (pendingDriverAckReminderStates[item.linkId]?.nextAvailableAt
+                                    ? Date.parse(
+                                        pendingDriverAckReminderStates[item.linkId].nextAvailableAt || "",
+                                      ) > currentTimeMs
+                                    : false)
+                                ? item.reminderLastProviderAccepted
+                                  ? "Auto reminder sent"
+                                  : "Auto reminder attempted"
+                                : "Remind again"}
                         </button>
                         <button
                           aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}

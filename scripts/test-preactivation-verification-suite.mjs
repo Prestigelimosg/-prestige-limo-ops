@@ -418,6 +418,14 @@ const guardChecks = [
     script: "scripts/test-admin-native-push-receipt-evidence-guard.mjs",
   },
   {
+    label: "Driver ACK automatic first-reminder guard",
+    script: "scripts/test-driver-ack-auto-reminder-guard.mjs",
+  },
+  {
+    label: "Driver ACK automatic first-reminder runtime",
+    script: "scripts/test-driver-ack-auto-reminder-runtime.mjs",
+  },
+  {
     label: "admin complete native alert and Driver plate guard",
     script: "scripts/test-admin-native-ack-push-notification-guard.mjs",
   },

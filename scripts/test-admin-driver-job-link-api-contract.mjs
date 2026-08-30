@@ -165,6 +165,12 @@ class MockSupabaseQuery {
     return this;
   }
 
+  in(column, values) {
+    this.filters.push({ column, type: "in", value: values });
+
+    return this;
+  }
+
   insert(payload) {
     this.operation = "insert";
     this.payload = payload;
@@ -310,6 +316,7 @@ class MockSupabaseClient {
           service_type: "DEP",
         },
       ],
+      customer_driver_app_notification_outbox: [],
       driver_live_location_runtime_settings: [],
       driver_device_push_subscriptions: [],
       driver_job_links: [],
@@ -332,7 +339,11 @@ class MockSupabaseClient {
 
   filterRows(table, filters) {
     return this.tables[table].filter((row) =>
-      filters.every((filter) => row[filter.column] === filter.value),
+      filters.every((filter) =>
+        filter.type === "in"
+          ? filter.value.includes(row[filter.column])
+          : row[filter.column] === filter.value,
+      ),
     );
   }
 
@@ -911,9 +922,41 @@ try {
   assert.equal(listed.body.links[0].booking_reference, "JOB-LINK-CONTRACT-001");
   assert.equal(listed.body.links[0].safe_summary.acknowledged, false);
   assert.equal(listed.body.links[0].safe_summary.acknowledged_at, null);
+  assert.deepEqual(listed.body.links[0].safe_summary.ack_reminder, {
+    count: 0,
+    last_provider_accepted: null,
+    last_sent_at: null,
+  });
   assertNoApiLeak(listed, "listed response");
   assertNoUnsafeDriverJobLinkLeak(listed, "listed response");
   assert.doesNotMatch(JSON.stringify(listed.body), /driver_job_url/i);
+
+  client.tables.customer_driver_app_notification_outbox.push({
+    created_at: "2026-07-16T12:40:00.000Z",
+    driver_job_link_id: listed.body.links[0].id,
+    safe_context: {
+      provider_accepted: true,
+      provider_reason: "accepted",
+      reminder_attempt: 1,
+      reminder_trigger: "automatic_first_reminder",
+    },
+    workflow_area: "pending_driver_ack_reminder",
+  });
+  const remindedListed = await readResponse(
+    await harness.route.GET(
+      new Request("http://localhost/api/admin-driver-job-links?booking_reference=JOB-LINK-CONTRACT-001&limit=10&page=1", {
+        headers: adminHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(remindedListed.status, 200);
+  assert.deepEqual(remindedListed.body.links[0].safe_summary.ack_reminder, {
+    count: 1,
+    last_provider_accepted: true,
+    last_sent_at: "2026-07-16T12:40:00.000Z",
+  });
+  assertNoUnsafeDriverJobLinkLeak(remindedListed, "reminded listed response");
 
   client.tables.driver_job_links[0].safe_link_context.driver_acknowledged_at =
     "2026-07-16T12:45:00.000Z";

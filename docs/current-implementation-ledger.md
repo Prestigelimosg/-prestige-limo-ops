@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-d90c732a Automate first Driver ACK reminder
+109d249d Link proven Company Booker customer accounts
 
 Latest pushed main/staging runtime checkpoint:
-d90c732a Automate first Driver ACK reminder
+109d249d Link proven Company Booker customer accounts
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
 c50056b3 Merge pull request #445 from Prestigelimosg/codex/company-booker-browser-qa-race
@@ -12,13 +12,14 @@ c50056b3 Merge pull request #445 from Prestigelimosg/codex/company-booker-browse
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
-## Company + Booker Existing-Customer Link Migration — Approved Source Checkpoint (2026-08-30)
+## Company + Booker Existing-Customer Link Production Acceptance (2026-08-30)
 
 - The owner approved linking only eleven proven Company + Booker identities to their already-existing Customer profiles through the established nullable `bookers.customer_id` relationship: `14/39→173`, `16/38→171`, `17/33→165`, `18/36→169`, `21/47→184`, `22/48→185`, `23/50→188`, `24/31→163`, `27/40→196`, `28/56→197`, and `29/30→167`. This is a relationship link, not a Customer merge. Passenger/Traveller remains booking-only.
 - The official migration `20260830141847_company_booker_existing_account_backfill.sql` asserts the exact current global counts, eleven null Booker links, active target Customers, exact booking-ID evidence and Customer ownership, exact aligned invoice IDs, empty candidate Booker/Company rates, no candidate legacy-Traveller rate override, no active access-account collision, no competing Booker link, and the existing validated restrictive FK, ready unique partial index, nullable column, RLS default-deny boundary and zero Booker policies. Any drift aborts the complete serializable transaction before a relationship changes.
 - The only persistent statement updates `public.bookers.customer_id` for those exact eleven Booker/Company rows and requires an affected-row count of eleven. It does not insert, delete or update Customers, Companies, bookings, invoices, rates, access accounts, memberships, principals, sessions, devices, subscriptions, notifications, Calendar, Driver, GPS, billing, payment, payout or PayNow records; it adds no runtime, schema, policy, grant, provider, environment, Vercel or native-app change.
 - Booker `15` / Customer `174` remains excluded for protected legacy access/history compatibility. Booker `20` / Customer `177` remains excluded to preserve its nonempty legacy Traveller rate precedence. Already-linked Booker `19` / Customer `170` retains its accepted Booker rates, and QA Booker `26` / Customer `192` plus the complete QA access graph remain unchanged. The sixteen legacy/no-pair Customers `160, 161, 162, 164, 166, 168, 175, 178, 180, 183, 186, 187, 189, 190, 193, 194` remain non-inference targets and are explicitly protected.
-- Source protection is `scripts/test-company-booker-existing-account-backfill-guard.mjs` plus the existing Company + Booker identity, Rates, Customer access/session, privacy, notification/badge/fanout, Calendar, DSP and invoice guards. At this source checkpoint the migration has not yet been applied to Production; merge, immediate live precondition recheck, exact migration application and readback acceptance remain the next steps in the same bounded task.
+- PR `#447` merged the reviewed migration, guard and source checkpoint to `main` as `267c24ff1beda7c634b03a1f1d1eff96ced170bf`. The authenticated Production Supabase migration runner then applied only `company_booker_existing_account_backfill` as remote version `20260830142840`. Immediate readback proves all eleven exact links, thirteen linked Bookers total, only protected Bookers `15` and `20` still null, zero links to the sixteen non-inference Customers, all seventeen exact bookings and three aligned invoices unchanged, zero active access-account touches, and zero candidate Booker, Company or legacy-Traveller rate changes. QA Customer `192`, protected Customer `174`, accepted Booker `19` rates and Booker `20` legacy rate precedence remain intact.
+- The validated restrictive FK, ready unique partial index, nullable column and Booker RLS default-deny boundary remain unchanged. Post-migration advisors reported only existing project-level informational findings plus the unrelated Auth leaked-password-protection warning; this data-only migration added no schema, policy, grant or index finding, and no unrelated advisor remediation was attempted. Source protection is `scripts/test-company-booker-existing-account-backfill-guard.mjs` plus the existing Company + Booker identity, Rates, Customer access/session, privacy, notification/badge/fanout, Calendar, DSP and invoice guards; the focused post-migration set passed again with no runtime write or provider action.
 
 ## Company + Booker Customer Rates Production Acceptance (2026-08-30)
 

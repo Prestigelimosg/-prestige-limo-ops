@@ -12,6 +12,13 @@ Latest remote main/staging deployment checkpoint verified before this docs note:
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+## Company + Booker Browser QA Reselect Race Repair (2026-08-30)
+
+- Read-only Production inspection on the owner's signed-in Mac Chrome confirmed QA booking `10917` remained on the established verified Company + Booker account and exposed no Passenger/Traveller account prompt. No field, booking, account, Calendar, invoice, notification or provider action was changed.
+- The isolated zero-write Customer Account browser acceptance then failed after selecting the same verified Booker for a changed booking Passenger. Its existing wait accepted the already-present Company/Booker dataset before the asynchronous exact-Booker verification completed; the late selection completion then closed the newly opened create-choice dialog and produced a false timeout.
+- The browser guard now requires the existing Customer Account chooser to be closed and its search input to be cleared, in addition to the exact Company/Booker/Customer IDs and changed Passenger. Those two UI states are set only by the established completed account-selection path, so the following single Company + Booker new-account assertion cannot race the pending verification. No delay, retry, weakened assertion or application source change is introduced.
+- This is test-and-ledger-only acceptance stabilization. Save + CRM runtime, Company/Booker/Passenger behavior, Customer access, Rates, invoices, Calendar, Driver ACK, push/badges, native apps, Supabase, Vercel, Production data, payments, payout, PayNow, messaging and all provider lanes remain unchanged. Protection remains `scripts/test-admin-dispatch-customer-account-browser.mjs` plus the existing Company + Booker identity guards.
+
 ## Automatic First Driver ACK Reminder (2026-08-30)
 
 - The owner confirmed the Driver physically received the initial new-job native alert for test booking `10916`, then approved one automatic follow-up reminder about 15 minutes after the exact Driver Job Link was issued only if that newest link remains active and unacknowledged. There is no automatic reminder at 30 or 45 minutes. Any later second or third recovery reminder remains an explicit Admin action in the established Pending Driver ACK Queue, subject to the existing 15-minute cooldown and three-reminder maximum.

@@ -427,9 +427,13 @@ async function main() {
     const differentPassengerState = await waitForCondition(
       async () => evaluate(`(() => {
         const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        const searchInput = document.querySelector('[data-admin-dispatch-customer-account-search="true"]');
         const passenger = document.querySelector('input[placeholder="Passenger name"]');
         const review = document.querySelector('[data-admin-dispatch-customer-account-match-review="true"]');
-        return chooser?.dataset.bookerId === "5501" &&
+        return chooser instanceof HTMLDetailsElement &&
+          !chooser.open &&
+          searchInput?.value === "" &&
+          chooser.dataset.bookerId === "5501" &&
           chooser?.dataset.customerId === "550" &&
           passenger?.value === "Alex Tan" &&
           !review

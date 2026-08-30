@@ -12,6 +12,13 @@ c50056b3 Merge pull request #445 from Prestigelimosg/codex/company-booker-browse
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+## Save + CRM Booking-Read Purpose Repair (2026-08-30)
+
+- Signed-in Production QA on deployed source `2569e1a0acb01f95270555d60e9c566b472ff2a2` selected the established QA Company `Prestige Internal Native Push QA`, Booker `Owner PA Native Push Test`, and Passenger `OWNER DRIVER REMINDER QA`. The exact Company + Booker Customer Account was already selected, and Save + CRM correctly did not ask to create or merge another account. The save then failed closed before its booking POST with `Booking save failed: Admin booking persistence is available only from the internal admin dashboard.` Vercel Production runtime evidence recorded the corresponding `GET /api/admin-bookings` as HTTP `403` while the deployment remained `READY`.
+- The exact cause was the existing Save + CRM billing-identity preflight read sending the legacy-data purpose header to the established `/api/admin-bookings` route, whose verified boundary requires `admin-booking-persistence`. The in-place repair changes only that one preflight GET header. It adds no route, writer, selector, panel, account rule, persistence path or fallback, and it leaves the established booking POST and Company + Booker resolution unchanged.
+- Focused protection in `scripts/test-save-crm-billing-identity-review-guard.mjs` now scopes the assertion to `fetchRecentAdminBookingPersistenceRecordsForBillingIdentity` and requires the exact booking-persistence purpose while rejecting the legacy-data purpose there. Supabase data/schema, Vercel configuration, Rates, invoice/billing, Calendar, Driver ACK/reminders, messaging, native apps, Customer access, privacy, payment, payout and PayNow lanes remain untouched.
+- The failed QA attempt created no booking: the saved-booking count remained `55`, and the unsaved draft was cleared. Source review and pre-merge verification are recorded by this checkpoint; controlled Production save acceptance remains pending the merged deployment and a fresh owner-approved action-time test.
+
 ## Company + Booker Existing-Customer Link Production Acceptance (2026-08-30)
 
 - The owner approved linking only eleven proven Company + Booker identities to their already-existing Customer profiles through the established nullable `bookers.customer_id` relationship: `14/39→173`, `16/38→171`, `17/33→165`, `18/36→169`, `21/47→184`, `22/48→185`, `23/50→188`, `24/31→163`, `27/40→196`, `28/56→197`, and `29/30→167`. This is a relationship link, not a Customer merge. Passenger/Traveller remains booking-only.

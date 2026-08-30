@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-1d7a9ac3 Compact empty Driver ACK queue
+0974e07b Add guarded Driver ACK reminders
 
 Latest pushed main/staging runtime checkpoint:
-1d7a9ac3 Compact empty Driver ACK queue
+0974e07b Add guarded Driver ACK reminders
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-37f01406 Merge pull request #439 from Prestigelimosg/codex/pending-ack-queue-compact-zero
+4d7a0268 Merge pull request #440 from Prestigelimosg/codex/pending-ack-remind-driver
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Admin Mobile Details Draft Clear (2026-08-30)
+
+- The installed Admin app uses the existing web-served Dispatch quick-booking layout; no native-container or Expo change is required for this control.
+- The mobile `Details` step now exposes one compact `Clear` action in the existing Booking Details heading. It reuses the complete established `New booking` reset lane, clears the current form, parser text/review artifacts and loaded edit identity, explicitly arms the existing new-booking path, and remains on the empty Details step.
+- The existing Message-step `Clear Message` contract is unchanged: it clears parser/conversation text only and deliberately preserves the current booking form and loaded edit identity. The existing `New booking` action still performs the same complete reset and returns to Message.
+- The new control is local state only. It does not save/delete a booking, call an API, touch Supabase, Calendar, invoice/billing/payment, messaging, push/badge, GPS, provider or native code, and it is hidden on desktop where the established `New booking` action is already visible.
+- Focused protection remains in `scripts/test-mobile-dispatch-quick-booking-guard.mjs` with browser acceptance in the established booking/mobile suites.
+- The complete booking browser gate reproduced its completed-only Dashboard fixture checking the visible `Refresh Dashboard` control while the established notification read still correctly disabled it. The fixture now waits only for that existing control to become enabled before clicking; Dashboard runtime, loading state and refresh behavior are unchanged.
 
 ## Pending Driver ACK Native Reminder — Local Only (2026-08-30)
 

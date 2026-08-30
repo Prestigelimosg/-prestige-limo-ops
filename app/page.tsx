@@ -19853,13 +19853,17 @@ export default function Home() {
   }
 
   function resetAdminBookingFormAfterSuccessfulPersistence() {
+    resetAdminBookingDraft("message");
+  }
+
+  function resetAdminBookingDraft(nextStep: MobileDispatchBookingStep) {
     const emptyBooking = createInitialBooking();
 
     bookingFormRef.current = emptyBooking;
     setBooking(() => emptyBooking);
     clearLoadedBookingSelectionContext({ explicitNewBooking: true });
     clearBookingMessageInput();
-    setMobileDispatchBookingStep("message");
+    setMobileDispatchBookingStep(nextStep);
   }
 
   function retainSavedBookingForDriverJobLinkHandoff(
@@ -41926,12 +41930,7 @@ export default function Home() {
               <button
                 className="min-h-11 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 md:min-h-9"
                 type="button"
-                onClick={() => {
-                  setBooking(() => createInitialBooking());
-                  clearLoadedBookingSelectionContext({ explicitNewBooking: true });
-                  clearBookingMessageInput();
-                  setMobileDispatchBookingStep("message");
-                }}
+                onClick={() => resetAdminBookingDraft("message")}
               >
                 New booking
               </button>
@@ -42300,9 +42299,20 @@ export default function Home() {
               data-admin-dispatch-form-density="slim-booking-details"
               data-dispatch-workflow-step="booking-details"
             >
-              <div className="mb-1.5">
-                <h3 className="text-sm font-semibold text-slate-900">Booking Details</h3>
-                <p className="text-xs text-slate-500">Account, passenger, booker, and contact details.</p>
+              <div className="mb-1.5 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900">Booking Details</h3>
+                  <p className="text-xs text-slate-500">Account, passenger, booker, and contact details.</p>
+                </div>
+                <button
+                  className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 md:hidden"
+                  data-admin-mobile-booking-details-clear="true"
+                  onClick={() => resetAdminBookingDraft("details")}
+                  style={{ minHeight: 40, minWidth: 64 }}
+                  type="button"
+                >
+                  Clear
+                </button>
               </div>
               <div
                 className="mb-2 grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-2 md:grid-cols-3"

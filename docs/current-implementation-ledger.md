@@ -1,16 +1,23 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3962124f Fix Company Booker Save CRM passenger boundary
+1d7a9ac3 Compact empty Driver ACK queue
 
 Latest pushed main/staging runtime checkpoint:
-d4afcd43 Simplify Customer Copy actions
+3962124f Fix Company Booker Save CRM passenger boundary
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-c06f7abc Merge pull request #432 from Prestigelimosg/codex/admin-dashboard-default
+52846fa3 Merge pull request #438 from Prestigelimosg/codex/company-booker-save-crm-passenger-boundary
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Pending Driver ACK Queue Compact Zero State (2026-08-30)
+
+- When the existing Dispatch `Pending for Driver ACK Queue` has zero rows, it now renders one slim green row containing only the established title and `0 pending` badge. The explanatory `Newest active Driver Job Link...` sentence and duplicate `No driver acknowledgements pending.` empty-state sentence are hidden at zero. Any positive count retains the complete existing pulsing amber queue, explanatory sentence, every uncapped exact-link row, revision label and local-only `Close` control unchanged.
+- Complete read-only inspection proved a queue-row `Resend` action cannot safely recover or copy an issued private link: the safe Admin GET never returns the one-time token, while the established Driver Job Link POST creates a new link and inseparably performs the existing best-effort Driver native push attempt and temporary live-location authorization. No `Resend` control, new writer, route, token recovery, provider claim, revocation, expiry or acknowledgement behavior is added in this checkpoint. Any future shortcut must reuse the visible Driver Job Link setup lane under a separately chosen owner-approved meaning.
+- Fail-first source coverage rejected the missing compact branch before the presentation-only repair. The focused browser guard then reproduced the same initial queue timeout on untouched `origin/main`: the shared Admin root now opens Dashboard, but the older Dispatch-only guard never selected Dispatch. The guard now opens the established Dispatch tab after each hard navigation before asserting exact-link dismissal isolation and persistence; this changes no runtime or tab default.
+- Driver Job Link creation/copy/revoke, acknowledgement persistence, Driver Reports, explicit Admin completion, Operations and personal Driver Calendar, push/badge/native files, GPS writers/polling, booking, messaging, Customer access, invoice, billing, payment, payout, PayNow, provider, schema and Production data remain unchanged.
 
 ## Verified Company + Booker Save + CRM Passenger Boundary (2026-08-30)
 
@@ -21,7 +28,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The final PA-scope protection batch reproduced one test-only assertion failure identically on unchanged `origin/main`: its exact access-account select string predated the established `principal_cutover_at` and `legacy_link_revoked_at` fields. The guard now requires those two existing cutover fields in their exact current safe read order; customer access, session, privacy and runtime source are unchanged.
 - The same unchanged-main comparison proved the Company Profile sync guard still named the retired generic/agency new-account choices even though the established browser suite now enforces the single `Create Company + Booker Account` path. Only that guard's UI and browser-evidence fragments are aligned to the current Company+Booker choice, field retention and pre-write fail-closed coverage; Company Profile, booking, CRM and Calendar runtime are unchanged.
 - The complete preactivation suite also reproduced its compact action-feedback guard's obsolete visible `SMS checked` requirement identically on unchanged `origin/main`, after PR `#437` removed that blocked Customer Copy pseudo-button. That guard now explicitly rejects the retired SMS action selector instead; the disabled SMS route, ordinary Copy fallback and all notification runtime remain unchanged.
-- The ledger source-of-truth gate then reproduced the top clean/pushed runtime pointer lagging one already-merged application commit on unchanged `origin/main`. Both runtime pointers now identify exact current runtime commit `d4afcd43 Simplify Customer Copy actions`; the older remote-deployment evidence line is preserved without making a new deployment claim.
+- The ledger source-of-truth gate then reproduced the top clean/pushed runtime pointer lagging one already-merged application commit on unchanged `origin/main`. At that checkpoint both runtime pointers were aligned to `d4afcd43 Simplify Customer Copy actions`; the current header now advances only with later separately verified runtime, push and deployment evidence.
+- Signed-in Production no-write acceptance on exact full source `52846fa3f2461be7b26275ce3ef051ba44335a21` selected verified Company `53` plus Booker `26` with Passenger blank. The browser allowed only the exact account/read preflights and intercepted the sole `POST /api/admin-bookings` before network persistence, returning a local `409`; the draft remained `Not saved yet`, no billing-identity review or Passenger/Boss prompt appeared, and no booking, customer, account, Calendar, invoice, alert, push or provider write occurred.
 - Rates, invoice layout/workflow, DSP/hourly calculations, Calendar, push/badge/fanout, Customer/Driver/native source, messaging, GPS, provider, schema and data lanes are unchanged. Protection remains in the existing Admin Dispatch CRM identity guard and Customer Account browser suite.
 
 ## Customer Copy Visible Noise And SMS Pseudo-Button Cleanup (2026-08-30)
@@ -31,6 +39,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - `Copy`, `Edit`, `Email`, `Send In-App`, `Copy Booking Invite`, `Copy + App Link`, message preview/disclosure, the live-location helper and all Copy/app-link success or error feedback remain in their existing locations with their existing handlers. Ordinary Copy remains the manual external fallback.
 - Focused source guards and Booking UI/app-smoke browser coverage require the removed visible strings and SMS selectors to stay absent while preserving the established Email, Send In-App, Copy, app-link, access, notification and privacy boundaries. No push/badge/native, automatic Driver ACK, Calendar, invoice, billing, payment, payout, DSP, GPS, provider, schema or data behavior is changed.
 - The complete mocked Driver browser gate reproduced on untouched `origin/main` with two different immediate empty bridge-state assertions even though Driver route, native and test sources were byte-identical. The existing browser harness now waits only for the already-required asynchronous service-worker remembered-link and embedded native-notification bridge results before asserting them; no Driver runtime, native bridge, push registration or notification behavior changed.
+- A later complete preactivation run reproduced one obsolete compact-feedback assertion identically on untouched `origin/main`: it still required the retired visible `SMS checked` button result after the approved SMS pseudo-button removal. That one test-only fragment is removed while the separate SMS disabled-route, no-live and Customer Copy absence guards continue protecting the blocked backend and absent UI; no runtime, handler, provider or notification behavior changed.
+- The same restart proved the ledger header still named the earlier app-link runtime and PR `#432` deployment after PR `#437` had already merged and deployed the Customer Copy cleanup. The header now records exact latest runtime `d4afcd43` and exact verified deployed merge `19358121`; Git history and Production state are unchanged by this documentation alignment.
 
 ## Saved Customer App Link Independent Of Trip Readiness (2026-08-29)
 

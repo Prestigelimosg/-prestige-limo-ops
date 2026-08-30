@@ -349,6 +349,25 @@ async function runChromeTest() {
       return result.result?.value;
     };
 
+    const openDispatchTab = async () => {
+      const clicked = await evaluate(`(() => {
+        const button = [...document.querySelectorAll("button[role='tab']")].find(
+          (button) => button.textContent?.trim() === "Dispatch",
+        );
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(clicked, true, "Expected the established Dispatch tab to be available.");
+      await waitForCondition(
+        () => evaluate(`Boolean(document.querySelector("[data-pending-driver-ack-queue='true']"))`),
+        10000,
+        "Pending Driver ACK Queue after opening Dispatch",
+      );
+    };
+
+    await openDispatchTab();
+
     const readQueue = () =>
       evaluate(`(() => {
         const queue = document.querySelector("[data-pending-driver-ack-queue='true']");
@@ -419,6 +438,7 @@ async function runChromeTest() {
     );
 
     await navigateWithLoadEvent(client, appUrl);
+    await openDispatchTab();
     reporter.step("hard refresh retained exact-link dismissal");
     const refreshedQueue = await waitForCondition(
       async () => {
@@ -442,6 +462,7 @@ async function runChromeTest() {
       `window.localStorage.setItem("prestige-ack-queue-browser-link-mode", "amendment")`,
     );
     await navigateWithLoadEvent(client, appUrl);
+    await openDispatchTab();
     reporter.step("new exact link appeared as a fresh pending alert");
     const amendedQueue = await waitForCondition(
       async () => {

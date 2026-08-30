@@ -1,13 +1,13 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-3962124f Fix Company Booker Save CRM passenger boundary
+1d7a9ac3 Compact empty Driver ACK queue
 
 Latest pushed main/staging runtime checkpoint:
-d4afcd43 Simplify Customer Copy actions
+3962124f Fix Company Booker Save CRM passenger boundary
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-19358121 Merge pull request #437 from Prestigelimosg/codex/customer-copy-remove-sms-pseudo-button
+52846fa3 Merge pull request #438 from Prestigelimosg/codex/company-booker-save-crm-passenger-boundary
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -28,7 +28,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The final PA-scope protection batch reproduced one test-only assertion failure identically on unchanged `origin/main`: its exact access-account select string predated the established `principal_cutover_at` and `legacy_link_revoked_at` fields. The guard now requires those two existing cutover fields in their exact current safe read order; customer access, session, privacy and runtime source are unchanged.
 - The same unchanged-main comparison proved the Company Profile sync guard still named the retired generic/agency new-account choices even though the established browser suite now enforces the single `Create Company + Booker Account` path. Only that guard's UI and browser-evidence fragments are aligned to the current Company+Booker choice, field retention and pre-write fail-closed coverage; Company Profile, booking, CRM and Calendar runtime are unchanged.
 - The complete preactivation suite also reproduced its compact action-feedback guard's obsolete visible `SMS checked` requirement identically on unchanged `origin/main`, after PR `#437` removed that blocked Customer Copy pseudo-button. That guard now explicitly rejects the retired SMS action selector instead; the disabled SMS route, ordinary Copy fallback and all notification runtime remain unchanged.
-- The ledger source-of-truth gate then reproduced the top clean/pushed runtime pointer lagging one already-merged application commit on unchanged `origin/main`. Both runtime pointers now identify exact current runtime commit `d4afcd43 Simplify Customer Copy actions`; the older remote-deployment evidence line is preserved without making a new deployment claim.
+- The ledger source-of-truth gate then reproduced the top clean/pushed runtime pointer lagging one already-merged application commit on unchanged `origin/main`. At that checkpoint both runtime pointers were aligned to `d4afcd43 Simplify Customer Copy actions`; the current header now advances only with later separately verified runtime, push and deployment evidence.
+- Signed-in Production no-write acceptance on exact full source `52846fa3f2461be7b26275ce3ef051ba44335a21` selected verified Company `53` plus Booker `26` with Passenger blank. The browser allowed only the exact account/read preflights and intercepted the sole `POST /api/admin-bookings` before network persistence, returning a local `409`; the draft remained `Not saved yet`, no billing-identity review or Passenger/Boss prompt appeared, and no booking, customer, account, Calendar, invoice, alert, push or provider write occurred.
 - Rates, invoice layout/workflow, DSP/hourly calculations, Calendar, push/badge/fanout, Customer/Driver/native source, messaging, GPS, provider, schema and data lanes are unchanged. Protection remains in the existing Admin Dispatch CRM identity guard and Customer Account browser suite.
 
 ## Customer Copy Visible Noise And SMS Pseudo-Button Cleanup (2026-08-30)

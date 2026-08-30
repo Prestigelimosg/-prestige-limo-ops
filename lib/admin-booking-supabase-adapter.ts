@@ -1582,6 +1582,49 @@ async function resolveExactBookerCustomerAccount(
   return { data: customerId, ok: true };
 }
 
+async function resolveExactActiveAccessAccountCustomerCandidate(
+  client: SupabaseClient,
+  verifiedCompanyId: DbIdentifier,
+  verifiedBookerId: DbIdentifier,
+): Promise<AdminBookingResult<DbIdentifier | null>> {
+  const { data, error } = await client
+    .from("customer_access_accounts")
+    .select("customer_account_reference, account_status, company_id, booker_id")
+    .eq("company_id", verifiedCompanyId)
+    .eq("booker_id", verifiedBookerId)
+    .limit(2);
+
+  if (error) {
+    return safeAdapterFailure(safeSaveError, 500, error, "customer_lookup");
+  }
+
+  const rows = asArray(data);
+
+  if (!rows.length) {
+    return { data: null, ok: true };
+  }
+
+  const accessAccount = asRecord(rows[0]);
+  const customerId = Number(accessAccount.customer_account_reference);
+
+  if (
+    rows.length !== 1 ||
+    String(dbIdentifierOrNull(accessAccount.company_id) || "") !== String(verifiedCompanyId) ||
+    String(dbIdentifierOrNull(accessAccount.booker_id) || "") !== String(verifiedBookerId) ||
+    textOrNull(accessAccount.account_status)?.toLocaleLowerCase() !== "active" ||
+    !Number.isSafeInteger(customerId) ||
+    customerId <= 0
+  ) {
+    return {
+      error: safeCustomerIdentityConflictError,
+      ok: false,
+      status: 409,
+    };
+  }
+
+  return { data: customerId, ok: true };
+}
+
 async function bindExactBookerCustomerAccount(
   client: SupabaseClient,
   verifiedCompanyId: DbIdentifier,
@@ -2020,6 +2063,16 @@ async function findOrCreateCustomerId(
       return { data: exactBookerAccount.data, ok: true };
     }
 
+    const exactAccessAccount = await resolveExactActiveAccessAccountCustomerCandidate(
+      client,
+      verifiedCompanyId,
+      verifiedBookerId,
+    );
+
+    if (!exactAccessAccount.ok) {
+      return exactAccessAccount;
+    }
+
     const { data: verifiedIdentityRows, error: verifiedIdentityError } = await client
       .from("bookings")
       .select("customer_id")
@@ -2031,6 +2084,10 @@ async function findOrCreateCustomerId(
     }
 
     const verifiedCustomerIds = new Map<string, DbIdentifier>();
+
+    if (exactAccessAccount.data) {
+      verifiedCustomerIds.set(String(exactAccessAccount.data), exactAccessAccount.data);
+    }
 
     for (const row of asArray(verifiedIdentityRows)) {
       const customerId = dbIdentifierOrNull(asRecord(row).customer_id);
@@ -2119,6 +2176,14 @@ async function findOrCreateCustomerId(
     }
 
     if (verifiedCustomerId) {
+      return {
+        error: safeCustomerIdentityConflictError,
+        ok: false,
+        status: 409,
+      };
+    }
+
+    if (exactAccessAccount.data) {
       return {
         error: safeCustomerIdentityConflictError,
         ok: false,

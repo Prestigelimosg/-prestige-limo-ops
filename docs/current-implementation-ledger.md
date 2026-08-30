@@ -1,7 +1,7 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-0974e07b Add guarded Driver ACK reminders
+d24f51e9 Add mobile Admin Details clear
 
 Latest pushed main/staging runtime checkpoint:
 0974e07b Add guarded Driver ACK reminders

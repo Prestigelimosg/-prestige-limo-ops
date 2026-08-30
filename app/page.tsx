@@ -20231,7 +20231,7 @@ export default function Home() {
       });
       const response = await fetch(`${adminBookingsApiPath}?${searchParams.toString()}`, {
         headers: {
-          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+          "x-prestige-admin-purpose": "admin-booking-persistence",
         },
         method: "GET",
       });

@@ -40,6 +40,20 @@ assertIncludes(
   "visible no-2099 save guard message",
 );
 assertIncludes(appSource, "fetchRecentAdminBookingPersistenceRecordsForBillingIdentity", "fresh recent booking read before save");
+const billingIdentityRecentBookingReadSection = appSource.slice(
+  appSource.indexOf("async function fetchRecentAdminBookingPersistenceRecordsForBillingIdentity()"),
+  appSource.indexOf("async function resolveSaveCrmBillingIdentityAccountForSave("),
+);
+assertIncludes(
+  billingIdentityRecentBookingReadSection,
+  '"x-prestige-admin-purpose": "admin-booking-persistence"',
+  "billing identity review refresh uses booking persistence purpose",
+);
+assertExcludes(
+  billingIdentityRecentBookingReadSection,
+  '"x-prestige-admin-purpose": adminLegacyDataPurpose',
+  "billing identity review refresh must not use legacy-data purpose",
+);
 assertIncludes(
   appSource,
   "Existing traveler(s) under this billing/contact identity",

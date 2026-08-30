@@ -7,10 +7,19 @@ Latest pushed main/staging runtime checkpoint:
 d90c732a Automate first Driver ACK reminder
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-3e7a702a Merge pull request #443 from Prestigelimosg/codex/auto-driver-ack-reminder
+c50056b3 Merge pull request #445 from Prestigelimosg/codex/company-booker-browser-qa-race
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Company + Booker Customer Rates Production Acceptance (2026-08-30)
+
+- The owner approved opening only `PRESTIGE_CUSTOMER_RATES_WRITE_ENABLED=true` for the existing Vercel project's Production environment. The exact key was previously absent. No second Vercel project, domain, repository, source deployment or environment lane was created. Vercel's existing Production `Redeploy` action rebuilt the selected current `main` source without a code change as deployment `dpl_67exipzGHq4st6ZuRjkHiAt456n9`; it reached `READY`, retained `app.prestigelimo.sg`, and reports verified Git SHA `c50056b35739dc90e76610c850a36dec4fddeba4`.
+- The first native Admin load after redeployment temporarily remained on `Loading secure Admin sign-in…`. Read-only runtime evidence showed the existing native push-subscription request succeeded with HTTP `200`, `/admin-sign-in` returned the expected signed-session HTTP `307`, the deployment remained `READY`, and no error/fatal runtime log was present. The installed app then loaded normally without sign-out, reinstall, credential reset, Face ID reset, native build or application repair; this transient observation is not claimed as a reproduced source defect.
+- The owner then selected the existing exact Customer Account `ATOM International [Rachal Quinlan] · rachal` in the installed native Admin Rates surface and pressed the established `Save Override` once with only MNG AVF `85` and DEP AVF `75`. Production recorded one `POST /api/admin-customer-rates-runtime-write-action` at 21:25:51 SGT with HTTP `200`; the native UI reported `Override saved`.
+- Read-only Supabase verification proved exact Booker `19` remains bound to Company `37` and Customer `170` and now stores only `{"DEP":{"AVF":75},"MNG":{"AVF":85}}`. Company `37` retains empty Company rates, `transzend_excel_privacy=false`, and `card_option_default_enabled=false`. It is the only non-empty Booker customer-rate row, all Company customer-rate rows remain empty, and protected Booker `20` remains unchanged with empty rates. No second save, direct SQL write, migration, booking, Customer Account, invoice, billing, Calendar, Driver, notification, provider, payment, payout, PayNow, native build or release action occurred.
+- This accepts the existing Company + Booker customer-rate writer in Production; it does not broaden identity or precedence. Exact Booker rates continue overriding Company rates, Company rates continue overriding defaults, Passenger/Traveller remains booking-only, and legacy Traveller precedence remains available only when no approved Company + Booker account exists. The Production gate remains open for the established guarded Rates save/remove workflow. Closing or removing the gate and redeploying remains the bounded kill switch and was not exercised after this accepted save.
+- Focused post-acceptance protection remains `scripts/test-customer-rates-runtime-write-action-api-contract.mjs`, `scripts/test-customer-rates-runtime-app-wiring.mjs`, `scripts/test-customer-rates-runtime-activation-readiness-guard.mjs`, `scripts/test-pricing-customer-rates-approval-packet.mjs`, and `scripts/test-customer-rates-runtime-create-path-guard.mjs`. All five passed on the exact current-main tree before this docs-only checkpoint.
 
 ## Company + Booker Browser QA Reselect Race Repair (2026-08-30)
 

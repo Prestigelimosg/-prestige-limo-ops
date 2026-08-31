@@ -2,6 +2,7 @@ import {
   adminAiAssistantPurpose,
   requestAdminAiConversation,
 } from "../../../lib/admin-ai-runtime";
+import { executeAdminAiAccountBrief } from "../../../lib/admin-ai-account-brief";
 import { executeAdminAiBookingBrief } from "../../../lib/admin-ai-booking-brief";
 import { executeAdminAiInvoiceSearch } from "../../../lib/admin-ai-invoice-search";
 import { executeAdminAiTodaysWorkBrief } from "../../../lib/admin-ai-todays-work-brief";
@@ -91,6 +92,36 @@ export async function POST(request: Request) {
     return Response.json({
       answer: bookingBrief.data.answer,
       booking_brief: bookingBrief.data,
+      external_send: false,
+      model: "Prestige live records",
+      ok: true,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      write_action: false,
+    });
+  }
+
+  const accountBrief = await executeAdminAiAccountBrief(
+    body.message,
+    body.account_brief_page,
+    boundary.context,
+  );
+
+  if (accountBrief.matched) {
+    if (!accountBrief.ok) {
+      return Response.json(
+        {
+          error: accountBrief.error,
+          external_send: false,
+          ok: false,
+          write_action: false,
+        },
+        { status: accountBrief.status },
+      );
+    }
+
+    return Response.json({
+      account_brief: accountBrief.data,
+      answer: accountBrief.data.answer,
       external_send: false,
       model: "Prestige live records",
       ok: true,

@@ -2667,6 +2667,55 @@ type AdminAiInvoiceSearchResult = {
   total_count: number;
 };
 
+type AdminAiAccountBriefIdentity = {
+  booker_id: number;
+  booker_name: string;
+  company_id: number;
+  company_name: string;
+  customer_id: number;
+  open_customer_path: string;
+};
+
+type AdminAiAccountBriefResult = {
+  account: (AdminAiAccountBriefIdentity & {
+    completed_count: number;
+    identity_anomalies: string[];
+    issued_invoice_count: number;
+    issued_invoice_total_label: string;
+    jobs_not_billed_count: number;
+    unpaid_invoice_balance_label: string;
+    unpaid_invoice_count: number;
+    upcoming_count: number;
+  }) | null;
+  accounts_with_jobs_not_billed: Array<AdminAiAccountBriefIdentity & { jobs_not_billed_count: number }>;
+  answer: string;
+  company_options: string[];
+  has_more: boolean;
+  intent: "find_customer_account_brief";
+  jobs_not_billed: Array<{
+    booking_reference: string;
+    pickup_at: string | null;
+    public_booking_reference: string | null;
+    service_type: string;
+    status: string;
+  }>;
+  kind: "account" | "all_unpaid_bookings" | "unpaid_bookings";
+  manual_folder_guidance: string | null;
+  page: number;
+  page_size: number;
+  query: string;
+  read_at: string;
+  status: "ambiguous" | "blocked" | "legacy_identity" | "no_match" | "results" | "traveller_only";
+  total_count: number;
+  unpaid_invoices: Array<{
+    amount_label: string;
+    balance_label: string;
+    due_date: string;
+    invoice_number: string;
+    status: "Unpaid";
+  }>;
+};
+
 type AdminAiBookingBriefResult = {
   answer: string;
   booking: {
@@ -14910,6 +14959,8 @@ export default function Home() {
   const [adminAiBookingBriefLoadPending, setAdminAiBookingBriefLoadPending] = useState(false);
   const [adminAiInvoiceSearchResult, setAdminAiInvoiceSearchResult] =
     useState<AdminAiInvoiceSearchResult | null>(null);
+  const [adminAiAccountBriefResult, setAdminAiAccountBriefResult] =
+    useState<AdminAiAccountBriefResult | null>(null);
   const [adminAiTodaysWorkBriefResult, setAdminAiTodaysWorkBriefResult] =
     useState<AdminAiTodaysWorkBriefResult | null>(null);
   const [adminAiTodaysWorkHandoffPendingKey, setAdminAiTodaysWorkHandoffPendingKey] = useState("");
@@ -20006,6 +20057,7 @@ export default function Home() {
   function clearBookingMessageInput() {
     clearParseArtifacts();
     setAiConversationMessages([]);
+    setAdminAiAccountBriefResult(null);
     setAdminAiBookingBriefResult(null);
     setAdminAiInvoiceSearchResult(null);
     setAdminAiTodaysWorkBriefResult(null);
@@ -20937,6 +20989,8 @@ export default function Home() {
     appendInvoiceSearchPage = false,
     todaysWorkPage = 1,
     appendTodaysWorkPage = false,
+    accountBriefPage = 1,
+    appendAccountBriefPage = false,
   ) {
     if (!aiAssistSafetyAccepted) {
       setAiAssistMessage({
@@ -20956,7 +21010,8 @@ export default function Home() {
     setAiAssistMessage(null);
     setAiAssistLoading(true);
 
-    if (!appendInvoiceSearchPage && !appendTodaysWorkPage) {
+    if (!appendInvoiceSearchPage && !appendTodaysWorkPage && !appendAccountBriefPage) {
+      setAdminAiAccountBriefResult(null);
       setAdminAiBookingBriefResult(null);
       setAdminAiInvoiceSearchResult(null);
       setAdminAiTodaysWorkBriefResult(null);
@@ -20970,6 +21025,7 @@ export default function Home() {
           "x-prestige-admin-purpose": "admin-ai-assistant",
         },
         body: JSON.stringify({
+          account_brief_page: accountBriefPage,
           history: aiConversationMessages.slice(-6),
           invoice_search_page: invoiceSearchPage,
           message: question,
@@ -20977,6 +21033,7 @@ export default function Home() {
         }),
       });
       const responseBody = await response.json().catch(() => ({})) as {
+        account_brief?: unknown;
         answer?: unknown;
         booking_brief?: unknown;
         error?: unknown;
@@ -21007,6 +21064,7 @@ export default function Home() {
           : null;
 
       if (todaysWorkBrief) {
+        setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
         setAdminAiInvoiceSearchResult(null);
         setAdminAiTodaysWorkBriefResult((current) => {
@@ -21045,12 +21103,56 @@ export default function Home() {
           : null;
 
       if (bookingBrief) {
+        setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(bookingBrief);
         setAdminAiInvoiceSearchResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setBookingMessage("");
         setAiAssistResponseNote(
           "Prestige live records · Read-only booking brief. No AI model, booking write, Calendar call, message, or external send was used.",
+        );
+        return;
+      }
+
+      const rawAccountBrief = responseBody.account_brief;
+      const accountBrief =
+        rawAccountBrief !== null &&
+        typeof rawAccountBrief === "object" &&
+        !Array.isArray(rawAccountBrief) &&
+        (rawAccountBrief as { intent?: unknown }).intent === "find_customer_account_brief"
+          ? rawAccountBrief as AdminAiAccountBriefResult
+          : null;
+
+      if (accountBrief) {
+        setAdminAiBookingBriefResult(null);
+        setAdminAiInvoiceSearchResult(null);
+        setAdminAiTodaysWorkBriefResult(null);
+        setAdminAiAccountBriefResult((current) => {
+          if (
+            !appendAccountBriefPage ||
+            !current ||
+            current.query !== accountBrief.query ||
+            accountBrief.page !== current.page + 1
+          ) {
+            return accountBrief;
+          }
+
+          const seenAccounts = new Set(current.accounts_with_jobs_not_billed.map((row) =>
+            `${row.customer_id}:${row.company_id}:${row.booker_id}`,
+          ));
+          return {
+            ...accountBrief,
+            accounts_with_jobs_not_billed: [
+              ...current.accounts_with_jobs_not_billed,
+              ...accountBrief.accounts_with_jobs_not_billed.filter((row) =>
+                !seenAccounts.has(`${row.customer_id}:${row.company_id}:${row.booker_id}`),
+              ),
+            ],
+          };
+        });
+        setBookingMessage("");
+        setAiAssistResponseNote(
+          "Prestige live records · Read-only exact Company + Booker account brief. No AI model, customer or invoice write, payment, Calendar call, message, or external send was used.",
         );
         return;
       }
@@ -21065,6 +21167,7 @@ export default function Home() {
           : null;
 
       if (invoiceSearch) {
+        setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setAdminAiInvoiceSearchResult((current) => {
@@ -21126,6 +21229,20 @@ export default function Home() {
     await runAdminAiConversation(
       adminAiInvoiceSearchResult.query,
       adminAiInvoiceSearchResult.page + 1,
+      true,
+    );
+  }
+
+  async function handleAdminAiAccountBriefLoadMore() {
+    if (!adminAiAccountBriefResult?.has_more || aiAssistLoading) return;
+
+    await runAdminAiConversation(
+      adminAiAccountBriefResult.query,
+      1,
+      false,
+      1,
+      false,
+      adminAiAccountBriefResult.page + 1,
       true,
     );
   }
@@ -42601,7 +42718,7 @@ export default function Home() {
                     ))
                   ) : (
                     <p className="text-sm text-slate-600">
-                      Ask for today&apos;s work brief, one exact booking, or issued invoices by exact Booker. Read-only skills cannot change app data.
+                      Ask for today&apos;s work brief, one exact booking, an exact Company + Booker account, Jobs not billed yet, or issued invoices. Read-only skills cannot change app data.
                     </p>
                   )}
                   {adminAiTodaysWorkBriefResult ? (
@@ -42880,6 +42997,124 @@ export default function Home() {
                             </div>
                           </div>
                         </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {adminAiAccountBriefResult ? (
+                    <div
+                      className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-slate-900"
+                      data-admin-ai-account-brief="true"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-teal-800">
+                        Prestige live records · Read only
+                      </p>
+                      <p className="mt-1 font-semibold" data-admin-ai-account-brief-answer="true">
+                        {adminAiAccountBriefResult.answer}
+                      </p>
+                      {adminAiAccountBriefResult.account ? (
+                        <div className="mt-3 rounded-md border border-teal-200 bg-white p-3" data-admin-ai-account-card="true">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="text-lg font-bold text-teal-950">
+                                {adminAiAccountBriefResult.account.company_name} · {adminAiAccountBriefResult.account.booker_name}
+                              </p>
+                              <p className="text-xs text-slate-600">
+                                Customer #{adminAiAccountBriefResult.account.customer_id} · Company #{adminAiAccountBriefResult.account.company_id} · Booker #{adminAiAccountBriefResult.account.booker_id}
+                              </p>
+                            </div>
+                            <Link
+                              className="inline-flex min-h-9 items-center rounded-md border border-teal-300 bg-white px-3 py-1.5 text-xs font-semibold text-teal-950 hover:bg-teal-100"
+                              data-admin-ai-account-open-customer="true"
+                              href={adminAiAccountBriefResult.account.open_customer_path}
+                            >
+                              Open Customer Account
+                            </Link>
+                          </div>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            <p><strong>Upcoming:</strong> {adminAiAccountBriefResult.account.upcoming_count}</p>
+                            <p><strong>Completed:</strong> {adminAiAccountBriefResult.account.completed_count}</p>
+                            <p><strong>Issued invoices:</strong> {adminAiAccountBriefResult.account.issued_invoice_count} · {adminAiAccountBriefResult.account.issued_invoice_total_label}</p>
+                            <p data-admin-ai-jobs-not-billed-count="true"><strong>Jobs not billed yet:</strong> {adminAiAccountBriefResult.account.jobs_not_billed_count}</p>
+                            <p data-admin-ai-unpaid-invoice-count="true"><strong>Unpaid invoices:</strong> {adminAiAccountBriefResult.account.unpaid_invoice_count} · {adminAiAccountBriefResult.account.unpaid_invoice_balance_label}</p>
+                          </div>
+                          {adminAiAccountBriefResult.account.identity_anomalies.map((anomaly) => (
+                            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900" key={anomaly}>
+                              {anomaly}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {adminAiAccountBriefResult.company_options.length > 0 ? (
+                        <p className="mt-2 text-xs text-slate-700">
+                          Companies found: {adminAiAccountBriefResult.company_options.join(", ")}
+                        </p>
+                      ) : null}
+                      {adminAiAccountBriefResult.accounts_with_jobs_not_billed.length > 0 ? (
+                        <section className="mt-3" data-admin-ai-accounts-with-unpaid-bookings="true">
+                          <h3 className="font-bold text-teal-950">Jobs not billed yet by exact Company + Booker</h3>
+                          <div className="mt-2 space-y-2">
+                            {adminAiAccountBriefResult.accounts_with_jobs_not_billed.map((row) => (
+                              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-teal-200 bg-white p-3" key={`${row.customer_id}:${row.company_id}:${row.booker_id}`}>
+                                <div>
+                                  <p className="font-bold">{row.company_name} · {row.booker_name}</p>
+                                  <p className="text-xs text-slate-600">{row.jobs_not_billed_count} Job{row.jobs_not_billed_count === 1 ? "" : "s"} not billed yet</p>
+                                </div>
+                                <Link className="inline-flex min-h-9 items-center rounded-md border border-teal-300 bg-white px-3 py-1.5 text-xs font-semibold text-teal-950 hover:bg-teal-100" href={row.open_customer_path}>
+                                  Open Customer Account
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+                      {adminAiAccountBriefResult.jobs_not_billed.length > 0 ? (
+                        <section className="mt-3" data-admin-ai-jobs-not-billed="true">
+                          <h3 className="font-bold text-teal-950">Jobs not billed yet</h3>
+                          <div className="mt-2 space-y-2">
+                            {adminAiAccountBriefResult.jobs_not_billed.map((job) => (
+                              <div className="rounded-md border border-teal-200 bg-white p-3" key={job.booking_reference}>
+                                <p className="font-bold">Booking {job.public_booking_reference || job.booking_reference}</p>
+                                <p className="text-xs text-slate-600">{job.service_type} · {job.status}</p>
+                                {job.pickup_at ? <p className="text-xs text-slate-600">Pickup {job.pickup_at}</p> : null}
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+                      {adminAiAccountBriefResult.unpaid_invoices.length > 0 ? (
+                        <section className="mt-3" data-admin-ai-unpaid-invoices="true">
+                          <h3 className="font-bold text-teal-950">Unpaid invoices</h3>
+                          <div className="mt-2 space-y-2">
+                            {adminAiAccountBriefResult.unpaid_invoices.map((invoice) => (
+                              <div className="rounded-md border border-teal-200 bg-white p-3" key={invoice.invoice_number}>
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div>
+                                    <p className="font-bold">{invoice.invoice_number}</p>
+                                    <p className="text-xs text-slate-600">Due {invoice.due_date}</p>
+                                  </div>
+                                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900">Unpaid</span>
+                                </div>
+                                <p className="mt-1 text-xs"><strong>Amount:</strong> {invoice.amount_label} · <strong>Balance:</strong> {invoice.balance_label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+                      {adminAiAccountBriefResult.manual_folder_guidance ? (
+                        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+                          {adminAiAccountBriefResult.manual_folder_guidance}
+                        </p>
+                      ) : null}
+                      {adminAiAccountBriefResult.has_more ? (
+                        <button
+                          className="mt-3 min-h-9 rounded-md border border-teal-300 bg-white px-3 py-1.5 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-admin-ai-account-brief-load-more="true"
+                          disabled={aiAssistLoading}
+                          onClick={handleAdminAiAccountBriefLoadMore}
+                          type="button"
+                        >
+                          {aiAssistLoading ? "Loading..." : "Load more"}
+                        </button>
                       ) : null}
                     </div>
                   ) : null}

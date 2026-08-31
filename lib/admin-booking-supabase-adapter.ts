@@ -17,6 +17,7 @@ import type {
   AdminBookingServiceItemInput,
 } from "./admin-booking-persistence";
 import type { AdminDispatcherBoundaryContext } from "./admin-dispatcher-auth-boundary";
+import { sendDriverDevicePushAlertForAppUpdate } from "./driver-device-push-notification";
 
 export const adminBookingSupabaseAdapterVersion =
   "stage-4a-376-server-only-supabase-adapter-v1";
@@ -160,6 +161,8 @@ const allowedAdapterSourceSurfaces = new Set(["admin_api", "customer_booking_req
 const allowedStagingReadinessRoles = new Set(["admin", "dispatcher"]);
 const placeholderConfigPattern =
   /^(?:todo|tbd|n\/a|none|null|undefined|placeholder|change[-_\s]?me|changeme|replace[-_\s]?me|your[-_\s]?.*|example)$/i;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -169,6 +172,12 @@ function asRecord(value: unknown): UnknownRecord {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function uuidOrNull(value: unknown) {
+  const cleaned = textOrNull(value);
+
+  return cleaned && uuidPattern.test(cleaned) ? cleaned : null;
 }
 
 function textOrNull(value: unknown) {
@@ -2701,6 +2710,189 @@ async function createAuditLog(
   };
 }
 
+type AdminDriverReassignmentRpcRecord = {
+  booking_id: DbIdentifier;
+  booking_reference: string;
+  expired_link_ids: string[];
+  new_driver_id: number;
+  notification: {
+    booking_reference: string;
+    delivery_surface: "driver_app";
+    driver_job_link_id: string | null;
+    id: string;
+    notification_status: "queued";
+    notification_type: "booking_status";
+    priority: "urgent";
+    safe_message: "Job reassigned, do not proceed.";
+    safe_title: "Prestige Driver";
+    workflow_area: "driver_reassignment";
+  };
+  previous_driver_id: number;
+};
+
+function positiveSafeInteger(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeAdminDriverReassignmentRpcRecord(
+  value: unknown,
+): AdminDriverReassignmentRpcRecord | null {
+  const record = asRecord(value);
+  const notification = asRecord(record.notification);
+  const bookingId = dbIdentifierOrNull(record.booking_id);
+  const bookingReference = textOrNull(record.booking_reference);
+  const previousDriverId = positiveSafeInteger(record.previous_driver_id);
+  const newDriverId = positiveSafeInteger(record.new_driver_id);
+  const notificationId = uuidOrNull(notification.id);
+  const notificationLinkId = notification.driver_job_link_id === null
+    ? null
+    : uuidOrNull(notification.driver_job_link_id);
+  const expiredLinkIds = asArray(record.expired_link_ids)
+    .map(uuidOrNull)
+    .filter((linkId): linkId is string => Boolean(linkId));
+
+  if (
+    !bookingId ||
+    !bookingReference ||
+    !previousDriverId ||
+    !newDriverId ||
+    !notificationId ||
+    (notification.driver_job_link_id !== null && !notificationLinkId) ||
+    expiredLinkIds.length !== asArray(record.expired_link_ids).length ||
+    notification.booking_reference !== bookingReference ||
+    notification.delivery_surface !== "driver_app" ||
+    notification.notification_status !== "queued" ||
+    notification.notification_type !== "booking_status" ||
+    notification.priority !== "urgent" ||
+    notification.safe_message !== "Job reassigned, do not proceed." ||
+    notification.safe_title !== "Prestige Driver" ||
+    notification.workflow_area !== "driver_reassignment"
+  ) {
+    return null;
+  }
+
+  return {
+    booking_id: bookingId,
+    booking_reference: bookingReference,
+    expired_link_ids: expiredLinkIds,
+    new_driver_id: newDriverId,
+    notification: {
+      booking_reference: bookingReference,
+      delivery_surface: "driver_app",
+      driver_job_link_id: notificationLinkId,
+      id: notificationId,
+      notification_status: "queued",
+      notification_type: "booking_status",
+      priority: "urgent",
+      safe_message: "Job reassigned, do not proceed.",
+      safe_title: "Prestige Driver",
+      workflow_area: "driver_reassignment",
+    },
+    previous_driver_id: previousDriverId,
+  };
+}
+
+async function applyAdminDriverReassignmentTransaction(
+  client: SupabaseClient,
+  input: AdminBookingPersistenceUpdateInput,
+  actor: AdminBookingPersistenceAdapterActor,
+  existing: AdminBookingPersistenceRecord & { id: DbIdentifier },
+): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
+  const expectedUpdatedAt = textOrNull(input.expected_updated_at);
+  const previousDriverId = positiveSafeInteger(existing.driver_id);
+  const newDriverId = positiveSafeInteger(input.booking.driver_id);
+
+  if (!expectedUpdatedAt || !previousDriverId || !newDriverId) {
+    return {
+      error: safeUpdateError,
+      ok: false,
+      operation: "booking_row",
+      status: 409,
+    };
+  }
+
+  if (previousDriverId === newDriverId) {
+    return {
+      error: "The selected Driver is already assigned to this booking.",
+      ok: false,
+      operation: "booking_row",
+      status: 409,
+    };
+  }
+
+  const { data, error } = await client.rpc("apply_admin_driver_reassignment", {
+    p_actor_label: actor.actor_label,
+    p_actor_role: actor.actor_role,
+    p_booking_reference: input.target_booking_reference,
+    p_expected_updated_at: expectedUpdatedAt,
+    p_new_driver_id: newDriverId,
+  });
+
+  if (error) {
+    const errorCode = textOrNull(asRecord(error).code)?.toUpperCase() || "";
+
+    if (["22023", "40001", "P0002"].includes(errorCode)) {
+      return {
+        error:
+          errorCode === "40001"
+            ? safeUpdateConflictError
+            : "Verified Driver reassignment was rejected safely. Reload the booking and Driver Database before trying again.",
+        ok: false,
+        operation: "booking_row",
+        status: 409,
+      };
+    }
+
+    return safeAdapterFailure(safeUpdateError, 500, error, "booking_row");
+  }
+
+  const reassignment = normalizeAdminDriverReassignmentRpcRecord(data);
+
+  if (
+    !reassignment ||
+    reassignment.booking_reference !== input.target_booking_reference ||
+    String(reassignment.booking_id) !== String(existing.id) ||
+    reassignment.previous_driver_id !== previousDriverId ||
+    reassignment.new_driver_id !== newDriverId
+  ) {
+    return {
+      error: safeUpdateError,
+      ok: false,
+      operation: "booking_reload",
+      status: 500,
+    };
+  }
+
+  const reloadedResult = await fetchAdminBookingById(client, reassignment.booking_id);
+
+  if (!reloadedResult.ok) {
+    return reloadedResult;
+  }
+
+  if (positiveSafeInteger(reloadedResult.data.driver_id) !== newDriverId) {
+    return {
+      error: safeUpdateError,
+      ok: false,
+      operation: "booking_reload",
+      status: 500,
+    };
+  }
+
+  await sendDriverDevicePushAlertForAppUpdate(client, {
+    booking_reference: reassignment.notification.booking_reference,
+    delivery_surface: reassignment.notification.delivery_surface,
+    driver_job_link_id: reassignment.notification.driver_job_link_id,
+    notification_id: reassignment.notification.id,
+    recipient_driver_id: reassignment.previous_driver_id,
+    safe_message: reassignment.notification.safe_message,
+    workflow_area: reassignment.notification.workflow_area,
+  }).catch(() => null);
+
+  return reloadedResult;
+}
+
 export function adminDispatcherBoundaryToPersistenceAdapterActor(
   context: AdminDispatcherBoundaryContext,
 ): AdminBookingPersistenceAdapterActor {
@@ -2859,6 +3051,38 @@ export async function updateAdminBookingThroughSupabaseAdapter(
       status: 409,
       error: safeUpdateConflictError,
     };
+  }
+
+  if (input.update_mode === "driver_assignment") {
+    const existingDriverId = positiveSafeInteger(existing.driver_id);
+    const requestedDriverId = positiveSafeInteger(input.booking.driver_id);
+
+    if (!requestedDriverId) {
+      return {
+        error: "Select one active verified Driver before saving the assignment.",
+        ok: false,
+        operation: "booking_row",
+        status: 409,
+      };
+    }
+
+    if (existingDriverId) {
+      if (existingDriverId === requestedDriverId) {
+        return {
+          error: "The selected Driver is already assigned to this booking.",
+          ok: false,
+          operation: "booking_row",
+          status: 409,
+        };
+      }
+
+      return applyAdminDriverReassignmentTransaction(
+        client,
+        input,
+        actor,
+        existing,
+      );
+    }
   }
 
   const existingCustomerId = dbIdentifierOrNull(existing.customer_id);

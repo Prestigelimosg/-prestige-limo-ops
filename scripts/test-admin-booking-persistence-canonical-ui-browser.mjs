@@ -222,6 +222,7 @@ async function main() {
         },
         travelers: { traveler_name: "Type 2 Passenger" }
       };
+      let type2PreviousLinkExpired = false;
       const type2Driver = {
         id: 7301,
         availability_status: "available",
@@ -271,7 +272,10 @@ async function main() {
           const requestUrl = new URL(String(url), window.location.href);
           const bookingReference = requestUrl.searchParams.get("booking_reference");
 
-          if (bookingReference === type2Booking.booking_reference) {
+          if (
+            bookingReference === type2Booking.booking_reference &&
+            !type2PreviousLinkExpired
+          ) {
             await new Promise((resolve) => window.setTimeout(resolve, 250));
             return new Response(JSON.stringify({
               links: [{
@@ -322,6 +326,9 @@ async function main() {
 
           if (method === "PATCH") {
             window.__type2AssignmentPatchBodies.push(parsedBody);
+            if (parsedBody.update_mode === "driver_assignment") {
+              type2PreviousLinkExpired = true;
+            }
             type2Booking = {
               ...type2Booking,
               ...parsedBody.booking,
@@ -681,6 +688,7 @@ async function main() {
     );
 
     assert.equal(type2AssignmentSavedState.patch.target_booking_reference, "TYPE2-SAVED-001");
+    assert.equal(type2AssignmentSavedState.patch.update_mode, "driver_assignment");
     assert.equal(
       type2AssignmentSavedState.patch.expected_updated_at,
       "2026-06-25T02:00:00.000Z",

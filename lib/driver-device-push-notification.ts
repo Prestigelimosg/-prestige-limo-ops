@@ -125,11 +125,15 @@ type DriverDevicePushAlertInput = {
   booking_reference: string | null;
   delivery_surface: string | null;
   driver_job_link_id: string | null;
+  notification_id?: string | null;
+  recipient_driver_id?: unknown;
+  safe_message?: string | null;
   workflow_area?: string | null;
 };
 
 type DriverNativePushOpenTarget = "messages";
 type DriverNativePushVisibleBody =
+  | "Job reassigned, do not proceed."
   | "Job update available"
   | "Job acknowledgement needed. Tap to review."
   | "New job available. Tap to review."
@@ -137,6 +141,7 @@ type DriverNativePushVisibleBody =
 
 type DriverDevicePushPayload = {
   body:
+    | "Job reassigned, do not proceed."
     | "New Driver Job app update. Tap to review."
     | "New Driver Job issued. Tap to review."
     | "Pickup is in 1 hour. Open Driver Portal to review.";
@@ -664,6 +669,92 @@ async function resolveAlertDriverLink(
   return asRows(data).find((row) => linkIsActive(row) && linkWasAcknowledged(row)) ?? null;
 }
 
+type ReassignedDriverNotificationTarget = {
+  driverId: number;
+  targetId: string;
+};
+
+async function resolveReassignedDriverNotificationTarget(
+  client: DriverDevicePushClient,
+  input: DriverDevicePushAlertInput,
+): Promise<ReassignedDriverNotificationTarget | null> {
+  const notificationId = safeUuid(input.notification_id);
+  const bookingReference = safeText(input.booking_reference, 120);
+  const recipientDriverId = safePositiveInteger(input.recipient_driver_id);
+  const requestedLinkId = input.driver_job_link_id === null
+    ? null
+    : safeUuid(input.driver_job_link_id);
+
+  if (
+    !notificationId ||
+    !bookingReference ||
+    !recipientDriverId ||
+    input.delivery_surface !== "driver_app" ||
+    input.workflow_area !== "driver_reassignment" ||
+    input.safe_message !== "Job reassigned, do not proceed." ||
+    (input.driver_job_link_id !== null && !requestedLinkId)
+  ) {
+    return null;
+  }
+
+  const { data: notificationData, error: notificationError } = await client
+    .from("customer_driver_app_notification_outbox")
+    .select(
+      "id, notification_type, notification_status, priority, delivery_surface, booking_reference, driver_job_link_id, workflow_area, safe_title, safe_message, safe_context",
+    )
+    .eq("id", notificationId)
+    .maybeSingle();
+  const notification = asRecord(notificationData);
+  const storedLinkId = notification.driver_job_link_id === null
+    ? null
+    : safeUuid(notification.driver_job_link_id);
+  const safeContext = asRecord(notification.safe_context);
+  if (
+    notificationError ||
+    safeUuid(notification.id) !== notificationId ||
+    notification.notification_type !== "booking_status" ||
+    notification.notification_status !== "queued" ||
+    notification.priority !== "urgent" ||
+    notification.delivery_surface !== "driver_app" ||
+    notification.booking_reference !== bookingReference ||
+    notification.workflow_area !== "driver_reassignment" ||
+    notification.safe_title !== "Prestige Driver" ||
+    notification.safe_message !== "Job reassigned, do not proceed." ||
+    safeContext.audience !== "replaced_driver" ||
+    safeContext.source !== "save_driver_assignment" ||
+    storedLinkId !== requestedLinkId
+  ) {
+    return null;
+  }
+
+  if (!storedLinkId) {
+    const { data: driverData, error: driverError } = await client
+      .from("drivers")
+      .select("id")
+      .eq("id", recipientDriverId)
+      .maybeSingle();
+
+    return !driverError && safePositiveInteger(asRecord(driverData).id) === recipientDriverId
+      ? { driverId: recipientDriverId, targetId: notificationId }
+      : null;
+  }
+
+  const { data: linkData, error: linkError } = await client
+    .from("driver_job_links")
+    .select(driverDevicePushLinkSelect)
+    .eq("id", storedLinkId)
+    .maybeSingle();
+  const link = asRecord(linkData);
+  return !linkError &&
+    safeUuid(link.id) === storedLinkId &&
+    link.booking_reference === bookingReference &&
+    safePositiveInteger(link.driver_id) === recipientDriverId &&
+    link.link_status === "expired" &&
+    link.revoked_at === null
+    ? { driverId: recipientDriverId, targetId: storedLinkId }
+    : null;
+}
+
 function toPushSubscription(row: UnknownRecord): PushSubscription | null {
   const endpoint = safeText(row.endpoint, 2048);
   const p256dh = safeText(row.p256dh, 512);
@@ -701,6 +792,17 @@ function safePayload(linkId: string): DriverDevicePushPayload {
   const jobKey = opaqueDriverJobLinkKey(linkId);
   return {
     body: "New Driver Job app update. Tap to review.",
+    job_key: jobKey,
+    tag: `prestige-driver-update-${jobKey.slice(0, 24)}`,
+    title: "Prestige Limo Ops",
+    version: driverDevicePushNotificationVersion,
+  };
+}
+
+function reassignmentPayload(targetId: string): DriverDevicePushPayload {
+  const jobKey = opaqueDriverJobLinkKey(targetId);
+  return {
+    body: "Job reassigned, do not proceed.",
     job_key: jobKey,
     tag: `prestige-driver-update-${jobKey.slice(0, 24)}`,
     title: "Prestige Limo Ops",
@@ -1126,6 +1228,25 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     return alertResult(enabled ? "provider_not_configured" : "push_gate_closed", {
       enabled,
     });
+  }
+
+  if (input.workflow_area === "driver_reassignment") {
+    const target = await resolveReassignedDriverNotificationTarget(client, input);
+    if (!target) {
+      return alertResult("invalid_driver_link", { enabled: true });
+    }
+
+    const payload = reassignmentPayload(target.targetId);
+    return sendPayloadToDriverSubscriptions(
+      client,
+      target.driverId,
+      payload,
+      config,
+      options,
+      null,
+      "Job reassigned, do not proceed.",
+      payload.job_key,
+    );
   }
 
   const link = await resolveAlertDriverLink(client, input);

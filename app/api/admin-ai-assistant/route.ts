@@ -5,6 +5,7 @@ import {
 import { executeAdminAiAccountBrief } from "../../../lib/admin-ai-account-brief";
 import { executeAdminAiBookingBrief } from "../../../lib/admin-ai-booking-brief";
 import { executeAdminAiInvoiceSearch } from "../../../lib/admin-ai-invoice-search";
+import { executeAdminAiMonthlyBillingReview } from "../../../lib/admin-ai-monthly-billing-review";
 import { executeAdminAiTodaysWorkBrief } from "../../../lib/admin-ai-todays-work-brief";
 import { resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
 
@@ -44,6 +45,36 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonBody(request);
+  const monthlyBillingReview = await executeAdminAiMonthlyBillingReview(
+    body.message,
+    body.monthly_billing_review_page,
+    boundary.context,
+  );
+
+  if (monthlyBillingReview.matched) {
+    if (!monthlyBillingReview.ok) {
+      return Response.json(
+        {
+          error: monthlyBillingReview.error,
+          external_send: false,
+          ok: false,
+          write_action: false,
+        },
+        { status: monthlyBillingReview.status },
+      );
+    }
+
+    return Response.json({
+      answer: monthlyBillingReview.data.answer,
+      external_send: false,
+      model: "Prestige live records",
+      monthly_billing_review: monthlyBillingReview.data,
+      ok: true,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      write_action: false,
+    });
+  }
+
   const todaysWorkBrief = await executeAdminAiTodaysWorkBrief(
     body.message,
     body.todays_work_page,

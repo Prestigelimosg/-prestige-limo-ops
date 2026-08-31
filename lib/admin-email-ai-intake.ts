@@ -1063,7 +1063,7 @@ function explicitSourceBookingFacts(body: string) {
   const companyAccount = singleExplicitEvidence(
     matchedSourceValues(
       source,
-      /(?:^|\n)\s*(?:Agency|Company)(?:\s+(?:name|account))?\s*(?:[:=-]\s*)?([^\n]+)/gim,
+      /(?:^|\n)[ \t]*(?:Agency|Company(?![ \t]+Address\b))(?:[ \t]+(?:name|account))?[ \t]*(?:[:=-][ \t]*)?([^\n]*?)(?=[ \t]+Company[ \t]+Address[ \t]*(?:\n|$)|\n|$)/gim,
     ).filter((value) => !isPrestigeOwnCompanyEvidence(value)),
   );
   const dateTimeMatches = [...source.matchAll(

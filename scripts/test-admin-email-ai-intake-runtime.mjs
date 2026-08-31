@@ -1247,6 +1247,71 @@ try {
   assert.equal(completeExplicitOrganisation.ok, true);
   assert.equal(completeExplicitOrganisation.analysis, explicitOrganisationAnalysis);
 
+  const sameLineCompanyAddressLabelBody = [
+    syntheticPrestigeTransport15787Body,
+    "Billing address",
+    "Company name Atlas Example Wealth Management Co., Ltd. Company Address",
+    "Example Tower, 1 Sample Street, Tokyo 100-0005",
+  ].join("\n");
+  const sameLineCompanyAddressLabelAnalysis = {
+    ...completeExplicitSourceFactsAnalysis,
+    bookingResult: {
+      ...completeExplicitSourceFactsAnalysis.bookingResult,
+      bookings: [
+        {
+          ...completeExplicitSourceFactsBooking,
+          companyAccount: "Atlas Example Wealth Management Co., Ltd.",
+        },
+      ],
+    },
+  };
+  const sameLineCompanyAddressLabel =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: sameLineCompanyAddressLabelBody },
+      sameLineCompanyAddressLabelAnalysis,
+    );
+  assert.equal(
+    sameLineCompanyAddressLabel.ok,
+    true,
+    "A trailing Company Address field label must not become part of the explicit customer company name.",
+  );
+
+  for (const [label, companyAccount] of [
+    ["missing same-line company", ""],
+    ["truncated same-line company", "Atlas Example Wealth Management"],
+    ["address label substituted for company", "Company Address"],
+  ]) {
+    const result = runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: sameLineCompanyAddressLabelBody },
+      {
+        ...sameLineCompanyAddressLabelAnalysis,
+        bookingResult: {
+          ...sameLineCompanyAddressLabelAnalysis.bookingResult,
+          bookings: [
+            {
+              ...completeExplicitSourceFactsBooking,
+              companyAccount,
+            },
+          ],
+        },
+      },
+    );
+    assert.equal(result.ok, false, `${label} must still fail closed`);
+  }
+
+  const companyAddressIsNotACompany =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      {
+        body: `${syntheticPrestigeTransport15787Body}\nCompany Address Example Tower, 1 Sample Street`,
+      },
+      completeExplicitSourceFactsAnalysis,
+    );
+  assert.equal(
+    companyAddressIsNotACompany.ok,
+    true,
+    "A Company Address field must never be interpreted as a customer company name.",
+  );
+
   for (const [label, companyAccount] of [
     ["missing explicit source organisation", ""],
     ["conflicting explicit source organisation", "Atlas Travel"],

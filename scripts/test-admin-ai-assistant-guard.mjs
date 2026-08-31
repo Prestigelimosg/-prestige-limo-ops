@@ -94,6 +94,10 @@ try {
     await mkdir(path.dirname(targets[name]), { recursive: true });
     await writeFile(targets[name], transpile(sources[name], paths[name]));
   }
+  await writeFile(
+    path.join(tempDir, "lib/admin-ai-todays-work-brief.js"),
+    'exports.executeAdminAiTodaysWorkBrief = async () => ({ matched: false });\n',
+  );
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(serverOnlyPath, "module.exports = {};\n");

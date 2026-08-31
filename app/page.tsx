@@ -2707,6 +2707,59 @@ type AdminAiBookingBriefResult = {
   status: "ambiguous" | "blocked" | "identity_review" | "not_found" | "results";
 };
 
+type AdminAiTodaysWorkBriefCategory =
+  | "blocked_monthly_billing"
+  | "customer_booking_review"
+  | "driver_report_completion"
+  | "pending_driver_ack"
+  | "urgent_unassigned";
+
+type AdminAiTodaysWorkBriefRow = {
+  billing_month: string | null;
+  booker_id: number | null;
+  booker_name: string | null;
+  booking_reference: string | null;
+  category: AdminAiTodaysWorkBriefCategory;
+  company_id: number | null;
+  company_name: string | null;
+  customer_id: number | null;
+  detail: string;
+  handoff: "dashboard" | "dispatch" | "driver_ack_queue";
+  identity_status: "manual_review" | "verified";
+  occurred_at: string | null;
+  pickup_at: string | null;
+  public_booking_reference: string | null;
+  review_kind: "amendment" | "cancellation" | "new" | null;
+  row_key: string;
+};
+
+type AdminAiTodaysWorkBriefResult = {
+  answer: string;
+  counts: Record<AdminAiTodaysWorkBriefCategory, number> & { total: number };
+  has_more: boolean;
+  intent: "find_todays_work_brief";
+  page: number;
+  page_size: number;
+  query: string;
+  read_at: string;
+  rows: AdminAiTodaysWorkBriefRow[];
+  status: "blocked" | "empty" | "results";
+};
+
+function adminAiTodaysWorkCategoryLabel(category: AdminAiTodaysWorkBriefCategory) {
+  if (category === "customer_booking_review") return "Customer booking review";
+  if (category === "urgent_unassigned") return "Urgent · Driver TBC";
+  if (category === "pending_driver_ack") return "Pending Driver ACK";
+  if (category === "driver_report_completion") return "Driver report · Admin confirmation";
+  return "Blocked monthly billing draft";
+}
+
+function adminAiTodaysWorkHandoffLabel(row: AdminAiTodaysWorkBriefRow) {
+  if (row.handoff === "dispatch") return "Load in Dispatch";
+  if (row.handoff === "driver_ack_queue") return "Open Driver ACK Queue";
+  return row.category === "driver_report_completion" ? "Open Driver Report" : "Review on Dashboard";
+}
+
 type ParsedBooking = Partial<BookingForm> & {
   success?: boolean;
   cleanedLines?: string[];
@@ -14857,6 +14910,9 @@ export default function Home() {
   const [adminAiBookingBriefLoadPending, setAdminAiBookingBriefLoadPending] = useState(false);
   const [adminAiInvoiceSearchResult, setAdminAiInvoiceSearchResult] =
     useState<AdminAiInvoiceSearchResult | null>(null);
+  const [adminAiTodaysWorkBriefResult, setAdminAiTodaysWorkBriefResult] =
+    useState<AdminAiTodaysWorkBriefResult | null>(null);
+  const [adminAiTodaysWorkHandoffPendingKey, setAdminAiTodaysWorkHandoffPendingKey] = useState("");
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const [aiAssistSafetyAccepted, setAiAssistSafetyAccepted] = useState(false);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
@@ -19952,6 +20008,7 @@ export default function Home() {
     setAiConversationMessages([]);
     setAdminAiBookingBriefResult(null);
     setAdminAiInvoiceSearchResult(null);
+    setAdminAiTodaysWorkBriefResult(null);
     setBookingMessage("");
     setBookingMessageResetKey((current) => current + 1);
 
@@ -20878,6 +20935,8 @@ export default function Home() {
     questionValue: string,
     invoiceSearchPage = 1,
     appendInvoiceSearchPage = false,
+    todaysWorkPage = 1,
+    appendTodaysWorkPage = false,
   ) {
     if (!aiAssistSafetyAccepted) {
       setAiAssistMessage({
@@ -20897,9 +20956,10 @@ export default function Home() {
     setAiAssistMessage(null);
     setAiAssistLoading(true);
 
-    if (!appendInvoiceSearchPage) {
+    if (!appendInvoiceSearchPage && !appendTodaysWorkPage) {
       setAdminAiBookingBriefResult(null);
       setAdminAiInvoiceSearchResult(null);
+      setAdminAiTodaysWorkBriefResult(null);
     }
 
     try {
@@ -20913,6 +20973,7 @@ export default function Home() {
           history: aiConversationMessages.slice(-6),
           invoice_search_page: invoiceSearchPage,
           message: question,
+          todays_work_page: todaysWorkPage,
         }),
       });
       const responseBody = await response.json().catch(() => ({})) as {
@@ -20922,6 +20983,7 @@ export default function Home() {
         invoice_search?: unknown;
         model?: unknown;
         ok?: unknown;
+        todays_work_brief?: unknown;
         usage?: { totalTokens?: unknown };
       };
 
@@ -20932,6 +20994,44 @@ export default function Home() {
             ? responseBody.error
             : "AI conversation failed. Please try again.",
         });
+        return;
+      }
+
+      const rawTodaysWorkBrief = responseBody.todays_work_brief;
+      const todaysWorkBrief =
+        rawTodaysWorkBrief !== null &&
+        typeof rawTodaysWorkBrief === "object" &&
+        !Array.isArray(rawTodaysWorkBrief) &&
+        (rawTodaysWorkBrief as { intent?: unknown }).intent === "find_todays_work_brief"
+          ? rawTodaysWorkBrief as AdminAiTodaysWorkBriefResult
+          : null;
+
+      if (todaysWorkBrief) {
+        setAdminAiBookingBriefResult(null);
+        setAdminAiInvoiceSearchResult(null);
+        setAdminAiTodaysWorkBriefResult((current) => {
+          if (
+            !appendTodaysWorkPage ||
+            !current ||
+            current.query !== todaysWorkBrief.query ||
+            todaysWorkBrief.page !== current.page + 1
+          ) {
+            return todaysWorkBrief;
+          }
+
+          const seenRowKeys = new Set(current.rows.map((row) => row.row_key));
+          return {
+            ...todaysWorkBrief,
+            rows: [
+              ...current.rows,
+              ...todaysWorkBrief.rows.filter((row) => !seenRowKeys.has(row.row_key)),
+            ],
+          };
+        });
+        setBookingMessage("");
+        setAiAssistResponseNote(
+          "Prestige live records · Read-only today's work brief. No AI model, operational write, Calendar call, message, financial action, or external send was used.",
+        );
         return;
       }
 
@@ -20947,6 +21047,7 @@ export default function Home() {
       if (bookingBrief) {
         setAdminAiBookingBriefResult(bookingBrief);
         setAdminAiInvoiceSearchResult(null);
+        setAdminAiTodaysWorkBriefResult(null);
         setBookingMessage("");
         setAiAssistResponseNote(
           "Prestige live records · Read-only booking brief. No AI model, booking write, Calendar call, message, or external send was used.",
@@ -20965,6 +21066,7 @@ export default function Home() {
 
       if (invoiceSearch) {
         setAdminAiBookingBriefResult(null);
+        setAdminAiTodaysWorkBriefResult(null);
         setAdminAiInvoiceSearchResult((current) => {
           if (
             !appendInvoiceSearchPage ||
@@ -21026,6 +21128,69 @@ export default function Home() {
       adminAiInvoiceSearchResult.page + 1,
       true,
     );
+  }
+
+  async function handleAdminAiTodaysWorkLoadMore() {
+    if (!adminAiTodaysWorkBriefResult?.has_more || aiAssistLoading) {
+      return;
+    }
+
+    await runAdminAiConversation(
+      adminAiTodaysWorkBriefResult.query,
+      1,
+      false,
+      adminAiTodaysWorkBriefResult.page + 1,
+      true,
+    );
+  }
+
+  async function handleAdminAiTodaysWorkHandoff(row: AdminAiTodaysWorkBriefRow) {
+    if (adminAiTodaysWorkHandoffPendingKey) return;
+    const exactBookingReference = cleanReferenceText(row.booking_reference);
+
+    if (row.handoff === "dispatch" && exactBookingReference) {
+      setAdminAiTodaysWorkHandoffPendingKey(row.row_key);
+      setAiAssistMessage(null);
+      try {
+        const exactBookingRecord = await loadExactAdminBookingPersistenceRecord(
+          exactBookingReference,
+          `Exact saved booking ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+        );
+        await loadSelectedBooking(
+          adminBookingPersistenceRecordToCalendarBookingRecord(exactBookingRecord),
+          { adminBookingRecordOverride: exactBookingRecord },
+        );
+      } catch (error) {
+        setAiAssistMessage({
+          tone: "error",
+          text: error instanceof Error ? error.message : "The exact saved booking could not be loaded in Dispatch.",
+        });
+      } finally {
+        setAdminAiTodaysWorkHandoffPendingKey("");
+      }
+      return;
+    }
+
+    if (row.handoff === "driver_ack_queue") {
+      selectAppTab("dispatch");
+      window.setTimeout(() => {
+        document.querySelector<HTMLElement>("[data-pending-driver-ack-queue]")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+      return;
+    }
+
+    selectAppTab("dashboard");
+    window.setTimeout(() => {
+      const exactActiveJob = exactBookingReference
+        ? Array.from(document.querySelectorAll<HTMLElement>("[data-admin-multi-driver-active-job]"))
+            .find((element) => element.dataset.adminMultiDriverActiveJob === exactBookingReference)
+        : null;
+      const target = exactActiveJob ||
+        document.querySelector<HTMLElement>('[data-dashboard-urgent-booking-requests-panel="true"]') ||
+        document.querySelector<HTMLElement>('[data-admin-app-notification-feed="true"]');
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   }
 
   async function handleAdminAiBookingBriefLoadInDispatch() {
@@ -42436,9 +42601,143 @@ export default function Home() {
                     ))
                   ) : (
                     <p className="text-sm text-slate-600">
-                      Ask about the text you provide, find one exact booking, or find issued invoices by exact Booker. Read-only skills cannot change app data.
+                      Ask for today&apos;s work brief, one exact booking, or issued invoices by exact Booker. Read-only skills cannot change app data.
                     </p>
                   )}
+                  {adminAiTodaysWorkBriefResult ? (
+                    <div
+                      className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-slate-900"
+                      data-admin-ai-todays-work-brief="true"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                        Prestige live records · Read only
+                      </p>
+                      <p className="mt-1 font-semibold" data-admin-ai-todays-work-answer="true">
+                        {adminAiTodaysWorkBriefResult.answer}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Read {new Date(adminAiTodaysWorkBriefResult.read_at).toLocaleString("en-SG", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                          timeZone: "Asia/Singapore",
+                        })}
+                      </p>
+                      <div
+                        className="mt-2 flex flex-wrap gap-1.5"
+                        data-admin-ai-todays-work-counts="true"
+                      >
+                        {([
+                          ["customer_booking_review", "Customer reviews"],
+                          ["urgent_unassigned", "Driver TBC"],
+                          ["pending_driver_ack", "Pending ACK"],
+                          ["driver_report_completion", "Admin completion"],
+                          ["blocked_monthly_billing", "Billing blocked"],
+                        ] as const).map(([category, label]) => (
+                          <span
+                            className="rounded-full border border-violet-200 bg-white px-2 py-1 text-xs font-semibold text-violet-950"
+                            data-admin-ai-todays-work-count={category}
+                            key={category}
+                          >
+                            {label}: {adminAiTodaysWorkBriefResult.counts[category]}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-3 space-y-3" data-admin-ai-todays-work-groups="true">
+                        {([
+                          "customer_booking_review",
+                          "urgent_unassigned",
+                          "pending_driver_ack",
+                          "driver_report_completion",
+                          "blocked_monthly_billing",
+                        ] as AdminAiTodaysWorkBriefCategory[]).map((category) => {
+                          const rows = adminAiTodaysWorkBriefResult.rows.filter((row) => row.category === category);
+                          if (rows.length === 0) return null;
+
+                          return (
+                            <section
+                              className="rounded-md border border-violet-200 bg-white p-2"
+                              data-admin-ai-todays-work-group={category}
+                              key={category}
+                            >
+                              <h3 className="font-bold text-violet-950">
+                                {adminAiTodaysWorkCategoryLabel(category)} · {adminAiTodaysWorkBriefResult.counts[category]}
+                              </h3>
+                              <div className="mt-2 space-y-2">
+                                {rows.map((row) => (
+                                  <article
+                                    className="rounded-md border border-violet-100 bg-violet-50/60 p-2"
+                                    data-admin-ai-todays-work-row={row.row_key}
+                                    key={row.row_key}
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="font-bold text-slate-950">
+                                          {row.public_booking_reference
+                                            ? `Booking ${row.public_booking_reference}`
+                                            : row.booking_reference
+                                              ? `Booking ${row.booking_reference}`
+                                              : row.billing_month
+                                                ? `Billing month ${row.billing_month}`
+                                                : "Operational review"}
+                                        </p>
+                                        {row.identity_status === "verified" ? (
+                                          <p
+                                            className="text-xs font-semibold text-slate-700"
+                                            data-admin-ai-todays-work-identity="verified"
+                                          >
+                                            {row.company_name} · {row.booker_name} · Customer #{row.customer_id} · Company #{row.company_id} · Booker #{row.booker_id}
+                                          </p>
+                                        ) : (
+                                          <p
+                                            className="text-xs font-semibold text-amber-800"
+                                            data-admin-ai-todays-work-identity="manual_review"
+                                          >
+                                            Exact Company + Booker identity requires manual review. No name was guessed.
+                                          </p>
+                                        )}
+                                        <p className="mt-1 text-xs text-slate-700">{row.detail}</p>
+                                        {row.pickup_at || row.occurred_at ? (
+                                          <p className="mt-1 text-xs text-slate-500">
+                                            {row.pickup_at ? "Pickup" : "Recorded"}: {new Date(row.pickup_at || row.occurred_at || "").toLocaleString("en-SG", {
+                                              dateStyle: "medium",
+                                              timeStyle: "short",
+                                              timeZone: "Asia/Singapore",
+                                            })}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                      <button
+                                        className="min-h-9 rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-950 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                        data-admin-ai-todays-work-handoff={row.handoff}
+                                        disabled={Boolean(adminAiTodaysWorkHandoffPendingKey)}
+                                        onClick={() => void handleAdminAiTodaysWorkHandoff(row)}
+                                        type="button"
+                                      >
+                                        {adminAiTodaysWorkHandoffPendingKey === row.row_key
+                                          ? "Loading..."
+                                          : adminAiTodaysWorkHandoffLabel(row)}
+                                      </button>
+                                    </div>
+                                  </article>
+                                ))}
+                              </div>
+                            </section>
+                          );
+                        })}
+                      </div>
+                      {adminAiTodaysWorkBriefResult.has_more ? (
+                        <button
+                          className="mt-3 min-h-9 rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-950 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-admin-ai-todays-work-load-more="true"
+                          disabled={aiAssistLoading}
+                          onClick={handleAdminAiTodaysWorkLoadMore}
+                          type="button"
+                        >
+                          {aiAssistLoading ? "Loading..." : "Load more"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {adminAiBookingBriefResult ? (
                     <div
                       className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-slate-900"

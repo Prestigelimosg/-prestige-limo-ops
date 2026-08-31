@@ -4,6 +4,7 @@ import {
 } from "../../../lib/admin-ai-runtime";
 import { executeAdminAiBookingBrief } from "../../../lib/admin-ai-booking-brief";
 import { executeAdminAiInvoiceSearch } from "../../../lib/admin-ai-invoice-search";
+import { executeAdminAiTodaysWorkBrief } from "../../../lib/admin-ai-todays-work-brief";
 import { resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,36 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonBody(request);
+  const todaysWorkBrief = await executeAdminAiTodaysWorkBrief(
+    body.message,
+    body.todays_work_page,
+    boundary.context,
+  );
+
+  if (todaysWorkBrief.matched) {
+    if (!todaysWorkBrief.ok) {
+      return Response.json(
+        {
+          error: todaysWorkBrief.error,
+          external_send: false,
+          ok: false,
+          write_action: false,
+        },
+        { status: todaysWorkBrief.status },
+      );
+    }
+
+    return Response.json({
+      answer: todaysWorkBrief.data.answer,
+      external_send: false,
+      model: "Prestige live records",
+      ok: true,
+      todays_work_brief: todaysWorkBrief.data,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      write_action: false,
+    });
+  }
+
   const bookingBrief = await executeAdminAiBookingBrief(body.message, boundary.context);
 
   if (bookingBrief.matched) {

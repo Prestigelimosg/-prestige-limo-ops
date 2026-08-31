@@ -55,6 +55,7 @@ export type AdminCompanyTravelerCrmRuntimeWriteActionResult = {
   action_type: AdminCompanyTravelerCrmIdentityContactWriteContractResult["action_type"];
   category?: AdminBookingPersistenceSafeErrorCategory | "client_init_failed";
   company_fields: AdminCompanyTravelerCrmIdentityContactWriteContractResult["company_fields"];
+  company_clear_fields: AdminCompanyTravelerCrmIdentityContactWriteContractResult["company_clear_fields"];
   database_client_enabled: boolean;
   delivery_surface: "company_traveler_crm_identity_contact_runtime_write_action";
   env_gate_name: typeof adminCompanyTravelerCrmRuntimeWriteActionEnvGateName;
@@ -221,6 +222,7 @@ function safeResult(
     | "action_scope"
     | "action_type"
     | "company_fields"
+    | "company_clear_fields"
     | "delivery_surface"
     | "env_gate_name"
     | "forbidden_fields_present"
@@ -237,6 +239,7 @@ function safeResult(
     action_scope: contract.action_scope,
     action_type: contract.action_type,
     company_fields: contract.company_fields,
+    company_clear_fields: contract.company_clear_fields,
     database_client_enabled: false,
     delivery_surface: "company_traveler_crm_identity_contact_runtime_write_action",
     env_gate_name: adminCompanyTravelerCrmRuntimeWriteActionEnvGateName,
@@ -289,7 +292,7 @@ function getRuntimeWriteClient(
 }
 
 function companyPayload(contract: AdminCompanyTravelerCrmIdentityContactWriteContractResult) {
-  return {
+  const payload: Record<string, string | null> = {
     ...(contract.company_fields.accounts_email ? { accounts_email: contract.company_fields.accounts_email } : {}),
     ...(contract.company_fields.billing_address ? { billing_address: contract.company_fields.billing_address } : {}),
     ...(contract.company_fields.billing_email ? { billing_email: contract.company_fields.billing_email } : {}),
@@ -303,6 +306,12 @@ function companyPayload(contract: AdminCompanyTravelerCrmIdentityContactWriteCon
       : {}),
     ...(contract.company_fields.website ? { website: contract.company_fields.website } : {}),
   };
+
+  for (const field of contract.company_clear_fields) {
+    payload[field] = null;
+  }
+
+  return payload;
 }
 
 function travelerPayload(contract: AdminCompanyTravelerCrmIdentityContactWriteContractResult) {

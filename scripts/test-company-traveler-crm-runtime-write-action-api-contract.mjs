@@ -139,6 +139,16 @@ function safeCompanyInput() {
   };
 }
 
+function safeCompanyContactClearInput() {
+  return {
+    action_type: "company_update",
+    billing_address: null,
+    company_name: "Acme Travel Desk",
+    id: 11,
+    primary_contact_name: null,
+  };
+}
+
 function safeTravelerInput() {
   return {
     action_type: "traveler_update",
@@ -550,6 +560,7 @@ try {
   );
 
   const fakeCompany = createFakeClient();
+  const fakeCompanyContactClear = createFakeClient();
   const fakeTraveler = createFakeClient();
   const actor = {
     actor_label: "Harness admin",
@@ -568,8 +579,14 @@ try {
     actor,
     { clientFactory: () => fakeTraveler.client },
   );
+  const companyContactClearResult = await helper.executeAdminCompanyTravelerCrmRuntimeWriteAction(
+    safeCompanyContactClearInput(),
+    actor,
+    { clientFactory: () => fakeCompanyContactClear.client },
+  );
 
   assertSaved(companyResult, "mocked company CRM runtime write");
+  assertSaved(companyContactClearResult, "mocked company optional contact clear CRM runtime write");
   assertSaved(travelerResult, "mocked traveler CRM runtime write");
 
   assert.deepEqual(fakeCompany.calls, [
@@ -596,6 +613,20 @@ try {
       select:
         "id, company_id, traveler_name, preferred_vehicle, default_address, default_pickup_address, default_dropoff_address, booker_name, booker_contact, booker_email",
       table: "travelers",
+    },
+  ]);
+  assert.deepEqual(fakeCompanyContactClear.calls, [
+    {
+      eq: { field: "id", value: 11 },
+      operation: "update",
+      payload: {
+        billing_address: null,
+        company_name: "Acme Travel Desk",
+        primary_contact_name: null,
+      },
+      select:
+        "id, company_name, domain, billing_address, main_phone, mobile_phone, website, primary_contact_name, billing_email, accounts_email, operations_email",
+      table: "companies",
     },
   ]);
 } finally {

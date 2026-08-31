@@ -29,7 +29,10 @@ for (const fragment of [
   'data-customer-add-booker-traveler="true"',
   "Add Traveller",
   "Edit this pair",
-  "Save changes",
+  "Save Booker / Traveller",
+  "onDraftDirtyChange",
+  "setDraftDirty(true)",
+  "setDraftDirty(false)",
   "window.confirm",
   "customerId: string",
   "customer_id?: number | null",
@@ -48,6 +51,19 @@ for (const fragment of [
 ]) {
   assert.ok(identityEditor.includes(fragment), `Verified customer identity lane is missing ${fragment}`);
 }
+
+assert.ok(
+  identityEditor.includes("onDraftDirtyChange(draftDirty)"),
+  "The nested identity editor must expose its exact dirty state for the parent save boundary.",
+);
+assert.ok(
+  !identityEditor.includes("return () => onDraftDirtyChange(false)"),
+  "The nested identity editor must not update parent state from an unmount cleanup.",
+);
+assert.ok(
+  !identityEditor.includes("Save changes"),
+  "The ambiguous retired nested save label must not remain in Customer Profile guidance.",
+);
 
 for (const existingPath of [
   'const adminBookersApiPath = "/api/admin-bookers"',

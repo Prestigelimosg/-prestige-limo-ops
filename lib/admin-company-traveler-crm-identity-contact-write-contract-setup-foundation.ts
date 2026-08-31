@@ -57,6 +57,7 @@ export type AdminCompanyTravelerCrmIdentityContactWriteContractResult = {
   admin_review_required: true;
   allowed_fields: readonly string[];
   company_fields: AdminCompanyTravelerCrmIdentityContactWriteContractCompanyFields;
+  company_clear_fields: string[];
   contractReady: boolean;
   contract_ready: boolean;
   delivery_surface: "company_traveler_crm_identity_contact_write_contract_setup_only";
@@ -100,6 +101,17 @@ const allowedCanonicalFields = [
   "preferred_vehicle",
   "traveler_id",
   "traveler_name",
+  "website",
+] as const;
+
+const clearableCompanyContactFields = [
+  "accounts_email",
+  "billing_address",
+  "billing_email",
+  "main_phone",
+  "mobile_phone",
+  "operations_email",
+  "primary_contact_name",
   "website",
 ] as const;
 
@@ -440,20 +452,33 @@ export function buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup(
     preferred_vehicle: safeText(firstValue(normalized, "preferred_vehicle"), 120),
     traveler_name: safeText(firstValue(normalized, "traveler_name")),
   };
+  const companyClearFields = actionType === "company_update"
+    ? clearableCompanyContactFields.filter(
+        (field) => Object.hasOwn(normalized, field) && normalized[field] === null,
+      )
+    : [];
   const invalidFields = unique(
     [
       fieldInvalid(normalized, "company_name", companyFields.company_name) ? "company_name" : "",
       fieldInvalid(normalized, "domain", companyFields.domain) ? "domain" : "",
-      fieldInvalid(normalized, "billing_address", companyFields.billing_address) ? "billing_address" : "",
-      fieldInvalid(normalized, "main_phone", companyFields.main_phone) ? "main_phone" : "",
-      fieldInvalid(normalized, "mobile_phone", companyFields.mobile_phone) ? "mobile_phone" : "",
-      fieldInvalid(normalized, "website", companyFields.website) ? "website" : "",
-      fieldInvalid(normalized, "primary_contact_name", companyFields.primary_contact_name)
+      fieldInvalid(normalized, "billing_address", companyFields.billing_address) &&
+      !companyClearFields.includes("billing_address") ? "billing_address" : "",
+      fieldInvalid(normalized, "main_phone", companyFields.main_phone) &&
+      !companyClearFields.includes("main_phone") ? "main_phone" : "",
+      fieldInvalid(normalized, "mobile_phone", companyFields.mobile_phone) &&
+      !companyClearFields.includes("mobile_phone") ? "mobile_phone" : "",
+      fieldInvalid(normalized, "website", companyFields.website) &&
+      !companyClearFields.includes("website") ? "website" : "",
+      fieldInvalid(normalized, "primary_contact_name", companyFields.primary_contact_name) &&
+      !companyClearFields.includes("primary_contact_name")
         ? "primary_contact_name"
         : "",
-      fieldInvalid(normalized, "billing_email", companyFields.billing_email) ? "billing_email" : "",
-      fieldInvalid(normalized, "accounts_email", companyFields.accounts_email) ? "accounts_email" : "",
-      fieldInvalid(normalized, "operations_email", companyFields.operations_email)
+      fieldInvalid(normalized, "billing_email", companyFields.billing_email) &&
+      !companyClearFields.includes("billing_email") ? "billing_email" : "",
+      fieldInvalid(normalized, "accounts_email", companyFields.accounts_email) &&
+      !companyClearFields.includes("accounts_email") ? "accounts_email" : "",
+      fieldInvalid(normalized, "operations_email", companyFields.operations_email) &&
+      !companyClearFields.includes("operations_email")
         ? "operations_email"
         : "",
       fieldInvalid(normalized, "booker_contact", travelerFields.booker_contact) ? "booker_contact" : "",
@@ -534,6 +559,7 @@ export function buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup(
     admin_review_required: true,
     allowed_fields: allowedCanonicalFields,
     company_fields: companyFields,
+    company_clear_fields: companyClearFields,
     contractReady,
     contract_ready: contractReady,
     delivery_surface: "company_traveler_crm_identity_contact_write_contract_setup_only",

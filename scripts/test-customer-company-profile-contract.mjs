@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /setProfile\(blankCreateProfile\(companyLookupName, guestAccountBillingEnabled\)\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{companyLookupName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
+  /setProfile\(blankCreateProfile\(companyLookupName, guestAccountBillingEnabled\)\);\s+setLoadedProfile\(null\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{companyLookupName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
   "not-found lookup results must visibly open the create customer company profile form",
 );
 assert.match(
@@ -151,6 +151,47 @@ assert.match(
   editorSource,
   /setMessage\(`Saved customer company profile for[\s\S]+?setStatus\("saved"\);\s+setProfile\(null\);/,
   "a fully successful profile save must close the existing editor while retaining its saved feedback",
+);
+assert.match(
+  editorSource,
+  /if \(identityDraftDirty\) \{[\s\S]+?Booker \/ Traveller changes are not saved yet\.[\s\S]+?data-customer-save-booker-traveler[\s\S]+?\.focus\(\);[\s\S]+?return;/,
+  "company details save must block and focus the established Booker / Traveller save while an identity draft is dirty",
+);
+assert.match(
+  editorSource,
+  /profileMode === "create"[\s\S]+?\? "Create company details"[\s\S]+?: "Save company details"/,
+  "the parent action must clearly name the company-details scope",
+);
+for (const clearableField of [
+  "accounts_email",
+  "billing_address",
+  "billing_email",
+  "main_phone",
+  "mobile_phone",
+  "operations_email",
+  "primary_contact_name",
+  "website",
+]) {
+  assert.match(
+    editorSource,
+    new RegExp(`${clearableField}: optionalCompanyContactValue\\(`),
+    `${clearableField} must carry an explicit null only when an existing optional company contact value is cleared`,
+  );
+}
+assert.doesNotMatch(
+  editorSource,
+  /company_name:\s*optionalCompanyContactValue|domain:\s*optionalCompanyContactValue/,
+  "required company identity must never use the optional contact clearing helper",
+);
+assert.match(
+  editorSource,
+  /return !isCreate && loadedValue\?\.trim\(\) \? null : undefined;/,
+  "unchanged blank optional fields must stay omitted while a deliberately cleared loaded value becomes null",
+);
+assert.doesNotMatch(
+  editorSource,
+  /website:\s*profileValue\([^\n]+website\)[^\n]+profileValue\([^\n]+domain\)/,
+  "a cleared optional website must not be repopulated from the preserved required company domain",
 );
 
 console.log("Customer company profile contact contract guard passed.");

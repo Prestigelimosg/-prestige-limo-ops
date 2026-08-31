@@ -306,6 +306,39 @@ try {
   assert.equal(companyContract.company_fields.domain, "example.com");
   assert.equal(forbiddenRuntimeFieldsPattern.test(JSON.stringify(companyContract)), false);
 
+  const companyContactClearContract = buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup({
+    action_type: "company_update",
+    accounts_email: null,
+    billing_address: null,
+    billing_email: null,
+    company_name: "ACME Holdings",
+    id: 11,
+    main_phone: null,
+    mobile_phone: null,
+    operations_email: null,
+    primary_contact_name: null,
+    website: null,
+  });
+
+  assertValidBlockedContract(companyContactClearContract, "Company optional contact clear contract");
+  assert.deepEqual(companyContactClearContract.company_clear_fields, [
+    "accounts_email",
+    "billing_address",
+    "billing_email",
+    "main_phone",
+    "mobile_phone",
+    "operations_email",
+    "primary_contact_name",
+    "website",
+  ]);
+
+  const companyIdentityClearContract = buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup({
+    action_type: "company_update",
+    company_name: null,
+    id: 11,
+  });
+  assertRejectedContract(companyIdentityClearContract, ["company_name"], "Required company identity clear contract");
+
   const travelerContract = buildAdminCompanyTravelerCrmIdentityContactWriteContractSetup({
     actionType: "traveler update",
     bookerContact: "+65 8123 4567",

@@ -10,6 +10,7 @@ const adminLegacyTravelersApiPath = "/api/admin-legacy-data/rest/v1/travelers";
 type CustomerVerifiedIdentitiesEditorProps = {
   companyId: number;
   companyName: string;
+  customerId: string;
 };
 
 type SafeIdentityTraveler = {
@@ -23,6 +24,7 @@ type SafeIdentityTraveler = {
 type SafeIdentityBooker = {
   booker_name?: string | null;
   company_id?: number | null;
+  customer_id?: number | null;
   email?: string | null;
   id?: number | null;
   phone?: string | null;
@@ -59,7 +61,12 @@ function identityFeedbackClass(status: IdentityStatus) {
 function safeIdentityError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
-  if (message.startsWith("Verified ") || message.startsWith("That traveller")) {
+  if (
+    message.startsWith("Verified ") ||
+    message.startsWith("That traveller") ||
+    message.startsWith("No approved ") ||
+    message.startsWith("More than one ")
+  ) {
     return message;
   }
 
@@ -73,9 +80,11 @@ function safeIdentityError(error: unknown) {
 export function CustomerVerifiedIdentitiesEditor({
   companyId,
   companyName,
+  customerId,
 }: CustomerVerifiedIdentitiesEditorProps) {
   const [status, setStatus] = useState<IdentityStatus>("loading");
   const [message, setMessage] = useState("Loading verified Bookers and Travellers...");
+  const [exactCustomerBooker, setExactCustomerBooker] = useState<SafeIdentityBooker | null>(null);
   const [travelers, setTravelers] = useState<SafeIdentityTraveler[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [bookerName, setBookerName] = useState("");
@@ -95,29 +104,62 @@ export function CustomerVerifiedIdentitiesEditor({
     });
     const result = await response.json().catch(() => null);
 
-    if (!response.ok || result?.ok !== true || !Array.isArray(result?.travelers)) {
+    if (
+      !response.ok ||
+      result?.ok !== true ||
+      !Array.isArray(result?.bookers) ||
+      !Array.isArray(result?.travelers)
+    ) {
       throw new Error("Verified identity list could not be loaded safely.");
     }
 
-    const exactCompanyTravelers = (result.travelers as SafeIdentityTraveler[]).filter(
-      (traveler) => positiveId(traveler.company_id) === companyId,
+    const exactCustomerBookers = (result.bookers as SafeIdentityBooker[]).filter(
+      (booker) =>
+        positiveId(booker.company_id) === companyId &&
+        positiveId(booker.customer_id) === positiveId(customerId),
     );
-    setTravelers(exactCompanyTravelers);
-    setIsOpen((current) => current || exactCompanyTravelers.length === 0);
+
+    if (exactCustomerBookers.length === 0) {
+      setExactCustomerBooker(null);
+      setTravelers([]);
+      setIsOpen(true);
+      throw new Error(
+        "No approved Company + Booker Customer Account is linked to this exact customer profile. Use the existing Dispatch Save + CRM account review; nothing was inferred or changed.",
+      );
+    }
+
+    if (exactCustomerBookers.length !== 1) {
+      setExactCustomerBooker(null);
+      setTravelers([]);
+      setIsOpen(true);
+      throw new Error(
+        "More than one Company + Booker Customer Account matched this exact customer profile. Nothing was changed.",
+      );
+    }
+
+    const exactCustomerBooker = exactCustomerBookers[0];
+    const exactCustomerTravelers = (result.travelers as SafeIdentityTraveler[]).filter(
+      (traveler) =>
+        positiveId(traveler.company_id) === companyId &&
+        positiveId(traveler.booker_id) === positiveId(exactCustomerBooker.id),
+    );
+    setExactCustomerBooker(exactCustomerBooker);
+    setTravelers(exactCustomerTravelers);
+    setIsOpen((current) => current || exactCustomerTravelers.length === 0);
 
     if (options?.afterSave) {
-      setMessage("Saved and verified the Booker and Traveller for this company.");
+      setMessage("Saved and verified the exact Customer Account Booker and Traveller.");
       setStatus("saved");
     } else if (!options?.silent) {
       setMessage(
-        exactCompanyTravelers.length > 0
-          ? "Verified identities are available to Dispatch. The customer booking link uses them after verified access is created."
-          : "No verified Booker or Traveller exists yet for this company.",
+        exactCustomerTravelers.length > 0
+          ? "This exact Company + Booker Customer Account and its booking-only Travellers are available to Dispatch."
+          : "This exact Company + Booker Customer Account has no saved Traveller yet.",
       );
       setStatus("ready");
     }
 
-    return exactCompanyTravelers;
+    return { booker: exactCustomerBooker, travelers: exactCustomerTravelers };
   }
 
   useEffect(() => {
@@ -138,9 +180,9 @@ export function CustomerVerifiedIdentitiesEditor({
     return () => {
       active = false;
     };
-    // The company ID is the exact verified scope for this profile.
+    // The customer and company IDs together are the exact verified scope for this profile.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId]);
+  }, [companyId, customerId]);
 
   const identityRows = useMemo(() => {
     return travelers.flatMap((traveler) => {
@@ -155,10 +197,7 @@ export function CustomerVerifiedIdentitiesEditor({
     });
   }, [travelers]);
 
-  const verifiedBookerCount = useMemo(
-    () => new Set(identityRows.map((row) => row.bookerId)).size,
-    [identityRows],
-  );
+  const verifiedBookerCount = exactCustomerBooker ? 1 : 0;
 
   async function loadExactBooker(bookerId: number) {
     const lookupParams = new URLSearchParams({ id: String(bookerId) });
@@ -177,8 +216,13 @@ export function CustomerVerifiedIdentitiesEditor({
 
     const booker = lookupResult.booker as SafeIdentityBooker | null;
 
-    if (!booker || !positiveId(booker.id) || positiveId(booker.company_id) !== companyId) {
-      throw new Error("Verified Booker does not belong to this exact company.");
+    if (
+      !booker ||
+      !positiveId(booker.id) ||
+      positiveId(booker.company_id) !== companyId ||
+      positiveId(booker.customer_id) !== positiveId(customerId)
+    ) {
+      throw new Error("Verified Booker does not belong to this exact Customer Account.");
     }
 
     return booker;
@@ -205,126 +249,114 @@ export function CustomerVerifiedIdentitiesEditor({
     }
   }
 
-  function startAddingIdentity() {
-    setEditingBookerId(null);
-    setEditingTravelerId(null);
-    setBookerName("");
-    setBookerEmail("");
-    setBookerContact("");
-    setTravelerName("");
-    setMessage("Enter one Booker / PA and one Traveller, then save the exact pair.");
-    setStatus("ready");
-    setIsOpen(true);
-  }
+  async function startAddingIdentity() {
+    const bookerId = positiveId(exactCustomerBooker?.id);
 
-  async function findOrCreateBooker() {
-    const lookupParams = editingBookerId
-      ? new URLSearchParams({ id: String(editingBookerId) })
-      : new URLSearchParams({
-          booker_name: bookerName.trim(),
-          company_id: String(companyId),
-        });
-    const lookupResponse = await fetch(`${adminBookersApiPath}?${lookupParams.toString()}`, {
-      cache: "no-store",
-      headers: {
-        "x-prestige-admin-purpose": "admin-booking-persistence",
-      },
-      method: "GET",
-    });
-    const lookupResult = await lookupResponse.json().catch(() => null);
-
-    if (!lookupResponse.ok || lookupResult?.ok !== true) {
-      throw new Error("Verified Booker lookup failed safely.");
+    if (!bookerId) {
+      setMessage(
+        "No approved Company + Booker Customer Account is linked to this exact customer profile. Use the existing Dispatch Save + CRM account review; nothing was inferred or changed.",
+      );
+      setStatus("error");
+      setIsOpen(true);
+      return;
     }
 
-    let booker = lookupResult.booker as SafeIdentityBooker | null;
+    setStatus("loading");
+    setMessage("Loading the exact Customer Account Booker before adding a Traveller...");
+    setIsOpen(true);
 
-    if (!booker || !positiveId(booker.id)) {
-      if (editingBookerId) {
-        throw new Error("Verified Booker could not be reloaded safely.");
-      }
+    try {
+      const booker = await loadExactBooker(bookerId);
+      setEditingBookerId(bookerId);
+      setEditingTravelerId(null);
+      setBookerName(cleanText(booker.booker_name));
+      setBookerEmail(cleanText(booker.email).toLowerCase());
+      setBookerContact(cleanText(booker.phone));
+      setTravelerName("");
+      setMessage("Add one booking-only Traveller to this exact Company + Booker Customer Account.");
+      setStatus("ready");
+    } catch (error) {
+      setMessage(safeIdentityError(error));
+      setStatus("error");
+    }
+  }
 
-      const createResponse = await fetch(adminBookersApiPath, {
+  async function saveExactBooker(expectedBooker: SafeIdentityBooker) {
+    const bookerId = positiveId(expectedBooker.id);
+
+    if (
+      !bookerId ||
+      bookerId !== editingBookerId ||
+      positiveId(expectedBooker.company_id) !== companyId ||
+      positiveId(expectedBooker.customer_id) !== positiveId(customerId)
+    ) {
+      throw new Error("Verified Booker changed while this exact customer profile was open. Nothing was changed.");
+    }
+
+    let booker = await loadExactBooker(bookerId);
+    const savedEmail = cleanText(booker.email).toLowerCase();
+    const savedPhone = cleanText(booker.phone);
+    const requestedEmail = bookerEmail.trim().toLowerCase();
+    const requestedPhone = bookerContact.trim();
+    const nextBookerName = bookerName.trim();
+
+    if (
+      comparableText(booker.booker_name) !== comparableText(nextBookerName) ||
+      savedEmail !== requestedEmail ||
+      savedPhone !== requestedPhone
+    ) {
+      const updateResponse = await fetch(adminBookersApiPath, {
         body: JSON.stringify({
-          booker_name: bookerName.trim(),
-          company_id: companyId,
-          email: bookerEmail.trim().toLowerCase() || null,
-          phone: bookerContact.trim() || null,
+          booker_name: nextBookerName,
+          email: requestedEmail || null,
+          id: bookerId,
+          phone: requestedPhone || null,
         }),
         headers: {
           "Content-Type": "application/json",
           "x-prestige-admin-purpose": "admin-booking-persistence",
         },
-        method: "POST",
+        method: "PATCH",
       });
-      const createResult = await createResponse.json().catch(() => null);
-
-      if (!createResponse.ok || createResult?.ok !== true || !positiveId(createResult?.booker?.id)) {
-        throw new Error("Verified Booker could not be created safely.");
-      }
-
-      booker = createResult.booker;
-    } else {
-      if (positiveId(booker.company_id) !== companyId) {
-        throw new Error("Verified Booker does not belong to this exact company.");
-      }
-
-      const savedEmail = cleanText(booker.email).toLowerCase();
-      const savedPhone = cleanText(booker.phone);
-      const requestedEmail = bookerEmail.trim().toLowerCase();
-      const requestedPhone = bookerContact.trim();
+      const updateResult = await updateResponse.json().catch(() => null);
 
       if (
-        !editingBookerId &&
-        ((savedEmail && requestedEmail && savedEmail !== requestedEmail) ||
-          (savedPhone && requestedPhone && savedPhone !== requestedPhone))
+        !updateResponse.ok ||
+        updateResult?.ok !== true ||
+        positiveId(updateResult?.booker?.id) !== bookerId ||
+        positiveId(updateResult?.booker?.company_id) !== companyId ||
+        positiveId(updateResult?.booker?.customer_id) !== positiveId(customerId)
       ) {
-        throw new Error("Verified Booker already exists with different contact details. Review the existing record first.");
+        throw new Error("Verified Booker changes could not be saved safely.");
       }
 
-      const nextBookerName = editingBookerId ? bookerName.trim() : cleanText(booker.booker_name);
-      const nextEmail = editingBookerId ? requestedEmail : requestedEmail || savedEmail;
-      const nextPhone = editingBookerId ? requestedPhone : requestedPhone || savedPhone;
-
-      if (
-        comparableText(booker.booker_name) !== comparableText(nextBookerName) ||
-        savedEmail !== nextEmail ||
-        savedPhone !== nextPhone
-      ) {
-        const updateResponse = await fetch(adminBookersApiPath, {
-          body: JSON.stringify({
-            booker_name: nextBookerName,
-            email: nextEmail || null,
-            id: positiveId(booker.id),
-            phone: nextPhone || null,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "PATCH",
-        });
-        const updateResult = await updateResponse.json().catch(() => null);
-
-        if (!updateResponse.ok || updateResult?.ok !== true ||
-            positiveId(updateResult?.booker?.id) !== positiveId(booker.id)) {
-          throw new Error("Verified Booker changes could not be saved safely.");
-        }
-
-        booker = updateResult.booker;
-      }
+      booker = updateResult.booker;
     }
 
-    if (!booker || positiveId(booker.company_id) !== companyId) {
-      throw new Error("Verified Booker does not belong to this exact company.");
+    if (
+      positiveId(booker.id) !== bookerId ||
+      positiveId(booker.company_id) !== companyId ||
+      positiveId(booker.customer_id) !== positiveId(customerId)
+    ) {
+      throw new Error("Verified Booker does not belong to this exact Customer Account.");
     }
 
-    return positiveId(booker.id) as number;
+    return bookerId;
   }
 
   async function saveBookerAndTraveler() {
     const safeBookerName = cleanText(bookerName);
     const safeTravelerName = cleanText(travelerName);
+    const expectedBookerId = positiveId(exactCustomerBooker?.id);
+
+    if (!expectedBookerId || editingBookerId !== expectedBookerId) {
+      setMessage(
+        "No approved Company + Booker Customer Account is ready for this exact customer profile. Nothing was changed.",
+      );
+      setStatus("error");
+      setIsOpen(true);
+      return;
+    }
 
     if (!safeBookerName || !safeTravelerName) {
       setMessage("Booker / PA name and Traveller name are required.");
@@ -333,7 +365,7 @@ export function CustomerVerifiedIdentitiesEditor({
       return;
     }
 
-    const actionLabel = editingBookerId && editingTravelerId ? "Update" : "Save";
+    const actionLabel = editingTravelerId ? "Update" : "Add";
 
     if (!window.confirm(
       `${actionLabel} verified Booker ${safeBookerName} and Traveller ${safeTravelerName} for ${companyName}? Booker details will stay consistent on all Travellers already linked to this exact Booker; the Traveller name changes only this exact Traveller. They will become selectable in the existing Dispatch identity row. This does not change any saved booking, invoice, price, Calendar event, driver, payment, or message.`,
@@ -347,16 +379,19 @@ export function CustomerVerifiedIdentitiesEditor({
     setMessage("Saving the verified Booker and Traveller...");
 
     try {
-      const freshTravelers = await loadIdentities({ silent: true });
+      const freshIdentity = await loadIdentities({ silent: true });
+      const freshTravelers = freshIdentity.travelers;
       const matchingTraveler = editingTravelerId
         ? freshTravelers.find(
             (traveler) =>
               positiveId(traveler.id) === editingTravelerId &&
-              positiveId(traveler.company_id) === companyId,
+              positiveId(traveler.company_id) === companyId &&
+              positiveId(traveler.booker_id) === positiveId(freshIdentity.booker.id),
           )
         : freshTravelers.find(
             (traveler) =>
               positiveId(traveler.company_id) === companyId &&
+              positiveId(traveler.booker_id) === positiveId(freshIdentity.booker.id) &&
               comparableText(traveler.traveler_name) === comparableText(safeTravelerName),
           );
 
@@ -376,9 +411,9 @@ export function CustomerVerifiedIdentitiesEditor({
         throw new Error("That traveller is already linked to another verified Booker. Nothing was changed.");
       }
 
-      const bookerId = await findOrCreateBooker();
+      const bookerId = await saveExactBooker(freshIdentity.booker);
 
-      if (editingBookerId && bookerId !== editingBookerId) {
+      if (bookerId !== editingBookerId) {
         throw new Error("Verified Booker changed while this profile was open. Nothing was changed.");
       }
 
@@ -482,8 +517,8 @@ export function CustomerVerifiedIdentitiesEditor({
         throw new Error("Verified Booker details could not be synchronized safely.");
       }
 
-      const verifiedRows = await loadIdentities({ afterSave: true });
-      const verified = verifiedRows.some(
+      const verifiedIdentity = await loadIdentities({ afterSave: true });
+      const verified = verifiedIdentity.travelers.some(
         (traveler) =>
           positiveId(traveler.id) === travelerId &&
           positiveId(traveler.booker_id) === bookerId &&
@@ -553,53 +588,59 @@ export function CustomerVerifiedIdentitiesEditor({
                 </button>
               </div>
             ))}
-            <button
-              className="justify-self-start text-xs font-bold text-sky-900 underline underline-offset-2"
-              data-customer-add-booker-traveler="true"
-              disabled={status === "saving" || status === "loading"}
-              onClick={startAddingIdentity}
-              type="button"
-            >
-              Add another Booker + Traveller
-            </button>
           </div>
         ) : null}
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="grid gap-1 text-xs font-bold text-slate-700">
-            Booker / PA name
-            <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-name="true" disabled={status === "saving"} onChange={(event) => setBookerName(event.target.value)} value={bookerName} />
-          </label>
-          <label className="grid gap-1 text-xs font-bold text-slate-700">
-            Traveller name
-            <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-traveler-name="true" disabled={status === "saving"} onChange={(event) => setTravelerName(event.target.value)} value={travelerName} />
-          </label>
-          <label className="grid gap-1 text-xs font-bold text-slate-700">
-            Booker email (optional)
-            <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-email="true" disabled={status === "saving"} onChange={(event) => setBookerEmail(event.target.value)} type="email" value={bookerEmail} />
-          </label>
-          <label className="grid gap-1 text-xs font-bold text-slate-700">
-            Booker contact (optional)
-            <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-contact="true" disabled={status === "saving"} onChange={(event) => setBookerContact(event.target.value)} value={bookerContact} />
-          </label>
-        </div>
+        {exactCustomerBooker ? (
+          <>
+            <button
+              className="mb-3 text-xs font-bold text-sky-900 underline underline-offset-2"
+              data-customer-add-booker-traveler="true"
+              disabled={status === "saving" || status === "loading"}
+              onClick={() => void startAddingIdentity()}
+              type="button"
+            >
+              Add Traveller
+            </button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="grid gap-1 text-xs font-bold text-slate-700">
+                Booker / PA name
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-name="true" disabled={status === "saving"} onChange={(event) => setBookerName(event.target.value)} value={bookerName} />
+              </label>
+              <label className="grid gap-1 text-xs font-bold text-slate-700">
+                Traveller name
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-traveler-name="true" disabled={status === "saving"} onChange={(event) => setTravelerName(event.target.value)} value={travelerName} />
+              </label>
+              <label className="grid gap-1 text-xs font-bold text-slate-700">
+                Booker email (optional)
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-email="true" disabled={status === "saving"} onChange={(event) => setBookerEmail(event.target.value)} type="email" value={bookerEmail} />
+              </label>
+              <label className="grid gap-1 text-xs font-bold text-slate-700">
+                Booker contact (optional)
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-contact="true" disabled={status === "saving"} onChange={(event) => setBookerContact(event.target.value)} value={bookerContact} />
+              </label>
+            </div>
+          </>
+        ) : null}
         <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className={`rounded-md border px-2.5 py-2 text-xs font-semibold ${identityFeedbackClass(status)}`}>
             {message}
           </p>
-          <button
-            className="min-h-9 shrink-0 rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white disabled:border-slate-300 disabled:bg-slate-300"
-            data-customer-save-booker-traveler="true"
-            disabled={status === "saving" || status === "loading"}
-            onClick={saveBookerAndTraveler}
-            type="button"
-          >
-            {status === "saving"
-              ? "Saving"
-              : editingBookerId && editingTravelerId
-                ? "Save changes"
-                : "Save Booker + Traveller"}
-          </button>
+          {exactCustomerBooker ? (
+            <button
+              className="min-h-9 shrink-0 rounded-md border border-slate-900 bg-slate-900 px-3 text-xs font-bold text-white disabled:border-slate-300 disabled:bg-slate-300"
+              data-customer-save-booker-traveler="true"
+              disabled={status === "saving" || status === "loading" || !editingBookerId}
+              onClick={saveBookerAndTraveler}
+              type="button"
+            >
+              {status === "saving"
+                ? "Saving"
+                : editingTravelerId
+                  ? "Save changes"
+                  : "Add Traveller"}
+            </button>
+          ) : null}
         </div>
       </div>
     </details>

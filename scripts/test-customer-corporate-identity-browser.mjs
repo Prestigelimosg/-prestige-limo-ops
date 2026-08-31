@@ -70,15 +70,27 @@ async function main() {
   let client = null;
   let rateSetupReadCount = 0;
   let alternateTravelerAvailable = false;
+  let otherCustomerTravelerAvailable = true;
   let bookerPatchPayload = null;
+  let bookerPatchCount = 0;
+  let bookerPostCount = 0;
+  let travelerCreateCount = 0;
+  let createdTravelerRecord = null;
   const travelerPatchPayloads = [];
   const bookingPatchPayloads = [];
   let bookerRecord = {
     booker_name: "Georgina",
     company_id: 33,
+    customer_id: Number(customerId),
     email: null,
     id: 17,
     phone: null,
+  };
+  const otherCustomerBookerRecord = {
+    booker_name: "Other Apollo Booker",
+    company_id: 33,
+    customer_id: 166,
+    id: 18,
   };
   let travelerRecord = {
     booker_id: 17,
@@ -102,6 +114,7 @@ async function main() {
           { requestStage: "Request", urlPattern: "*/api/admin-companies-crm-identity*" },
           { requestStage: "Request", urlPattern: "*/api/admin-rate-setup*" },
           { requestStage: "Request", urlPattern: "*/api/admin-bookers*" },
+          { requestStage: "Request", urlPattern: "*/api/admin-company-traveler-crm-runtime-write-action*" },
           { requestStage: "Request", urlPattern: "*/api/admin-legacy-data/rest/v1/travelers*" },
           { requestStage: "Request", urlPattern: "*/api/admin-customer-saved-bookings*" },
           { requestStage: "Request", urlPattern: "*/api/admin-customer-invoices*" },
@@ -157,6 +170,7 @@ async function main() {
       } else if (requestUrl.pathname === "/api/admin-rate-setup" && method === "GET") {
         rateSetupReadCount += 1;
         responseBody = {
+          bookers: [bookerRecord, otherCustomerBookerRecord],
           companies: [{ company_name: customerName, id: 33 }],
           ok: true,
           settings: null,
@@ -171,6 +185,16 @@ async function main() {
                   traveler_name: "Alternate Traveller",
                 }]
               : []),
+            ...(otherCustomerTravelerAvailable
+              ? [{
+                  booker_id: 18,
+                  booker_name: "Other Apollo Booker",
+                  company_id: 33,
+                  id: 32,
+                  traveler_name: "Other Customer Traveller",
+                }]
+              : []),
+            ...(createdTravelerRecord ? [createdTravelerRecord] : []),
           ],
           version: "browser-corporate-identity-rate-setup",
         };
@@ -180,7 +204,11 @@ async function main() {
           ok: true,
           version: "browser-corporate-identity-booker",
         };
+      } else if (requestUrl.pathname === "/api/admin-bookers" && method === "POST") {
+        bookerPostCount += 1;
+        responseBody = { error: "Customer Profile must not create a Booker.", ok: false };
       } else if (requestUrl.pathname === "/api/admin-bookers" && method === "PATCH") {
+        bookerPatchCount += 1;
         bookerPatchPayload = JSON.parse(request.postData || "{}");
         bookerRecord = {
           ...bookerRecord,
@@ -194,25 +222,47 @@ async function main() {
           version: "browser-corporate-identity-booker",
         };
       } else if (
+        requestUrl.pathname === "/api/admin-company-traveler-crm-runtime-write-action" &&
+        method === "POST"
+      ) {
+        const payload = JSON.parse(request.postData || "{}");
+        travelerCreateCount += 1;
+        createdTravelerRecord = {
+          booker_id: null,
+          booker_name: payload.booker_name,
+          company_id: payload.company_id,
+          id: 33,
+          traveler_name: payload.traveler_name,
+        };
+        responseBody = { ok: true, record: createdTravelerRecord, status: "saved" };
+      } else if (
         requestUrl.pathname === "/api/admin-legacy-data/rest/v1/travelers" &&
         method === "PATCH"
       ) {
         const travelerPatchPayload = JSON.parse(request.postData || "{}");
         travelerPatchPayloads.push(travelerPatchPayload);
-        travelerRecord = {
-          ...travelerRecord,
+        const patchTraveler = (record) => ({
+          ...record,
           ...(travelerPatchPayload.booker_id ? { booker_id: travelerPatchPayload.booker_id } : {}),
           ...(travelerPatchPayload.booker_name ? { booker_name: travelerPatchPayload.booker_name } : {}),
           ...(travelerPatchPayload.traveler_name ? { traveler_name: travelerPatchPayload.traveler_name } : {}),
-        };
-        const returnedTraveler = {
-          ...travelerRecord,
           booker_contact: travelerPatchPayload.booker_contact,
           booker_email: travelerPatchPayload.booker_email,
-        };
-        responseBody = requestUrl.searchParams.get("single") === "single"
-          ? returnedTraveler
-          : [returnedTraveler];
+        });
+        const single = requestUrl.searchParams.get("single") === "single";
+        const targetId = Number((requestUrl.searchParams.get("id") || "").replace(/^eq\./, ""));
+
+        if (single && createdTravelerRecord && targetId === createdTravelerRecord.id) {
+          createdTravelerRecord = patchTraveler(createdTravelerRecord);
+          responseBody = createdTravelerRecord;
+        } else if (single) {
+          travelerRecord = patchTraveler(travelerRecord);
+          responseBody = travelerRecord;
+        } else {
+          travelerRecord = patchTraveler(travelerRecord);
+          if (createdTravelerRecord) createdTravelerRecord = patchTraveler(createdTravelerRecord);
+          responseBody = [travelerRecord, ...(createdTravelerRecord ? [createdTravelerRecord] : [])];
+        }
       } else if (requestUrl.pathname === "/api/admin-customer-saved-bookings" && method === "GET") {
         responseBody = {
           ok: true,
@@ -319,6 +369,12 @@ async function main() {
       '[data-customer-edit-booker-traveler="17-30"]',
       "existing Booker and Traveller edit button",
     );
+    assert.equal(
+      await evaluate(`document.querySelector('[data-customer-edit-booker-traveler="18-32"]') === null`),
+      true,
+      "Customer Profile must not expose another Customer Account's Booker or Traveller under the same Company.",
+    );
+    otherCustomerTravelerAvailable = false;
     await evaluate(`document.querySelector('[data-customer-edit-booker-traveler="17-30"]').click()`);
     await waitForCondition(
       async () => await evaluate(`document.querySelector('[data-customer-booker-name="true"]')?.value === "Georgina"`),
@@ -363,6 +419,29 @@ async function main() {
       booker_email: "gcheung@apollo.com",
       booker_name: "Georgina Cheung",
     });
+
+    reporter.step("adding a booking-only Traveller under the exact bound Booker");
+    await evaluate(`document.querySelector('[data-customer-add-booker-traveler="true"]')?.click()`);
+    await waitForCondition(
+      async () => await evaluate(`(() => {
+        const booker = document.querySelector('[data-customer-booker-name="true"]')?.value || "";
+        const traveller = document.querySelector('[data-customer-traveler-name="true"]')?.value ?? "missing";
+        return booker === "Georgina Cheung" && traveller === "" ? { booker, traveller } : false;
+      })()`),
+      10000,
+      "exact bound Booker loaded for Traveller add",
+    );
+    assert.equal(await evaluate(setInputValueScript('[data-customer-traveler-name="true"]', "Second Account Traveller")), true);
+    await evaluate(`document.querySelector('[data-customer-save-booker-traveler="true"]')?.click()`);
+    await waitForSelector(
+      evaluate,
+      '[data-customer-edit-booker-traveler="17-33"]',
+      "new booking-only Traveller under the exact bound Booker",
+    );
+    assert.equal(travelerCreateCount, 1);
+    assert.equal(bookerPostCount, 0);
+    assert.equal(bookerPatchCount, 1);
+    createdTravelerRecord = null;
 
     alternateTravelerAvailable = true;
     reporter.step("resolving two same-passenger legacy jobs once in Section 4");
@@ -451,7 +530,37 @@ async function main() {
     );
     assert.ok(rateSetupReadCount >= 4, "Expected a fresh selected-job Booker and Traveller read after the profile save.");
 
+    reporter.step("checking an unlinked Customer Profile fails closed");
+    bookerRecord = { ...bookerRecord, customer_id: null };
+    const unlinkedCustomerUrl = new URL(`/customers/${customerId}`, appUrl);
+    unlinkedCustomerUrl.searchParams.set("name", customerName);
+    unlinkedCustomerUrl.searchParams.set("unlinked", "true");
+    await navigateWithLoadEvent(client, unlinkedCustomerUrl.toString());
+    await waitForSelector(
+      evaluate,
+      `[data-customer-company-profile-edit="${customerId}"]`,
+      "unlinked customer profile edit button",
+    );
+    await evaluate(`document.querySelector('[data-customer-company-profile-edit="${customerId}"]')?.click()`);
+    await waitForCondition(
+      async () => await evaluate(
+        `document.body.innerText.includes("No approved Company + Booker Customer Account is linked to this exact customer profile.")`,
+      ),
+      10000,
+      "unlinked exact Customer profile fail-closed message",
+    );
+    assert.equal(
+      await evaluate(`Boolean(document.querySelector('[data-customer-add-booker-traveler="true"], [data-customer-save-booker-traveler="true"]'))`),
+      false,
+      "An unlinked Customer Profile must expose no Booker or Traveller writer.",
+    );
+    assert.equal(bookerPostCount, 0, "Customer Profile must never create a second unlinked Booker.");
+    assert.equal(bookerPatchCount, 1, "Only the earlier exact bound Booker edit should have been written.");
+
     console.log(JSON.stringify(reporter.summary({
+      bookerPatchCount,
+      bookerPostCount,
+      travelerCreateCount,
       errorCount: 0,
       ok: true,
       bookingPatchCount: bookingPatchPayloads.length,

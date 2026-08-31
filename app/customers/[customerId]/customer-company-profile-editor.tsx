@@ -562,6 +562,7 @@ export function CustomerCompanyProfileEditor({
         </p>
       ) : profile.id ? (
         <CustomerVerifiedIdentitiesEditor
+          customerId={customerId}
           companyId={profile.id}
           companyName={profile.company_name}
         />

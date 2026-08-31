@@ -1,16 +1,23 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-4aa276a4 Fix Save CRM booking read purpose
+dc4febc3 Scope customer profiles to bound bookers
 
 Latest pushed main/staging runtime checkpoint:
-4aa276a4 Fix Save CRM booking read purpose
+dc4febc3 Scope customer profiles to bound bookers
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-0327c5f5 Merge pull request #450 from Prestigelimosg/codex/save-crm-booking-read-purpose-acceptance
+b71d5c5d Merge pull request #451 from Prestigelimosg/codex/customer-profile-account-scope
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Admin Mobile Customer Account Chooser Containment Repair (2026-08-31)
+
+- The owner-provided installed Admin iPhone screenshot reproduced the established Dispatch `Details` step with the open `Customer Account` menu covering the Company, Booker and contact fields below it. Source inspection proved the menu panel used `absolute left-0 top-full` at every breakpoint, so the phone menu was removed from normal document flow even though its width and internal scroll boundary remained contained.
+- The established chooser remains in the same Booking Details location with the same native `<details>` control, search, options, Company + Booker identity tuples, handlers and selected values. Only its existing menu panel positioning changes: it is `relative` and therefore in-flow below the summary on phone widths, while `md:absolute md:left-0 md:top-full` preserves the accepted compact overlay from the existing medium breakpoint upward. Opening the phone menu now pushes the following booking fields down instead of covering them.
+- Fail-first focused Chrome evidence used the real mobile Dispatch navigation and `Details` quick step at 390-by-844 device metrics. A synthesized touch opened the exact chooser, then the unchanged source failed with computed menu position `absolute`. After the repair, the same run proved computed `relative` positioning, zero overlap with the following Company field, internal `overflow-y: auto`, zero horizontal page overflow, touch selection of exact Company `55` / Booker `5501` / Customer `550`, null Traveller identity and zero booking POSTs. A second 320-by-568 containment probe also passed. The existing 1440px regression continues proving computed `absolute` desktop positioning, the approved one-column width, search and repeat-account behavior.
+- Focused protection is `scripts/test-admin-dispatch-customer-account-browser.mjs` and `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`. No selector, panel, route, API, writer, data field, account rule, Customer profile behavior, Save + CRM review/binding/persistence, Passenger/Traveller rule, Customer access, Rates, invoice/billing, Calendar, Driver, messaging, push/badge, native source, GPS, provider, environment, Supabase schema/data, payment, payout or PayNow lane changes.
 
 ## Exact Customer Profile Company + Booker Scope Repair (2026-08-31)
 

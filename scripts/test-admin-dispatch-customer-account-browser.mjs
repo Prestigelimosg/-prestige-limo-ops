@@ -136,6 +136,26 @@ async function main() {
       return result.result?.value;
     };
 
+    const touchTap = async (selector) => {
+      const point = await evaluate(`(() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        if (!(element instanceof HTMLElement)) return null;
+        element.scrollIntoView({ block: "center", inline: "nearest" });
+        const rect = element.getBoundingClientRect();
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        };
+      })()`);
+
+      assert.ok(point, `Expected touch target ${selector}`);
+      await client.send("Input.synthesizeTapGesture", {
+        gestureSourceType: "touch",
+        x: point.x,
+        y: point.y,
+      });
+    };
+
     client.on("Fetch.requestPaused", ({ request, requestId }) => {
       const requestUrl = new URL(request.url);
       const method = request.method || "GET";
@@ -211,12 +231,14 @@ async function main() {
         chooser.open = true;
         const options = [...document.querySelectorAll('[data-admin-dispatch-customer-account-option]')];
         const keys = options.map((option) => option.getAttribute("data-admin-dispatch-customer-account-option"));
+        const menu = [...chooser.children].find((child) => child instanceof HTMLDivElement);
         const summaryWidth = chooser.querySelector("summary")?.getBoundingClientRect().width || 0;
         const sectorWidth = chooser.closest('[data-admin-dispatch-crm-identity-selectors="true"]')?.getBoundingClientRect().width || 0;
-        return options.length === 3 && keys.includes("corporate:41:4101") ? {
+        return menu instanceof HTMLDivElement && options.length === 3 && keys.includes("corporate:41:4101") ? {
           keys,
           legacyCount: document.querySelectorAll('[data-admin-dispatch-agency-folder-select="true"], [data-admin-dispatch-corporate-customer-select="true"], [data-admin-dispatch-corporate-pair-select="true"]').length,
           listOverflowY: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-options="true"]')).overflowY,
+          menuPosition: getComputedStyle(menu).position,
           searchBackground: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-search="true"]')).backgroundColor,
           widthRatio: sectorWidth ? summaryWidth / sectorWidth : 0,
         } : false;
@@ -231,6 +253,7 @@ async function main() {
     ]);
     assert.equal(initialState.legacyCount, 0);
     assert.equal(initialState.listOverflowY, "auto");
+    assert.equal(initialState.menuPosition, "absolute");
     assert.match(initialState.searchBackground, /255, 255, 255/);
     assert.ok(
       initialState.widthRatio >= 0.3 && initialState.widthRatio <= 0.36,
@@ -489,6 +512,183 @@ async function main() {
       ),
       true,
     );
+    assert.equal(bookingPosts.length, 0);
+
+    reporter.step("checking iPhone Customer Account layout and touch selection");
+    await Promise.all([
+      client.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: 3,
+        height: 844,
+        mobile: true,
+        width: 390,
+      }),
+      client.send("Emulation.setTouchEmulationEnabled", {
+        enabled: true,
+        maxTouchPoints: 5,
+      }),
+    ]);
+    await navigateWithLoadEvent(client, appUrl);
+    await waitForSelector(evaluate, '[data-app-tab="dispatch"]', "mobile Dispatch tab");
+    await waitForCondition(
+      async () => evaluate(`(() => {
+        const tab = document.querySelector('[data-app-tab="dispatch"]');
+        if (!(tab instanceof HTMLButtonElement)) return false;
+        if (tab.getAttribute("aria-selected") === "true") return true;
+        tab.click();
+        return false;
+      })()`),
+      10000,
+      "active mobile Dispatch tab",
+    );
+    await waitForSelector(
+      evaluate,
+      '[data-mobile-dispatch-quick-step="details"]',
+      "mobile Details quick step",
+    );
+    await waitForCondition(
+      async () => evaluate(`(() => {
+        const step = document.querySelector('[data-mobile-dispatch-quick-step="details"]');
+        if (!(step instanceof HTMLButtonElement)) return false;
+        if (step.getAttribute("aria-current") === "step") return true;
+        step.click();
+        return false;
+      })()`),
+      10000,
+      "active mobile Details quick step",
+    );
+    await waitForSelector(
+      evaluate,
+      '[data-admin-dispatch-customer-account-select="true"]',
+      "mobile Customer Account chooser",
+    );
+    await waitForCondition(
+      async () => evaluate(`(() => {
+        const summary = document.querySelector('[data-admin-dispatch-customer-account-select="true"] > summary');
+        const rect = summary?.getBoundingClientRect();
+        return Boolean(rect && rect.width > 0 && rect.height > 0);
+      })()`),
+      10000,
+      "visible mobile Customer Account chooser",
+    );
+    await touchTap('[data-admin-dispatch-customer-account-select="true"] > summary');
+    await waitForCondition(
+      async () => evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]')?.open === true`),
+      10000,
+      "touch-opened mobile Customer Account chooser",
+    );
+
+    const mobileOpenState = await evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        if (!(chooser instanceof HTMLDetailsElement) || !chooser.open) {
+          return { ready: false, reason: "chooser-not-open" };
+        }
+        const menu = [...chooser.children].find((child) => child instanceof HTMLDivElement);
+        const section = chooser.closest('[data-dispatch-workflow-step="booking-details"]');
+        const companyField = section
+          ?.querySelector('input[placeholder="Company / Account"]')
+          ?.closest("label");
+        const options = chooser.querySelector('[data-admin-dispatch-customer-account-options="true"]');
+        if (!(menu instanceof HTMLDivElement) || !(companyField instanceof HTMLLabelElement) ||
+          !(options instanceof HTMLDivElement)) {
+          return {
+            companyFieldFound: companyField instanceof HTMLLabelElement,
+            menuFound: menu instanceof HTMLDivElement,
+            optionsFound: options instanceof HTMLDivElement,
+            ready: false,
+            reason: "mobile-geometry-target-missing",
+          };
+        }
+        const menuRect = menu.getBoundingClientRect();
+        const companyRect = companyField.getBoundingClientRect();
+        return {
+          companyTop: companyRect.top,
+          menuBottom: menuRect.bottom,
+          menuPosition: getComputedStyle(menu).position,
+          optionsOverflowY: getComputedStyle(options).overflowY,
+          overlapsCompanyField: menuRect.bottom > companyRect.top,
+          pageOverflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+          ready: true,
+          viewportWidth: window.innerWidth,
+        };
+      })()`);
+    assert.equal(mobileOpenState.ready, true, JSON.stringify(mobileOpenState));
+    assert.equal(mobileOpenState.viewportWidth, 390);
+    assert.equal(mobileOpenState.menuPosition, "relative");
+    assert.equal(mobileOpenState.overlapsCompanyField, false);
+    assert.ok(mobileOpenState.companyTop >= mobileOpenState.menuBottom);
+    assert.equal(mobileOpenState.optionsOverflowY, "auto");
+    assert.equal(mobileOpenState.pageOverflow, 0);
+
+    await touchTap('[data-admin-dispatch-customer-account-option="corporate:55:5501"]');
+    const mobileSelectedState = await waitForCondition(
+      async () => evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return chooser instanceof HTMLDetailsElement &&
+          !chooser.open &&
+          chooser.dataset.bookerId === "5501" &&
+          chooser.dataset.companyId === "55" &&
+          chooser.dataset.customerId === "550"
+          ? {
+              bookerId: chooser.dataset.bookerId,
+              companyId: chooser.dataset.companyId,
+              customerId: chooser.dataset.customerId,
+              travelerId: chooser.dataset.travelerId || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "touch-selected exact mobile Customer Account",
+    );
+    assert.deepEqual(mobileSelectedState, {
+      bookerId: "5501",
+      companyId: "55",
+      customerId: "550",
+      travelerId: "",
+    });
+    assert.equal(bookingPosts.length, 0);
+
+    reporter.step("checking narrow-phone Customer Account containment");
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 2,
+      height: 568,
+      mobile: true,
+      width: 320,
+    });
+    await evaluate(`(() => {
+      const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+      if (chooser instanceof HTMLDetailsElement) {
+        chooser.open = true;
+        chooser.scrollIntoView({ block: "center", inline: "nearest" });
+      }
+    })()`);
+    const narrowPhoneState = await waitForCondition(
+      async () => evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        if (!(chooser instanceof HTMLDetailsElement) || !chooser.open) return false;
+        const menu = [...chooser.children].find((child) => child instanceof HTMLDivElement);
+        const companyField = chooser
+          .closest('[data-dispatch-workflow-step="booking-details"]')
+          ?.querySelector('input[placeholder="Company / Account"]')
+          ?.closest("label");
+        if (!(menu instanceof HTMLDivElement) || !(companyField instanceof HTMLLabelElement)) return false;
+        const menuRect = menu.getBoundingClientRect();
+        const companyRect = companyField.getBoundingClientRect();
+        return {
+          menuPosition: getComputedStyle(menu).position,
+          overlapsCompanyField: menuRect.bottom > companyRect.top,
+          pageOverflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+          viewportWidth: window.innerWidth,
+        };
+      })()`),
+      10000,
+      "320px Customer Account containment",
+    );
+    assert.deepEqual(narrowPhoneState, {
+      menuPosition: "relative",
+      overlapsCompanyField: false,
+      pageOverflow: 0,
+      viewportWidth: 320,
+    });
     assert.equal(bookingPosts.length, 0);
 
     console.log(JSON.stringify(reporter.summary({

@@ -320,6 +320,7 @@ assert.match(
 );
 assert.match(runtimeSource, /directPassengerPhoneCandidates/);
 assert.match(runtimeSource, /explicitSourceBookingFacts/);
+assert.match(runtimeSource, /preserveValidatedExplicitCompanyDisplay/);
 assert.match(runtimeSource, /isPrestigeOwnCompanyEvidence/);
 assert.match(runtimeSource, /verifiedSenderCompanyAccount/);
 assert.match(
@@ -335,6 +336,25 @@ assert.doesNotMatch(
   sourceFactsValidationSource,
   /bookingResult\s*:\s*\{|(?:bagCount|bookingType|companyAccount|extraStopCount|extraStopLocation|flightNumber|passengerContact|passengerName|pax|pickup|pickupDate|pickupTime|vehicle)\s*:/,
   "The post-AI validator must accept or reject the provider result without populating structured booking fields from source evidence.",
+);
+const companyDisplayPreservationSource = runtimeSource.match(
+  /function preserveValidatedExplicitCompanyDisplay\([\s\S]*?\n}\n\nfunction prestigeTransportClientIdentity/,
+)?.[0] || "";
+assert.ok(companyDisplayPreservationSource);
+assert.match(
+  companyDisplayPreservationSource,
+  /normalizedEvidenceText\(structuredCompanyAccount\)[\s\S]*normalizedEvidenceText\(explicitCompanyAccount\)/,
+  "Exact source Company display may be preserved only after normalized semantic equality is proven.",
+);
+assert.doesNotMatch(
+  companyDisplayPreservationSource,
+  /(?:bagCount|bookingType|extraStopCount|extraStopLocation|flightNumber|passengerContact|passengerName|pax|pickup|pickupDate|pickupTime|vehicle)\s*:/,
+  "The post-validation display step must not populate any booking field except Company.",
+);
+assert.match(
+  runtimeSource,
+  /if \(!sourceFactsValidation\.ok\)[\s\S]*analysis:\s*preserveValidatedExplicitCompanyDisplay\(\s*input\.body,\s*sourceFactsValidation\.analysis,\s*\)/,
+  "Exact Company display preservation must run only after explicit-source validation passes.",
 );
 assert.doesNotMatch(
   runtimeSource,

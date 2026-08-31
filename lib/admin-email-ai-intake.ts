@@ -1280,6 +1280,45 @@ function emailLocalPartLooksLikeAnotherPerson(
   );
 }
 
+function preserveValidatedExplicitCompanyDisplay(
+  body: string,
+  analysis: AdminEmailAiAnalysis,
+) {
+  const sourceEvidence = explicitSourceBookingFacts(body);
+  const explicitCompanyAccount = cleanText(
+    sourceEvidence.facts.companyAccount,
+    320,
+  );
+  const booking = analysis.bookingResult.bookings[0];
+  const structuredCompanyAccount = cleanText(booking?.companyAccount, 320);
+
+  if (
+    sourceEvidence.ambiguous ||
+    !explicitCompanyAccount ||
+    analysis.bookingResult.multipleBookingsDetected ||
+    analysis.bookingResult.bookings.length !== 1 ||
+    !booking ||
+    normalizedEvidenceText(structuredCompanyAccount) !==
+      normalizedEvidenceText(explicitCompanyAccount) ||
+    structuredCompanyAccount === explicitCompanyAccount
+  ) {
+    return analysis;
+  }
+
+  return {
+    ...analysis,
+    bookingResult: {
+      ...analysis.bookingResult,
+      bookings: [
+        {
+          ...booking,
+          companyAccount: explicitCompanyAccount,
+        },
+      ],
+    },
+  };
+}
+
 function prestigeTransportClientIdentity(input: {
   body: string;
   subject: string;
@@ -1671,7 +1710,10 @@ async function analyseAllowedEmail(input: {
     }
 
     return {
-      analysis: sourceFactsValidation.analysis,
+      analysis: preserveValidatedExplicitCompanyDisplay(
+        input.body,
+        sourceFactsValidation.analysis,
+      ),
       inputTokens: cleanPositiveInteger(response.usage?.input_tokens),
       model: cleanModel(response.model || model),
       ok: true,

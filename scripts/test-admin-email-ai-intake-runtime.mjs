@@ -956,7 +956,7 @@ try {
     let source = await readFile(sourcePaths[name], "utf8");
     if (name === "runtime") {
       source +=
-        "\nexport { enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation, validateExplicitSourceFactsCompleteness as testValidateExplicitSourceFactsCompleteness };\n";
+        "\nexport { enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation, preserveValidatedExplicitCompanyDisplay as testPreserveValidatedExplicitCompanyDisplay, validateExplicitSourceFactsCompleteness as testValidateExplicitSourceFactsCompleteness };\n";
     }
     await mkdir(path.dirname(targetPaths[name]), { recursive: true });
     await writeFile(
@@ -1348,6 +1348,51 @@ try {
     sameLineCompanyAddressLabel.ok,
     true,
     "A trailing Company Address field label must not become part of the explicit customer company name.",
+  );
+
+  const sourcePunctuationRestored =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: sameLineCompanyAddressLabelBody },
+      {
+        ...sameLineCompanyAddressLabelAnalysis,
+        bookingResult: {
+          ...sameLineCompanyAddressLabelAnalysis.bookingResult,
+          bookings: [
+            {
+              ...completeExplicitSourceFactsBooking,
+              companyAccount: "Atlas Example Wealth Management Co., Ltd",
+            },
+          ],
+        },
+      },
+    );
+  assert.equal(
+    sourcePunctuationRestored.ok,
+    true,
+    "Equivalent Company punctuation must still pass the established normalized evidence check.",
+  );
+  assert.equal(
+    sourcePunctuationRestored.analysis.bookingResult.bookings[0].companyAccount,
+    "Atlas Example Wealth Management Co., Ltd",
+    "The explicit-source validator must remain a pure accept-or-reject guard.",
+  );
+  const sourcePunctuationPreserved =
+    runtime.testPreserveValidatedExplicitCompanyDisplay(
+      sameLineCompanyAddressLabelBody,
+      sourcePunctuationRestored.analysis,
+    );
+  assert.equal(
+    sourcePunctuationPreserved.bookingResult.bookings[0].companyAccount,
+    "Atlas Example Wealth Management Co., Ltd.",
+    "A semantically validated explicit Company must retain the exact source punctuation in the queued result.",
+  );
+  assert.equal(
+    runtime.testPreserveValidatedExplicitCompanyDisplay(
+      sameLineCompanyAddressLabelBody,
+      sameLineCompanyAddressLabelAnalysis,
+    ),
+    sameLineCompanyAddressLabelAnalysis,
+    "An already exact Company display must retain the established analysis object unchanged.",
   );
 
   for (const [label, companyAccount] of [

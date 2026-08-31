@@ -84,6 +84,14 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverDevicePushPath = path.join(
+    tempDir,
+    "lib/driver-device-push-notification.js",
+  );
+  const adminDevicePushPath = path.join(
+    tempDir,
+    "lib/admin-device-push-notification.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
@@ -111,6 +119,53 @@ async function writeMockModules(tempDir) {
       "}",
       "module.exports = { maybePersistCustomerDriverAppNotification };",
     ].join("\n"),
+  );
+  await writeFile(
+    driverDevicePushPath,
+    "function sendDriverDevicePushAlertForAppUpdate() { throw new Error('Unexpected driver push call.'); }\nmodule.exports = { sendDriverDevicePushAlertForAppUpdate };",
+  );
+  await writeFile(
+    adminDevicePushPath,
+    "async function sendAdminManualBookingCreatedDevicePushAlert() { throw new Error('Unexpected admin push call.'); }\nasync function sendAdminNewBookingDevicePushAlert() { throw new Error('Unexpected admin push call.'); }\nmodule.exports = { sendAdminManualBookingCreatedDevicePushAlert, sendAdminNewBookingDevicePushAlert };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-app-notification-persistence.js"),
+    "async function createCustomerBookingRequestAdminAppNotification() { throw new Error('Unexpected admin app notification call.'); }\nmodule.exports = { createCustomerBookingRequestAdminAppNotification };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-new-booking-email-alert.js"),
+    "async function sendAdminNewBookingEmailAlert() { throw new Error('Unexpected admin email call.'); }\nmodule.exports = { sendAdminNewBookingEmailAlert };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-saved-bookings-read.js"),
+    [
+      "function expiredCustomerSavedBookingsSessionCookieHeaders() { return []; }",
+      "function resolveCustomerSavedBookingsBoundaryForPurpose() { return { ok: true, data: { portal_link_revision: 'kill-switch-revision' } }; }",
+      "async function resolveCustomerSavedBookingsVerifiedIdentity() {",
+      "  return { ok: true, data: { booker_email: 'kill-switch-customer@example.com', booker_id: '00000000-0000-4000-8000-000000000002', company_id: '00000000-0000-4000-8000-000000000001', customer_account_reference: 'KILL-SWITCH-CUSTOMER', traveler_id: null, traveler_name: null } };",
+      "}",
+      "module.exports = { expiredCustomerSavedBookingsSessionCookieHeaders, resolveCustomerSavedBookingsBoundaryForPurpose, resolveCustomerSavedBookingsVerifiedIdentity };",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(tempDir, "lib/codex-job-card-auto-preparation.js"),
+    "async function prepareCodexJobCardForAdminReview() { throw new Error('Unexpected job card preparation call.'); }\nmodule.exports = { prepareCodexJobCardForAdminReview };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-receipt-email.js"),
+    "async function sendCustomerBookingReceiptEmail() { throw new Error('Unexpected receipt email call.'); }\nmodule.exports = { sendCustomerBookingReceiptEmail };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-invitation.js"),
+    "function verifyCustomerBookingInvitationToken() { throw new Error('Unexpected invitation verification call.'); }\nmodule.exports = { verifyCustomerBookingInvitationToken };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-booking-phone-otp.js"),
+    "function verifyCustomerBookingPhoneOtpProof() { throw new Error('Unexpected phone verification call.'); }\nmodule.exports = { verifyCustomerBookingPhoneOtpProof };",
+  );
+  await writeFile(
+    path.join(tempDir, "lib/customer-portal-access-link.js"),
+    "function createCustomerPortalAccessLinkToken() { throw new Error('Unexpected portal link call.'); }\nfunction safeCustomerPortalPublicBookingReference() { throw new Error('Unexpected portal reference call.'); }\nmodule.exports = { createCustomerPortalAccessLinkToken, safeCustomerPortalPublicBookingReference };",
   );
 }
 

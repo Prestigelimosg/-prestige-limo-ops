@@ -87,6 +87,10 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverDevicePushPath = path.join(
+    tempDir,
+    "lib/driver-device-push-notification.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
@@ -104,6 +108,11 @@ async function writeMockModules(tempDir) {
       "}",
       "module.exports = { createClient };",
     ].join("\n"),
+  );
+  await mkdir(path.dirname(driverDevicePushPath), { recursive: true });
+  await writeFile(
+    driverDevicePushPath,
+    "function sendDriverDevicePushAlertForAppUpdate() { throw new Error('Unexpected driver push call.'); }\nmodule.exports = { sendDriverDevicePushAlertForAppUpdate };",
   );
 }
 

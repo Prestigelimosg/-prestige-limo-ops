@@ -106,6 +106,10 @@ try {
     path.join(tempDir, "lib/admin-ai-monthly-billing-review.js"),
     'exports.executeAdminAiMonthlyBillingReview = async () => ({ matched: false });\n',
   );
+  await writeFile(
+    path.join(tempDir, "lib/admin-ai-invoice-payment-preparation.js"),
+    'exports.executeAdminAiInvoicePaymentPreparation = async () => ({ matched: false });\n',
+  );
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(serverOnlyPath, "module.exports = {};\n");

@@ -2638,6 +2638,42 @@ type AdminAiConversationMessage = {
   text: string;
 };
 
+type AdminAiInvoicePaymentPreparationResult = {
+  answer: string;
+  intent: "prepare_invoice_payment_review";
+  invoice: {
+    amount_label: string;
+    balance_label: string;
+    booker_id: number;
+    booker_name: string;
+    booking_references: string[];
+    company_id: number;
+    company_name: string;
+    customer_id: number;
+    due_date: string;
+    invoice_number: string;
+    issue_date: string;
+    status: "Paid" | "Unpaid";
+  } | null;
+  open_customer_path: string | null;
+  query: string;
+  read_at: string;
+  ready_for_manual_review: boolean;
+  requirements: {
+    payment_method_required: true;
+    payment_methods: ["Bank transfer", "Card", "Cash"];
+    thank_you_choice_required: true;
+  } | null;
+  status:
+    | "already_paid"
+    | "ambiguous"
+    | "blocked"
+    | "identity_review"
+    | "not_found"
+    | "ready"
+    | "wrong_document";
+};
+
 type AdminAiInvoiceSearchRow = {
   amount_label: string;
   balance_label: string;
@@ -15014,6 +15050,8 @@ export default function Home() {
   const [adminAiBookingBriefLoadPending, setAdminAiBookingBriefLoadPending] = useState(false);
   const [adminAiInvoiceSearchResult, setAdminAiInvoiceSearchResult] =
     useState<AdminAiInvoiceSearchResult | null>(null);
+  const [adminAiInvoicePaymentPreparationResult, setAdminAiInvoicePaymentPreparationResult] =
+    useState<AdminAiInvoicePaymentPreparationResult | null>(null);
   const [adminAiAccountBriefResult, setAdminAiAccountBriefResult] =
     useState<AdminAiAccountBriefResult | null>(null);
   const [adminAiMonthlyBillingReviewResult, setAdminAiMonthlyBillingReviewResult] =
@@ -20116,6 +20154,7 @@ export default function Home() {
     setAiConversationMessages([]);
     setAdminAiAccountBriefResult(null);
     setAdminAiBookingBriefResult(null);
+    setAdminAiInvoicePaymentPreparationResult(null);
     setAdminAiInvoiceSearchResult(null);
     setAdminAiMonthlyBillingReviewResult(null);
     setAdminAiTodaysWorkBriefResult(null);
@@ -21078,6 +21117,7 @@ export default function Home() {
     ) {
       setAdminAiAccountBriefResult(null);
       setAdminAiBookingBriefResult(null);
+      setAdminAiInvoicePaymentPreparationResult(null);
       setAdminAiInvoiceSearchResult(null);
       setAdminAiMonthlyBillingReviewResult(null);
       setAdminAiTodaysWorkBriefResult(null);
@@ -21104,6 +21144,7 @@ export default function Home() {
         answer?: unknown;
         booking_brief?: unknown;
         error?: unknown;
+        invoice_payment_preparation?: unknown;
         invoice_search?: unknown;
         model?: unknown;
         monthly_billing_review?: unknown;
@@ -21122,6 +21163,29 @@ export default function Home() {
         return;
       }
 
+      const rawInvoicePaymentPreparation = responseBody.invoice_payment_preparation;
+      const invoicePaymentPreparation =
+        rawInvoicePaymentPreparation !== null &&
+        typeof rawInvoicePaymentPreparation === "object" &&
+        !Array.isArray(rawInvoicePaymentPreparation) &&
+        (rawInvoicePaymentPreparation as { intent?: unknown }).intent === "prepare_invoice_payment_review"
+          ? rawInvoicePaymentPreparation as AdminAiInvoicePaymentPreparationResult
+          : null;
+
+      if (invoicePaymentPreparation) {
+        setAdminAiAccountBriefResult(null);
+        setAdminAiBookingBriefResult(null);
+        setAdminAiInvoiceSearchResult(null);
+        setAdminAiMonthlyBillingReviewResult(null);
+        setAdminAiTodaysWorkBriefResult(null);
+        setAdminAiInvoicePaymentPreparationResult(invoicePaymentPreparation);
+        setBookingMessage("");
+        setAiAssistResponseNote(
+          "Prestige live records · Read-only exact-invoice preparation. No AI model, invoice or payment write, email, provider call, message, or external send was used.",
+        );
+        return;
+      }
+
       const rawMonthlyBillingReview = responseBody.monthly_billing_review;
       const monthlyBillingReview =
         rawMonthlyBillingReview !== null &&
@@ -21134,6 +21198,7 @@ export default function Home() {
       if (monthlyBillingReview) {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
+        setAdminAiInvoicePaymentPreparationResult(null);
         setAdminAiInvoiceSearchResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setAdminAiMonthlyBillingReviewResult((current) => {
@@ -21174,6 +21239,7 @@ export default function Home() {
       if (todaysWorkBrief) {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
+        setAdminAiInvoicePaymentPreparationResult(null);
         setAdminAiInvoiceSearchResult(null);
         setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult((current) => {
@@ -21214,6 +21280,7 @@ export default function Home() {
       if (bookingBrief) {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(bookingBrief);
+        setAdminAiInvoicePaymentPreparationResult(null);
         setAdminAiInvoiceSearchResult(null);
         setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult(null);
@@ -21235,6 +21302,7 @@ export default function Home() {
 
       if (accountBrief) {
         setAdminAiBookingBriefResult(null);
+        setAdminAiInvoicePaymentPreparationResult(null);
         setAdminAiInvoiceSearchResult(null);
         setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult(null);
@@ -21280,6 +21348,7 @@ export default function Home() {
       if (invoiceSearch) {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
+        setAdminAiInvoicePaymentPreparationResult(null);
         setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setAdminAiInvoiceSearchResult((current) => {
@@ -42854,9 +42923,118 @@ export default function Home() {
                     ))
                   ) : (
                     <p className="text-sm text-slate-600">
-                      Ask for today&apos;s work brief, one exact booking, an exact Company + Booker account, Jobs not billed yet, or issued invoices. Read-only skills cannot change app data.
+                      Ask for today&apos;s work brief, one exact booking, an exact Company + Booker account, Jobs not billed yet, issued invoices, or preparation for one exact invoice payment review. Read-only skills cannot change app data.
                     </p>
                   )}
+                  {adminAiInvoicePaymentPreparationResult ? (
+                    <div
+                      className={`rounded-lg border p-3 text-sm text-slate-900 ${
+                        adminAiInvoicePaymentPreparationResult.status === "ready"
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-rose-200 bg-rose-50"
+                      }`}
+                      data-admin-ai-invoice-payment-preparation="true"
+                      data-admin-ai-invoice-payment-preparation-status={adminAiInvoicePaymentPreparationResult.status}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className={`text-[10px] font-semibold uppercase tracking-wide ${
+                            adminAiInvoicePaymentPreparationResult.status === "ready"
+                              ? "text-emerald-800"
+                              : "text-rose-800"
+                          }`}>
+                            Prestige live records · Read-only preparation
+                          </p>
+                          <p className="mt-1 font-semibold" data-admin-ai-invoice-payment-preparation-answer="true">
+                            {adminAiInvoicePaymentPreparationResult.answer}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Read {new Date(adminAiInvoicePaymentPreparationResult.read_at).toLocaleString("en-SG", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                              timeZone: "Asia/Singapore",
+                            })}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-bold ${
+                            adminAiInvoicePaymentPreparationResult.status === "ready"
+                              ? "bg-emerald-100 text-emerald-900"
+                              : "bg-rose-100 text-rose-900"
+                          }`}
+                        >
+                          {adminAiInvoicePaymentPreparationResult.status === "ready"
+                            ? "Ready for manual review"
+                            : adminAiInvoicePaymentPreparationResult.status === "already_paid"
+                              ? "Already paid"
+                              : "Not prepared"}
+                        </span>
+                      </div>
+                      {adminAiInvoicePaymentPreparationResult.invoice ? (
+                        <div
+                          className="mt-3 rounded-md border border-slate-200 bg-white p-3"
+                          data-admin-ai-invoice-payment-preparation-record="true"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="text-lg font-bold text-slate-950">
+                                {adminAiInvoicePaymentPreparationResult.invoice.invoice_number}
+                              </p>
+                              <p className="font-semibold text-slate-800">
+                                {adminAiInvoicePaymentPreparationResult.invoice.company_name} · {adminAiInvoicePaymentPreparationResult.invoice.booker_name}
+                              </p>
+                              <p className="text-xs text-slate-600">
+                                Customer #{adminAiInvoicePaymentPreparationResult.invoice.customer_id} · Company #{adminAiInvoicePaymentPreparationResult.invoice.company_id} · Booker #{adminAiInvoicePaymentPreparationResult.invoice.booker_id}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-800">
+                              {adminAiInvoicePaymentPreparationResult.invoice.status}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                            <p><strong>Total:</strong> {adminAiInvoicePaymentPreparationResult.invoice.amount_label}</p>
+                            <p><strong>Balance:</strong> {adminAiInvoicePaymentPreparationResult.invoice.balance_label}</p>
+                            <p><strong>Issued:</strong> {adminAiInvoicePaymentPreparationResult.invoice.issue_date}</p>
+                            <p><strong>Due:</strong> {adminAiInvoicePaymentPreparationResult.invoice.due_date}</p>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-700">
+                            <strong>Booking references:</strong>{" "}
+                            {adminAiInvoicePaymentPreparationResult.invoice.booking_references.length > 0
+                              ? adminAiInvoicePaymentPreparationResult.invoice.booking_references.join(", ")
+                              : "None recorded"}
+                          </p>
+                        </div>
+                      ) : null}
+                      {adminAiInvoicePaymentPreparationResult.requirements ? (
+                        <div
+                          className="mt-3 rounded-md border border-emerald-200 bg-white p-3 text-xs text-slate-800"
+                          data-admin-ai-invoice-payment-preparation-requirements="true"
+                        >
+                          <p className="font-bold text-emerald-950">Still choose in 2 · Total invoices</p>
+                          <p className="mt-1">
+                            Payment method: {adminAiInvoicePaymentPreparationResult.requirements.payment_methods.join(" / ")}
+                          </p>
+                          <p className="mt-1">Choose whether to send the payment thank-you email.</p>
+                          <p className="mt-1 font-semibold">
+                            Then use the existing Mark paid confirmation. Ask AI cannot confirm, save, or send it.
+                          </p>
+                        </div>
+                      ) : null}
+                      {adminAiInvoicePaymentPreparationResult.open_customer_path ? (
+                        <Link
+                          className={`mt-3 inline-flex min-h-9 items-center rounded-md border bg-white px-3 py-1.5 text-xs font-semibold ${
+                            adminAiInvoicePaymentPreparationResult.status === "ready"
+                              ? "border-emerald-300 text-emerald-950 hover:bg-emerald-100"
+                              : "border-rose-300 text-rose-950 hover:bg-rose-100"
+                          }`}
+                          data-admin-ai-invoice-payment-preparation-open-customer="true"
+                          href={adminAiInvoicePaymentPreparationResult.open_customer_path}
+                        >
+                          Open Customer Account
+                        </Link>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {adminAiMonthlyBillingReviewResult ? (
                     <div
                       className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-slate-900"

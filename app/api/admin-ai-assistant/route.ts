@@ -4,6 +4,7 @@ import {
 } from "../../../lib/admin-ai-runtime";
 import { executeAdminAiAccountBrief } from "../../../lib/admin-ai-account-brief";
 import { executeAdminAiBookingBrief } from "../../../lib/admin-ai-booking-brief";
+import { executeAdminAiInvoicePaymentPreparation } from "../../../lib/admin-ai-invoice-payment-preparation";
 import { executeAdminAiInvoiceSearch } from "../../../lib/admin-ai-invoice-search";
 import { executeAdminAiMonthlyBillingReview } from "../../../lib/admin-ai-monthly-billing-review";
 import { executeAdminAiTodaysWorkBrief } from "../../../lib/admin-ai-todays-work-brief";
@@ -45,6 +46,35 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonBody(request);
+  const invoicePaymentPreparation = await executeAdminAiInvoicePaymentPreparation(
+    body.message,
+    boundary.context,
+  );
+
+  if (invoicePaymentPreparation.matched) {
+    if (!invoicePaymentPreparation.ok) {
+      return Response.json(
+        {
+          error: invoicePaymentPreparation.error,
+          external_send: false,
+          ok: false,
+          write_action: false,
+        },
+        { status: invoicePaymentPreparation.status },
+      );
+    }
+
+    return Response.json({
+      answer: invoicePaymentPreparation.data.answer,
+      external_send: false,
+      invoice_payment_preparation: invoicePaymentPreparation.data,
+      model: "Prestige live records",
+      ok: true,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      write_action: false,
+    });
+  }
+
   const monthlyBillingReview = await executeAdminAiMonthlyBillingReview(
     body.message,
     body.monthly_billing_review_page,

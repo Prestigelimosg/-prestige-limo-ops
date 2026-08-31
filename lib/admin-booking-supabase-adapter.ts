@@ -2097,6 +2097,29 @@ async function findOrCreateCustomerId(
       }
     }
 
+    if (verifiedCustomerId && !verifiedCustomerIds.has(String(verifiedCustomerId))) {
+      const { data: explicitLegacyCustomerRows, error: explicitLegacyCustomerError } =
+        await client
+          .from("bookings")
+          .select("id")
+          .eq("company_id", verifiedCompanyId)
+          .eq("customer_id", verifiedCustomerId)
+          .limit(1);
+
+      if (explicitLegacyCustomerError) {
+        return safeAdapterFailure(
+          safeSaveError,
+          500,
+          explicitLegacyCustomerError,
+          "customer_lookup",
+        );
+      }
+
+      if (asArray(explicitLegacyCustomerRows).length === 1) {
+        verifiedCustomerIds.set(String(verifiedCustomerId), verifiedCustomerId);
+      }
+    }
+
     if (verifiedCustomerIds.size > 1) {
       return {
         error: safeCustomerIdentityConflictError,

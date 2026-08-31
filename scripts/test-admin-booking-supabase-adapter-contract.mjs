@@ -1518,6 +1518,98 @@ try {
   assert.equal(useLegacyAccountMock.client.tables.bookers[0].customer_id, 163);
   assert.equal(insertedOperation(useLegacyAccountMock.client, "bookings")?.payload?.customer_id, 163);
 
+  const explicitlySelectedLegacyProfileSeed = {
+    bookings: [
+      { booker_id: null, company_id: 31, customer_id: 180, id: 180, traveler_id: null },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        display_name: "Existing Legacy Customer Profile",
+        id: 180,
+        status: "active",
+      },
+    ],
+  };
+  const explicitlySelectedLegacyProfileReviewMock = installMockClient(
+    explicitlySelectedLegacyProfileSeed,
+  );
+  const explicitlySelectedLegacyProfileReviewResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      persistence.parseAdminBookingPersistencePayload(
+        canonicalCorporateAdminPayload({
+          booking: { customer_id: 180, traveler_id: null },
+        }),
+      ).data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(explicitlySelectedLegacyProfileReviewResult.ok, false);
+  assert.deepEqual(
+    explicitlySelectedLegacyProfileReviewResult.customer_account_collision_review?.candidates.map(
+      (candidate) => candidate.customer_id,
+    ),
+    [180],
+  );
+  assert.equal(
+    insertedOperations(explicitlySelectedLegacyProfileReviewMock.client, "bookings").length,
+    0,
+  );
+
+  const mismatchedLegacyProfileReviewMock = installMockClient({
+    bookings: [
+      { booker_id: null, company_id: 32, customer_id: 180, id: 181, traveler_id: null },
+    ],
+    customers: clone(explicitlySelectedLegacyProfileSeed.customers),
+  });
+  const mismatchedLegacyProfileReviewResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      persistence.parseAdminBookingPersistencePayload(
+        canonicalCorporateAdminPayload({
+          booking: { customer_id: 180, traveler_id: null },
+        }),
+      ).data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(mismatchedLegacyProfileReviewResult.ok, false);
+  assert.deepEqual(
+    mismatchedLegacyProfileReviewResult.customer_account_collision_review?.candidates,
+    [],
+  );
+  assert.equal(
+    insertedOperations(mismatchedLegacyProfileReviewMock.client, "bookings").length,
+    0,
+  );
+
+  const useExplicitlySelectedLegacyProfileMock = installMockClient(
+    explicitlySelectedLegacyProfileSeed,
+  );
+  const useExplicitlySelectedLegacyProfileResult =
+    await adapter.createAdminBookingThroughSupabaseAdapter(
+      persistence.parseAdminBookingPersistencePayload(
+        canonicalCorporateAdminPayload({
+          booking: { customer_id: 180, traveler_id: null },
+          customer_account_collision_resolution: {
+            action: "merge",
+            reviewed_customer_ids: [180],
+            selected_customer_id: 180,
+          },
+        }),
+      ).data,
+      adminAudit(),
+      adminActor(),
+    );
+
+  assert.equal(useExplicitlySelectedLegacyProfileResult.ok, true);
+  assert.equal(useExplicitlySelectedLegacyProfileMock.client.tables.bookers[0].customer_id, 180);
+  assert.equal(
+    insertedOperation(useExplicitlySelectedLegacyProfileMock.client, "bookings")?.payload?.customer_id,
+    180,
+  );
+
   const ambiguousBookerMock = installMockClient({
     bookings: [
       { booker_id: 24, company_id: 31, customer_id: 163, id: 179, traveler_id: 38 },

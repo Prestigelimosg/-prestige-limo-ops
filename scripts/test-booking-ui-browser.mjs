@@ -9135,10 +9135,14 @@ async function runChromeTest() {
       "unified Customer Account search keeps Company + Booker identity tuples",
     );
     assert.equal(unifiedCustomerAccountListState.legacySelectorCount, 0);
-    assert.equal(
-      unifiedCustomerAccountListState.accountOptions.some((option) => option.key.startsWith("agency:")),
-      false,
-      "Expected legacy agency-only rows not to be selectable for a future booking",
+    assert.ok(
+      unifiedCustomerAccountListState.accountOptions.some(
+        (option) =>
+          option.key === "agency:161:601" &&
+          option.text.includes("Existing customer profile") &&
+          option.text.includes("Booker required"),
+      ),
+      "Expected one orphan legacy Customer profile to remain selectable for explicit Company + Booker conversion",
     );
     assert.ok(
       unifiedCustomerAccountListState.accountOptions.some(

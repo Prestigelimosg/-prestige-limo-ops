@@ -22269,16 +22269,17 @@ export default function Home() {
       }
 
       const existingCustomerId = adminDispatchVerifiedIdentityId(booking.customerId);
-      const hotelAgencyBooking =
-        adminDispatchIsCreatingAgencyFolder(booking) ||
-        Boolean(
+      const loadedLegacyAgencyBooking = Boolean(
+        clean(appliedAdminBookingSnapshotReference) &&
           existingCustomerId &&
-            companyProfileResolution &&
-            (await loadSaveCrmAgencyCustomerClassification(
-              existingCustomerId,
-              companyProfileResolution.companyId,
-            )),
-        );
+          companyProfileResolution &&
+          (await loadSaveCrmAgencyCustomerClassification(
+            existingCustomerId,
+            companyProfileResolution.companyId,
+          )),
+      );
+      const hotelAgencyBooking =
+        adminDispatchIsCreatingAgencyFolder(booking) || loadedLegacyAgencyBooking;
       const corporateIdentityResolution =
         companyProfileResolution && !hotelAgencyBooking
           ? await resolveSaveCrmCorporateIdentityForSave(
@@ -27564,7 +27565,24 @@ export default function Home() {
     });
   }
 
+  const adminDispatchLegacyProfileConversionOptions = clean(
+    appliedAdminBookingSnapshotReference,
+  )
+    ? []
+    : adminDispatchLegacyAgencyAccountOptions
+        .filter(
+          (account) =>
+            !Array.from(adminDispatchCorporateAccountGroups.values()).some(
+              (corporateAccount) => corporateAccount.companyId === account.companyId,
+            ),
+        )
+        .map((account) => ({
+          ...account,
+          secondaryLabel: "Existing customer profile · Booker required",
+        }));
+
   adminDispatchCustomerAccountOptions.push(...adminDispatchCorporateAccountGroups.values());
+  adminDispatchCustomerAccountOptions.push(...adminDispatchLegacyProfileConversionOptions);
   const loadedLegacyAgencyAccount = adminDispatchLegacyAgencyAccountOptions.find(
     (account) =>
       Boolean(clean(appliedAdminBookingSnapshotReference)) &&
@@ -27655,6 +27673,9 @@ export default function Home() {
     if (account.kind === "agency") {
       setBooking((current) => ({
         ...current,
+        booker: "",
+        bookerContact: "",
+        bookerEmail: "",
         bookerId: "",
         company: account.companyName || current.company,
         companyId: account.companyId,
@@ -42437,7 +42458,9 @@ export default function Home() {
                     className="rounded-md border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-900 md:col-span-3"
                     data-admin-dispatch-agency-folder-selected="true"
                   >
-                    Customer account selected: {adminDispatchSelectedAgencyFolder.name}. Passenger name stays on this booking only.
+                    {clean(appliedAdminBookingSnapshotReference)
+                      ? `Customer account selected: ${adminDispatchSelectedAgencyFolder.name}. Passenger name stays on this booking only.`
+                      : `Existing customer profile selected: ${adminDispatchSelectedAgencyFolder.name}. Enter and approve the exact Booker before Save + CRM. Passenger stays on this booking only.`}
                   </p>
                 ) : adminDispatchCreatingAgencyFolder ? (
                   <p

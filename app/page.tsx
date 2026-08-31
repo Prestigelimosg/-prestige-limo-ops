@@ -2638,6 +2638,35 @@ type AdminAiConversationMessage = {
   text: string;
 };
 
+type AdminAiInvoiceSearchRow = {
+  amount_label: string;
+  balance_label: string;
+  booking_references: string[];
+  due_date: string;
+  invoice_number: string;
+  issue_date: string;
+  status: "Paid" | "Unpaid";
+};
+
+type AdminAiInvoiceSearchResult = {
+  answer: string;
+  booker_name: string | null;
+  company_name: string | null;
+  company_options: string[];
+  has_more: boolean;
+  intent: "find_customer_invoices";
+  legacy_rows_excluded: boolean;
+  manual_folder_guidance: string | null;
+  open_customer_path: string | null;
+  page: number;
+  page_size: number;
+  query: string;
+  read_at: string;
+  rows: AdminAiInvoiceSearchRow[];
+  status: "ambiguous" | "blocked" | "legacy_identity" | "no_match" | "results" | "traveller_only";
+  total_count: number;
+};
+
 type ParsedBooking = Partial<BookingForm> & {
   success?: boolean;
   cleanedLines?: string[];
@@ -14783,6 +14812,8 @@ export default function Home() {
   const [aiAssistMode, setAiAssistMode] = useState<AiAssistMode>("parser");
   const [aiDraft, setAiDraft] = useState<AiParseResult | null>(null);
   const [aiConversationMessages, setAiConversationMessages] = useState<AdminAiConversationMessage[]>([]);
+  const [adminAiInvoiceSearchResult, setAdminAiInvoiceSearchResult] =
+    useState<AdminAiInvoiceSearchResult | null>(null);
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const [aiAssistSafetyAccepted, setAiAssistSafetyAccepted] = useState(false);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
@@ -19876,6 +19907,7 @@ export default function Home() {
   function clearBookingMessageInput() {
     clearParseArtifacts();
     setAiConversationMessages([]);
+    setAdminAiInvoiceSearchResult(null);
     setBookingMessage("");
     setBookingMessageResetKey((current) => current + 1);
 
@@ -20798,7 +20830,11 @@ export default function Home() {
     }
   }
 
-  async function handleAdminAiConversation() {
+  async function runAdminAiConversation(
+    questionValue: string,
+    invoiceSearchPage = 1,
+    appendInvoiceSearchPage = false,
+  ) {
     if (!aiAssistSafetyAccepted) {
       setAiAssistMessage({
         tone: "error",
@@ -20807,7 +20843,7 @@ export default function Home() {
       return;
     }
 
-    const question = clean(bookingMessage);
+    const question = clean(questionValue);
 
     if (!question) {
       setAiAssistMessage({ tone: "error", text: "Enter a question before sending it to AI." });
@@ -20816,6 +20852,10 @@ export default function Home() {
 
     setAiAssistMessage(null);
     setAiAssistLoading(true);
+
+    if (!appendInvoiceSearchPage) {
+      setAdminAiInvoiceSearchResult(null);
+    }
 
     try {
       const response = await fetch("/api/admin-ai-assistant", {
@@ -20826,12 +20866,14 @@ export default function Home() {
         },
         body: JSON.stringify({
           history: aiConversationMessages.slice(-6),
+          invoice_search_page: invoiceSearchPage,
           message: question,
         }),
       });
       const responseBody = await response.json().catch(() => ({})) as {
         answer?: unknown;
         error?: unknown;
+        invoice_search?: unknown;
         model?: unknown;
         ok?: unknown;
         usage?: { totalTokens?: unknown };
@@ -20844,6 +20886,42 @@ export default function Home() {
             ? responseBody.error
             : "AI conversation failed. Please try again.",
         });
+        return;
+      }
+
+      const rawInvoiceSearch = responseBody.invoice_search;
+      const invoiceSearch =
+        rawInvoiceSearch !== null &&
+        typeof rawInvoiceSearch === "object" &&
+        !Array.isArray(rawInvoiceSearch) &&
+        (rawInvoiceSearch as { intent?: unknown }).intent === "find_customer_invoices"
+          ? rawInvoiceSearch as AdminAiInvoiceSearchResult
+          : null;
+
+      if (invoiceSearch) {
+        setAdminAiInvoiceSearchResult((current) => {
+          if (
+            !appendInvoiceSearchPage ||
+            !current ||
+            current.query !== invoiceSearch.query ||
+            invoiceSearch.page !== current.page + 1
+          ) {
+            return invoiceSearch;
+          }
+
+          const seenInvoiceNumbers = new Set(current.rows.map((row) => row.invoice_number));
+          return {
+            ...invoiceSearch,
+            rows: [
+              ...current.rows,
+              ...invoiceSearch.rows.filter((row) => !seenInvoiceNumbers.has(row.invoice_number)),
+            ],
+          };
+        });
+        setBookingMessage("");
+        setAiAssistResponseNote(
+          "Prestige live records · Read-only result. No AI model, invoice write, or external send was used.",
+        );
         return;
       }
 
@@ -20866,6 +20944,22 @@ export default function Home() {
     } finally {
       setAiAssistLoading(false);
     }
+  }
+
+  async function handleAdminAiConversation() {
+    await runAdminAiConversation(bookingMessage);
+  }
+
+  async function handleAdminAiInvoiceSearchLoadMore() {
+    if (!adminAiInvoiceSearchResult?.has_more || aiAssistLoading) {
+      return;
+    }
+
+    await runAdminAiConversation(
+      adminAiInvoiceSearchResult.query,
+      adminAiInvoiceSearchResult.page + 1,
+      true,
+    );
   }
 
   function openAdminEmailAiIntakeReview(
@@ -42242,9 +42336,105 @@ export default function Home() {
                     ))
                   ) : (
                     <p className="text-sm text-slate-600">
-                      Ask about the text you provide. AI cannot access or change live app data.
+                      Ask about the text you provide, or find issued invoices by exact Booker. Read-only skills cannot change app data.
                     </p>
                   )}
+                  {adminAiInvoiceSearchResult ? (
+                    <div
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-slate-900"
+                      data-admin-ai-invoice-search="true"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                        Prestige live records · Read only
+                      </p>
+                      <p className="mt-1 font-semibold" data-admin-ai-invoice-search-answer="true">
+                        {adminAiInvoiceSearchResult.answer}
+                      </p>
+                      {adminAiInvoiceSearchResult.company_name && adminAiInvoiceSearchResult.booker_name ? (
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-bold" data-admin-ai-invoice-search-identity="true">
+                              {adminAiInvoiceSearchResult.company_name} · {adminAiInvoiceSearchResult.booker_name}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              Read {new Date(adminAiInvoiceSearchResult.read_at).toLocaleString("en-SG", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                                timeZone: "Asia/Singapore",
+                              })} · {adminAiInvoiceSearchResult.total_count} issued invoice
+                              {adminAiInvoiceSearchResult.total_count === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          {adminAiInvoiceSearchResult.open_customer_path ? (
+                            <Link
+                              className="inline-flex min-h-9 items-center rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
+                              data-admin-ai-open-customer-account="true"
+                              href={adminAiInvoiceSearchResult.open_customer_path}
+                            >
+                              Open Customer Account
+                            </Link>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {adminAiInvoiceSearchResult.company_options.length > 0 ? (
+                        <p className="mt-2 text-xs text-slate-700">
+                          Companies found: {adminAiInvoiceSearchResult.company_options.join(", ")}
+                        </p>
+                      ) : null}
+                      {adminAiInvoiceSearchResult.rows.length > 0 ? (
+                        <div className="mt-3 space-y-2" data-admin-ai-invoice-search-rows="true">
+                          {adminAiInvoiceSearchResult.rows.map((invoice) => (
+                            <div
+                              className="rounded-md border border-emerald-200 bg-white p-3"
+                              key={invoice.invoice_number}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="font-bold">{invoice.invoice_number}</p>
+                                  <p className="text-xs text-slate-600">
+                                    Issued {invoice.issue_date} · Due {invoice.due_date}
+                                  </p>
+                                </div>
+                                <span className={`rounded-full px-2 py-1 text-xs font-bold ${
+                                  invoice.status === "Paid"
+                                    ? "bg-emerald-100 text-emerald-900"
+                                    : "bg-amber-100 text-amber-900"
+                                }`}>
+                                  {invoice.status}
+                                </span>
+                              </div>
+                              <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                                <p><strong>Amount:</strong> {invoice.amount_label}</p>
+                                <p><strong>Balance:</strong> {invoice.balance_label}</p>
+                                <p className="sm:col-span-2">
+                                  <strong>Booking refs:</strong>{" "}
+                                  {invoice.booking_references.length > 0
+                                    ? invoice.booking_references.join(", ")
+                                    : "No booking reference recorded"}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {adminAiInvoiceSearchResult.manual_folder_guidance ? (
+                        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+                          {adminAiInvoiceSearchResult.manual_folder_guidance}
+                        </p>
+                      ) : null}
+                      {adminAiInvoiceSearchResult.has_more ? (
+                        <button
+                          className="mt-3 min-h-9 rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-admin-ai-invoice-search-load-more="true"
+                          disabled={aiAssistLoading}
+                          onClick={handleAdminAiInvoiceSearchLoadMore}
+                          type="button"
+                        >
+                          {aiAssistLoading ? "Loading..." : "Load more"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {aiAssistResponseNote ? (
                     <p className="text-xs font-medium text-indigo-900">{aiAssistResponseNote}</p>
                   ) : null}

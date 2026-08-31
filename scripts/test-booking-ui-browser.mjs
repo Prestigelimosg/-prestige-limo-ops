@@ -8602,13 +8602,22 @@ async function runChromeTest() {
         if (method === "GET" && url.pathname === "/api/admin-customer-accounts") {
           if (window.__prestigeEmailAiCustomerRecommendationMode === "company-corporate") {
             return jsonResponse({
-              accounts: [{
-                customer_account: "BROWSER UI TEST AGENCY",
-                customer_folder_active: true,
-                customer_id: "161",
-                guest_account_billing_enabled: true,
-                verified_company_id: "601",
-              }],
+              accounts: [
+                {
+                  customer_account: "Alson Chua UOB",
+                  customer_folder_active: true,
+                  customer_id: "550",
+                  guest_account_billing_enabled: false,
+                  verified_company_id: "55",
+                },
+                {
+                  customer_account: "BROWSER UI TEST AGENCY",
+                  customer_folder_active: true,
+                  customer_id: "161",
+                  guest_account_billing_enabled: true,
+                  verified_company_id: "601",
+                },
+              ],
               ok: true,
             });
           }
@@ -8694,8 +8703,10 @@ async function runChromeTest() {
         if (method === "GET" && url.pathname === "/api/admin-bookers") {
           if (
             window.__prestigeEmailAiCustomerRecommendationMode === "company-corporate" &&
-            window.__prestigeAllowBookerIdentityRead === true &&
-            url.searchParams.get("id") === "5501"
+            ((url.searchParams.get("company_id") === "55" &&
+              url.searchParams.get("booker_name") === "Alson") ||
+              (window.__prestigeAllowBookerIdentityRead === true &&
+                url.searchParams.get("id") === "5501"))
           ) {
             return jsonResponse({
               booker: {
@@ -8714,6 +8725,7 @@ async function runChromeTest() {
               booker: {
                 booker_name: "Kim Hyun Soo",
                 company_id: 41,
+                customer_id: 174,
                 email: "hyunsoostar@hotmail.com",
                 id: 4101,
                 phone: "+65 98156017",
@@ -8728,6 +8740,23 @@ async function runChromeTest() {
                 company_id: 55,
                 email: "hyunsoostar@hotmail.com",
                 id: 5501,
+                phone: "+65 98156017",
+              },
+              ok: true,
+            });
+          }
+          if (
+            window.__prestigeEmailAiCustomerRecommendationMode === "email-agency" &&
+            url.searchParams.get("company_id") === "41" &&
+            url.searchParams.get("booker_name") === "Kim Hyun Soo"
+          ) {
+            return jsonResponse({
+              booker: {
+                booker_name: "Kim Hyun Soo",
+                company_id: 41,
+                customer_id: 174,
+                email: null,
+                id: 4101,
                 phone: "+65 98156017",
               },
               ok: true,
@@ -9007,7 +9036,8 @@ async function runChromeTest() {
       ),
       "Expected exact operations email to identify the app customer profile",
     );
-    assert.match(emailAiAgencyIdentityState.suggestionText, /exact email match/i);
+    assert.match(emailAiAgencyIdentityState.suggestionText, /exact company and Booker match/i);
+    assert.match(emailAiAgencyIdentityState.suggestionText, /Kim Hyun Soo/i);
     assert.match(
       emailAiAgencyIdentityState.suggestionText,
       /suggestion only.*Choose the exact Company \+ Booker Customer Account before Save \+ CRM/i,
@@ -9110,7 +9140,8 @@ async function runChromeTest() {
       ),
       "Expected exact company name to be used only after email had no match",
     );
-    assert.match(emailAiCompanyFallbackState.suggestionText, /corporate, exact company name match/i);
+    assert.match(emailAiCompanyFallbackState.suggestionText, /corporate, exact company and Booker match/i);
+    assert.match(emailAiCompanyFallbackState.suggestionText, /Alson/i);
 
     const unifiedCustomerAccountListState = await evaluate(`(() => {
       const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
@@ -9348,7 +9379,7 @@ async function runChromeTest() {
       ),
       "Expected the exact Booker email alone to identify the app customer profile",
     );
-    assert.match(emailAiBookerEmailOnlyState.suggestionText, /agency, exact email match/i);
+    assert.match(emailAiBookerEmailOnlyState.suggestionText, /agency, exact booker email match/i);
 
     const startedEmailAiConflictingEmail = await evaluate(`(() => {
       window.__prestigeEmailAiCustomerRecommendationMode = "email-conflict";
@@ -9376,10 +9407,12 @@ async function runChromeTest() {
       () =>
         evaluate(`(() => {
           const accountSelector = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+          const suggestion = document.querySelector('[data-admin-email-ai-customer-profile-suggestion="true"]');
           const visibleText = document.body.innerText.replace(/\\s+/g, " ");
 
           return accountSelector instanceof HTMLDetailsElement &&
             accountSelector.dataset.value === "" &&
+            suggestion &&
             visibleText.includes("exact email address points to more than one app customer profile")
             ? {
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
@@ -9388,6 +9421,8 @@ async function runChromeTest() {
                 requestUrls: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.url),
                 suggestionCount: document.querySelectorAll('[data-admin-email-ai-customer-profile-suggestion="true"]').length,
+                suggestionStatus: suggestion.getAttribute("data-admin-email-ai-customer-profile-status") || "",
+                suggestionText: suggestion.textContent.replace(/\\s+/g, " ").trim(),
               }
             : false;
         })()`),
@@ -9395,7 +9430,13 @@ async function runChromeTest() {
       "Email AI conflicting exact email sources fail closed",
     );
     assert.deepEqual(emailAiConflictingEmailState.nonGetMethods, []);
-    assert.equal(emailAiConflictingEmailState.suggestionCount, 0);
+    assert.equal(emailAiConflictingEmailState.suggestionCount, 1);
+    assert.equal(emailAiConflictingEmailState.suggestionStatus, "ambiguous");
+    assert.match(emailAiConflictingEmailState.suggestionText, /No account was selected/i);
+    assert.match(
+      emailAiConflictingEmailState.suggestionText,
+      /Choose the exact Company \+ Booker Customer Account before Save \+ CRM/i,
+    );
     assert.equal(
       emailAiConflictingEmailState.requestUrls.some((url) => url.includes("company_name=")),
       false,

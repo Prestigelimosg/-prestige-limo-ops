@@ -7,12 +7,12 @@ const [adminPage, savedBookingsPanel] = await Promise.all([
 ]);
 
 for (const fragment of [
-  'data-admin-email-ai-customer-status="true"',
-  "Repeated customer",
-  "New customer",
-  "Ambiguous customer",
-  "Customer check unavailable",
-  'data-admin-email-ai-use-repeated-customer="true"',
+  'data-admin-email-ai-customer-profile-suggestion="true"',
+  'data-admin-email-ai-customer-profile-status=',
+  "Possible Customer Account",
+  "No exact Company + Booker Customer Account match was found.",
+  "This does not prove a new customer.",
+  "Passenger stays on this booking only.",
   "Email AI intake",
 ]) {
   assert.ok(
@@ -33,15 +33,25 @@ assert.ok(
   adminPage.includes("adminDispatchVerifiedIdentityId(bookingValue.companyId)"),
   "Email AI repeated-customer confirmation must continue through the existing verified booking identity fields",
 );
-assert.match(
-  adminPage,
-  /const adminEmailAiCustomerStatus =\s*!activeAdminEmailAiIntakeId \|\|\s*adminDispatchSelectedAgencyFolder \|\|\s*adminDispatchCreatingAgencyFolder \|\|\s*adminEmailAiCustomerProfileSuggestion\s*\? null/,
-  "An explicit agency folder or exact app-profile suggestion must suppress the contradictory new/repeated-customer banner",
-);
+for (const retiredFragment of [
+  "adminEmailAiPassengerMatches",
+  "adminEmailAiRepeatedCustomerCandidates",
+  "adminEmailAiRepeatedCustomerCandidate",
+  "adminEmailAiCustomerStatus",
+  "No verified CRM traveller matches this Email AI passenger.",
+  "invoicing remains blocked until",
+  "A passenger-name match exists",
+]) {
+  assert.ok(
+    !adminPage.includes(retiredFragment),
+    `Email AI customer-account detection must not retain Passenger/Traveller account evidence: ${retiredFragment}`,
+  );
+}
 
 for (const fragment of [
   "adminEmailAiRecommendationEmail",
   "adminEmailAiRecommendationCompanyName",
+  "adminEmailAiRecommendationBookerName",
   "loadAdminEmailAiCustomerProfileRecommendation",
   "applyAdminEmailAiCustomerProfileRecommendation",
   "operations_email",
@@ -50,8 +60,7 @@ for (const fragment of [
   "verified_company_id",
   "guest_account_billing_enabled",
   'data-admin-email-ai-customer-profile-suggestion="true"',
-  "Suggested from the app customer profile",
-  "Admin can change this selection before Save + CRM",
+  "This is a suggestion only. Choose the exact Company + Booker Customer Account before Save + CRM.",
 ]) {
   assert.ok(
     adminPage.includes(fragment),
@@ -77,14 +86,15 @@ for (const fragment of [
   "adminBookersApiPath",
   "adminCustomerAccountsApiPath",
   'method: "GET"',
-  "exactEmailCompanyIds",
-  "exactNameCompanyIds",
-  "agencyFolders",
-  'matchBasis = "email"',
-  'matchBasis = "company name"',
+  "matchedBooker",
+  "exactCustomerAccounts",
+  'matchBasis = "booker email"',
+  'matchBasis = "company and Booker"',
   "normaliseEmail(emailCompany?.operations_email",
-  "normaliseEmail(bookerBody.booker?.email",
+  "normaliseEmail(emailBooker?.email",
   "saveCrmComparableIdentityValue(nameCompany?.company_name)",
+  "saveCrmComparableIdentityValue(bookerBody?.booker_name)",
+  "adminDispatchVerifiedIdentityId(matchedBooker.customer_id)",
 ]) {
   assert.ok(
     recommendationBlock.includes(fragment),
@@ -99,8 +109,13 @@ assert.doesNotMatch(
 );
 assert.match(
   recommendationBlock,
-  /if \(recommendationEmail\)[\s\S]+exactEmailCompanyIds\.size === 1[\s\S]+matchBasis = "email"[\s\S]+if \(!matchBasis && recommendationCompanyName\)/,
-  "Either one exact email match must win first, or exact company name may be used only as the fallback",
+  /if \(recommendationEmail\)[\s\S]+if \(!matchedCompanyId && recommendationCompanyName\)[\s\S]+if \(!matchedBooker && matchedCompanyId && recommendationBookerName\)/,
+  "An exact Booker email may identify the Booker first; otherwise exact Company plus exact Booker name is required",
+);
+assert.match(
+  recommendationBlock,
+  /if \(!matchedBooker \|\| !matchedCompanyId \|\| !matchBasis\)[\s\S]+status: "unmatched"/,
+  "A Company-only result must never be presented as an existing Customer Account",
 );
 assert.match(
   adminPage,
@@ -111,6 +126,40 @@ assert.match(
   adminPage,
   /loadRates\("Email AI customer check loaded\.",\s*\{[\s\S]{0,180}includeAgencyFolders:\s*true/,
   "Email AI recommendation must load the established customer profiles and agency folders before selecting",
+);
+
+const recommendationApplyStart = adminPage.indexOf(
+  "function applyAdminEmailAiCustomerProfileRecommendation",
+);
+const recommendationApplyEnd = adminPage.indexOf(
+  "\n  async function ",
+  recommendationApplyStart + 1,
+);
+assert.ok(
+  recommendationApplyStart >= 0 && recommendationApplyEnd > recommendationApplyStart,
+  "Email AI customer-profile recommendation presentation must remain one bounded existing-lane helper",
+);
+const recommendationApplyBlock = adminPage.slice(
+  recommendationApplyStart,
+  recommendationApplyEnd,
+);
+for (const fragment of [
+  'recommendation.status === "matched"',
+  'recommendation.status === "unmatched"',
+  'status: recommendation.status',
+  "No exact Company + Booker Customer Account match was found.",
+  "This does not prove a new customer.",
+  "Passenger stays on this booking only.",
+]) {
+  assert.ok(
+    recommendationApplyBlock.includes(fragment),
+    `Email AI safe customer-account recommendation presentation is missing ${fragment}`,
+  );
+}
+assert.doesNotMatch(
+  recommendationApplyBlock,
+  /setBooking|setRate|method:\s*["'](?:POST|PATCH|PUT|DELETE)["']|customerId:|companyId:|bookerId:|travelerId:/,
+  "Email AI repeated-customer detection must remain a read-only suggestion and must never select or write an account identity",
 );
 
 const explicitNewCustomerChoiceStart = adminPage.indexOf(

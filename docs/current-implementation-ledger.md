@@ -1,16 +1,29 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
-Latest verified clean runtime checkpoint:
-dc4febc3 Scope customer profiles to bound bookers
+Latest verified application source checkpoint:
+ac55b9a8 Merge pull request #465 from Prestigelimosg/codex/admin-ai-invoice-mark-paid-preparation
 
-Latest pushed main/staging runtime checkpoint:
-dc4febc3 Scope customer profiles to bound bookers
+Latest pushed `origin/main` application checkpoint:
+ac55b9a8 Merge pull request #465 from Prestigelimosg/codex/admin-ai-invoice-mark-paid-preparation
 
-Latest remote main/staging deployment checkpoint verified before this docs note:
-b71d5c5d Merge pull request #451 from Prestigelimosg/codex/customer-profile-account-scope
+Latest separately observed `origin/staging` pointer:
+6c6ad94c Merge PR #323: Scroll customer booking details into view
+
+Latest directly observed Production deployment checkpoint before this maintenance note:
+`dpl_2NeSQaRLKSD9cpeZgCH8e9eUuoxr` was `READY` on the Production alias at 2026-09-01 04:35:26 SGT. Its association with `ac55b9a8` is a strong main-alias and three-second deployment-timing inference; the inspected Vercel metadata did not expose a Git SHA, so this is not recorded as direct SHA evidence.
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Test Harness Dependency And Ledger Checkpoint Maintenance (source checkpoint 2026-09-01)
+
+- This bounded maintenance changes only four existing test scripts and this ledger. It does not change any application, library, API, schema, migration, environment, provider, data, UI, invoice, Customer, booking, notification, Driver or Calendar runtime lane.
+- The two monthly sequencing guards no longer classify the append-only ledger's documented public Supabase project reference as a secret. Their real-secret checks remain active for secret environment assignments, Supabase URLs and JWT-shaped values, and each guard contains test-of-test samples proving those detections before scanning the protected source and documentation.
+- The Admin app-notification API contract now supplies one fail-closed temporary `driver-device-push-notification` dependency required by the established booking adapter. The booking-persistence kill-switch harness now supplies the current route dependency graph through isolated temporary modules; every notification, push, email, Job Card, invitation, OTP and portal provider stub throws if the kill-switch test unexpectedly enters that lane. Its verified Customer test identity is an exact `customer_id + company_id + booker_id` tuple used only to reach and prove the existing disabled-write assertions.
+- Clean-main fail-first evidence was exact: both monthly guards stopped only on the historical project-reference regex, the notification contract stopped before assertions on the omitted Driver push module, and the kill-switch harness stopped before assertions on its stale temporary dependency graph. After the test-only corrections, all four focused guards pass and the original workflow, privacy, zero-provider and zero-database-mutation assertions remain unchanged.
+- Companion Admin notification, Automation, monthly grouping/draft, monthly auto-preparation and booking-adapter guards pass. Lint completes with the existing warning-only baseline, the Production build passes, and localhost browser gates pass for Rates, the full Booking UI in 468.5 seconds, Production-disabled Driver Job, nine mobile/tablet/desktop viewports, Customer profile, exact corporate identity and the full app smoke in 279.7 seconds; the completed browser gates report zero errors and zero console errors. The sequential `test:safe` unit/AI/lint/build portion also passes, but its initial Rates browser step found no localhost server because that script does not start one; the same Rates gate passed after the established local server was started.
+- Two unmodified companion harnesses, `scripts/test-core-booking-persistence-safe-path-guard.mjs` and `scripts/test-admin-booking-persistence-api-gate.mjs`, independently stop before their assertions on the same omitted temporary Driver-push dependency. They are attributed as additional clean-main test-harness debt and are not widened into this owner-approved four-test repair.
+- The separate clean-main Driver Job browser timeout at `POB blocked status feedback` is not included in this repair. It remains a diagnosis-only follow-up with no Driver, status, mock-store or Calendar source changes unless a distinct runtime defect is proven and separately approved.
 
 ## Admin Ask AI Exact Invoice Payment Preparation (source checkpoint 2026-09-01)
 

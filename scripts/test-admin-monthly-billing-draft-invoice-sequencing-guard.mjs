@@ -9,6 +9,8 @@ const ledgerPath = "docs/current-implementation-ledger.md";
 const docsIndexPath = "docs/test-and-safety-docs-index.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardScript = "scripts/test-admin-monthly-billing-draft-invoice-sequencing-guard.mjs";
+const realSecretLeakPattern =
+  /SUPABASE_URL\s*=|SUPABASE_SERVICE_ROLE_KEY\s*=|SESSION_TOKEN\s*=|https:\/\/[^\s)`]+\.supabase\.co|eyJ[A-Za-z0-9_-]{20,}/i;
 
 const adminRoutes = [
   "app/api/admin-monthly-billing-draft-plans/route.ts",
@@ -31,6 +33,18 @@ function assertExcludes(source, fragment, label = fragment) {
 
 function assertNotMatches(source, pattern, label) {
   assert.doesNotMatch(source, pattern, `${label} must not match ${pattern}.`);
+}
+
+for (const realSecretShape of [
+  "SUPABASE_SERVICE_ROLE_KEY=do-not-commit",
+  "https://example-project.supabase.co",
+  `eyJ${"a".repeat(24)}`,
+]) {
+  assert.match(
+    realSecretShape,
+    realSecretLeakPattern,
+    `real secret detection must retain ${realSecretShape}`,
+  );
 }
 
 function countOccurrences(source, fragment) {
@@ -354,11 +368,7 @@ for (const [label, text] of [
   ["docsIndex", docsIndex],
 ]) {
   assertNotMatches(text, /```(?:bash|sql)/i, `${label} runnable shell or SQL block`);
-  assertNotMatches(
-    text,
-    /SUPABASE_URL\s*=|SUPABASE_SERVICE_ROLE_KEY\s*=|SESSION_TOKEN\s*=|https:\/\/[^\s)`]+\.supabase\.co|eyJ[A-Za-z0-9_-]{20,}|kvvsg[a-z0-9]+hxatm/i,
-    `${label} secret leak`,
-  );
+  assertNotMatches(text, realSecretLeakPattern, `${label} secret leak`);
 }
 
 console.log("Admin Monthly Billing Draft and Invoice Review sequencing guard passed");

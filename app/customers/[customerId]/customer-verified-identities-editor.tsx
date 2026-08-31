@@ -11,6 +11,7 @@ type CustomerVerifiedIdentitiesEditorProps = {
   companyId: number;
   companyName: string;
   customerId: string;
+  onDraftDirtyChange: (dirty: boolean) => void;
 };
 
 type SafeIdentityTraveler = {
@@ -81,6 +82,7 @@ export function CustomerVerifiedIdentitiesEditor({
   companyId,
   companyName,
   customerId,
+  onDraftDirtyChange,
 }: CustomerVerifiedIdentitiesEditorProps) {
   const [status, setStatus] = useState<IdentityStatus>("loading");
   const [message, setMessage] = useState("Loading verified Bookers and Travellers...");
@@ -93,6 +95,11 @@ export function CustomerVerifiedIdentitiesEditor({
   const [travelerName, setTravelerName] = useState("");
   const [editingBookerId, setEditingBookerId] = useState<number | null>(null);
   const [editingTravelerId, setEditingTravelerId] = useState<number | null>(null);
+  const [draftDirty, setDraftDirty] = useState(false);
+
+  useEffect(() => {
+    onDraftDirtyChange(draftDirty);
+  }, [draftDirty, onDraftDirtyChange]);
 
   async function loadIdentities(options?: { afterSave?: boolean; silent?: boolean }) {
     const response = await fetch(adminRateSetupApiPath, {
@@ -241,7 +248,8 @@ export function CustomerVerifiedIdentitiesEditor({
       setBookerEmail(cleanText(booker.email).toLowerCase());
       setBookerContact(cleanText(booker.phone));
       setTravelerName(row.travelerName);
-      setMessage("Edit this exact Booker and Traveller pair, then press Save changes.");
+      setDraftDirty(false);
+      setMessage("Edit this exact Booker and Traveller pair, then press Save Booker / Traveller.");
       setStatus("ready");
     } catch (error) {
       setMessage(safeIdentityError(error));
@@ -273,6 +281,7 @@ export function CustomerVerifiedIdentitiesEditor({
       setBookerEmail(cleanText(booker.email).toLowerCase());
       setBookerContact(cleanText(booker.phone));
       setTravelerName("");
+      setDraftDirty(false);
       setMessage("Add one booking-only Traveller to this exact Company + Booker Customer Account.");
       setStatus("ready");
     } catch (error) {
@@ -549,6 +558,7 @@ export function CustomerVerifiedIdentitiesEditor({
       setBookerEmail(verifiedEmail);
       setBookerContact(verifiedPhone);
       setTravelerName(safeTravelerName);
+      setDraftDirty(false);
       setMessage("Saved, reloaded, and verified this exact Booker and Traveller pair.");
       setStatus("saved");
     } catch (error) {
@@ -605,19 +615,31 @@ export function CustomerVerifiedIdentitiesEditor({
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="grid gap-1 text-xs font-bold text-slate-700">
                 Booker / PA name
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-name="true" disabled={status === "saving"} onChange={(event) => setBookerName(event.target.value)} value={bookerName} />
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-name="true" disabled={status === "saving"} onChange={(event) => {
+                  setBookerName(event.target.value);
+                  setDraftDirty(true);
+                }} value={bookerName} />
               </label>
               <label className="grid gap-1 text-xs font-bold text-slate-700">
                 Traveller name
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-traveler-name="true" disabled={status === "saving"} onChange={(event) => setTravelerName(event.target.value)} value={travelerName} />
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-traveler-name="true" disabled={status === "saving"} onChange={(event) => {
+                  setTravelerName(event.target.value);
+                  setDraftDirty(true);
+                }} value={travelerName} />
               </label>
               <label className="grid gap-1 text-xs font-bold text-slate-700">
                 Booker email (optional)
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-email="true" disabled={status === "saving"} onChange={(event) => setBookerEmail(event.target.value)} type="email" value={bookerEmail} />
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-email="true" disabled={status === "saving"} onChange={(event) => {
+                  setBookerEmail(event.target.value);
+                  setDraftDirty(true);
+                }} type="email" value={bookerEmail} />
               </label>
               <label className="grid gap-1 text-xs font-bold text-slate-700">
                 Booker contact (optional)
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-contact="true" disabled={status === "saving"} onChange={(event) => setBookerContact(event.target.value)} value={bookerContact} />
+                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-contact="true" disabled={status === "saving"} onChange={(event) => {
+                  setBookerContact(event.target.value);
+                  setDraftDirty(true);
+                }} value={bookerContact} />
               </label>
             </div>
           </>
@@ -634,11 +656,7 @@ export function CustomerVerifiedIdentitiesEditor({
               onClick={saveBookerAndTraveler}
               type="button"
             >
-              {status === "saving"
-                ? "Saving"
-                : editingTravelerId
-                  ? "Save changes"
-                  : "Add Traveller"}
+              {status === "saving" ? "Saving" : "Save Booker / Traveller"}
             </button>
           ) : null}
         </div>

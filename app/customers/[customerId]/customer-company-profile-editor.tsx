@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
@@ -136,22 +136,64 @@ async function loadCompanyProfileById(companyId: number) {
   return { response, result };
 }
 
-function profilePayload(profile: CompanyProfile, isCreate: boolean) {
+function optionalCompanyContactValue(
+  value: string,
+  loadedValue: string | undefined,
+  isCreate: boolean,
+  lowercase = false,
+) {
+  const normalized = (lowercase ? value.toLowerCase() : value).trim();
+
+  if (normalized) {
+    return normalized;
+  }
+
+  return !isCreate && loadedValue?.trim() ? null : undefined;
+}
+
+function profilePayload(
+  profile: CompanyProfile,
+  loadedProfile: CompanyProfile | null,
+  isCreate: boolean,
+) {
   const website = profile.website.trim().toLowerCase();
 
   return {
     action_type: isCreate ? "company_create" : "company_update",
-    accounts_email: profile.accounts_email.trim().toLowerCase() || undefined,
-    billing_address: profile.billing_address.trim() || undefined,
-    billing_email: profile.billing_email.trim().toLowerCase() || undefined,
+    accounts_email: optionalCompanyContactValue(
+      profile.accounts_email,
+      loadedProfile?.accounts_email,
+      isCreate,
+      true,
+    ),
+    billing_address: optionalCompanyContactValue(
+      profile.billing_address,
+      loadedProfile?.billing_address,
+      isCreate,
+    ),
+    billing_email: optionalCompanyContactValue(
+      profile.billing_email,
+      loadedProfile?.billing_email,
+      isCreate,
+      true,
+    ),
     company_name: profile.company_name.trim(),
     domain: website || profile.domain.trim().toLowerCase() || undefined,
     entity_type: "company",
-    main_phone: profile.main_phone.trim() || undefined,
-    mobile_phone: profile.mobile_phone.trim() || undefined,
-    operations_email: profile.operations_email.trim().toLowerCase() || undefined,
-    primary_contact_name: profile.primary_contact_name.trim() || undefined,
-    website: website || undefined,
+    main_phone: optionalCompanyContactValue(profile.main_phone, loadedProfile?.main_phone, isCreate),
+    mobile_phone: optionalCompanyContactValue(profile.mobile_phone, loadedProfile?.mobile_phone, isCreate),
+    operations_email: optionalCompanyContactValue(
+      profile.operations_email,
+      loadedProfile?.operations_email,
+      isCreate,
+      true,
+    ),
+    primary_contact_name: optionalCompanyContactValue(
+      profile.primary_contact_name,
+      loadedProfile?.primary_contact_name,
+      isCreate,
+    ),
+    website: optionalCompanyContactValue(profile.website, loadedProfile?.website, isCreate, true),
     ...(profile.id ? { id: profile.id } : {}),
   };
 }
@@ -164,11 +206,17 @@ export function CustomerCompanyProfileEditor({
   const [status, setStatus] = useState<EditorStatus>("idle");
   const [message, setMessage] = useState("");
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [loadedProfile, setLoadedProfile] = useState<CompanyProfile | null>(null);
   const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
   const [customerFolderName, setCustomerFolderName] = useState(customerName.trim());
   const [loadedCustomerFolderName, setLoadedCustomerFolderName] = useState(customerName.trim());
+  const [identityDraftDirty, setIdentityDraftDirty] = useState(false);
+  const handleIdentityDraftDirtyChange = useCallback((dirty: boolean) => {
+    setIdentityDraftDirty(dirty);
+  }, []);
 
   async function openProfileEditor() {
+    setIdentityDraftDirty(false);
     setStatus("loading");
     setMessage("Loading customer company profile...");
 
@@ -225,6 +273,7 @@ export function CustomerCompanyProfileEditor({
       if (!response.ok || !result?.ok) {
         if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result)) {
           setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
+          setLoadedProfile(null);
           setProfileMode("create");
           setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
           setStatus("ready");
@@ -240,6 +289,7 @@ export function CustomerCompanyProfileEditor({
         }
 
         setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
+        setLoadedProfile(null);
         setProfileMode("create");
         setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
         setStatus("ready");
@@ -254,7 +304,7 @@ export function CustomerCompanyProfileEditor({
         throw new Error("Verified company CRM profile identity did not match safely.");
       }
 
-      setProfile({
+      const loadedCompanyProfile = {
         accounts_email: profileValue(company.accounts_email),
         billing_address: profileValue(company.billing_address),
         billing_email: profileValue(company.billing_email),
@@ -266,8 +316,10 @@ export function CustomerCompanyProfileEditor({
         mobile_phone: profileValue(company.mobile_phone),
         operations_email: profileValue(company.operations_email),
         primary_contact_name: profileValue(company.primary_contact_name),
-        website: profileValue(company.website) || profileValue(company.domain),
-      });
+        website: profileValue(company.website),
+      };
+      setProfile(loadedCompanyProfile);
+      setLoadedProfile(loadedCompanyProfile);
       setProfileMode("edit");
       setMessage(`Editing the company profile for ${String(company.company_name || customerName).trim()}.`);
       setStatus("ready");
@@ -279,6 +331,19 @@ export function CustomerCompanyProfileEditor({
 
   async function saveProfile() {
     if (!profile) {
+      return;
+    }
+
+    if (identityDraftDirty) {
+      setMessage(
+        "Booker / Traveller changes are not saved yet. Press Save Booker / Traveller below first.",
+      );
+      setStatus("error");
+      const identitySaveButton = document.querySelector<HTMLButtonElement>(
+        '[data-customer-save-booker-traveler="true"]',
+      );
+      identitySaveButton?.scrollIntoView({ behavior: "smooth", block: "center" });
+      identitySaveButton?.focus();
       return;
     }
 
@@ -315,7 +380,7 @@ export function CustomerCompanyProfileEditor({
 
     try {
       const response = await fetch(adminCompanyProfileWriteApiPath, {
-        body: JSON.stringify(profilePayload(profile, isCreate)),
+        body: JSON.stringify(profilePayload(profile, loadedProfile, isCreate)),
         headers: {
           "Content-Type": "application/json",
           "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -341,9 +406,10 @@ export function CustomerCompanyProfileEditor({
         mobile_phone: profileValue(savedProfile.mobile_phone),
         operations_email: profileValue(savedProfile.operations_email),
         primary_contact_name: profileValue(savedProfile.primary_contact_name),
-        website: profileValue(savedProfile.website) || profileValue(savedProfile.domain) || domain,
+        website: profileValue(savedProfile.website),
       };
       setProfile(nextProfile);
+      setLoadedProfile(nextProfile);
       setProfileMode("edit");
 
       if (customerFolderNameChanged) {
@@ -431,7 +497,9 @@ export function CustomerCompanyProfileEditor({
             className="min-h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
             disabled={status === "saving"}
             onClick={() => {
+              setIdentityDraftDirty(false);
               setProfile(null);
+              setLoadedProfile(null);
               setProfileMode("edit");
               setMessage("");
               setStatus("idle");
@@ -447,7 +515,11 @@ export function CustomerCompanyProfileEditor({
             onClick={saveProfile}
             type="button"
           >
-            {status === "saving" ? "Saving" : profileMode === "create" ? "Create profile" : "Save profile"}
+            {status === "saving"
+              ? "Saving"
+              : profileMode === "create"
+                ? "Create company details"
+                : "Save company details"}
           </button>
         </div>
       </div>
@@ -565,6 +637,7 @@ export function CustomerCompanyProfileEditor({
           customerId={customerId}
           companyId={profile.id}
           companyName={profile.company_name}
+          onDraftDirtyChange={handleIdentityDraftDirtyChange}
         />
       ) : null}
 

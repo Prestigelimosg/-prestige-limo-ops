@@ -387,6 +387,35 @@ async function main() {
     assert.equal(await evaluate(setInputValueScript('[data-customer-booker-email="true"]', "gcheung@apollo.com")), true);
     assert.equal(await evaluate(setInputValueScript('[data-customer-booker-contact="true"]', "97359990")), true);
 
+    reporter.step("blocking company save while Booker and Traveller changes are unsaved");
+    await evaluate(`document.querySelector('[data-customer-company-profile-save="${customerId}"]').click()`);
+    const blockedCompanySaveState = await waitForCondition(
+      async () => await evaluate(`(() => {
+        const messageVisible = document.body.innerText.includes(
+          "Booker / Traveller changes are not saved yet. Press Save Booker / Traveller below first.",
+        );
+        const nestedSave = document.querySelector('[data-customer-save-booker-traveler="true"]');
+        return messageVisible && document.activeElement === nestedSave
+          ? {
+              booker: document.querySelector('[data-customer-booker-name="true"]')?.value || "",
+              companyEditorVisible: Boolean(document.querySelector('[data-customer-company-profile-editor="${customerId}"]')),
+              nestedSaveLabel: nestedSave?.textContent?.trim() || "",
+              traveller: document.querySelector('[data-customer-traveler-name="true"]')?.value || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "dirty Booker and Traveller company-save block",
+    );
+    assert.deepEqual(blockedCompanySaveState, {
+      booker: "Georgina Cheung",
+      companyEditorVisible: true,
+      nestedSaveLabel: "Save Booker / Traveller",
+      traveller: "Ms Tanya Sanwal",
+    });
+    assert.equal(travelerCreateCount, 0, "Blocked company save must not call the shared company/traveller writer.");
+    assert.equal(bookerPatchCount, 0, "Blocked company save must not write the Booker.");
+
     reporter.step("saving and reloading the exact corporate identity pair");
     await evaluate(`document.querySelector('[data-customer-save-booker-traveler="true"]').click()`);
     await waitForCondition(

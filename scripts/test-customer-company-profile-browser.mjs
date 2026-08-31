@@ -219,6 +219,9 @@ async function main() {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
       setter.call(input, ${JSON.stringify(correctedFolderName)});
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      const contact = document.querySelector('[data-customer-company-profile-primary-contact="${customerId}"]');
+      setter.call(contact, "");
+      contact.dispatchEvent(new Event("input", { bubbles: true }));
       document.querySelector('[data-customer-company-profile-save="${customerId}"]').click();
     })()`);
 
@@ -241,6 +244,8 @@ async function main() {
     assert.equal(Object.hasOwn(folderPatchPayload, "guest_account_billing_enabled"), false);
     assert.equal(companySavePayload.action_type, "company_update");
     assert.equal(companySavePayload.company_name, correctedFolderName);
+    assert.equal(companySavePayload.primary_contact_name, null);
+    assert.equal(Object.hasOwn(companySavePayload, "billing_address"), false);
     assert.equal(Object.hasOwn(companySavePayload, "traveller_name"), false);
     assert.equal(
       interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,

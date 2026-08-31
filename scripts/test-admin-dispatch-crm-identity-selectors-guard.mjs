@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [app, appSmokeBrowser, bookingUiBrowser, rateSetupRead, adminBookers, customerProfileEditor, customerAccountBrowser, packageJson] = await Promise.all([
+const [app, adapter, appSmokeBrowser, bookingUiBrowser, rateSetupRead, adminBookers, customerProfileEditor, customerAccountBrowser, packageJson] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
+  readFile("lib/admin-booking-supabase-adapter.ts", "utf8"),
   readFile("scripts/test-app-smoke-browser.mjs", "utf8"),
   readFile("scripts/test-booking-ui-browser.mjs", "utf8"),
   readFile("lib/admin-rate-setup-read.ts", "utf8"),
@@ -82,17 +83,36 @@ assert.ok(
 
 for (const fragment of [
   "adminDispatchLegacyAgencyAccountOptions",
+  "adminDispatchLegacyProfileConversionOptions",
+  'secondaryLabel: "Existing customer profile · Booker required"',
+  "adminDispatchCustomerAccountOptions.push(...adminDispatchLegacyProfileConversionOptions)",
   "loadedLegacyAgencyAccount",
   "Boolean(clean(appliedAdminBookingSnapshotReference))",
   "`corporate:${companyId}:${bookerId}`",
   "existing.travelers.push(traveler)",
   'customerId: account.customerId',
+  'booker: ""',
+  'bookerContact: ""',
+  'bookerEmail: ""',
   'bookerId: account.bookerId',
   'companyId: account.companyId',
   'travelerId: ""',
   "Choose or create the exact Company + Booker Customer Account before Save + CRM.",
   "Retry customer list",
+  "Enter and approve the exact Booker before Save + CRM.",
 ]) assert.ok(app.includes(fragment), `Missing unified account identity preservation ${fragment}`);
+
+assert.ok(
+  adapter.includes("explicitLegacyCustomerRows") &&
+    adapter.includes('.eq("company_id", verifiedCompanyId)') &&
+    adapter.includes('.eq("customer_id", verifiedCustomerId)'),
+  "An explicitly selected legacy Customer profile must be accepted only with exact saved Company + Customer evidence",
+);
+assert.ok(
+  app.includes("loadedLegacyAgencyBooking") &&
+    app.includes("Boolean(clean(appliedAdminBookingSnapshotReference))"),
+  "Only a loaded legacy saved booking may continue through the company-only compatibility lane",
+);
 
 const loadedUnassignedCorporateOptionStart = app.indexOf(
   "if (\n    clean(appliedAdminBookingSnapshotReference) &&\n    booking.companyId &&",

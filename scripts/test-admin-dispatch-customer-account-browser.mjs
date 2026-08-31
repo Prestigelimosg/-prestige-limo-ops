@@ -23,6 +23,7 @@ const reporter = createBrowserTestReporter("admin-dispatch-customer-account-brow
 
 const companies = [
   { company_name: "Kim Hyun Soo", domain: null, id: 41 },
+  { company_name: "Alson Chua UOB", domain: null, id: 46 },
   { company_name: "Nomura Singapore Limited", domain: null, id: 55 },
 ];
 const bookers = [
@@ -165,13 +166,22 @@ async function main() {
         responseBody = { bookers, companies, ok: true, settings: null, travelers };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "GET") {
         responseBody = {
-          accounts: [{
-            customer_account: "Kim Hyun Soo",
-            customer_folder_active: true,
-            customer_id: "174",
-            guest_account_billing_enabled: true,
-            verified_company_id: "41",
-          }],
+          accounts: [
+            {
+              customer_account: "Kim Hyun Soo",
+              customer_folder_active: true,
+              customer_id: "174",
+              guest_account_billing_enabled: true,
+              verified_company_id: "41",
+            },
+            {
+              customer_account: "Alson Chua UOB",
+              customer_folder_active: true,
+              customer_id: "180",
+              guest_account_billing_enabled: true,
+              verified_company_id: "46",
+            },
+          ],
           ok: true,
         };
       } else if (requestUrl.pathname === "/api/admin-bookers" && method === "GET") {
@@ -234,7 +244,7 @@ async function main() {
         const menu = [...chooser.children].find((child) => child instanceof HTMLDivElement);
         const summaryWidth = chooser.querySelector("summary")?.getBoundingClientRect().width || 0;
         const sectorWidth = chooser.closest('[data-admin-dispatch-crm-identity-selectors="true"]')?.getBoundingClientRect().width || 0;
-        return menu instanceof HTMLDivElement && options.length === 3 && keys.includes("corporate:41:4101") ? {
+        return menu instanceof HTMLDivElement && options.length === 4 && keys.includes("corporate:41:4101") ? {
           keys,
           legacyCount: document.querySelectorAll('[data-admin-dispatch-agency-folder-select="true"], [data-admin-dispatch-corporate-customer-select="true"], [data-admin-dispatch-corporate-pair-select="true"]').length,
           listOverflowY: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-options="true"]')).overflowY,
@@ -247,6 +257,7 @@ async function main() {
       "exact unified account options",
     );
     assert.deepEqual(initialState.keys.sort(), [
+      "agency:180:46",
       "corporate:41:4101",
       "corporate:55:5501",
       "corporate:55:5502",
@@ -285,6 +296,48 @@ async function main() {
       );
     };
     const search = async (value) => (await searchKeys(value, 1))[0];
+
+    assert.equal(await search("Alson Chua UOB"), "agency:180:46");
+    await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="agency:180:46"]')?.click()`);
+    const legacyProfileSelectionState = await waitForCondition(
+      async () => evaluate(`(() => {
+        const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return chooser?.dataset.companyId === "46" && chooser?.dataset.customerId === "180"
+          ? {
+              bookerId: chooser.dataset.bookerId || "",
+              bookerName: [...document.querySelectorAll("label")]
+                .find((label) => label.textContent.includes("Booker / PA name"))
+                ?.querySelector("input")?.value || "",
+              companyId: chooser.dataset.companyId,
+              customerId: chooser.dataset.customerId,
+              profileMessage: document.querySelector('[data-admin-dispatch-agency-folder-selected="true"]')
+                ?.textContent.replace(/\\s+/g, " ").trim() || "",
+              selectedText: chooser.querySelector("summary")?.textContent.replace(/\\s+/g, " ").trim() || "",
+              travelerId: chooser.dataset.travelerId || "",
+            }
+          : false;
+      })()`),
+      10000,
+      "existing legacy profile selected without inferred Booker or Traveller",
+    );
+    assert.deepEqual(
+      {
+        bookerId: legacyProfileSelectionState.bookerId,
+        bookerName: legacyProfileSelectionState.bookerName,
+        companyId: legacyProfileSelectionState.companyId,
+        customerId: legacyProfileSelectionState.customerId,
+        travelerId: legacyProfileSelectionState.travelerId,
+      },
+      {
+        bookerId: "",
+        bookerName: "",
+        companyId: "46",
+        customerId: "180",
+        travelerId: "",
+      },
+    );
+    assert.match(legacyProfileSelectionState.selectedText, /^Alson Chua UOB/);
+    assert.match(legacyProfileSelectionState.profileMessage, /Enter and approve the exact Booker/);
 
     assert.equal(await search("Kim Hyun Soo"), "corporate:41:4101");
     assert.equal(await search("Kim Passenger"), "corporate:41:4101");

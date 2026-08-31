@@ -635,10 +635,13 @@ class QueryBuilder {
 function createMockClient({
   acknowledged = true,
   activeOnePhoneAccount = true,
+  linkStatus = "active",
+  notificationOverrides = {},
   nativeHandoff = false,
   subscriptions = [],
 } = {}) {
   const linkId = "11111111-1111-4111-8111-111111111111";
+  const notificationId = "22222222-2222-4222-8222-222222222222";
   const calls = [];
   const client = {
     calls,
@@ -658,7 +661,7 @@ function createMockClient({
             driver_id: 8,
             expires_at: "2026-07-23T00:00:00.000Z",
             id: linkId,
-            link_status: "active",
+            link_status: linkStatus,
             revoked_at: null,
             safe_link_context: {
               ...(acknowledged
@@ -672,6 +675,31 @@ function createMockClient({
           },
           error: null,
         };
+      }
+      if (query.table === "customer_driver_app_notification_outbox") {
+        return {
+          data: {
+            booking_reference: "PRIVATE-BOOKING-REFERENCE",
+            delivery_surface: "driver_app",
+            driver_job_link_id: linkId,
+            id: notificationId,
+            notification_status: "queued",
+            notification_type: "booking_status",
+            priority: "urgent",
+            safe_context: {
+              audience: "replaced_driver",
+              source: "save_driver_assignment",
+            },
+            safe_message: "Job reassigned, do not proceed.",
+            safe_title: "Prestige Driver",
+            workflow_area: "driver_reassignment",
+            ...notificationOverrides,
+          },
+          error: null,
+        };
+      }
+      if (query.table === "drivers") {
+        return { data: { id: 8 }, error: null };
       }
       if (query.table === "driver_device_push_subscriptions" && query.operation === "select") {
         return { data: subscriptions, error: null };
@@ -937,6 +965,90 @@ try {
     ],
     "safe driver push payload",
   );
+
+  let reassignmentPayload = null;
+  const reassignmentClient = createMockClient({
+    linkStatus: "expired",
+    subscriptions: [
+      {
+        auth: "guard-auth",
+        endpoint: "https://push.example.test/replaced-driver-device",
+        p256dh: "guard-p256dh",
+      },
+    ],
+  });
+  const reassignmentAlert = await helper.sendDriverDevicePushAlertForAppUpdate(
+    reassignmentClient,
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      notification_id: "22222222-2222-4222-8222-222222222222",
+      recipient_driver_id: 8,
+      safe_message: "Job reassigned, do not proceed.",
+      workflow_area: "driver_reassignment",
+    },
+    {
+      env: configuredEnv,
+      pushSender: async (_subscription, payload) => {
+        reassignmentPayload = payload;
+      },
+    },
+  );
+  assert.equal(reassignmentAlert.ok, true);
+  assert.equal(reassignmentAlert.reason, "send_succeeded");
+  assert.equal(reassignmentPayload.body, "Job reassigned, do not proceed.");
+  assert.equal(reassignmentPayload.title, "Prestige Limo Ops");
+  assert.equal(
+    reassignmentClient.calls.some(
+      (call) =>
+        call.table === "driver_device_push_subscriptions" &&
+        call.filters.some(([field, value]) => field === "driver_id" && value === 8),
+    ),
+    true,
+    "reassignment must load subscriptions only for the replaced driver",
+  );
+
+  let invalidReassignmentProviderRequests = 0;
+  const activeLinkReassignment = await helper.sendDriverDevicePushAlertForAppUpdate(
+    createMockClient({ linkStatus: "active", subscriptions: [{}] }),
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      notification_id: "22222222-2222-4222-8222-222222222222",
+      recipient_driver_id: 8,
+      safe_message: "Job reassigned, do not proceed.",
+      workflow_area: "driver_reassignment",
+    },
+    {
+      env: configuredEnv,
+      pushSender: async () => { invalidReassignmentProviderRequests += 1; },
+    },
+  );
+  assert.equal(activeLinkReassignment.ok, false);
+  assert.equal(activeLinkReassignment.reason, "invalid_driver_link");
+  assert.equal(invalidReassignmentProviderRequests, 0);
+
+  const wrongDriverReassignment = await helper.sendDriverDevicePushAlertForAppUpdate(
+    createMockClient({ linkStatus: "expired", subscriptions: [{}] }),
+    {
+      booking_reference: "PRIVATE-BOOKING-REFERENCE",
+      delivery_surface: "driver_app",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      notification_id: "22222222-2222-4222-8222-222222222222",
+      recipient_driver_id: 9,
+      safe_message: "Job reassigned, do not proceed.",
+      workflow_area: "driver_reassignment",
+    },
+    {
+      env: configuredEnv,
+      pushSender: async () => { invalidReassignmentProviderRequests += 1; },
+    },
+  );
+  assert.equal(wrongDriverReassignment.ok, false);
+  assert.equal(wrongDriverReassignment.reason, "invalid_driver_link");
+  assert.equal(invalidReassignmentProviderRequests, 0);
 
   let nativeProviderRequest = null;
   const nativeAlertClient = createMockClient({

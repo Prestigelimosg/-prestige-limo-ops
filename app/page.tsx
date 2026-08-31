@@ -25793,6 +25793,7 @@ export default function Home() {
         body: JSON.stringify({
           expected_updated_at: expectedUpdatedAt,
           target_booking_reference: targetBookingReference,
+          update_mode: assignmentOnly ? "driver_assignment" : undefined,
           ...payload,
         }),
         headers: {
@@ -25823,6 +25824,7 @@ export default function Home() {
       });
 
       if (assignmentOnly) {
+        await refreshDashboardDriverJobLinksRead([updatedBookingReference]);
         const retainedAssignmentBooking = {
           ...bookingRecordToForm(
             adminBookingPersistenceRecordToCalendarBookingRecord(updatedBooking),

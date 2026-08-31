@@ -103,6 +103,7 @@ export type AdminBookingPersistenceInput = {
 export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
   expected_updated_at?: string | null;
   target_booking_reference: string;
+  update_mode?: "driver_assignment";
 };
 
 export type CustomerBookingRequestInput = {
@@ -204,6 +205,7 @@ const createPayloadTopLevelFields = new Set([
 const updatePayloadTopLevelFields = new Set([
   "expected_updated_at",
   "target_booking_reference",
+  "update_mode",
   "booking",
   "route_points",
   "service_items",
@@ -1138,6 +1140,18 @@ export function parseAdminBookingUpdatePayload(
 
   const targetBookingReference = validTargetBookingReference(body.target_booking_reference as string | null);
   const expectedUpdatedAt = textOrNull(body.expected_updated_at);
+  const updateMode = textOrNull(body.update_mode);
+
+  if (
+    Object.prototype.hasOwnProperty.call(body, "update_mode") &&
+    updateMode !== "driver_assignment"
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Malformed admin booking update mode rejected.",
+    };
+  }
 
   if (
     Object.prototype.hasOwnProperty.call(body, "expected_updated_at") &&
@@ -1172,6 +1186,7 @@ export function parseAdminBookingUpdatePayload(
       ...parsed.data,
       ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
       target_booking_reference: targetBookingReference,
+      ...(updateMode === "driver_assignment" ? { update_mode: updateMode } : {}),
     },
   };
 }

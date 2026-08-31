@@ -350,6 +350,7 @@ class MockSupabaseClient {
       calls: 0,
     }));
     this.selectHistory = [];
+    this.rpcHandlers = options.rpcHandlers || {};
     this.schemaMode = options.schemaMode || "cumulative";
     this.missingColumns = new Set(options.missingColumns || []);
     this.tables = {
@@ -369,7 +370,10 @@ class MockSupabaseClient {
       customer_driver_app_notification_outbox: [],
       customer_contacts: [],
       customers: [],
+      driver_access_accounts: [],
+      driver_device_push_subscriptions: [],
       driver_job_links: [],
+      drivers: [],
       travelers: [],
     };
     this.nextIds = {
@@ -382,7 +386,10 @@ class MockSupabaseClient {
       customer_driver_app_notification_outbox: 1,
       customer_contacts: 1,
       customers: 1,
+      driver_access_accounts: 1,
+      driver_device_push_subscriptions: 1,
       driver_job_links: 1,
+      drivers: 1,
       travelers: 1,
     };
 
@@ -396,6 +403,15 @@ class MockSupabaseClient {
     assert.ok(this.tables[table], `Unexpected mocked Supabase table: ${table}`);
 
     return new MockSupabaseQuery(this, table);
+  }
+
+  async rpc(name, params) {
+    this.recordOperation("rpc", name, params);
+    const handler = this.rpcHandlers[name];
+
+    return handler
+      ? handler(params, this)
+      : { data: null, error: { code: "mock_rpc_not_configured" } };
   }
 
   createId(table) {
@@ -1718,6 +1734,106 @@ try {
   assert.equal(auditUpdates.at(-1).payload.safe_before.booking_reference, "SAFE-ADM-001");
   assert.equal(auditUpdates.at(-1).payload.safe_after.pickup_location, "Updated Safe Pickup");
   assertNoUnsafeKeys(updateOperation, "mocked update operation");
+
+  const reassignmentExpectedUpdatedAt = "2030-06-01T00:00:00.000Z";
+  const reassignmentPayload = canonicalAdminUpdatePayload({
+    booking: {
+      booking_reference: "SAFE-DRIVER-REASSIGN-001",
+      customer_id: 104,
+      driver_contact: "+65 9000 0009",
+      driver_id: 9,
+      driver_name: "Requested Replacement Display",
+      driver_plate_number: "REQ9A",
+    },
+  });
+  const parsedReassignment = persistence.parseAdminBookingUpdatePayload({
+    ...reassignmentPayload,
+    expected_updated_at: reassignmentExpectedUpdatedAt,
+    target_booking_reference: "SAFE-DRIVER-REASSIGN-001",
+    update_mode: "driver_assignment",
+  });
+  assert.equal(parsedReassignment.ok, true);
+
+  const reassignmentMock = installMockClient(
+    {
+      bookings: [
+        {
+          ...canonicalAdminPayload().booking,
+          booking_reference: "SAFE-DRIVER-REASSIGN-001",
+          customer_id: 104,
+          driver_contact: "+65 9000 0008",
+          driver_id: 8,
+          driver_name: "Previous Verified Driver",
+          driver_plate_number: "OLD8A",
+          id: 104,
+          source_surface: "admin_dashboard",
+          updated_at: reassignmentExpectedUpdatedAt,
+        },
+      ],
+    },
+    {
+      rpcHandlers: {
+        apply_admin_driver_reassignment(params, client) {
+          assert.deepEqual(params, {
+            p_actor_label: "Contract Test Admin",
+            p_actor_role: "admin",
+            p_booking_reference: "SAFE-DRIVER-REASSIGN-001",
+            p_expected_updated_at: reassignmentExpectedUpdatedAt,
+            p_new_driver_id: 9,
+          });
+          Object.assign(client.tables.bookings[0], {
+            driver_contact: "+65 9000 0009",
+            driver_id: 9,
+            driver_name: "Replacement Verified Driver",
+            driver_plate_number: "NEW9A",
+            updated_at: "2030-06-01T00:00:01.000Z",
+          });
+          return {
+            data: {
+              booking_id: 104,
+              booking_reference: "SAFE-DRIVER-REASSIGN-001",
+              expired_link_ids: ["11111111-1111-4111-8111-111111111111"],
+              new_driver_id: 9,
+              notification: {
+                booking_reference: "SAFE-DRIVER-REASSIGN-001",
+                delivery_surface: "driver_app",
+                driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+                id: "22222222-2222-4222-8222-222222222222",
+                notification_status: "queued",
+                notification_type: "booking_status",
+                priority: "urgent",
+                safe_message: "Job reassigned, do not proceed.",
+                safe_title: "Prestige Driver",
+                workflow_area: "driver_reassignment",
+              },
+              previous_driver_id: 8,
+            },
+            error: null,
+          };
+        },
+      },
+    },
+  );
+  globalThis.__prestigeSupabaseAdapterMock = reassignmentMock;
+  const reassignmentResult = await adapter.updateAdminBookingThroughSupabaseAdapter(
+    parsedReassignment.data,
+    adminAudit("admin_booking_update"),
+    adminActor(),
+  );
+  assert.equal(reassignmentResult.ok, true);
+  assert.equal(reassignmentResult.data.driver_id, 9);
+  assert.equal(reassignmentResult.data.driver_name, "Replacement Verified Driver");
+  assert.equal(
+    reassignmentMock.client.operations.filter((operation) => operation.action === "rpc").length,
+    1,
+  );
+  assert.equal(
+    reassignmentMock.client.operations.some(
+      (operation) => ["insert", "update", "delete"].includes(operation.action),
+    ),
+    false,
+    "replacement assignment must not fall through to the non-transactional booking writer",
+  );
 
   const driverReloadFallbackPayload = canonicalAdminUpdatePayload({
     booking: {

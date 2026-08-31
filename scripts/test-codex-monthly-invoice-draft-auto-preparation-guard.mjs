@@ -17,6 +17,8 @@ const dashboardPath = "app/page.tsx";
 const vercelConfigPath = "vercel.json";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationSuitePath = "scripts/test-preactivation-verification-suite.mjs";
+const migrationPath =
+  "supabase/migrations/20260831142905_monthly_billing_company_booker_scope.sql";
 const guardScript = "scripts/test-codex-monthly-invoice-draft-auto-preparation-guard.mjs";
 
 function assertIncludes(source, fragment, label = fragment) {
@@ -150,7 +152,9 @@ function installRuntimeMock(overrides = {}) {
   const group = {
     billing_month: "2026-06",
     blocked_count: 0,
+    booker_id: 101,
     classified_count: 1,
+    company_id: 100,
     covered_count: 0,
     customer_account: "Safe Customer",
     customer_id: "safe-customer-id",
@@ -162,8 +166,10 @@ function installRuntimeMock(overrides = {}) {
     billing_month: "2026-06",
     billing_prep_readiness: "ready",
     booking_reference: "SAFE-MONTHLY-001",
+    booker_id: 101,
     closeout_id: "11111111-1111-4111-8111-111111111111",
     closeout_status: "closed",
+    company_id: 100,
     customer_account: "Safe Customer",
     customer_id: "safe-customer-id",
     safe_trip_context: {
@@ -234,6 +240,7 @@ const [
   vercelConfig,
   ledger,
   preactivationSuite,
+  migration,
 ] = await Promise.all([
   readFile(helperPath, "utf8"),
   readFile(routePath, "utf8"),
@@ -247,7 +254,28 @@ const [
   readFile(vercelConfigPath, "utf8"),
   readFile(ledgerPath, "utf8"),
   readFile(preactivationSuitePath, "utf8"),
+  readFile(migrationPath, "utf8"),
 ]);
+
+for (const fragment of [
+  "alter table public.monthly_billing_draft_plans",
+  "alter table public.monthly_invoice_drafts",
+  "add column if not exists company_id bigint references public.companies(id) on delete restrict",
+  "add column if not exists booker_id bigint references public.bookers(id) on delete restrict",
+  "monthly_billing_draft_plans_verified_identity_month_key",
+  "monthly_invoice_drafts_verified_identity_month_key",
+  "(customer_id, company_id, booker_id, billing_month)",
+]) {
+  assertIncludes(migration, fragment, `monthly Company Booker migration ${fragment}`);
+}
+for (const forbidden of [
+  /update\s+public\.monthly_(?:billing_draft_plans|invoice_drafts)/i,
+  /insert\s+into\s+public\.monthly_(?:billing_draft_plans|invoice_drafts)/i,
+  /create\s+policy/i,
+  /grant\s+/i,
+]) {
+  assertExcludes(migration, forbidden, "monthly Company Booker migration legacy-data boundary");
+}
 
 for (const fragment of [
   "readAdminAutomationRuntimeControl",
@@ -409,6 +437,22 @@ try {
   assert.equal(prepared.calendar_auto_write_enabled, false);
   assert.equal(prepared.customer_driver_email_auto_send_enabled, false);
   assert.equal(preparedMock.draftCreateCalls.length, 1);
+  assert.deepEqual(
+    {
+      booker_id: preparedMock.draftCreateCalls[0].input.booker_id,
+      company_id: preparedMock.draftCreateCalls[0].input.company_id,
+      customer_id: preparedMock.draftCreateCalls[0].input.customer_id,
+    },
+    { booker_id: 101, company_id: 100, customer_id: "safe-customer-id" },
+  );
+  assert.deepEqual(
+    {
+      booker_id: preparedMock.candidateCalls[0].input.booker_id,
+      company_id: preparedMock.candidateCalls[0].input.company_id,
+      customer_id: preparedMock.candidateCalls[0].input.customer_id,
+    },
+    { booker_id: 101, company_id: 100, customer_id: "safe-customer-id" },
+  );
   assert.equal(preparedMock.draftCreateCalls[0].input.draft_status, "pending_admin_review");
   assert.equal(preparedMock.draftCreateCalls[0].input.linked_trips.length, 1);
   assert.equal(preparedMock.notificationCalls.length, 1);
@@ -429,7 +473,10 @@ try {
         invoice_drafts: [
           {
             billing_month: "2026-06",
+            booker_id: 101,
+            company_id: 100,
             customer_account: "Safe Customer",
+            customer_id: "safe-customer-id",
             linked_trips: [{ booking_reference: "SAFE-MONTHLY-001" }],
           },
         ],
@@ -453,7 +500,10 @@ try {
         invoice_drafts: [
           {
             billing_month: "2026-06",
+            booker_id: 101,
+            company_id: 100,
             customer_account: "Safe Customer",
+            customer_id: "safe-customer-id",
             linked_trips: [],
           },
         ],
@@ -479,7 +529,9 @@ try {
           {
             billing_month: "2026-06",
             blocked_count: 0,
+            booker_id: 501,
             classified_count: 1,
+            company_id: 500,
             covered_count: 1,
             customer_account: "Covered Customer",
             customer_id: "covered-customer-id",
@@ -506,6 +558,43 @@ try {
   assert.equal(coveredOnlyMock.candidateCalls.length, 0);
   assert.equal(coveredOnlyMock.draftCreateCalls.length, 0);
   assert.equal(coveredOnlyMock.notificationCalls.length, 1);
+
+  const legacyIdentityMock = installRuntimeMock({
+    groupResult: {
+      data: {
+        groups: [
+          {
+            billing_month: "2026-06",
+            blocked_count: 1,
+            booker_id: null,
+            classified_count: 1,
+            company_id: 100,
+            covered_count: 0,
+            customer_account: "Legacy Customer",
+            customer_id: "legacy-customer-id",
+            ready_count: 0,
+            safe_readiness_status: "blocked",
+            total_count: 1,
+          },
+        ],
+        pagination: { has_next_page: false, total_group_count: 1 },
+        summary: {
+          blocked_count: 1,
+          classified_count: 1,
+          covered_count: 0,
+          ready_count: 0,
+        },
+      },
+      ok: true,
+    },
+  });
+  const legacyIdentity = await harness.helper.runCodexMonthlyInvoiceDraftAutoPreparation({
+    now: new Date("2026-07-01T00:00:00.000Z"),
+  });
+  assert.equal(legacyIdentity.reason, "no_work");
+  assert.equal(legacyIdentityMock.candidateCalls.length, 0);
+  assert.equal(legacyIdentityMock.draftCreateCalls.length, 0);
+  assert.equal(legacyIdentityMock.notificationCalls.length, 1);
 
   const mismatchMock = installRuntimeMock({
     candidateResult: {

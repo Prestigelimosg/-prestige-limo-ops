@@ -18,8 +18,10 @@ export const adminMonthlyInvoiceDraftTripCandidatesVersion =
 
 export type AdminMonthlyInvoiceDraftTripCandidateParams = {
   billing_month: string;
+  booker_id: number;
+  company_id: number;
   customer_account: string;
-  customer_id: string | null;
+  customer_id: string;
   limit: number;
   page: number;
 };
@@ -28,10 +30,12 @@ export type AdminMonthlyInvoiceDraftTripCandidate = {
   billing_month: string;
   billing_prep_readiness: string | null;
   booking_reference: string;
+  booker_id: number;
   closeout_id: string | null;
   closeout_status: string | null;
+  company_id: number;
   customer_account: string;
-  customer_id: string | null;
+  customer_id: string;
   safe_trip_context: {
     readiness_reason: string;
     source: "completed_booking_closeout";
@@ -81,11 +85,12 @@ const safeTripCandidatesReadError =
 const tripCandidateCloseoutSelect =
   "id, booking_reference, closeout_status, completed_job_status, dsp_actual_hours_readiness, extra_charges_readiness, billing_prep_readiness, updated_at";
 const tripCandidateCurrentBookingSelect =
-  "booking_reference, customer_id, customer_display_name, pickup_at, admin_internal_status";
+  "booking_reference, customer_id, company_id, booker_id, customer_display_name, pickup_at, admin_internal_status";
 const tripCandidateFoundationBookingSelect =
-  "booking_reference, customer_id, customer_display_name, pickup_datetime, admin_internal_status";
+  "booking_reference, customer_id, company_id, booker_id, customer_display_name, pickup_datetime, admin_internal_status";
 const tripCandidateDraftLinkSelect = "booking_reference, draft_id";
-const tripCandidateDraftSelect = "id, customer_account, billing_month";
+const tripCandidateDraftSelect =
+  "id, customer_account, customer_id, company_id, booker_id, billing_month";
 const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const forbiddenSafeTextFragments = [
   "amount_due",
@@ -190,6 +195,12 @@ function safeDisplayText(value: unknown, fallback: string) {
   return safeText(value) || fallback;
 }
 
+function safeIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function safeCustomerId(value: unknown) {
   return safeText(value);
 }
@@ -279,15 +290,13 @@ export function parseAdminMonthlyInvoiceDraftTripCandidateParams(
     };
   }
 
-  const customerIdValue = readParamsValue(params, "customer_id");
-  const customerId =
-    customerIdValue === undefined || customerIdValue === null || customerIdValue === ""
-      ? null
-      : safeCustomerId(customerIdValue);
+  const customerId = safeCustomerId(readParamsValue(params, "customer_id"));
+  const companyId = safeIdentityId(readParamsValue(params, "company_id"));
+  const bookerId = safeIdentityId(readParamsValue(params, "booker_id"));
 
-  if (customerIdValue && !customerId) {
+  if (!customerId || !companyId || !bookerId) {
     return {
-      error: "Malformed monthly invoice draft trip candidate customer_id rejected.",
+      error: "Verified Company and Booker identity is required for monthly invoice draft trip candidates.",
       ok: false,
       status: 400,
     };
@@ -320,6 +329,8 @@ export function parseAdminMonthlyInvoiceDraftTripCandidateParams(
   return {
     data: {
       billing_month: billingMonth,
+      booker_id: bookerId,
+      company_id: companyId,
       customer_account: customerAccount,
       customer_id: customerId,
       limit,
@@ -555,7 +566,9 @@ async function loadLinkedDraftBookingReferences(
   const { data: matchingDraftRows, error: matchingDraftError } = await client
     .from("monthly_invoice_drafts")
     .select(tripCandidateDraftSelect)
-    .eq("customer_account", params.customer_account)
+    .eq("customer_id", params.customer_id)
+    .eq("company_id", params.company_id)
+    .eq("booker_id", params.booker_id)
     .eq("billing_month", params.billing_month)
     .limit(25);
 
@@ -646,12 +659,18 @@ function buildCandidate(
     "Customer/account to confirm",
   );
   const customerId = safeCustomerId(bookingRow.customer_id);
+  const companyId = safeIdentityId(bookingRow.company_id);
+  const bookerId = safeIdentityId(bookingRow.booker_id);
 
   if (customerAccount !== params.customer_account) {
     return null;
   }
 
-  if (params.customer_id && customerId !== params.customer_id) {
+  if (
+    customerId !== params.customer_id ||
+    companyId !== params.company_id ||
+    bookerId !== params.booker_id
+  ) {
     return null;
   }
 
@@ -664,8 +683,10 @@ function buildCandidate(
     billing_month: billingMonth,
     billing_prep_readiness: safeText(closeoutRow.billing_prep_readiness, 80),
     booking_reference: bookingReference,
+    booker_id: bookerId,
     closeout_id: validUuid(closeoutRow.id),
     closeout_status: safeText(closeoutRow.closeout_status, 80),
+    company_id: companyId,
     customer_account: customerAccount,
     customer_id: customerId,
     safe_trip_context: {
@@ -761,7 +782,9 @@ export async function loadAdminMonthlyInvoiceDraftTripCandidates(
     (group) =>
       group.billing_month === parsed.data.billing_month &&
       group.customer_account === parsed.data.customer_account &&
-      (!parsed.data.customer_id || group.customer_id === parsed.data.customer_id),
+      group.customer_id === parsed.data.customer_id &&
+      group.company_id === parsed.data.company_id &&
+      group.booker_id === parsed.data.booker_id,
   );
   const readyBookingReferences = new Set(
     (matchingGroup?.jobs || [])

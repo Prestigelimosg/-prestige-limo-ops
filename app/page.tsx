@@ -1635,6 +1635,8 @@ type AdminMonthlyBillingGroupingReadinessFilter =
 type AdminMonthlyBillingJobClassification = {
   billing_month?: string | null;
   booking_reference?: string | null;
+  booker_id?: number | null;
+  company_id?: number | null;
   customer_account?: string | null;
   customer_id?: string | null;
   display_booking_reference?: string | null;
@@ -1645,6 +1647,8 @@ type AdminMonthlyBillingJobClassification = {
 type AdminMonthlyBillingGroup = {
   billing_month?: string | null;
   blocked_count?: number | null;
+  booker_id?: number | null;
+  company_id?: number | null;
   classified_count?: number | null;
   covered_count?: number | null;
   customer_account?: string | null;
@@ -1746,6 +1750,8 @@ type AdminMonthlyBillingDraftPlanStatus =
 type AdminMonthlyBillingDraftPlanRecord = {
   billing_month?: string | null;
   blocked_count?: number | null;
+  booker_id?: number | null;
+  company_id?: number | null;
   customer_account?: string | null;
   customer_id?: string | null;
   draft_status?: AdminMonthlyBillingDraftPlanStatus | null;
@@ -1794,8 +1800,11 @@ type AdminMonthlyInvoiceDraftTripReadinessStatus = "ready" | "blocked";
 type AdminMonthlyInvoiceDraftTripCandidate = {
   billing_prep_readiness?: string | null;
   booking_reference?: string | null;
+  booker_id?: number | null;
   closeout_id?: string | null;
   closeout_status?: string | null;
+  company_id?: number | null;
+  customer_id?: string | null;
   safe_trip_context?: Record<string, unknown> | null;
   trip_readiness_status?: AdminMonthlyInvoiceDraftTripReadinessStatus | null;
 };
@@ -1803,7 +1812,10 @@ type AdminMonthlyInvoiceDraftTripCandidate = {
 type AdminMonthlyInvoiceDraftRecord = {
   billing_month?: string | null;
   blocked_count?: number | null;
+  booker_id?: number | null;
+  company_id?: number | null;
   customer_account?: string | null;
+  customer_id?: string | null;
   draft_status?: AdminMonthlyInvoiceDraftStatus | null;
   id?: string | null;
   linked_trips?: Array<{
@@ -12937,14 +12949,26 @@ async function markAdminMonthlyInvoiceIssueRecordPdfReviewReady(
 
 async function saveAdminMonthlyBillingDraftPlanFromGroup(group: AdminMonthlyBillingGroup) {
   const customerAccount = clean(group.customer_account);
+  const customerId = clean(group.customer_id);
+  const companyId = Number(group.company_id);
+  const bookerId = Number(group.booker_id);
   const billingMonth = clean(group.billing_month);
   const readyCount = adminMonthlyBillingGroupingCount(group.ready_count);
   const blockedCount = adminMonthlyBillingGroupingCount(group.blocked_count);
   const totalCount = adminMonthlyBillingGroupingCount(group.total_count);
   const readinessStatus = group.safe_readiness_status || "blocked";
 
-  if (!customerAccount || !billingMonth || totalCount < 1) {
-    throw new Error("Monthly billing draft plan requires a saved customer/month group.");
+  if (
+    !customerAccount ||
+    !customerId ||
+    !Number.isSafeInteger(companyId) ||
+    companyId < 1 ||
+    !Number.isSafeInteger(bookerId) ||
+    bookerId < 1 ||
+    !billingMonth ||
+    totalCount < 1
+  ) {
+    throw new Error("Monthly billing draft plan requires verified Company and Booker identity.");
   }
 
   const draftStatus: AdminMonthlyBillingDraftPlanStatus =
@@ -12957,8 +12981,10 @@ async function saveAdminMonthlyBillingDraftPlanFromGroup(group: AdminMonthlyBill
     body: JSON.stringify({
       billing_month: billingMonth,
       blocked_count: blockedCount,
+      booker_id: bookerId,
+      company_id: companyId,
       customer_account: customerAccount,
-      customer_id: clean(group.customer_id) || null,
+      customer_id: customerId,
       draft_status: draftStatus,
       ready_count: readyCount,
       readiness_status: readinessStatus,
@@ -13004,24 +13030,32 @@ async function saveAdminMonthlyBillingDraftPlanFromGroup(group: AdminMonthlyBill
 
 async function loadAdminMonthlyInvoiceDraftTripCandidatesRead(group: AdminMonthlyBillingGroup) {
   const customerAccount = clean(group.customer_account);
+  const customerId = clean(group.customer_id);
+  const companyId = Number(group.company_id);
+  const bookerId = Number(group.booker_id);
   const billingMonth = clean(group.billing_month);
 
-  if (!customerAccount || !billingMonth) {
-    throw new Error("Monthly invoice draft trip candidate read requires a saved customer/month group.");
+  if (
+    !customerAccount ||
+    !customerId ||
+    !Number.isSafeInteger(companyId) ||
+    companyId < 1 ||
+    !Number.isSafeInteger(bookerId) ||
+    bookerId < 1 ||
+    !billingMonth
+  ) {
+    throw new Error("Monthly invoice draft trip candidate read requires verified Company and Booker identity.");
   }
 
   const params = new URLSearchParams({
     billing_month: billingMonth,
+    booker_id: String(bookerId),
+    company_id: String(companyId),
     customer_account: customerAccount,
+    customer_id: customerId,
     limit: "250",
     page: "1",
   });
-  const customerId = clean(group.customer_id);
-
-  if (customerId) {
-    params.set("customer_id", customerId);
-  }
-
   const response = await fetch(
     `${adminMonthlyInvoiceDraftTripCandidatesApiPath}?${params.toString()}`,
     {
@@ -13050,11 +13084,23 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
   group: AdminMonthlyBillingGroup;
 }) {
   const customerAccount = clean(group.customer_account);
+  const customerId = clean(group.customer_id);
+  const companyId = Number(group.company_id);
+  const bookerId = Number(group.booker_id);
   const billingMonth = clean(group.billing_month);
   const expectedReadyCount = adminMonthlyBillingGroupingCount(group.ready_count);
 
-  if (!customerAccount || !billingMonth || expectedReadyCount < 1) {
-    throw new Error("Monthly invoice draft preparation requires a saved customer/month group.");
+  if (
+    !customerAccount ||
+    !customerId ||
+    !Number.isSafeInteger(companyId) ||
+    companyId < 1 ||
+    !Number.isSafeInteger(bookerId) ||
+    bookerId < 1 ||
+    !billingMonth ||
+    expectedReadyCount < 1
+  ) {
+    throw new Error("Monthly invoice draft preparation requires verified Company and Booker identity.");
   }
 
   const linkedTrips = (await loadAdminMonthlyInvoiceDraftTripCandidatesRead(group)).map(
@@ -13107,7 +13153,9 @@ async function saveAdminMonthlyInvoiceDraftPreparation({
   const response = await fetch(adminMonthlyInvoiceDraftsApiPath, {
     body: JSON.stringify({
       ...sharedPayload,
-      customer_id: clean(group.customer_id) || null,
+      booker_id: bookerId,
+      company_id: companyId,
+      customer_id: customerId,
       linked_trips: linkedTrips,
     }),
     headers: {
@@ -33297,10 +33345,37 @@ export default function Home() {
   };
   const monthlyBillingSavedGroupingPrimaryGroup =
     adminMonthlyBillingGroupingReadState.groups[0] || null;
+  const monthlyBillingSavedCustomerId = clean(monthlyBillingSavedGroupingPrimaryGroup?.customer_id);
+  const monthlyBillingSavedCompanyId = Number(monthlyBillingSavedGroupingPrimaryGroup?.company_id);
+  const monthlyBillingSavedBookerId = Number(monthlyBillingSavedGroupingPrimaryGroup?.booker_id);
+  const monthlyBillingSavedMonth = clean(monthlyBillingSavedGroupingPrimaryGroup?.billing_month);
+  const monthlyBillingSavedIdentityComplete = Boolean(
+    monthlyBillingSavedCustomerId &&
+    Number.isSafeInteger(monthlyBillingSavedCompanyId) &&
+    monthlyBillingSavedCompanyId > 0 &&
+    Number.isSafeInteger(monthlyBillingSavedBookerId) &&
+    monthlyBillingSavedBookerId > 0 &&
+    monthlyBillingSavedMonth,
+  );
+  const matchesMonthlyBillingSavedIdentity = (record: {
+    billing_month?: string | null;
+    booker_id?: number | null;
+    company_id?: number | null;
+    customer_id?: string | null;
+  }) =>
+    monthlyBillingSavedIdentityComplete &&
+    clean(record.customer_id) === monthlyBillingSavedCustomerId &&
+    Number(record.company_id) === monthlyBillingSavedCompanyId &&
+    Number(record.booker_id) === monthlyBillingSavedBookerId &&
+    clean(record.billing_month) === monthlyBillingSavedMonth;
   const monthlyBillingDraftPlanPrimaryPlan =
-    adminMonthlyBillingDraftPlanReadState.draftPlans[0] || null;
+    adminMonthlyBillingDraftPlanReadState.draftPlans.find(
+      matchesMonthlyBillingSavedIdentity,
+    ) || null;
   const monthlyInvoiceDraftPrimaryDraft =
-    adminMonthlyInvoiceDraftReadState.invoiceDrafts[0] || null;
+    adminMonthlyInvoiceDraftReadState.invoiceDrafts.find(
+      matchesMonthlyBillingSavedIdentity,
+    ) || null;
   const monthlyInvoiceDraftItemReviewPrimaryReview = monthlyInvoiceDraftPrimaryDraft
     ? adminMonthlyInvoiceDraftItemReviewReadState.itemReviews.find(
         (review) => clean(review.draft_id) === clean(monthlyInvoiceDraftPrimaryDraft.id),
@@ -34152,6 +34227,7 @@ export default function Home() {
     adminMonthlyBillingDraftPlanAction === "save-draft-plan";
   const monthlyBillingDraftPlanSaveDisabled =
     !monthlyBillingSavedGroupingPrimaryGroup ||
+    !monthlyBillingSavedIdentityComplete ||
     monthlyBillingSavedGroupingTotalTrips < 1 ||
     monthlyBillingSavedGroupingLoading ||
     monthlyBillingDraftPlanLoading ||
@@ -34190,6 +34266,9 @@ export default function Home() {
       setAdminMonthlyBillingDraftPlanReadState((current) => {
         const savedId = clean(savedPlan.id);
         const savedAccount = clean(savedPlan.customer_account);
+        const savedCustomerId = clean(savedPlan.customer_id);
+        const savedCompanyId = Number(savedPlan.company_id);
+        const savedBookerId = Number(savedPlan.booker_id);
         const savedMonth = clean(savedPlan.billing_month);
         const savedMonthLabel = adminMonthlyBillingGroupingMonthLabel(savedMonth);
         const savedStatusLabel = adminMonthlyBillingDraftPlanStatusLabel(savedPlan.draft_status);
@@ -34198,7 +34277,12 @@ export default function Home() {
             return false;
           }
 
-          return clean(plan.customer_account) !== savedAccount || clean(plan.billing_month) !== savedMonth;
+          return (
+            clean(plan.customer_id) !== savedCustomerId ||
+            Number(plan.company_id) !== savedCompanyId ||
+            Number(plan.booker_id) !== savedBookerId ||
+            clean(plan.billing_month) !== savedMonth
+          );
         });
 
         return {
@@ -34227,6 +34311,7 @@ export default function Home() {
   const monthlyInvoiceDraftSaving = adminMonthlyInvoiceDraftAction === "save-draft-prep";
   const monthlyInvoiceDraftSaveDisabled =
     !monthlyBillingSavedGroupingPrimaryGroup ||
+    !monthlyBillingSavedIdentityComplete ||
     monthlyBillingSavedGroupingReadyTripsCount < 1 ||
     monthlyBillingSavedGroupingLoading ||
     monthlyInvoiceDraftLoading ||
@@ -34266,6 +34351,9 @@ export default function Home() {
       setAdminMonthlyInvoiceDraftReadState((current) => {
         const savedId = clean(savedDraft.id);
         const savedAccount = clean(savedDraft.customer_account);
+        const savedCustomerId = clean(savedDraft.customer_id);
+        const savedCompanyId = Number(savedDraft.company_id);
+        const savedBookerId = Number(savedDraft.booker_id);
         const savedMonth = clean(savedDraft.billing_month);
         const savedActionLabel = monthlyInvoiceDraftPrimaryDraft ? "Refreshed" : "Created";
         const savedMonthLabel = adminMonthlyBillingGroupingMonthLabel(savedMonth);
@@ -34275,7 +34363,12 @@ export default function Home() {
             return false;
           }
 
-          return clean(draft.customer_account) !== savedAccount || clean(draft.billing_month) !== savedMonth;
+          return (
+            clean(draft.customer_id) !== savedCustomerId ||
+            Number(draft.company_id) !== savedCompanyId ||
+            Number(draft.booker_id) !== savedBookerId ||
+            clean(draft.billing_month) !== savedMonth
+          );
         });
 
         return {

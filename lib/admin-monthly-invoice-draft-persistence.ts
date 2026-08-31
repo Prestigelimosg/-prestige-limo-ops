@@ -61,8 +61,10 @@ export type AdminMonthlyInvoiceDraftTripLinkInput = {
 export type AdminMonthlyInvoiceDraftInput = {
   billing_month: string;
   blocked_count: number;
+  booker_id: number;
+  company_id: number;
   customer_account: string;
-  customer_id: string | null;
+  customer_id: string;
   draft_status: AdminMonthlyInvoiceDraftStatus;
   linked_trips: AdminMonthlyInvoiceDraftTripLinkInput[];
   ready_count: number;
@@ -76,7 +78,10 @@ export type AdminMonthlyInvoiceDraftInput = {
 export type AdminMonthlyInvoiceDraftUpdateInput = {
   billing_month: string | null;
   blocked_count: number | null;
+  booker_id: number | null;
+  company_id: number | null;
   customer_account: string | null;
+  customer_id: string | null;
   draft_id: string | null;
   draft_status: AdminMonthlyInvoiceDraftStatus;
   ready_count: number | null;
@@ -107,11 +112,14 @@ export type AdminMonthlyInvoiceDraftTripLinkRecord =
 
 export type AdminMonthlyInvoiceDraftRecord = Omit<
   AdminMonthlyInvoiceDraftInput,
-  "linked_trips"
+  "booker_id" | "company_id" | "customer_id" | "linked_trips"
 > & {
   actor_label: string | null;
   actor_role: "admin" | "dispatcher" | "system";
   created_at: string | null;
+  booker_id: number | null;
+  company_id: number | null;
+  customer_id: string | null;
   id: string | null;
   linked_trips: AdminMonthlyInvoiceDraftTripLinkRecord[];
   source_surface: "admin_api" | "admin_dashboard" | "migration" | "system";
@@ -148,7 +156,7 @@ const maxDraftCount = 10000;
 const maxReadRows = 500;
 const maxLinkedTrips = 250;
 const invoiceDraftSelect =
-  "id, customer_account, customer_id, billing_month, draft_status, readiness_status, ready_count, blocked_count, total_count, source_grouping_summary, safe_draft_note, safe_draft_context, source_surface, actor_role, actor_label, created_at, updated_at";
+  "id, customer_account, customer_id, company_id, booker_id, billing_month, draft_status, readiness_status, ready_count, blocked_count, total_count, source_grouping_summary, safe_draft_note, safe_draft_context, source_surface, actor_role, actor_label, created_at, updated_at";
 const invoiceDraftTripLinkSelect =
   "id, draft_id, booking_reference, closeout_id, trip_readiness_status, closeout_status, billing_prep_readiness, safe_trip_context, created_at, updated_at";
 const disabledInvoiceDraftPersistenceError =
@@ -178,6 +186,8 @@ const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedCreateFields = new Set([
   "billing_month",
   "blocked_count",
+  "booker_id",
+  "company_id",
   "customer_account",
   "customer_id",
   "draft_status",
@@ -195,7 +205,10 @@ const allowedCreateFields = new Set([
 const allowedUpdateFields = new Set([
   "billing_month",
   "blocked_count",
+  "booker_id",
+  "company_id",
   "customer_account",
+  "customer_id",
   "draft_id",
   "draft_status",
   "draft_summary",
@@ -303,6 +316,12 @@ function textOrNull(value: unknown) {
   const trimmed = String(value).trim();
 
   return trimmed || null;
+}
+
+function safeIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function normalizeToken(value: string) {
@@ -731,6 +750,8 @@ function normalizeInvoiceDraftRecord(
       : "system",
     billing_month: textOrNull(row.billing_month) || "",
     blocked_count: parseCount(row.blocked_count) || 0,
+    booker_id: safeIdentityId(row.booker_id),
+    company_id: safeIdentityId(row.company_id),
     created_at: textOrNull(row.created_at),
     customer_account: textOrNull(row.customer_account) || "",
     customer_id: textOrNull(row.customer_id),
@@ -971,6 +992,8 @@ export function parseAdminMonthlyInvoiceDraftCreatePayload(
 
   const customerAccount = safeText(record.customer_account, maxCustomerAccountLength);
   const customerId = optionalSafeText(record.customer_id, maxCustomerIdLength);
+  const companyId = safeIdentityId(record.company_id);
+  const bookerId = safeIdentityId(record.booker_id);
   const billingMonth = validBillingMonth(record.billing_month);
   const draftStatus = validDraftStatus(record.draft_status) || "draft_planning";
   const readinessStatus = validReadinessStatus(record.readiness_status);
@@ -985,7 +1008,9 @@ export function parseAdminMonthlyInvoiceDraftCreatePayload(
 
   if (
     !customerAccount ||
-    (hasOwn(record, "customer_id") && record.customer_id && !customerId) ||
+    !customerId ||
+    !companyId ||
+    !bookerId ||
     !billingMonth ||
     !draftStatus ||
     !readinessStatus ||
@@ -1023,6 +1048,8 @@ export function parseAdminMonthlyInvoiceDraftCreatePayload(
     data: {
       billing_month: billingMonth,
       blocked_count: blockedCount,
+      booker_id: bookerId,
+      company_id: companyId,
       customer_account: customerAccount,
       customer_id: customerId,
       draft_status: draftStatus,
@@ -1059,6 +1086,18 @@ export function parseAdminMonthlyInvoiceDraftUpdatePayload(
     record.customer_account === undefined || record.customer_account === null || record.customer_account === ""
       ? null
       : safeText(record.customer_account, maxCustomerAccountLength);
+  const customerId =
+    record.customer_id === undefined || record.customer_id === null || record.customer_id === ""
+      ? null
+      : optionalSafeText(record.customer_id, maxCustomerIdLength);
+  const companyId =
+    record.company_id === undefined || record.company_id === null || record.company_id === ""
+      ? null
+      : safeIdentityId(record.company_id);
+  const bookerId =
+    record.booker_id === undefined || record.booker_id === null || record.booker_id === ""
+      ? null
+      : safeIdentityId(record.booker_id);
   const billingMonth =
     record.billing_month === undefined || record.billing_month === null || record.billing_month === ""
       ? null
@@ -1095,8 +1134,11 @@ export function parseAdminMonthlyInvoiceDraftUpdatePayload(
 
   if (
     (record.draft_id && !draftId) ||
-    (!draftId && (!customerAccount || !billingMonth)) ||
+    (!draftId && (!customerAccount || !customerId || !companyId || !bookerId || !billingMonth)) ||
     (record.customer_account && !customerAccount) ||
+    (record.customer_id && !customerId) ||
+    (record.company_id && !companyId) ||
+    (record.booker_id && !bookerId) ||
     (record.billing_month && !billingMonth) ||
     !draftStatus ||
     (record.readiness_status && !readinessStatus) ||
@@ -1127,7 +1169,10 @@ export function parseAdminMonthlyInvoiceDraftUpdatePayload(
     data: {
       billing_month: billingMonth,
       blocked_count: blockedCount,
+      booker_id: bookerId,
+      company_id: companyId,
       customer_account: customerAccount,
+      customer_id: customerId,
       draft_id: draftId,
       draft_status: draftStatus,
       ready_count: readyCount,
@@ -1234,12 +1279,17 @@ async function assertSubmittedTripLinksAreUnlinked(
 
 async function loadExistingDraftIdsForDuplicateGuard(
   client: SupabaseClient,
-  input: Pick<AdminMonthlyInvoiceDraftInput, "billing_month" | "customer_account">,
+  input: Pick<
+    AdminMonthlyInvoiceDraftInput,
+    "billing_month" | "booker_id" | "company_id" | "customer_id"
+  >,
 ): Promise<AdminBookingResult<Set<string>>> {
   const { data, error } = await client
     .from("monthly_invoice_drafts")
-    .select("id, customer_account, billing_month")
-    .eq("customer_account", input.customer_account)
+    .select("id, customer_id, company_id, booker_id, billing_month")
+    .eq("customer_id", input.customer_id)
+    .eq("company_id", input.company_id)
+    .eq("booker_id", input.booker_id)
     .eq("billing_month", input.billing_month)
     .limit(25);
 
@@ -1327,7 +1377,9 @@ export async function createAdminMonthlyInvoiceDraftFromGroup(
 
   const lockResult = await assertAdminMonthlyInvoiceDraftUnlocked(clientResult.data, {
     billing_month: input.billing_month,
-    customer_account: input.customer_account,
+    booker_id: input.booker_id,
+    company_id: input.company_id,
+    customer_id: input.customer_id,
   });
 
   if (!lockResult.ok) {
@@ -1356,6 +1408,8 @@ export async function createAdminMonthlyInvoiceDraftFromGroup(
   const payload = {
     billing_month: input.billing_month,
     blocked_count: input.blocked_count,
+    booker_id: input.booker_id,
+    company_id: input.company_id,
     customer_account: input.customer_account,
     customer_id: input.customer_id,
     draft_status: input.draft_status,
@@ -1373,7 +1427,7 @@ export async function createAdminMonthlyInvoiceDraftFromGroup(
   const { data, error } = await clientResult.data
     .from("monthly_invoice_drafts")
     .upsert(payload, {
-      onConflict: "customer_account,billing_month",
+      onConflict: "customer_id,company_id,booker_id,billing_month",
     })
     .select(invoiceDraftSelect)
     .single();
@@ -1446,7 +1500,9 @@ export async function updateAdminMonthlyInvoiceDraftStatus(
 
   const lockResult = await assertAdminMonthlyInvoiceDraftUnlocked(clientResult.data, {
     billing_month: input.billing_month,
-    customer_account: input.customer_account,
+    booker_id: input.booker_id,
+    company_id: input.company_id,
+    customer_id: input.customer_id,
     draft_id: input.draft_id,
   });
 
@@ -1475,7 +1531,9 @@ export async function updateAdminMonthlyInvoiceDraftStatus(
   updateQuery = input.draft_id
     ? updateQuery.eq("id", input.draft_id)
     : updateQuery
-        .eq("customer_account", input.customer_account || "")
+        .eq("customer_id", input.customer_id || "")
+        .eq("company_id", input.company_id || 0)
+        .eq("booker_id", input.booker_id || 0)
         .eq("billing_month", input.billing_month || "");
 
   const { data, error } = await updateQuery.select(invoiceDraftSelect).single();

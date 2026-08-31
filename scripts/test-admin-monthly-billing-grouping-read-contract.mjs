@@ -87,10 +87,16 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverDevicePushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(driverDevicePushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    driverDevicePushPath,
+    "function sendDriverDevicePushAlertForAppUpdate() { throw new Error('Unexpected driver push call.'); }\nmodule.exports = { sendDriverDevicePushAlertForAppUpdate };",
+  );
   await writeFile(
     supabasePath,
     [
@@ -341,6 +347,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "MONTHLY-READY-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-04T10:00:00.000Z",
@@ -348,6 +356,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "MONTHLY-BLOCKED-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-18T10:00:00.000Z",
@@ -355,6 +365,8 @@ const seed = {
     {
       admin_internal_status: "draft",
       booking_reference: "MONTHLY-DRAFT-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-20T10:00:00.000Z",
@@ -362,6 +374,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "MONTHLY-READY-JUL",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-07-02T10:00:00.000Z",
@@ -369,6 +383,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "MONTHLY-READY-ZETA-JUN",
+      booker_id: 201,
+      company_id: 200,
       customer_display_name: "Zeta Account",
       customer_id: "customer-zeta",
       pickup_at: "2026-06-24T10:00:00.000Z",
@@ -376,6 +392,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "MONTHLY-MISSING-CLOSEOUT-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-26T10:00:00.000Z",
@@ -383,6 +401,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "MONTHLY-COVERED-JUN",
+      booker_id: 101,
+      company_id: 100,
       public_booking_reference: "10077",
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
@@ -456,6 +476,7 @@ const seed = {
   ],
   customer_invoice_records: [
     {
+      booker_id: 101,
       customer_id: "customer-acme",
       document_state: "issued",
       document_type: "invoice",
@@ -699,6 +720,8 @@ try {
       {
         admin_internal_status: "completed",
         booking_reference: "MONTHLY-DSP-INVALID-JC",
+        booker_id: 301,
+        company_id: 300,
         customer_display_name: "DSP Timing Account",
         customer_id: "customer-dsp-timing",
         pickup_at: "2026-07-25T08:00:00.000Z",
@@ -707,6 +730,8 @@ try {
       {
         admin_internal_status: "completed",
         booking_reference: "MONTHLY-DSP-MISSING-JC",
+        booker_id: 301,
+        company_id: 300,
         customer_display_name: "DSP Timing Account",
         customer_id: "customer-dsp-timing",
         pickup_at: "2026-07-26T08:00:00.000Z",
@@ -715,6 +740,8 @@ try {
       {
         admin_internal_status: "completed",
         booking_reference: "MONTHLY-DSP-CORRECTED",
+        booker_id: 301,
+        company_id: 300,
         customer_display_name: "DSP Timing Account",
         customer_id: "customer-dsp-timing",
         pickup_at: "2026-07-27T15:00:00.000Z",
@@ -723,6 +750,8 @@ try {
       {
         admin_internal_status: "completed",
         booking_reference: "MONTHLY-DSP-COVERED",
+        booker_id: 301,
+        company_id: 300,
         public_booking_reference: "10999",
         customer_display_name: "DSP Timing Account",
         customer_id: "customer-dsp-timing",
@@ -732,6 +761,8 @@ try {
       {
         admin_internal_status: "completed",
         booking_reference: "MONTHLY-NON-DSP-READY",
+        booker_id: 301,
+        company_id: 300,
         customer_display_name: "DSP Timing Account",
         customer_id: "customer-dsp-timing",
         pickup_at: "2026-07-29T08:00:00.000Z",
@@ -757,6 +788,7 @@ try {
     })),
     customer_invoice_records: [
       {
+        booker_id: 301,
         customer_id: "customer-dsp-timing",
         document_state: "issued",
         document_type: "invoice",
@@ -1099,6 +1131,175 @@ try {
   ]);
   assertNoLeaks(readResult, "monthly billing grouping response should stay safe");
 
+  setEnv(enabledEnv());
+
+  const companyBookerIsolationSeed = {
+    bookings: [
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-BOOKER-A",
+        booker_id: 701,
+        company_id: 700,
+        customer_display_name: "Shared Company · Su Ling",
+        customer_id: "customer-shared",
+        pickup_at: "2026-07-04T10:00:00.000Z",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-BOOKER-B",
+        booker_id: 702,
+        company_id: 700,
+        customer_display_name: "Shared Company · Su Ling",
+        customer_id: "customer-shared",
+        pickup_at: "2026-07-05T10:00:00.000Z",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-LEGACY-NULL",
+        booker_id: null,
+        company_id: null,
+        customer_display_name: "Shared Company · Su Ling",
+        customer_id: "customer-legacy-null",
+        pickup_at: "2026-07-06T10:00:00.000Z",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-LEGACY-NO-BOOKER",
+        booker_id: null,
+        company_id: 700,
+        customer_display_name: "Shared Company · Su Ling",
+        customer_id: "customer-legacy-company-only",
+        pickup_at: "2026-07-07T10:00:00.000Z",
+      },
+      {
+        admin_internal_status: "completed",
+        booking_reference: "MONTHLY-LEGACY-NO-COMPANY",
+        booker_id: 703,
+        company_id: null,
+        customer_display_name: "Shared Company · Su Ling",
+        customer_id: "customer-legacy-booker-only",
+        pickup_at: "2026-07-08T10:00:00.000Z",
+      },
+    ],
+    completed_booking_closeouts: [
+      "MONTHLY-BOOKER-A",
+      "MONTHLY-BOOKER-B",
+      "MONTHLY-LEGACY-NULL",
+      "MONTHLY-LEGACY-NO-BOOKER",
+      "MONTHLY-LEGACY-NO-COMPANY",
+    ].map((booking_reference) => ({
+      billing_prep_readiness: "ready",
+      booking_reference,
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: "not_applicable",
+      extra_charges_readiness: "none",
+      updated_at: "2026-07-31T12:00:00.000Z",
+    })),
+    customer_invoice_records: [
+      {
+        booker_id: 701,
+        customer_id: "customer-shared",
+        document_state: "issued",
+        document_type: "invoice",
+        line_items: [{ bookingReference: "MONTHLY-BOOKER-B" }],
+        reference: "CROSS-BOOKER-INVOICE",
+      },
+    ],
+  };
+  const companyBookerIsolationMock = installMockClient(companyBookerIsolationSeed);
+  const companyBookerIsolationResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-monthly-billing-groups?billing_month=2026-07",
+        { headers: sessionHeaders() },
+      ),
+    ),
+  );
+
+  assert.equal(companyBookerIsolationResult.status, 200);
+  const companyBookerJobs = companyBookerIsolationResult.body.groups.flatMap(
+    (group) => group.jobs,
+  );
+  const jobByReference = new Map(
+    companyBookerJobs.map((job) => [job.booking_reference, job]),
+  );
+  const bookerAGroup = companyBookerIsolationResult.body.groups.find((group) =>
+    group.jobs.some((job) => job.booking_reference === "MONTHLY-BOOKER-A"),
+  );
+  const bookerBGroup = companyBookerIsolationResult.body.groups.find((group) =>
+    group.jobs.some((job) => job.booking_reference === "MONTHLY-BOOKER-B"),
+  );
+  const companyBookerInvoiceRead = companyBookerIsolationMock.client.selectHistory.find(
+    (entry) => entry.table === "customer_invoice_records",
+  );
+  assert.deepEqual(
+    {
+      booker_a_group_scope: {
+        booker_id: bookerAGroup?.booker_id ?? null,
+        company_id: bookerAGroup?.company_id ?? null,
+        customer_id: bookerAGroup?.customer_id ?? null,
+      },
+      booker_b_group_scope: {
+        booker_id: bookerBGroup?.booker_id ?? null,
+        company_id: bookerBGroup?.company_id ?? null,
+        customer_id: bookerBGroup?.customer_id ?? null,
+      },
+      cross_booker_invoice_status:
+        jobByReference.get("MONTHLY-BOOKER-B")?.safe_billing_status ?? null,
+      exact_bookers_share_group: bookerAGroup === bookerBGroup,
+      invoice_read_includes_booker_id:
+        companyBookerInvoiceRead?.selectedColumns.includes("booker_id") ?? false,
+      legacy_identity_statuses: [
+        "MONTHLY-LEGACY-NULL",
+        "MONTHLY-LEGACY-NO-BOOKER",
+        "MONTHLY-LEGACY-NO-COMPANY",
+      ].map((bookingReference) => ({
+        booking_reference: bookingReference,
+        safe_billing_status:
+          jobByReference.get(bookingReference)?.safe_billing_status ?? null,
+        safe_reason: jobByReference.get(bookingReference)?.safe_reason ?? null,
+      })),
+      booking_read_includes_booker_id:
+        companyBookerIsolationMock.client.selectHistory[0].selectedColumns.includes("booker_id"),
+      booking_read_includes_company_id:
+        companyBookerIsolationMock.client.selectHistory[0].selectedColumns.includes("company_id"),
+      write_count: companyBookerIsolationMock.client.operations.length,
+    },
+    {
+      booker_a_group_scope: {
+        booker_id: 701,
+        company_id: 700,
+        customer_id: "customer-shared",
+      },
+      booker_b_group_scope: {
+        booker_id: 702,
+        company_id: 700,
+        customer_id: "customer-shared",
+      },
+      cross_booker_invoice_status: "ready",
+      exact_bookers_share_group: false,
+      invoice_read_includes_booker_id: true,
+      legacy_identity_statuses: [
+        "MONTHLY-LEGACY-NULL",
+        "MONTHLY-LEGACY-NO-BOOKER",
+        "MONTHLY-LEGACY-NO-COMPANY",
+      ].map((bookingReference) => ({
+        booking_reference: bookingReference,
+        safe_billing_status: "blocked",
+        safe_reason: "Verified Company and Booker identity is missing or incomplete.",
+      })),
+      booking_read_includes_booker_id: true,
+      booking_read_includes_company_id: true,
+      write_count: 0,
+    },
+    "monthly billing must use exact verified Company and Booker identity and fail closed for legacy partial identity",
+  );
+  assertNoLeaks(
+    companyBookerIsolationResult,
+    "Company and Booker isolated monthly billing grouping response should stay safe",
+  );
+
   setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
 
   const dispatcherMock = installMockClient(seed);
@@ -1166,6 +1367,8 @@ try {
         {
           admin_internal_status: "completed",
           booking_reference: "MONTHLY-FOUNDATION-AUG",
+          booker_id: 401,
+          company_id: 400,
           customer_display_name: "Foundation Account",
           customer_id: "customer-foundation",
           pickup_datetime: "2026-08-12T10:00:00.000Z",

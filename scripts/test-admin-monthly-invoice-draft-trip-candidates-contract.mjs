@@ -89,10 +89,16 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverDevicePushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(driverDevicePushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    driverDevicePushPath,
+    "function sendDriverDevicePushAlertForAppUpdate() { throw new Error('Unexpected driver push call.'); }\nmodule.exports = { sendDriverDevicePushAlertForAppUpdate };",
+  );
   await writeFile(
     supabasePath,
     [
@@ -327,6 +333,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "TRIP-CANDIDATE-READY-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-04T10:00:00.000Z",
@@ -334,6 +342,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "TRIP-CANDIDATE-BLOCKED-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-18T10:00:00.000Z",
@@ -341,6 +351,8 @@ const seed = {
     {
       admin_internal_status: "draft",
       booking_reference: "TRIP-CANDIDATE-DRAFT-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-20T10:00:00.000Z",
@@ -348,6 +360,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "TRIP-CANDIDATE-READY-JUL",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-07-02T10:00:00.000Z",
@@ -355,6 +369,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "TRIP-CANDIDATE-UNBILLED-JUN",
+      booker_id: 101,
+      company_id: 100,
       customer_display_name: "Acme Corporate",
       customer_id: "customer-acme",
       pickup_at: "2026-06-27T10:00:00.000Z",
@@ -362,6 +378,8 @@ const seed = {
     {
       admin_internal_status: "completed",
       booking_reference: "TRIP-CANDIDATE-ZETA-JUN",
+      booker_id: 201,
+      company_id: 200,
       customer_display_name: "Zeta Account",
       customer_id: "customer-zeta",
       pickup_at: "2026-06-24T10:00:00.000Z",
@@ -452,12 +470,18 @@ const seed = {
   monthly_invoice_drafts: [
     {
       billing_month: "2026-06",
+      booker_id: 101,
+      company_id: 100,
       customer_account: "Acme Corporate",
+      customer_id: "customer-acme",
       id: "draft-acme-june",
     },
     {
       billing_month: "2026-06",
+      booker_id: 901,
+      company_id: 900,
       customer_account: "Other Customer",
+      customer_id: "customer-other",
       id: "draft-other-customer",
     },
   ],
@@ -476,12 +500,16 @@ try {
   assert.deepEqual(
     candidates.parseAdminMonthlyInvoiceDraftTripCandidateParams({
       billing_month: "2026-06",
+      booker_id: 101,
+      company_id: 100,
       customer_account: "Acme Corporate",
       customer_id: "customer-acme",
     }),
     {
       data: {
         billing_month: "2026-06",
+        booker_id: 101,
+        company_id: 100,
         customer_account: "Acme Corporate",
         customer_id: "customer-acme",
         limit: 250,
@@ -511,19 +539,35 @@ try {
       "bad customer id",
       {
         billing_month: "2026-06",
+        booker_id: 101,
+        company_id: 100,
         customer_account: "Acme Corporate",
         customer_id: "payment_link",
       },
-      "Malformed monthly invoice draft trip candidate customer_id rejected.",
+      "Verified Company and Booker identity is required for monthly invoice draft trip candidates.",
     ],
     [
       "bad limit",
-      { billing_month: "2026-06", customer_account: "Acme Corporate", limit: "999" },
+      {
+        billing_month: "2026-06",
+        booker_id: 101,
+        company_id: 100,
+        customer_account: "Acme Corporate",
+        customer_id: "customer-acme",
+        limit: "999",
+      },
       "Malformed monthly invoice draft trip candidate limit rejected.",
     ],
     [
       "bad page",
-      { billing_month: "2026-06", customer_account: "Acme Corporate", page: "0" },
+      {
+        billing_month: "2026-06",
+        booker_id: 101,
+        company_id: 100,
+        customer_account: "Acme Corporate",
+        customer_id: "customer-acme",
+        page: "0",
+      },
       "Malformed monthly invoice draft trip candidate page rejected.",
     ],
   ]) {
@@ -541,7 +585,7 @@ try {
   const disabledResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&company_id=100&booker_id=101",
         {
           headers: adminHeaders(),
         },
@@ -612,7 +656,7 @@ try {
   const readResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&limit=2&page=1",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&company_id=100&booker_id=101&limit=2&page=1",
         {
           headers: sessionHeaders(),
         },
@@ -628,8 +672,10 @@ try {
       billing_month: candidate.billing_month,
       billing_prep_readiness: candidate.billing_prep_readiness,
       booking_reference: candidate.booking_reference,
+      booker_id: candidate.booker_id,
       closeout_id: candidate.closeout_id,
       closeout_status: candidate.closeout_status,
+      company_id: candidate.company_id,
       customer_account: candidate.customer_account,
       customer_id: candidate.customer_id,
       safe_trip_context: candidate.safe_trip_context,
@@ -640,8 +686,10 @@ try {
         billing_month: "2026-06",
         billing_prep_readiness: "ready",
         booking_reference: "TRIP-CANDIDATE-READY-JUN",
+        booker_id: 101,
         closeout_id: "11111111-1111-4111-8111-111111111111",
         closeout_status: "ready_for_billing_prep",
+        company_id: 100,
         customer_account: "Acme Corporate",
         customer_id: "customer-acme",
         safe_trip_context: {
@@ -686,6 +734,12 @@ try {
       "bookings",
     ],
   );
+  assert.deepEqual(readMock.client.selectHistory[4].filters, [
+    { column: "customer_id", operator: "eq", value: "customer-acme" },
+    { column: "company_id", operator: "eq", value: 100 },
+    { column: "booker_id", operator: "eq", value: 101 },
+    { column: "billing_month", operator: "eq", value: "2026-06" },
+  ]);
   assert.equal(
     readResult.body.trip_candidates.some(
       (candidate) => candidate.booking_reference === "TRIP-CANDIDATE-BLOCKED-JUN",
@@ -700,7 +754,7 @@ try {
   const allAcmeResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&limit=5&page=1",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&company_id=100&booker_id=101&limit=5&page=1",
         {
           headers: sessionHeaders(),
         },
@@ -722,13 +776,35 @@ try {
   assert.equal(allAcmeMock.client.operations.length, 0);
   assertNoLeaks(allAcmeResult, "all Acme trip candidate response should stay safe");
 
+  setEnv(enabledEnv());
+
+  const otherBookerMock = installMockClient(seed);
+  const otherBookerResult = await readRouteResponse(
+    await route.GET(
+      new Request(
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&company_id=100&booker_id=102&limit=5&page=1",
+        { headers: sessionHeaders() },
+      ),
+    ),
+  );
+
+  assert.equal(otherBookerResult.status, 200);
+  assert.deepEqual(otherBookerResult.body.trip_candidates, []);
+  assert.deepEqual(otherBookerResult.body.summary, {
+    blocked_count: 0,
+    ready_count: 0,
+    total_count: 0,
+  });
+  assert.equal(otherBookerMock.client.operations.length, 0);
+  assertNoLeaks(otherBookerResult, "other Booker trip candidate response should stay safe");
+
   setEnv(enabledEnv({ PRESTIGE_ADMIN_DISPATCHER_SESSION_ROLE: "dispatcher" }));
 
   const dispatcherMock = installMockClient(seed);
   const dispatcherResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Zeta+Account",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Zeta+Account&customer_id=customer-zeta&company_id=200&booker_id=201",
         {
           headers: sessionHeaders(),
         },
@@ -761,7 +837,7 @@ try {
   const linkFailureResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&company_id=100&booker_id=101",
         {
           headers: sessionHeaders(),
         },
@@ -791,6 +867,8 @@ try {
         {
           admin_internal_status: "completed",
           booking_reference: "TRIP-CANDIDATE-FOUNDATION-AUG",
+          booker_id: 401,
+          company_id: 400,
           customer_display_name: "Foundation Account",
           customer_id: "customer-foundation",
           pickup_datetime: "2026-08-12T10:00:00.000Z",
@@ -824,7 +902,7 @@ try {
   const fallbackResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-08&customer_account=Foundation+Account",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-08&customer_account=Foundation+Account&customer_id=customer-foundation&company_id=400&booker_id=401",
         {
           headers: sessionHeaders(),
         },
@@ -856,7 +934,10 @@ try {
   const localActorResult = await candidates.loadAdminMonthlyInvoiceDraftTripCandidates(
     {
       billing_month: "2026-06",
+      booker_id: 101,
+      company_id: 100,
       customer_account: "Acme Corporate",
+      customer_id: "customer-acme",
     },
     {
       actor_label: "Local dev actor",
@@ -888,7 +969,7 @@ try {
   const failureResult = await readRouteResponse(
     await route.GET(
       new Request(
-        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate",
+        "http://localhost/api/admin-monthly-invoice-draft-trip-candidates?billing_month=2026-06&customer_account=Acme+Corporate&customer_id=customer-acme&company_id=100&booker_id=101",
         {
           headers: sessionHeaders(),
         },

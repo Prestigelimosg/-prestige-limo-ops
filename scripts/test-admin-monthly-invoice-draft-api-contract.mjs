@@ -90,10 +90,16 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverDevicePushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(driverDevicePushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    driverDevicePushPath,
+    "function sendDriverDevicePushAlertForAppUpdate() { throw new Error('Unexpected driver push call.'); }\nmodule.exports = { sendDriverDevicePushAlertForAppUpdate };",
+  );
   await writeFile(
     supabasePath,
     [
@@ -563,6 +569,8 @@ const seed = {
       actor_role: "admin",
       billing_month: "2026-06",
       blocked_count: 1,
+      booker_id: 101,
+      company_id: 100,
       created_at: "2026-06-07T00:00:00.000Z",
       customer_account: "Acme Corporate",
       customer_id: "customer-acme",
@@ -589,6 +597,8 @@ const seed = {
       actor_role: "admin",
       billing_month: "2026-06",
       blocked_count: 0,
+      booker_id: 201,
+      company_id: 200,
       created_at: "2026-06-07T00:00:00.000Z",
       customer_account: "Zeta Account",
       customer_id: "customer-zeta",
@@ -616,6 +626,8 @@ const seed = {
 const validCreatePayload = {
   billing_month: "2026-07",
   blocked_count: 0,
+  booker_id: 401,
+  company_id: 400,
   customer_account: "Foundation Account",
   customer_id: "customer-foundation",
   draft_status: "draft_planning",
@@ -653,7 +665,10 @@ const lockedDraftSeed = {
   monthly_invoice_drafts: [
     {
       billing_month: validCreatePayload.billing_month,
+      booker_id: validCreatePayload.booker_id,
+      company_id: validCreatePayload.company_id,
       customer_account: validCreatePayload.customer_account,
+      customer_id: validCreatePayload.customer_id,
       id: lockedDraftId,
     },
   ],
@@ -694,6 +709,15 @@ try {
     true,
     "Expected valid safe invoice draft payload",
   );
+  for (const missingIdentityField of ["customer_id", "company_id", "booker_id"]) {
+    const missingIdentityPayload = { ...validCreatePayload };
+    delete missingIdentityPayload[missingIdentityField];
+    assert.equal(
+      persistence.parseAdminMonthlyInvoiceDraftCreatePayload(missingIdentityPayload).ok,
+      false,
+      `Expected missing ${missingIdentityField} to fail closed`,
+    );
+  }
 
   for (const [label, params, expectedError] of [
     ["bad draft id", { draft_id: "not-a-uuid" }, "Malformed monthly invoice draft id rejected."],
@@ -987,6 +1011,8 @@ try {
           ...validCreatePayload,
           billing_month: "2026-06",
           blocked_count: 0,
+          booker_id: 101,
+          company_id: 100,
           customer_account: "Acme Corporate",
           customer_id: "customer-acme",
           linked_trips: [
@@ -1048,7 +1074,7 @@ try {
   assert.equal(saveMock.client.operations[0].action, "upsert");
   assert.equal(saveMock.client.operations[0].table, "monthly_invoice_drafts");
   assert.deepEqual(saveMock.client.operations[0].options, {
-    onConflict: "customer_account,billing_month",
+    onConflict: "customer_id,company_id,booker_id,billing_month",
   });
   assert.equal(saveMock.client.operations[1].action, "delete");
   assert.equal(saveMock.client.operations[1].table, "monthly_invoice_draft_trip_links");
@@ -1095,6 +1121,12 @@ try {
   assert.equal(lockedCreateMock.client.operations.length, 0);
   assert.equal(lockedCreateMock.client.selectHistory.length, 2);
   assert.equal(lockedCreateMock.client.selectHistory[0].table, "monthly_invoice_drafts");
+  assert.deepEqual(lockedCreateMock.client.selectHistory[0].filters, [
+    { column: "customer_id", type: "eq", value: validCreatePayload.customer_id },
+    { column: "company_id", type: "eq", value: validCreatePayload.company_id },
+    { column: "booker_id", type: "eq", value: validCreatePayload.booker_id },
+    { column: "billing_month", type: "eq", value: validCreatePayload.billing_month },
+  ]);
   assert.equal(lockedCreateMock.client.selectHistory[1].table, "monthly_invoice_issue_records");
   assertNoLeaks(lockedCreateResult, "locked monthly invoice draft create response should stay safe");
 

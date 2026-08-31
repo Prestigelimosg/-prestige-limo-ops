@@ -104,8 +104,17 @@ export function isFirstSingaporeCalendarDay(now: Date) {
   return singaporeDateParts(now)?.day === 1;
 }
 
-function draftKey(customerAccount: string, billingMonth: string) {
-  return `${customerAccount.trim()}::${billingMonth}`;
+function draftKey(
+  customerId: string | null | undefined,
+  companyId: number | null | undefined,
+  bookerId: number | null | undefined,
+  billingMonth: string,
+) {
+  const cleanedCustomerId = String(customerId || "").trim();
+
+  return cleanedCustomerId && companyId && bookerId
+    ? `${cleanedCustomerId}::${companyId}::${bookerId}::${billingMonth}`
+    : null;
 }
 
 function sortedReferences(values: Array<string | null | undefined>) {
@@ -220,26 +229,55 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
     });
   }
 
-  const existingDraftsByKey = new Map(
-    existingDraftResult.data.invoice_drafts.map((draft) => [
-      draftKey(draft.customer_account, draft.billing_month),
-      draft,
-    ]),
-  );
+  const existingDraftsByKey = new Map<
+    string,
+    (typeof existingDraftResult.data.invoice_drafts)[number]
+  >();
+
+  for (const draft of existingDraftResult.data.invoice_drafts) {
+    const key = draftKey(
+      draft.customer_id,
+      draft.company_id,
+      draft.booker_id,
+      draft.billing_month,
+    );
+
+    if (key) {
+      existingDraftsByKey.set(key, draft);
+    }
+  }
   let failedCount = 0;
   let preparedCount = 0;
   let skippedExistingCount = 0;
 
   for (const group of groupResult.data.groups) {
-    if (group.ready_count < 1) {
+    const customerId = group.customer_id;
+    const companyId = group.company_id;
+    const bookerId = group.booker_id;
+    const groupDraftKey = draftKey(
+      customerId,
+      companyId,
+      bookerId,
+      group.billing_month,
+    );
+
+    if (
+      group.ready_count < 1 ||
+      !groupDraftKey ||
+      !customerId ||
+      !companyId ||
+      !bookerId
+    ) {
       continue;
     }
 
     const candidateResult = await loadAdminMonthlyInvoiceDraftTripCandidates(
       {
         billing_month: group.billing_month,
+        booker_id: bookerId,
+        company_id: companyId,
         customer_account: group.customer_account,
-        customer_id: group.customer_id,
+        customer_id: customerId,
         limit: batchLimit,
         page: 1,
       },
@@ -261,9 +299,7 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
       continue;
     }
 
-    const existingDraft = existingDraftsByKey.get(
-      draftKey(group.customer_account, group.billing_month),
-    );
+    const existingDraft = existingDraftsByKey.get(groupDraftKey);
     const readyReferences = sortedReferences(
       candidateResult.data.trip_candidates.map((candidate) => candidate.booking_reference),
     );
@@ -279,8 +315,10 @@ export async function runCodexMonthlyInvoiceDraftAutoPreparation({
     const draftInput: AdminMonthlyInvoiceDraftInput = {
       billing_month: group.billing_month,
       blocked_count: 0,
+      booker_id: bookerId,
+      company_id: companyId,
       customer_account: group.customer_account,
-      customer_id: group.customer_id,
+      customer_id: customerId,
       draft_status: "pending_admin_review",
       linked_trips: candidateResult.data.trip_candidates.map((candidate) => ({
         billing_prep_readiness: candidate.billing_prep_readiness,

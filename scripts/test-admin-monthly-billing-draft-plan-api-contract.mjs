@@ -87,10 +87,16 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverDevicePushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(driverDevicePushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    driverDevicePushPath,
+    "function sendDriverDevicePushAlertForAppUpdate() { throw new Error('Unexpected driver push call.'); }\nmodule.exports = { sendDriverDevicePushAlertForAppUpdate };",
+  );
   await writeFile(
     supabasePath,
     [
@@ -381,6 +387,8 @@ const seed = {
       actor_role: "admin",
       billing_month: "2026-06",
       blocked_count: 1,
+      booker_id: 101,
+      company_id: 100,
       created_at: "2026-06-07T00:00:00.000Z",
       customer_account: "Acme Corporate",
       customer_id: "customer-acme",
@@ -407,6 +415,8 @@ const seed = {
       actor_role: "admin",
       billing_month: "2026-06",
       blocked_count: 0,
+      booker_id: 201,
+      company_id: 200,
       created_at: "2026-06-07T00:00:00.000Z",
       customer_account: "Zeta Account",
       customer_id: "customer-zeta",
@@ -434,6 +444,8 @@ const seed = {
 const validSavePayload = {
   billing_month: "2026-07",
   blocked_count: 0,
+  booker_id: 401,
+  company_id: 400,
   customer_account: "Foundation Account",
   customer_id: "customer-foundation",
   draft_status: "ready_for_billing_draft_review",
@@ -477,6 +489,15 @@ try {
     true,
     "Expected valid safe draft plan payload",
   );
+  for (const missingIdentityField of ["customer_id", "company_id", "booker_id"]) {
+    const missingIdentityPayload = { ...validSavePayload };
+    delete missingIdentityPayload[missingIdentityField];
+    assert.equal(
+      persistence.parseAdminMonthlyBillingDraftPlanSavePayload(missingIdentityPayload).ok,
+      false,
+      `Expected missing ${missingIdentityField} to fail closed`,
+    );
+  }
 
   for (const [label, params, expectedError] of [
     [
@@ -669,7 +690,7 @@ try {
   assert.deepEqual(saveMock.client.operations[0], {
     action: "upsert",
     options: {
-      onConflict: "customer_account,billing_month",
+      onConflict: "customer_id,company_id,booker_id,billing_month",
     },
     payload: {
       ...validSavePayload,

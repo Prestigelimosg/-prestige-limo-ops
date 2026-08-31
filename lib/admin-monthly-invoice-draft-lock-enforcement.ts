@@ -8,12 +8,16 @@ export const lockedMonthlyInvoiceDraftError =
 const lockReadFailureError = "Admin monthly invoice draft lock check failed safely.";
 const issueRecordLockSelect =
   "id, draft_id, issue_record_status, draft_lock_status, invoice_number_status";
-const invoiceDraftIdentitySelect = "id, customer_account, billing_month";
+const invoiceDraftIdentitySelect =
+  "id, customer_id, company_id, booker_id, billing_month";
 const nonLockingIssueRecordStatuses = new Set(["archived", "voided"]);
 
 type DraftLockScope = {
   billing_month?: string | null;
+  booker_id?: number | null;
+  company_id?: number | null;
   customer_account?: string | null;
+  customer_id?: string | null;
   draft_id?: string | null;
 };
 
@@ -72,14 +76,18 @@ function issueRecordLocksDraft(row: UnknownRecord) {
   return textOrNull(row.draft_lock_status) === "locked_for_issue";
 }
 
-async function loadDraftIdsForAccountMonth(
+async function loadDraftIdsForVerifiedIdentityMonth(
   client: SupabaseClient,
-  scope: Required<Pick<DraftLockScope, "billing_month" | "customer_account">>,
+  scope: Required<
+    Pick<DraftLockScope, "billing_month" | "booker_id" | "company_id" | "customer_id">
+  >,
 ): Promise<AdminBookingResult<string[]>> {
   const { data, error } = await client
     .from("monthly_invoice_drafts")
     .select(invoiceDraftIdentitySelect)
-    .eq("customer_account", scope.customer_account)
+    .eq("customer_id", scope.customer_id)
+    .eq("company_id", scope.company_id)
+    .eq("booker_id", scope.booker_id)
     .eq("billing_month", scope.billing_month)
     .limit(25);
 
@@ -123,10 +131,18 @@ export async function assertAdminMonthlyInvoiceDraftUnlocked(
   const directDraftId = textOrNull(scope.draft_id);
   const draftIds = directDraftId ? [directDraftId] : [];
 
-  if (draftIds.length === 0 && scope.customer_account && scope.billing_month) {
-    const draftIdResult = await loadDraftIdsForAccountMonth(client, {
+  if (
+    draftIds.length === 0 &&
+    scope.customer_id &&
+    scope.company_id &&
+    scope.booker_id &&
+    scope.billing_month
+  ) {
+    const draftIdResult = await loadDraftIdsForVerifiedIdentityMonth(client, {
       billing_month: scope.billing_month,
-      customer_account: scope.customer_account,
+      booker_id: scope.booker_id,
+      company_id: scope.company_id,
+      customer_id: scope.customer_id,
     });
 
     if (!draftIdResult.ok) {

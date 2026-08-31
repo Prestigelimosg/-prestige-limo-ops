@@ -36,8 +36,10 @@ export type AdminMonthlyBillingDraftPlanSafeContext = {
 export type AdminMonthlyBillingDraftPlanInput = {
   billing_month: string;
   blocked_count: number;
+  booker_id: number;
+  company_id: number;
   customer_account: string;
-  customer_id: string | null;
+  customer_id: string;
   draft_status: AdminMonthlyBillingDraftStatus;
   ready_count: number;
   readiness_status: AdminMonthlyBillingReadinessStatus;
@@ -56,10 +58,16 @@ export type AdminMonthlyBillingDraftPlanLoadParams = {
   readiness_status: AdminMonthlyBillingReadinessStatus | null;
 };
 
-export type AdminMonthlyBillingDraftPlanRecord = AdminMonthlyBillingDraftPlanInput & {
+export type AdminMonthlyBillingDraftPlanRecord = Omit<
+  AdminMonthlyBillingDraftPlanInput,
+  "booker_id" | "company_id" | "customer_id"
+> & {
   actor_label: string | null;
   actor_role: "admin" | "dispatcher" | "system";
   created_at: string | null;
+  booker_id: number | null;
+  company_id: number | null;
+  customer_id: string | null;
   id: string | null;
   source_surface: "admin_api" | "admin_dashboard" | "migration" | "system";
   updated_at: string | null;
@@ -94,7 +102,7 @@ const maxDraftPlanPage = 1000;
 const maxDraftPlanCount = 10000;
 const maxReadRows = 500;
 const draftPlanSelect =
-  "id, customer_account, customer_id, billing_month, draft_status, readiness_status, ready_count, blocked_count, total_count, source_grouping_summary, safe_draft_note, safe_draft_context, source_surface, actor_role, actor_label, created_at, updated_at";
+  "id, customer_account, customer_id, company_id, booker_id, billing_month, draft_status, readiness_status, ready_count, blocked_count, total_count, source_grouping_summary, safe_draft_note, safe_draft_context, source_surface, actor_role, actor_label, created_at, updated_at";
 const disabledDraftPlanPersistenceError =
   "Admin monthly billing draft planning persistence is not enabled on this server.";
 const safeDraftPlanConfigError =
@@ -114,6 +122,8 @@ const allowedActorRoles = new Set(["admin", "dispatcher", "system"]);
 const allowedTopLevelFields = new Set([
   "billing_month",
   "blocked_count",
+  "booker_id",
+  "company_id",
   "customer_account",
   "customer_id",
   "draft_status",
@@ -209,6 +219,12 @@ function textOrNull(value: unknown) {
   const trimmed = String(value).trim();
 
   return trimmed || null;
+}
+
+function safeIdentityId(value: unknown) {
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function normalizeToken(value: string) {
@@ -562,6 +578,8 @@ function normalizeDraftPlanRecord(row: UnknownRecord): AdminMonthlyBillingDraftP
       : "system",
     billing_month: textOrNull(row.billing_month) || "",
     blocked_count: parseCount(row.blocked_count) || 0,
+    booker_id: safeIdentityId(row.booker_id),
+    company_id: safeIdentityId(row.company_id),
     created_at: textOrNull(row.created_at),
     customer_account: textOrNull(row.customer_account) || "",
     customer_id: textOrNull(row.customer_id),
@@ -740,6 +758,8 @@ export function parseAdminMonthlyBillingDraftPlanSavePayload(
 
   const customerAccount = safeText(record.customer_account, maxCustomerAccountLength);
   const customerId = optionalSafeText(record.customer_id, maxCustomerIdLength);
+  const companyId = safeIdentityId(record.company_id);
+  const bookerId = safeIdentityId(record.booker_id);
   const billingMonth = validBillingMonth(record.billing_month);
   const draftStatus = validDraftStatus(record.draft_status);
   const readinessStatus = validReadinessStatus(record.readiness_status);
@@ -755,7 +775,9 @@ export function parseAdminMonthlyBillingDraftPlanSavePayload(
 
   if (
     !customerAccount ||
-    (hasOwn(record, "customer_id") && record.customer_id && !customerId) ||
+    !customerId ||
+    !companyId ||
+    !bookerId ||
     !billingMonth ||
     !draftStatus ||
     !readinessStatus ||
@@ -779,6 +801,8 @@ export function parseAdminMonthlyBillingDraftPlanSavePayload(
     data: {
       billing_month: billingMonth,
       blocked_count: blockedCount,
+      booker_id: bookerId,
+      company_id: companyId,
       customer_account: customerAccount,
       customer_id: customerId,
       draft_status: draftStatus,
@@ -858,7 +882,7 @@ export async function saveAdminMonthlyBillingDraftPlan(
   const { data, error } = await clientResult.data
     .from("monthly_billing_draft_plans")
     .upsert(payload, {
-      onConflict: "customer_account,billing_month",
+      onConflict: "customer_id,company_id,booker_id,billing_month",
     })
     .select(draftPlanSelect)
     .single();

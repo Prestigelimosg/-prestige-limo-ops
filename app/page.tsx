@@ -42356,7 +42356,7 @@ export default function Home() {
                         ⌄
                       </span>
                     </summary>
-                    <div className="absolute left-0 top-full z-30 mt-1 w-full overflow-hidden rounded-md border border-sky-300 bg-white shadow-lg">
+                    <div className="relative z-30 mt-1 w-full overflow-hidden rounded-md border border-sky-300 bg-white shadow-lg md:absolute md:left-0 md:top-full">
                       <label className="block p-2">
                         <span className="sr-only">Quick search customer account</span>
                         <input

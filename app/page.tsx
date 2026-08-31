@@ -2716,6 +2716,61 @@ type AdminAiAccountBriefResult = {
   }>;
 };
 
+type AdminAiMonthlyBillingReviewStatus =
+  | "already_invoiced"
+  | "blocked"
+  | "locked"
+  | "pending_admin_review"
+  | "ready";
+
+type AdminAiMonthlyBillingReviewRow = {
+  already_invoiced_count: number;
+  billing_month: string;
+  blocked_count: number;
+  blocked_reasons: string[];
+  booker_id: number | null;
+  booker_name: string | null;
+  company_id: number | null;
+  company_name: string | null;
+  customer_id: number | null;
+  draft_plan_status: string | null;
+  identity_status: "manual_review" | "verified";
+  invoice_draft_status: string | null;
+  locked: boolean;
+  open_customer_path: string | null;
+  ready_count: number;
+  reference_count: number;
+  references: Array<{
+    booking_reference: string;
+    display_booking_reference: string;
+    reason: string;
+    status: "Already invoiced" | "Blocked" | "Ready";
+  }>;
+  row_key: string;
+  status: AdminAiMonthlyBillingReviewStatus;
+  total_count: number;
+};
+
+type AdminAiMonthlyBillingReviewResult = {
+  answer: string;
+  billing_month: string;
+  has_more: boolean;
+  intent: "find_monthly_billing_review";
+  page: number;
+  page_size: number;
+  query: string;
+  read_at: string;
+  rows: AdminAiMonthlyBillingReviewRow[];
+  status: "blocked" | "empty" | "results";
+  total_count: number;
+};
+
+function adminAiMonthlyBillingStatusLabel(status: AdminAiMonthlyBillingReviewStatus) {
+  if (status === "already_invoiced") return "Already invoiced";
+  if (status === "pending_admin_review") return "pending_admin_review";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 type AdminAiBookingBriefResult = {
   answer: string;
   booking: {
@@ -14961,6 +15016,8 @@ export default function Home() {
     useState<AdminAiInvoiceSearchResult | null>(null);
   const [adminAiAccountBriefResult, setAdminAiAccountBriefResult] =
     useState<AdminAiAccountBriefResult | null>(null);
+  const [adminAiMonthlyBillingReviewResult, setAdminAiMonthlyBillingReviewResult] =
+    useState<AdminAiMonthlyBillingReviewResult | null>(null);
   const [adminAiTodaysWorkBriefResult, setAdminAiTodaysWorkBriefResult] =
     useState<AdminAiTodaysWorkBriefResult | null>(null);
   const [adminAiTodaysWorkHandoffPendingKey, setAdminAiTodaysWorkHandoffPendingKey] = useState("");
@@ -20060,6 +20117,7 @@ export default function Home() {
     setAdminAiAccountBriefResult(null);
     setAdminAiBookingBriefResult(null);
     setAdminAiInvoiceSearchResult(null);
+    setAdminAiMonthlyBillingReviewResult(null);
     setAdminAiTodaysWorkBriefResult(null);
     setBookingMessage("");
     setBookingMessageResetKey((current) => current + 1);
@@ -20991,6 +21049,8 @@ export default function Home() {
     appendTodaysWorkPage = false,
     accountBriefPage = 1,
     appendAccountBriefPage = false,
+    monthlyBillingReviewPage = 1,
+    appendMonthlyBillingReviewPage = false,
   ) {
     if (!aiAssistSafetyAccepted) {
       setAiAssistMessage({
@@ -21010,10 +21070,16 @@ export default function Home() {
     setAiAssistMessage(null);
     setAiAssistLoading(true);
 
-    if (!appendInvoiceSearchPage && !appendTodaysWorkPage && !appendAccountBriefPage) {
+    if (
+      !appendInvoiceSearchPage &&
+      !appendTodaysWorkPage &&
+      !appendAccountBriefPage &&
+      !appendMonthlyBillingReviewPage
+    ) {
       setAdminAiAccountBriefResult(null);
       setAdminAiBookingBriefResult(null);
       setAdminAiInvoiceSearchResult(null);
+      setAdminAiMonthlyBillingReviewResult(null);
       setAdminAiTodaysWorkBriefResult(null);
     }
 
@@ -21029,6 +21095,7 @@ export default function Home() {
           history: aiConversationMessages.slice(-6),
           invoice_search_page: invoiceSearchPage,
           message: question,
+          monthly_billing_review_page: monthlyBillingReviewPage,
           todays_work_page: todaysWorkPage,
         }),
       });
@@ -21039,6 +21106,7 @@ export default function Home() {
         error?: unknown;
         invoice_search?: unknown;
         model?: unknown;
+        monthly_billing_review?: unknown;
         ok?: unknown;
         todays_work_brief?: unknown;
         usage?: { totalTokens?: unknown };
@@ -21051,6 +21119,46 @@ export default function Home() {
             ? responseBody.error
             : "AI conversation failed. Please try again.",
         });
+        return;
+      }
+
+      const rawMonthlyBillingReview = responseBody.monthly_billing_review;
+      const monthlyBillingReview =
+        rawMonthlyBillingReview !== null &&
+        typeof rawMonthlyBillingReview === "object" &&
+        !Array.isArray(rawMonthlyBillingReview) &&
+        (rawMonthlyBillingReview as { intent?: unknown }).intent === "find_monthly_billing_review"
+          ? rawMonthlyBillingReview as AdminAiMonthlyBillingReviewResult
+          : null;
+
+      if (monthlyBillingReview) {
+        setAdminAiAccountBriefResult(null);
+        setAdminAiBookingBriefResult(null);
+        setAdminAiInvoiceSearchResult(null);
+        setAdminAiTodaysWorkBriefResult(null);
+        setAdminAiMonthlyBillingReviewResult((current) => {
+          if (
+            !appendMonthlyBillingReviewPage ||
+            !current ||
+            current.query !== monthlyBillingReview.query ||
+            monthlyBillingReview.page !== current.page + 1
+          ) {
+            return monthlyBillingReview;
+          }
+
+          const seenRowKeys = new Set(current.rows.map((row) => row.row_key));
+          return {
+            ...monthlyBillingReview,
+            rows: [
+              ...current.rows,
+              ...monthlyBillingReview.rows.filter((row) => !seenRowKeys.has(row.row_key)),
+            ],
+          };
+        });
+        setBookingMessage("");
+        setAiAssistResponseNote(
+          "Prestige live records · Read-only monthly billing review. No AI model, draft or invoice write, scheduler action, payment, provider call, message, or external send was used.",
+        );
         return;
       }
 
@@ -21067,6 +21175,7 @@ export default function Home() {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
         setAdminAiInvoiceSearchResult(null);
+        setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult((current) => {
           if (
             !appendTodaysWorkPage ||
@@ -21106,6 +21215,7 @@ export default function Home() {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(bookingBrief);
         setAdminAiInvoiceSearchResult(null);
+        setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setBookingMessage("");
         setAiAssistResponseNote(
@@ -21126,6 +21236,7 @@ export default function Home() {
       if (accountBrief) {
         setAdminAiBookingBriefResult(null);
         setAdminAiInvoiceSearchResult(null);
+        setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setAdminAiAccountBriefResult((current) => {
           if (
@@ -21169,6 +21280,7 @@ export default function Home() {
       if (invoiceSearch) {
         setAdminAiAccountBriefResult(null);
         setAdminAiBookingBriefResult(null);
+        setAdminAiMonthlyBillingReviewResult(null);
         setAdminAiTodaysWorkBriefResult(null);
         setAdminAiInvoiceSearchResult((current) => {
           if (
@@ -21245,6 +21357,30 @@ export default function Home() {
       adminAiAccountBriefResult.page + 1,
       true,
     );
+  }
+
+  async function handleAdminAiMonthlyBillingReviewLoadMore() {
+    if (!adminAiMonthlyBillingReviewResult?.has_more || aiAssistLoading) return;
+
+    await runAdminAiConversation(
+      adminAiMonthlyBillingReviewResult.query,
+      1,
+      false,
+      1,
+      false,
+      1,
+      false,
+      adminAiMonthlyBillingReviewResult.page + 1,
+      true,
+    );
+  }
+
+  function handleAdminAiMonthlyBillingReviewHandoff() {
+    selectAppTab("dashboard");
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>("[data-admin-monthly-billing-month-grouping-review]")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   }
 
   async function handleAdminAiTodaysWorkLoadMore() {
@@ -42721,6 +42857,131 @@ export default function Home() {
                       Ask for today&apos;s work brief, one exact booking, an exact Company + Booker account, Jobs not billed yet, or issued invoices. Read-only skills cannot change app data.
                     </p>
                   )}
+                  {adminAiMonthlyBillingReviewResult ? (
+                    <div
+                      className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-slate-900"
+                      data-admin-ai-monthly-billing-review="true"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                            Prestige live records · Read only
+                          </p>
+                          <p className="mt-1 font-semibold" data-admin-ai-monthly-billing-review-answer="true">
+                            {adminAiMonthlyBillingReviewResult.answer}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Billing month {adminAiMonthlyBillingReviewResult.billing_month} · Read {new Date(adminAiMonthlyBillingReviewResult.read_at).toLocaleString("en-SG", {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                              timeZone: "Asia/Singapore",
+                            })}
+                          </p>
+                        </div>
+                        <button
+                          className="inline-flex min-h-9 items-center rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                          data-admin-ai-monthly-billing-open-review="true"
+                          onClick={handleAdminAiMonthlyBillingReviewHandoff}
+                          type="button"
+                        >
+                          Open monthly billing review
+                        </button>
+                      </div>
+                      {adminAiMonthlyBillingReviewResult.rows.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {adminAiMonthlyBillingReviewResult.rows.map((row) => (
+                            <section
+                              className="rounded-md border border-amber-200 bg-white p-3"
+                              data-admin-ai-monthly-billing-row={row.row_key}
+                              key={row.row_key}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="font-bold text-amber-950">
+                                    {row.identity_status === "verified"
+                                      ? `${row.company_name} · ${row.booker_name}`
+                                      : "Identity needs manual review"}
+                                  </p>
+                                  <p className="text-xs text-slate-600">
+                                    {row.identity_status === "verified"
+                                      ? `Customer #${row.customer_id} · Company #${row.company_id} · Booker #${row.booker_id}`
+                                      : "No Company-wide or name-only fallback was used."}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`rounded-full px-2 py-1 text-xs font-bold ${
+                                    row.status === "blocked"
+                                      ? "bg-rose-100 text-rose-900"
+                                      : row.status === "locked"
+                                        ? "bg-slate-200 text-slate-900"
+                                        : row.status === "pending_admin_review"
+                                          ? "bg-violet-100 text-violet-900"
+                                          : row.status === "already_invoiced"
+                                            ? "bg-emerald-100 text-emerald-900"
+                                            : "bg-sky-100 text-sky-900"
+                                  }`}
+                                  data-admin-ai-monthly-billing-status={row.status}
+                                >
+                                  {adminAiMonthlyBillingStatusLabel(row.status)}
+                                </span>
+                              </div>
+                              <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                                <p><strong>Ready:</strong> {row.ready_count}</p>
+                                <p><strong>Blocked:</strong> {row.blocked_count}</p>
+                                <p><strong>Already invoiced:</strong> {row.already_invoiced_count}</p>
+                                <p><strong>Total trips:</strong> {row.total_count}</p>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                                <p><strong>References shown:</strong> {row.reference_count}</p>
+                                {row.draft_plan_status ? <p><strong>Draft plan:</strong> {row.draft_plan_status}</p> : null}
+                                {row.invoice_draft_status ? <p><strong>Invoice draft:</strong> {row.invoice_draft_status}</p> : null}
+                                {row.locked ? <p><strong>Draft lock:</strong> locked</p> : null}
+                              </div>
+                              {row.blocked_reasons.map((reason) => (
+                                <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-900" key={reason}>
+                                  {reason}
+                                </p>
+                              ))}
+                              {row.references.length > 0 ? (
+                                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                                  {row.references.map((reference) => (
+                                    <p
+                                      className="rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5 text-xs"
+                                      data-admin-ai-monthly-billing-reference={reference.booking_reference}
+                                      key={`${row.row_key}:${reference.booking_reference}`}
+                                    >
+                                      <strong>{reference.display_booking_reference}</strong> · {reference.status}
+                                      {reference.reason ? ` · ${reference.reason}` : ""}
+                                    </p>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {row.open_customer_path ? (
+                                <Link
+                                  className="mt-2 inline-flex min-h-9 items-center rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                                  data-admin-ai-monthly-billing-open-customer="true"
+                                  href={row.open_customer_path}
+                                >
+                                  Open Customer Account
+                                </Link>
+                              ) : null}
+                            </section>
+                          ))}
+                        </div>
+                      ) : null}
+                      {adminAiMonthlyBillingReviewResult.has_more ? (
+                        <button
+                          className="mt-3 min-h-9 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-admin-ai-monthly-billing-load-more="true"
+                          disabled={aiAssistLoading}
+                          onClick={handleAdminAiMonthlyBillingReviewLoadMore}
+                          type="button"
+                        >
+                          {aiAssistLoading ? "Loading..." : "Load more"}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {adminAiTodaysWorkBriefResult ? (
                     <div
                       className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-slate-900"

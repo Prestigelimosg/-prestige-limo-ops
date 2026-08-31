@@ -2,6 +2,7 @@ import {
   adminAiAssistantPurpose,
   requestAdminAiConversation,
 } from "../../../lib/admin-ai-runtime";
+import { executeAdminAiInvoiceSearch } from "../../../lib/admin-ai-invoice-search";
 import { resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,36 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonBody(request);
+  const invoiceSearch = await executeAdminAiInvoiceSearch(
+    body.message,
+    body.invoice_search_page,
+    boundary.context,
+  );
+
+  if (invoiceSearch.matched) {
+    if (!invoiceSearch.ok) {
+      return Response.json(
+        {
+          error: invoiceSearch.error,
+          external_send: false,
+          ok: false,
+          write_action: false,
+        },
+        { status: invoiceSearch.status },
+      );
+    }
+
+    return Response.json({
+      answer: invoiceSearch.data.answer,
+      external_send: false,
+      invoice_search: invoiceSearch.data,
+      model: "Prestige live records",
+      ok: true,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      write_action: false,
+    });
+  }
+
   const result = await requestAdminAiConversation(body.message, body.history);
 
   if (!result.ok) {

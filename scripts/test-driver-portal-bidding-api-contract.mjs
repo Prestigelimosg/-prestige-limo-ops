@@ -90,10 +90,21 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const driverPushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(driverPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    driverPushPath,
+    [
+      "async function sendDriverDevicePushAlertForAppUpdate() {",
+      "  throw new Error('Driver bidding guard must never enter the device-push lane.');",
+      "}",
+      "module.exports = { sendDriverDevicePushAlertForAppUpdate };",
+    ].join("\n"),
+  );
   await writeFile(
     supabasePath,
     [

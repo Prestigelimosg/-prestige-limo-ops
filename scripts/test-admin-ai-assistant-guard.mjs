@@ -9,6 +9,7 @@ const paths = {
   book: path.join(process.cwd(), "app/book/page.tsx"),
   route: path.join(process.cwd(), "app/api/admin-ai-assistant/route.ts"),
   runtime: path.join(process.cwd(), "lib/admin-ai-runtime.ts"),
+  invoiceSearch: path.join(process.cwd(), "lib/admin-ai-invoice-search.ts"),
   schema: path.join(process.cwd(), "lib/ai-parser-schema.ts"),
   boundary: path.join(process.cwd(), "lib/admin-dispatcher-auth-boundary.ts"),
 };
@@ -77,6 +78,7 @@ const tempDir = await mkdtemp(path.join(process.cwd(), ".tmp-admin-ai-assistant-
 const targets = {
   route: path.join(tempDir, "app/api/admin-ai-assistant/route.js"),
   runtime: path.join(tempDir, "lib/admin-ai-runtime.js"),
+  invoiceSearch: path.join(tempDir, "lib/admin-ai-invoice-search.js"),
   schema: path.join(tempDir, "lib/ai-parser-schema.js"),
   boundary: path.join(tempDir, "lib/admin-dispatcher-auth-boundary.js"),
 };
@@ -86,6 +88,9 @@ try {
     await mkdir(path.dirname(targets[name]), { recursive: true });
     await writeFile(targets[name], transpile(sources[name], paths[name]));
   }
+  const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
+  await mkdir(path.dirname(serverOnlyPath), { recursive: true });
+  await writeFile(serverOnlyPath, "module.exports = {};\n");
   const require = createRequire(import.meta.url);
   const route = require(targets.route);
   const runtime = require(targets.runtime);

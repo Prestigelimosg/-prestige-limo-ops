@@ -6436,7 +6436,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 1,
+          booker_id: 602,
+          company_id: 601,
           customer_account: "BROWSER UI TEST COMPANY",
+          customer_id: "801",
           ready_count: 2,
           safe_readiness_status: "mixed",
           total_count: 3,
@@ -16798,7 +16801,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 1,
+          booker_id: 502,
+          company_id: 501,
           customer_account: "LOADED SAVED COMPANY",
+          customer_id: "801",
           ready_count: 2,
           safe_readiness_status: "mixed",
           total_count: 3,
@@ -16806,7 +16812,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 0,
+          booker_id: 602,
+          company_id: 601,
           customer_account: "SECOND SAVED ACCOUNT",
+          customer_id: "802",
           ready_count: 1,
           safe_readiness_status: "ready",
           total_count: 1,
@@ -16818,7 +16827,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 1,
+          booker_id: 502,
+          company_id: 501,
           customer_account: "LOADED SAVED COMPANY",
+          customer_id: "801",
           draft_status: "planning",
           id: "focused-browser-monthly-billing-draft-plan-one",
           readiness_status: "mixed",
@@ -16828,7 +16840,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 0,
+          booker_id: 602,
+          company_id: 601,
           customer_account: "SECOND SAVED ACCOUNT",
+          customer_id: "802",
           draft_status: "ready_for_billing_draft_review",
           id: "focused-browser-monthly-billing-draft-plan-two",
           readiness_status: "ready",
@@ -16842,7 +16857,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 1,
+          booker_id: 502,
+          company_id: 501,
           customer_account: "LOADED SAVED COMPANY",
+          customer_id: "801",
           draft_status: "pending_admin_review",
           id: "11111111-1111-4111-8111-111111111111",
           linked_trips: [
@@ -16862,7 +16880,10 @@ async function runChromeTest() {
         {
           billing_month: "2026-05",
           blocked_count: 0,
+          booker_id: 602,
+          company_id: 601,
           customer_account: "SECOND SAVED ACCOUNT",
+          customer_id: "802",
           draft_status: "admin_reviewed",
           id: "22222222-2222-4222-8222-222222222222",
           linked_trips: [
@@ -17585,7 +17606,9 @@ async function runChromeTest() {
               draftPlan,
               ...(window.__prestigeMonthlyBillingDraftPlans || []).filter(
                 (plan) =>
-                  plan.customer_account !== draftPlan.customer_account ||
+                  plan.customer_id !== draftPlan.customer_id ||
+                  plan.company_id !== draftPlan.company_id ||
+                  plan.booker_id !== draftPlan.booker_id ||
                   plan.billing_month !== draftPlan.billing_month,
               ),
             ];
@@ -17619,6 +17642,8 @@ async function runChromeTest() {
                 booking_reference: "ui-cleanup-load-fixture",
                 closeout_id: "aaaaaaaa-1111-4111-8111-111111111111",
                 closeout_status: "closed",
+                booker_id: 502,
+                company_id: 501,
                 customer_account: "LOADED SAVED COMPANY",
                 customer_id: "801",
                 safe_trip_context: {
@@ -17633,6 +17658,8 @@ async function runChromeTest() {
                 booking_reference: "ui-second-ready-load-fixture",
                 closeout_id: "bbbbbbbb-2222-4222-8222-222222222222",
                 closeout_status: "closed",
+                booker_id: 502,
+                company_id: 501,
                 customer_account: "LOADED SAVED COMPANY",
                 customer_id: "801",
                 safe_trip_context: {
@@ -17760,7 +17787,9 @@ async function runChromeTest() {
           if (method === "POST") {
             const existingDraftIndex = (window.__prestigeMonthlyInvoiceDrafts || []).findIndex(
               (draft) =>
-                draft.customer_account === parsedBody?.customer_account &&
+                draft.customer_id === parsedBody?.customer_id &&
+                draft.company_id === parsedBody?.company_id &&
+                draft.booker_id === parsedBody?.booker_id &&
                 draft.billing_month === parsedBody?.billing_month,
             );
             const existingDraft =
@@ -19696,7 +19725,10 @@ async function runChromeTest() {
         body: {
           billing_month: monthlyBillingDraftPlanPostRequest.body.billing_month,
           blocked_count: monthlyBillingDraftPlanPostRequest.body.blocked_count,
+          booker_id: monthlyBillingDraftPlanPostRequest.body.booker_id,
+          company_id: monthlyBillingDraftPlanPostRequest.body.company_id,
           customer_account: monthlyBillingDraftPlanPostRequest.body.customer_account,
+          customer_id: monthlyBillingDraftPlanPostRequest.body.customer_id,
           draft_status: monthlyBillingDraftPlanPostRequest.body.draft_status,
           ready_count: monthlyBillingDraftPlanPostRequest.body.ready_count,
           readiness_status: monthlyBillingDraftPlanPostRequest.body.readiness_status,
@@ -19711,7 +19743,10 @@ async function runChromeTest() {
         body: {
           billing_month: "2026-05",
           blocked_count: 1,
+          booker_id: 502,
+          company_id: 501,
           customer_account: "LOADED SAVED COMPANY",
+          customer_id: "801",
           draft_status: "blocked",
           ready_count: 2,
           readiness_status: "mixed",
@@ -19729,6 +19764,8 @@ async function runChromeTest() {
       [
         "billing_month",
         "blocked_count",
+        "booker_id",
+        "company_id",
         "customer_account",
         "customer_id",
         "draft_status",
@@ -19790,6 +19827,8 @@ async function runChromeTest() {
         body: {
           billing_month: monthlyInvoiceDraftPostRequest.body.billing_month,
           blocked_count: monthlyInvoiceDraftPostRequest.body.blocked_count,
+          booker_id: monthlyInvoiceDraftPostRequest.body.booker_id,
+          company_id: monthlyInvoiceDraftPostRequest.body.company_id,
           customer_account: monthlyInvoiceDraftPostRequest.body.customer_account,
           customer_id: monthlyInvoiceDraftPostRequest.body.customer_id,
           draft_status: monthlyInvoiceDraftPostRequest.body.draft_status,
@@ -19809,8 +19848,10 @@ async function runChromeTest() {
         body: {
           billing_month: "2026-05",
           blocked_count: 0,
+          booker_id: 502,
+          company_id: 501,
           customer_account: "LOADED SAVED COMPANY",
-          customer_id: null,
+          customer_id: "801",
           draft_status: "pending_admin_review",
           linked_trip_references: [
             "ui-cleanup-load-fixture",
@@ -19832,6 +19873,8 @@ async function runChromeTest() {
       [
         "billing_month",
         "blocked_count",
+        "booker_id",
+        "company_id",
         "customer_account",
         "customer_id",
         "draft_status",

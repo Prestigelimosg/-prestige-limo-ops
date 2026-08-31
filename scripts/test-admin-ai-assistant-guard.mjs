@@ -9,7 +9,10 @@ const paths = {
   book: path.join(process.cwd(), "app/book/page.tsx"),
   route: path.join(process.cwd(), "app/api/admin-ai-assistant/route.ts"),
   runtime: path.join(process.cwd(), "lib/admin-ai-runtime.ts"),
+  bookingBrief: path.join(process.cwd(), "lib/admin-ai-booking-brief.ts"),
   invoiceSearch: path.join(process.cwd(), "lib/admin-ai-invoice-search.ts"),
+  driverJobLink: path.join(process.cwd(), "lib/driver-job-link.ts"),
+  driverJobStatusWorkflow: path.join(process.cwd(), "lib/driver-job-status-workflow.ts"),
   schema: path.join(process.cwd(), "lib/ai-parser-schema.ts"),
   boundary: path.join(process.cwd(), "lib/admin-dispatcher-auth-boundary.ts"),
 };
@@ -78,7 +81,10 @@ const tempDir = await mkdtemp(path.join(process.cwd(), ".tmp-admin-ai-assistant-
 const targets = {
   route: path.join(tempDir, "app/api/admin-ai-assistant/route.js"),
   runtime: path.join(tempDir, "lib/admin-ai-runtime.js"),
+  bookingBrief: path.join(tempDir, "lib/admin-ai-booking-brief.js"),
   invoiceSearch: path.join(tempDir, "lib/admin-ai-invoice-search.js"),
+  driverJobLink: path.join(tempDir, "lib/driver-job-link.js"),
+  driverJobStatusWorkflow: path.join(tempDir, "lib/driver-job-status-workflow.ts"),
   schema: path.join(tempDir, "lib/ai-parser-schema.js"),
   boundary: path.join(tempDir, "lib/admin-dispatcher-auth-boundary.js"),
 };

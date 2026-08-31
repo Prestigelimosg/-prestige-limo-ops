@@ -2667,6 +2667,46 @@ type AdminAiInvoiceSearchResult = {
   total_count: number;
 };
 
+type AdminAiBookingBriefResult = {
+  answer: string;
+  booking: {
+    assigned_driver_name: string | null;
+    assigned_driver_plate: string | null;
+    booker_id: number;
+    booker_name: string;
+    booking_reference: string;
+    company_id: number;
+    company_name: string;
+    customer_id: number;
+    dropoff_location: string | null;
+    evidence: {
+      job_completed_at: string | null;
+      ots_at: string | null;
+      otw_at: string | null;
+      pob_at: string | null;
+    };
+    latest_driver_job_link: {
+      acknowledgement_status: "acknowledged" | "pending";
+      acknowledged_at: string | null;
+      issued_at: string | null;
+      state: "active" | "expired" | "revoked";
+    } | null;
+    open_customer_path: string;
+    persisted_status: string;
+    pickup_at: string | null;
+    pickup_location: string | null;
+    public_booking_reference: string;
+    route: string | null;
+    service_type: string;
+    traveller_id: number | null;
+    traveller_name: string | null;
+  } | null;
+  intent: "find_exact_booking_brief";
+  query: string;
+  read_at: string;
+  status: "ambiguous" | "blocked" | "identity_review" | "not_found" | "results";
+};
+
 type ParsedBooking = Partial<BookingForm> & {
   success?: boolean;
   cleanedLines?: string[];
@@ -14812,6 +14852,9 @@ export default function Home() {
   const [aiAssistMode, setAiAssistMode] = useState<AiAssistMode>("parser");
   const [aiDraft, setAiDraft] = useState<AiParseResult | null>(null);
   const [aiConversationMessages, setAiConversationMessages] = useState<AdminAiConversationMessage[]>([]);
+  const [adminAiBookingBriefResult, setAdminAiBookingBriefResult] =
+    useState<AdminAiBookingBriefResult | null>(null);
+  const [adminAiBookingBriefLoadPending, setAdminAiBookingBriefLoadPending] = useState(false);
   const [adminAiInvoiceSearchResult, setAdminAiInvoiceSearchResult] =
     useState<AdminAiInvoiceSearchResult | null>(null);
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
@@ -19907,6 +19950,7 @@ export default function Home() {
   function clearBookingMessageInput() {
     clearParseArtifacts();
     setAiConversationMessages([]);
+    setAdminAiBookingBriefResult(null);
     setAdminAiInvoiceSearchResult(null);
     setBookingMessage("");
     setBookingMessageResetKey((current) => current + 1);
@@ -20854,6 +20898,7 @@ export default function Home() {
     setAiAssistLoading(true);
 
     if (!appendInvoiceSearchPage) {
+      setAdminAiBookingBriefResult(null);
       setAdminAiInvoiceSearchResult(null);
     }
 
@@ -20872,6 +20917,7 @@ export default function Home() {
       });
       const responseBody = await response.json().catch(() => ({})) as {
         answer?: unknown;
+        booking_brief?: unknown;
         error?: unknown;
         invoice_search?: unknown;
         model?: unknown;
@@ -20889,6 +20935,25 @@ export default function Home() {
         return;
       }
 
+      const rawBookingBrief = responseBody.booking_brief;
+      const bookingBrief =
+        rawBookingBrief !== null &&
+        typeof rawBookingBrief === "object" &&
+        !Array.isArray(rawBookingBrief) &&
+        (rawBookingBrief as { intent?: unknown }).intent === "find_exact_booking_brief"
+          ? rawBookingBrief as AdminAiBookingBriefResult
+          : null;
+
+      if (bookingBrief) {
+        setAdminAiBookingBriefResult(bookingBrief);
+        setAdminAiInvoiceSearchResult(null);
+        setBookingMessage("");
+        setAiAssistResponseNote(
+          "Prestige live records · Read-only booking brief. No AI model, booking write, Calendar call, message, or external send was used.",
+        );
+        return;
+      }
+
       const rawInvoiceSearch = responseBody.invoice_search;
       const invoiceSearch =
         rawInvoiceSearch !== null &&
@@ -20899,6 +20964,7 @@ export default function Home() {
           : null;
 
       if (invoiceSearch) {
+        setAdminAiBookingBriefResult(null);
         setAdminAiInvoiceSearchResult((current) => {
           if (
             !appendInvoiceSearchPage ||
@@ -20960,6 +21026,40 @@ export default function Home() {
       adminAiInvoiceSearchResult.page + 1,
       true,
     );
+  }
+
+  async function handleAdminAiBookingBriefLoadInDispatch() {
+    const exactBookingReference = cleanReferenceText(
+      adminAiBookingBriefResult?.booking?.booking_reference,
+    );
+
+    if (!exactBookingReference || adminAiBookingBriefLoadPending) {
+      return;
+    }
+
+    setAdminAiBookingBriefLoadPending(true);
+    setAiAssistMessage(null);
+
+    try {
+      const exactBookingRecord = await loadExactAdminBookingPersistenceRecord(
+        exactBookingReference,
+        `Exact saved booking ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+      );
+
+      await loadSelectedBooking(
+        adminBookingPersistenceRecordToCalendarBookingRecord(exactBookingRecord),
+        { adminBookingRecordOverride: exactBookingRecord },
+      );
+    } catch (error) {
+      setAiAssistMessage({
+        tone: "error",
+        text: error instanceof Error
+          ? error.message
+          : "The exact saved booking could not be loaded in Dispatch.",
+      });
+    } finally {
+      setAdminAiBookingBriefLoadPending(false);
+    }
   }
 
   function openAdminEmailAiIntakeReview(
@@ -42336,9 +42436,154 @@ export default function Home() {
                     ))
                   ) : (
                     <p className="text-sm text-slate-600">
-                      Ask about the text you provide, or find issued invoices by exact Booker. Read-only skills cannot change app data.
+                      Ask about the text you provide, find one exact booking, or find issued invoices by exact Booker. Read-only skills cannot change app data.
                     </p>
                   )}
+                  {adminAiBookingBriefResult ? (
+                    <div
+                      className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-slate-900"
+                      data-admin-ai-booking-brief="true"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                        Prestige live records · Read only
+                      </p>
+                      <p className="mt-1 font-semibold" data-admin-ai-booking-brief-answer="true">
+                        {adminAiBookingBriefResult.answer}
+                      </p>
+                      {adminAiBookingBriefResult.booking ? (
+                        <div className="mt-3 space-y-3" data-admin-ai-booking-brief-record="true">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="text-lg font-bold text-sky-950">
+                                Booking {adminAiBookingBriefResult.booking.public_booking_reference}
+                              </p>
+                              <p className="font-semibold" data-admin-ai-booking-brief-identity="true">
+                                {adminAiBookingBriefResult.booking.company_name} · {adminAiBookingBriefResult.booking.booker_name}
+                                {adminAiBookingBriefResult.booking.traveller_name
+                                  ? ` · ${adminAiBookingBriefResult.booking.traveller_name}`
+                                  : " · Traveller not set"}
+                              </p>
+                              <p className="text-xs text-slate-600">
+                                Customer #{adminAiBookingBriefResult.booking.customer_id} · Company #{adminAiBookingBriefResult.booking.company_id} · Booker #{adminAiBookingBriefResult.booking.booker_id}
+                                {adminAiBookingBriefResult.booking.traveller_id
+                                  ? ` · Traveller #${adminAiBookingBriefResult.booking.traveller_id}`
+                                  : ""}
+                              </p>
+                              <p className="text-xs text-slate-600">
+                                Read {new Date(adminAiBookingBriefResult.read_at).toLocaleString("en-SG", {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                  timeZone: "Asia/Singapore",
+                                })}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="inline-flex min-h-9 items-center rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-950 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                data-admin-ai-booking-brief-load-dispatch="true"
+                                disabled={adminAiBookingBriefLoadPending}
+                                onClick={handleAdminAiBookingBriefLoadInDispatch}
+                                type="button"
+                              >
+                                {adminAiBookingBriefLoadPending ? "Loading..." : "Load in Dispatch"}
+                              </button>
+                              <Link
+                                className="inline-flex min-h-9 items-center rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-950 hover:bg-sky-100"
+                                data-admin-ai-booking-brief-open-customer="true"
+                                href={adminAiBookingBriefResult.booking.open_customer_path}
+                              >
+                                Open Customer Account
+                              </Link>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 rounded-md border border-sky-200 bg-white p-3 sm:grid-cols-2">
+                            <p><strong>Service:</strong> {adminAiBookingBriefResult.booking.service_type}</p>
+                            <p><strong>Status:</strong> {adminAiBookingBriefResult.booking.persisted_status}</p>
+                            <p className="sm:col-span-2">
+                              <strong>Pickup:</strong>{" "}
+                              {adminAiBookingBriefResult.booking.pickup_at
+                                ? Number.isFinite(Date.parse(adminAiBookingBriefResult.booking.pickup_at))
+                                  ? new Date(adminAiBookingBriefResult.booking.pickup_at).toLocaleString("en-SG", {
+                                      dateStyle: "medium",
+                                      timeStyle: "short",
+                                      timeZone: "Asia/Singapore",
+                                    })
+                                  : adminAiBookingBriefResult.booking.pickup_at
+                                : "Not recorded"}
+                              {adminAiBookingBriefResult.booking.pickup_location
+                                ? ` · ${adminAiBookingBriefResult.booking.pickup_location}`
+                                : ""}
+                            </p>
+                            <p className="sm:col-span-2">
+                              <strong>Route:</strong>{" "}
+                              {adminAiBookingBriefResult.booking.route || "Not recorded"}
+                            </p>
+                            <p>
+                              <strong>Driver:</strong>{" "}
+                              {adminAiBookingBriefResult.booking.assigned_driver_name || "Not assigned"}
+                            </p>
+                            <p>
+                              <strong>Plate:</strong>{" "}
+                              {adminAiBookingBriefResult.booking.assigned_driver_plate || "Not recorded"}
+                            </p>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <div className="rounded-md border border-sky-200 bg-white p-3">
+                              <p className="font-bold">Newest Driver Job Link</p>
+                              {adminAiBookingBriefResult.booking.latest_driver_job_link ? (
+                                <div className="mt-1 space-y-1 text-xs">
+                                  <p>
+                                    <strong>Link:</strong>{" "}
+                                    {adminAiBookingBriefResult.booking.latest_driver_job_link.state}
+                                  </p>
+                                  <p>
+                                    <strong>ACK:</strong>{" "}
+                                    {adminAiBookingBriefResult.booking.latest_driver_job_link.acknowledgement_status}
+                                  </p>
+                                  <p>
+                                    <strong>Issued:</strong>{" "}
+                                    {adminAiBookingBriefResult.booking.latest_driver_job_link.issued_at
+                                      ? new Date(adminAiBookingBriefResult.booking.latest_driver_job_link.issued_at).toLocaleString("en-SG", {
+                                          dateStyle: "medium",
+                                          timeStyle: "short",
+                                          timeZone: "Asia/Singapore",
+                                        })
+                                      : "Not recorded"}
+                                  </p>
+                                </div>
+                              ) : (
+                                <p className="mt-1 text-xs text-slate-600">No Driver Job Link recorded.</p>
+                              )}
+                            </div>
+                            <div className="rounded-md border border-sky-200 bg-white p-3">
+                              <p className="font-bold">Driver status evidence</p>
+                              <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
+                                {([
+                                  ["OTW", adminAiBookingBriefResult.booking.evidence.otw_at],
+                                  ["OTS", adminAiBookingBriefResult.booking.evidence.ots_at],
+                                  ["POB", adminAiBookingBriefResult.booking.evidence.pob_at],
+                                  ["JC", adminAiBookingBriefResult.booking.evidence.job_completed_at],
+                                ] as const).map(([label, timestamp]) => (
+                                  <p key={label}>
+                                    <strong>{label}:</strong>{" "}
+                                    {timestamp
+                                      ? new Date(timestamp).toLocaleString("en-SG", {
+                                          day: "2-digit",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                          month: "short",
+                                          timeZone: "Asia/Singapore",
+                                        })
+                                      : "—"}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {adminAiInvoiceSearchResult ? (
                     <div
                       className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-slate-900"

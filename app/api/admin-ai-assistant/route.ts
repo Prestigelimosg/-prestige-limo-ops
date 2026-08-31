@@ -2,6 +2,7 @@ import {
   adminAiAssistantPurpose,
   requestAdminAiConversation,
 } from "../../../lib/admin-ai-runtime";
+import { executeAdminAiBookingBrief } from "../../../lib/admin-ai-booking-brief";
 import { executeAdminAiInvoiceSearch } from "../../../lib/admin-ai-invoice-search";
 import { resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
 
@@ -41,6 +42,32 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonBody(request);
+  const bookingBrief = await executeAdminAiBookingBrief(body.message, boundary.context);
+
+  if (bookingBrief.matched) {
+    if (!bookingBrief.ok) {
+      return Response.json(
+        {
+          error: bookingBrief.error,
+          external_send: false,
+          ok: false,
+          write_action: false,
+        },
+        { status: bookingBrief.status },
+      );
+    }
+
+    return Response.json({
+      answer: bookingBrief.data.answer,
+      booking_brief: bookingBrief.data,
+      external_send: false,
+      model: "Prestige live records",
+      ok: true,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      write_action: false,
+    });
+  }
+
   const invoiceSearch = await executeAdminAiInvoiceSearch(
     body.message,
     body.invoice_search_page,

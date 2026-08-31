@@ -1,16 +1,25 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified clean runtime checkpoint:
-109d249d Link proven Company Booker customer accounts
+4aa276a4 Fix Save CRM booking read purpose
 
 Latest pushed main/staging runtime checkpoint:
-109d249d Link proven Company Booker customer accounts
+4aa276a4 Fix Save CRM booking read purpose
 
 Latest remote main/staging deployment checkpoint verified before this docs note:
-c50056b3 Merge pull request #445 from Prestigelimosg/codex/company-booker-browser-qa-race
+0327c5f5 Merge pull request #450 from Prestigelimosg/codex/save-crm-booking-read-purpose-acceptance
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Exact Customer Profile Company + Booker Scope Repair (2026-08-31)
+
+- Fail-first light-mode browser evidence placed two different Customer Accounts under the same verified Company: Booker `17` / Customer `165` and Booker `18` / Customer `166`. The existing Customer Profile identity editor scoped only by Company, so Customer `165` incorrectly exposed Booker `18` and its Traveller. The same editor could also create another Booker without the durable `bookers.customer_id` relationship that Dispatch requires, leaving a future Save + CRM operation to review that profile again.
+- The established Customer Profile editor now receives its exact Customer ID and reuses the existing safe `/api/admin-rate-setup` Booker projection. It requires exactly one Booker whose `company_id` matches the loaded Company and whose durable `customer_id` matches the exact Customer profile, then displays and maintains only Travellers carrying that exact Booker ID. Same-Company Bookers and Travellers belonging to another Customer Account are excluded.
+- Customer Profile no longer creates or binds a Booker. The existing Dispatch Save + CRM review and guarded Booker-to-Customer binder remain the sole account approval/creation lane. `Add Traveller` reloads and reuses only the already-bound exact Booker; Booker name, email and contact edits continue through the existing typed Booker PATCH, while Traveller creation/linking continues through the established guarded Traveller writers. Passenger/Traveller remains booking-only.
+- A profile with no exact bound Booker, multiple/malformed evidence, a changed Booker relationship or a cross-customer mismatch fails closed with a visible explanation and no Booker or Traveller writer. No Company name, Customer label, email, phone, Passenger text, prior form state or parser output is used to infer an account. Protected null-link and legacy cases therefore remain untouched and must continue through the existing explicit Dispatch review when permitted.
+- Focused source and mocked-browser protection is `scripts/test-customer-profile-verified-identities-guard.mjs` and `scripts/test-customer-corporate-identity-browser.mjs`. The browser proves one exact bound Booker edit, one booking-only Traveller add, zero Booker POSTs, exclusion of another Customer under the same Company, and a zero-write null-link failure. The unchanged Dispatch Customer Account browser still proves exact `bookers.customer_id` selection and zero booking posts.
+- No Supabase schema, migration or Production data change is included. Dispatch runtime, Save + CRM binding/collision review, Customer access, Rates and legacy precedence, QA Customer `192`, protected Customer `174`, Booker `20`, bookings, invoices, billing, Calendar, Driver, messaging, push/badge, native apps, GPS, provider, environment, payment, payout and PayNow lanes remain unchanged.
 
 ## Save + CRM Booking-Read Purpose Repair (2026-08-30)
 

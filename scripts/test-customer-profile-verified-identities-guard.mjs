@@ -11,6 +11,7 @@ const [editor, identityEditor, bookerRoute, dispatch, bookPage] = await Promise.
 
 for (const fragment of [
   "CustomerVerifiedIdentitiesEditor",
+  "customerId={customerId}",
   "companyId={profile.id}",
   "companyName={profile.company_name}",
 ]) {
@@ -26,13 +27,17 @@ for (const fragment of [
   'data-customer-save-booker-traveler="true"',
   'data-customer-edit-booker-traveler=',
   'data-customer-add-booker-traveler="true"',
-  "Save Booker + Traveller",
+  "Add Traveller",
   "Edit this pair",
   "Save changes",
   "window.confirm",
-  "findOrCreateBooker",
+  "customerId: string",
+  "customer_id?: number | null",
+  "result?.bookers",
+  "exactCustomerBooker",
+  "positiveId(booker.customer_id) === positiveId(customerId)",
+  "positiveId(traveler.booker_id) === positiveId(exactCustomerBooker.id)",
   'method: "GET"',
-  'method: "POST"',
   'method: "PATCH"',
   'action_type: "traveler_create"',
   "booker_id: bookerId",
@@ -54,16 +59,17 @@ for (const existingPath of [
 }
 
 assert.ok(
-  identityEditor.indexOf("await loadIdentities({ silent: true })") < identityEditor.indexOf("await findOrCreateBooker()"),
-  "Retry-safe identity saving must exact-read existing travelers before creating a Booker or Traveller.",
+  identityEditor.includes("No approved Company + Booker Customer Account is linked to this exact customer profile."),
+  "An unlinked exact Customer profile must fail closed instead of creating or inferring a Booker account.",
 );
 assert.ok(
-  identityEditor.indexOf("existingLinkedBookerName") < identityEditor.indexOf("const bookerId = await findOrCreateBooker()"),
-  "A Traveller linked to a differently named Booker must fail before any Booker create attempt.",
+  !identityEditor.includes("findOrCreateBooker") &&
+    !identityEditor.includes("Verified Booker could not be created safely."),
+  "Customer Profile must not create a second unlinked Booker or duplicate the Dispatch account-binding lane.",
 );
 assert.ok(
-  identityEditor.includes("if (!travelerId)") && identityEditor.includes("if (!booker || !positiveId(booker.id))"),
-  "Existing exact Booker and Traveller records must be reused before creation.",
+  identityEditor.includes("if (!travelerId)") && identityEditor.includes("await loadExactBooker(bookerId)"),
+  "Customer Profile must reuse the exact already-bound Booker while retaining the established Traveller create lane.",
 );
 assert.ok(
   identityEditor.includes('method: "PATCH"') &&

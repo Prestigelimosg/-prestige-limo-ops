@@ -1097,6 +1097,80 @@ try {
   assert.deepEqual(completeExplicitSourceFacts.analysis.reviewReasons, [
     "Airport terminal is not explicitly stated.",
   ]);
+
+  const possessivePassengerMobileBody = [
+    syntheticPrestigeTransport15787Body,
+    "Comment",
+    "Passenger: Pui Yu Chan (Synthetic Guest)",
+    "Ms. Chan's mobile: +65 9000 1234",
+  ].join("\n");
+  const possessivePassengerMobileAnalysis = {
+    ...completeExplicitSourceFactsAnalysis,
+    bookingResult: {
+      ...completeExplicitSourceFactsAnalysis.bookingResult,
+      bookings: [
+        {
+          ...completeExplicitSourceFactsBooking,
+          bookerContact: "+6596389322",
+          passengerContact: "+6590001234",
+        },
+      ],
+    },
+  };
+  const possessivePassengerMobile =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: possessivePassengerMobileBody },
+      possessivePassengerMobileAnalysis,
+    );
+  assert.equal(
+    possessivePassengerMobile.ok,
+    true,
+    "An exact possessive mobile label tied to the named Passenger must override the different Client-details phone for passengerContact.",
+  );
+  assert.equal(
+    possessivePassengerMobile.analysis.bookingResult.bookings[0]
+      .bookerContact,
+    "+6596389322",
+    "The separate Client-details phone must remain available as Booker contact evidence.",
+  );
+  const clientPhoneSubstitutedForPassenger =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      { body: possessivePassengerMobileBody },
+      {
+        ...possessivePassengerMobileAnalysis,
+        bookingResult: {
+          ...possessivePassengerMobileAnalysis.bookingResult,
+          bookings: [
+            {
+              ...possessivePassengerMobileAnalysis.bookingResult.bookings[0],
+              passengerContact: "+6596389322",
+            },
+          ],
+        },
+      },
+    );
+  assert.equal(
+    clientPhoneSubstitutedForPassenger.ok,
+    false,
+    "A different Client-details phone must not replace an exact Passenger-labelled mobile.",
+  );
+  const unrelatedPossessiveMobile =
+    runtime.testValidateExplicitSourceFactsCompleteness(
+      {
+        body: [
+          syntheticPrestigeTransport15787Body,
+          "Comment",
+          "Passenger: Pui Yu Chan (Synthetic Guest)",
+          "Mr. Lim's mobile: +65 9000 5678",
+        ].join("\n"),
+      },
+      completeExplicitSourceFactsAnalysis,
+    );
+  assert.equal(
+    unrelatedPossessiveMobile.ok,
+    true,
+    "A possessive mobile belonging to another named person must not override the Passenger contact.",
+  );
   const completeExplicitSourceCanonicalText =
     emailAiSchema.adminEmailAiCanonicalBookingText(
       completeExplicitSourceFacts.analysis,

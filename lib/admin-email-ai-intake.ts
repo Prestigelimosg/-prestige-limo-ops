@@ -1039,11 +1039,30 @@ function directPassengerPhoneCandidates(body: string) {
   const source = cleanMultilineText(body, maximumAiInputCharacters);
   const explicitPassengerPhonePattern =
     /\b(?:guest|passenger|traveller|traveler)\s+(?:contact|mobile|phone)(?:\s+(?:no\.?|number))?\s*[:=-]?\s*(\+?\d(?:[\d ().-]{5,22}\d))/gi;
+  const labelledPassengerTokens = new Set(
+    personIdentityTokens(
+      source.match(/\bPassenger\s*:\s*([^\n(]+)/i)?.[1],
+    ),
+  );
+  const possessivePassengerPhonePattern =
+    /\b((?:dr|miss|mr|mrs|ms)\.?\s+[\p{L}\p{M}-]+(?:\s+[\p{L}\p{M}-]+){0,3})['’]s\s+(?:contact|mobile|phone)(?:\s+(?:no\.?|number))?\s*[:=-]?\s*(\+?\d(?:[\d ().-]{5,22}\d))/giu;
 
   for (const match of source.matchAll(explicitPassengerPhonePattern)) {
     const phone = normalizedExplicitPassengerPhone(match[1]);
 
     if (phone) {
+      candidates.add(phone);
+    }
+  }
+
+  for (const match of source.matchAll(possessivePassengerPhonePattern)) {
+    const identityTokens = personIdentityTokens(match[1]);
+    const phone = normalizedExplicitPassengerPhone(match[2]);
+    const matchesLabelledPassenger =
+      identityTokens.length > 0 &&
+      identityTokens.every((token) => labelledPassengerTokens.has(token));
+
+    if (matchesLabelledPassenger && phone) {
       candidates.add(phone);
     }
   }
@@ -1119,10 +1138,7 @@ function explicitSourceBookingFacts(body: string) {
   const directPhone = singleExplicitEvidence([
     ...directPassengerPhoneCandidates(source),
   ]);
-  const passengerContact = singleExplicitEvidence([
-    clientPhone.value,
-    directPhone.value,
-  ]);
+  const passengerContact = directPhone.value ? directPhone : clientPhone;
   const pax = singleExplicitEvidence(
     clientMatches
       .map((match) => normalizedEvidenceCount(match[4]))

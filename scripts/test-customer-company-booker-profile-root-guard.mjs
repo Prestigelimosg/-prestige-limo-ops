@@ -11,7 +11,7 @@ const files = {
   editor: "app/customers/[customerId]/customer-company-profile-editor.tsx",
   exactProfile: "app/customers/[customerId]/page.tsx",
   helper: "lib/admin-customer-company-booker-profile.ts",
-  migration: "supabase/migrations/20260901233000_customer_company_booker_profile_transaction.sql",
+  migration: "supabase/migrations/20260902013000_fix_customer_company_booker_existing_booker_ambiguity.sql",
   reader: "lib/admin-customer-accounts-read.ts",
   route: "app/api/admin-customer-accounts/route.ts",
   title: "lib/admin-customer-account-title.ts",

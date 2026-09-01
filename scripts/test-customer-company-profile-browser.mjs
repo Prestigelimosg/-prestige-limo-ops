@@ -26,6 +26,7 @@ const correctedFolderName = "Transzend Groundbooker";
 const originalCompanyName = "Transzend Groundbooker";
 const originalBookerName = "David Kelly";
 const correctedBookerName = "June";
+const secondCorrectedBookerName = "June Tan";
 const customerId = "161";
 const companyId = 501;
 const bookerId = 701;
@@ -65,7 +66,7 @@ async function main() {
   let currentFolderName = originalFolderName;
   let currentCompanyName = originalCompanyName;
   let currentBookerName = originalBookerName;
-  let profilePatchPayload = null;
+  const profilePatchPayloads = [];
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -150,7 +151,8 @@ async function main() {
           ok: true,
         };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "PATCH") {
-        profilePatchPayload = JSON.parse(request.postData || "{}");
+        const profilePatchPayload = JSON.parse(request.postData || "{}");
+        profilePatchPayloads.push(profilePatchPayload);
         currentFolderName = profilePatchPayload.customer_display_name;
         currentCompanyName = profilePatchPayload.company_profile.company_name;
         currentBookerName = profilePatchPayload.booker_profile.booker_name;
@@ -265,13 +267,13 @@ async function main() {
         const banner = await evaluate(
           `document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || ""`,
         );
-        return banner === `${originalCompanyName} (${correctedBookerName})` && profilePatchPayload;
+        return banner === `${originalCompanyName} (${correctedBookerName})` && profilePatchPayloads.length === 1;
       },
       10000,
       "reloaded authoritative Company + Booker title",
     );
 
-    assert.deepEqual(profilePatchPayload, {
+    assert.deepEqual(profilePatchPayloads[0], {
       action_type: "customer_company_booker_profile_overwrite",
       booker_id: bookerId,
       booker_profile: {
@@ -314,8 +316,8 @@ async function main() {
       },
       expected_customer_display_name: originalFolderName,
     });
-    assert.equal(Object.hasOwn(profilePatchPayload, "traveller_name"), false);
-    assert.equal(Object.hasOwn(profilePatchPayload, "guest_account_billing_enabled"), false);
+    assert.equal(Object.hasOwn(profilePatchPayloads[0], "traveller_name"), false);
+    assert.equal(Object.hasOwn(profilePatchPayloads[0], "guest_account_billing_enabled"), false);
     assert.equal(
       interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,
       1,
@@ -384,10 +386,59 @@ async function main() {
       "Reopening must not create a second write",
     );
 
+    reporter.step("saving the reopened existing Booker and reopening again");
+    await evaluate(`(() => {
+      const booker = document.querySelector('[data-customer-required-booker-name="true"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      setter.call(booker, ${JSON.stringify(secondCorrectedBookerName)});
+      booker.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('[data-customer-company-profile-save="${customerId}"]').click();
+    })()`);
+    await waitForCondition(
+      async () =>
+        profilePatchPayloads.length === 2 &&
+        (await evaluate(
+          `document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || ""`,
+        )) === `${originalCompanyName} (${secondCorrectedBookerName})`,
+      10000,
+      "second existing-Booker save and authoritative reload",
+    );
+    assert.equal(profilePatchPayloads[1].booker_id, bookerId);
+    assert.deepEqual(profilePatchPayloads[1].expected_booker_profile, {
+      booker_name: correctedBookerName,
+      email: "booker@groundbooker.com",
+      phone: "+65 6000 0000",
+    });
+    assert.deepEqual(profilePatchPayloads[1].booker_profile, {
+      booker_name: secondCorrectedBookerName,
+      email: "booker@groundbooker.com",
+      phone: "+65 6000 0000",
+    });
+    assert.equal(
+      interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,
+      2,
+    );
+
+    await navigateWithLoadEvent(client, new URL("/customers", appUrl).toString());
+    await navigateWithLoadEvent(client, reopenedUrl.toString());
+    await waitForSelector(
+      evaluate,
+      `[data-customer-company-profile-edit="${customerId}"]`,
+      "twice-reopened customer profile edit button",
+    );
+    await waitForCondition(
+      async () =>
+        (await evaluate(
+          `document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || ""`,
+        )) === `${originalCompanyName} (${secondCorrectedBookerName})`,
+      10000,
+      "persisted second existing-Booker save after reopening",
+    );
+
     console.log(JSON.stringify(reporter.summary({
       errorCount: 0,
       ok: true,
-      patchPayload: profilePatchPayload,
+      patchPayloads: profilePatchPayloads,
       reopenedState,
     }), null, 2));
   } finally {

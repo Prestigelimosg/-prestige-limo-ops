@@ -136,6 +136,33 @@ input {
   text-transform: none;
 }
 
+.admin-ops-shell [data-admin-ai-floating-launcher="true"] {
+  align-items: center;
+  border-radius: 9999px;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  display: inline-flex;
+  height: 3rem;
+  justify-content: center;
+  min-height: 3rem;
+  min-width: 3rem;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  right: 1rem;
+  width: auto;
+  z-index: 20;
+}
+
+@media (min-width: 640px) {
+  .admin-ops-shell [data-admin-ai-floating-launcher="true"] {
+    bottom: 1.5rem;
+    height: auto;
+    min-height: 2.75rem;
+    min-width: auto;
+    padding: 0.625rem 1rem;
+    right: 1.5rem;
+  }
+}
+
 @media (max-width: 640px) {
   .admin-ops-shell [role="group"].grid {
     grid-template-columns: repeat(auto-fit, minmax(5.75rem, 1fr));

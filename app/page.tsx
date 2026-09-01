@@ -21402,6 +21402,28 @@ export default function Home() {
     await runAdminAiConversation(bookingMessage);
   }
 
+  function openAdminAiAssistant() {
+    if (aiAssistLoading) {
+      return;
+    }
+
+    selectAppTab("dispatch");
+    setMobileDispatchBookingStep("message");
+
+    if (aiAssistMode !== "conversation") {
+      setAiAssistMode("conversation");
+      clearParseArtifacts();
+    }
+
+    window.setTimeout(() => {
+      bookingMessageRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      bookingMessageRef.current?.focus();
+    }, 0);
+  }
+
   async function handleAdminAiInvoiceSearchLoadMore() {
     if (!adminAiInvoiceSearchResult?.has_more || aiAssistLoading) {
       return;
@@ -42751,7 +42773,10 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mb-2.5 rounded-md border border-stone-200 bg-stone-50 p-2">
+            <div
+              className="mb-2.5 rounded-md border border-stone-200 bg-stone-50 p-2"
+              data-admin-ai-assistant-board="true"
+            >
               <div
                 aria-label="AI Assist mode"
                 className="mb-2 grid max-w-md grid-cols-2 gap-1 rounded-md border border-indigo-200 bg-indigo-50 p-1"
@@ -51132,6 +51157,17 @@ export default function Home() {
         </section>
         ) : null}
       </div>
+      <button
+        aria-label="Open Ask AI"
+        className="border border-indigo-700 bg-indigo-900 font-semibold text-white shadow-lg transition hover:bg-indigo-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-400"
+        data-admin-ai-floating-launcher="true"
+        disabled={aiAssistLoading}
+        onClick={openAdminAiAssistant}
+        title={aiAssistLoading ? "Ask AI is working" : "Open Ask AI"}
+        type="button"
+      >
+        Ask AI
+      </button>
     </main>
   );
 }

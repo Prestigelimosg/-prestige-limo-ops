@@ -7,6 +7,7 @@ import ts from "typescript";
 const paths = {
   app: path.join(process.cwd(), "app/page.tsx"),
   book: path.join(process.cwd(), "app/book/page.tsx"),
+  globals: path.join(process.cwd(), "app/globals.css"),
   route: path.join(process.cwd(), "app/api/admin-ai-assistant/route.ts"),
   runtime: path.join(process.cwd(), "lib/admin-ai-runtime.ts"),
   bookingBrief: path.join(process.cwd(), "lib/admin-ai-booking-brief.ts"),
@@ -25,6 +26,8 @@ const sources = Object.fromEntries(
 
 assert.equal((sources.app.match(/data-ai-assist-mode-selector=/g) || []).length, 1);
 assert.equal((sources.app.match(/fetch\("\/api\/admin-ai-assistant"/g) || []).length, 1);
+assert.equal((sources.app.match(/data-admin-ai-assistant-board=/g) || []).length, 1);
+assert.equal((sources.app.match(/data-admin-ai-floating-launcher=/g) || []).length, 1);
 assert.match(sources.app, /data-ai-assist-mode=\{mode\}/);
 assert.match(sources.app, /"Booking Parser"/);
 assert.match(sources.app, /"Ask AI"/);
@@ -33,6 +36,26 @@ assert.match(sources.app, /disabled=\{aiAssistMode !== "parser"\}/);
 assert.match(sources.app, /onClick=\{handleParseBookingMessage\}/);
 assert.match(sources.app, /setAiConversationMessages\(\[\]\)/);
 assert.doesNotMatch(sources.book, /\/api\/(?:ai-parse|admin-ai-assistant)/);
+
+const floatingLauncherHandler = sources.app.slice(
+  sources.app.indexOf("function openAdminAiAssistant()"),
+  sources.app.indexOf("async function handleAdminAiInvoiceSearchLoadMore()"),
+);
+assert.match(floatingLauncherHandler, /if \(aiAssistLoading\) \{[\s\S]*?return;/);
+assert.match(floatingLauncherHandler, /selectAppTab\("dispatch"\)/);
+assert.match(floatingLauncherHandler, /setMobileDispatchBookingStep\("message"\)/);
+assert.match(floatingLauncherHandler, /if \(aiAssistMode !== "conversation"\)/);
+assert.match(floatingLauncherHandler, /setAiAssistMode\("conversation"\)/);
+assert.match(floatingLauncherHandler, /bookingMessageRef\.current\?\.scrollIntoView/);
+assert.match(floatingLauncherHandler, /bookingMessageRef\.current\?\.focus\(\)/);
+assert.doesNotMatch(
+  floatingLauncherHandler,
+  /fetch\(|runAdminAiConversation|handleAdminAiConversation|setAiAssistSafetyAccepted|setBookingMessage|setAiConversationMessages/,
+);
+assert.match(sources.app, /aria-label="Open Ask AI"/);
+assert.match(sources.app, /disabled=\{aiAssistLoading\}[\s\S]*?onClick=\{openAdminAiAssistant\}/);
+assert.match(sources.globals, /\[data-admin-ai-floating-launcher="true"\][\s\S]*?position: fixed/);
+assert.match(sources.globals, /bottom: calc\(1rem \+ env\(safe-area-inset-bottom, 0px\)\)/);
 
 for (const sourceName of ["route", "runtime"]) {
   for (const forbidden of [

@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified application source checkpoint:
-ac55b9a8 Merge pull request #465 from Prestigelimosg/codex/admin-ai-invoice-mark-paid-preparation
+2ee5ce51 Merge pull request #466 from Prestigelimosg/codex/maintenance-test-harness
 
 Latest pushed `origin/main` application checkpoint:
-ac55b9a8 Merge pull request #465 from Prestigelimosg/codex/admin-ai-invoice-mark-paid-preparation
+2ee5ce51 Merge pull request #466 from Prestigelimosg/codex/maintenance-test-harness
 
 Latest separately observed `origin/staging` pointer:
 6c6ad94c Merge PR #323: Scroll customer booking details into view
@@ -14,6 +14,14 @@ Latest directly observed Production deployment checkpoint before this maintenanc
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Admin Ask AI Floating Launcher (source checkpoint 2026-09-01)
+
+- The one existing Admin Ask AI entry now has one presentation-only floating `Ask AI` launcher on the established Admin Ops shell. Desktop and phone both use that exact visible label at the lower right; the phone button remains a compact pill with the browser safe-area inset included. It adds no icon, overlay, modal, drawer, chat board, AI mode selector, route, request helper or second result lane.
+- Clicking the launcher only selects the existing `Dispatch` tab, selects the phone `Message` step, switches the existing Dispatcher Intake mode to `Ask AI`, then scrolls to and focuses the same established textarea. A currently typed Dispatcher Intake message and existing Ask AI history/result remain in the same mounted state. If an AI request is already running, the launcher is disabled and cannot interrupt it.
+- The launcher never checks the AI safety checkbox, sends a prompt, calls `/api/admin-ai-assistant`, clears text or history, creates a Job Card, loads a booking, navigates to a Customer account, or performs any write or external send. The established explicit safety acceptance and `Send to AI` action remain required, and `Create Job Card` remains disabled while Ask AI mode is selected.
+- Focused protection remains `scripts/test-admin-ai-assistant-guard.mjs` and adds `scripts/test-admin-ai-floating-launcher-browser.mjs`. The synthetic light-mode browser acceptance opens the same board from another Admin tab at desktop and phone widths, proves one launcher, one board, one selector, preserved draft text, focused input, mobile safe-area placement, no horizontal overflow, zero Assistant requests and zero mutation requests before `Send to AI`. The complete mocked Booking UI browser passed in `471.8s` with zero test, console, Supabase-request or mutation errors; mobile usability passed all nine phone/tablet/desktop widths in `75.7s`; App smoke passed in `276.9s`; TypeScript, zero-error lint and the Next.js Production build passed. Lint retains only existing repository warnings. A clean-main-identical stale source-marker failure remains in the existing Operations Calendar API contract guard and was not changed in this presentation-only task.
+- The exact Company + Booker read skills, structured result cards, single authenticated Assistant POST, parser, Customer/invoice layout and controls, invoice PDF/email/payment, personal and Operations Calendar, Driver Reports, Pending ACK Queue, messaging, native apps, schema, environment, providers and Production data remain unchanged. This source change carries no Production deployment approval or deployment action.
 
 ## Test Harness Dependency And Ledger Checkpoint Maintenance (source checkpoint 2026-09-01)
 

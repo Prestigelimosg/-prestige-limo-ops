@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified application source checkpoint:
-2ee5ce51 Merge pull request #466 from Prestigelimosg/codex/maintenance-test-harness
+de37e129 Merge pull request #474 from Prestigelimosg/codex/customer-company-booker-root-repair
 
 Latest pushed `origin/main` application checkpoint:
-2ee5ce51 Merge pull request #466 from Prestigelimosg/codex/maintenance-test-harness
+de37e129 Merge pull request #474 from Prestigelimosg/codex/customer-company-booker-root-repair
 
 Latest separately observed `origin/staging` pointer:
 6c6ad94c Merge PR #323: Scroll customer booking details into view
 
-Latest directly observed Production deployment checkpoint before this maintenance note:
-`dpl_2NeSQaRLKSD9cpeZgCH8e9eUuoxr` was `READY` on the Production alias at 2026-09-01 04:35:26 SGT. Its association with `ac55b9a8` is a strong main-alias and three-second deployment-timing inference; the inspected Vercel metadata did not expose a Git SHA, so this is not recorded as direct SHA evidence.
+Latest directly observed Production deployment checkpoint:
+`dpl_HQrZAN9cXkGQffv6yrXzKBtDbQYr` is `READY` on the Production target and its inspected Vercel metadata directly identifies exact merged commit `de37e1290611afaab364493e8817afc090974885`.
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -23,6 +23,8 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - Future hotel/agency/personal Customer creation is retired. The visible creation choice is only `Create Company + Booker Account`; the booking parser rejects retired legacy creation payloads, and the legacy agency magic state fails closed before any Company or booking write. Existing legacy records are not batch-converted, deleted or recreated. Admin amends them one at a time through the same editor, preserving their Customer, Company, Booker, Traveller and booking IDs.
 - The database function is `SECURITY INVOKER`, executable only by `service_role`; `public`, `anon` and `authenticated` execution is revoked. Existing table mutation grants for Customer/Company/Booker/Traveller are also revoked from browser roles, while the established same-origin verified Admin/Dispatcher session and purpose boundary remains the only exposed editor path. No arbitrary table, SQL or public/authenticated update access is added.
 - Focused protection is `scripts/test-customer-company-booker-profile-root-guard.mjs`, `scripts/test-customer-company-profile-contract.mjs`, `scripts/test-customer-profile-verified-identities-guard.mjs`, `scripts/test-admin-customer-accounts-read-api-contract.mjs` and `scripts/test-admin-dispatch-crm-identity-selectors-guard.mjs`. Bookings and saved booking fields, invoice/billing/monthly, Customer access, either Calendar, messages, notifications, push/badges, Driver, rates, payments, payout, PayNow and providers are outside this transaction and remain unchanged.
+- PR `#474` merged the exact reviewed source to `main` as `de37e1290611afaab364493e8817afc090974885`. The authenticated Production migration runner then applied only `customer_company_booker_profile_transaction` as remote version `20260901163606`; immediate readback proves 27 active Customers and 16 Bookers remained, zero Bookers lack Company/name, zero Customer IDs have duplicate Booker bindings, and zero `customer_company_booker_profile_overwrite` audit rows exist because no Customer profile was converted or saved during activation. The function exists with `service_role` execute only, browser roles retain no Customer-table update privilege, and the mandatory Booker Company/name constraints are present.
+- Vercel Production deployment `dpl_HQrZAN9cXkGQffv6yrXzKBtDbQYr` reached `READY` for exact merge `de37e129`; the 15-minute post-deploy runtime-error scan was clean. Signed-in light-mode Mac Chrome read-only acceptance loaded all 27 Customer profiles and showed `Bridge Data Centres (Laurel Wong)` in Customer Overview, exact profile, reopened profile and the still-open editor. Dispatch showed the same exact title plus `Tiger Global (June)`, `The Law Society of Singapore (Danielle)` and other verified Company+Booker titles; incomplete records showed only `Customer account · Requires editing`. The local intercepted fixture separately proved one atomic edit/save plus navigate-away/reopen with no second write; it never reached Supabase or Production.
 
 ## Authoritative Company + Booker Customer Account Titles (source checkpoint 2026-09-01)
 

@@ -246,6 +246,10 @@ async function main() {
         const sectorWidth = chooser.closest('[data-admin-dispatch-crm-identity-selectors="true"]')?.getBoundingClientRect().width || 0;
         return menu instanceof HTMLDivElement && options.length === 4 && keys.includes("corporate:41:4101") ? {
           keys,
+          optionTitles: Object.fromEntries(options.map((option) => [
+            option.getAttribute("data-admin-dispatch-customer-account-option"),
+            option.querySelector("span")?.textContent.trim() || "",
+          ])),
           legacyCount: document.querySelectorAll('[data-admin-dispatch-agency-folder-select="true"], [data-admin-dispatch-corporate-customer-select="true"], [data-admin-dispatch-corporate-pair-select="true"]').length,
           listOverflowY: getComputedStyle(document.querySelector('[data-admin-dispatch-customer-account-options="true"]')).overflowY,
           menuPosition: getComputedStyle(menu).position,
@@ -263,6 +267,20 @@ async function main() {
       "corporate:55:5502",
     ]);
     assert.equal(initialState.legacyCount, 0);
+    assert.equal(initialState.optionTitles["corporate:41:4101"], "Kim Hyun Soo");
+    assert.equal(
+      initialState.optionTitles["corporate:55:5501"],
+      "Nomura Singapore Limited (Mavis Lam)",
+    );
+    assert.equal(
+      initialState.optionTitles["corporate:55:5502"],
+      "Nomura Singapore Limited (No Traveller Booker)",
+    );
+    assert.doesNotMatch(
+      Object.values(initialState.optionTitles).join(" "),
+      /Kim Passenger|Mr Jwalant Nanavati|Alex Tan/,
+      "Dispatch option titles must not use Passenger/Traveller/Boss names",
+    );
     assert.equal(initialState.listOverflowY, "auto");
     assert.equal(initialState.menuPosition, "absolute");
     assert.match(initialState.searchBackground, /255, 255, 255/);
@@ -357,6 +375,7 @@ async function main() {
               bookerId: chooser.dataset.bookerId,
               companyId: chooser.dataset.companyId,
               customerId: chooser.dataset.customerId,
+              title: chooser.querySelector("summary")?.textContent.replace(/\\s+/g, " ").trim() || "",
               travelerId: chooser.dataset.travelerId || "",
             }
           : false;
@@ -368,6 +387,7 @@ async function main() {
       bookerId: "5502",
       companyId: "55",
       customerId: "551",
+      title: "Nomura Singapore Limited (No Traveller Booker)⌄",
       travelerId: "",
     });
     const preparedDirectSave = await evaluate(`(() => {
@@ -685,6 +705,7 @@ async function main() {
               bookerId: chooser.dataset.bookerId,
               companyId: chooser.dataset.companyId,
               customerId: chooser.dataset.customerId,
+              title: chooser.querySelector("summary")?.textContent.replace(/\\s+/g, " ").trim() || "",
               travelerId: chooser.dataset.travelerId || "",
             }
           : false;
@@ -696,6 +717,7 @@ async function main() {
       bookerId: "5501",
       companyId: "55",
       customerId: "550",
+      title: "Nomura Singapore Limited (Mavis Lam)⌄",
       travelerId: "",
     });
     assert.equal(bookingPosts.length, 0);

@@ -151,51 +151,102 @@ function optionalCompanyContactValue(
   return !isCreate && loadedValue?.trim() ? null : undefined;
 }
 
+type CompanyProfileWriteField = Exclude<keyof CompanyProfile, "guest_account_billing_enabled" | "id">;
+
+const companyProfileWriteFields: CompanyProfileWriteField[] = [
+  "accounts_email",
+  "billing_address",
+  "billing_email",
+  "company_name",
+  "domain",
+  "main_phone",
+  "mobile_phone",
+  "operations_email",
+  "primary_contact_name",
+  "website",
+];
+
+function normalizedCompanyProfileField(profile: CompanyProfile, field: CompanyProfileWriteField) {
+  const lowercasedFields = new Set<CompanyProfileWriteField>([
+    "accounts_email",
+    "billing_email",
+    "domain",
+    "operations_email",
+    "website",
+  ]);
+  const rawValue = field === "domain"
+    ? profile.website.trim() || profile.domain
+    : profile[field];
+
+  return (lowercasedFields.has(field) ? rawValue.toLowerCase() : rawValue).trim();
+}
+
+function companyProfileFieldChanged(
+  profile: CompanyProfile,
+  loadedProfile: CompanyProfile,
+  field: CompanyProfileWriteField,
+) {
+  return normalizedCompanyProfileField(profile, field) !== normalizedCompanyProfileField(loadedProfile, field);
+}
+
+function companyProfileHasChanges(profile: CompanyProfile, loadedProfile: CompanyProfile | null) {
+  return Boolean(
+    loadedProfile &&
+      companyProfileWriteFields.some((field) => companyProfileFieldChanged(profile, loadedProfile, field)),
+  );
+}
+
+function createCompanyProfilePayload(profile: CompanyProfile) {
+  const website = profile.website.trim().toLowerCase();
+
+  return {
+    action_type: "company_create",
+    accounts_email: optionalCompanyContactValue(profile.accounts_email, undefined, true, true),
+    billing_address: optionalCompanyContactValue(profile.billing_address, undefined, true),
+    billing_email: optionalCompanyContactValue(profile.billing_email, undefined, true, true),
+    company_name: profile.company_name.trim(),
+    domain: website || profile.domain.trim().toLowerCase() || undefined,
+    entity_type: "company",
+    main_phone: optionalCompanyContactValue(profile.main_phone, undefined, true),
+    mobile_phone: optionalCompanyContactValue(profile.mobile_phone, undefined, true),
+    operations_email: optionalCompanyContactValue(profile.operations_email, undefined, true, true),
+    primary_contact_name: optionalCompanyContactValue(profile.primary_contact_name, undefined, true),
+    website: optionalCompanyContactValue(profile.website, undefined, true, true),
+  };
+}
+
+function changedCompanyProfilePayload(profile: CompanyProfile, loadedProfile: CompanyProfile) {
+  const payload: Record<string, number | string | null> = {
+    action_type: "company_update",
+    entity_type: "company",
+    id: profile.id || loadedProfile.id,
+  };
+
+  for (const field of companyProfileWriteFields) {
+    if (!companyProfileFieldChanged(profile, loadedProfile, field)) {
+      continue;
+    }
+
+    const normalizedValue = normalizedCompanyProfileField(profile, field);
+
+    if (normalizedValue) {
+      payload[field] = normalizedValue;
+    } else if (field !== "company_name" && field !== "domain") {
+      payload[field] = null;
+    }
+  }
+
+  return payload;
+}
+
 function profilePayload(
   profile: CompanyProfile,
   loadedProfile: CompanyProfile | null,
   isCreate: boolean,
 ) {
-  const website = profile.website.trim().toLowerCase();
-
-  return {
-    action_type: isCreate ? "company_create" : "company_update",
-    accounts_email: optionalCompanyContactValue(
-      profile.accounts_email,
-      loadedProfile?.accounts_email,
-      isCreate,
-      true,
-    ),
-    billing_address: optionalCompanyContactValue(
-      profile.billing_address,
-      loadedProfile?.billing_address,
-      isCreate,
-    ),
-    billing_email: optionalCompanyContactValue(
-      profile.billing_email,
-      loadedProfile?.billing_email,
-      isCreate,
-      true,
-    ),
-    company_name: profile.company_name.trim(),
-    domain: website || profile.domain.trim().toLowerCase() || undefined,
-    entity_type: "company",
-    main_phone: optionalCompanyContactValue(profile.main_phone, loadedProfile?.main_phone, isCreate),
-    mobile_phone: optionalCompanyContactValue(profile.mobile_phone, loadedProfile?.mobile_phone, isCreate),
-    operations_email: optionalCompanyContactValue(
-      profile.operations_email,
-      loadedProfile?.operations_email,
-      isCreate,
-      true,
-    ),
-    primary_contact_name: optionalCompanyContactValue(
-      profile.primary_contact_name,
-      loadedProfile?.primary_contact_name,
-      isCreate,
-    ),
-    website: optionalCompanyContactValue(profile.website, loadedProfile?.website, isCreate, true),
-    ...(profile.id ? { id: profile.id } : {}),
-  };
+  return isCreate || !loadedProfile
+    ? createCompanyProfilePayload(profile)
+    : changedCompanyProfilePayload(profile, loadedProfile);
 }
 
 export function CustomerCompanyProfileEditor({
@@ -237,7 +288,7 @@ export function CustomerCompanyProfileEditor({
       }
 
       const guestAccountBillingEnabled = account.guest_account_billing_enabled === true;
-      const exactCustomerFolderName = profileValue(account.customer_account);
+      const exactCustomerFolderName = profileValue(account.customer_directory_label);
 
       if (!exactCustomerFolderName) {
         throw new Error("Exact customer folder name could not be loaded safely.");
@@ -352,6 +403,7 @@ export function CustomerCompanyProfileEditor({
     const normalizedCustomerFolderName = customerFolderName.replace(/\s+/g, " ").trim();
     const isCreate = profileMode === "create";
     const customerFolderNameChanged = normalizedCustomerFolderName !== loadedCustomerFolderName;
+    const companyProfileChanged = isCreate || companyProfileHasChanges(profile, loadedProfile);
 
     if (!companyName) {
       setMessage("Company name is required before saving.");
@@ -365,9 +417,21 @@ export function CustomerCompanyProfileEditor({
       return;
     }
 
+    if (!companyProfileChanged && !customerFolderNameChanged) {
+      setMessage("No company profile or customer folder changes to save.");
+      setStatus("ready");
+      return;
+    }
+
+    const saveScope = companyProfileChanged && customerFolderNameChanged
+      ? `${isCreate ? "create" : "save"} the company profile and rename the customer folder to ${normalizedCustomerFolderName}`
+      : companyProfileChanged
+        ? `${isCreate ? "create" : "save"} the company profile`
+        : `rename the customer folder to ${normalizedCustomerFolderName}`;
+
     if (
       !window.confirm(
-        `${isCreate ? "Create" : "Save"} customer company profile for ${companyName}? This ${isCreate ? "creates" : "updates"} this customer company's contact profile${customerFolderNameChanged ? ` and renames the customer folder to ${normalizedCustomerFolderName}` : ""}. It does not change the stored customer classification, jobs, passenger names, invoice records, payments, or send any message.`,
+        `Confirm ${saveScope} for ${companyName}? It does not change the stored customer classification, jobs, passenger names, invoice records, payments, or send any message.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -376,41 +440,46 @@ export function CustomerCompanyProfileEditor({
     }
 
     setStatus("saving");
-    setMessage(`${isCreate ? "Creating" : "Saving"} customer company profile for ${companyName}...`);
+    setMessage(`Saving the selected customer profile changes for ${companyName}...`);
 
     try {
-      const response = await fetch(adminCompanyProfileWriteApiPath, {
-        body: JSON.stringify(profilePayload(profile, loadedProfile, isCreate)),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "POST",
-      });
-      const result = await response.json().catch(() => null);
-      const savedProfile = result?.record;
+      let savedCompanyName = companyName;
 
-      if (!response.ok || !result?.ok || result?.status !== "saved" || !savedProfile) {
-        throw new Error(result?.error || "Customer company profile save failed safely.");
+      if (companyProfileChanged) {
+        const response = await fetch(adminCompanyProfileWriteApiPath, {
+          body: JSON.stringify(profilePayload(profile, loadedProfile, isCreate)),
+          headers: {
+            "Content-Type": "application/json",
+            "x-prestige-admin-purpose": "admin-booking-persistence",
+          },
+          method: "POST",
+        });
+        const result = await response.json().catch(() => null);
+        const savedProfile = result?.record;
+
+        if (!response.ok || !result?.ok || result?.status !== "saved" || !savedProfile) {
+          throw new Error(result?.error || "Customer company profile save failed safely.");
+        }
+
+        const nextProfile = {
+          accounts_email: profileValue(savedProfile.accounts_email),
+          billing_address: profileValue(savedProfile.billing_address),
+          billing_email: profileValue(savedProfile.billing_email),
+          company_name: profileValue(savedProfile.company_name) || companyName,
+          domain: profileValue(savedProfile.domain) || domain,
+          guest_account_billing_enabled: profile.guest_account_billing_enabled,
+          id: Number(savedProfile.id),
+          main_phone: profileValue(savedProfile.main_phone),
+          mobile_phone: profileValue(savedProfile.mobile_phone),
+          operations_email: profileValue(savedProfile.operations_email),
+          primary_contact_name: profileValue(savedProfile.primary_contact_name),
+          website: profileValue(savedProfile.website),
+        };
+        savedCompanyName = nextProfile.company_name;
+        setProfile(nextProfile);
+        setLoadedProfile(nextProfile);
+        setProfileMode("edit");
       }
-
-      const nextProfile = {
-        accounts_email: profileValue(savedProfile.accounts_email),
-        billing_address: profileValue(savedProfile.billing_address),
-        billing_email: profileValue(savedProfile.billing_email),
-        company_name: profileValue(savedProfile.company_name) || companyName,
-        domain: profileValue(savedProfile.domain) || domain,
-        guest_account_billing_enabled: profile.guest_account_billing_enabled,
-        id: Number(savedProfile.id),
-        main_phone: profileValue(savedProfile.main_phone),
-        mobile_phone: profileValue(savedProfile.mobile_phone),
-        operations_email: profileValue(savedProfile.operations_email),
-        primary_contact_name: profileValue(savedProfile.primary_contact_name),
-        website: profileValue(savedProfile.website),
-      };
-      setProfile(nextProfile);
-      setLoadedProfile(nextProfile);
-      setProfileMode("edit");
 
       if (customerFolderNameChanged) {
         const accountResponse = await fetch(adminCustomerAccountsApiPath, {
@@ -425,7 +494,7 @@ export function CustomerCompanyProfileEditor({
           method: "PATCH",
         });
         const accountResult = await accountResponse.json().catch(() => null);
-        const savedCustomerFolderName = profileValue(accountResult?.account?.customer_account);
+        const savedCustomerFolderName = profileValue(accountResult?.account?.customer_directory_label);
 
         if (
           !accountResponse.ok ||
@@ -433,7 +502,7 @@ export function CustomerCompanyProfileEditor({
           (customerFolderNameChanged && savedCustomerFolderName !== normalizedCustomerFolderName)
         ) {
           setMessage(
-            `Saved the company contact profile for ${String(savedProfile.company_name || companyName).trim()}, but the customer folder settings were not saved. Reload before trying again.`,
+            `${companyProfileChanged ? `Saved the company contact profile for ${savedCompanyName}, but ` : ""}The customer folder settings were not saved. Reload before trying again.`,
           );
           setStatus("error");
           return;
@@ -446,7 +515,11 @@ export function CustomerCompanyProfileEditor({
         router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
       }
 
-      setMessage(`Saved customer company profile for ${String(savedProfile.company_name || companyName).trim()}.`);
+      setMessage(
+        companyProfileChanged
+          ? `Saved customer company profile for ${savedCompanyName}.`
+          : `Saved customer folder name for ${savedCompanyName}.`,
+      );
       setStatus("saved");
       setProfile(null);
     } catch (error) {

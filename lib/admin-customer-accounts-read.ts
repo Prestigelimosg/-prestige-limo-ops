@@ -23,6 +23,7 @@ export type AdminCustomerAccountSafeRecord = {
   account_scope_label: string | null;
   completed_count: number;
   customer_account: string;
+  customer_directory_label: string;
   customer_folder_key: string;
   customer_folder_active: boolean;
   customer_id: string | null;
@@ -307,6 +308,7 @@ function toSafeAccount(account: MutableCustomerAccount): InternalCustomerAccount
     account_scope_label: account.account_scope_label,
     completed_count: account.completed_count,
     customer_account: account.customer_account,
+    customer_directory_label: account.customer_directory_label,
     customer_folder_key: account.customer_folder_key,
     customer_folder_active: account.customer_folder_active,
     customer_id: account.customer_id,
@@ -348,6 +350,7 @@ function toCustomerAccounts(
         account_scope_label: accountScope.label,
         completed_count: 0,
         customer_account: customerAccount,
+        customer_directory_label: "",
         customer_folder_key: key,
         customer_folder_active: false,
         customer_id: customerId,
@@ -572,6 +575,7 @@ function mergeCustomerDirectoryRows(
         companyName,
         directoryLabel: directoryCustomerAccount,
       }),
+      customer_directory_label: directoryCustomerAccount || "",
       customer_folder_active: customerDirectoryRowIsActive(directoryRow),
       guest_account_billing_enabled: guestAccountBillingEnabled,
       verified_company_id: companyId,
@@ -614,6 +618,7 @@ function mergeCustomerDirectoryRows(
         companyName,
         directoryLabel: customerAccount,
       }),
+      customer_directory_label: customerAccount,
       customer_folder_key: `${customerId}::customer_account`,
       customer_folder_active: customerDirectoryRowIsActive(record),
       customer_id: customerId,
@@ -848,6 +853,7 @@ export async function updateAdminCustomerAccountProfile(
       account_scope_label: null,
       completed_count: 0,
       customer_account: customerAccount,
+      customer_directory_label: customerAccount,
       customer_folder_key: `${customerId}::customer_account`,
       customer_folder_active: customerDirectoryRowIsActive(record),
       customer_id: customerId,

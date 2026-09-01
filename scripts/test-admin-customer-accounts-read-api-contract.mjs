@@ -500,6 +500,7 @@ try {
       account_scope_label: "Passenger: Boss Alpha / Booker: PA Lee",
       completed_count: 1,
       customer_account: "UBS",
+      customer_directory_label: "UBS",
       customer_folder_key: "101::boss_alpha",
       customer_folder_active: true,
       customer_id: "101",
@@ -518,6 +519,7 @@ try {
       account_scope_label: null,
       completed_count: 1,
       customer_account: "Ritz Carlton",
+      customer_directory_label: "Ritz Carlton",
       customer_folder_key: "102::booker_traveller_not_set",
       customer_folder_active: true,
       customer_id: "102",
@@ -536,6 +538,7 @@ try {
       account_scope_label: "Passenger: Boss Beta / Booker: PA Lee",
       completed_count: 0,
       customer_account: "UBS",
+      customer_directory_label: "UBS",
       customer_folder_key: "101::boss_beta",
       customer_folder_active: true,
       customer_id: "101",
@@ -554,6 +557,7 @@ try {
       account_scope_label: null,
       completed_count: 0,
       customer_account: "Directory Only Customer",
+      customer_directory_label: "Directory Only Customer",
       customer_folder_key: "103::customer_account",
       customer_folder_active: true,
       customer_id: "103",
@@ -812,6 +816,11 @@ try {
     "Tiger Global (June)",
     "Exact verified Company + Booker title must override booking Passenger/Traveller display text",
   );
+  assert.equal(
+    authoritativeIdentityResult.body.accounts[0].customer_directory_label,
+    "Tiger Global (June)",
+    "The editable Customer folder label must remain the exact customers.display_name value",
+  );
   assert.doesNotMatch(
     authoritativeIdentityResult.body.accounts[0].customer_account,
     /Stanley|Passenger|Traveller|Boss/i,
@@ -850,12 +859,73 @@ try {
   assert.equal(directoryOnlyIdentityResult.status, 200);
   assert.equal(directoryOnlyIdentityResult.body.accounts.length, 1);
   assert.equal(directoryOnlyIdentityResult.body.accounts[0].customer_account, "Tiger Global (June)");
+  assert.equal(
+    directoryOnlyIdentityResult.body.accounts[0].customer_directory_label,
+    "Tiger Global [Stanley Ho]",
+    "A formatted corporate title must not overwrite the raw Customer directory label",
+  );
   assert.equal(directoryOnlyIdentityResult.body.accounts[0].saved_booking_count, 0);
   assert.doesNotMatch(
     directoryOnlyIdentityResult.body.accounts[0].customer_account,
     /Stanley|Passenger|Traveller|Boss/i,
   );
   assert.equal(directoryOnlyIdentityMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const contaminatedCompanyMock = installMockClient({
+    bookings: [
+      {
+        booker_id: 37,
+        booking_reference: "ATOM-SAFE-001",
+        company_id: 37,
+        contact_display_name: "Rachal Quinlan",
+        customer_display_name: "ATOM booking passenger label",
+        customer_id: "137",
+        passenger_name: "Booking Passenger",
+        pickup_at: "2026-09-10T10:00:00.000Z",
+      },
+    ],
+    bookers: [
+      { booker_name: "rachal", company_id: 37, customer_id: 137, id: 37 },
+    ],
+    companies: [
+      { company_name: "ATOM International [Rachal Quinlan]", id: 37 },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "corporate",
+        display_name: "ATOM folder saved by Admin",
+        id: 137,
+        status: "active",
+      },
+    ],
+  });
+  const contaminatedCompanyResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=137&limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(contaminatedCompanyResult.status, 200);
+  assert.equal(
+    contaminatedCompanyResult.body.accounts[0].customer_account,
+    "ATOM International [Rachal Quinlan] (rachal)",
+    "Presentation must faithfully use the exact verified Company and Booker records before guarded data correction",
+  );
+  assert.equal(
+    contaminatedCompanyResult.body.accounts[0].customer_directory_label,
+    "ATOM folder saved by Admin",
+    "Even a contaminated authoritative Company must never overwrite the editable Customer folder label",
+  );
+  assert.doesNotMatch(
+    contaminatedCompanyResult.body.accounts[0].customer_directory_label,
+    /Booking Passenger|Rachal Quinlan|\(rachal\)/,
+  );
+  assert.equal(contaminatedCompanyMock.client.operations.length, 0);
 
   setEnv(enabledEnv());
 

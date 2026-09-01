@@ -58,6 +58,7 @@ async function main() {
   let client = null;
   const interceptedRequests = [];
   let companySavePayload = null;
+  let currentFolderName = originalFolderName;
   let folderPatchPayload = null;
 
   try {
@@ -107,7 +108,8 @@ async function main() {
       if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "GET") {
         responseBody = {
           accounts: [{
-            customer_account: originalFolderName,
+            customer_account: currentFolderName,
+            customer_directory_label: currentFolderName,
             customer_id: customerId,
             guest_account_billing_enabled: true,
           }],
@@ -142,9 +144,11 @@ async function main() {
         };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "PATCH") {
         folderPatchPayload = JSON.parse(request.postData || "{}");
+        currentFolderName = folderPatchPayload.display_name;
         responseBody = {
           account: {
             customer_account: folderPatchPayload.display_name,
+            customer_directory_label: folderPatchPayload.display_name,
             customer_id: customerId,
             guest_account_billing_enabled: true,
           },
@@ -213,15 +217,32 @@ async function main() {
       travellerEditorVisible: false,
     });
 
+    reporter.step("checking raw Customer folder field at 390px");
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 3,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
+    const mobileOpenedState = await evaluate(`(() => ({
+      folderName: document.querySelector('[data-customer-folder-name="${customerId}"]')?.value || "",
+      pageOverflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      title: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
+      viewportWidth: window.innerWidth,
+    }))()`);
+    assert.deepEqual(mobileOpenedState, {
+      folderName: originalFolderName,
+      pageOverflow: 0,
+      title: originalFolderName,
+      viewportWidth: 390,
+    });
+
     reporter.step("saving folder-only agency correction");
     await evaluate(`(() => {
       const input = document.querySelector('[data-customer-folder-name="${customerId}"]');
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
       setter.call(input, ${JSON.stringify(correctedFolderName)});
       input.dispatchEvent(new Event("input", { bubbles: true }));
-      const contact = document.querySelector('[data-customer-company-profile-primary-contact="${customerId}"]');
-      setter.call(contact, "");
-      contact.dispatchEvent(new Event("input", { bubbles: true }));
       document.querySelector('[data-customer-company-profile-save="${customerId}"]').click();
     })()`);
 
@@ -242,11 +263,11 @@ async function main() {
     });
     assert.equal(Object.hasOwn(folderPatchPayload, "traveller_name"), false);
     assert.equal(Object.hasOwn(folderPatchPayload, "guest_account_billing_enabled"), false);
-    assert.equal(companySavePayload.action_type, "company_update");
-    assert.equal(companySavePayload.company_name, correctedFolderName);
-    assert.equal(companySavePayload.primary_contact_name, null);
-    assert.equal(Object.hasOwn(companySavePayload, "billing_address"), false);
-    assert.equal(Object.hasOwn(companySavePayload, "traveller_name"), false);
+    assert.equal(
+      companySavePayload,
+      null,
+      "A Customer-folder-only save must never POST or rewrite the unchanged Company profile",
+    );
     assert.equal(
       interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,
       1,
@@ -266,13 +287,50 @@ async function main() {
       editButtonVisible: true,
       editorVisible: false,
       folderInputVisible: false,
-      savedMessage: `Saved customer company profile for ${correctedFolderName}.`,
+      savedMessage: `Saved customer folder name for ${correctedFolderName}.`,
       saveButtonVisible: false,
       topBanner: correctedFolderName,
       travellerEditorVisible: false,
     });
 
+    reporter.step("saving one changed Company field without rewriting the Customer folder");
+    await evaluate(`document.querySelector('[data-customer-company-profile-edit="${customerId}"]').click()`);
+    await waitForSelector(
+      evaluate,
+      `[data-customer-company-profile-primary-contact="${customerId}"]`,
+      "reopened company contact field",
+    );
+    await evaluate(`(() => {
+      const contact = document.querySelector('[data-customer-company-profile-primary-contact="${customerId}"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      setter.call(contact, "");
+      contact.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('[data-customer-company-profile-save="${customerId}"]').click();
+    })()`);
+    await waitForCondition(
+      () => companySavePayload,
+      10000,
+      "changed-only Company profile payload",
+    );
+
+    assert.deepEqual(companySavePayload, {
+      action_type: "company_update",
+      entity_type: "company",
+      id: 501,
+      primary_contact_name: null,
+    });
+    assert.equal(
+      interceptedRequests.filter((value) => value === "POST /api/admin-company-traveler-crm-runtime-write-action").length,
+      1,
+    );
+    assert.equal(
+      interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,
+      1,
+      "Company-only save must not rewrite the raw Customer folder",
+    );
+
     console.log(JSON.stringify(reporter.summary({
+      companyPayload: companySavePayload,
       errorCount: 0,
       ok: true,
       patchPayload: folderPatchPayload,

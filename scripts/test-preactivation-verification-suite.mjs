@@ -50,6 +50,10 @@ const guardChecks = [
     script: "scripts/test-admin-customer-account-delete-runtime.mjs",
   },
   {
+    label: "Bridge Customer177 Company + Booker repair guard",
+    script: "scripts/test-bridge-customer-177-company-booker-repair-guard.mjs",
+  },
+  {
     label: "customer and booking test-data wipe approval packet guard",
     script: "scripts/test-customer-booking-test-data-wipe-approval-packet.mjs",
   },

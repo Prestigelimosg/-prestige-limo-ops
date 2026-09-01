@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { CustomerAccountDangerZone } from "./customer-account-danger-zone";
 import { CustomerVerifiedIdentitiesEditor } from "./customer-verified-identities-editor";
 
 const adminCompanyIdentityApiPath = "/api/admin-companies-crm-identity";
-const adminCompanyProfileWriteApiPath = "/api/admin-company-traveler-crm-runtime-write-action";
 const adminCustomerAccountsApiPath = "/api/admin-customer-accounts";
+const adminRateSetupApiPath = "/api/admin-rate-setup";
+const createBookerValue = "create-new-booker";
 
 type CustomerCompanyProfileEditorProps = {
   customerId: string;
@@ -29,6 +30,17 @@ type CompanyProfile = {
   primary_contact_name: string;
   website: string;
 };
+
+type BookerProfile = {
+  booker_name: string;
+  company_id: number;
+  customer_id: number | null;
+  email: string;
+  id: number;
+  phone: string;
+};
+
+type CompanyOption = { id: number; name: string };
 
 type EditorStatus = "idle" | "loading" | "ready" | "saving" | "saved" | "error";
 type ProfileMode = "create" | "edit";
@@ -61,6 +73,14 @@ function safeErrorMessage(rawError: unknown) {
     return "No company CRM profile was found for this customer. No customer record was changed.";
   }
 
+  if (/changed while|stale|conflict/.test(normalized)) {
+    return "This exact Customer, Company or Booker changed while the profile was open. Reload before saving; nothing was overwritten.";
+  }
+
+  if (/saved but.*reload|authoritative title/.test(normalized)) {
+    return "The exact Company + Booker profile saved, but its authoritative title could not be reloaded. Reload this profile before editing again.";
+  }
+
   return "Customer profile could not be loaded or saved. No customer record was changed.";
 }
 
@@ -72,16 +92,6 @@ function positiveProfileId(value: unknown) {
   const parsed = Number(value);
 
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-function agencyCompanyProfileName(customerName: string, guestAccountBillingEnabled: boolean) {
-  const normalized = customerName.trim();
-
-  if (!guestAccountBillingEnabled) {
-    return normalized;
-  }
-
-  return normalized.replace(/\s+\[[^\[\]]+\]\s*$/, "").trim() || normalized;
 }
 
 function blankCreateProfile(customerName: string, guestAccountBillingEnabled: boolean): CompanyProfile {
@@ -101,24 +111,81 @@ function blankCreateProfile(customerName: string, guestAccountBillingEnabled: bo
   };
 }
 
-function isMissingCompanyProfileResult(response: Response, result: unknown) {
-  const record = result !== null && typeof result === "object" ? (result as Record<string, unknown>) : {};
-  const message = typeof record.error === "string" ? record.error.toLowerCase() : "";
-
-  return response.status === 404 || /not found|no company/.test(message);
+function blankBookerProfile(companyId: number): BookerProfile {
+  return {
+    booker_name: "",
+    company_id: companyId,
+    customer_id: null,
+    email: "",
+    id: 0,
+    phone: "",
+  };
 }
 
-async function loadCompanyProfile(companyName: string) {
-  const params = new URLSearchParams({ company_name: companyName });
-  const response = await fetch(`${adminCompanyIdentityApiPath}?${params.toString()}`, {
-    headers: {
-      "x-prestige-admin-purpose": "admin-booking-persistence",
-    },
-    method: "GET",
-  });
-  const result = await response.json().catch(() => null);
+function normalizedBooker(value: unknown): BookerProfile | null {
+  const row = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+  const id = positiveProfileId(row.id);
+  const companyId = positiveProfileId(row.company_id);
 
-  return { response, result };
+  return id && companyId
+    ? {
+        booker_name: profileValue(row.booker_name),
+        company_id: companyId,
+        customer_id: positiveProfileId(row.customer_id),
+        email: profileValue(row.email).toLowerCase(),
+        id,
+        phone: profileValue(row.phone),
+      }
+    : null;
+}
+
+function companyProfileSnapshot(profile: CompanyProfile) {
+  return {
+    accounts_email: profile.accounts_email.trim().toLowerCase() || null,
+    billing_address: profile.billing_address.trim() || null,
+    billing_email: profile.billing_email.trim().toLowerCase() || null,
+    company_name: profile.company_name.replace(/\s+/g, " ").trim(),
+    domain: profile.domain.trim().toLowerCase() || null,
+    main_phone: profile.main_phone.trim() || null,
+    mobile_phone: profile.mobile_phone.trim() || null,
+    operations_email: profile.operations_email.trim().toLowerCase() || null,
+    primary_contact_name: profile.primary_contact_name.trim() || null,
+    website: profile.website.trim().toLowerCase() || null,
+  };
+}
+
+function companyProfileFromRecord(value: unknown): CompanyProfile | null {
+  const company = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+  const id = positiveProfileId(company.id);
+
+  return id
+    ? {
+        accounts_email: profileValue(company.accounts_email),
+        billing_address: profileValue(company.billing_address),
+        billing_email: profileValue(company.billing_email),
+        company_name: profileValue(company.company_name),
+        domain: profileValue(company.domain),
+        guest_account_billing_enabled: false,
+        id,
+        main_phone: profileValue(company.main_phone),
+        mobile_phone: profileValue(company.mobile_phone),
+        operations_email: profileValue(company.operations_email),
+        primary_contact_name: profileValue(company.primary_contact_name),
+        website: profileValue(company.website),
+      }
+    : null;
+}
+
+function bookerProfileSnapshot(profile: BookerProfile) {
+  return {
+    booker_name: profile.booker_name.replace(/\s+/g, " ").trim(),
+    email: profile.email.trim().toLowerCase() || null,
+    phone: profile.phone.trim() || null,
+  };
 }
 
 async function loadCompanyProfileById(companyId: number) {
@@ -136,119 +203,6 @@ async function loadCompanyProfileById(companyId: number) {
   return { response, result };
 }
 
-function optionalCompanyContactValue(
-  value: string,
-  loadedValue: string | undefined,
-  isCreate: boolean,
-  lowercase = false,
-) {
-  const normalized = (lowercase ? value.toLowerCase() : value).trim();
-
-  if (normalized) {
-    return normalized;
-  }
-
-  return !isCreate && loadedValue?.trim() ? null : undefined;
-}
-
-type CompanyProfileWriteField = Exclude<keyof CompanyProfile, "guest_account_billing_enabled" | "id">;
-
-const companyProfileWriteFields: CompanyProfileWriteField[] = [
-  "accounts_email",
-  "billing_address",
-  "billing_email",
-  "company_name",
-  "domain",
-  "main_phone",
-  "mobile_phone",
-  "operations_email",
-  "primary_contact_name",
-  "website",
-];
-
-function normalizedCompanyProfileField(profile: CompanyProfile, field: CompanyProfileWriteField) {
-  const lowercasedFields = new Set<CompanyProfileWriteField>([
-    "accounts_email",
-    "billing_email",
-    "domain",
-    "operations_email",
-    "website",
-  ]);
-  const rawValue = field === "domain"
-    ? profile.website.trim() || profile.domain
-    : profile[field];
-
-  return (lowercasedFields.has(field) ? rawValue.toLowerCase() : rawValue).trim();
-}
-
-function companyProfileFieldChanged(
-  profile: CompanyProfile,
-  loadedProfile: CompanyProfile,
-  field: CompanyProfileWriteField,
-) {
-  return normalizedCompanyProfileField(profile, field) !== normalizedCompanyProfileField(loadedProfile, field);
-}
-
-function companyProfileHasChanges(profile: CompanyProfile, loadedProfile: CompanyProfile | null) {
-  return Boolean(
-    loadedProfile &&
-      companyProfileWriteFields.some((field) => companyProfileFieldChanged(profile, loadedProfile, field)),
-  );
-}
-
-function createCompanyProfilePayload(profile: CompanyProfile) {
-  const website = profile.website.trim().toLowerCase();
-
-  return {
-    action_type: "company_create",
-    accounts_email: optionalCompanyContactValue(profile.accounts_email, undefined, true, true),
-    billing_address: optionalCompanyContactValue(profile.billing_address, undefined, true),
-    billing_email: optionalCompanyContactValue(profile.billing_email, undefined, true, true),
-    company_name: profile.company_name.trim(),
-    domain: website || profile.domain.trim().toLowerCase() || undefined,
-    entity_type: "company",
-    main_phone: optionalCompanyContactValue(profile.main_phone, undefined, true),
-    mobile_phone: optionalCompanyContactValue(profile.mobile_phone, undefined, true),
-    operations_email: optionalCompanyContactValue(profile.operations_email, undefined, true, true),
-    primary_contact_name: optionalCompanyContactValue(profile.primary_contact_name, undefined, true),
-    website: optionalCompanyContactValue(profile.website, undefined, true, true),
-  };
-}
-
-function changedCompanyProfilePayload(profile: CompanyProfile, loadedProfile: CompanyProfile) {
-  const payload: Record<string, number | string | null> = {
-    action_type: "company_update",
-    entity_type: "company",
-    id: profile.id || loadedProfile.id,
-  };
-
-  for (const field of companyProfileWriteFields) {
-    if (!companyProfileFieldChanged(profile, loadedProfile, field)) {
-      continue;
-    }
-
-    const normalizedValue = normalizedCompanyProfileField(profile, field);
-
-    if (normalizedValue) {
-      payload[field] = normalizedValue;
-    } else if (field !== "company_name" && field !== "domain") {
-      payload[field] = null;
-    }
-  }
-
-  return payload;
-}
-
-function profilePayload(
-  profile: CompanyProfile,
-  loadedProfile: CompanyProfile | null,
-  isCreate: boolean,
-) {
-  return isCreate || !loadedProfile
-    ? createCompanyProfilePayload(profile)
-    : changedCompanyProfilePayload(profile, loadedProfile);
-}
-
 export function CustomerCompanyProfileEditor({
   customerId,
   customerName,
@@ -261,10 +215,110 @@ export function CustomerCompanyProfileEditor({
   const [profileMode, setProfileMode] = useState<ProfileMode>("edit");
   const [customerFolderName, setCustomerFolderName] = useState(customerName.trim());
   const [loadedCustomerFolderName, setLoadedCustomerFolderName] = useState(customerName.trim());
+  const [accountTitle, setAccountTitle] = useState("Customer account · Requires editing");
+  const [booker, setBooker] = useState<BookerProfile | null>(null);
+  const [loadedBooker, setLoadedBooker] = useState<BookerProfile | null>(null);
+  const [bookerOptions, setBookerOptions] = useState<BookerProfile[]>([]);
+  const [availableBookers, setAvailableBookers] = useState<BookerProfile[]>([]);
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
+  const [companySelection, setCompanySelection] = useState("create-new-company");
+  const [bookerSelection, setBookerSelection] = useState(createBookerValue);
   const [identityDraftDirty, setIdentityDraftDirty] = useState(false);
   const handleIdentityDraftDirtyChange = useCallback((dirty: boolean) => {
     setIdentityDraftDirty(dirty);
   }, []);
+
+  const loadAccountTitle = useCallback(async () => {
+    const params = new URLSearchParams({ customer_id: customerId, limit: "1" });
+    const response = await fetch(`${adminCustomerAccountsApiPath}?${params.toString()}`, {
+      cache: "no-store",
+      headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+      method: "GET",
+    });
+    const result = await response.json().catch(() => null);
+    const account = Array.isArray(result?.accounts) ? result.accounts[0] : null;
+
+    if (response.ok && result?.ok && String(account?.customer_id || "") === customerId) {
+      const title = profileValue(account.customer_account) || "Customer account · Requires editing";
+      setAccountTitle(title);
+      return title;
+    }
+
+    return null;
+  }, [customerId]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void loadAccountTitle(), 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [loadAccountTitle]);
+
+  function configureBookerForCompany(companyId: number, candidates = availableBookers) {
+    const exactLinked = candidates.filter(
+      (candidate) =>
+        candidate.company_id === companyId &&
+        candidate.customer_id === positiveProfileId(customerId),
+    );
+
+    if (exactLinked.length > 1) {
+      throw new Error("More than one exact Booker is linked to this Customer.");
+    }
+
+    if (exactLinked.length === 1) {
+      setBooker(exactLinked[0]);
+      setLoadedBooker(exactLinked[0]);
+      setBookerOptions([exactLinked[0]]);
+      setBookerSelection(String(exactLinked[0].id));
+      return;
+    }
+
+    const available = candidates.filter(
+      (candidate) => candidate.company_id === companyId && candidate.customer_id === null,
+    );
+    setBookerOptions(available);
+    setLoadedBooker(null);
+    setBooker(blankBookerProfile(companyId));
+    setBookerSelection(createBookerValue);
+  }
+
+  async function chooseCompany(value: string) {
+    setCompanySelection(value);
+
+    if (value === "create-new-company") {
+      setProfile(blankCreateProfile("", false));
+      setLoadedProfile(null);
+      setProfileMode("create");
+      setBooker(blankBookerProfile(0));
+      setLoadedBooker(null);
+      setBookerOptions([]);
+      setBookerSelection(createBookerValue);
+      return;
+    }
+
+    const companyId = positiveProfileId(value);
+
+    if (!companyId) {
+      return;
+    }
+
+    setStatus("loading");
+    setMessage("Loading the selected exact Company...");
+    const { response, result } = await loadCompanyProfileById(companyId);
+    const nextProfile = companyProfileFromRecord(result?.company);
+
+    if (!response.ok || result?.ok !== true || !nextProfile || nextProfile.id !== companyId) {
+      setMessage("Selected Company could not be loaded safely. Nothing was changed.");
+      setStatus("error");
+      return;
+    }
+
+    setProfile(nextProfile);
+    setLoadedProfile(nextProfile);
+    setProfileMode("edit");
+    configureBookerForCompany(companyId);
+    setMessage("Company selected explicitly. Select an unlinked Booker or create one explicitly.");
+    setStatus("ready");
+  }
 
   async function openProfileEditor() {
     setIdentityDraftDirty(false);
@@ -287,7 +341,6 @@ export function CustomerCompanyProfileEditor({
         throw new Error("Exact customer account classification could not be loaded safely.");
       }
 
-      const guestAccountBillingEnabled = account.guest_account_billing_enabled === true;
       const exactCustomerFolderName = profileValue(account.customer_directory_label);
 
       if (!exactCustomerFolderName) {
@@ -296,55 +349,59 @@ export function CustomerCompanyProfileEditor({
 
       setCustomerFolderName(exactCustomerFolderName);
       setLoadedCustomerFolderName(exactCustomerFolderName);
-      const companyLookupName = agencyCompanyProfileName(exactCustomerFolderName, guestAccountBillingEnabled);
+      const rateResponse = await fetch(adminRateSetupApiPath, {
+        cache: "no-store",
+        headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+        method: "GET",
+      });
+      const rateResult = await rateResponse.json().catch(() => null);
+      const allBookers = Array.isArray(rateResult?.bookers)
+        ? rateResult.bookers.map(normalizedBooker).filter((value: BookerProfile | null): value is BookerProfile => Boolean(value))
+        : [];
+      const allCompanies: CompanyOption[] = Array.isArray(rateResult?.companies)
+        ? rateResult.companies.flatMap((value: unknown) => {
+            const row = value !== null && typeof value === "object" && !Array.isArray(value)
+              ? (value as Record<string, unknown>)
+              : {};
+            const id = positiveProfileId(row.id);
+            const name = profileValue(row.company_name);
+
+            return id && name ? [{ id, name }] : [];
+          })
+        : [];
+
+      if (!rateResponse.ok || rateResult?.ok !== true) {
+        throw new Error("Verified Booker list could not be loaded safely.");
+      }
+
+      setAvailableBookers(allBookers);
+      setCompanyOptions(allCompanies);
+
       const verifiedCompanyId = positiveProfileId(account.verified_company_id);
-      let response: Response;
-      let result: {
-        company?: Record<string, unknown> | null;
-        error?: string;
-        ok?: boolean;
-      } | null;
 
-      if (verifiedCompanyId) {
-        ({ response, result } = await loadCompanyProfileById(verifiedCompanyId));
-      } else {
-        ({ response, result } = await loadCompanyProfile(companyLookupName));
+      if (!verifiedCompanyId) {
+        setProfile(blankCreateProfile("", false));
+        setLoadedProfile(null);
+        setBooker(blankBookerProfile(0));
+        setLoadedBooker(null);
+        setBookerOptions([]);
+        setBookerSelection(createBookerValue);
+        setCompanySelection("create-new-company");
+        setProfileMode("create");
+        setMessage("This Customer requires an explicit Company and Booker. Enter both; nothing was inferred from the old folder, passenger, Traveller or contact text.");
+        setStatus("ready");
+        return;
       }
 
-      if (
-        !verifiedCompanyId &&
-        companyLookupName !== exactCustomerFolderName &&
-        isMissingCompanyProfileResult(response, result)
-      ) {
-        ({ response, result } = await loadCompanyProfile(exactCustomerFolderName));
-      }
-
+      const { response, result } = await loadCompanyProfileById(verifiedCompanyId);
       const company = result?.company;
 
       if (!response.ok || !result?.ok) {
-        if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result)) {
-          setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
-          setLoadedProfile(null);
-          setProfileMode("create");
-          setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
-          setStatus("ready");
-          return;
-        }
-
         throw new Error(result?.error || "Customer company profile lookup failed safely.");
       }
 
       if (!company) {
-        if (verifiedCompanyId) {
-          throw new Error("Verified company CRM profile could not be loaded safely.");
-        }
-
-        setProfile(blankCreateProfile(companyLookupName, guestAccountBillingEnabled));
-        setLoadedProfile(null);
-        setProfileMode("create");
-        setMessage(`No company CRM profile exists for ${companyLookupName}. Review the name, then create it deliberately.`);
-        setStatus("ready");
-        return;
+        throw new Error("Verified company CRM profile could not be loaded safely.");
       }
 
       if (!Number.isSafeInteger(Number(company.id)) || Number(company.id) <= 0) {
@@ -355,24 +412,25 @@ export function CustomerCompanyProfileEditor({
         throw new Error("Verified company CRM profile identity did not match safely.");
       }
 
-      const loadedCompanyProfile = {
-        accounts_email: profileValue(company.accounts_email),
-        billing_address: profileValue(company.billing_address),
-        billing_email: profileValue(company.billing_email),
-        company_name: profileValue(company.company_name),
-        domain: profileValue(company.domain),
-        guest_account_billing_enabled: guestAccountBillingEnabled,
-        id: Number(company.id),
-        main_phone: profileValue(company.main_phone),
-        mobile_phone: profileValue(company.mobile_phone),
-        operations_email: profileValue(company.operations_email),
-        primary_contact_name: profileValue(company.primary_contact_name),
-        website: profileValue(company.website),
-      };
+      const loadedCompanyProfile = companyProfileFromRecord(company);
+
+      if (!loadedCompanyProfile) {
+        throw new Error("Verified company CRM profile could not be loaded safely.");
+      }
       setProfile(loadedCompanyProfile);
       setLoadedProfile(loadedCompanyProfile);
+      configureBookerForCompany(Number(company.id), allBookers);
+      setCompanySelection(String(company.id));
       setProfileMode("edit");
-      setMessage(`Editing the company profile for ${String(company.company_name || customerName).trim()}.`);
+      setMessage(
+        allBookers.some(
+          (candidate: BookerProfile) =>
+            candidate.company_id === Number(company.id) &&
+            candidate.customer_id === positiveProfileId(customerId),
+        )
+          ? `Editing the exact Company + Booker profile for ${String(company.company_name || customerName).trim()}.`
+          : "Company loaded. Select an unlinked Booker or create one explicitly; Traveller is optional.",
+      );
       setStatus("ready");
     } catch (error) {
       setMessage(safeErrorMessage(error));
@@ -381,13 +439,13 @@ export function CustomerCompanyProfileEditor({
   }
 
   async function saveProfile() {
-    if (!profile) {
+    if (!profile || !booker) {
       return;
     }
 
     if (identityDraftDirty) {
       setMessage(
-        "Booker / Traveller changes are not saved yet. Press Save Booker / Traveller below first.",
+        "Traveller changes are not saved yet. Save or cancel the Traveller draft first.",
       );
       setStatus("error");
       const identitySaveButton = document.querySelector<HTMLButtonElement>(
@@ -399,14 +457,20 @@ export function CustomerCompanyProfileEditor({
     }
 
     const companyName = profile.company_name.trim();
-    const domain = profile.domain.trim().toLowerCase();
     const normalizedCustomerFolderName = customerFolderName.replace(/\s+/g, " ").trim();
-    const isCreate = profileMode === "create";
-    const customerFolderNameChanged = normalizedCustomerFolderName !== loadedCustomerFolderName;
-    const companyProfileChanged = isCreate || companyProfileHasChanges(profile, loadedProfile);
+    const safeBookerName = booker.booker_name.replace(/\s+/g, " ").trim();
+    const selectedBookerId = bookerSelection === createBookerValue
+      ? null
+      : positiveProfileId(bookerSelection);
 
     if (!companyName) {
       setMessage("Company name is required before saving.");
+      setStatus("error");
+      return;
+    }
+
+    if (!safeBookerName) {
+      setMessage("Booker / PA name is required. Traveller remains optional.");
       setStatus("error");
       return;
     }
@@ -417,21 +481,9 @@ export function CustomerCompanyProfileEditor({
       return;
     }
 
-    if (!companyProfileChanged && !customerFolderNameChanged) {
-      setMessage("No company profile or customer folder changes to save.");
-      setStatus("ready");
-      return;
-    }
-
-    const saveScope = companyProfileChanged && customerFolderNameChanged
-      ? `${isCreate ? "create" : "save"} the company profile and rename the customer folder to ${normalizedCustomerFolderName}`
-      : companyProfileChanged
-        ? `${isCreate ? "create" : "save"} the company profile`
-        : `rename the customer folder to ${normalizedCustomerFolderName}`;
-
     if (
       !window.confirm(
-        `Confirm ${saveScope} for ${companyName}? It does not change the stored customer classification, jobs, passenger names, invoice records, payments, or send any message.`,
+        `Save the exact Company + Booker profile ${companyName} (${safeBookerName})? Customer folder, Company and Booker changes save together. Traveller is optional. This does not change any booking, passenger, Traveller, invoice, monthly billing, access, Calendar, message, notification, push, Driver, rate, payment or provider.`,
       )
     ) {
       setMessage("Profile save cancelled. No customer record was changed.");
@@ -440,88 +492,63 @@ export function CustomerCompanyProfileEditor({
     }
 
     setStatus("saving");
-    setMessage(`Saving the selected customer profile changes for ${companyName}...`);
+    setMessage(`Saving the exact Company + Booker profile for ${companyName}...`);
 
     try {
-      let savedCompanyName = companyName;
+      const accountResponse = await fetch(adminCustomerAccountsApiPath, {
+        body: JSON.stringify({
+          action_type: "customer_company_booker_profile_overwrite",
+          booker_id: selectedBookerId,
+          booker_profile: bookerProfileSnapshot(booker),
+          company_id: profile.id,
+          company_profile: companyProfileSnapshot(profile),
+          customer_display_name: normalizedCustomerFolderName,
+          customer_id: customerId,
+          expected_booker_profile: loadedBooker ? bookerProfileSnapshot(loadedBooker) : null,
+          expected_booker_customer_id: loadedBooker?.customer_id ?? null,
+          expected_company_profile: loadedProfile ? companyProfileSnapshot(loadedProfile) : null,
+          expected_customer_display_name: loadedCustomerFolderName,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const accountResult = await accountResponse.json().catch(() => null);
+      const saved = accountResult?.account;
 
-      if (companyProfileChanged) {
-        const response = await fetch(adminCompanyProfileWriteApiPath, {
-          body: JSON.stringify(profilePayload(profile, loadedProfile, isCreate)),
-          headers: {
-            "Content-Type": "application/json",
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "POST",
-        });
-        const result = await response.json().catch(() => null);
-        const savedProfile = result?.record;
-
-        if (!response.ok || !result?.ok || result?.status !== "saved" || !savedProfile) {
-          throw new Error(result?.error || "Customer company profile save failed safely.");
-        }
-
-        const nextProfile = {
-          accounts_email: profileValue(savedProfile.accounts_email),
-          billing_address: profileValue(savedProfile.billing_address),
-          billing_email: profileValue(savedProfile.billing_email),
-          company_name: profileValue(savedProfile.company_name) || companyName,
-          domain: profileValue(savedProfile.domain) || domain,
-          guest_account_billing_enabled: profile.guest_account_billing_enabled,
-          id: Number(savedProfile.id),
-          main_phone: profileValue(savedProfile.main_phone),
-          mobile_phone: profileValue(savedProfile.mobile_phone),
-          operations_email: profileValue(savedProfile.operations_email),
-          primary_contact_name: profileValue(savedProfile.primary_contact_name),
-          website: profileValue(savedProfile.website),
-        };
-        savedCompanyName = nextProfile.company_name;
-        setProfile(nextProfile);
-        setLoadedProfile(nextProfile);
-        setProfileMode("edit");
+      if (
+        !accountResponse.ok ||
+        accountResult?.ok !== true ||
+        positiveProfileId(saved?.customer_id) !== positiveProfileId(customerId) ||
+        positiveProfileId(saved?.company_id) === null ||
+        positiveProfileId(saved?.booker_id) === null ||
+        profileValue(saved?.customer_display_name) !== normalizedCustomerFolderName ||
+        profileValue(saved?.company_name) !== companyName ||
+        profileValue(saved?.booker_name) !== safeBookerName
+      ) {
+        throw new Error(accountResult?.error || "Customer Company + Booker profile save failed safely.");
       }
 
-      if (customerFolderNameChanged) {
-        const accountResponse = await fetch(adminCustomerAccountsApiPath, {
-          body: JSON.stringify({
-            customer_id: customerId,
-            display_name: normalizedCustomerFolderName,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            "x-prestige-admin-purpose": "admin-booking-persistence",
-          },
-          method: "PATCH",
-        });
-        const accountResult = await accountResponse.json().catch(() => null);
-        const savedCustomerFolderName = profileValue(accountResult?.account?.customer_directory_label);
+      setCustomerFolderName(normalizedCustomerFolderName);
+      setLoadedCustomerFolderName(normalizedCustomerFolderName);
+      const expectedTitle = `${companyName} (${safeBookerName})`;
+      setAccountTitle(expectedTitle);
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("name", normalizedCustomerFolderName);
+      router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
+      const reloadedTitle = await loadAccountTitle();
 
-        if (
-          !accountResponse.ok ||
-          !accountResult?.ok ||
-          (customerFolderNameChanged && savedCustomerFolderName !== normalizedCustomerFolderName)
-        ) {
-          setMessage(
-            `${companyProfileChanged ? `Saved the company contact profile for ${savedCompanyName}, but ` : ""}The customer folder settings were not saved. Reload before trying again.`,
-          );
-          setStatus("error");
-          return;
-        }
-
-        setCustomerFolderName(savedCustomerFolderName);
-        setLoadedCustomerFolderName(savedCustomerFolderName);
-        const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.set("name", savedCustomerFolderName);
-        router.replace(`${nextUrl.pathname}${nextUrl.search}`, { scroll: false });
+      if (reloadedTitle !== expectedTitle) {
+        throw new Error("Customer profile saved but authoritative title reload failed.");
       }
 
-      setMessage(
-        companyProfileChanged
-          ? `Saved customer company profile for ${savedCompanyName}.`
-          : `Saved customer folder name for ${savedCompanyName}.`,
-      );
+      setMessage(`Saved, reloaded and verified ${expectedTitle}.`);
       setStatus("saved");
       setProfile(null);
+      setBooker(null);
+      setLoadedBooker(null);
     } catch (error) {
       setMessage(safeErrorMessage(error));
       setStatus("error");
@@ -530,21 +557,26 @@ export function CustomerCompanyProfileEditor({
 
   if (!profile) {
     return (
-      <div className="inline-flex flex-col items-start gap-1">
-        <button
-          className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
-          data-customer-company-profile-edit={customerId}
-          disabled={status === "loading"}
-          onClick={openProfileEditor}
-          type="button"
-        >
-          {status === "loading" ? "Loading profile" : "Edit profile"}
-        </button>
-        {message ? (
-          <p className={`max-w-sm rounded-md border px-2 py-1 text-xs font-semibold ${feedbackClass(status)}`}>
-            {message}
-          </p>
-        ) : null}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-bold tracking-normal text-slate-950" data-customer-authoritative-title={customerId}>
+          {accountTitle}
+        </h1>
+        <div className="inline-flex flex-col items-start gap-1">
+          <button
+            className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 transition hover:border-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
+            data-customer-company-profile-edit={customerId}
+            disabled={status === "loading"}
+            onClick={openProfileEditor}
+            type="button"
+          >
+            {status === "loading" ? "Loading profile" : "Edit profile"}
+          </button>
+          {message ? (
+            <p className={`max-w-sm rounded-md border px-2 py-1 text-xs font-semibold ${feedbackClass(status)}`}>
+              {message}
+            </p>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -554,14 +586,20 @@ export function CustomerCompanyProfileEditor({
       className="w-full rounded-md border border-slate-200 bg-slate-50 p-3"
       data-customer-company-profile-editor={customerId}
     >
+      <h1
+        className="mb-3 text-2xl font-bold tracking-normal text-slate-950"
+        data-customer-authoritative-title={customerId}
+      >
+        {accountTitle}
+      </h1>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-bold text-slate-950">
             {profileMode === "create" ? "Create customer company profile" : "Edit customer company profile"}
           </p>
           <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-600">
-            {profileMode === "create" ? "Creates" : "Changes"} this customer company record only. Jobs,
-            invoices, payments, and messages are not affected.
+            {profileMode === "create" ? "Creates" : "Changes"} this exact Customer + Company + Booker
+            profile in one guarded save. Jobs, invoices, payments, and messages are not affected.
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -573,6 +611,13 @@ export function CustomerCompanyProfileEditor({
               setIdentityDraftDirty(false);
               setProfile(null);
               setLoadedProfile(null);
+              setBooker(null);
+              setLoadedBooker(null);
+              setBookerOptions([]);
+              setAvailableBookers([]);
+              setCompanyOptions([]);
+              setCompanySelection("create-new-company");
+              setBookerSelection(createBookerValue);
               setProfileMode("edit");
               setMessage("");
               setStatus("idle");
@@ -590,9 +635,7 @@ export function CustomerCompanyProfileEditor({
           >
             {status === "saving"
               ? "Saving"
-              : profileMode === "create"
-                ? "Create company details"
-                : "Save company details"}
+              : "Save Company + Booker profile"}
           </button>
         </div>
       </div>
@@ -608,9 +651,26 @@ export function CustomerCompanyProfileEditor({
             value={customerFolderName}
           />
           <span className="font-semibold text-slate-500">
-            Controls only this customer folder label and top banner. Passenger names stay on their bookings.
+            Controls only the internal customer folder label. The visible customer title comes only from verified Company + Booker. Passenger names stay on their bookings.
           </span>
         </label>
+        {profileMode === "create" ? (
+          <label className="grid gap-1 text-xs font-bold text-slate-700 sm:col-span-2">
+            Exact Company
+            <select
+              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+              data-customer-company-selection="true"
+              onChange={(event) => void chooseCompany(event.target.value)}
+              value={companySelection}
+            >
+              <option value="create-new-company">Create new Company explicitly</option>
+              {companyOptions.map((candidate) => (
+                <option key={candidate.id} value={String(candidate.id)}>{candidate.name}</option>
+              ))}
+            </select>
+            <span className="font-semibold text-slate-500">No Company is inferred from the old folder, passenger, Traveller or contact text.</span>
+          </label>
+        ) : null}
         <label className="grid gap-1 text-xs font-bold text-slate-700">
           Company name
           <input
@@ -625,7 +685,11 @@ export function CustomerCompanyProfileEditor({
           <input
             className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
             data-customer-company-profile-website={customerId}
-            onChange={(event) => setProfile((current) => (current ? { ...current, website: event.target.value } : current))}
+            onChange={(event) => setProfile((current) => (current ? {
+              ...current,
+              domain: event.target.value,
+              website: event.target.value,
+            } : current))}
             placeholder="example.com"
             value={profile.website}
           />
@@ -698,21 +762,77 @@ export function CustomerCompanyProfileEditor({
         </label>
       </div>
 
-      {profile.guest_account_billing_enabled ? (
-        <p
-          className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
-          data-customer-agency-guest-guidance={customerId}
-        >
-          Agency guests stay on each booking. No permanent Booker / PA or Traveller CRM profile is required.
+      <section className="mt-3 rounded-md border border-sky-200 bg-white p-3" data-customer-company-booker-required="true">
+        <p className="text-xs font-bold text-slate-950">Company + Booker Customer Account</p>
+        <p className="mt-1 text-xs font-semibold text-slate-600">
+          Booker / PA is mandatory. Traveller is optional and stays separate.
         </p>
-      ) : profile.id ? (
+        {!loadedBooker && profile.id ? (
+          <label className="mt-3 grid gap-1 text-xs font-bold text-slate-700">
+            Exact Booker / PA
+            <select
+              className="min-h-9 rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold text-slate-950"
+              data-customer-booker-selection="true"
+              onChange={(event) => {
+                const next = event.target.value;
+                setBookerSelection(next);
+                const selected = bookerOptions.find((candidate) => String(candidate.id) === next);
+                setLoadedBooker(selected || null);
+                setBooker(selected || blankBookerProfile(profile.id || 0));
+              }}
+              value={bookerSelection}
+            >
+              <option value={createBookerValue}>Create new Booker explicitly</option>
+              {bookerOptions.map((candidate) => (
+                <option key={candidate.id} value={String(candidate.id)}>
+                  {candidate.booker_name || `Booker ${candidate.id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <label className="grid gap-1 text-xs font-bold text-slate-700">
+            Booker / PA name
+            <input
+              className="min-h-9 rounded-md border border-slate-300 px-2 text-sm font-semibold text-slate-950"
+              data-customer-required-booker-name="true"
+              onChange={(event) => setBooker((current) => current ? { ...current, booker_name: event.target.value } : current)}
+              value={booker?.booker_name || ""}
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-bold text-slate-700">
+            Booker email
+            <input
+              className="min-h-9 rounded-md border border-slate-300 px-2 text-sm font-semibold text-slate-950"
+              onChange={(event) => setBooker((current) => current ? { ...current, email: event.target.value } : current)}
+              type="email"
+              value={booker?.email || ""}
+            />
+          </label>
+          <label className="grid gap-1 text-xs font-bold text-slate-700">
+            Booker contact
+            <input
+              className="min-h-9 rounded-md border border-slate-300 px-2 text-sm font-semibold text-slate-950"
+              onChange={(event) => setBooker((current) => current ? { ...current, phone: event.target.value } : current)}
+              value={booker?.phone || ""}
+            />
+          </label>
+        </div>
+      </section>
+
+      {profile.id && loadedBooker?.customer_id === positiveProfileId(customerId) ? (
         <CustomerVerifiedIdentitiesEditor
           customerId={customerId}
           companyId={profile.id}
           companyName={profile.company_name}
           onDraftDirtyChange={handleIdentityDraftDirtyChange}
         />
-      ) : null}
+      ) : (
+        <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+          Save the exact Company + Booker profile first. No Traveller is required.
+        </p>
+      )}
 
       <p className={`mt-3 rounded-md border px-3 py-2 text-xs font-semibold ${feedbackClass(status)}`}>
         {message}

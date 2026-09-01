@@ -204,8 +204,6 @@ export function CustomerVerifiedIdentitiesEditor({
     });
   }, [travelers]);
 
-  const verifiedBookerCount = exactCustomerBooker ? 1 : 0;
-
   async function loadExactBooker(bookerId: number) {
     const lookupParams = new URLSearchParams({ id: String(bookerId) });
     const lookupResponse = await fetch(`${adminBookersApiPath}?${lookupParams.toString()}`, {
@@ -249,7 +247,7 @@ export function CustomerVerifiedIdentitiesEditor({
       setBookerContact(cleanText(booker.phone));
       setTravelerName(row.travelerName);
       setDraftDirty(false);
-      setMessage("Edit this exact Booker and Traveller pair, then press Save Booker / Traveller.");
+      setMessage("Edit only this optional Traveller, then press Save Traveller. Edit the Booker in the Company + Booker profile above.");
       setStatus("ready");
     } catch (error) {
       setMessage(safeIdentityError(error));
@@ -282,7 +280,7 @@ export function CustomerVerifiedIdentitiesEditor({
       setBookerContact(cleanText(booker.phone));
       setTravelerName("");
       setDraftDirty(false);
-      setMessage("Add one booking-only Traveller to this exact Company + Booker Customer Account.");
+      setMessage("Add one optional booking-only Traveller to this exact Company + Booker Customer Account.");
       setStatus("ready");
     } catch (error) {
       setMessage(safeIdentityError(error));
@@ -290,7 +288,7 @@ export function CustomerVerifiedIdentitiesEditor({
     }
   }
 
-  async function saveExactBooker(expectedBooker: SafeIdentityBooker) {
+  async function verifyExactBooker(expectedBooker: SafeIdentityBooker) {
     const bookerId = positiveId(expectedBooker.id);
 
     if (
@@ -302,45 +300,7 @@ export function CustomerVerifiedIdentitiesEditor({
       throw new Error("Verified Booker changed while this exact customer profile was open. Nothing was changed.");
     }
 
-    let booker = await loadExactBooker(bookerId);
-    const savedEmail = cleanText(booker.email).toLowerCase();
-    const savedPhone = cleanText(booker.phone);
-    const requestedEmail = bookerEmail.trim().toLowerCase();
-    const requestedPhone = bookerContact.trim();
-    const nextBookerName = bookerName.trim();
-
-    if (
-      comparableText(booker.booker_name) !== comparableText(nextBookerName) ||
-      savedEmail !== requestedEmail ||
-      savedPhone !== requestedPhone
-    ) {
-      const updateResponse = await fetch(adminBookersApiPath, {
-        body: JSON.stringify({
-          booker_name: nextBookerName,
-          email: requestedEmail || null,
-          id: bookerId,
-          phone: requestedPhone || null,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-          "x-prestige-admin-purpose": "admin-booking-persistence",
-        },
-        method: "PATCH",
-      });
-      const updateResult = await updateResponse.json().catch(() => null);
-
-      if (
-        !updateResponse.ok ||
-        updateResult?.ok !== true ||
-        positiveId(updateResult?.booker?.id) !== bookerId ||
-        positiveId(updateResult?.booker?.company_id) !== companyId ||
-        positiveId(updateResult?.booker?.customer_id) !== positiveId(customerId)
-      ) {
-        throw new Error("Verified Booker changes could not be saved safely.");
-      }
-
-      booker = updateResult.booker;
-    }
+    const booker = await loadExactBooker(bookerId);
 
     if (
       positiveId(booker.id) !== bookerId ||
@@ -348,6 +308,14 @@ export function CustomerVerifiedIdentitiesEditor({
       positiveId(booker.customer_id) !== positiveId(customerId)
     ) {
       throw new Error("Verified Booker does not belong to this exact Customer Account.");
+    }
+
+    if (
+      comparableText(booker.booker_name) !== comparableText(bookerName) ||
+      cleanText(booker.email).toLowerCase() !== bookerEmail.trim().toLowerCase() ||
+      cleanText(booker.phone) !== bookerContact.trim()
+    ) {
+      throw new Error("Verified Booker changed while this exact customer profile was open. Nothing was changed.");
     }
 
     return bookerId;
@@ -368,7 +336,7 @@ export function CustomerVerifiedIdentitiesEditor({
     }
 
     if (!safeBookerName || !safeTravelerName) {
-      setMessage("Booker / PA name and Traveller name are required.");
+      setMessage("Traveller name is required only when adding or editing a Traveller.");
       setStatus("error");
       setIsOpen(true);
       return;
@@ -377,7 +345,7 @@ export function CustomerVerifiedIdentitiesEditor({
     const actionLabel = editingTravelerId ? "Update" : "Add";
 
     if (!window.confirm(
-      `${actionLabel} verified Booker ${safeBookerName} and Traveller ${safeTravelerName} for ${companyName}? Booker details will stay consistent on all Travellers already linked to this exact Booker; the Traveller name changes only this exact Traveller. They will become selectable in the existing Dispatch identity row. This does not change any saved booking, invoice, price, Calendar event, driver, payment, or message.`,
+      `${actionLabel} optional Traveller ${safeTravelerName} under ${companyName} (${safeBookerName})? The Booker profile is read-only here and remains controlled by the Company + Booker profile above. This does not change any saved booking, invoice, price, Calendar event, driver, payment, notification or message.`,
     )) {
       setMessage("Booker and Traveller save cancelled. Nothing was changed.");
       setStatus("ready");
@@ -420,7 +388,7 @@ export function CustomerVerifiedIdentitiesEditor({
         throw new Error("That traveller is already linked to another verified Booker. Nothing was changed.");
       }
 
-      const bookerId = await saveExactBooker(freshIdentity.booker);
+      const bookerId = await verifyExactBooker(freshIdentity.booker);
 
       if (bookerId !== editingBookerId) {
         throw new Error("Verified Booker changed while this profile was open. Nothing was changed.");
@@ -576,7 +544,7 @@ export function CustomerVerifiedIdentitiesEditor({
       open={isOpen}
     >
       <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-slate-900">
-        Booker / PA & Travellers · {verifiedBookerCount} verified Booker{verifiedBookerCount === 1 ? "" : "s"}
+        Optional Travellers · {identityRows.length} saved
       </summary>
       <div className="border-t border-sky-100 p-3">
         {identityRows.length > 0 ? (
@@ -594,7 +562,7 @@ export function CustomerVerifiedIdentitiesEditor({
                   onClick={() => void startEditingIdentity(row)}
                   type="button"
                 >
-                  Edit this pair
+                  Edit Traveller
                 </button>
               </div>
             ))}
@@ -613,13 +581,9 @@ export function CustomerVerifiedIdentitiesEditor({
               Add Traveller
             </button>
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="grid gap-1 text-xs font-bold text-slate-700">
-                Booker / PA name
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-name="true" disabled={status === "saving"} onChange={(event) => {
-                  setBookerName(event.target.value);
-                  setDraftDirty(true);
-                }} value={bookerName} />
-              </label>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-700" data-customer-booker-readonly="true">
+                Booker / PA: <strong>{bookerName}</strong>
+              </p>
               <label className="grid gap-1 text-xs font-bold text-slate-700">
                 Traveller name
                 <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-traveler-name="true" disabled={status === "saving"} onChange={(event) => {
@@ -627,20 +591,12 @@ export function CustomerVerifiedIdentitiesEditor({
                   setDraftDirty(true);
                 }} value={travelerName} />
               </label>
-              <label className="grid gap-1 text-xs font-bold text-slate-700">
-                Booker email (optional)
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-email="true" disabled={status === "saving"} onChange={(event) => {
-                  setBookerEmail(event.target.value);
-                  setDraftDirty(true);
-                }} type="email" value={bookerEmail} />
-              </label>
-              <label className="grid gap-1 text-xs font-bold text-slate-700">
-                Booker contact (optional)
-                <input className="min-h-9 rounded-md border border-slate-300 px-2 text-sm" data-customer-booker-contact="true" disabled={status === "saving"} onChange={(event) => {
-                  setBookerContact(event.target.value);
-                  setDraftDirty(true);
-                }} value={bookerContact} />
-              </label>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-700">
+                Booker email: {bookerEmail || "Not saved"}
+              </p>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-700">
+                Booker contact: {bookerContact || "Not saved"}
+              </p>
             </div>
           </>
         ) : null}
@@ -656,7 +612,7 @@ export function CustomerVerifiedIdentitiesEditor({
               onClick={saveBookerAndTraveler}
               type="button"
             >
-              {status === "saving" ? "Saving" : "Save Booker / Traveller"}
+              {status === "saving" ? "Saving" : "Save Traveller"}
             </button>
           ) : null}
         </div>

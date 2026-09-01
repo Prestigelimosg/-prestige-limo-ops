@@ -7105,6 +7105,13 @@ async function resolveSaveCrmCompanyProfileForSave(
   const requestedCompanyName = clean(confirmedAccountLabel);
   const creatingAgencyFolder = adminDispatchIsCreatingAgencyFolder(bookingValue);
 
+  if (creatingAgencyFolder) {
+    return {
+      message: "Hotel / Tour Agency and personal account creation are retired. Choose or create the exact Company + Booker Customer Account. Nothing was changed.",
+      ok: false,
+    };
+  }
+
   if (bookingValue.customerId && !creatingAgencyFolder && !requestedCompanyId) {
     return {
       message: "The selected agency folder has no verified company relationship. Reload CRM identities and select the folder again. No company or booking was saved.",
@@ -10291,8 +10298,6 @@ function buildAdminBookingPersistencePayload(
     clean(options.customerDisplayNameOverride) ||
     saveCrmDefaultCustomerAccount(bookingValue) ||
     adminDraftCustomerFallback;
-  const createHotelAgencyFolder =
-    options.hotelAgencyFolderCreateOverride ?? adminDispatchIsCreatingAgencyFolder(bookingValue);
   const contactDisplayName =
     clean(bookingValue.booker) ||
     clean(bookingValue.name) ||
@@ -10353,20 +10358,6 @@ function buildAdminBookingPersistencePayload(
       request_review_status: "pending_review",
       parser_source_reference: clean(options.parserSourceReferenceOverride) || parsedSourceReference(bookingValue),
     },
-    ...(createHotelAgencyFolder
-      ? {
-          hotel_agency_folder_create: {
-            company_name: customerDisplayName,
-          },
-        }
-      : {}),
-    ...(options.personalCustomerFolderCreateOverride
-      ? {
-          personal_customer_folder_create: {
-            display_name: clean(bookingValue.name) || customerDisplayName,
-          },
-        }
-      : {}),
     route_points: routePoints,
     service_items: serviceItems,
   };
@@ -20545,6 +20536,17 @@ export default function Home() {
       return;
     }
 
+    if (review.personalCustomerChoiceRequired) {
+      const message = {
+        tone: "error",
+        text: "Personal and agency Customer creation is retired. Choose or create the exact Company + Booker Customer Account; Traveller remains optional.",
+      } satisfies Message;
+
+      setSaveCrmBillingIdentityReviewMessage(message);
+      scrollToSaveCrmBillingIdentityReview();
+      return { message, ok: false };
+    }
+
     const confirmation = {
       accountLabel: review.accountLabel,
       companyAccount: review.companyAccount,
@@ -23257,8 +23259,6 @@ export default function Home() {
           parserSourceReferenceOverride: activeAdminEmailAiIntakeId
             ? `Email AI intake ${clean(activeAdminEmailAiIntakeId)}`
             : undefined,
-          personalCustomerFolderCreateOverride:
-            billingIdentityResolution.personalCustomerCreateConfirmed,
         },
       );
 
@@ -24906,8 +24906,6 @@ export default function Home() {
 
     const payload = buildAdminBookingPersistencePayload(booking, currentTimeMs, undefined, {
       customerDisplayNameOverride: billingIdentityResolution.accountLabel,
-      personalCustomerFolderCreateOverride:
-        billingIdentityResolution.personalCustomerCreateConfirmed,
     });
 
     setAdminBookingPersistenceAction("save");
@@ -28326,9 +28324,9 @@ export default function Home() {
         customerId: account.id,
         key: `agency:${account.id}:${account.companyId}`,
         kind: "agency" as const,
-        label: account.name,
+        label: formatVerifiedCustomerAccountTitle({ companyName }),
         searchText: `${account.name} ${companyName} ${passengerSearchText}`.toLocaleLowerCase(),
-        secondaryLabel: "Customer account · many passengers",
+        secondaryLabel: "Requires editing · exact Booker missing",
         travelers: accountTravelers,
       };
     });
@@ -28471,12 +28469,12 @@ export default function Home() {
         account.bookerId === booking.bookerId,
     )
   ) {
-    const loadedCompanyName =
-      clean(
-        rateCompanies.find(
-          (company) => String(adminDispatchVerifiedIdentityId(company.id) || "") === booking.companyId,
-        )?.company_name,
-      ) || `Company ${booking.companyId}`;
+    const loadedVerifiedCompanyName = clean(
+      rateCompanies.find(
+        (company) => String(adminDispatchVerifiedIdentityId(company.id) || "") === booking.companyId,
+      )?.company_name,
+    );
+    const loadedCompanyName = loadedVerifiedCompanyName || `Company ${booking.companyId}`;
     const loadedBooker = rateBookers.find(
       (booker) =>
         String(adminDispatchVerifiedIdentityId(booker.id) || "") === booking.bookerId &&
@@ -28502,7 +28500,7 @@ export default function Home() {
       kind: "corporate",
       label: formatVerifiedCustomerAccountTitle({
         bookerName: loadedBookerName,
-        companyName: loadedCompanyName,
+        companyName: loadedVerifiedCompanyName,
       }),
       searchText: `${loadedCompanyName} ${loadedBookerName}`.toLocaleLowerCase(),
       secondaryLabel: loadedBookerName

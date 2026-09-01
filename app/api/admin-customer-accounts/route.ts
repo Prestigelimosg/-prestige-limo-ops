@@ -7,8 +7,11 @@ import {
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import {
   loadAdminCustomerAccounts,
-  updateAdminCustomerAccountProfile,
 } from "../../../lib/admin-customer-accounts-read";
+import {
+  adminCustomerCompanyBookerProfileVersion,
+  overwriteAdminCustomerCompanyBookerProfile,
+} from "../../../lib/admin-customer-company-booker-profile";
 
 export const dynamic = "force-dynamic";
 
@@ -223,16 +226,18 @@ export async function PATCH(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await updateAdminCustomerAccountProfile(
-      await readJsonBody(request),
-      actor,
-    );
+    const body = await readJsonBody(request);
+    const result = await overwriteAdminCustomerCompanyBookerProfile(body, actor);
 
     if (!result.ok) {
       return Response.json({ error: result.error, ok: false }, { status: result.status });
     }
 
-    return Response.json({ account: result.data, ok: true });
+    return Response.json({
+      account: result.data,
+      ok: true,
+      version: adminCustomerCompanyBookerProfileVersion,
+    });
   } catch {
     return safeFailureResponse();
   }

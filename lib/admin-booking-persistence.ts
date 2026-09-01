@@ -906,6 +906,14 @@ function parseAdminBookingOperationalPayload(
     };
   }
 
+  if (hasHotelAgencyFolderCreate || hasPersonalCustomerFolderCreate) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Legacy agency and personal Customer creation is retired. Select or create the exact Company + Booker Customer Account.",
+    };
+  }
+
   if (hasOwn(body, "route_points") && !Array.isArray(body.route_points)) {
     return {
       ok: false,

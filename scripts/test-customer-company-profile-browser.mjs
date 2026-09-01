@@ -23,7 +23,12 @@ const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9232);
 const reporter = createBrowserTestReporter("customer-company-profile-browser");
 const originalFolderName = "Transzend Groundbooker [Mr David Kelly]";
 const correctedFolderName = "Transzend Groundbooker";
+const originalCompanyName = "Transzend Groundbooker";
+const originalBookerName = "David Kelly";
+const correctedBookerName = "June";
 const customerId = "161";
+const companyId = 501;
+const bookerId = 701;
 
 function responseHeaders() {
   return [
@@ -57,9 +62,10 @@ async function main() {
   const chromeProcess = spawn(chromeBinary, chromeArgs, { stdio: "ignore" });
   let client = null;
   const interceptedRequests = [];
-  let companySavePayload = null;
   let currentFolderName = originalFolderName;
-  let folderPatchPayload = null;
+  let currentCompanyName = originalCompanyName;
+  let currentBookerName = originalBookerName;
+  let profilePatchPayload = null;
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -73,10 +79,7 @@ async function main() {
         patterns: [
           { requestStage: "Request", urlPattern: "*/api/admin-customer-accounts*" },
           { requestStage: "Request", urlPattern: "*/api/admin-companies-crm-identity*" },
-          {
-            requestStage: "Request",
-            urlPattern: "*/api/admin-company-traveler-crm-runtime-write-action*",
-          },
+          { requestStage: "Request", urlPattern: "*/api/admin-rate-setup*" },
         ],
       }),
     ]);
@@ -108,10 +111,11 @@ async function main() {
       if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "GET") {
         responseBody = {
           accounts: [{
-            customer_account: currentFolderName,
+            customer_account: `${currentCompanyName} (${currentBookerName})`,
             customer_directory_label: currentFolderName,
             customer_id: customerId,
             guest_account_billing_enabled: true,
+            verified_company_id: String(companyId),
           }],
           ok: true,
         };
@@ -121,9 +125,9 @@ async function main() {
             accounts_email: "accounts@groundbooker.com",
             billing_address: "",
             billing_email: "",
-            company_name: correctedFolderName,
+            company_name: currentCompanyName,
             domain: "groundbooker.com",
-            id: 501,
+            id: companyId,
             main_phone: "",
             mobile_phone: "",
             operations_email: "transzend@groundbooker.com",
@@ -132,25 +136,32 @@ async function main() {
           },
           ok: true,
         };
-      } else if (
-        requestUrl.pathname === "/api/admin-company-traveler-crm-runtime-write-action" &&
-        method === "POST"
-      ) {
-        companySavePayload = JSON.parse(request.postData || "{}");
+      } else if (requestUrl.pathname === "/api/admin-rate-setup" && method === "GET") {
         responseBody = {
+          bookers: [{
+            booker_name: currentBookerName,
+            company_id: companyId,
+            customer_id: Number(customerId),
+            email: "booker@groundbooker.com",
+            id: bookerId,
+            phone: "+65 6000 0000",
+          }],
+          companies: [{ company_name: currentCompanyName, id: companyId }],
           ok: true,
-          record: { id: 501, ...companySavePayload },
-          status: "saved",
         };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "PATCH") {
-        folderPatchPayload = JSON.parse(request.postData || "{}");
-        currentFolderName = folderPatchPayload.display_name;
+        profilePatchPayload = JSON.parse(request.postData || "{}");
+        currentFolderName = profilePatchPayload.customer_display_name;
+        currentCompanyName = profilePatchPayload.company_profile.company_name;
+        currentBookerName = profilePatchPayload.booker_profile.booker_name;
         responseBody = {
           account: {
-            customer_account: folderPatchPayload.display_name,
-            customer_directory_label: folderPatchPayload.display_name,
-            customer_id: customerId,
-            guest_account_billing_enabled: true,
+            booker_id: bookerId,
+            booker_name: currentBookerName,
+            company_id: companyId,
+            company_name: currentCompanyName,
+            customer_display_name: currentFolderName,
+            customer_id: Number(customerId),
           },
           ok: true,
         };
@@ -171,7 +182,7 @@ async function main() {
     const customerUrl = new URL(`/customers/${customerId}`, appUrl);
     customerUrl.searchParams.set("name", originalFolderName);
     await navigateWithLoadEvent(client, customerUrl.toString());
-    reporter.step("opening checked agency profile");
+    reporter.step("opening exact Company + Booker profile");
     await waitForSelector(
       evaluate,
       `[data-customer-company-profile-edit="${customerId}"]`,
@@ -204,17 +215,17 @@ async function main() {
     const openedState = await evaluate(`(() => ({
       classificationControlCount: document.querySelectorAll('[data-customer-guest-account-billing="${customerId}"]').length,
       folderName: document.querySelector('[data-customer-folder-name="${customerId}"]')?.value || "",
-      guidanceVisible: Boolean(document.querySelector('[data-customer-agency-guest-guidance="${customerId}"]')),
-      topBanner: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
+      requiredIdentityVisible: Boolean(document.querySelector('[data-customer-company-booker-required="true"]')),
+      topBanner: document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || "",
       travellerEditorVisible: Boolean(document.querySelector('[data-customer-verified-identities="true"]')),
     }))()`);
 
     assert.deepEqual(openedState, {
       classificationControlCount: 0,
       folderName: originalFolderName,
-      guidanceVisible: true,
-      topBanner: originalFolderName,
-      travellerEditorVisible: false,
+      requiredIdentityVisible: true,
+      topBanner: `${originalCompanyName} (${originalBookerName})`,
+      travellerEditorVisible: true,
     });
 
     reporter.step("checking raw Customer folder field at 390px");
@@ -227,47 +238,84 @@ async function main() {
     const mobileOpenedState = await evaluate(`(() => ({
       folderName: document.querySelector('[data-customer-folder-name="${customerId}"]')?.value || "",
       pageOverflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
-      title: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
+      title: document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || "",
       viewportWidth: window.innerWidth,
     }))()`);
     assert.deepEqual(mobileOpenedState, {
       folderName: originalFolderName,
       pageOverflow: 0,
-      title: originalFolderName,
+      title: `${originalCompanyName} (${originalBookerName})`,
       viewportWidth: 390,
     });
 
-    reporter.step("saving folder-only agency correction");
+    reporter.step("saving Customer folder + exact Company + Booker atomically");
     await evaluate(`(() => {
       const input = document.querySelector('[data-customer-folder-name="${customerId}"]');
+      const booker = document.querySelector('[data-customer-required-booker-name="true"]');
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
       setter.call(input, ${JSON.stringify(correctedFolderName)});
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      setter.call(booker, ${JSON.stringify(correctedBookerName)});
+      booker.dispatchEvent(new Event("input", { bubbles: true }));
       document.querySelector('[data-customer-company-profile-save="${customerId}"]').click();
     })()`);
 
     await waitForCondition(
       async () => {
         const banner = await evaluate(
-          `document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || ""`,
+          `document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || ""`,
         );
-        return banner === correctedFolderName && folderPatchPayload;
+        return banner === `${originalCompanyName} (${correctedBookerName})` && profilePatchPayload;
       },
       10000,
-      "corrected customer folder banner",
+      "reloaded authoritative Company + Booker title",
     );
 
-    assert.deepEqual(folderPatchPayload, {
+    assert.deepEqual(profilePatchPayload, {
+      action_type: "customer_company_booker_profile_overwrite",
+      booker_id: bookerId,
+      booker_profile: {
+        booker_name: correctedBookerName,
+        email: "booker@groundbooker.com",
+        phone: "+65 6000 0000",
+      },
+      company_id: companyId,
+      company_profile: {
+        accounts_email: "accounts@groundbooker.com",
+        billing_address: null,
+        billing_email: null,
+        company_name: originalCompanyName,
+        domain: "groundbooker.com",
+        main_phone: null,
+        mobile_phone: null,
+        operations_email: "transzend@groundbooker.com",
+        primary_contact_name: "GroundBooker",
+        website: "groundbooker.com",
+      },
+      customer_display_name: correctedFolderName,
       customer_id: customerId,
-      display_name: correctedFolderName,
+      expected_booker_customer_id: Number(customerId),
+      expected_booker_profile: {
+        booker_name: originalBookerName,
+        email: "booker@groundbooker.com",
+        phone: "+65 6000 0000",
+      },
+      expected_company_profile: {
+        accounts_email: "accounts@groundbooker.com",
+        billing_address: null,
+        billing_email: null,
+        company_name: originalCompanyName,
+        domain: "groundbooker.com",
+        main_phone: null,
+        mobile_phone: null,
+        operations_email: "transzend@groundbooker.com",
+        primary_contact_name: "GroundBooker",
+        website: "groundbooker.com",
+      },
+      expected_customer_display_name: originalFolderName,
     });
-    assert.equal(Object.hasOwn(folderPatchPayload, "traveller_name"), false);
-    assert.equal(Object.hasOwn(folderPatchPayload, "guest_account_billing_enabled"), false);
-    assert.equal(
-      companySavePayload,
-      null,
-      "A Customer-folder-only save must never POST or rewrite the unchanged Company profile",
-    );
+    assert.equal(Object.hasOwn(profilePatchPayload, "traveller_name"), false);
+    assert.equal(Object.hasOwn(profilePatchPayload, "guest_account_billing_enabled"), false);
     assert.equal(
       interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,
       1,
@@ -279,7 +327,7 @@ async function main() {
       folderInputVisible: Boolean(document.querySelector('[data-customer-folder-name="${customerId}"]')),
       savedMessage: document.querySelector('[data-customer-company-profile-edit="${customerId}"]')?.nextElementSibling?.textContent?.trim() || "",
       saveButtonVisible: Boolean(document.querySelector('[data-customer-company-profile-save="${customerId}"]')),
-      topBanner: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
+      topBanner: document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || "",
       travellerEditorVisible: Boolean(document.querySelector('[data-customer-verified-identities="true"]')),
     }))()`);
 
@@ -287,53 +335,60 @@ async function main() {
       editButtonVisible: true,
       editorVisible: false,
       folderInputVisible: false,
-      savedMessage: `Saved customer folder name for ${correctedFolderName}.`,
+      savedMessage: `Saved, reloaded and verified ${originalCompanyName} (${correctedBookerName}).`,
       saveButtonVisible: false,
-      topBanner: correctedFolderName,
+      topBanner: `${originalCompanyName} (${correctedBookerName})`,
       travellerEditorVisible: false,
     });
 
-    reporter.step("saving one changed Company field without rewriting the Customer folder");
+    reporter.step("navigating away and reopening the same exact profile");
+    await navigateWithLoadEvent(client, new URL("/customers", appUrl).toString());
+    const reopenedUrl = new URL(`/customers/${customerId}`, appUrl);
+    reopenedUrl.searchParams.set("name", correctedFolderName);
+    await navigateWithLoadEvent(client, reopenedUrl.toString());
+    await waitForSelector(
+      evaluate,
+      `[data-customer-company-profile-edit="${customerId}"]`,
+      "reopened customer profile edit button",
+    );
+    await waitForCondition(
+      async () =>
+        (await evaluate(
+          `document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || ""`,
+        )) === `${originalCompanyName} (${correctedBookerName})`,
+      10000,
+      "persisted authoritative Company + Booker title after reopening",
+    );
     await evaluate(`document.querySelector('[data-customer-company-profile-edit="${customerId}"]').click()`);
     await waitForSelector(
       evaluate,
-      `[data-customer-company-profile-primary-contact="${customerId}"]`,
-      "reopened company contact field",
+      `[data-customer-required-booker-name="true"]`,
+      "reopened exact Booker field",
     );
-    await evaluate(`(() => {
-      const contact = document.querySelector('[data-customer-company-profile-primary-contact="${customerId}"]');
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-      setter.call(contact, "");
-      contact.dispatchEvent(new Event("input", { bubbles: true }));
-      document.querySelector('[data-customer-company-profile-save="${customerId}"]').click();
-    })()`);
-    await waitForCondition(
-      () => companySavePayload,
-      10000,
-      "changed-only Company profile payload",
-    );
+    const reopenedState = await evaluate(`(() => ({
+      bookerName: document.querySelector('[data-customer-required-booker-name="true"]')?.value || "",
+      companyName: document.querySelector('[data-customer-company-profile-name="${customerId}"]')?.value || "",
+      folderName: document.querySelector('[data-customer-folder-name="${customerId}"]')?.value || "",
+      topBanner: document.querySelector('[data-customer-authoritative-title="${customerId}"]')?.textContent?.trim() || "",
+    }))()`);
 
-    assert.deepEqual(companySavePayload, {
-      action_type: "company_update",
-      entity_type: "company",
-      id: 501,
-      primary_contact_name: null,
+    assert.deepEqual(reopenedState, {
+      bookerName: correctedBookerName,
+      companyName: originalCompanyName,
+      folderName: correctedFolderName,
+      topBanner: `${originalCompanyName} (${correctedBookerName})`,
     });
-    assert.equal(
-      interceptedRequests.filter((value) => value === "POST /api/admin-company-traveler-crm-runtime-write-action").length,
-      1,
-    );
     assert.equal(
       interceptedRequests.filter((value) => value === "PATCH /api/admin-customer-accounts").length,
       1,
-      "Company-only save must not rewrite the raw Customer folder",
+      "Reopening must not create a second write",
     );
 
     console.log(JSON.stringify(reporter.summary({
-      companyPayload: companySavePayload,
       errorCount: 0,
       ok: true,
-      patchPayload: folderPatchPayload,
+      patchPayload: profilePatchPayload,
+      reopenedState,
     }), null, 2));
   } finally {
     await client?.close().catch(() => {});

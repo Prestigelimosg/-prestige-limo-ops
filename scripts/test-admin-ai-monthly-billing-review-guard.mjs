@@ -28,6 +28,9 @@ assert.match(helperSource, /draft_lock_status === "locked_for_issue"/);
 assert.match(helperSource, /pending_admin_review/);
 assert.match(helperSource, /Already invoiced/);
 assert.match(helperSource, /Verified Company and Booker identity is missing or incomplete/);
+assert.match(helperSource, /blockerPattern/);
+assert.match(helperSource, /filterRowForBlockerReason/);
+assert.match(appSource, /Load booking \$\{reference\.display_booking_reference\} in Dispatch/);
 assert.doesNotMatch(helperSource, /travell?er_name|passenger_name/i);
 assert.doesNotMatch(helperSource, /customer_price|driver_payout|paynow|payment_amount|invoice_amount/i);
 assert.doesNotMatch(helperSource, /\.(?:insert|update|delete|upsert|rpc)\(/);
@@ -206,8 +209,10 @@ const baseSnapshot = {
   groups: [
     group(197, 7, 11, [job("ADM-SU-1", "ready")]),
     group(198, 7, 12, [job("ADM-STANLEY-1", "ready")]),
-    group(199, 8, 13, [job("ADM-ADA-1", "blocked", "Completed booking closeout is missing.")]),
-    group(200, 9, 14, [job("ADM-JUNE-1", "covered", "Exact issued invoice already covers this booking.")]),
+    group(199, 8, 13, [job("ADM-ADA-1", "blocked", "Completed job closeout is missing.")]),
+    group(200, 9, 14, [job("ADM-JUNE-1", "covered", "An issued customer bill already covers this booking.")], {
+      safe_readiness_status: "blocked",
+    }),
     group(201, 10, 15, [job("ADM-MAYA-1", "ready")]),
     group(202, null, null, [job("ADM-DEEP-1", "blocked", "Verified Company and Booker identity is missing or incomplete.")], {
       customer_account: "Deep",
@@ -281,11 +286,27 @@ try {
   assert.equal(stanley.locked, true);
   assert.equal(suLing.locked, false, "A same-Company cross-Booker issue record must not lock Su Ling's draft");
   assert.equal(ada.status, "blocked");
-  assert.deepEqual(ada.blocked_reasons, ["Completed booking closeout is missing."]);
+  assert.deepEqual(ada.blocked_reasons, ["Completed job closeout is missing."]);
   assert.equal(june.status, "already_invoiced");
   assert.equal(june.already_invoiced_count, 1);
   assert.equal(june.total_count, 1);
   assert.equal(maya.status, "ready");
+
+  const blockedSavedDraft = await executeAdminAiMonthlyBillingReview(
+    "Show monthly billing review",
+    1,
+    actor,
+    dependencies({
+      ...baseSnapshot,
+      invoiceDrafts: [...baseSnapshot.invoiceDrafts, draft("draft-june", 200, 9, 14, "blocked")],
+    }).value,
+    now,
+  );
+  assert.equal(
+    blockedSavedDraft.data.rows.find((row) => row.booker_id === 14)?.status,
+    "blocked",
+    "The all-covered repair must not override a separately saved blocked draft.",
+  );
   assert.equal(partial.status, "blocked");
   assert.equal(partial.booker_name, null);
   assert.equal(partial.company_name, null);
@@ -325,6 +346,29 @@ try {
   );
   assert.equal(attention.data.rows.some((row) => row.status === "already_invoiced"), false);
   assert.equal(attention.data.rows.some((row) => row.status === "locked"), false);
+
+  const missingCloseout = await executeAdminAiMonthlyBillingReview(
+    "Show monthly billing blockers for missing closeout for August 2026",
+    1,
+    actor,
+    dependencies().value,
+    now,
+  );
+  assert.equal(missingCloseout.ok, true);
+  assert.equal(missingCloseout.data.blocker_reason, "missing_closeout");
+  assert.equal(missingCloseout.data.total_count, 1);
+  assert.deepEqual(missingCloseout.data.rows[0].references.map((reference) => reference.booking_reference), ["ADM-ADA-1"]);
+
+  const missingIdentity = await executeAdminAiMonthlyBillingReview(
+    "Show monthly billing blockers for missing identity",
+    1,
+    actor,
+    dependencies().value,
+    now,
+  );
+  assert.equal(missingIdentity.ok, true);
+  assert.equal(missingIdentity.data.total_count, 1);
+  assert.equal(missingIdentity.data.rows[0].identity_status, "manual_review");
 
   const empty = await executeAdminAiMonthlyBillingReview(
     "Show monthly billing review",

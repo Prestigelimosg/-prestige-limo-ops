@@ -14,11 +14,15 @@ import {
   type AdminRateSetupCompany,
   type AdminRateSetupTraveler,
 } from "./admin-rate-setup-read";
+import {
+  loadAdminSavedBookingsForExactAccountUpcoming,
+  type AdminSavedBookingRecord,
+} from "./admin-saved-booking-read";
 
 export const adminAiAccountBriefIntent = "find_customer_account_brief";
 export const adminAiAccountBriefPageSize = 10;
 
-export type AdminAiAccountBriefKind = "account" | "all_unpaid_bookings" | "unpaid_bookings";
+export type AdminAiAccountBriefKind = "account" | "all_unpaid_bookings" | "unpaid_bookings" | "upcoming_jobs";
 
 export type AdminAiAccountBriefIdentity = {
   booker_id: number;
@@ -77,6 +81,7 @@ export type AdminAiAccountBriefResult = {
   status: "ambiguous" | "blocked" | "legacy_identity" | "no_match" | "results" | "traveller_only";
   total_count: number;
   unpaid_invoices: AdminAiAccountBriefInvoice[];
+  upcoming_jobs: AdminAiAccountBriefJob[];
 };
 
 export type AdminAiAccountBriefExecution =
@@ -123,6 +128,12 @@ type AdminAiAccountBriefSnapshot = AdminAiAccountBriefIdentitySnapshot & AdminAi
 export type AdminAiAccountBriefDependencies = {
   loadAccountData(actor: AdminBookingPersistenceAdapterActor): Promise<AdminAiAccountBriefDataSnapshot>;
   loadIdentities(actor: AdminBookingPersistenceAdapterActor): Promise<AdminAiAccountBriefIdentitySnapshot>;
+  loadUpcomingJobs?(
+    actor: AdminBookingPersistenceAdapterActor,
+    identity: AdminAiAccountBriefIdentity,
+    now: Date,
+    page: number,
+  ): Promise<{ hasMore: boolean; jobs: AdminAiAccountBriefJob[]; totalCount: number }>;
 };
 
 const allowedActorRoles = new Set(["admin", "dispatcher"]);
@@ -139,6 +150,8 @@ const unpaidBookingsPattern =
   /^show(?:\s+me)?\s+(.+?)(?:'s|’s)?\s+unpaid\s+bookings(?:\s+(?:for|at|from)\s+(.+?))?[\s?.!]*$/i;
 const accountPattern =
   /^show(?:\s+me)?\s+(.+?)\s+account(?:\s+(?:for|at|from)\s+(.+?))?[\s?.!]*$/i;
+const upcomingJobsPattern =
+  /^show(?:\s+me)?\s+upcoming\s+jobs\s+for\s+(.+?)(?:\s+(?:at|for|from)\s+(.+?))?[\s?.!]*$/i;
 const clearlyBilledOrClosedStatusPattern =
   /(?:invoice|invoiced|billed|paid|cancelled|canceled|declined|rejected|void|deleted)/i;
 const completedStatusPattern = /(?:^|[\s_-])(?:complete|completed|job_completed)(?:$|[\s_-])/i;
@@ -231,7 +244,7 @@ function safeInvoice(value: unknown): AccountInvoiceRow | null {
 function parseAccountBrief(messageValue: unknown): ParsedAccountBrief | "blocked" | null {
   const query = cleanText(messageValue, 500);
 
-  if (!query || (!/\baccount\b/i.test(query) && !/\bunpaid\s+bookings\b/i.test(query))) {
+  if (!query || (!/\baccount\b/i.test(query) && !/\bunpaid\s+bookings\b/i.test(query) && !/\bupcoming\s+jobs\b/i.test(query))) {
     return null;
   }
 
@@ -242,8 +255,9 @@ function parseAccountBrief(messageValue: unknown): ParsedAccountBrief | "blocked
   }
 
   const unpaidMatch = query.match(unpaidBookingsPattern);
+  const upcomingMatch = query.match(upcomingJobsPattern);
   const accountMatch = query.match(accountPattern);
-  const match = unpaidMatch || accountMatch;
+  const match = unpaidMatch || upcomingMatch || accountMatch;
 
   if (!match) return "blocked";
 
@@ -263,7 +277,7 @@ function parseAccountBrief(messageValue: unknown): ParsedAccountBrief | "blocked
   return {
     bookerName,
     companyName: companyName || null,
-    kind: unpaidMatch ? "unpaid_bookings" : "account",
+    kind: unpaidMatch ? "unpaid_bookings" : upcomingMatch ? "upcoming_jobs" : "account",
     query,
   };
 }
@@ -298,6 +312,7 @@ function result(
       ? input.total_count || 0
       : 0,
     unpaid_invoices: input.unpaid_invoices || [],
+    upcoming_jobs: input.upcoming_jobs || [],
   };
 }
 
@@ -423,6 +438,30 @@ function jobRow(booking: AdminBookingPersistenceRecord): AdminAiAccountBriefJob 
   };
 }
 
+function safeUpcomingJob(value: unknown): AdminAiAccountBriefJob | null {
+  const row = asRecord(value);
+  const bookingReference = cleanText(row.booking_reference, 160);
+  const pickupAt = cleanText(row.pickup_at || row.pickup_datetime, 100);
+  if (!bookingReference || !pickupAt || !Number.isFinite(Date.parse(pickupAt))) return null;
+  return {
+    booking_reference: bookingReference,
+    pickup_at: pickupAt,
+    public_booking_reference: cleanText(row.public_booking_reference, 100) || null,
+    service_type: cleanText(row.service_type, 80) || "Service not recorded",
+    status: cleanText(row.admin_internal_status || row.customer_facing_status, 100) || "Status not recorded",
+  };
+}
+
+function savedBookingIsUpcomingOperational(booking: AdminSavedBookingRecord) {
+  const statuses = [booking.admin_internal_status, booking.status, booking.customer_facing_status]
+    .map((status) => cleanText(status, 100))
+    .filter(Boolean);
+
+  return statuses.every((status) =>
+    !completedStatusPattern.test(status) && !clearlyBilledOrClosedStatusPattern.test(status)
+  );
+}
+
 async function loadDefaultIdentities(
   actor: AdminBookingPersistenceAdapterActor,
 ): Promise<AdminAiAccountBriefIdentitySnapshot> {
@@ -468,6 +507,28 @@ async function loadDefaultAccountData(
 const defaultDependencies: AdminAiAccountBriefDependencies = {
   loadAccountData: loadDefaultAccountData,
   loadIdentities: loadDefaultIdentities,
+  async loadUpcomingJobs(actor, identity, now, page) {
+    const from = (page - 1) * adminAiAccountBriefPageSize;
+    const loaded = await loadAdminSavedBookingsForExactAccountUpcoming({
+      booker_id: identity.booker_id,
+      company_id: identity.company_id,
+      customer_id: identity.customer_id,
+      pickup_at_or_after: now.toISOString(),
+    }, actor);
+
+    if (!loaded.ok) throw new Error(safeReadError);
+
+    const allJobs = loaded.data.bookings
+      .filter(savedBookingIsUpcomingOperational)
+      .map(safeUpcomingJob)
+      .filter((job): job is AdminAiAccountBriefJob => Boolean(job));
+    const jobs = allJobs.slice(from, from + adminAiAccountBriefPageSize);
+    return {
+      hasMore: from + jobs.length < allJobs.length,
+      jobs,
+      totalCount: allJobs.length,
+    };
+  },
 };
 
 export async function executeAdminAiAccountBrief(
@@ -596,6 +657,28 @@ export async function executeAdminAiAccountBrief(
   }
 
   const identity = identities[0];
+  if (parsed.kind === "upcoming_jobs") {
+    if (!dependencies.loadUpcomingJobs) {
+      return { error: safeReadError, matched: true, ok: false, status: 500 };
+    }
+    try {
+      const upcoming = await dependencies.loadUpcomingJobs(actor, identity, now, page);
+      return {
+        data: result(parsed, page, {
+          answer: `${identity.company_name} · ${identity.booker_name} has ${upcoming.totalCount} upcoming job${upcoming.totalCount === 1 ? "" : "s"}.`,
+          has_more: upcoming.hasMore,
+          status: "results",
+          total_count: upcoming.totalCount,
+          upcoming_jobs: upcoming.jobs,
+        }),
+        matched: true,
+        ok: true,
+      };
+    } catch {
+      return { error: safeReadError, matched: true, ok: false, status: 500 };
+    }
+  }
+
   let accountData: AdminAiAccountBriefDataSnapshot;
   try {
     accountData = await dependencies.loadAccountData(actor);

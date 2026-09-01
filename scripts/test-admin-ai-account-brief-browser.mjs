@@ -85,6 +85,7 @@ function accountResponse(query) {
           status: "Unpaid",
         },
       ],
+      upcoming_jobs: [],
     },
     answer: "Tiger Global · Su Ling has 2 Jobs not billed yet and 1 unpaid invoice.",
     external_send: false,
@@ -129,8 +130,45 @@ function allAccountsResponse(query, page) {
       status: "results",
       total_count: 12,
       unpaid_invoices: [],
+      upcoming_jobs: [],
     },
     answer: "Found 12 exact Company + Booker accounts with Jobs not billed yet.",
+    external_send: false,
+    model: "Prestige live records",
+    ok: true,
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    write_action: false,
+  };
+}
+
+function upcomingJobsResponse(query) {
+  return {
+    account_brief: {
+      account: null,
+      accounts_with_jobs_not_billed: [],
+      answer: "Tiger Global · Su Ling has 1 upcoming job.",
+      company_options: [],
+      has_more: false,
+      intent: "find_customer_account_brief",
+      jobs_not_billed: [],
+      kind: "upcoming_jobs",
+      manual_folder_guidance: null,
+      page: 1,
+      page_size: 10,
+      query,
+      read_at: "2026-09-01T04:00:00.000Z",
+      status: "results",
+      total_count: 1,
+      unpaid_invoices: [],
+      upcoming_jobs: [{
+        booking_reference: "ADM-10912",
+        pickup_at: "2026-09-02T02:00:00.000Z",
+        public_booking_reference: "10912",
+        service_type: "MNG",
+        status: "Confirmed",
+      }],
+    },
+    answer: "Tiger Global · Su Ling has 1 upcoming job.",
     external_send: false,
     model: "Prestige live records",
     ok: true,
@@ -165,6 +203,7 @@ async function main() {
   const chromeProcess = spawn(chromeBinary, chromeArgs, { stdio: "ignore" });
   let client = null;
   const assistantRequests = [];
+  const exactBookingReadRequests = [];
   const mutationRequests = [];
   const consoleErrors = [];
 
@@ -179,7 +218,10 @@ async function main() {
       client.send("Network.enable"),
       client.send("Log.enable"),
       client.send("Fetch.enable", {
-        patterns: [{ requestStage: "Request", urlPattern: "*/api/admin-ai-assistant*" }],
+        patterns: [
+          { requestStage: "Request", urlPattern: "*/api/admin-ai-assistant*" },
+          { requestStage: "Request", urlPattern: "*/api/admin-bookings?booking_reference=*" },
+        ],
       }),
     ]);
 
@@ -196,6 +238,40 @@ async function main() {
     });
 
     client.on("Fetch.requestPaused", ({ request, requestId }) => {
+      const requestUrl = new URL(request.url);
+      if (requestUrl.pathname === "/api/admin-bookings") {
+        exactBookingReadRequests.push({
+          method: request.method,
+          reference: requestUrl.searchParams.get("booking_reference"),
+        });
+        client.send("Fetch.fulfillRequest", {
+          body: Buffer.from(JSON.stringify({
+            booking: {
+              admin_internal_status: "confirmed",
+              booking_reference: "ADM-10912",
+              booker_id: 11,
+              company_id: 7,
+              contact_display_name: "Su Ling",
+              customer_display_name: "Tiger Global",
+              customer_facing_status: "Confirmed",
+              customer_id: 197,
+              dropoff_location: "CBD",
+              passenger_name: "Synthetic Traveller",
+              pickup_at: "2026-09-02T02:00:00.000Z",
+              pickup_location: "Changi Airport",
+              public_booking_reference: "10912",
+              route_summary: "Changi Airport > CBD",
+              service_type: "MNG",
+              traveler_id: 42,
+            },
+            ok: true,
+          })).toString("base64"),
+          requestId,
+          responseCode: 200,
+          responseHeaders: responseHeaders(),
+        }).catch(() => {});
+        return;
+      }
       let body = {};
       try {
         body = JSON.parse(request.postData || "{}");
@@ -206,7 +282,9 @@ async function main() {
       const query = String(body.message || "");
       const responseBody = query === "Show all customers with unpaid bookings"
         ? allAccountsResponse(query, Number(body.account_brief_page) || 1)
-        : accountResponse(query);
+        : query === "Show upcoming jobs for Su Ling at Tiger Global"
+          ? upcomingJobsResponse(query)
+          : accountResponse(query);
       client.send("Fetch.fulfillRequest", {
         body: Buffer.from(JSON.stringify(responseBody)).toString("base64"),
         requestId,
@@ -312,6 +390,47 @@ async function main() {
     assert.deepEqual(assistantRequests[1].history, []);
     assert.deepEqual(assistantRequests[2].history, []);
 
+    assert.equal(await clickButton("Clear Message"), true);
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
+    reporter.step("checking mobile upcoming-job navigation to the existing Details step");
+    assert.equal(await setQuestion("Show upcoming jobs for Su Ling at Tiger Global"), true);
+    assert.equal(await clickButton("Send to AI"), true);
+    await waitForSelector(evaluate, '[data-admin-ai-upcoming-job-load-dispatch="ADM-10912"]', "mobile upcoming booking handoff");
+    assert.equal(await clickButton("Load booking 10912 in Dispatch"), true);
+    const mobileNavigationState = await waitForCondition(
+      async () => evaluate(`(() => {
+        const workflow = document.querySelector('[data-dispatch-workflow="true"]');
+        const detailsStep = document.querySelector('[data-mobile-dispatch-quick-step="details"]');
+        const bookingDetails = document.querySelector('[data-dispatch-workflow-step="booking-details"]');
+        if (!(workflow instanceof HTMLElement) || !(detailsStep instanceof HTMLButtonElement) || !(bookingDetails instanceof HTMLElement)) return false;
+        const active = document.activeElement === bookingDetails;
+        const selected = detailsStep.getAttribute("aria-current") === "step" && workflow.getAttribute("data-mobile-dispatch-step") === "details";
+        if (!active || !selected) return false;
+        return {
+          active,
+          detailsTabIndex: bookingDetails.getAttribute("tabindex"),
+          noHorizontalOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2,
+          selected,
+          travelerLoaded: [...bookingDetails.querySelectorAll("input")].some((input) => input.value === "Synthetic Traveller"),
+        };
+      })()`),
+      5000,
+      "mobile Details selection and Booking Details focus",
+    );
+    assert.deepEqual(mobileNavigationState, {
+      active: true,
+      detailsTabIndex: "-1",
+      noHorizontalOverflow: true,
+      selected: true,
+      travelerLoaded: true,
+    });
+    assert.deepEqual(exactBookingReadRequests, [{ method: "GET", reference: "ADM-10912" }]);
+
     const unexpectedMutations = mutationRequests.filter(({ url }) => !url.includes("/api/admin-ai-assistant"));
     const expectedLocalBoundaryLogs = consoleErrors.filter((message) =>
       /Failed to load resource: the server responded with a status of 403 \(Forbidden\)/.test(message),
@@ -320,13 +439,14 @@ async function main() {
       !/Failed to load resource: the server responded with a status of 403 \(Forbidden\)/.test(message),
     );
     assert.deepEqual(unexpectedMutations, []);
-    assert.equal(assistantRequests.length, 3);
+    assert.equal(assistantRequests.length, 4);
     assert.ok(expectedLocalBoundaryLogs.length > 0, "Expected the isolated local unauthenticated boundary reads to fail closed");
     assert.deepEqual(actionableConsoleErrors, []);
     assert.equal(await clickButton("Clear Message"), true);
     console.log(JSON.stringify(reporter.summary({
       actionableConsoleErrorCount: actionableConsoleErrors.length,
       assistantRequestCount: assistantRequests.length,
+      exactBookingReadCount: exactBookingReadRequests.length,
       expectedLocalBoundaryLogCount: expectedLocalBoundaryLogs.length,
       ok: true,
       unexpectedMutationCount: unexpectedMutations.length,

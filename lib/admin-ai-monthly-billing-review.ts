@@ -30,6 +30,15 @@ import {
 export const adminAiMonthlyBillingReviewIntent = "find_monthly_billing_review";
 export const adminAiMonthlyBillingReviewPageSize = 10;
 
+export type AdminAiMonthlyBillingBlockerReason =
+  | "billing_closeout"
+  | "completion_evidence"
+  | "dsp_billing_time"
+  | "extra_charges"
+  | "inconsistent_identity"
+  | "missing_closeout"
+  | "missing_identity";
+
 export type AdminAiMonthlyBillingReviewStatus =
   | "already_invoiced"
   | "blocked"
@@ -70,6 +79,7 @@ export type AdminAiMonthlyBillingReviewRow = {
 export type AdminAiMonthlyBillingReviewResult = {
   answer: string;
   billing_month: string;
+  blocker_reason: AdminAiMonthlyBillingBlockerReason | null;
   has_more: boolean;
   intent: typeof adminAiMonthlyBillingReviewIntent;
   page: number;
@@ -104,7 +114,8 @@ export type AdminAiMonthlyBillingReviewDependencies = {
 
 type ParsedMonthlyBillingReview = {
   billingMonth: string;
-  kind: "attention" | "review";
+  blockerReason: AdminAiMonthlyBillingBlockerReason | null;
+  kind: "attention" | "blockers" | "review";
   query: string;
 };
 
@@ -125,12 +136,32 @@ const injectionPattern =
   /(?:ignore\s+(?:all\s+)?(?:previous|prior)|system\s+prompt|developer\s+message|service[_\s-]?role|api[_\s-]?key|database\s+credential|\b(?:drop|insert|select|update|delete)\s+(?:table|from|into|monthly_billing_draft_plans|monthly_invoice_drafts)\b)/i;
 const reviewPattern = /^show(?:\s+me)?\s+monthly\s+billing\s+review(?:\s+for\s+(.+?))?[\s?.!]*$/i;
 const attentionPattern = /^which\s+monthly\s+billing\s+drafts\s+need\s+attention(?:\s+for\s+(.+?))?[\s?.!]*$/i;
+const blockerPattern =
+  /^show(?:\s+me)?\s+monthly\s+billing\s+blockers\s+for\s+(missing\s+identity|inconsistent\s+identity|missing\s+closeout|completion\s+evidence|dsp\s+billing\s+time|extra\s+charges|billing\s+closeout)(?:\s+for\s+(.+?))?[\s?.!]*$/i;
 const nonLockingIssueRecordStatuses = new Set(["archived", "voided"]);
 const monthNames = new Map([
   ["january", 1], ["jan", 1], ["february", 2], ["feb", 2], ["march", 3], ["mar", 3],
   ["april", 4], ["apr", 4], ["may", 5], ["june", 6], ["jun", 6], ["july", 7],
   ["jul", 7], ["august", 8], ["aug", 8], ["september", 9], ["sep", 9], ["sept", 9],
   ["october", 10], ["oct", 10], ["november", 11], ["nov", 11], ["december", 12], ["dec", 12],
+]);
+const blockerReasonByPrompt = new Map<string, AdminAiMonthlyBillingBlockerReason>([
+  ["billing closeout", "billing_closeout"],
+  ["completion evidence", "completion_evidence"],
+  ["dsp billing time", "dsp_billing_time"],
+  ["extra charges", "extra_charges"],
+  ["inconsistent identity", "inconsistent_identity"],
+  ["missing closeout", "missing_closeout"],
+  ["missing identity", "missing_identity"],
+]);
+const blockerReasonBySafeReason = new Map<string, AdminAiMonthlyBillingBlockerReason>([
+  ["Completed job billing closeout needs review.", "billing_closeout"],
+  ["Completion evidence needs review.", "completion_evidence"],
+  ["DSP billing time needs review.", "dsp_billing_time"],
+  ["Extra charges need review.", "extra_charges"],
+  ["Verified Company and Booker identity is inconsistent.", "inconsistent_identity"],
+  ["Completed job closeout is missing.", "missing_closeout"],
+  [manualIdentityReason, "missing_identity"],
 ]);
 
 function cleanText(value: unknown, maximumLength = 220) {
@@ -182,17 +213,21 @@ function parseMonthlyBillingReview(
   if (!query || !/monthly\s+billing/i.test(query)) return null;
   if (blockedActionPattern.test(query) || injectionPattern.test(query)) return "blocked";
   const attentionMatch = query.match(attentionPattern);
+  const blockerMatch = query.match(blockerPattern);
   const reviewMatch = query.match(reviewPattern);
-  const match = attentionMatch || reviewMatch;
+  const match = attentionMatch || blockerMatch || reviewMatch;
   if (!match) return "blocked";
   const previousMonth = previousSingaporeBillingMonth(now);
-  const requestedMonth = parseMonthToken(match[1]);
+  const requestedMonth = parseMonthToken(blockerMatch ? blockerMatch[2] : match[1]);
   if (requestedMonth === "invalid" || (requestedMonth && requestedMonth !== previousMonth)) {
     return "blocked";
   }
   return {
     billingMonth: previousMonth,
-    kind: attentionMatch ? "attention" : "review",
+    blockerReason: blockerMatch
+      ? blockerReasonByPrompt.get(cleanText(blockerMatch[1], 80).toLowerCase()) || null
+      : null,
+    kind: attentionMatch ? "attention" : blockerMatch ? "blockers" : "review",
     query,
   };
 }
@@ -218,6 +253,7 @@ function result(
   return {
     answer: input.answer || `No monthly billing review records were found for ${monthLabel(parsed.billingMonth)}.`,
     billing_month: parsed.billingMonth,
+    blocker_reason: parsed.blockerReason,
     has_more: input.has_more === true,
     intent: adminAiMonthlyBillingReviewIntent,
     page,
@@ -234,7 +270,7 @@ function blockedResult(query: string, page: number, now: Date): AdminAiMonthlyBi
   const billingMonth = previousSingaporeBillingMonth(now);
   return {
     data: result(
-      { billingMonth, kind: "review", query },
+      { billingMonth, blockerReason: null, kind: "review", query },
       page,
       {
         answer: `Ask AI can only read the existing ${monthLabel(billingMonth)} monthly billing review. Use the established Admin controls for every draft, invoice, payment, and scheduling action.`,
@@ -410,6 +446,15 @@ function rowForSeed(
   else if (locked) status = "locked";
   else if (invoiceDraftStatus === "pending_admin_review") status = "pending_admin_review";
   else if (
+    counts.alreadyInvoiced > 0 &&
+    counts.ready === 0 &&
+    counts.blocked === 0 &&
+    invoiceDraftStatus !== "blocked" &&
+    !["blocked", "mixed"].includes(seed.draftPlan?.readiness_status || "") &&
+    !["blocked", "mixed"].includes(seed.invoiceDraft?.readiness_status || "")
+  ) {
+    status = "already_invoiced";
+  } else if (
     counts.blocked > 0 ||
     seed.group?.safe_readiness_status === "blocked" ||
     seed.group?.safe_readiness_status === "mixed" ||
@@ -420,7 +465,6 @@ function rowForSeed(
     invoiceDraftStatus === "blocked"
   ) status = "blocked";
   else if (counts.ready > 0) status = "ready";
-  else if (counts.alreadyInvoiced > 0) status = "already_invoiced";
 
   return {
     already_invoiced_count: counts.alreadyInvoiced,
@@ -447,6 +491,27 @@ function rowForSeed(
       : `manual:${seed.seedKey}`,
     status,
     total_count: counts.total,
+  };
+}
+
+function filterRowForBlockerReason(
+  row: AdminAiMonthlyBillingReviewRow,
+  blockerReason: AdminAiMonthlyBillingBlockerReason,
+) {
+  const references = row.references.filter((reference) =>
+    reference.status === "Blocked" && blockerReasonBySafeReason.get(reference.reason) === blockerReason
+  );
+  const blockedReasons = row.blocked_reasons.filter((reason) =>
+    blockerReasonBySafeReason.get(reason) === blockerReason
+  );
+
+  if (references.length === 0 && blockedReasons.length === 0) return null;
+
+  return {
+    ...row,
+    blocked_reasons: blockedReasons,
+    reference_count: references.length,
+    references,
   };
 }
 
@@ -522,7 +587,12 @@ export async function executeAdminAiMonthlyBillingReview(
       row.status === "pending_admin_review" ||
       row.status === "ready"
     )
-    : allRows;
+    : parsed.kind === "blockers" && parsed.blockerReason
+      ? allRows.flatMap((row) => {
+        const filtered = filterRowForBlockerReason(row, parsed.blockerReason!);
+        return filtered ? [filtered] : [];
+      })
+      : allRows;
   const from = (page - 1) * adminAiMonthlyBillingReviewPageSize;
   const pageRows = rows.slice(from, from + adminAiMonthlyBillingReviewPageSize);
   const attentionCount = rows.filter((row) =>
@@ -535,6 +605,8 @@ export async function executeAdminAiMonthlyBillingReview(
       answer: rows.length
         ? parsed.kind === "attention"
           ? `Found ${rows.length} monthly billing account${rows.length === 1 ? "" : "s"} needing Admin review for ${monthLabel(parsed.billingMonth)}.`
+          : parsed.kind === "blockers"
+            ? `Found ${rows.length} monthly billing account${rows.length === 1 ? "" : "s"} with the requested blocker for ${monthLabel(parsed.billingMonth)}.`
           : `Found ${rows.length} monthly billing account${rows.length === 1 ? "" : "s"} for ${monthLabel(parsed.billingMonth)}. ${attentionCount} need Admin review; ${lockedCount} ${lockedCount === 1 ? "is" : "are"} locked in the established issue workflow.`
         : undefined,
       has_more: from + pageRows.length < rows.length,

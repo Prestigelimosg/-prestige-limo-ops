@@ -4,6 +4,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdminDispatcherBoundaryContext } from "./admin-dispatcher-auth-boundary";
 import {
+  adminDispatcherBoundaryToPersistenceAdapterActor,
+  type AdminBookingPersistenceAdapterActor,
+} from "./admin-booking-supabase-adapter";
+import {
+  loadAdminMonthlyBillingGroups,
+  type AdminMonthlyBillingJobClassification,
+} from "./admin-monthly-billing-grouping-read";
+import {
   isDriverJobLinkExpired,
   isDriverJobLinkExpiryOutsideAllowedWindow,
 } from "./driver-job-link";
@@ -15,9 +23,17 @@ type AdminAiBookingBriefClient = Pick<SupabaseClient, "from">;
 type ExactReferenceKind = "internal" | "public";
 
 type ParsedBookingBrief = {
-  kind: ExactReferenceKind;
+  kind: "billing_readiness" | "invoice_coverage" | "operational";
   query: string;
   reference: string;
+  referenceKind: ExactReferenceKind;
+};
+
+export type AdminAiBookingBillingReadiness = {
+  billing_month: string | null;
+  invoice_coverage: "covered" | "not_covered";
+  reason: string;
+  status: "already_invoiced" | "blocked" | "not_eligible" | "ready";
 };
 
 export type AdminAiBookingBriefEvidence = {
@@ -39,6 +55,7 @@ export type AdminAiBookingBriefRecord = {
   assigned_driver_plate: string | null;
   booker_id: number;
   booker_name: string;
+  billing_readiness: AdminAiBookingBillingReadiness | null;
   booking_reference: string;
   company_id: number;
   company_name: string;
@@ -84,6 +101,12 @@ const directBookingPattern =
   /^(?:show|find|get)(?:\s+me)?\s+booking\s+([A-Z0-9-]+)[\s?.!]*$/i;
 const happeningBookingPattern =
   /^what(?:'s|\s+is)\s+happening\s+with\s+booking\s+([A-Z0-9-]+)[\s?.!]*$/i;
+const billingReadinessPattern =
+  /^show\s+billing\s+readiness\s+for\s+booking\s+([A-Z0-9-]+)[\s?.!]*$/i;
+const billingBlockedPattern =
+  /^why\s+is\s+booking\s+([A-Z0-9-]+)\s+blocked\s+for\s+billing[\s?.!]*$/i;
+const invoiceCoveragePattern =
+  /^is\s+booking\s+([A-Z0-9-]+)\s+already\s+invoiced[\s?.!]*$/i;
 const bookingSelect = [
   "id",
   "customer_id",
@@ -112,6 +135,17 @@ const bookingSelect = [
 const linkSelect =
   "booking_reference, link_status, issued_at, expires_at, revoked_at, safe_link_context, created_at";
 const statusSelect = "booking_reference, status_value, occurred_at, created_at";
+const invoiceCoverageSelect =
+  "customer_id, booker_id, document_type, document_state, reference, line_items";
+const maxBillingEvidenceRows = 250;
+
+export type AdminAiBookingBriefDependencies = {
+  loadMonthlyClassification(
+    actor: AdminBookingPersistenceAdapterActor,
+    billingMonth: string,
+    bookingReference: string,
+  ): Promise<AdminMonthlyBillingJobClassification | null>;
+};
 
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -152,7 +186,10 @@ function parseBookingBrief(messageValue: unknown): ParsedBookingBrief | "blocked
     return "blocked";
   }
 
-  const match = query.match(directBookingPattern) || query.match(happeningBookingPattern);
+  const billingReadinessMatch = query.match(billingReadinessPattern) || query.match(billingBlockedPattern);
+  const invoiceCoverageMatch = query.match(invoiceCoveragePattern);
+  const operationalMatch = query.match(directBookingPattern) || query.match(happeningBookingPattern);
+  const match = billingReadinessMatch || invoiceCoverageMatch || operationalMatch;
   const rawReference = cleanText(match?.[1], 100).toUpperCase();
 
   if (!match || (!publicReferencePattern.test(rawReference) && !internalReferencePattern.test(rawReference))) {
@@ -160,9 +197,10 @@ function parseBookingBrief(messageValue: unknown): ParsedBookingBrief | "blocked
   }
 
   return {
-    kind: publicReferencePattern.test(rawReference) ? "public" : "internal",
+    kind: billingReadinessMatch ? "billing_readiness" : invoiceCoverageMatch ? "invoice_coverage" : "operational",
     query,
     reference: rawReference,
+    referenceKind: publicReferencePattern.test(rawReference) ? "public" : "internal",
   };
 }
 
@@ -287,10 +325,38 @@ function statusEvidence(rows: unknown[]): AdminAiBookingBriefEvidence {
   return evidence;
 }
 
+function billingMonth(value: unknown) {
+  const pickup = safeDate(value);
+  return pickup && /^\d{4}-\d{2}/.test(pickup) ? pickup.slice(0, 7) : null;
+}
+
+function invoiceRecordReferences(value: unknown) {
+  const row = asRecord(value);
+  return [
+    cleanText(row.reference, 160),
+    ...asArray(row.line_items).map((item) => cleanText(asRecord(item).bookingReference, 160)),
+  ].map((reference) => reference.toUpperCase()).filter(Boolean);
+}
+
+const defaultDependencies: AdminAiBookingBriefDependencies = {
+  async loadMonthlyClassification(actor, billingMonthValue, bookingReference) {
+    const loaded = await loadAdminMonthlyBillingGroups({
+      billing_month: billingMonthValue,
+      limit: maxBillingEvidenceRows,
+      page: 1,
+    }, actor);
+    if (!loaded.ok || loaded.data.pagination.has_next_page) throw new Error(safeReadError);
+    return loaded.data.groups
+      .flatMap((group) => group.jobs)
+      .find((job) => cleanText(job.booking_reference, 160) === bookingReference) || null;
+  },
+};
+
 export async function executeAdminAiBookingBrief(
   messageValue: unknown,
   context: AdminDispatcherBoundaryContext,
   client?: AdminAiBookingBriefClient,
+  dependencies: AdminAiBookingBriefDependencies = defaultDependencies,
 ): Promise<AdminAiBookingBriefExecution> {
   const parsed = parseBookingBrief(messageValue);
 
@@ -316,7 +382,7 @@ export async function executeAdminAiBookingBrief(
   }
 
   const database = client || createServerClient();
-  const referenceColumn = parsed.kind === "public" ? "public_booking_reference" : "booking_reference";
+  const referenceColumn = parsed.referenceKind === "public" ? "public_booking_reference" : "booking_reference";
   const { data: bookingData, error: bookingError } = await database
     .from("bookings")
     .select(bookingSelect)
@@ -401,6 +467,11 @@ export async function executeAdminAiBookingBrief(
     companyRows.length === 1 &&
     customerRows.length === 1 &&
     bookerRows.length === 1 &&
+    positiveInteger(companyRows[0]?.id) === companyId &&
+    positiveInteger(customerRows[0]?.id) === customerId &&
+    positiveInteger(bookerRows[0]?.id) === bookerId &&
+    positiveInteger(bookerRows[0]?.company_id) === companyId &&
+    positiveInteger(bookerRows[0]?.customer_id) === customerId &&
     companyName &&
     bookerName &&
     customerStatus === "active" &&
@@ -419,7 +490,8 @@ export async function executeAdminAiBookingBrief(
     };
   }
 
-  const [linkRead, statusRead] = await Promise.all([
+  const shouldReadBilling = parsed.kind !== "operational";
+  const [linkRead, statusRead, invoiceCoverageRead] = await Promise.all([
     database
       .from("driver_job_links")
       .select(linkSelect)
@@ -432,9 +504,24 @@ export async function executeAdminAiBookingBrief(
       .eq("booking_reference", bookingReference)
       .order("occurred_at", { ascending: false })
       .limit(25),
+    shouldReadBilling
+      ? database
+          .from("customer_invoice_records")
+          .select(invoiceCoverageSelect)
+          .eq("customer_id", customerId)
+          .eq("booker_id", bookerId)
+          .eq("document_type", "invoice")
+          .eq("document_state", "issued")
+          .limit(maxBillingEvidenceRows)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
-  if (linkRead.error || statusRead.error) {
+  if (
+    linkRead.error ||
+    statusRead.error ||
+    invoiceCoverageRead.error ||
+    (shouldReadBilling && asArray(invoiceCoverageRead.data).length >= maxBillingEvidenceRows)
+  ) {
     return { error: safeReadError, matched: true, ok: false, status: 500 };
   }
 
@@ -456,12 +543,64 @@ export async function executeAdminAiBookingBrief(
     cleanText(booking.status, 120) ||
     cleanText(booking.customer_facing_status, 120) ||
     "Not recorded";
+  let billingReadiness: AdminAiBookingBillingReadiness | null = null;
+
+  if (shouldReadBilling) {
+    const bookingMonth = billingMonth(booking.pickup_at) || billingMonth(booking.pickup_datetime);
+    const bookingReferences = new Set([bookingReference, publicReference].map((reference) => reference.toUpperCase()));
+    const covered = asArray(invoiceCoverageRead.data).some((row) =>
+      positiveInteger(asRecord(row).customer_id) === customerId &&
+      positiveInteger(asRecord(row).booker_id) === bookerId &&
+      invoiceRecordReferences(row).some((reference) => bookingReferences.has(reference))
+    );
+    let classification: AdminMonthlyBillingJobClassification | null = null;
+
+    if (!covered && parsed.kind === "billing_readiness" && bookingMonth) {
+      try {
+        const actor = adminDispatcherBoundaryToPersistenceAdapterActor(context);
+        classification = await dependencies.loadMonthlyClassification(actor, bookingMonth, bookingReference);
+      } catch {
+        return { error: safeReadError, matched: true, ok: false, status: 500 };
+      }
+    }
+
+    billingReadiness = covered
+      ? {
+          billing_month: bookingMonth,
+          invoice_coverage: "covered",
+          reason: "An issued customer invoice already covers this exact booking.",
+          status: "already_invoiced",
+        }
+      : classification?.safe_billing_status === "ready"
+        ? {
+            billing_month: bookingMonth,
+            invoice_coverage: "not_covered",
+            reason: cleanText(classification.safe_reason, 220) || "Ready and not covered by an issued customer invoice.",
+            status: "ready",
+          }
+        : classification?.safe_billing_status === "blocked"
+          ? {
+              billing_month: bookingMonth,
+              invoice_coverage: "not_covered",
+              reason: cleanText(classification.safe_reason, 220) || "Billing evidence needs Admin review.",
+              status: "blocked",
+            }
+          : {
+              billing_month: bookingMonth,
+              invoice_coverage: "not_covered",
+              reason: parsed.kind === "invoice_coverage"
+                ? "No exact issued customer invoice coverage was found."
+                : "The saved booking is not yet eligible for the monthly billing review.",
+              status: "not_eligible",
+            };
+  }
 
   const safeBooking: AdminAiBookingBriefRecord = {
     assigned_driver_name: cleanText(booking.driver_name, 160) || null,
     assigned_driver_plate: cleanText(booking.driver_plate_number, 80) || null,
     booker_id: bookerId,
     booker_name: bookerName,
+    billing_readiness: billingReadiness,
     booking_reference: bookingReference,
     company_id: companyId,
     company_name: companyName,
@@ -482,7 +621,11 @@ export async function executeAdminAiBookingBrief(
 
   return {
     data: result(parsed.query, {
-      answer: `Booking ${publicReference} loaded as a read-only operational brief.`,
+      answer: parsed.kind === "billing_readiness"
+        ? `Billing readiness for booking ${publicReference} was read without changing the booking or invoice workflow.`
+        : parsed.kind === "invoice_coverage"
+          ? `Issued-invoice coverage for booking ${publicReference} was read without changing any invoice.`
+          : `Booking ${publicReference} loaded as a read-only operational brief.`,
       booking: safeBooking,
       status: "results",
     }),

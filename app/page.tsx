@@ -2735,7 +2735,7 @@ type AdminAiAccountBriefResult = {
     service_type: string;
     status: string;
   }>;
-  kind: "account" | "all_unpaid_bookings" | "unpaid_bookings";
+  kind: "account" | "all_unpaid_bookings" | "unpaid_bookings" | "upcoming_jobs";
   manual_folder_guidance: string | null;
   page: number;
   page_size: number;
@@ -2749,6 +2749,13 @@ type AdminAiAccountBriefResult = {
     due_date: string;
     invoice_number: string;
     status: "Unpaid";
+  }>;
+  upcoming_jobs: Array<{
+    booking_reference: string;
+    pickup_at: string | null;
+    public_booking_reference: string | null;
+    service_type: string;
+    status: string;
   }>;
 };
 
@@ -2790,6 +2797,15 @@ type AdminAiMonthlyBillingReviewRow = {
 type AdminAiMonthlyBillingReviewResult = {
   answer: string;
   billing_month: string;
+  blocker_reason:
+    | "billing_closeout"
+    | "completion_evidence"
+    | "dsp_billing_time"
+    | "extra_charges"
+    | "inconsistent_identity"
+    | "missing_closeout"
+    | "missing_identity"
+    | null;
   has_more: boolean;
   intent: "find_monthly_billing_review";
   page: number;
@@ -2814,6 +2830,12 @@ type AdminAiBookingBriefResult = {
     assigned_driver_plate: string | null;
     booker_id: number;
     booker_name: string;
+    billing_readiness: {
+      billing_month: string | null;
+      invoice_coverage: "covered" | "not_covered";
+      reason: string;
+      status: "already_invoiced" | "blocked" | "not_eligible" | "ready";
+    } | null;
     booking_reference: string;
     company_id: number;
     company_name: string;
@@ -2852,6 +2874,8 @@ type AdminAiTodaysWorkBriefCategory =
   | "customer_booking_review"
   | "driver_report_completion"
   | "pending_driver_ack"
+  | "scheduled_assigned"
+  | "scheduled_unassigned"
   | "urgent_unassigned";
 
 type AdminAiTodaysWorkBriefRow = {
@@ -2864,6 +2888,7 @@ type AdminAiTodaysWorkBriefRow = {
   company_name: string | null;
   customer_id: number | null;
   detail: string;
+  flight_no: string | null;
   handoff: "dashboard" | "dispatch" | "driver_ack_queue";
   identity_status: "manual_review" | "verified";
   occurred_at: string | null;
@@ -2871,6 +2896,8 @@ type AdminAiTodaysWorkBriefRow = {
   public_booking_reference: string | null;
   review_kind: "amendment" | "cancellation" | "new" | null;
   row_key: string;
+  route: string | null;
+  service_type: string | null;
 };
 
 type AdminAiTodaysWorkBriefResult = {
@@ -2883,7 +2910,10 @@ type AdminAiTodaysWorkBriefResult = {
   query: string;
   read_at: string;
   rows: AdminAiTodaysWorkBriefRow[];
+  scope: "attention" | "date_operations" | "flight_date";
   status: "blocked" | "empty" | "results";
+  target_date: string | null;
+  target_flight_no: string | null;
 };
 
 function adminAiTodaysWorkCategoryLabel(category: AdminAiTodaysWorkBriefCategory) {
@@ -2891,11 +2921,14 @@ function adminAiTodaysWorkCategoryLabel(category: AdminAiTodaysWorkBriefCategory
   if (category === "urgent_unassigned") return "Urgent · Driver TBC";
   if (category === "pending_driver_ack") return "Pending Driver ACK";
   if (category === "driver_report_completion") return "Driver report · Admin confirmation";
+  if (category === "scheduled_assigned") return "Scheduled · Driver assigned";
+  if (category === "scheduled_unassigned") return "Scheduled · Driver TBC";
   return "Blocked monthly billing draft";
 }
 
 function adminAiTodaysWorkHandoffLabel(row: AdminAiTodaysWorkBriefRow) {
-  if (row.handoff === "dispatch") return "Load in Dispatch";
+  const reference = row.public_booking_reference || row.booking_reference;
+  if (row.handoff === "dispatch") return reference ? `Load booking ${reference} in Dispatch` : "Load in Dispatch";
   if (row.handoff === "driver_ack_queue") return "Open Driver ACK Queue";
   return row.category === "driver_report_completion" ? "Open Driver Report" : "Review on Dashboard";
 }
@@ -15059,6 +15092,8 @@ export default function Home() {
   const [adminAiTodaysWorkBriefResult, setAdminAiTodaysWorkBriefResult] =
     useState<AdminAiTodaysWorkBriefResult | null>(null);
   const [adminAiTodaysWorkHandoffPendingKey, setAdminAiTodaysWorkHandoffPendingKey] = useState("");
+  const [adminAiReadOnlyBookingNavigationPendingKey, setAdminAiReadOnlyBookingNavigationPendingKey] =
+    useState("");
   const [aiAssistMessage, setAiAssistMessage] = useState<Message | null>(null);
   const [aiAssistSafetyAccepted, setAiAssistSafetyAccepted] = useState(false);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
@@ -21327,6 +21362,14 @@ export default function Home() {
                 !seenAccounts.has(`${row.customer_id}:${row.company_id}:${row.booker_id}`),
               ),
             ],
+            upcoming_jobs: [
+              ...current.upcoming_jobs,
+              ...accountBrief.upcoming_jobs.filter((job) =>
+                !current.upcoming_jobs.some((currentJob) =>
+                  currentJob.booking_reference === job.booking_reference
+                )
+              ),
+            ],
           };
         });
         setBookingMessage("");
@@ -21469,9 +21512,63 @@ export default function Home() {
   function handleAdminAiMonthlyBillingReviewHandoff() {
     selectAppTab("dashboard");
     window.setTimeout(() => {
-      document.querySelector<HTMLElement>("[data-admin-monthly-billing-month-grouping-review]")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const review = document.querySelector<HTMLDetailsElement>("[data-admin-monthly-billing-month-grouping-review]");
+      if (review) review.open = true;
+      review?.scrollIntoView({ behavior: "smooth", block: "start" });
+      review?.querySelector<HTMLElement>("[data-admin-monthly-billing-month-grouping-customer-search]")?.focus();
     }, 0);
+  }
+
+  function focusAdminAiLoadedBookingDetails() {
+    window.setTimeout(() => {
+      const bookingDetails = document.querySelector<HTMLElement>('[data-dispatch-workflow-step="booking-details"]');
+      bookingDetails?.scrollIntoView({ behavior: "smooth", block: "start" });
+      bookingDetails?.focus({ preventScroll: true });
+    }, 0);
+  }
+
+  async function loadAdminAiReadOnlyBookingInDispatch(
+    bookingReferenceValue: string | number | null | undefined,
+    failureMessage: string,
+  ) {
+    const exactBookingReference = cleanReferenceText(bookingReferenceValue);
+    if (!exactBookingReference) throw new Error(failureMessage);
+    const exactBookingRecord = await loadExactAdminBookingPersistenceRecord(
+      exactBookingReference,
+      failureMessage,
+    );
+    await loadSelectedBooking(
+      adminBookingPersistenceRecordToCalendarBookingRecord(exactBookingRecord),
+      {
+        adminBookingRecordOverride: exactBookingRecord,
+        suppressCustomerRequestHandledMemory: true,
+      },
+    );
+    setMobileDispatchBookingStep("details");
+    focusAdminAiLoadedBookingDetails();
+  }
+
+  async function handleAdminAiReadOnlyBookingNavigation(
+    bookingReferenceValue: string | number | null | undefined,
+    pendingKey: string,
+  ) {
+    if (adminAiReadOnlyBookingNavigationPendingKey) return;
+    const displayReference = adminVisibleBookingReference(cleanReferenceText(bookingReferenceValue));
+    setAdminAiReadOnlyBookingNavigationPendingKey(pendingKey);
+    setAiAssistMessage(null);
+    try {
+      await loadAdminAiReadOnlyBookingInDispatch(
+        bookingReferenceValue,
+        `Exact saved booking ${displayReference} could not be loaded.`,
+      );
+    } catch (error) {
+      setAiAssistMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : "The exact saved booking could not be loaded in Dispatch.",
+      });
+    } finally {
+      setAdminAiReadOnlyBookingNavigationPendingKey("");
+    }
   }
 
   async function handleAdminAiTodaysWorkLoadMore() {
@@ -21496,13 +21593,9 @@ export default function Home() {
       setAdminAiTodaysWorkHandoffPendingKey(row.row_key);
       setAiAssistMessage(null);
       try {
-        const exactBookingRecord = await loadExactAdminBookingPersistenceRecord(
+        await loadAdminAiReadOnlyBookingInDispatch(
           exactBookingReference,
           `Exact saved booking ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
-        );
-        await loadSelectedBooking(
-          adminBookingPersistenceRecordToCalendarBookingRecord(exactBookingRecord),
-          { adminBookingRecordOverride: exactBookingRecord },
         );
       } catch (error) {
         setAiAssistMessage({
@@ -21550,14 +21643,9 @@ export default function Home() {
     setAiAssistMessage(null);
 
     try {
-      const exactBookingRecord = await loadExactAdminBookingPersistenceRecord(
+      await loadAdminAiReadOnlyBookingInDispatch(
         exactBookingReference,
         `Exact saved booking ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
-      );
-
-      await loadSelectedBooking(
-        adminBookingPersistenceRecordToCalendarBookingRecord(exactBookingRecord),
-        { adminBookingRecordOverride: exactBookingRecord },
       );
     } catch (error) {
       setAiAssistMessage({
@@ -23977,6 +24065,7 @@ export default function Home() {
       focusCustomerCopy?: boolean;
       focusDriverJobLink?: boolean;
       focusJobCard?: boolean;
+      suppressCustomerRequestHandledMemory?: boolean;
     } = {},
   ) {
     const requestRevision = loadSelectedBookingRequestRevisionRef.current + 1;
@@ -24030,7 +24119,9 @@ export default function Home() {
       ]);
     }
 
-    rememberHandledCustomerBookingRequest(bookingRecord);
+    if (!options.suppressCustomerRequestHandledMemory) {
+      rememberHandledCustomerBookingRequest(bookingRecord);
+    }
     setDriverJobLinkCopyMessage(null);
     setAdminDriverJobStatusReadState({
       bookingReference,
@@ -43148,14 +43239,24 @@ export default function Home() {
                               {row.references.length > 0 ? (
                                 <div className="mt-2 grid gap-1 sm:grid-cols-2">
                                   {row.references.map((reference) => (
-                                    <p
-                                      className="rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5 text-xs"
+                                    <button
+                                      className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-left text-xs hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                                       data-admin-ai-monthly-billing-reference={reference.booking_reference}
+                                      disabled={Boolean(adminAiReadOnlyBookingNavigationPendingKey)}
                                       key={`${row.row_key}:${reference.booking_reference}`}
+                                      onClick={() => void handleAdminAiReadOnlyBookingNavigation(
+                                        reference.booking_reference,
+                                        `monthly:${reference.booking_reference}`,
+                                      )}
+                                      type="button"
                                     >
-                                      <strong>{reference.display_booking_reference}</strong> · {reference.status}
+                                      <strong>
+                                        {adminAiReadOnlyBookingNavigationPendingKey === `monthly:${reference.booking_reference}`
+                                          ? "Loading..."
+                                          : `Load booking ${reference.display_booking_reference} in Dispatch`}
+                                      </strong> · {reference.status}
                                       {reference.reason ? ` · ${reference.reason}` : ""}
-                                    </p>
+                                    </button>
                                   ))}
                                 </div>
                               ) : null}
@@ -43210,6 +43311,8 @@ export default function Home() {
                         {([
                           ["customer_booking_review", "Customer reviews"],
                           ["urgent_unassigned", "Driver TBC"],
+                          ["scheduled_unassigned", "Scheduled · Driver TBC"],
+                          ["scheduled_assigned", "Scheduled · Assigned"],
                           ["pending_driver_ack", "Pending ACK"],
                           ["driver_report_completion", "Admin completion"],
                           ["blocked_monthly_billing", "Billing blocked"],
@@ -43227,6 +43330,8 @@ export default function Home() {
                         {([
                           "customer_booking_review",
                           "urgent_unassigned",
+                          "scheduled_unassigned",
+                          "scheduled_assigned",
                           "pending_driver_ack",
                           "driver_report_completion",
                           "blocked_monthly_billing",
@@ -43277,6 +43382,13 @@ export default function Home() {
                                           </p>
                                         )}
                                         <p className="mt-1 text-xs text-slate-700">{row.detail}</p>
+                                        {row.service_type || row.flight_no || row.route ? (
+                                          <p className="mt-1 text-xs text-slate-600">
+                                            {[row.service_type, row.flight_no ? `Flight ${row.flight_no}` : null, row.route]
+                                              .filter(Boolean)
+                                              .join(" · ")}
+                                          </p>
+                                        ) : null}
                                         {row.pickup_at || row.occurred_at ? (
                                           <p className="mt-1 text-xs text-slate-500">
                                             {row.pickup_at ? "Pickup" : "Recorded"}: {new Date(row.pickup_at || row.occurred_at || "").toLocaleString("en-SG", {
@@ -43365,7 +43477,9 @@ export default function Home() {
                                 onClick={handleAdminAiBookingBriefLoadInDispatch}
                                 type="button"
                               >
-                                {adminAiBookingBriefLoadPending ? "Loading..." : "Load in Dispatch"}
+                                {adminAiBookingBriefLoadPending
+                                  ? "Loading..."
+                                  : `Load booking ${adminAiBookingBriefResult.booking.public_booking_reference} in Dispatch`}
                               </button>
                               <Link
                                 className="inline-flex min-h-9 items-center rounded-md border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-950 hover:bg-sky-100"
@@ -43407,6 +43521,30 @@ export default function Home() {
                               {adminAiBookingBriefResult.booking.assigned_driver_plate || "Not recorded"}
                             </p>
                           </div>
+                          {adminAiBookingBriefResult.booking.billing_readiness ? (
+                            <div
+                              className="rounded-md border border-amber-200 bg-amber-50 p-3"
+                              data-admin-ai-booking-billing-readiness="true"
+                            >
+                              <p className="font-bold text-amber-950">Billing readiness</p>
+                              <div className="mt-1 grid gap-1 text-xs sm:grid-cols-2">
+                                <p>
+                                  <strong>Status:</strong>{" "}
+                                  {adminAiBookingBriefResult.booking.billing_readiness.status === "not_eligible"
+                                    ? "Not yet eligible"
+                                    : adminAiMonthlyBillingStatusLabel(adminAiBookingBriefResult.booking.billing_readiness.status)}
+                                </p>
+                                <p>
+                                  <strong>Issued invoice coverage:</strong>{" "}
+                                  {adminAiBookingBriefResult.booking.billing_readiness.invoice_coverage === "covered"
+                                    ? "Covered"
+                                    : "Not covered"}
+                                </p>
+                                <p><strong>Billing month:</strong> {adminAiBookingBriefResult.booking.billing_readiness.billing_month || "Not available"}</p>
+                                <p className="sm:col-span-2"><strong>Reason:</strong> {adminAiBookingBriefResult.booking.billing_readiness.reason}</p>
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="grid gap-2 sm:grid-cols-2">
                             <div className="rounded-md border border-sky-200 bg-white p-3">
                               <p className="font-bold">Newest Driver Job Link</p>
@@ -43540,6 +43678,47 @@ export default function Home() {
                                 <p className="font-bold">Booking {job.public_booking_reference || job.booking_reference}</p>
                                 <p className="text-xs text-slate-600">{job.service_type} · {job.status}</p>
                                 {job.pickup_at ? <p className="text-xs text-slate-600">Pickup {job.pickup_at}</p> : null}
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ) : null}
+                      {adminAiAccountBriefResult.upcoming_jobs.length > 0 ? (
+                        <section className="mt-3" data-admin-ai-upcoming-jobs="true">
+                          <h3 className="font-bold text-teal-950">Upcoming jobs</h3>
+                          <div className="mt-2 space-y-2">
+                            {adminAiAccountBriefResult.upcoming_jobs.map((job) => (
+                              <div
+                                className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-teal-200 bg-white p-3"
+                                key={job.booking_reference}
+                              >
+                                <div>
+                                  <p className="font-bold">Booking {job.public_booking_reference || job.booking_reference}</p>
+                                  <p className="text-xs text-slate-600">{job.service_type} · {job.status}</p>
+                                  {job.pickup_at ? (
+                                    <p className="text-xs text-slate-600">
+                                      Pickup {new Date(job.pickup_at).toLocaleString("en-SG", {
+                                        dateStyle: "medium",
+                                        timeStyle: "short",
+                                        timeZone: "Asia/Singapore",
+                                      })}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <button
+                                  className="min-h-9 rounded-md border border-teal-300 bg-white px-3 py-1.5 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                  data-admin-ai-upcoming-job-load-dispatch={job.booking_reference}
+                                  disabled={Boolean(adminAiReadOnlyBookingNavigationPendingKey)}
+                                  onClick={() => void handleAdminAiReadOnlyBookingNavigation(
+                                    job.booking_reference,
+                                    `upcoming:${job.booking_reference}`,
+                                  )}
+                                  type="button"
+                                >
+                                  {adminAiReadOnlyBookingNavigationPendingKey === `upcoming:${job.booking_reference}`
+                                    ? "Loading..."
+                                    : `Load booking ${job.public_booking_reference || job.booking_reference} in Dispatch`}
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -43865,6 +44044,7 @@ export default function Home() {
               className="order-20 min-w-0 rounded-md border border-stone-200 bg-white p-2"
               data-admin-dispatch-form-density="slim-booking-details"
               data-dispatch-workflow-step="booking-details"
+              tabIndex={-1}
             >
               <div className="mb-1.5 flex items-start justify-between gap-2">
                 <div className="min-w-0">

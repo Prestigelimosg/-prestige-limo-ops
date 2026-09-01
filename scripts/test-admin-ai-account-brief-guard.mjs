@@ -8,11 +8,13 @@ const helperPath = path.join(process.cwd(), "lib/admin-ai-account-brief.ts");
 const routePath = path.join(process.cwd(), "app/api/admin-ai-assistant/route.ts");
 const appPath = path.join(process.cwd(), "app/page.tsx");
 const browserPath = path.join(process.cwd(), "scripts/test-admin-ai-account-brief-browser.mjs");
-const [helperSource, routeSource, appSource, browserSource] = await Promise.all([
+const savedBookingReaderPath = path.join(process.cwd(), "lib/admin-saved-booking-read.ts");
+const [helperSource, routeSource, appSource, browserSource, savedBookingReaderSource] = await Promise.all([
   readFile(helperPath, "utf8"),
   readFile(routePath, "utf8"),
   readFile(appPath, "utf8"),
   readFile(browserPath, "utf8"),
+  readFile(savedBookingReaderPath, "utf8"),
 ]);
 
 assert.match(helperSource, /import "server-only"/);
@@ -30,6 +32,13 @@ assert.match(helperSource, /Jobs not billed yet/);
 assert.match(helperSource, /unpaid invoice/);
 assert.match(helperSource, /loadIdentities/);
 assert.match(helperSource, /loadAccountData/);
+assert.match(helperSource, /upcomingJobsPattern/);
+assert.match(helperSource, /loadUpcomingJobs/);
+assert.match(helperSource, /loadAdminSavedBookingsForExactAccountUpcoming/);
+assert.doesNotMatch(helperSource, /\.from\("bookings"\)[\s\S]*?upcoming/);
+assert.match(savedBookingReaderSource, /loadAdminSavedBookingsForExactAccountUpcoming/);
+assert.match(savedBookingReaderSource, /\.eq\("customer_id", customerId\)[\s\S]*?\.eq\("company_id", companyId\)[\s\S]*?\.eq\("booker_id", bookerId\)[\s\S]*?\.gte\(pickupColumn/);
+assert.match(savedBookingReaderSource, /\.limit\(maxExactAccountUpcomingRows \+ 1\)/);
 assert.ok(
   helperSource.indexOf("identities.length !== 1") < helperSource.lastIndexOf("dependencies.loadAccountData(actor)"),
   "Duplicate or partial Booker identities must stop before account data is read.",
@@ -48,6 +57,8 @@ assert.match(appSource, /data-admin-ai-jobs-not-billed="true"/);
 assert.match(appSource, /data-admin-ai-unpaid-invoices="true"/);
 assert.match(appSource, /data-admin-ai-account-brief-load-more="true"/);
 assert.match(appSource, /data-admin-ai-account-open-customer="true"[\s\S]*?Open Customer Account/);
+assert.match(appSource, /data-admin-ai-upcoming-jobs="true"/);
+assert.match(appSource, /data-admin-ai-upcoming-job-load-dispatch=/);
 assert.match(appSource, /No AI model, customer or invoice write, payment, Calendar call, message, or external send was used/);
 assert.match(appSource, /if \(accountBrief\) \{[\s\S]*?setAdminAiAccountBriefResult[\s\S]*?return;[\s\S]*?setAiConversationMessages/);
 assert.doesNotMatch(appSource, /router\.push\(adminAiAccountBriefResult/);
@@ -55,6 +66,11 @@ assert.match(browserSource, /Show Su Ling's unpaid bookings/);
 assert.match(browserSource, /Show all customers with unpaid bookings/);
 assert.match(browserSource, /unexpectedMutationCount/);
 assert.match(browserSource, /account_brief_page/);
+assert.match(browserSource, /Show upcoming jobs for Su Ling at Tiger Global/);
+assert.match(browserSource, /data-mobile-dispatch-quick-step/);
+assert.match(browserSource, /detailsStep\.getAttribute\("aria-current"\) === "step"/);
+assert.match(browserSource, /document\.activeElement === bookingDetails/);
+assert.match(browserSource, /exactBookingReadRequests/);
 
 const tempDir = await mkdtemp(path.join(process.cwd(), ".tmp-admin-ai-account-brief-"));
 
@@ -150,12 +166,14 @@ try {
   const adapterTarget = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
   const persistenceTarget = path.join(tempDir, "lib/admin-booking-persistence.js");
   const rateSetupTarget = path.join(tempDir, "lib/admin-rate-setup-read.js");
+  const savedBookingReaderTarget = path.join(tempDir, "lib/admin-saved-booking-read.js");
   await mkdir(path.dirname(helperTarget), { recursive: true });
   await mkdir(path.dirname(serverOnlyTarget), { recursive: true });
   await writeFile(serverOnlyTarget, "module.exports = {};\n");
   await writeFile(adapterTarget, "exports.adminDispatcherBoundaryToPersistenceAdapterActor = (context) => ({ actor_label: context.actorLabel, actor_role: context.role, boundary_mode: context.mode, source_surface: 'admin_api' });\n");
   await writeFile(persistenceTarget, "exports.listAdminBookings = async () => { throw new Error('unexpected default read'); };\n");
   await writeFile(rateSetupTarget, "exports.loadAdminRateSetup = async () => { throw new Error('unexpected default read'); };\n");
+  await writeFile(savedBookingReaderTarget, "exports.loadAdminSavedBookingsForExactAccountUpcoming = async () => { throw new Error('unexpected default read'); };\n");
   await writeFile(helperTarget, ts.transpileModule(helperSource, {
     compilerOptions: {
       esModuleInterop: true,
@@ -202,6 +220,39 @@ try {
   assert.equal(possessive.data.kind, "unpaid_bookings");
   assert.equal(possessive.data.account.booker_name, "Su Ling");
   assert.match(possessive.data.answer, /2 Jobs not billed yet/);
+
+  const upcomingDeps = dependencies();
+  let upcomingIdentity = null;
+  upcomingDeps.value.loadUpcomingJobs = async (_actor, identity, _now, page) => {
+    upcomingIdentity = identity;
+    assert.equal(page, 1);
+    return {
+      hasMore: false,
+      jobs: [{
+        booking_reference: "ADM-UPCOMING",
+        pickup_at: "2026-09-03T02:00:00.000Z",
+        public_booking_reference: "10999",
+        service_type: "MNG",
+        status: "Confirmed",
+      }],
+      totalCount: 1,
+    };
+  };
+  const upcoming = await executeAdminAiAccountBrief(
+    "Show upcoming jobs for Su Ling at Tiger Global",
+    1,
+    actor,
+    upcomingDeps.value,
+    new Date("2026-09-01T00:00:00.000Z"),
+  );
+  assert.equal(upcoming.ok, true);
+  assert.equal(upcoming.data.kind, "upcoming_jobs");
+  assert.deepEqual(
+    [upcomingIdentity.customer_id, upcomingIdentity.company_id, upcomingIdentity.booker_id],
+    [197, 7, 11],
+  );
+  assert.deepEqual(upcoming.data.upcoming_jobs.map((job) => job.booking_reference), ["ADM-UPCOMING"]);
+  assert.equal(upcomingDeps.calls.account, 0, "Upcoming jobs must not trigger the broad account/invoice snapshot.");
 
   const duplicateDeps = dependencies({
     ...identities,

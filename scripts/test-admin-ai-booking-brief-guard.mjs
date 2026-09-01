@@ -20,13 +20,21 @@ const [helperSource, routeSource, appSource, driverJobLinkSource, driverJobStatu
 
 assert.match(helperSource, /import "server-only"/);
 assert.match(helperSource, /adminAiBookingBriefIntent = "find_exact_booking_brief"/);
-assert.match(helperSource, /referenceColumn = parsed\.kind === "public" \? "public_booking_reference" : "booking_reference"/);
+assert.match(helperSource, /referenceColumn = parsed\.referenceKind === "public" \? "public_booking_reference" : "booking_reference"/);
 assert.match(helperSource, /\.eq\(referenceColumn, parsed\.reference\)/);
 assert.match(helperSource, /\.eq\("id", bookerId\)[\s\S]*?\.eq\("company_id", companyId\)[\s\S]*?\.eq\("customer_id", customerId\)/);
+assert.match(helperSource, /positiveInteger\(companyRows\[0\]\?\.id\) === companyId/);
+assert.match(helperSource, /positiveInteger\(customerRows\[0\]\?\.id\) === customerId/);
+assert.match(helperSource, /positiveInteger\(bookerRows\[0\]\?\.company_id\) === companyId/);
+assert.match(helperSource, /positiveInteger\(bookerRows\[0\]\?\.customer_id\) === customerId/);
 assert.match(helperSource, /\.eq\("id", travellerId\)[\s\S]*?\.eq\("company_id", companyId\)[\s\S]*?\.eq\("booker_id", bookerId\)/);
 assert.match(helperSource, /\.from\("driver_job_links"\)[\s\S]*?\.eq\("booking_reference", bookingReference\)[\s\S]*?\.order\("created_at", \{ ascending: false \}\)[\s\S]*?\.limit\(1\)/);
 assert.match(helperSource, /\.from\("driver_job_status_events"\)[\s\S]*?\.eq\("booking_reference", bookingReference\)[\s\S]*?\.order\("occurred_at", \{ ascending: false \}\)/);
 assert.match(helperSource, /status: "identity_review"/);
+assert.match(helperSource, /billingReadinessPattern/);
+assert.match(helperSource, /invoiceCoveragePattern/);
+assert.match(helperSource, /loadAdminMonthlyBillingGroups/);
+assert.match(helperSource, /\.eq\("customer_id", customerId\)[\s\S]*?\.eq\("booker_id", bookerId\)[\s\S]*?\.eq\("document_type", "invoice"\)[\s\S]*?\.eq\("document_state", "issued"\)/);
 assert.match(helperSource, /Booking changes must use the existing confirmed Dispatch controls/);
 assert.doesNotMatch(helperSource, /\.(?:insert|update|delete|upsert|rpc)\(/);
 for (const forbidden of [
@@ -229,8 +237,10 @@ try {
   const helperTarget = path.join(tempDir, "lib/admin-ai-booking-brief.js");
   const driverJobLinkTarget = path.join(tempDir, "lib/driver-job-link.js");
   const driverJobStatusWorkflowTarget = path.join(tempDir, "lib/driver-job-status-workflow.ts");
+  const adapterTarget = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
+  const monthlyGroupingTarget = path.join(tempDir, "lib/admin-monthly-billing-grouping-read.js");
   const serverOnlyTarget = path.join(tempDir, "node_modules/server-only/index.js");
-  for (const target of [helperTarget, driverJobLinkTarget, driverJobStatusWorkflowTarget, serverOnlyTarget]) {
+  for (const target of [helperTarget, driverJobLinkTarget, driverJobStatusWorkflowTarget, adapterTarget, monthlyGroupingTarget, serverOnlyTarget]) {
     await mkdir(path.dirname(target), { recursive: true });
   }
   const transpile = (source, filename) => ts.transpileModule(source, {
@@ -240,6 +250,8 @@ try {
   await writeFile(serverOnlyTarget, "module.exports = {};\n");
   await writeFile(driverJobStatusWorkflowTarget, transpile(driverJobStatusWorkflowSource, driverJobStatusWorkflowPath));
   await writeFile(driverJobLinkTarget, transpile(driverJobLinkSource, driverJobLinkPath));
+  await writeFile(adapterTarget, "exports.adminDispatcherBoundaryToPersistenceAdapterActor = (context) => context;\n");
+  await writeFile(monthlyGroupingTarget, "exports.loadAdminMonthlyBillingGroups = async () => ({ ok: false, error: 'not called' });\n");
   await writeFile(helperTarget, transpile(helperSource, helperPath));
   const require = createRequire(import.meta.url);
   const { executeAdminAiBookingBrief } = require(helperTarget);
@@ -271,6 +283,95 @@ try {
   const linkCall = publicClient.calls.find((call) => call.table === "driver_job_links");
   assert.deepEqual(linkCall.filters, [{ column: "booking_reference", value: internalReference }]);
   assert.equal(linkCall.resultLimit, 1);
+  assert.equal(
+    publicClient.calls.some((call) => call.table === "customer_invoice_records"),
+    false,
+    "The established operational brief must not add a finance read.",
+  );
+
+  const coverageClient = new FakeClient(baseTables({
+    customer_invoice_records: [{
+      booker_id: 28,
+      customer_id: 197,
+      document_state: "issued",
+      document_type: "invoice",
+      line_items: [{ bookingReference: internalReference }],
+      reference: "",
+    }],
+  }));
+  const coverage = await executeAdminAiBookingBrief(
+    "Is booking 10912 already invoiced?",
+    actor,
+    coverageClient,
+  );
+  assert.equal(coverage.ok, true);
+  assert.equal(coverage.data.booking.billing_readiness.status, "already_invoiced");
+  assert.equal(coverage.data.booking.billing_readiness.invoice_coverage, "covered");
+  const coverageCall = coverageClient.calls.find((call) => call.table === "customer_invoice_records");
+  assert.deepEqual(coverageCall.filters, [
+    { column: "customer_id", value: 197 },
+    { column: "booker_id", value: 28 },
+    { column: "document_type", value: "invoice" },
+    { column: "document_state", value: "issued" },
+  ]);
+
+  const crossAccountCoverageClient = new FakeClient(baseTables({
+    customer_invoice_records: [{
+      booker_id: 29,
+      customer_id: 197,
+      document_state: "issued",
+      document_type: "invoice",
+      line_items: [{ bookingReference: internalReference }],
+      reference: "",
+    }],
+  }));
+  const crossAccountCoverage = await executeAdminAiBookingBrief(
+    "Is booking 10912 already invoiced?",
+    actor,
+    crossAccountCoverageClient,
+  );
+  assert.equal(crossAccountCoverage.ok, true);
+  assert.equal(crossAccountCoverage.data.booking.billing_readiness.invoice_coverage, "not_covered");
+
+  let classificationReads = 0;
+  const readinessClient = new FakeClient(baseTables({ customer_invoice_records: [] }));
+  const readiness = await executeAdminAiBookingBrief(
+    "Show billing readiness for booking 10912",
+    actor,
+    readinessClient,
+    {
+      async loadMonthlyClassification(_actor, billingMonth, bookingReference) {
+        classificationReads += 1;
+        assert.equal(billingMonth, "2026-09");
+        assert.equal(bookingReference, internalReference);
+        return {
+          billing_month: billingMonth,
+          booking_reference: bookingReference,
+          booker_id: 28,
+          company_id: 56,
+          customer_account: "Ignored",
+          customer_id: "197",
+          display_booking_reference: "10912",
+          safe_billing_status: "blocked",
+          safe_reason: "Completed job closeout is missing.",
+        };
+      },
+    },
+  );
+  assert.equal(readiness.ok, true);
+  assert.equal(classificationReads, 1);
+  assert.equal(readiness.data.booking.billing_readiness.status, "blocked");
+  assert.equal(readiness.data.booking.billing_readiness.reason, "Completed job closeout is missing.");
+
+  const notCoveredClient = new FakeClient(baseTables({ customer_invoice_records: [] }));
+  const notCovered = await executeAdminAiBookingBrief(
+    "Is booking 10912 already invoiced?",
+    actor,
+    notCoveredClient,
+  );
+  assert.equal(notCovered.ok, true);
+  assert.equal(notCovered.data.booking.billing_readiness.status, "not_eligible");
+  assert.equal(notCovered.data.booking.billing_readiness.invoice_coverage, "not_covered");
 
   const internalClient = new FakeClient(baseTables());
   const internalResult = await executeAdminAiBookingBrief(
@@ -319,6 +420,18 @@ try {
   assert.equal(crossBooker.data.status, "identity_review");
   assert.equal(crossBooker.data.booking, null);
   assert.equal(crossBookerClient.calls.some((call) => call.table === "driver_job_links"), false);
+
+  const crossCompanyClient = new FakeClient(baseTables({
+    companies: [{ id: 57, company_name: "Other Company" }],
+  }));
+  const crossCompany = await executeAdminAiBookingBrief(
+    "Is booking 10912 already invoiced?",
+    actor,
+    crossCompanyClient,
+  );
+  assert.equal(crossCompany.ok, true);
+  assert.equal(crossCompany.data.status, "identity_review");
+  assert.equal(crossCompanyClient.calls.some((call) => call.table === "customer_invoice_records"), false);
 
   const travellerNotBookerClient = new FakeClient(baseTables({
     travelers: [{ id: 42, company_id: 56, booker_id: 29, traveler_name: "Deep" }],

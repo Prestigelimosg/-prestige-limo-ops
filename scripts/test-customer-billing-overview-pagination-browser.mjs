@@ -28,7 +28,8 @@ function responseHeaders() {
   ];
 }
 
-const accountFixtures = Array.from({ length: 32 }, (_, index) => {
+const accountFixtures = [
+  ...Array.from({ length: 32 }, (_, index) => {
   const accountNumber = index + 1;
   const customerId = String(1000 + accountNumber);
   const customerName = `Pagination Customer ${String(accountNumber).padStart(2, "0")}`;
@@ -51,7 +52,26 @@ const accountFixtures = Array.from({ length: 32 }, (_, index) => {
     upcoming_count: 0,
     verified_company_id: null,
   };
-});
+  }),
+  {
+    account_scope_key: "stanley",
+    account_scope_label: "Passenger: Stanley Ho / Booker: June",
+    completed_count: 4,
+    customer_account: "Tiger Global (June)",
+    customer_folder_active: true,
+    customer_folder_key: "197::stanley",
+    customer_id: "197",
+    guest_account_billing_enabled: false,
+    latest_booking_reference: "ADM-10910",
+    latest_public_booking_reference: "10910",
+    latest_pickup_at: "2026-09-10T10:00:00.000Z",
+    latest_service_type: "Airport Arrival",
+    saved_booking_count: 4,
+    source: "admin_booking_persistence",
+    upcoming_count: 0,
+    verified_company_id: "56",
+  },
+];
 
 async function main() {
   const chromeProfileDir = await mkdtemp(
@@ -164,7 +184,7 @@ async function main() {
     });
 
     await navigateWithLoadEvent(client, new URL("/customers", appUrl).toString());
-    reporter.step("loading 32 guarded customer accounts");
+  reporter.step("loading 33 guarded customer accounts");
     await waitForCondition(
       () => evaluate(`Boolean(document.querySelector('[data-customer-billing-overview-load-accounts="true"]'))`),
       10000,
@@ -178,7 +198,7 @@ async function main() {
           const rows = [...document.querySelectorAll('[data-customer-billing-overview-row]')];
           const pages = [...document.querySelectorAll('[data-customer-billing-overview-page]')];
           const feedback = document.querySelector('[data-customer-billing-overview-feedback]')?.textContent.trim() || "";
-          if (rows.length !== 15 || pages.length !== 3 || !feedback.includes("Showing 1-15 of 32 customers")) {
+          if (rows.length !== 15 || pages.length !== 3 || !feedback.includes("Showing 1-15 of 33 customers")) {
             return false;
           }
           const scrollBox = document.querySelector('[data-customer-billing-overview-scroll="true"]');
@@ -212,7 +232,7 @@ async function main() {
       () => evaluate(`(() => {
         const rows = [...document.querySelectorAll('[data-customer-billing-overview-row]')];
         const feedback = document.querySelector('[data-customer-billing-overview-feedback]')?.textContent.trim() || "";
-        return rows.length === 15 && feedback.includes("Showing 16-30 of 32 customers")
+        return rows.length === 15 && feedback.includes("Showing 16-30 of 33 customers")
           ? {
               firstName: rows[0]?.querySelector('a')?.textContent.trim() || "",
               lastName: rows.at(-1)?.querySelector('a')?.textContent.trim() || "",
@@ -231,14 +251,59 @@ async function main() {
       () => evaluate(`(() => {
         const rows = [...document.querySelectorAll('[data-customer-billing-overview-row]')];
         const feedback = document.querySelector('[data-customer-billing-overview-feedback]')?.textContent.trim() || "";
-        return rows.length === 2 && feedback.includes("Showing 31-32 of 32 customers")
+        return rows.length === 3 && feedback.includes("Showing 31-33 of 33 customers")
           ? rows.map((row) => row.querySelector('a')?.textContent.trim() || "")
           : false;
       })()`),
       10000,
       "Customer Billing Overview page three",
     );
-    assert.deepEqual(pageThreeState, ["Pagination Customer 31", "Pagination Customer 32"]);
+    assert.deepEqual(pageThreeState, [
+      "Pagination Customer 31",
+      "Pagination Customer 32",
+      "Tiger Global (June)",
+    ]);
+    assert.doesNotMatch(pageThreeState.join(" "), /Stanley|Passenger|Traveller|Boss/i);
+
+    reporter.step("checking authoritative Customer Billing Overview title at 390px");
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 3,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
+    await navigateWithLoadEvent(client, new URL("/customers", appUrl).toString());
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-customer-billing-overview-load-accounts="true"]'))`),
+      10000,
+      "mobile Customer Billing Overview Load Accounts control",
+    );
+    await evaluate(`document.querySelector('[data-customer-billing-overview-load-accounts="true"]').click()`);
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-customer-billing-overview-page="3"]'))`),
+      10000,
+      "mobile Customer Billing Overview page three",
+    );
+    await evaluate(`document.querySelector('[data-customer-billing-overview-page="3"]').click()`);
+    const mobileTigerState = await waitForCondition(
+      () => evaluate(`(() => {
+        const row = [...document.querySelectorAll('[data-customer-billing-overview-row]')]
+          .find((candidate) => candidate.textContent.includes("Tiger Global (June)"));
+        if (!(row instanceof HTMLTableRowElement)) return false;
+        return {
+          pageOverflow: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+          title: row.querySelector('a')?.textContent.trim() || "",
+          viewportWidth: window.innerWidth,
+        };
+      })()`),
+      10000,
+      "mobile authoritative Tiger Global title",
+    );
+    assert.deepEqual(mobileTigerState, {
+      pageOverflow: 0,
+      title: "Tiger Global (June)",
+      viewportWidth: 390,
+    });
     assert.equal(
       requests.some(
         (request) =>
@@ -259,7 +324,7 @@ async function main() {
         reporter.summary({
           accountCount: accountFixtures.length,
           pageOneRows: 15,
-          pageThreeRows: 2,
+          pageThreeRows: 3,
           result: "passed",
         }),
         null,

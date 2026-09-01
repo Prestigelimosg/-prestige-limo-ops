@@ -15,6 +15,7 @@ const unsafeAccountsLeakPattern =
 const safeApiLeakPattern =
   /SUPABASE_SERVICE_ROLE_KEY_CUSTOMER_ACCOUNTS_SENTINEL|mock-admin-customer-accounts-session-token|customer-accounts-contract\.supabase\.co|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/admin-customer-account-title.ts",
   "lib/admin-customer-accounts-read.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
@@ -199,7 +200,9 @@ class MockSupabaseClient {
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
+      bookers: [],
       bookings: [],
+      companies: [],
       customers: [],
     };
 
@@ -566,7 +569,7 @@ try {
     },
   ]);
   assert.equal(readMock.client.operations.length, 0);
-  assert.equal(readMock.client.selectHistory.length, 3);
+  assert.equal(readMock.client.selectHistory.length, 5);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
   assert.equal(readMock.client.selectHistory[0].limit, 200);
   assert.equal(readMock.client.selectHistory[1].table, "customers");
@@ -574,6 +577,15 @@ try {
   assert.equal(readMock.client.selectHistory[2].table, "bookings");
   assert.equal(readMock.client.selectHistory[2].selectedColumns, "customer_id, company_id");
   assert.equal(readMock.client.selectHistory[2].limit, 1000);
+  assert.equal(readMock.client.selectHistory[3].table, "companies");
+  assert.equal(readMock.client.selectHistory[3].selectedColumns, "id, company_name");
+  assert.equal(readMock.client.selectHistory[3].limit, 1000);
+  assert.equal(readMock.client.selectHistory[4].table, "bookers");
+  assert.equal(
+    readMock.client.selectHistory[4].selectedColumns,
+    "id, company_id, customer_id, booker_name",
+  );
+  assert.equal(readMock.client.selectHistory[4].limit, 1000);
   assertNoLeaks(readResult, "customer accounts read response should stay safe");
 
   setEnv(enabledEnv());
@@ -665,7 +677,7 @@ try {
     "Directory Only Customer",
   ]);
   assert.equal(searchMock.client.operations.length, 0);
-  assert.equal(searchMock.client.selectHistory.length, 3);
+  assert.equal(searchMock.client.selectHistory.length, 5);
   assert.equal(searchMock.client.selectHistory[0].limit, 200);
   assertNoLeaks(searchResult, "searched customer accounts response should stay safe");
 
@@ -683,7 +695,7 @@ try {
   assert.equal(tokenReadResult.status, 200);
   assert.equal(tokenReadResult.body.ok, true);
   assert.equal(tokenReadMock.client.operations.length, 0);
-  assert.equal(tokenReadMock.client.selectHistory.length, 3);
+  assert.equal(tokenReadMock.client.selectHistory.length, 5);
   assertNoLeaks(tokenReadResult, "customer accounts token read response should stay safe");
 
   setEnv(enabledEnv());
@@ -702,7 +714,7 @@ try {
   assert.equal(limitedResult.body.accounts[0].customer_account, "UBS");
   assert.equal(limitedResult.body.accounts[0].account_scope_key, "boss_alpha");
   assert.equal(limitedMock.client.operations.length, 0);
-  assert.equal(limitedMock.client.selectHistory.length, 3);
+  assert.equal(limitedMock.client.selectHistory.length, 5);
   assertNoLeaks(limitedResult, "limited customer accounts response should stay safe");
 
   setEnv(enabledEnv());
@@ -750,6 +762,193 @@ try {
   assert.equal(agencyDirectoryResult.body.accounts[0].customer_account, "Ritz Carlton Agency");
   assert.equal(agencyDirectoryResult.body.accounts[0].guest_account_billing_enabled, true);
   assert.equal(agencyDirectoryMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const authoritativeIdentityMock = installMockClient({
+    bookings: [
+      {
+        admin_internal_status: "completed",
+        booker_id: 28,
+        booking_reference: "TIGER-SAFE-001",
+        company_id: 56,
+        contact_display_name: "June",
+        customer_display_name: "Tiger Global [Stanley Ho]",
+        customer_facing_status: "completed",
+        customer_id: "197",
+        passenger_name: "Stanley Ho",
+        pickup_at: "2026-09-10T10:00:00.000Z",
+        service_type: "Airport Arrival",
+      },
+    ],
+    bookers: [
+      { booker_name: "June", company_id: 56, customer_id: 197, id: 28 },
+    ],
+    companies: [
+      { company_name: "Tiger Global", id: 56 },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "corporate",
+        display_name: "Tiger Global (June)",
+        id: 197,
+        status: "active",
+      },
+    ],
+  });
+  const authoritativeIdentityResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=197&limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(authoritativeIdentityResult.status, 200);
+  assert.equal(authoritativeIdentityResult.body.accounts.length, 1);
+  assert.equal(
+    authoritativeIdentityResult.body.accounts[0].customer_account,
+    "Tiger Global (June)",
+    "Exact verified Company + Booker title must override booking Passenger/Traveller display text",
+  );
+  assert.doesNotMatch(
+    authoritativeIdentityResult.body.accounts[0].customer_account,
+    /Stanley|Passenger|Traveller|Boss/i,
+    "Customer Billing Overview title must not leak Passenger/Traveller/Boss text",
+  );
+  assert.equal(authoritativeIdentityMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const directoryOnlyIdentityMock = installMockClient({
+    bookings: [],
+    bookers: [
+      { booker_name: "June", company_id: 56, customer_id: 197, id: 28 },
+    ],
+    companies: [
+      { company_name: "Tiger Global", id: 56 },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "corporate",
+        display_name: "Tiger Global [Stanley Ho]",
+        id: 197,
+        status: "active",
+      },
+    ],
+  });
+  const directoryOnlyIdentityResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=197&limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(directoryOnlyIdentityResult.status, 200);
+  assert.equal(directoryOnlyIdentityResult.body.accounts.length, 1);
+  assert.equal(directoryOnlyIdentityResult.body.accounts[0].customer_account, "Tiger Global (June)");
+  assert.equal(directoryOnlyIdentityResult.body.accounts[0].saved_booking_count, 0);
+  assert.doesNotMatch(
+    directoryOnlyIdentityResult.body.accounts[0].customer_account,
+    /Stanley|Passenger|Traveller|Boss/i,
+  );
+  assert.equal(directoryOnlyIdentityMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const mismatchedBookerMock = installMockClient({
+    bookings: [
+      {
+        booker_id: 28,
+        booking_reference: "LEGACY-SAFE-001",
+        company_id: 56,
+        customer_display_name: "Tiger Global [Stanley Ho]",
+        customer_id: "197",
+        passenger_name: "Stanley Ho",
+        pickup_at: "2026-09-10T10:00:00.000Z",
+      },
+    ],
+    bookers: [
+      { booker_name: "Wrong Account Booker", company_id: 56, customer_id: 999, id: 28 },
+    ],
+    companies: [
+      { company_name: "Tiger Global", id: 56 },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "corporate",
+        display_name: "Tiger Global directory",
+        id: 197,
+        status: "active",
+      },
+    ],
+  });
+  const mismatchedBookerResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=197&limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(mismatchedBookerResult.status, 200);
+  assert.equal(mismatchedBookerResult.body.accounts[0].customer_account, "Tiger Global");
+  assert.doesNotMatch(
+    mismatchedBookerResult.body.accounts[0].customer_account,
+    /Stanley|Wrong Account Booker|Passenger|Traveller|Boss/i,
+  );
+  assert.equal(mismatchedBookerMock.client.operations.length, 0);
+
+  setEnv(enabledEnv());
+
+  const duplicateBookerMock = installMockClient({
+    bookings: [
+      {
+        booker_id: 28,
+        booking_reference: "DUPLICATE-IDENTITY-SAFE-001",
+        company_id: 56,
+        customer_display_name: "Tiger Global [Stanley Ho]",
+        customer_id: "197",
+        passenger_name: "Stanley Ho",
+        pickup_at: "2026-09-10T10:00:00.000Z",
+      },
+    ],
+    bookers: [
+      { booker_name: "June", company_id: 56, customer_id: 197, id: 28 },
+      { booker_name: "Duplicate Booker", company_id: 56, customer_id: 197, id: 29 },
+    ],
+    companies: [
+      { company_name: "Tiger Global", id: 56 },
+    ],
+    customers: [
+      {
+        account_status: "active",
+        customer_type: "corporate",
+        display_name: "Tiger Global directory",
+        id: 197,
+        status: "active",
+      },
+    ],
+  });
+  const duplicateBookerResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?customer_id=197&limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(duplicateBookerResult.status, 200);
+  assert.equal(duplicateBookerResult.body.accounts[0].customer_account, "Tiger Global");
+  assert.doesNotMatch(
+    duplicateBookerResult.body.accounts[0].customer_account,
+    /June|Duplicate Booker|Stanley|Passenger|Traveller|Boss/i,
+  );
+  assert.equal(duplicateBookerMock.client.operations.length, 0);
 
   setEnv(enabledEnv());
 
@@ -914,6 +1113,58 @@ try {
   });
   assert.equal(failureMock.client.operations.length, 0);
   assertNoLeaks(failureResult, "database failure response should stay sanitized");
+
+  setEnv(enabledEnv());
+
+  const companyFailureMock = installMockClient(seed, {
+    failures: {
+      "select:companies": {
+        code: "42501",
+        message: `Company SQL stack with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const companyFailureResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(companyFailureResult.status, 500);
+  assert.deepEqual(companyFailureResult.body, {
+    error: "Admin customer Company identity read failed safely.",
+    ok: false,
+  });
+  assert.equal(companyFailureMock.client.operations.length, 0);
+  assertNoLeaks(companyFailureResult, "Company identity failure response should stay sanitized");
+
+  setEnv(enabledEnv());
+
+  const bookerFailureMock = installMockClient(seed, {
+    failures: {
+      "select:bookers": {
+        code: "42501",
+        message: `Booker SQL stack with ${serviceRoleSentinel} should not leak`,
+      },
+    },
+  });
+  const bookerFailureResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-customer-accounts?limit=10", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(bookerFailureResult.status, 500);
+  assert.deepEqual(bookerFailureResult.body, {
+    error: "Admin customer Booker identity read failed safely.",
+    ok: false,
+  });
+  assert.equal(bookerFailureMock.client.operations.length, 0);
+  assertNoLeaks(bookerFailureResult, "Booker identity failure response should stay sanitized");
 } finally {
   restoreEnv();
   delete globalThis.__prestigeAdminCustomerAccountsReadMock;

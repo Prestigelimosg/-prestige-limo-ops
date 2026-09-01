@@ -52,6 +52,7 @@ import {
   type PublicCompanyProfile,
 } from "../lib/company-profile-shared";
 import { formatWhatsAppJobCard } from "../lib/whatsapp-job-card";
+import { formatVerifiedCustomerAccountTitle } from "../lib/admin-customer-account-title";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
@@ -28349,6 +28350,16 @@ export default function Home() {
       clean(rateCompanies.find((company) => String(company.id) === companyId)?.company_name) ||
       `Company ${companyId}`;
     const bookerName = clean(booker.booker_name) || `Booker ${bookerId}`;
+    const customerId = String(adminDispatchVerifiedIdentityId(booker.customer_id) || "");
+    const exactDirectoryTitleReady = Boolean(
+      customerId &&
+        clean(
+          rateCompanies.find(
+            (company) => String(adminDispatchVerifiedIdentityId(company.id) || "") === companyId,
+          )?.company_name,
+        ) &&
+        clean(booker.booker_name),
+    );
     const accountTravelers = rateTravelers.filter(
       (traveler) =>
         String(adminDispatchVerifiedIdentityId(traveler.company_id) || "") === companyId &&
@@ -28364,10 +28375,13 @@ export default function Home() {
       bookerName,
       companyId,
       companyName,
-      customerId: String(adminDispatchVerifiedIdentityId(booker.customer_id) || ""),
+      customerId,
       key: `corporate:${companyId}:${bookerId}`,
       kind: "corporate",
-      label: bookerName,
+      label: formatVerifiedCustomerAccountTitle({
+        bookerName: exactDirectoryTitleReady ? bookerName : null,
+        companyName,
+      }),
       searchText: `${companyName} ${bookerName} ${passengerSearchText}`.toLocaleLowerCase(),
       secondaryLabel: accountTravelers.length > 0
         ? `${companyName} · ${accountTravelers.length} passenger${accountTravelers.length === 1 ? "" : "s"}`
@@ -28411,7 +28425,7 @@ export default function Home() {
       customerId: "",
       key,
       kind: "corporate",
-      label: bookerName,
+      label: formatVerifiedCustomerAccountTitle({ companyName }),
       searchText: `${companyName} ${bookerName} ${clean(traveler.traveler_name)}`.toLocaleLowerCase(),
       secondaryLabel: `${companyName} · 1 passenger`,
       travelers: [traveler],
@@ -28457,8 +28471,20 @@ export default function Home() {
         account.bookerId === booking.bookerId,
     )
   ) {
-    const loadedCompanyName = clean(booking.company) || `Company ${booking.companyId}`;
-    const loadedBookerName = clean(booking.booker);
+    const loadedCompanyName =
+      clean(
+        rateCompanies.find(
+          (company) => String(adminDispatchVerifiedIdentityId(company.id) || "") === booking.companyId,
+        )?.company_name,
+      ) || `Company ${booking.companyId}`;
+    const loadedBooker = rateBookers.find(
+      (booker) =>
+        String(adminDispatchVerifiedIdentityId(booker.id) || "") === booking.bookerId &&
+        String(adminDispatchVerifiedIdentityId(booker.company_id) || "") === booking.companyId &&
+        Boolean(booking.customerId) &&
+        String(adminDispatchVerifiedIdentityId(booker.customer_id) || "") === booking.customerId,
+    );
+    const loadedBookerName = clean(loadedBooker?.booker_name);
     const loadedTraveler = rateTravelers.find(
       (traveler) =>
         String(traveler.id) === booking.travelerId &&
@@ -28474,7 +28500,10 @@ export default function Home() {
       customerId: booking.customerId,
       key: `corporate:${booking.companyId}:${booking.bookerId || "unassigned"}`,
       kind: "corporate",
-      label: loadedBookerName || loadedCompanyName,
+      label: formatVerifiedCustomerAccountTitle({
+        bookerName: loadedBookerName,
+        companyName: loadedCompanyName,
+      }),
       searchText: `${loadedCompanyName} ${loadedBookerName}`.toLocaleLowerCase(),
       secondaryLabel: loadedBookerName
         ? `${loadedCompanyName} · loaded booking identity`

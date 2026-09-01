@@ -43,7 +43,24 @@ for (const fragment of [
   "rateCompanies",
   "rateBookers",
   "rateTravelers",
+  "formatVerifiedCustomerAccountTitle",
 ]) assert.ok(app.includes(fragment), `Missing ${fragment}`);
+
+assert.ok(
+  app.includes("label: formatVerifiedCustomerAccountTitle({") &&
+    app.includes("companyName,") &&
+    app.includes("bookerName,"),
+  "Dispatch Customer Account option titles must use the shared exact Company + Booker formatter",
+);
+for (const forbiddenTitle of [
+  "label: bookerName,",
+  "label: loadedBookerName || loadedCompanyName,",
+]) {
+  assert.ok(
+    !app.includes(forbiddenTitle),
+    `Dispatch Customer Account option title must not use booking/passenger-era display precedence ${forbiddenTitle}`,
+  );
+}
 
 for (const forbiddenFragment of [
   'data-admin-dispatch-new-customer-account="true"',

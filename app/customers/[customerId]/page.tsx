@@ -91,7 +91,6 @@ export default async function MockCustomerFolderPage({ params, searchParams }: C
                 1 · Customer profile &amp; invoice prefix
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-normal text-slate-950">{customer.companyName}</h1>
                 <CustomerCompanyProfileEditor customerId={customer.id} customerName={customer.companyName} />
               </div>
               <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">

@@ -94,8 +94,8 @@ assert.ok(
   "The profile must not expose the legacy Hotel / Tour Agency checkbox",
 );
 assert.ok(
-  customerProfileEditor.includes("profile.guest_account_billing_enabled"),
-  "Stored customer classification must remain available to the existing profile and access consumers",
+  !customerProfileEditor.includes("profile.guest_account_billing_enabled"),
+  "The profile save lane must not branch on retired hotel, agency or personal classification",
 );
 
 for (const fragment of [

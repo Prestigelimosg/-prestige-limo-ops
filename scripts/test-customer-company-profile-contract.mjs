@@ -47,8 +47,8 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /function isMissingCompanyProfileResult\(response: Response, result: unknown\)/,
-  "profile editor must explicitly classify safe missing-company lookup responses",
+  /action_type: "customer_company_booker_profile_overwrite"/,
+  "profile editor must use the one guarded Customer + Company + Booker overwrite action",
 );
 assert.match(editorSource, />\s*Contact name\s*<input/,
   "the existing primary_contact_name field must be clearly labelled Contact name",
@@ -64,28 +64,18 @@ assert.doesNotMatch(editorSource, /Primary contact person/,
 );
 assert.match(
   editorSource,
-  /response\.status === 404 \|\| \/not found\|no company\/\.test\(message\)/,
-  "missing company lookup responses must open create mode instead of error-only feedback",
+  /if \(!verifiedCompanyId\) \{[\s\S]+?setCompanySelection\("create-new-company"\);[\s\S]+?nothing was inferred from the old folder, passenger, Traveller or contact text/,
+  "a profile without exact identity must require explicit Company selection and never infer from legacy text",
 );
 assert.match(
   editorSource,
-  /setProfile\(blankCreateProfile\(companyLookupName, guestAccountBillingEnabled\)\);\s+setLoadedProfile\(null\);\s+setProfileMode\("create"\);\s+setMessage\(`No company CRM profile exists for \$\{companyLookupName\}\. Review the name, then create it deliberately\.`\);\s+setStatus\("ready"\);\s+return;/,
-  "not-found lookup results must visibly open the create customer company profile form",
+  /<option value="create-new-company">Create new Company explicitly<\/option>/,
+  "Admin must retain the deliberate create-Company choice inside the existing profile editor",
 );
-assert.match(
+assert.doesNotMatch(
   editorSource,
-  /function agencyCompanyProfileName\(customerName: string, guestAccountBillingEnabled: boolean\)/,
-  "the established profile editor must derive an agency company lookup name only after exact guest-account classification",
-);
-assert.match(
-  editorSource,
-  /if \(!guestAccountBillingEnabled\) \{\s+return normalized;\s+\}\s+return normalized\.replace\(\/\\s\+\\\[[^\n]+\\\]\\s\*\$\/, ""\)\.trim\(\) \|\| normalized;/,
-  "normal companies must retain their exact name while agency folders may remove one trailing passenger scope",
-);
-assert.match(
-  editorSource,
-  /const accountResponse = await fetch\(`\$\{adminCustomerAccountsApiPath\}\?\$\{accountParams\.toString\(\)\}`,[\s\S]+?const guestAccountBillingEnabled = account\.guest_account_billing_enabled === true;[\s\S]+?const exactCustomerFolderName = profileValue\(account\.customer_directory_label\);[\s\S]+?const companyLookupName = agencyCompanyProfileName\(exactCustomerFolderName, guestAccountBillingEnabled\);[\s\S]+?await loadCompanyProfile\(companyLookupName\)/,
-  "the exact customer account classification must be loaded before choosing the company profile lookup name",
+  /agencyCompanyProfileName|guestAccountBillingEnabled === true/,
+  "retired agency and hotel classification must not choose or rewrite Company identity",
 );
 assert.doesNotMatch(
   editorSource,
@@ -94,9 +84,8 @@ assert.doesNotMatch(
 );
 for (const fragment of [
   "const verifiedCompanyId = positiveProfileId(account.verified_company_id);",
-  "if (verifiedCompanyId) {",
+  "if (!verifiedCompanyId) {",
   "await loadCompanyProfileById(verifiedCompanyId)",
-  "if (!verifiedCompanyId && isMissingCompanyProfileResult(response, result))",
   "if (verifiedCompanyId && Number(company.id) !== verifiedCompanyId)",
 ]) {
   assert.equal(
@@ -112,13 +101,8 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /if \(\s*!verifiedCompanyId &&\s*companyLookupName !== exactCustomerFolderName &&\s*isMissingCompanyProfileResult\(response, result\)\s*\) \{[\s\S]+?loadCompanyProfile\(exactCustomerFolderName\)/,
-  "an unverified agency base-name miss must safely fall back to the original folder name instead of creating a duplicate company",
-);
-assert.match(
-  editorSource,
-  /\{profile\.guest_account_billing_enabled \? \([\s\S]+?Agency guests stay on each booking\. No permanent Booker \/ PA or Traveller CRM profile is required\.[\s\S]+?\) : profile\.id \? \([\s\S]+?<CustomerVerifiedIdentitiesEditor/,
-  "hotel and tour agency profiles must keep guests on bookings and must not require permanent CRM traveller identities",
+  /Booker \/ PA is mandatory\. Traveller is optional and stays separate\./,
+  "every customer profile must require one exact Booker while keeping Traveller optional",
 );
 assert.match(
   editorSource,
@@ -132,33 +116,38 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /if \(customerFolderNameChanged\) \{[\s\S]+?customer_id: customerId,[\s\S]+?display_name: normalizedCustomerFolderName,/,
-  "profile save must send the changed folder name through the existing exact-customer PATCH only",
+  /action_type: "customer_company_booker_profile_overwrite",[\s\S]+?customer_display_name: normalizedCustomerFolderName,[\s\S]+?customer_id: customerId,[\s\S]+?expected_customer_display_name: loadedCustomerFolderName/,
+  "profile save must carry the raw Customer folder with its exact-current value in the atomic PATCH",
 );
 assert.match(
   editorSource,
-  /const companyProfileChanged = isCreate \|\| companyProfileHasChanges\(profile, loadedProfile\);/,
-  "company and Customer folder edits must have independent dirty scopes",
+  /company_profile: companyProfileSnapshot\(profile\)/,
+  "all visible Company profile fields must save in the same atomic transaction",
 );
 assert.match(
   editorSource,
-  /if \(companyProfileChanged\) \{[\s\S]+?fetch\(adminCompanyProfileWriteApiPath,[\s\S]+?method: "POST"/,
-  "the existing Company writer must run only when a Company profile field changed",
+  /booker_profile: bookerProfileSnapshot\(booker\)/,
+  "Booker name, email and contact must save in the same atomic transaction",
+);
+for (const expectedSnapshot of [
+  "expected_company_profile: loadedProfile ? companyProfileSnapshot(loadedProfile) : null",
+  "expected_booker_customer_id: loadedBooker?.customer_id ?? null",
+  "expected_booker_profile: loadedBooker ? bookerProfileSnapshot(loadedBooker) : null",
+]) {
+  assert.ok(
+    editorSource.includes(expectedSnapshot),
+    `Company, Booker and exact binding must carry optimistic exact-current snapshot ${expectedSnapshot}`,
+  );
+}
+assert.match(
+  editorSource,
+  /profileValue\(saved\?\.customer_display_name\) !== normalizedCustomerFolderName/,
+  "atomic response must verify the exact saved raw Customer folder",
 );
 assert.match(
   editorSource,
-  /function changedCompanyProfilePayload\([\s\S]+?for \(const field of companyProfileWriteFields\)[\s\S]+?if \(!companyProfileFieldChanged\(profile, loadedProfile, field\)\) \{[\s\S]+?payload\[field\] = normalizedValue;/,
-  "Company updates must send only independently changed fields instead of a stale full-profile overwrite",
-);
-assert.match(
-  editorSource,
-  /const savedCustomerFolderName = profileValue\(accountResult\?\.account\?\.customer_directory_label\)/,
-  "folder save read-back must use the raw directory label returned by the existing Customer writer",
-);
-assert.match(
-  editorSource,
-  /nextUrl\.searchParams\.set\("name", savedCustomerFolderName\);[\s\S]+?router\.replace\(`\$\{nextUrl\.pathname\}\$\{nextUrl\.search\}`, \{ scroll: false \}\);/,
-  "a successful folder rename must refresh the same customer route and top banner",
+  /nextUrl\.searchParams\.set\("name", normalizedCustomerFolderName\);[\s\S]+?const reloadedTitle = await loadAccountTitle\(\);[\s\S]+?if \(reloadedTitle !== expectedTitle\)/,
+  "successful save must refresh the same route and authoritatively reread the Company + Booker title",
 );
 assert.equal(
   editorSource.includes("guestAccountBillingChanged") ||
@@ -169,23 +158,23 @@ assert.equal(
 );
 assert.match(
   editorSource,
-  /Controls only this customer folder label and top banner\. Passenger names stay on their bookings\./,
+  /Controls only the internal customer folder label\. The visible customer title comes only from verified Company \+ Booker\. Passenger names stay on their bookings\./,
   "the folder-name control must state its narrow booking-preserving scope",
 );
 assert.match(
   editorSource,
-  /setMessage\(\s*companyProfileChanged\s*\? `Saved customer company profile for \$\{savedCompanyName\}\.`\s*: `Saved customer folder name for \$\{savedCompanyName\}\.`,[\s\S]+?setStatus\("saved"\);\s+setProfile\(null\);/,
-  "a fully successful profile save must close the existing editor while retaining its saved feedback",
+  /setMessage\(`Saved, reloaded and verified \$\{expectedTitle\}\.`\);[\s\S]+?setStatus\("saved"\);[\s\S]+?setProfile\(null\);/,
+  "a successful atomic save must close only after authoritative title reload",
 );
 assert.match(
   editorSource,
-  /if \(identityDraftDirty\) \{[\s\S]+?Booker \/ Traveller changes are not saved yet\.[\s\S]+?data-customer-save-booker-traveler[\s\S]+?\.focus\(\);[\s\S]+?return;/,
-  "company details save must block and focus the established Booker / Traveller save while an identity draft is dirty",
+  /if \(identityDraftDirty\) \{[\s\S]+?Traveller changes are not saved yet\.[\s\S]+?data-customer-save-booker-traveler[\s\S]+?\.focus\(\);[\s\S]+?return;/,
+  "Company + Booker save must block and focus the separate optional Traveller save while its draft is dirty",
 );
 assert.match(
   editorSource,
-  /profileMode === "create"[\s\S]+?\? "Create company details"[\s\S]+?: "Save company details"/,
-  "the parent action must clearly name the company-details scope",
+  /"Save Company \+ Booker profile"/,
+  "the parent action must clearly name its atomic Company + Booker scope",
 );
 for (const clearableField of [
   "accounts_email",
@@ -199,19 +188,19 @@ for (const clearableField of [
 ]) {
   assert.match(
     editorSource,
-    new RegExp(`${clearableField}: optionalCompanyContactValue\\(`),
-    `${clearableField} must carry an explicit null only when an existing optional company contact value is cleared`,
+    new RegExp(`${clearableField}: profile\\.${clearableField}`),
+    `${clearableField} must remain editable through the complete Company profile snapshot`,
   );
 }
 assert.doesNotMatch(
   editorSource,
-  /company_name:\s*optionalCompanyContactValue|domain:\s*optionalCompanyContactValue/,
-  "required company identity must never use the optional contact clearing helper",
+  /adminCompanyProfileWriteApiPath/,
+  "the editor must not retain a second split Company write path",
 );
 assert.match(
   editorSource,
-  /return !isCreate && loadedValue\?\.trim\(\) \? null : undefined;/,
-  "unchanged blank optional fields must stay omitted while a deliberately cleared loaded value becomes null",
+  /company_name: profile\.company_name\.replace\(\/\\s\+\/g, " "\)\.trim\(\)/,
+  "required Company identity must stay nonblank and normalized",
 );
 assert.doesNotMatch(
   editorSource,

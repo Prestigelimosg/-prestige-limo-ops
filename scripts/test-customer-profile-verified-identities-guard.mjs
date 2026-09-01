@@ -20,16 +20,15 @@ for (const fragment of [
 
 for (const fragment of [
   'data-customer-verified-identities="true"',
-  'data-customer-booker-name="true"',
   'data-customer-traveler-name="true"',
-  'data-customer-booker-email="true"',
-  'data-customer-booker-contact="true"',
+  'data-customer-booker-readonly="true"',
   'data-customer-save-booker-traveler="true"',
   'data-customer-edit-booker-traveler=',
   'data-customer-add-booker-traveler="true"',
+  "Optional Travellers",
   "Add Traveller",
-  "Edit this pair",
-  "Save Booker / Traveller",
+  "Edit Traveller",
+  "Save Traveller",
   "onDraftDirtyChange",
   "setDraftDirty(true)",
   "setDraftDirty(false)",
@@ -46,6 +45,7 @@ for (const fragment of [
   "booker_id: bookerId",
   "await loadIdentities({ afterSave: true })",
   "await loadExactBooker(bookerId)",
+  "verifyExactBooker",
   "setEditingBookerId(bookerId)",
   "setEditingTravelerId(travelerId)",
 ]) {
@@ -81,7 +81,12 @@ assert.ok(
 assert.ok(
   !identityEditor.includes("findOrCreateBooker") &&
     !identityEditor.includes("Verified Booker could not be created safely."),
-  "Customer Profile must not create a second unlinked Booker or duplicate the Dispatch account-binding lane.",
+  "The optional Traveller editor must not create or infer a Booker outside the atomic parent profile lane.",
+);
+assert.doesNotMatch(
+  identityEditor,
+  /fetch\(adminBookersApiPath,[\s\S]{0,500}?method: "PATCH"/,
+  "The optional Traveller editor must verify the exact Booker read-only and never overwrite it",
 );
 assert.ok(
   identityEditor.includes("if (!travelerId)") && identityEditor.includes("await loadExactBooker(bookerId)"),

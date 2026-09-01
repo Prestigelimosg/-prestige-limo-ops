@@ -17,6 +17,7 @@ const safeApiLeakPattern =
 const sourceFiles = [
   "lib/admin-customer-account-title.ts",
   "lib/admin-customer-accounts-read.ts",
+  "lib/admin-customer-company-booker-profile.ts",
   "lib/admin-booking-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -318,6 +319,9 @@ function assertNoSupabaseTouched(mock, label) {
 }
 
 const seed = {
+  bookers: [
+    { booker_name: "PA Lee", company_id: 38, customer_id: 101, id: 8 },
+  ],
   bookings: [
     {
       admin_internal_status: "completed",
@@ -377,6 +381,10 @@ const seed = {
     { account_status: "active", customer_type: "corporate", display_name: "UBS", id: 101, status: "active" },
     { account_status: "active", customer_type: "hotel", display_name: "Ritz Carlton", id: 102, status: "active" },
     { account_status: "active", customer_type: null, display_name: "Directory Only Customer", id: 103, status: "active" },
+  ],
+  companies: [
+    { company_name: "UBS", id: 38 },
+    { company_name: "Ritz Carlton", id: 55 },
   ],
 };
 
@@ -499,7 +507,7 @@ try {
       account_scope_key: "boss_alpha",
       account_scope_label: "Passenger: Boss Alpha / Booker: PA Lee",
       completed_count: 1,
-      customer_account: "UBS",
+      customer_account: "UBS (PA Lee)",
       customer_directory_label: "UBS",
       customer_folder_key: "101::boss_alpha",
       customer_folder_active: true,
@@ -518,7 +526,7 @@ try {
       account_scope_key: "booker_traveller_not_set",
       account_scope_label: null,
       completed_count: 1,
-      customer_account: "Ritz Carlton",
+      customer_account: "Customer account · Requires editing",
       customer_directory_label: "Ritz Carlton",
       customer_folder_key: "102::booker_traveller_not_set",
       customer_folder_active: true,
@@ -531,13 +539,13 @@ try {
       saved_booking_count: 1,
       source: "admin_booking_persistence",
       upcoming_count: 0,
-      verified_company_id: "55",
+      verified_company_id: null,
     },
     {
       account_scope_key: "boss_beta",
       account_scope_label: "Passenger: Boss Beta / Booker: PA Lee",
       completed_count: 0,
-      customer_account: "UBS",
+      customer_account: "UBS (PA Lee)",
       customer_directory_label: "UBS",
       customer_folder_key: "101::boss_beta",
       customer_folder_active: true,
@@ -556,7 +564,7 @@ try {
       account_scope_key: "customer_account",
       account_scope_label: null,
       completed_count: 0,
-      customer_account: "Directory Only Customer",
+      customer_account: "Customer account · Requires editing",
       customer_directory_label: "Directory Only Customer",
       customer_folder_key: "103::customer_account",
       customer_folder_active: true,
@@ -625,7 +633,7 @@ try {
   assert.equal(olderAgencyResult.body.accounts[0].customer_id, "104");
   assert.equal(olderAgencyResult.body.accounts[0].customer_folder_active, true);
   assert.equal(olderAgencyResult.body.accounts[0].guest_account_billing_enabled, true);
-  assert.equal(olderAgencyResult.body.accounts[0].verified_company_id, "66");
+  assert.equal(olderAgencyResult.body.accounts[0].verified_company_id, null);
   assert.equal(olderAgencyMock.client.operations.length, 0);
 
   setEnv(enabledEnv());
@@ -677,8 +685,8 @@ try {
     total_account_count: 4,
   });
   assert.deepEqual(searchResult.body.accounts.map((account) => account.customer_account), [
-    "Ritz Carlton",
-    "Directory Only Customer",
+    "Customer account · Requires editing",
+    "Customer account · Requires editing",
   ]);
   assert.equal(searchMock.client.operations.length, 0);
   assert.equal(searchMock.client.selectHistory.length, 5);
@@ -715,7 +723,7 @@ try {
 
   assert.equal(limitedResult.status, 200);
   assert.equal(limitedResult.body.accounts.length, 1);
-  assert.equal(limitedResult.body.accounts[0].customer_account, "UBS");
+  assert.equal(limitedResult.body.accounts[0].customer_account, "UBS (PA Lee)");
   assert.equal(limitedResult.body.accounts[0].account_scope_key, "boss_alpha");
   assert.equal(limitedMock.client.operations.length, 0);
   assert.equal(limitedMock.client.selectHistory.length, 5);
@@ -763,7 +771,10 @@ try {
 
   assert.equal(agencyDirectoryResult.status, 200);
   assert.equal(agencyDirectoryResult.body.accounts.length, 1);
-  assert.equal(agencyDirectoryResult.body.accounts[0].customer_account, "Ritz Carlton Agency");
+  assert.equal(
+    agencyDirectoryResult.body.accounts[0].customer_account,
+    "Customer account · Requires editing",
+  );
   assert.equal(agencyDirectoryResult.body.accounts[0].guest_account_billing_enabled, true);
   assert.equal(agencyDirectoryMock.client.operations.length, 0);
 
@@ -966,7 +977,10 @@ try {
   );
 
   assert.equal(mismatchedBookerResult.status, 200);
-  assert.equal(mismatchedBookerResult.body.accounts[0].customer_account, "Tiger Global");
+  assert.equal(
+    mismatchedBookerResult.body.accounts[0].customer_account,
+    "Customer account · Requires editing",
+  );
   assert.doesNotMatch(
     mismatchedBookerResult.body.accounts[0].customer_account,
     /Stanley|Wrong Account Booker|Passenger|Traveller|Boss/i,
@@ -1013,7 +1027,10 @@ try {
   );
 
   assert.equal(duplicateBookerResult.status, 200);
-  assert.equal(duplicateBookerResult.body.accounts[0].customer_account, "Tiger Global");
+  assert.equal(
+    duplicateBookerResult.body.accounts[0].customer_account,
+    "Customer account · Requires editing",
+  );
   assert.doesNotMatch(
     duplicateBookerResult.body.accounts[0].customer_account,
     /June|Duplicate Booker|Stanley|Passenger|Traveller|Boss/i,
@@ -1042,18 +1059,8 @@ try {
     ),
   );
 
-  assert.equal(updateResult.status, 200);
-  assert.equal(updateResult.body.account.customer_id, "101");
-  assert.equal(updateResult.body.account.customer_folder_active, true);
-  assert.equal(updateResult.body.account.guest_account_billing_enabled, true);
-  assert.deepEqual(updateMock.client.operations, [{
-    filters: [{ column: "id", type: "eq", value: "101" }],
-    payload: { customer_type: "hotel" },
-    selectedColumns: "id, display_name, customer_type, account_status, status",
-    singleResult: true,
-    table: "customers",
-    type: "update",
-  }]);
+  assert.equal(updateResult.status, 403);
+  assertNoSupabaseTouched(updateMock, "retired hotel classification update");
 
   setEnv(enabledEnv());
 
@@ -1077,18 +1084,8 @@ try {
     ),
   );
 
-  assert.equal(renameResult.status, 200);
-  assert.equal(renameResult.body.account.customer_id, "101");
-  assert.equal(renameResult.body.account.customer_account, "Transzend Groundbooker");
-  assert.equal(renameResult.body.account.guest_account_billing_enabled, false);
-  assert.deepEqual(renameMock.client.operations, [{
-    filters: [{ column: "id", type: "eq", value: "101" }],
-    payload: { display_name: "Transzend Groundbooker" },
-    selectedColumns: "id, display_name, customer_type, account_status, status",
-    singleResult: true,
-    table: "customers",
-    type: "update",
-  }]);
+  assert.equal(renameResult.status, 403);
+  assertNoSupabaseTouched(renameMock, "split raw Customer rename without Company + Booker");
 
   setEnv(enabledEnv());
 
@@ -1109,7 +1106,7 @@ try {
     ),
   );
 
-  assert.equal(blankRenameResult.status, 400);
+  assert.equal(blankRenameResult.status, 403);
   assertNoSupabaseTouched(blankRenameMock, "blank customer folder rename");
 
   setEnv(enabledEnv());
@@ -1135,7 +1132,7 @@ try {
     ),
   );
 
-  assert.equal(travellerWriteResult.status, 400);
+  assert.equal(travellerWriteResult.status, 403);
   assertNoSupabaseTouched(travellerWriteMock, "customer folder rename with traveller profile field");
 
   setEnv(enabledEnv());

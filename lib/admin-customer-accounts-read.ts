@@ -145,20 +145,6 @@ function safeText(value: unknown, maxLength = 160) {
   return cleaned;
 }
 
-function safeCustomerFolderName(value: unknown) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const cleaned = value.replace(/\s+/g, " ").trim();
-
-  if (!cleaned || cleaned.length > 120 || includesForbiddenSafeTextFragment(cleaned)) {
-    return null;
-  }
-
-  return cleaned;
-}
-
 function readParamsValue(params: URLSearchParams | UnknownRecord, key: string) {
   return params instanceof URLSearchParams ? params.get(key) : params[key];
 }
@@ -201,8 +187,12 @@ function filterAccountsBySearch(accounts: AdminCustomerAccountSafeRecord[], sear
     const customerIdSearchText = (account.customer_id || "")
       .replace(/^customer[-_]?/i, "")
       .toLowerCase();
+    const authoritativeTitleSearch = account.customer_account === "Customer account · Requires editing"
+      ? ""
+      : account.customer_account;
     const accountSearchText = [
-      account.customer_account,
+      authoritativeTitleSearch,
+      account.customer_directory_label,
       customerIdSearchText,
       account.latest_booking_reference || "",
       account.latest_public_booking_reference || "",
@@ -458,7 +448,7 @@ function exactCustomerId(value: unknown) {
 function mergeCustomerDirectoryRows(
   bookingAccounts: InternalCustomerAccount[],
   rows: unknown[],
-  relationshipRows: unknown[],
+  _relationshipRows: unknown[],
   companyRows: unknown[],
   bookerRows: unknown[],
 ) {
@@ -472,7 +462,6 @@ function mergeCustomerDirectoryRows(
       return customerId ? [[customerId, record] as const] : [];
     }),
   );
-  const verifiedCompanyIdsByCustomerId = new Map<string, Set<string>>();
   const companiesById = new Map(
     companyRows.flatMap((row) => {
       const record = row !== null && typeof row === "object" && !Array.isArray(row)
@@ -493,7 +482,7 @@ function mergeCustomerDirectoryRows(
       return bookerId ? [[bookerId, record] as const] : [];
     }),
   );
-  const bookersByCustomerCompany = new Map<string, Array<[string, UnknownRecord]>>();
+  const bookersByCustomer = new Map<string, Array<[string, UnknownRecord]>>();
 
   for (const [bookerId, booker] of bookersById.entries()) {
     const customerId = exactCustomerId(booker.customer_id);
@@ -503,77 +492,28 @@ function mergeCustomerDirectoryRows(
       continue;
     }
 
-    const companyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
-    companyIds.add(companyId);
-    verifiedCompanyIdsByCustomerId.set(customerId, companyIds);
-    const customerCompanyKey = `${customerId}:${companyId}`;
-    const accountBookers = bookersByCustomerCompany.get(customerCompanyKey) || [];
+    const accountBookers = bookersByCustomer.get(customerId) || [];
     accountBookers.push([bookerId, booker]);
-    bookersByCustomerCompany.set(customerCompanyKey, accountBookers);
-  }
-
-  for (const account of bookingAccounts) {
-    const customerId = exactCustomerId(account.customer_id);
-    const companyId = verifiedCompanyId(account.verified_company_id);
-
-    if (!customerId || !companyId) {
-      continue;
-    }
-
-    const companyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
-
-    companyIds.add(companyId);
-    verifiedCompanyIdsByCustomerId.set(customerId, companyIds);
-  }
-
-  for (const row of relationshipRows) {
-    const record = row !== null && typeof row === "object" && !Array.isArray(row)
-      ? (row as UnknownRecord)
-      : {};
-    const customerId = exactCustomerId(record.customer_id);
-    const companyId = verifiedCompanyId(record.company_id);
-
-    if (!customerId || !companyId) {
-      continue;
-    }
-
-    const companyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
-
-    companyIds.add(companyId);
-    verifiedCompanyIdsByCustomerId.set(customerId, companyIds);
+    bookersByCustomer.set(customerId, accountBookers);
   }
 
   const enrichedBookingAccounts = bookingAccounts.map((account) => {
     const customerId = exactCustomerId(account.customer_id) || "";
     const directoryRow = directoryRowsByCustomerId.get(customerId);
-    const verifiedCompanyIds = verifiedCompanyIdsByCustomerId.get(customerId) || new Set<string>();
     const guestAccountBillingEnabled = directoryRow?.customer_type === "hotel";
     const directoryCustomerAccount = safeText(directoryRow?.display_name, 120);
-    const companyId = verifiedCompanyIds.size === 1 ? Array.from(verifiedCompanyIds)[0] : null;
+    const exactAccountBookers = bookersByCustomer.get(customerId) || [];
+    const exactBooker = exactAccountBookers.length === 1 ? exactAccountBookers[0][1] : undefined;
+    const companyId = verifiedCompanyId(exactBooker?.company_id);
     const companyRecord = companyId ? companiesById.get(companyId) : undefined;
-    const companyName = guestAccountBillingEnabled
-      ? null
-      : safeText(companyRecord?.company_name, 120);
-    const exactAccountBookers = companyId
-      ? bookersByCustomerCompany.get(`${customerId}:${companyId}`) || []
-      : [];
-    const bookingBookerIds = account.verified_booker_ids;
-    const exactBooker =
-      exactAccountBookers.length === 1 &&
-      (bookingBookerIds.length === 0 ||
-        (bookingBookerIds.length === 1 && bookingBookerIds[0] === exactAccountBookers[0][0]))
-        ? exactAccountBookers[0][1]
-        : undefined;
-    const bookerName = guestAccountBillingEnabled
-      ? null
-      : safeText(exactBooker?.booker_name, 80);
+    const companyName = safeText(companyRecord?.company_name, 120);
+    const bookerName = safeText(exactBooker?.booker_name, 80);
 
     return {
       ...account,
       customer_account: formatVerifiedCustomerAccountTitle({
         bookerName,
         companyName,
-        directoryLabel: directoryCustomerAccount,
       }),
       customer_directory_label: directoryCustomerAccount || "",
       customer_folder_active: customerDirectoryRowIsActive(directoryRow),
@@ -590,24 +530,17 @@ function mergeCustomerDirectoryRows(
       : {};
     const customerId = exactCustomerId(record.id);
     const customerAccount = safeText(record.display_name, 120);
-    const verifiedCompanyIds = verifiedCompanyIdsByCustomerId.get(customerId || "") || new Set<string>();
 
     if (!customerId || !customerAccount || linkedCustomerIds.has(customerId)) {
       return [];
     }
 
     const guestAccountBillingEnabled = record.customer_type === "hotel";
-    const companyId = verifiedCompanyIds.size === 1 ? Array.from(verifiedCompanyIds)[0] : null;
-    const companyName = guestAccountBillingEnabled
-      ? null
-      : safeText(companiesById.get(companyId || "")?.company_name, 120);
-    const exactAccountBookers = companyId
-      ? bookersByCustomerCompany.get(`${customerId}:${companyId}`) || []
-      : [];
-    const bookerName =
-      !guestAccountBillingEnabled && exactAccountBookers.length === 1
-        ? safeText(exactAccountBookers[0][1].booker_name, 80)
-        : null;
+    const exactAccountBookers = bookersByCustomer.get(customerId) || [];
+    const exactBooker = exactAccountBookers.length === 1 ? exactAccountBookers[0][1] : undefined;
+    const companyId = verifiedCompanyId(exactBooker?.company_id);
+    const companyName = safeText(companiesById.get(companyId || "")?.company_name, 120);
+    const bookerName = safeText(exactBooker?.booker_name, 80);
 
     return [{
       account_scope_key: "customer_account",
@@ -616,7 +549,6 @@ function mergeCustomerDirectoryRows(
       customer_account: formatVerifiedCustomerAccountTitle({
         bookerName,
         companyName,
-        directoryLabel: customerAccount,
       }),
       customer_directory_label: customerAccount,
       customer_folder_key: `${customerId}::customer_account`,
@@ -786,86 +718,6 @@ export async function loadAdminCustomerAccounts(
         total_account_count: accounts.length,
       },
       version: adminCustomerAccountsReadVersion,
-    },
-    ok: true,
-  };
-}
-
-export async function updateAdminCustomerAccountProfile(
-  input: UnknownRecord,
-  actor: AdminBookingPersistenceAdapterActor,
-): Promise<AdminBookingResult<AdminCustomerAccountSafeRecord>> {
-  const allowedWriteFields = new Set(["customer_id", "display_name", "guest_account_billing_enabled"]);
-
-  if (Object.keys(input).some((key) => !allowedWriteFields.has(key))) {
-    return { error: forbiddenParamsError, ok: false, status: 400 };
-  }
-
-  const customerId = exactCustomerId(input.customer_id);
-  const displayNameProvided = Object.hasOwn(input, "display_name");
-  const guestAccountBillingProvided = Object.hasOwn(input, "guest_account_billing_enabled");
-  const displayName = displayNameProvided ? safeCustomerFolderName(input.display_name) : null;
-  const enabled = input.guest_account_billing_enabled;
-
-  if (
-    !customerId ||
-    !actor?.actor_role ||
-    (!displayNameProvided && !guestAccountBillingProvided) ||
-    (displayNameProvided && !displayName) ||
-    (guestAccountBillingProvided && typeof enabled !== "boolean")
-  ) {
-    return { error: malformedParamsError, ok: false, status: 400 };
-  }
-
-  const client: Pick<SupabaseClient, "from"> | null = customerDirectoryClient();
-
-  if (!client) {
-    return { error: "Admin customer directory configuration is not ready.", ok: false, status: 503 };
-  }
-
-  const updatePayload: { customer_type?: "corporate" | "hotel"; display_name?: string } = {};
-
-  if (displayName) {
-    updatePayload.display_name = displayName;
-  }
-
-  if (guestAccountBillingProvided) {
-    Object.assign(updatePayload, { customer_type: enabled ? "hotel" : "corporate" });
-  }
-
-  const { data, error } = await client
-    .from("customers")
-    .update(updatePayload)
-    .eq("id", customerId)
-    .select("id, display_name, customer_type, account_status, status")
-    .single();
-  const record = data !== null && typeof data === "object" ? (data as UnknownRecord) : {};
-  const savedCustomerId = exactCustomerId(record.id);
-  const customerAccount = safeText(record.display_name, 120);
-
-  if (error || savedCustomerId !== customerId || !customerAccount) {
-    return { error: "Admin customer account profile update failed safely.", ok: false, status: 500 };
-  }
-
-  return {
-    data: {
-      account_scope_key: "customer_account",
-      account_scope_label: null,
-      completed_count: 0,
-      customer_account: customerAccount,
-      customer_directory_label: customerAccount,
-      customer_folder_key: `${customerId}::customer_account`,
-      customer_folder_active: customerDirectoryRowIsActive(record),
-      customer_id: customerId,
-      guest_account_billing_enabled: record.customer_type === "hotel",
-      latest_booking_reference: null,
-      latest_public_booking_reference: null,
-      latest_pickup_at: null,
-      latest_service_type: null,
-      saved_booking_count: 0,
-      source: "customer_directory",
-      upcoming_count: 0,
-      verified_company_id: null,
     },
     ok: true,
   };

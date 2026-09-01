@@ -84,8 +84,13 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /const accountResponse = await fetch\(`\$\{adminCustomerAccountsApiPath\}\?\$\{accountParams\.toString\(\)\}`,[\s\S]+?const guestAccountBillingEnabled = account\.guest_account_billing_enabled === true;[\s\S]+?const exactCustomerFolderName = profileValue\(account\.customer_account\);[\s\S]+?const companyLookupName = agencyCompanyProfileName\(exactCustomerFolderName, guestAccountBillingEnabled\);[\s\S]+?await loadCompanyProfile\(companyLookupName\)/,
+  /const accountResponse = await fetch\(`\$\{adminCustomerAccountsApiPath\}\?\$\{accountParams\.toString\(\)\}`,[\s\S]+?const guestAccountBillingEnabled = account\.guest_account_billing_enabled === true;[\s\S]+?const exactCustomerFolderName = profileValue\(account\.customer_directory_label\);[\s\S]+?const companyLookupName = agencyCompanyProfileName\(exactCustomerFolderName, guestAccountBillingEnabled\);[\s\S]+?await loadCompanyProfile\(companyLookupName\)/,
   "the exact customer account classification must be loaded before choosing the company profile lookup name",
+);
+assert.doesNotMatch(
+  editorSource,
+  /const exactCustomerFolderName = profileValue\(account\.customer_account\)/,
+  "the formatted Company (Booker) presentation title must never populate the editable Customer folder input",
 );
 for (const fragment of [
   "const verifiedCompanyId = positiveProfileId(account.verified_company_id);",
@@ -132,6 +137,26 @@ assert.match(
 );
 assert.match(
   editorSource,
+  /const companyProfileChanged = isCreate \|\| companyProfileHasChanges\(profile, loadedProfile\);/,
+  "company and Customer folder edits must have independent dirty scopes",
+);
+assert.match(
+  editorSource,
+  /if \(companyProfileChanged\) \{[\s\S]+?fetch\(adminCompanyProfileWriteApiPath,[\s\S]+?method: "POST"/,
+  "the existing Company writer must run only when a Company profile field changed",
+);
+assert.match(
+  editorSource,
+  /function changedCompanyProfilePayload\([\s\S]+?for \(const field of companyProfileWriteFields\)[\s\S]+?if \(!companyProfileFieldChanged\(profile, loadedProfile, field\)\) \{[\s\S]+?payload\[field\] = normalizedValue;/,
+  "Company updates must send only independently changed fields instead of a stale full-profile overwrite",
+);
+assert.match(
+  editorSource,
+  /const savedCustomerFolderName = profileValue\(accountResult\?\.account\?\.customer_directory_label\)/,
+  "folder save read-back must use the raw directory label returned by the existing Customer writer",
+);
+assert.match(
+  editorSource,
   /nextUrl\.searchParams\.set\("name", savedCustomerFolderName\);[\s\S]+?router\.replace\(`\$\{nextUrl\.pathname\}\$\{nextUrl\.search\}`, \{ scroll: false \}\);/,
   "a successful folder rename must refresh the same customer route and top banner",
 );
@@ -149,7 +174,7 @@ assert.match(
 );
 assert.match(
   editorSource,
-  /setMessage\(`Saved customer company profile for[\s\S]+?setStatus\("saved"\);\s+setProfile\(null\);/,
+  /setMessage\(\s*companyProfileChanged\s*\? `Saved customer company profile for \$\{savedCompanyName\}\.`\s*: `Saved customer folder name for \$\{savedCompanyName\}\.`,[\s\S]+?setStatus\("saved"\);\s+setProfile\(null\);/,
   "a fully successful profile save must close the existing editor while retaining its saved feedback",
 );
 assert.match(

@@ -22,7 +22,9 @@ const chromeBinary =
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9233);
 const reporter = createBrowserTestReporter("customer-corporate-identity-browser");
 const customerId = "165";
-const customerName = "Apollo [Ms Tanya Sanwal]";
+const companyDirectoryName = "Apollo";
+const customerDirectoryLabel = "Apollo folder saved by Admin";
+const customerName = "Apollo (Georgina)";
 const bookingReferences = ["ADM-BROWSER-CORPORATE-001", "ADM-BROWSER-CORPORATE-002"];
 
 function responseHeaders() {
@@ -150,6 +152,7 @@ async function main() {
         responseBody = {
           accounts: [{
             customer_account: customerName,
+            customer_directory_label: customerDirectoryLabel,
             customer_id: customerId,
             guest_account_billing_enabled: false,
             verified_company_id: 33,
@@ -159,7 +162,7 @@ async function main() {
       } else if (requestUrl.pathname === "/api/admin-companies-crm-identity" && method === "GET") {
         responseBody = {
           company: {
-            company_name: customerName,
+            company_name: companyDirectoryName,
             domain: "apollo.com",
             id: 33,
             operations_email: "operations@apollo.com",
@@ -171,7 +174,7 @@ async function main() {
         rateSetupReadCount += 1;
         responseBody = {
           bookers: [bookerRecord, otherCustomerBookerRecord],
-          companies: [{ company_name: customerName, id: 33 }],
+          companies: [{ company_name: companyDirectoryName, id: 33 }],
           ok: true,
           settings: null,
           travelers: [
@@ -368,6 +371,19 @@ async function main() {
       evaluate,
       '[data-customer-edit-booker-traveler="17-30"]',
       "existing Booker and Traveller edit button",
+    );
+    assert.deepEqual(
+      await evaluate(`(() => ({
+        companyName: document.querySelector('[data-customer-company-profile-name="${customerId}"]')?.value || "",
+        folderName: document.querySelector('[data-customer-folder-name="${customerId}"]')?.value || "",
+        heading: document.querySelector('[data-customer-folder-sector="profile"] h1')?.textContent?.trim() || "",
+      }))()`),
+      {
+        companyName: companyDirectoryName,
+        folderName: customerDirectoryLabel,
+        heading: customerName,
+      },
+      "Profile heading, raw Customer folder and exact Company must remain separate",
     );
     assert.equal(
       await evaluate(`document.querySelector('[data-customer-edit-booker-traveler="18-32"]') === null`),

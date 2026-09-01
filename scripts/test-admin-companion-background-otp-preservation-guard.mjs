@@ -19,6 +19,15 @@ assert.equal(
   false,
   "The native lock must not unmount the in-progress Admin sign-in WebView",
 );
+assert.ok(
+  normalizedApp.includes("{nativeBootstrapReady ? ( <WebView"),
+  "The first WebView may wait for native bootstrap inputs but must stay mounted across privacy locks",
+);
+assert.equal(
+  (app.match(/setNativeBootstrapReady\(false\)/g) || []).length,
+  0,
+  "Backgrounding and Face ID locks must never unmount the initialized WebView",
+);
 
 for (const phrase of [
   'const webLayerLocked = screenMode !== "web"',

@@ -3,6 +3,7 @@ const installationIdPattern =
 const expoPushTokenPattern = /^(?:Exponent|Expo)PushToken\[[A-Za-z0-9_-]{20,400}\]$/;
 
 export type AdminBridgeMessage =
+  | { type: "admin_native_web_ready" }
   | { type: "admin_notifications_register" }
   | { type: "admin_notifications_unregister" }
   | {
@@ -25,7 +26,8 @@ export function parseAdminBridgeMessage(value: string): AdminBridgeMessage | nul
     if (
       keys.length === 1 &&
       keys[0] === "type" &&
-      (parsed.type === "admin_notifications_register" ||
+      (parsed.type === "admin_native_web_ready" ||
+        parsed.type === "admin_notifications_register" ||
         parsed.type === "admin_notifications_unregister")
     ) {
       return { type: parsed.type };
@@ -103,6 +105,14 @@ export function embeddedAdminBridgeBootstrap(
       nativeNotificationState.enabled = false;
     }
   });
+  const notifyNativeWebReady = function () {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: "admin_native_web_ready" }));
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", notifyNativeWebReady, { once: true });
+  } else {
+    notifyNativeWebReady();
+  }
 })();
 true;
 `;

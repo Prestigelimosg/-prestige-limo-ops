@@ -133,6 +133,14 @@ try {
     path.join(tempDir, "lib/admin-ai-invoice-payment-preparation.js"),
     'exports.executeAdminAiInvoicePaymentPreparation = async () => ({ matched: false });\n',
   );
+  await writeFile(
+    path.join(tempDir, "lib/admin-booking-supabase-adapter.js"),
+    'exports.adminDispatcherBoundaryToPersistenceAdapterActor = (context) => context;\n',
+  );
+  await writeFile(
+    path.join(tempDir, "lib/admin-monthly-billing-grouping-read.js"),
+    'exports.loadAdminMonthlyBillingGroups = async () => ({ ok: false, error: "not called" });\n',
+  );
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(serverOnlyPath, "module.exports = {};\n");

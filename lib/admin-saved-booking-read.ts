@@ -17,6 +17,17 @@ export type AdminSavedBookingListReadParams = {
   scope: "all" | "monitorable";
 };
 
+export type AdminSavedBookingExactAccountUpcomingReadParams = {
+  booker_id: number;
+  company_id: number;
+  customer_id: number;
+  pickup_at_or_after: string;
+};
+
+export type AdminSavedBookingExactSgtDateReadParams = {
+  sgt_date: string;
+};
+
 export type AdminSavedBookingRecord = {
   admin_internal_status: string | null;
   booking_reference: string | null;
@@ -118,7 +129,7 @@ type AdminSavedBookingReadFailureCategory =
   | "table_unreachable"
   | "unknown_adapter_failure";
 
-type AdminSavedBookingReadResult<T> =
+export type AdminSavedBookingReadResult<T> =
   | {
       data: T;
       ok: true;
@@ -163,6 +174,8 @@ const adminSavedBookingReadSelects = [
 const defaultListLimit = 25;
 const maxListLimit = 100;
 const maxListOffset = 10_000;
+const maxExactAccountUpcomingRows = 250;
+const maxExactSgtDateRows = 100;
 const terminalSavedBookingStatuses =
   "(completed,complete,job_completed,cancelled,canceled,archived,declined_internal)";
 const malformedParamsError =
@@ -381,6 +394,44 @@ function safeDatabaseFailure<T>(
 
 function isColumnMissingFailure(error: unknown) {
   return classifyDatabaseFailure(error) === "column_missing";
+}
+
+function exactSgtDateBounds(value: unknown) {
+  const date = textOrNull(value, 20);
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return null;
+  }
+
+  const start = new Date(`${date}T00:00:00+08:00`);
+
+  if (!Number.isFinite(start.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(start);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value || "";
+
+  if (`${part("year")}-${part("month")}-${part("day")}` !== date) {
+    return null;
+  }
+
+  return {
+    end: new Date(start.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    start: start.toISOString(),
+  };
+}
+
+function pickupTimestampColumn(selectedColumns: string) {
+  if (selectedColumns.includes("pickup_at")) return "pickup_at";
+  if (selectedColumns.includes("pickup_datetime")) return "pickup_datetime";
+  return null;
 }
 
 async function loadAdminSavedBookingsWithSchemaFallback<T>(
@@ -823,6 +874,145 @@ export async function loadAdminSavedBookingList(
 
   if (error) {
     return safeDatabaseFailure(safeReadError, 500, error);
+  }
+
+  return {
+    data: {
+      bookings: Array.isArray(data)
+        ? data
+            .map(toSavedBookingRecord)
+            .filter((booking): booking is AdminSavedBookingRecord => Boolean(booking))
+        : [],
+      version: adminSavedBookingReadVersion,
+    },
+    ok: true,
+  };
+}
+
+export async function loadAdminSavedBookingsForExactAccountUpcoming(
+  params: AdminSavedBookingExactAccountUpcomingReadParams,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminSavedBookingReadResult<AdminSavedBookingListReadData>> {
+  const customerId = integerOrNull(params.customer_id);
+  const companyId = integerOrNull(params.company_id);
+  const bookerId = integerOrNull(params.booker_id);
+  const pickupAtOrAfter = textOrNull(params.pickup_at_or_after, 100);
+
+  if (
+    !customerId ||
+    !companyId ||
+    !bookerId ||
+    !pickupAtOrAfter ||
+    !Number.isFinite(Date.parse(pickupAtOrAfter))
+  ) {
+    return {
+      error: malformedParamsError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const clientResult = getSavedBookingClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) => {
+    const pickupColumn = pickupTimestampColumn(selectedColumns);
+
+    if (!pickupColumn) {
+      return Promise.resolve({
+        data: null,
+        error: { code: "42703", message: "A canonical pickup timestamp is required." },
+      });
+    }
+
+    return clientResult.data
+      .from("bookings")
+      .select(selectedColumns)
+      .eq("customer_id", customerId)
+      .eq("company_id", companyId)
+      .eq("booker_id", bookerId)
+      .gte(pickupColumn, new Date(pickupAtOrAfter).toISOString())
+      .order(pickupColumn, { ascending: true })
+      .limit(maxExactAccountUpcomingRows + 1);
+  });
+
+  if (error) {
+    return safeDatabaseFailure(safeReadError, 500, error);
+  }
+
+  if (Array.isArray(data) && data.length > maxExactAccountUpcomingRows) {
+    return {
+      error: safeReadError,
+      ok: false,
+      status: 500,
+    };
+  }
+
+  return {
+    data: {
+      bookings: Array.isArray(data)
+        ? data
+            .map(toSavedBookingRecord)
+            .filter((booking): booking is AdminSavedBookingRecord => Boolean(booking))
+        : [],
+      version: adminSavedBookingReadVersion,
+    },
+    ok: true,
+  };
+}
+
+export async function loadAdminSavedBookingsForExactSgtDate(
+  params: AdminSavedBookingExactSgtDateReadParams,
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminSavedBookingReadResult<AdminSavedBookingListReadData>> {
+  const bounds = exactSgtDateBounds(params.sgt_date);
+
+  if (!bounds) {
+    return {
+      error: malformedParamsError,
+      ok: false,
+      status: 400,
+    };
+  }
+
+  const clientResult = getSavedBookingClient(actor);
+
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const { data, error } = await loadAdminSavedBookingsWithSchemaFallback((selectedColumns) => {
+    const pickupColumn = pickupTimestampColumn(selectedColumns);
+
+    if (!pickupColumn) {
+      return Promise.resolve({
+        data: null,
+        error: { code: "42703", message: "A canonical pickup timestamp is required." },
+      });
+    }
+
+    return clientResult.data
+      .from("bookings")
+      .select(selectedColumns)
+      .gte(pickupColumn, bounds.start)
+      .lt(pickupColumn, bounds.end)
+      .order(pickupColumn, { ascending: true })
+      .limit(maxExactSgtDateRows + 1);
+  });
+
+  if (error) {
+    return safeDatabaseFailure(safeReadError, 500, error);
+  }
+
+  if (Array.isArray(data) && data.length > maxExactSgtDateRows) {
+    return {
+      error: safeReadError,
+      ok: false,
+      status: 500,
+    };
   }
 
   return {

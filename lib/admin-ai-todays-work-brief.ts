@@ -25,6 +25,7 @@ import {
   type AdminMonthlyInvoiceDraftRecord,
 } from "./admin-monthly-invoice-draft-persistence";
 import {
+  loadAdminSavedBookingsForExactSgtDate,
   loadAdminSavedBookingList,
   type AdminSavedBookingRecord,
 } from "./admin-saved-booking-read";
@@ -37,6 +38,8 @@ export type AdminAiTodaysWorkBriefCategory =
   | "customer_booking_review"
   | "driver_report_completion"
   | "pending_driver_ack"
+  | "scheduled_assigned"
+  | "scheduled_unassigned"
   | "urgent_unassigned";
 
 export type AdminAiTodaysWorkBriefRow = {
@@ -49,6 +52,7 @@ export type AdminAiTodaysWorkBriefRow = {
   company_name: string | null;
   customer_id: number | null;
   detail: string;
+  flight_no: string | null;
   handoff: "dashboard" | "dispatch" | "driver_ack_queue";
   identity_status: "manual_review" | "verified";
   occurred_at: string | null;
@@ -56,6 +60,8 @@ export type AdminAiTodaysWorkBriefRow = {
   public_booking_reference: string | null;
   review_kind: "amendment" | "cancellation" | "new" | null;
   row_key: string;
+  route: string | null;
+  service_type: string | null;
 };
 
 export type AdminAiTodaysWorkBriefResult = {
@@ -68,7 +74,10 @@ export type AdminAiTodaysWorkBriefResult = {
   query: string;
   read_at: string;
   rows: AdminAiTodaysWorkBriefRow[];
+  scope: "attention" | "date_operations" | "flight_date";
   status: "blocked" | "empty" | "results";
+  target_date: string | null;
+  target_flight_no: string | null;
 };
 
 export type AdminAiTodaysWorkBriefExecution =
@@ -100,11 +109,19 @@ export type AdminAiTodaysWorkBriefDependencies = {
   loadSnapshot(
     actor: AdminBookingPersistenceAdapterActor,
     now: Date,
+    request?:
+      | { kind: "attention" }
+      | { kind: "exact_sgt_date"; targetDate: string },
   ): Promise<AdminAiTodaysWorkBriefSnapshot>;
 };
 
 type UnknownRecord = Record<string, unknown>;
-type ParsedTodaysWorkBrief = { query: string };
+type ParsedTodaysWorkBrief = {
+  kind: "attention" | "date_operations" | "flight_date";
+  query: string;
+  targetDate: string | null;
+  targetFlightNo: string | null;
+};
 
 const allowedActorRoles = new Set(["admin", "dispatcher"]);
 const safeReadError = "Today's work brief failed safely. No operational record was changed.";
@@ -116,6 +133,9 @@ const exactWorkBriefPatterns = [
   /^what\s+needs\s+my\s+attention\s+today[\s?.!]*$/i,
   /^show(?:\s+me)?\s+today(?:'|’)?s\s+work\s+brief[\s?.!]*$/i,
 ];
+const tomorrowOperationsPattern = /^show(?:\s+me)?\s+tomorrow(?:'|’)?s\s+operations\s+brief[\s?.!]*$/i;
+const exactDateOperationsPattern = /^show(?:\s+me)?\s+operations\s+brief\s+for\s+(\d{4}-\d{2}-\d{2})[\s?.!]*$/i;
+const exactFlightDatePattern = /^show(?:\s+me)?\s+flight\s+([A-Z0-9 -]{2,16})\s+jobs\s+for\s+(\d{4}-\d{2}-\d{2})[\s?.!]*$/i;
 const terminalBookingStatuses = new Set([
   "archived",
   "canceled",
@@ -147,6 +167,8 @@ const unassignedDriverLabels = new Set([
 const categoryOrder: AdminAiTodaysWorkBriefCategory[] = [
   "customer_booking_review",
   "urgent_unassigned",
+  "scheduled_unassigned",
+  "scheduled_assigned",
   "pending_driver_ack",
   "driver_report_completion",
   "blocked_monthly_billing",
@@ -192,13 +214,68 @@ function identityKey(customerId: unknown, companyId: unknown, bookerId: unknown)
   return customer && company && booker ? `${customer}:${company}:${booker}` : "";
 }
 
+function singaporeDateKey(value: unknown) {
+  const date = value instanceof Date
+    ? value
+    : typeof value === "number"
+      ? new Date(value)
+      : new Date(cleanText(value, 100));
+  if (!Number.isFinite(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
+  const key = `${part("year")}-${part("month")}-${part("day")}`;
+  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
+}
+
+function validExactDate(value: unknown) {
+  const date = cleanText(value, 20);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T00:00:00+08:00`);
+  return singaporeDateKey(parsed) === date ? date : null;
+}
+
+function tomorrowSingaporeDate(now: Date) {
+  const today = singaporeDateKey(now);
+  if (!today) return null;
+  return singaporeDateKey(new Date(`${today}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000);
+}
+
+function normalizedFlightNumber(value: unknown) {
+  const flight = cleanText(value, 16).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return /^[A-Z0-9]{2,12}$/.test(flight) ? flight : null;
+}
+
 function parseTodaysWorkBrief(messageValue: unknown): ParsedTodaysWorkBrief | "blocked" | null {
   const query = cleanText(messageValue, 500);
-  const looksLikeWorkBrief = /\b(?:attention\s+today|today(?:'|’)?s\s+work\s+brief)\b/i.test(query);
+  const looksLikeWorkBrief = /\b(?:attention\s+today|today(?:'|’)?s\s+work\s+brief|operations\s+brief|flight\s+.+?\s+jobs\s+for)\b/i.test(query);
 
   if (!query || !looksLikeWorkBrief) return null;
   if (blockedActionPattern.test(query) || injectionPattern.test(query)) return "blocked";
-  return exactWorkBriefPatterns.some((pattern) => pattern.test(query)) ? { query } : "blocked";
+  if (exactWorkBriefPatterns.some((pattern) => pattern.test(query))) {
+    return { kind: "attention", query, targetDate: null, targetFlightNo: null };
+  }
+  if (tomorrowOperationsPattern.test(query)) {
+    return { kind: "date_operations", query, targetDate: "tomorrow", targetFlightNo: null };
+  }
+  const dateMatch = query.match(exactDateOperationsPattern);
+  if (dateMatch) {
+    const targetDate = validExactDate(dateMatch[1]);
+    return targetDate ? { kind: "date_operations", query, targetDate, targetFlightNo: null } : "blocked";
+  }
+  const flightMatch = query.match(exactFlightDatePattern);
+  if (flightMatch) {
+    const targetDate = validExactDate(flightMatch[2]);
+    const targetFlightNo = normalizedFlightNumber(flightMatch[1]);
+    return targetDate && targetFlightNo
+      ? { kind: "flight_date", query, targetDate, targetFlightNo }
+      : "blocked";
+  }
+  return "blocked";
 }
 
 function validActor(context: AdminDispatcherBoundaryContext) {
@@ -308,9 +385,12 @@ function baseBookingRow(
     company_id: identity?.company_id ?? null,
     company_name: identity?.company_name ?? null,
     customer_id: identity?.customer_id ?? null,
+    flight_no: cleanText(booking.flight_no, 40) || null,
     identity_status: identity ? "verified" as const : "manual_review" as const,
     pickup_at: bookingPickupAt(booking),
     public_booking_reference: publicBookingReference(booking),
+    route: cleanText(booking.route_summary || booking.route, 500) || null,
+    service_type: cleanText(booking.service_type || booking.booking_type, 80) || null,
   };
 }
 
@@ -345,9 +425,12 @@ function buildRows(snapshot: AdminAiTodaysWorkBriefSnapshot, now: Date) {
       company_id: null,
       company_name: null,
       customer_id: null,
+      flight_no: null,
       identity_status: "manual_review" as const,
       pickup_at: null,
       public_booking_reference: null,
+      route: null,
+      service_type: null,
     };
     const notificationId = cleanText(notification.id, 120) || safeDate(notification.created_at) || reference;
     const rowKey = `customer_booking_review:${reviewKind}:${reference}:${notificationId}`;
@@ -478,7 +561,10 @@ function buildRows(snapshot: AdminAiTodaysWorkBriefSnapshot, now: Date) {
       pickup_at: null,
       public_booking_reference: null,
       review_kind: null,
+      route: null,
       row_key: `blocked_monthly_billing:${draftId}`,
+      service_type: null,
+      flight_no: null,
     });
   }
 
@@ -491,7 +577,72 @@ function buildRows(snapshot: AdminAiTodaysWorkBriefSnapshot, now: Date) {
   });
 }
 
+function buildDateRows(
+  snapshot: AdminAiTodaysWorkBriefSnapshot,
+  targetDate: string,
+  targetFlightNo: string | null,
+) {
+  const newestActiveLinkByReference = new Map<string, AdminDriverJobLinkRecord>();
+  for (const link of snapshot.links) {
+    const reference = cleanText(link.booking_reference, 120);
+    if (!reference || link.link_status !== "active" || newestActiveLinkByReference.has(reference)) continue;
+    newestActiveLinkByReference.set(reference, link);
+  }
+
+  return snapshot.bookings.flatMap((booking): AdminAiTodaysWorkBriefRow[] => {
+    const pickupAt = bookingPickupAt(booking);
+    const reference = bookingReference(booking);
+    if (!pickupAt || !reference || singaporeDateKey(pickupAt) !== targetDate) return [];
+    if (targetFlightNo && normalizedFlightNumber(booking.flight_no) !== targetFlightNo) return [];
+
+    const base = baseBookingRow(snapshot, booking);
+    const link = newestActiveLinkByReference.get(reference);
+    const latestStatus = snapshot.latest_status_by_reference[reference];
+    let category: AdminAiTodaysWorkBriefCategory;
+    let detail: string;
+    let handoff: AdminAiTodaysWorkBriefRow["handoff"] = "dispatch";
+
+    if (bookingIsOpenCustomerRequest(booking)) {
+      category = "customer_booking_review";
+      detail = "Customer booking review is waiting on the established Dashboard controls.";
+      handoff = "dashboard";
+    } else if (link && !link.safe_summary.acknowledged) {
+      category = "pending_driver_ack";
+      detail = "Newest active Driver Job Link is pending acknowledgement.";
+      handoff = "driver_ack_queue";
+    } else if (latestStatus?.status_value === "completed" && !bookingIsTerminal(booking)) {
+      category = "driver_report_completion";
+      detail = "Driver Job Completed report is saved; explicit Admin confirm completed is still required.";
+      handoff = "dashboard";
+    } else if (bookingHasAssignedDriver(booking)) {
+      category = "scheduled_assigned";
+      detail = bookingIsTerminal(booking)
+        ? "Saved job is completed or closed; no action was taken."
+        : "Scheduled job has an assigned Driver.";
+    } else {
+      category = "scheduled_unassigned";
+      detail = "Scheduled job has no assigned Driver.";
+    }
+
+    return [{
+      ...base,
+      billing_month: null,
+      category,
+      detail: base.identity_status === "verified"
+        ? detail
+        : `${detail} Exact Company + Booker identity needs manual review.`,
+      handoff,
+      occurred_at: latestStatus?.occurred_at || null,
+      review_kind: bookingIsOpenCustomerRequest(booking) ? "new" : null,
+      row_key: `${targetFlightNo ? "flight_date" : "date_operations"}:${targetDate}:${reference}`,
+    }];
+  }).sort((first, second) =>
+    (first.pickup_at || "").localeCompare(second.pickup_at || "") || first.row_key.localeCompare(second.row_key)
+  );
+}
+
 function result(
+  parsed: ParsedTodaysWorkBrief,
   query: string,
   page: number,
   input: Partial<AdminAiTodaysWorkBriefResult>,
@@ -506,11 +657,16 @@ function result(
     query,
     read_at: new Date().toISOString(),
     rows: input.rows || [],
+    scope: parsed.kind,
     status: input.status || "empty",
+    target_date: parsed.targetDate && parsed.targetDate !== "tomorrow" ? parsed.targetDate : null,
+    target_flight_no: parsed.targetFlightNo,
   };
 }
 
-async function loadAllSavedBookings(actor: AdminBookingPersistenceAdapterActor) {
+async function loadAllSavedBookings(
+  actor: AdminBookingPersistenceAdapterActor,
+) {
   const bookings: AdminSavedBookingRecord[] = [];
   for (let page = 0; page < 100; page += 1) {
     const loaded = await loadAdminSavedBookingList({ limit: 100, offset: page * 100, scope: "monitorable" }, actor);
@@ -603,7 +759,48 @@ async function loadVerifiedIdentities(
 }
 
 const defaultDependencies: AdminAiTodaysWorkBriefDependencies = {
-  async loadSnapshot(actor, now) {
+  async loadSnapshot(actor, now, request = { kind: "attention" }) {
+    if (request.kind === "exact_sgt_date") {
+      const loaded = await loadAdminSavedBookingsForExactSgtDate({
+        sgt_date: request.targetDate,
+      }, actor);
+      if (!loaded.ok) throw new Error(loaded.error);
+      const bookings = loaded.data.bookings;
+      const perBookingEvidence = await Promise.all(bookings.map(async (booking) => {
+        const reference = bookingReference(booking);
+        if (!reference) throw new Error(safeReadError);
+        const [linksRead, statusRead] = await Promise.all([
+          loadAdminDriverJobLinks({
+            booking_reference: reference,
+            limit: 1,
+            link_status: "active",
+            page: 1,
+          }, actor),
+          loadAdminDriverJobStatuses({ booking_reference: reference, limit: 1 }, actor),
+        ]);
+        if (!linksRead.ok || !statusRead.ok) throw new Error(safeReadError);
+        const latest = statusRead.data.statuses[0] || null;
+        return {
+          latestStatus: [reference, {
+            occurred_at: latest?.occurred_at || latest?.created_at || null,
+            status_value: statusRead.data.latest_status,
+          }] as const,
+          links: linksRead.data.links,
+        };
+      }));
+      const identities = await loadVerifiedIdentities(actor, bookings, []);
+      return {
+        bookings,
+        drafts: [],
+        identities,
+        latest_status_by_reference: Object.fromEntries(
+          perBookingEvidence.map((entry) => entry.latestStatus),
+        ),
+        links: perBookingEvidence.flatMap((entry) => entry.links),
+        notifications: [],
+      };
+    }
+
     const [bookings, notifications, links, drafts] = await Promise.all([
       loadAllSavedBookings(actor),
       loadAllQueuedNotifications(actor),
@@ -644,9 +841,15 @@ export async function executeAdminAiTodaysWorkBrief(
   const page = safePage(pageValue);
   if (!parsed) return { matched: false };
   if (parsed === "blocked") {
+    const blockedParsed: ParsedTodaysWorkBrief = {
+      kind: "attention",
+      query: cleanText(messageValue, 500),
+      targetDate: null,
+      targetFlightNo: null,
+    };
     return {
-      data: result(cleanText(messageValue, 500), page, {
-        answer: "Ask AI can read today's work brief only. Use the established Dashboard controls to review or change any record.",
+      data: result(blockedParsed, blockedParsed.query, page, {
+        answer: "Ask AI can read today's work brief, one exact SGT operations date, or one exact flight plus date. Use the established Dashboard and Dispatch controls to change any record.",
         status: "blocked",
       }),
       matched: true,
@@ -664,15 +867,32 @@ export async function executeAdminAiTodaysWorkBrief(
 
   try {
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(context);
-    const snapshot = await dependencies.loadSnapshot(actor, now);
-    const allRows = buildRows(snapshot, now);
+    const targetDate = parsed.targetDate === "tomorrow" ? tomorrowSingaporeDate(now) : parsed.targetDate;
+    if (parsed.kind !== "attention" && !targetDate) {
+      return { error: safeReadError, matched: true, ok: false, status: 500 };
+    }
+    const effectiveParsed = { ...parsed, targetDate };
+    const snapshot = await dependencies.loadSnapshot(
+      actor,
+      now,
+      parsed.kind === "attention"
+        ? { kind: "attention" }
+        : { kind: "exact_sgt_date", targetDate: targetDate! },
+    );
+    const allRows = parsed.kind === "attention"
+      ? buildRows(snapshot, now)
+      : buildDateRows(snapshot, targetDate!, parsed.targetFlightNo);
     const start = (page - 1) * adminAiTodaysWorkBriefPageSize;
     const rows = allRows.slice(start, start + adminAiTodaysWorkBriefPageSize);
     return {
-      data: result(parsed.query, page, {
-        answer: allRows.length > 0
-          ? `${allRows.length} operational attention item${allRows.length === 1 ? "" : "s"} found in the established Dashboard sources.`
-          : "No operational attention items were found in the established Dashboard sources.",
+      data: result(effectiveParsed, parsed.query, page, {
+        answer: parsed.kind === "attention"
+          ? allRows.length > 0
+            ? `${allRows.length} operational attention item${allRows.length === 1 ? "" : "s"} found in the established Dashboard sources.`
+            : "No operational attention items were found in the established Dashboard sources."
+          : parsed.kind === "flight_date"
+            ? `${allRows.length} Prestige job${allRows.length === 1 ? "" : "s"} found for flight ${parsed.targetFlightNo} on ${targetDate}. This is not live airline status.`
+            : `${allRows.length} Prestige operation${allRows.length === 1 ? "" : "s"} found for ${targetDate}.`,
         counts: makeCounts(allRows),
         has_more: start + rows.length < allRows.length,
         rows,

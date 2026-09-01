@@ -92,6 +92,7 @@ export default function App() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(adminSignInUrl());
   const [installationId, setInstallationId] = useState("");
+  const [nativeBootstrapReady, setNativeBootstrapReady] = useState(false);
   const [navigationKey, setNavigationKey] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<
@@ -169,6 +170,20 @@ export default function App() {
       recoverAdminWebView(true);
     }, adminWebViewInitialLoadTimeoutMs);
   }, [clearAdminWebViewLoadTimeout, recoverAdminWebView]);
+
+  const markAdminWebViewReady = useCallback(() => {
+    if (
+      webViewLoadFailurePendingRef.current ||
+      webViewHasCompletedLoadRef.current
+    ) {
+      return false;
+    }
+    clearAdminWebViewLoadTimeout();
+    webViewHasCompletedLoadRef.current = true;
+    webViewAutomaticRecoveryCountRef.current = 0;
+    setWebViewLoadState("ready");
+    return true;
+  }, [clearAdminWebViewLoadTimeout]);
 
   const handleAdminWebViewLoadError = useCallback((event: WebViewErrorEvent) => {
     event.preventDefault();
@@ -258,8 +273,8 @@ export default function App() {
       setBiometricEnabled(enabled);
       setNotificationEnabled(Boolean(savedNotificationToken) && nextPermission === "granted");
       setNotificationPermission(nextPermission);
+      setNativeBootstrapReady(true);
       void Notifications.setBadgeCountAsync(0).catch(() => false);
-      setNavigationKey((current) => current + 1);
       if (!enabled) {
         setAdminScreenMode("web");
         return;
@@ -547,17 +562,14 @@ export default function App() {
     event: WebViewNavigationEvent | WebViewErrorEvent,
   ) => {
     if (webViewLoadFailurePendingRef.current) return;
-    clearAdminWebViewLoadTimeout();
-    webViewHasCompletedLoadRef.current = true;
-    webViewAutomaticRecoveryCountRef.current = 0;
-    setWebViewLoadState("ready");
+    markAdminWebViewReady();
     if (
       signOutPendingRef.current &&
       event.nativeEvent.url === `${productionOrigin}/`
     ) {
       void requestNativeSubscription("unregister", "sign_out");
     }
-  }, [clearAdminWebViewLoadTimeout, requestNativeSubscription]);
+  }, [markAdminWebViewReady, requestNativeSubscription]);
 
   const handleWebViewMessage = useCallback(async (event: WebViewMessageEvent) => {
     const message = parseAdminBridgeMessage(event.nativeEvent.data);
@@ -565,6 +577,11 @@ export default function App() {
       if (event.nativeEvent.data.includes("admin-sign-out-failed")) {
         setNotice("Sign out did not complete. Please try again.");
       }
+      return;
+    }
+
+    if (message.type === "admin_native_web_ready") {
+      markAdminWebViewReady();
       return;
     }
 
@@ -655,7 +672,7 @@ export default function App() {
       signOutPendingRef.current = false;
       webViewRef.current?.injectJavaScript(signOutScript);
     }
-  }, [installationId, requestNativeSubscription]);
+  }, [installationId, markAdminWebViewReady, requestNativeSubscription]);
 
   const signOutAfterNativePushRevocation = useCallback(async () => {
     if (nativeBridgeBusyRef.current) {
@@ -684,7 +701,7 @@ export default function App() {
   const webLayerLocked = screenMode !== "web";
   const enrollmentRequired = screenMode === "enrollment-required";
   const signedInPage = isProtectedAdminUrl(currentUrl) && biometricEnabled;
-  const adminBridgeBootstrap = installationId
+  const adminBridgeBootstrap = nativeBootstrapReady
     ? embeddedAdminBridgeBootstrap(
         installationId,
         notificationEnabled,
@@ -723,45 +740,47 @@ export default function App() {
               </View>
             ) : null}
             <View style={styles.webViewContainer}>
-              <WebView
-                injectedJavaScriptBeforeContentLoaded={adminBridgeBootstrap}
-                allowsBackForwardNavigationGestures={false}
-                allowsLinkPreview={false}
-                cacheEnabled
-                domStorageEnabled
-                javaScriptCanOpenWindowsAutomatically={false}
-                javaScriptEnabled
-                key={`prestige-admin-webview-${navigationKey}`}
-                mixedContentMode="never"
-                onContentProcessDidTerminate={handleAdminWebViewContentProcessTermination}
-                onError={handleAdminWebViewLoadError}
-                onHttpError={(event) => {
-                  if (event.nativeEvent.statusCode >= 500) {
-                    setNotice("Prestige Limo Ops is temporarily unavailable.");
-                  }
-                }}
-                onLoadEnd={handleAdminWebViewLoadEnd}
-                onLoadStart={handleAdminWebViewLoadStart}
-                onMessage={(event) => {
-                  void handleWebViewMessage(event);
-                }}
-                onNavigationStateChange={updateNavigation}
-                onShouldStartLoadWithRequest={allowNavigation}
-                originWhitelist={["https://app.prestigelimo.sg"]}
-                pullToRefreshEnabled
-                ref={webViewRef}
-                setSupportMultipleWindows={false}
-                sharedCookiesEnabled
-                source={{ uri: currentUrl }}
-                style={styles.webView}
-                thirdPartyCookiesEnabled={false}
-              />
-              {webViewLoadState === "loading" ? (
+              {nativeBootstrapReady ? (
+                <WebView
+                  injectedJavaScriptBeforeContentLoaded={adminBridgeBootstrap}
+                  allowsBackForwardNavigationGestures={false}
+                  allowsLinkPreview={false}
+                  cacheEnabled
+                  domStorageEnabled
+                  javaScriptCanOpenWindowsAutomatically={false}
+                  javaScriptEnabled
+                  key={`prestige-admin-webview-${navigationKey}`}
+                  mixedContentMode="never"
+                  onContentProcessDidTerminate={handleAdminWebViewContentProcessTermination}
+                  onError={handleAdminWebViewLoadError}
+                  onHttpError={(event) => {
+                    if (event.nativeEvent.statusCode >= 500) {
+                      setNotice("Prestige Limo Ops is temporarily unavailable.");
+                    }
+                  }}
+                  onLoadEnd={handleAdminWebViewLoadEnd}
+                  onLoadStart={handleAdminWebViewLoadStart}
+                  onMessage={(event) => {
+                    void handleWebViewMessage(event);
+                  }}
+                  onNavigationStateChange={updateNavigation}
+                  onShouldStartLoadWithRequest={allowNavigation}
+                  originWhitelist={["https://app.prestigelimo.sg"]}
+                  pullToRefreshEnabled
+                  ref={webViewRef}
+                  setSupportMultipleWindows={false}
+                  sharedCookiesEnabled
+                  source={{ uri: currentUrl }}
+                  style={styles.webView}
+                  thirdPartyCookiesEnabled={false}
+                />
+              ) : null}
+              {nativeBootstrapReady && webViewLoadState === "loading" ? (
                 <View accessibilityRole="progressbar" style={styles.webViewRecoveryOverlay}>
                   <ActivityIndicator color={colors.gold} size="large" />
                   <Text style={styles.webViewRecoveryText}>Loading secure Admin sign-in…</Text>
                 </View>
-              ) : webViewLoadState === "failed" ? (
+              ) : nativeBootstrapReady && webViewLoadState === "failed" ? (
                 <View accessibilityRole="alert" style={styles.webViewRecoveryOverlay}>
                   <Text style={styles.webViewRecoveryTitle}>The secure Admin screen did not load.</Text>
                   <Text style={styles.webViewRecoveryText}>

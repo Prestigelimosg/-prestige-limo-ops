@@ -54,6 +54,10 @@ const guardChecks = [
     script: "scripts/test-bridge-customer-177-company-booker-repair-guard.mjs",
   },
   {
+    label: "Monthly Billing nine-booking Company + Booker repair guard",
+    script: "scripts/test-monthly-billing-nine-company-booker-repair-guard.mjs",
+  },
+  {
     label: "customer and booking test-data wipe approval packet guard",
     script: "scripts/test-customer-booking-test-data-wipe-approval-packet.mjs",
   },

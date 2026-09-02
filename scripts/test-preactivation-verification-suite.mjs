@@ -62,6 +62,10 @@ const guardChecks = [
     script: "scripts/test-monthly-billing-action-queue-production-repair-guard.mjs",
   },
   {
+    label: "Monthly Billing eight-booking cancellation repair guard",
+    script: "scripts/test-monthly-billing-eight-cancelled-repair-guard.mjs",
+  },
+  {
     label: "customer and booking test-data wipe approval packet guard",
     script: "scripts/test-customer-booking-test-data-wipe-approval-packet.mjs",
   },

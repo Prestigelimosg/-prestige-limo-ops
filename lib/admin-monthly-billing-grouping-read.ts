@@ -16,6 +16,7 @@ export const adminMonthlyBillingGroupingReadVersion =
 
 export type AdminMonthlyBillingGroupingReadinessStatus = "ready" | "blocked" | "mixed";
 export type AdminMonthlyBillingJobStatus = "ready" | "covered" | "blocked";
+export type AdminMonthlyBillingPaymentStatus = "paid" | "unpaid";
 
 export type AdminMonthlyBillingJobClassification = {
   billing_month: string;
@@ -26,6 +27,7 @@ export type AdminMonthlyBillingJobClassification = {
   customer_id: string | null;
   display_booking_reference: string;
   safe_billing_status: AdminMonthlyBillingJobStatus;
+  safe_payment_status: AdminMonthlyBillingPaymentStatus | null;
   safe_reason: string;
 };
 
@@ -87,7 +89,15 @@ type BillingCandidate = {
   customerId: string | null;
   displayBookingReference: string;
   safeBillingStatus: AdminMonthlyBillingJobStatus;
+  safePaymentStatus: AdminMonthlyBillingPaymentStatus | null;
   safeReason: string;
+};
+type IssuedCoverageEvidence = {
+  coverageKeys: Set<string>;
+  invoiceMatchesByCoverageKey: Map<
+    string,
+    Map<string, AdminMonthlyBillingPaymentStatus | null>
+  >;
 };
 type DspBillingIntervalEvidence = {
   endedAtMs: number;
@@ -119,7 +129,7 @@ const monthlyBillingCurrentBookingSelect =
 const monthlyBillingFoundationBookingSelect =
   "booking_reference, public_booking_reference, customer_id, company_id, booker_id, customer_display_name, pickup_datetime, service_type, booking_type, admin_internal_status";
 const monthlyBillingIssuedRecordSelect =
-  "customer_id, booker_id, reference, line_items, document_type, document_state";
+  "id, customer_id, booker_id, reference, line_items, document_type, document_state, status";
 const monthlyBillingDspCorrectionSelect =
   "booking_reference, event_type, occurred_at, safe_event_note, safe_event_context, source_surface, actor_role, created_at";
 const monthlyBillingDspSummarySelect =
@@ -837,14 +847,25 @@ function issuedCoverageKey(
   return `${exactIdentityKey(customerId, companyId, bookerId)}::${bookingReference}`;
 }
 
+function safeIssuedInvoicePaymentStatus(
+  value: unknown,
+): AdminMonthlyBillingPaymentStatus | null {
+  const status = textOrNull(value);
+
+  return status === "Paid" ? "paid" : status === "Unpaid" ? "unpaid" : null;
+}
+
 async function loadIssuedCoverageKeys(
   client: SupabaseClient,
   customerIds: string[],
   companyIdsByCustomerBooker: Map<string, Set<number>>,
-): Promise<AdminBookingResult<Set<string>>> {
+): Promise<AdminBookingResult<IssuedCoverageEvidence>> {
   if (customerIds.length === 0) {
     return {
-      data: new Set(),
+      data: {
+        coverageKeys: new Set(),
+        invoiceMatchesByCoverageKey: new Map(),
+      },
       ok: true,
     };
   }
@@ -860,10 +881,16 @@ async function loadIssuedCoverageKeys(
   }
 
   const coverageKeys = new Set<string>();
+  const invoiceMatchesByCoverageKey = new Map<
+    string,
+    Map<string, AdminMonthlyBillingPaymentStatus | null>
+  >();
 
   for (const row of asArray(data).map(asRecord)) {
     const customerId = safeCustomerId(row.customer_id);
     const bookerId = safeIdentityId(row.booker_id);
+    const invoiceRecordId = textOrNull(row.id);
+    const safePaymentStatus = safeIssuedInvoicePaymentStatus(row.status);
 
     if (!customerId || !bookerId) {
       continue;
@@ -877,15 +904,51 @@ async function loadIssuedCoverageKeys(
 
     const [companyId] = companyIds;
 
-    for (const reference of issuedRecordBookingReferences(row)) {
-      coverageKeys.add(issuedCoverageKey(customerId, companyId, bookerId, reference));
+    for (const reference of new Set(issuedRecordBookingReferences(row))) {
+      const coverageKey = issuedCoverageKey(customerId, companyId, bookerId, reference);
+      coverageKeys.add(coverageKey);
+
+      if (invoiceRecordId) {
+        const matches = invoiceMatchesByCoverageKey.get(coverageKey) || new Map();
+        matches.set(invoiceRecordId, safePaymentStatus);
+        invoiceMatchesByCoverageKey.set(coverageKey, matches);
+      }
     }
   }
 
   return {
-    data: coverageKeys,
+    data: {
+      coverageKeys,
+      invoiceMatchesByCoverageKey,
+    },
     ok: true,
   };
+}
+
+function exactIssuedInvoicePaymentStatus(
+  coverageEvidence: IssuedCoverageEvidence,
+  customerId: string,
+  companyId: number,
+  bookerId: number,
+  bookingReferences: string[],
+) {
+  const exactMatches = new Map<string, AdminMonthlyBillingPaymentStatus | null>();
+
+  for (const reference of new Set(bookingReferences)) {
+    const matches = coverageEvidence.invoiceMatchesByCoverageKey.get(
+      issuedCoverageKey(customerId, companyId, bookerId, reference),
+    );
+
+    for (const [invoiceRecordId, status] of matches || []) {
+      exactMatches.set(invoiceRecordId, status);
+    }
+  }
+
+  if (exactMatches.size !== 1) {
+    return null;
+  }
+
+  return [...exactMatches.values()][0] || null;
 }
 
 function closeoutIsReady(row: UnknownRecord) {
@@ -943,7 +1006,7 @@ function blockedReason(closeoutRow: UnknownRecord | undefined) {
 function buildBillingCandidate(
   bookingRow: UnknownRecord,
   closeoutRow: UnknownRecord | undefined,
-  issuedCoverageKeys: Set<string>,
+  issuedCoverageEvidence: IssuedCoverageEvidence,
   dspBillingIntervalEvidence: DspBillingIntervalEvidence | undefined,
   ambiguousCustomerBookerKeys: Set<string>,
 ): BillingCandidate | null {
@@ -970,14 +1033,25 @@ function buildBillingCandidate(
     bookingRow.public_booking_reference,
     bookingReference,
   );
+  const candidateBookingReferences = [bookingReference, publicBookingReference];
   const isCovered = Boolean(
     customerId && companyId && bookerId &&
-      [bookingReference, publicBookingReference].some((reference) =>
-        issuedCoverageKeys.has(
+      candidateBookingReferences.some((reference) =>
+        issuedCoverageEvidence.coverageKeys.has(
           issuedCoverageKey(customerId, companyId, bookerId, reference),
         ),
       ),
   );
+  const safePaymentStatus =
+    isCovered && customerId && companyId && bookerId
+      ? exactIssuedInvoicePaymentStatus(
+          issuedCoverageEvidence,
+          customerId,
+          companyId,
+          bookerId,
+          candidateBookingReferences,
+        )
+      : null;
   const dspBillingTimeReady = dspBillingIntervalIsReady(
     bookingRow,
     dspBillingIntervalEvidence,
@@ -1001,6 +1075,7 @@ function buildBillingCandidate(
     customerId,
     displayBookingReference: publicBookingReference,
     safeBillingStatus: isCovered ? "covered" : isReady ? "ready" : "blocked",
+    safePaymentStatus,
     safeReason: isCovered
       ? "An issued customer bill already covers this booking."
       : !customerId || !companyId || !bookerId
@@ -1064,6 +1139,7 @@ function groupCandidates(
       customer_id: candidate.customerId,
       display_booking_reference: candidate.displayBookingReference,
       safe_billing_status: candidate.safeBillingStatus,
+      safe_payment_status: candidate.safePaymentStatus,
       safe_reason: candidate.safeReason,
     });
     group.safe_readiness_status =

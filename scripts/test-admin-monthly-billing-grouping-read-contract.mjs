@@ -310,9 +310,13 @@ async function readRouteResponse(response) {
 
 function assertNoLeaks(value, label) {
   const text = JSON.stringify(value);
+  const textWithoutApprovedPaymentStatus = text.replace(
+    /"safe_payment_status":(?:null|"paid"|"unpaid")/g,
+    '"safe_billing_marker":"approved-bounded-value"',
+  );
 
   assert.doesNotMatch(text, safeApiLeakPattern, label);
-  assert.doesNotMatch(text, unsafeMonthlyBillingLeakPattern, label);
+  assert.doesNotMatch(textWithoutApprovedPaymentStatus, unsafeMonthlyBillingLeakPattern, label);
 }
 
 function assertNoSupabaseTouched(mock, label) {
@@ -480,8 +484,10 @@ const seed = {
       customer_id: "customer-acme",
       document_state: "issued",
       document_type: "invoice",
+      id: "invoice-covered-unpaid",
       line_items: [{ bookingReference: "10077" }],
       reference: "MONTHLY-CUSTOMER-BILL",
+      status: "Unpaid",
     },
   ],
 };
@@ -683,27 +689,32 @@ try {
     acmeJuneGroup.jobs.map((job) => [
       job.booking_reference,
       job.safe_billing_status,
+      job.safe_payment_status,
       job.safe_reason,
     ]),
     [
       [
         "MONTHLY-COVERED-JUN",
         "covered",
+        "unpaid",
         "An issued customer bill already covers this booking.",
       ],
       [
         "MONTHLY-BLOCKED-JUN",
         "blocked",
+        null,
         "Extra charges need review.",
       ],
       [
         "MONTHLY-MISSING-CLOSEOUT-JUN",
         "blocked",
+        null,
         "Completed job closeout is missing.",
       ],
       [
         "MONTHLY-READY-JUN",
         "ready",
+        null,
         "Ready and not covered by an issued customer bill.",
       ],
     ],
@@ -712,6 +723,102 @@ try {
   assert.equal(defaultReadResult.body.summary.covered_count, 1);
   assert.equal(defaultReadMock.client.operations.length, 0);
   assertNoLeaks(defaultReadResult, "default monthly billing grouping response should stay safe");
+
+  const paymentEvidenceBookingReferences = [
+    "MONTHLY-PAID-EXACT",
+    "MONTHLY-AMBIGUOUS-EXACT",
+    "MONTHLY-SAME-RECORD-TWO-REFS",
+    "MONTHLY-UNKNOWN-STATUS",
+  ];
+  const paymentEvidenceMock = installMockClient({
+    bookings: paymentEvidenceBookingReferences.map((bookingReference, index) => ({
+      admin_internal_status: "completed",
+      booking_reference: bookingReference,
+      booker_id: 401,
+      company_id: 400,
+      customer_display_name: "Payment Evidence Account",
+      customer_id: "customer-status-evidence",
+      pickup_at: `2026-08-${String(index + 1).padStart(2, "0")}T10:00:00.000Z`,
+      public_booking_reference:
+        bookingReference === "MONTHLY-SAME-RECORD-TWO-REFS" ? "PUBLIC-SAME-RECORD" : null,
+      service_type: "TRF",
+    })),
+    completed_booking_closeouts: paymentEvidenceBookingReferences.map((bookingReference) => ({
+      billing_prep_readiness: "ready",
+      booking_reference: bookingReference,
+      closeout_status: "ready_for_billing_prep",
+      completed_job_status: "completed",
+      dsp_actual_hours_readiness: "not_applicable",
+      extra_charges_readiness: "none",
+      updated_at: "2026-08-05T12:00:00.000Z",
+    })),
+    customer_invoice_records: [
+      {
+        booker_id: 401,
+        customer_id: "customer-status-evidence",
+        document_state: "issued",
+        document_type: "invoice",
+        id: "invoice-paid-exact",
+        line_items: [{ bookingReference: "MONTHLY-PAID-EXACT" }],
+        reference: "PAID-EXACT-INVOICE",
+        status: "Paid",
+      },
+      ...["invoice-ambiguous-one", "invoice-ambiguous-two"].map((id) => ({
+        booker_id: 401,
+        customer_id: "customer-status-evidence",
+        document_state: "issued",
+        document_type: "invoice",
+        id,
+        line_items: [{ bookingReference: "MONTHLY-AMBIGUOUS-EXACT" }],
+        reference: `${id}-reference`,
+        status: "Unpaid",
+      })),
+      {
+        booker_id: 401,
+        customer_id: "customer-status-evidence",
+        document_state: "issued",
+        document_type: "invoice",
+        id: "invoice-same-two-refs",
+        line_items: [{ bookingReference: "PUBLIC-SAME-RECORD" }],
+        reference: "MONTHLY-SAME-RECORD-TWO-REFS",
+        status: "Unpaid",
+      },
+      {
+        booker_id: 401,
+        customer_id: "customer-status-evidence",
+        document_state: "issued",
+        document_type: "invoice",
+        id: "invoice-unknown-status",
+        line_items: [{ bookingReference: "MONTHLY-UNKNOWN-STATUS" }],
+        reference: "UNKNOWN-STATUS-INVOICE",
+        status: "Draft",
+      },
+    ],
+  });
+  const paymentEvidenceResult = await readRouteResponse(
+    await route.GET(
+      new Request("http://localhost/api/admin-monthly-billing-groups?billing_month=2026-08", {
+        headers: sessionHeaders(),
+      }),
+    ),
+  );
+
+  assert.equal(paymentEvidenceResult.status, 200);
+  assert.deepEqual(
+    paymentEvidenceResult.body.groups[0].jobs.map((job) => [
+      job.booking_reference,
+      job.safe_billing_status,
+      job.safe_payment_status,
+    ]),
+    [
+      ["MONTHLY-AMBIGUOUS-EXACT", "covered", null],
+      ["MONTHLY-PAID-EXACT", "covered", "paid"],
+      ["MONTHLY-UNKNOWN-STATUS", "covered", null],
+      ["MONTHLY-SAME-RECORD-TWO-REFS", "covered", "unpaid"],
+    ],
+  );
+  assert.equal(paymentEvidenceMock.client.operations.length, 0);
+  assertNoLeaks(paymentEvidenceResult, "payment evidence monthly grouping response should stay safe");
 
   setEnv(enabledEnv());
 

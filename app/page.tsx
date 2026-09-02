@@ -1642,6 +1642,7 @@ type AdminMonthlyBillingJobClassification = {
   customer_id?: string | null;
   display_booking_reference?: string | null;
   safe_billing_status?: "ready" | "covered" | "blocked" | null;
+  safe_payment_status?: "paid" | "unpaid" | null;
   safe_reason?: string | null;
 };
 
@@ -1691,6 +1692,14 @@ type AdminMonthlyBillingDashboardClassificationState = {
   groups: AdminMonthlyBillingGroup[];
   message: string;
   status: "idle" | "loading" | "loaded" | "error";
+};
+
+type AdminMonthlyBillingDashboardBookingActionState = {
+  billingMonth: string;
+  message: Message | null;
+  pendingAction: "review" | "resolve" | null;
+  pendingReference: string;
+  resolvedRowKeys: string[];
 };
 
 type AdminCompletedBookingBillingReadinessAuditRequirement =
@@ -14357,6 +14366,24 @@ function adminMonthlyBillingGroupingCount(value: number | null | undefined) {
   return Number.isFinite(count) && count >= 0 ? count : 0;
 }
 
+function adminMonthlyBillingDashboardRowKey(
+  billingMonth: string | null | undefined,
+  bookingReference: string | number | null | undefined,
+) {
+  const exactBillingMonth = clean(billingMonth);
+  const exactBookingReference = cleanReferenceText(bookingReference);
+
+  return exactBillingMonth && exactBookingReference
+    ? `${exactBillingMonth}::${exactBookingReference}`
+    : "";
+}
+
+function adminMonthlyBillingDashboardJobIsActionable(
+  job: AdminMonthlyBillingJobClassification,
+) {
+  return job.safe_billing_status === "blocked" || job.safe_payment_status === "unpaid";
+}
+
 function adminMonthlyInvoiceAmountInputToCents(value: string) {
   const cleanedValue = value.trim().replace(/,/g, "");
 
@@ -15364,6 +15391,16 @@ export default function Home() {
       message: "",
       status: "idle",
     });
+  const [adminMonthlyBillingDashboardBookingActionState, setAdminMonthlyBillingDashboardBookingActionState] =
+    useState<AdminMonthlyBillingDashboardBookingActionState>({
+      billingMonth: "",
+      message: null,
+      pendingAction: null,
+      pendingReference: "",
+      resolvedRowKeys: [],
+    });
+  const adminMonthlyBillingDashboardBookingActionPendingRef = useRef(false);
+  const adminMonthlyBillingDashboardBookingActionRevisionRef = useRef(0);
   const [adminEmailAiIntakeReadState, setAdminEmailAiIntakeReadState] =
     useState<AdminEmailAiIntakeReadState>({
       enabled: false,
@@ -16084,6 +16121,18 @@ export default function Home() {
           message: "",
           status: "loaded",
         });
+        const actionableRowKeys = new Set(
+          groups.flatMap((group) => group.jobs || [])
+            .filter(adminMonthlyBillingDashboardJobIsActionable)
+            .map((job) => adminMonthlyBillingDashboardRowKey(billingMonth, job.booking_reference))
+            .filter(Boolean),
+        );
+        setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+          ...current,
+          resolvedRowKeys: current.resolvedRowKeys.filter(
+            (rowKey) => !actionableRowKeys.has(rowKey),
+          ),
+        }));
       } catch {
         if (cancelled) {
           return;
@@ -21533,6 +21582,7 @@ export default function Home() {
   async function loadAdminAiReadOnlyBookingInDispatch(
     bookingReferenceValue: string | number | null | undefined,
     failureMessage: string,
+    isCurrent: () => boolean = () => true,
   ) {
     const exactBookingReference = cleanReferenceText(bookingReferenceValue);
     if (!exactBookingReference) throw new Error(failureMessage);
@@ -21540,6 +21590,7 @@ export default function Home() {
       exactBookingReference,
       failureMessage,
     );
+    if (!isCurrent()) throw new Error(failureMessage);
     await loadSelectedBooking(
       adminBookingPersistenceRecordToCalendarBookingRecord(exactBookingRecord),
       {
@@ -21571,6 +21622,196 @@ export default function Home() {
       });
     } finally {
       setAdminAiReadOnlyBookingNavigationPendingKey("");
+    }
+  }
+
+  async function handleAdminMonthlyBillingDashboardBookingReview(
+    job: AdminMonthlyBillingJobClassification,
+    billingMonth: string,
+  ) {
+    if (adminMonthlyBillingDashboardBookingActionPendingRef.current) return;
+
+    const exactBookingReference = cleanReferenceText(job.booking_reference);
+    const displayReference =
+      clean(job.display_booking_reference) ||
+      adminVisibleBookingReference(exactBookingReference) ||
+      "Reference unavailable";
+
+    if (!exactBookingReference) {
+      setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+        ...current,
+        billingMonth,
+        message: {
+          tone: "error",
+          text: `Exact saved booking ${displayReference} could not be loaded.`,
+        },
+        pendingAction: null,
+        pendingReference: "",
+      }));
+      return;
+    }
+
+    const requestRevision = adminMonthlyBillingDashboardBookingActionRevisionRef.current + 1;
+    adminMonthlyBillingDashboardBookingActionRevisionRef.current = requestRevision;
+    adminMonthlyBillingDashboardBookingActionPendingRef.current = true;
+    setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+      ...current,
+      billingMonth,
+      message: null,
+      pendingAction: "review",
+      pendingReference: exactBookingReference,
+    }));
+
+    let failure: Message | null = null;
+
+    try {
+      await loadAdminAiReadOnlyBookingInDispatch(
+        exactBookingReference,
+        `Exact saved booking ${displayReference} could not be loaded.`,
+        () => adminMonthlyBillingDashboardBookingActionRevisionRef.current === requestRevision,
+      );
+    } catch (error) {
+      failure = {
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "The exact saved booking could not be loaded in Dispatch.",
+      };
+    } finally {
+      if (adminMonthlyBillingDashboardBookingActionRevisionRef.current === requestRevision) {
+        adminMonthlyBillingDashboardBookingActionPendingRef.current = false;
+        setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+          ...current,
+          billingMonth,
+          message: failure,
+          pendingAction: null,
+          pendingReference: "",
+        }));
+      }
+    }
+  }
+
+  async function handleAdminMonthlyBillingDashboardBookingResolve(
+    job: AdminMonthlyBillingJobClassification,
+    billingMonth: string,
+  ) {
+    if (adminMonthlyBillingDashboardBookingActionPendingRef.current) return;
+
+    const exactBookingReference = cleanReferenceText(job.booking_reference);
+    const displayReference =
+      clean(job.display_booking_reference) ||
+      adminVisibleBookingReference(exactBookingReference) ||
+      "Reference unavailable";
+
+    if (!exactBookingReference || !adminMonthlyBillingDashboardJobIsActionable(job)) {
+      setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+        ...current,
+        billingMonth,
+        message: {
+          tone: "error",
+          text: `Booking ${displayReference} could not be rechecked safely.`,
+        },
+        pendingAction: null,
+        pendingReference: "",
+      }));
+      return;
+    }
+
+    const requestRevision = adminMonthlyBillingDashboardBookingActionRevisionRef.current + 1;
+    adminMonthlyBillingDashboardBookingActionRevisionRef.current = requestRevision;
+    adminMonthlyBillingDashboardBookingActionPendingRef.current = true;
+    setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+      ...current,
+      billingMonth,
+      message: null,
+      pendingAction: "resolve",
+      pendingReference: exactBookingReference,
+    }));
+
+    let nextGroups: AdminMonthlyBillingGroup[] | null = null;
+    let nextMessage: Message;
+    let resolvedRowKey = "";
+
+    try {
+      const { groups, pagination } = await loadAdminMonthlyBillingGroupsRead({
+        billingMonth,
+        customerAccountSearch: "",
+        limit: 250,
+        page: 1,
+        readinessStatus: "all",
+      });
+
+      if (
+        adminMonthlyBillingDashboardBookingActionRevisionRef.current !== requestRevision ||
+        pagination?.has_next_page
+      ) {
+        throw new Error("Monthly billing classification recheck could not be completed safely.");
+      }
+
+      const exactMatches = groups
+        .flatMap((group) => group.jobs || [])
+        .filter((candidate) => cleanReferenceText(candidate.booking_reference) === exactBookingReference);
+
+      if (exactMatches.length !== 1) {
+        throw new Error(`Booking ${displayReference} could not be rechecked safely.`);
+      }
+
+      const [freshJob] = exactMatches;
+      nextGroups = groups;
+
+      if (adminMonthlyBillingDashboardJobIsActionable(freshJob)) {
+        nextMessage = {
+          tone: "info",
+          text:
+            freshJob.safe_payment_status === "unpaid"
+              ? `Booking ${displayReference} remains Unpaid. Use the existing invoice controls before rechecking.`
+              : `Booking ${displayReference} still needs review.`,
+        };
+      } else {
+        resolvedRowKey = adminMonthlyBillingDashboardRowKey(billingMonth, exactBookingReference);
+        nextMessage = {
+          tone: "success",
+          text: `Booking ${displayReference} is no longer actionable and was removed after the fresh recheck.`,
+        };
+      }
+    } catch (error) {
+      nextMessage = {
+        tone: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : `Booking ${displayReference} could not be rechecked safely.`,
+      };
+    } finally {
+      if (adminMonthlyBillingDashboardBookingActionRevisionRef.current === requestRevision) {
+        adminMonthlyBillingDashboardBookingActionPendingRef.current = false;
+
+        if (nextGroups) {
+          setAdminMonthlyBillingDashboardClassificationState({
+            billingMonth,
+            groups: nextGroups,
+            message: "",
+            status: "loaded",
+          });
+        }
+
+        setAdminMonthlyBillingDashboardBookingActionState((current) => ({
+          ...current,
+          billingMonth,
+          message: nextMessage,
+          pendingAction: null,
+          pendingReference: "",
+          resolvedRowKeys: resolvedRowKey
+            ? [...new Set([...current.resolvedRowKeys, resolvedRowKey])]
+            : current.resolvedRowKeys.filter(
+                (rowKey) => rowKey !== adminMonthlyBillingDashboardRowKey(
+                  billingMonth,
+                  exactBookingReference,
+                ),
+              ),
+        }));
+      }
     }
   }
 
@@ -51028,6 +51269,13 @@ export default function Home() {
                     adminMonthlyBillingDashboardClassificationState.billingMonth === monthlyBillingMonth
                       ? adminMonthlyBillingDashboardClassificationState.groups.flatMap(
                           (group) => group.jobs || [],
+                        ).filter(
+                          (job) => !adminMonthlyBillingDashboardBookingActionState.resolvedRowKeys.includes(
+                            adminMonthlyBillingDashboardRowKey(
+                              monthlyBillingMonth,
+                              job.booking_reference,
+                            ),
+                          ),
                         )
                       : [];
                   const isNewBookingRequestNotification =
@@ -51172,41 +51420,102 @@ export default function Home() {
                                       {monthlyBillingClassifications.map((job) => {
                                         const status = job.safe_billing_status || "blocked";
                                         const statusLabel =
-                                          status === "ready"
-                                            ? "Ready"
-                                            : status === "covered"
-                                              ? "Already invoiced"
-                                              : "Blocked";
+                                          job.safe_payment_status === "paid"
+                                            ? "Paid"
+                                            : job.safe_payment_status === "unpaid"
+                                              ? "Unpaid"
+                                              : status === "ready"
+                                                ? "Ready"
+                                                : status === "covered"
+                                                  ? "Already invoiced"
+                                                  : "Needs review";
                                         const reference =
                                           clean(job.display_booking_reference) ||
                                           clean(job.booking_reference) ||
                                           "Reference unavailable";
+                                        const exactBookingReference = cleanReferenceText(job.booking_reference);
+                                        const actionable =
+                                          Boolean(exactBookingReference) &&
+                                          adminMonthlyBillingDashboardJobIsActionable(job);
+                                        const bookingActionPending =
+                                          adminMonthlyBillingDashboardBookingActionState.billingMonth === monthlyBillingMonth &&
+                                          adminMonthlyBillingDashboardBookingActionState.pendingReference === exactBookingReference;
+                                        const reviewPending =
+                                          bookingActionPending &&
+                                          adminMonthlyBillingDashboardBookingActionState.pendingAction === "review";
+                                        const resolvePending =
+                                          bookingActionPending &&
+                                          adminMonthlyBillingDashboardBookingActionState.pendingAction === "resolve";
 
                                         return (
                                           <div
-                                            className="grid gap-1 rounded border border-sky-100 bg-white px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+                                            className="grid gap-1 rounded border border-sky-100 bg-white px-2 py-1.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                                             data-admin-monthly-billing-dashboard-classification-row={status}
                                             key={`${clean(job.booking_reference)}-${status}`}
                                           >
                                             <div className="min-w-0">
-                                              <p className="break-words font-semibold text-slate-900">
-                                                {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
-                                              </p>
+                                              {exactBookingReference ? (
+                                                <button
+                                                  aria-busy={reviewPending}
+                                                  aria-label={`Review booking ${reference} in Dispatch`}
+                                                  className="inline-flex min-h-11 max-w-full items-center rounded-md text-left font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 transition hover:text-sky-800 hover:decoration-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                                                  data-admin-monthly-billing-dashboard-review-booking="true"
+                                                  disabled={Boolean(adminMonthlyBillingDashboardBookingActionState.pendingAction)}
+                                                  onClick={() => void handleAdminMonthlyBillingDashboardBookingReview(
+                                                    job,
+                                                    monthlyBillingMonth,
+                                                  )}
+                                                  style={{ minHeight: "2.75rem" }}
+                                                  type="button"
+                                                >
+                                                  <span className="break-words">
+                                                    {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
+                                                  </span>
+                                                </button>
+                                              ) : (
+                                                <p className="break-words py-2 font-semibold text-slate-900">
+                                                  {reference} · {clean(job.customer_account) || "Customer/account to confirm"}
+                                                </p>
+                                              )}
                                               <p className="mt-0.5 break-words text-[11px] text-slate-600">
                                                 {clean(job.safe_reason) || "Billing review reason unavailable."}
                                               </p>
                                             </div>
-                                            <span
-                                              className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                                status === "ready"
-                                                  ? "bg-emerald-100 text-emerald-800"
-                                                  : status === "covered"
-                                                    ? "bg-slate-200 text-slate-800"
-                                                    : "bg-amber-100 text-amber-900"
-                                              }`}
-                                            >
-                                              {statusLabel}
-                                            </span>
+                                            <div className="flex min-h-11 flex-wrap items-center gap-1 sm:justify-end">
+                                              <span
+                                                className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                                  job.safe_payment_status === "paid"
+                                                    ? "bg-emerald-100 text-emerald-800"
+                                                    : job.safe_payment_status === "unpaid"
+                                                      ? "bg-rose-100 text-rose-800"
+                                                      : status === "ready"
+                                                        ? "bg-emerald-100 text-emerald-800"
+                                                        : status === "covered"
+                                                          ? "bg-slate-200 text-slate-800"
+                                                          : "bg-amber-100 text-amber-900"
+                                                }`}
+                                                data-admin-monthly-billing-dashboard-status-pill="true"
+                                              >
+                                                {statusLabel}
+                                              </span>
+                                              {actionable ? (
+                                                <button
+                                                  aria-busy={resolvePending}
+                                                  aria-label={`Recheck booking ${reference}`}
+                                                  className="inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-800 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                                                  data-admin-monthly-billing-dashboard-resolve-booking="true"
+                                                  disabled={Boolean(adminMonthlyBillingDashboardBookingActionState.pendingAction)}
+                                                  onClick={() => void handleAdminMonthlyBillingDashboardBookingResolve(
+                                                    job,
+                                                    monthlyBillingMonth,
+                                                  )}
+                                                  style={{ minHeight: "2.75rem" }}
+                                                  type="button"
+                                                >
+                                                  {resolvePending ? "Checking..." : "Resolve"}
+                                                </button>
+                                              ) : null}
+                                            </div>
                                           </div>
                                         );
                                       })}
@@ -51216,6 +51525,22 @@ export default function Home() {
                                       No completed jobs were classified for this billing month.
                                     </p>
                                   )}
+                                  {adminMonthlyBillingDashboardBookingActionState.billingMonth === monthlyBillingMonth &&
+                                  adminMonthlyBillingDashboardBookingActionState.message ? (
+                                    <p
+                                      className={`text-xs font-medium ${
+                                        adminMonthlyBillingDashboardBookingActionState.message.tone === "error"
+                                          ? "text-rose-700"
+                                          : adminMonthlyBillingDashboardBookingActionState.message.tone === "success"
+                                            ? "text-emerald-700"
+                                            : "text-slate-700"
+                                      }`}
+                                      data-admin-monthly-billing-dashboard-booking-feedback="true"
+                                      role={adminMonthlyBillingDashboardBookingActionState.message.tone === "error" ? "alert" : "status"}
+                                    >
+                                      {adminMonthlyBillingDashboardBookingActionState.message.text}
+                                    </p>
+                                  ) : null}
                                 </div>
                               ) : null}
 											</div>

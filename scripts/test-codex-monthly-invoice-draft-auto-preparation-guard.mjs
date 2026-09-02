@@ -326,10 +326,46 @@ for (const fragment of [
   "data-admin-monthly-billing-dashboard-classification-row={status}",
   'status === "covered"',
   '"Already invoiced"',
+  'safe_payment_status?: "paid" | "unpaid" | null',
+  'data-admin-monthly-billing-dashboard-review-booking="true"',
+  'data-admin-monthly-billing-dashboard-resolve-booking="true"',
+  '`Review booking ${reference} in Dispatch`',
+  'className="inline-flex min-h-11',
+  'handleAdminMonthlyBillingDashboardBookingReview',
+  'handleAdminMonthlyBillingDashboardBookingResolve',
+  'adminMonthlyBillingDashboardJobIsActionable',
   "loadAdminMonthlyBillingGroupsRead",
 ]) {
   assertIncludes(dashboard, fragment, `monthly classification Dashboard ${fragment}`);
 }
+
+for (const fragment of [
+  'safe_payment_status: candidate.safePaymentStatus',
+  'status === "Paid" ? "paid" : status === "Unpaid" ? "unpaid" : null',
+  'monthlyBillingIssuedRecordSelect',
+]) {
+  assertIncludes(grouping, fragment, `monthly classification payment evidence ${fragment}`);
+}
+
+const dashboardReviewNavigationSource = dashboard.slice(
+  dashboard.indexOf("async function handleAdminMonthlyBillingDashboardBookingReview"),
+  dashboard.indexOf("async function handleAdminAiTodaysWorkLoadMore"),
+);
+assertIncludes(
+  dashboardReviewNavigationSource,
+  "loadAdminAiReadOnlyBookingInDispatch",
+  "monthly classification review existing exact Dispatch loader",
+);
+assertIncludes(
+  dashboardReviewNavigationSource,
+  "loadAdminMonthlyBillingGroupsRead",
+  "monthly classification Resolve authoritative recheck",
+);
+assertExcludes(
+  dashboardReviewNavigationSource,
+  /method:\s*"(?:POST|PUT|PATCH|DELETE)"|\b(?:saveBooking|createInvoice|issueInvoice|markInvoice)\s*\(/,
+  "monthly classification review and Resolve write boundary",
+);
 
 const vercelConfigValue = JSON.parse(vercelConfig);
 assert.deepEqual(

@@ -18,9 +18,9 @@ import {
 const appUrl = process.env.APP_URL || "http://localhost:3000";
 const chromeBinary = process.env.CHROME_BINARY || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const chromeDebugPort = Number(process.env.CHROME_DEBUG_PORT || 9248);
-const reporter = createBrowserTestReporter("admin-monthly-billing-dashboard-review-recheck-browser");
-const blockedReference = "MONTHLY-RECHECK-BLOCKED";
-const unpaidReference = "MONTHLY-RECHECK-UNPAID";
+const reporter = createBrowserTestReporter("admin-monthly-billing-dashboard-action-queue-browser");
+const blockedReference = "MONTHLY-ACTION-BLOCKED";
+const unpaidReference = "MONTHLY-ACTION-UNPAID";
 
 function responseHeaders() {
   return [
@@ -49,19 +49,17 @@ function classificationJob({ bookingReference, displayReference, paymentStatus =
   };
 }
 
-function monthlyBillingGroupsResponse(readNumber) {
-  const blockedStatus = readNumber >= 2 ? "ready" : "blocked";
-  const unpaidPaymentStatus = readNumber >= 4 ? "paid" : "unpaid";
+function monthlyBillingGroupsResponse() {
   const jobs = [
     classificationJob({
       bookingReference: blockedReference,
       displayReference: "11901",
-      status: blockedStatus,
+      status: "blocked",
     }),
     classificationJob({
       bookingReference: unpaidReference,
       displayReference: "11902",
-      paymentStatus: unpaidPaymentStatus,
+      paymentStatus: "unpaid",
       status: "covered",
     }),
     classificationJob({
@@ -90,7 +88,7 @@ function monthlyBillingGroupsResponse(readNumber) {
   return {
     groups: [{
       billing_month: "2026-08",
-      blocked_count: blockedStatus === "blocked" ? 2 : 1,
+      blocked_count: 2,
       booker_id: 11,
       classified_count: jobs.length,
       company_id: 7,
@@ -98,7 +96,7 @@ function monthlyBillingGroupsResponse(readNumber) {
       customer_account: "Tiger Global (June)",
       customer_id: "197",
       jobs,
-      ready_count: blockedStatus === "ready" ? 2 : 1,
+      ready_count: 1,
       safe_readiness_status: "mixed",
       total_count: jobs.length,
     }],
@@ -111,11 +109,11 @@ function monthlyBillingGroupsResponse(readNumber) {
       total_group_count: 1,
     },
     summary: {
-      blocked_count: blockedStatus === "blocked" ? 2 : 1,
+      blocked_count: 2,
       classified_count: jobs.length,
       covered_count: 3,
       group_count: 1,
-      ready_count: blockedStatus === "ready" ? 2 : 1,
+      ready_count: 1,
       total_count: jobs.length,
     },
   };
@@ -171,7 +169,7 @@ function exactBookingResponse(reference) {
 }
 
 async function main() {
-  const chromeProfileDir = await mkdtemp(path.join(os.tmpdir(), "prestige-monthly-review-recheck-chrome-"));
+  const chromeProfileDir = await mkdtemp(path.join(os.tmpdir(), "prestige-monthly-action-queue-chrome-"));
   const chromeArgs = [
     "--disable-background-networking",
     "--disable-component-update",
@@ -195,8 +193,6 @@ async function main() {
   const chromeProcess = spawn(chromeBinary, chromeArgs, { stdio: "ignore" });
   let client = null;
   let groupingReadCount = 0;
-  let resolveReadCount = 0;
-  let resolveRecheckStarted = false;
   const exactBookingReads = [];
   const mutationRequests = [];
   const protectedLaneRequests = [];
@@ -255,8 +251,7 @@ async function main() {
       }
       if (requestUrl.pathname === "/api/admin-monthly-billing-groups") {
         groupingReadCount += 1;
-        if (resolveRecheckStarted) resolveReadCount += 1;
-        void fulfill(200, monthlyBillingGroupsResponse(resolveReadCount));
+        void fulfill(200, monthlyBillingGroupsResponse());
         return;
       }
 
@@ -286,42 +281,38 @@ async function main() {
       '[data-admin-monthly-billing-dashboard-classification-rows="true"]',
       "Monthly Billing Draft classification rows",
     );
-    const rowExists = (reference) => evaluate(`[...document.querySelectorAll('[data-admin-monthly-billing-dashboard-classification-row]')].some((row) => row.textContent?.includes(${JSON.stringify(reference)}))`);
-    const feedbackIncludes = (text) => waitForCondition(
-      async () => (await evaluate(`document.querySelector('[data-admin-monthly-billing-dashboard-booking-feedback="true"]')?.textContent?.includes(${JSON.stringify(text)})`)) === true,
-      5000,
-      `feedback ${text}`,
-    );
-
     await navigateWithLoadEvent(client, appUrl);
     await waitForRows();
-    reporter.step("checking compact Review titles, plain status pills, and actionable Resolve controls");
+    reporter.step("checking the compact action queue keeps Review and omits non-actionable rows and Resolve");
     const desktopState = await evaluate(`(() => {
       const panel = document.querySelector('[data-admin-monthly-billing-dashboard-classifications="true"]');
       const review = document.querySelector('button[aria-label="Review booking 11901 in Dispatch"]');
-      const resolve = document.querySelector('button[aria-label="Recheck booking 11901"]');
       const pills = [...document.querySelectorAll('[data-admin-monthly-billing-dashboard-status-pill="true"]')];
-      return panel instanceof HTMLElement && review instanceof HTMLButtonElement && resolve instanceof HTMLButtonElement ? {
+      return panel instanceof HTMLElement ? {
+        heading: panel.querySelector('p')?.textContent?.trim(),
+        panelText: panel.textContent?.trim(),
+        reviewPresent: review instanceof HTMLButtonElement,
         labels: pills.map((pill) => pill.textContent?.trim()),
         missingReferenceReviewAbsent: !document.querySelector('button[aria-label="Review booking 11906 in Dispatch"]'),
-        missingReferenceResolveAbsent: !document.querySelector('button[aria-label="Recheck booking 11906"]'),
         noHorizontalOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2,
+        nonActionableReferencesAbsent: !["11903", "11904", "11905"].some((reference) => panel.textContent?.includes(reference)),
         plainPills: pills.every((pill) => !(pill instanceof HTMLButtonElement) && !(pill instanceof HTMLAnchorElement)),
-        resolveCount: panel.querySelectorAll('[data-admin-monthly-billing-dashboard-resolve-booking="true"]').length,
-        resolveHeight: resolve.getBoundingClientRect().height,
+        resolveAbsent: !panel.querySelector('[data-admin-monthly-billing-dashboard-resolve-booking="true"]') && !panel.textContent?.includes("Resolve"),
         reviewCount: panel.querySelectorAll('[data-admin-monthly-billing-dashboard-review-booking="true"]').length,
-        reviewHeight: review.getBoundingClientRect().height,
+        reviewHeight: review instanceof HTMLButtonElement ? review.getBoundingClientRect().height : null,
       } : null;
     })()`);
     assert.deepEqual(desktopState, {
-      labels: ["Needs review", "Unpaid", "Paid", "Ready", "Already invoiced", "Needs review"],
+      heading: "3 jobs need Monthly Billing action for August 2026",
+      panelText: "3 jobs need Monthly Billing action for August 202611901 · Tiger Global (June)Completed booking closeout needs Admin review.Needs review11902 · Tiger Global (June)An issued customer bill already covers this booking.Unpaid11906 · Tiger Global (June)Completed booking closeout needs Admin review.Needs review",
+      reviewPresent: true,
+      labels: ["Needs review", "Unpaid", "Needs review"],
       missingReferenceReviewAbsent: true,
-      missingReferenceResolveAbsent: true,
       noHorizontalOverflow: true,
+      nonActionableReferencesAbsent: true,
       plainPills: true,
-      resolveCount: 2,
-      resolveHeight: 44,
-      reviewCount: 5,
+      resolveAbsent: true,
+      reviewCount: 2,
       reviewHeight: 44,
     });
 
@@ -335,28 +326,7 @@ async function main() {
     assert.deepEqual(exactBookingReads, [{ method: "GET", reference: blockedReference }]);
     await evaluate(`document.querySelector('[data-app-tab="dashboard"]')?.click()`);
     await waitForRows();
-    await waitForCondition(
-      async () => (await evaluate(`document.querySelector('button[aria-label="Recheck booking 11901"]')?.disabled`)) === false,
-      5000,
-      "blocked Resolve enabled after Review handoff",
-    );
-
-    reporter.step("checking blocked recheck retains, then removes only after fresh ready evidence");
-    resolveRecheckStarted = true;
-    assert.equal(await click('button[aria-label="Recheck booking 11901"]'), true);
-    await feedbackIncludes("still needs review");
-    assert.equal(await rowExists("11901"), true);
-    assert.equal(await click('button[aria-label="Recheck booking 11901"]'), true);
-    await feedbackIncludes("no longer actionable");
-    assert.equal(await rowExists("11901"), false);
-
-    reporter.step("checking unpaid recheck retains, then removes only after fresh paid evidence");
-    assert.equal(await click('button[aria-label="Recheck booking 11902"]'), true);
-    await feedbackIncludes("remains Unpaid");
-    assert.equal(await rowExists("11902"), true);
-    assert.equal(await click('button[aria-label="Recheck booking 11902"]'), true);
-    await feedbackIncludes("no longer actionable");
-    assert.equal(await rowExists("11902"), false);
+    assert.equal(await evaluate(`document.querySelector('[data-admin-monthly-billing-dashboard-resolve-booking="true"]')`), null);
 
     await client.send("Emulation.setDeviceMetricsOverride", {
       deviceScaleFactor: 1,
@@ -366,7 +336,7 @@ async function main() {
     });
     reporter.step("checking 390px light-mode layout remains compact and accessible");
     const mobileState = await evaluate(`(() => {
-      const review = document.querySelector('button[aria-label="Review booking 11903 in Dispatch"]');
+      const review = document.querySelector('button[aria-label="Review booking 11902 in Dispatch"]');
       return review instanceof HTMLButtonElement ? {
         bodyBackground: getComputedStyle(document.body).backgroundColor,
         noHorizontalOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 2,
@@ -382,8 +352,7 @@ async function main() {
     const actionableConsoleErrors = consoleErrors.filter((message) =>
       !/Failed to load resource: the server responded with a status of (?:403|503) \((?:Forbidden|Service Unavailable)\)/.test(message),
     );
-    assert.ok(groupingReadCount >= 5);
-    assert.equal(resolveReadCount, 4);
+    assert.ok(groupingReadCount >= 2);
     assert.deepEqual(mutationRequests, []);
     assert.deepEqual(protectedLaneRequests, []);
     assert.deepEqual(actionableConsoleErrors, []);
@@ -391,7 +360,6 @@ async function main() {
     console.log(JSON.stringify(reporter.summary({
       exactBookingReadCount: exactBookingReads.length,
       groupingReadCount,
-      resolveReadCount,
       mobileWidth: 390,
       ok: true,
       protectedLaneRequestCount: protectedLaneRequests.length,

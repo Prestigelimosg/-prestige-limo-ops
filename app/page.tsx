@@ -19750,10 +19750,29 @@ export default function Home() {
       !adminAppNotificationIsNewBookingRequest(notification) &&
       !adminAppNotificationChangeRequestContext(notification),
   );
-  const dashboardMonthlyBillingMonth = otherAdminAppNotifications
-    .slice(0, 5)
-    .map(adminAppNotificationMonthlyBillingMonth)
-    .find(Boolean) || "";
+  const visibleOtherAdminAppNotifications = otherAdminAppNotifications.slice(0, 5);
+  const dashboardMonthlyBillingNotificationIndex = visibleOtherAdminAppNotifications.findIndex((notification) =>
+    Boolean(adminAppNotificationMonthlyBillingMonth(notification)),
+  );
+  const dashboardMonthlyBillingNotification =
+    dashboardMonthlyBillingNotificationIndex >= 0
+      ? visibleOtherAdminAppNotifications[dashboardMonthlyBillingNotificationIndex]
+      : null;
+  const visibleNonMonthlyAdminAppNotifications = visibleOtherAdminAppNotifications.filter(
+    (_notification, index) => index !== dashboardMonthlyBillingNotificationIndex,
+  );
+  const dashboardMonthlyBillingMonth = dashboardMonthlyBillingNotification
+    ? adminAppNotificationMonthlyBillingMonth(dashboardMonthlyBillingNotification)
+    : "";
+  const dashboardMonthlyBillingNotificationId = clean(dashboardMonthlyBillingNotification?.id);
+  const dashboardMonthlyBillingNotificationAction =
+    dashboardMonthlyBillingNotificationId &&
+    adminAppNotificationAction?.notificationId === dashboardMonthlyBillingNotificationId
+      ? adminAppNotificationAction.status
+      : null;
+  const dashboardMonthlyBillingNotificationHighlighted =
+    adminAlertLocatorHighlight?.target === "admin-app-notification" &&
+    adminAlertLocatorHighlight.notificationId === dashboardMonthlyBillingNotificationId;
   const dashboardMonthlyBillingClassifications =
     dashboardMonthlyBillingMonth &&
     adminMonthlyBillingDashboardClassificationState.billingMonth === dashboardMonthlyBillingMonth
@@ -51112,12 +51131,12 @@ export default function Home() {
 
             {codexPreparedJobCardsPanel}
 
-            {otherAdminAppNotifications.length > 0 ? (
+            {visibleNonMonthlyAdminAppNotifications.length > 0 ? (
               <div
                 className="mt-2 grid gap-2"
                 data-admin-app-notification-feed-rows="true"
               >
-                {otherAdminAppNotifications.slice(0, 5).map((notification, index) => {
+                {visibleNonMonthlyAdminAppNotifications.map((notification, index) => {
                   const notificationId = clean(notification.id);
                   const title = clean(notification.safe_title) || "Admin app notification";
 	                  const notificationType = adminAppNotificationDisplayLabel(notification.notification_type);
@@ -51390,11 +51409,67 @@ export default function Home() {
               </div>
             ) : null}
 
-            {dashboardMonthlyBillingMonth ? (
+            {dashboardMonthlyBillingMonth && dashboardMonthlyBillingNotification ? (
+              <section
+                className="space-y-2"
+                data-admin-monthly-billing-dashboard-position="page-bottom"
+                data-admin-monthly-billing-dashboard-sector="true"
+              >
+                <div
+                  className={`rounded-md border bg-white p-2 text-xs sm:text-sm ${
+                    dashboardMonthlyBillingNotificationHighlighted
+                      ? "border-amber-300 shadow-[0_0_0_3px_rgba(245,158,11,0.35)]"
+                      : "border-sky-100"
+                  }`}
+                  data-admin-alert-locator-highlight={dashboardMonthlyBillingNotificationHighlighted ? "true" : undefined}
+                  data-admin-app-notification-feed-row="true"
+                  data-admin-app-notification-feed-row-id={dashboardMonthlyBillingNotificationId || undefined}
+                  data-admin-monthly-billing-dashboard-notification="true"
+                >
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h4
+                        className="break-words font-semibold text-slate-950"
+                        data-admin-app-notification-feed-title="true"
+                      >
+                        {clean(dashboardMonthlyBillingNotification.safe_title) || "Admin app notification"}
+                      </h4>
+                      <p
+                        className="mt-1 break-words text-xs text-slate-700 sm:text-sm"
+                        data-admin-app-notification-feed-message="true"
+                      >
+                        {clean(dashboardMonthlyBillingNotification.safe_message) || "No safe notification message recorded."}
+                      </p>
+                    </div>
+                    <span className="w-fit rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">
+                      {adminAppNotificationPriorityLabel(dashboardMonthlyBillingNotification.priority)}
+                    </span>
+                  </div>
+                  <p className="mt-2 hidden break-words text-xs text-slate-600">
+                    {adminAppNotificationDisplayLabel(dashboardMonthlyBillingNotification.notification_type)} /{" "}
+                    {adminAppNotificationDisplayLabel(dashboardMonthlyBillingNotification.notification_status)} /{" "}
+                    {adminAppNotificationTimeLabel(dashboardMonthlyBillingNotification.created_at)}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      className="h-7 rounded-md border border-slate-300 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                      data-admin-app-notification-action="read"
+                      disabled={
+                        !dashboardMonthlyBillingNotificationId ||
+                        Boolean(dashboardMonthlyBillingNotificationAction)
+                      }
+                      onClick={() =>
+                        handleAdminAppNotificationStatusUpdate(dashboardMonthlyBillingNotificationId, "read")
+                      }
+                      type="button"
+                    >
+                      {dashboardMonthlyBillingNotificationAction === "read" ? "Saving..." : "Done"}
+                    </button>
+                  </div>
+                </div>
                     <div
                       className="space-y-1 rounded-md border border-sky-100 bg-sky-50/60 p-2"
                       data-admin-monthly-billing-dashboard-classifications="true"
-                      data-admin-monthly-billing-dashboard-position="page-bottom"
                       data-admin-monthly-billing-dashboard-month={dashboardMonthlyBillingMonth}
                     >
                       <p className="text-xs font-semibold text-slate-800">
@@ -51510,6 +51585,7 @@ export default function Home() {
                         </p>
                       ) : null}
                     </div>
+              </section>
                   ) : null}
           </div>
         </section>

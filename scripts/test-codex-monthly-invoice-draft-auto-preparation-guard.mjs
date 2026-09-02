@@ -328,15 +328,24 @@ for (const fragment of [
   '"Already invoiced"',
   'safe_payment_status?: "paid" | "unpaid" | null',
   'data-admin-monthly-billing-dashboard-review-booking="true"',
-  'data-admin-monthly-billing-dashboard-resolve-booking="true"',
   '`Review booking ${reference} in Dispatch`',
   'className="inline-flex min-h-11',
   'handleAdminMonthlyBillingDashboardBookingReview',
-  'handleAdminMonthlyBillingDashboardBookingResolve',
   'adminMonthlyBillingDashboardJobIsActionable',
+  ".filter(adminMonthlyBillingDashboardJobIsActionable)",
+  "need Monthly Billing action for",
   "loadAdminMonthlyBillingGroupsRead",
 ]) {
   assertIncludes(dashboard, fragment, `monthly classification Dashboard ${fragment}`);
+}
+
+for (const retired of [
+  'data-admin-monthly-billing-dashboard-resolve-booking="true"',
+  "handleAdminMonthlyBillingDashboardBookingResolve",
+  "adminMonthlyBillingDashboardRowKey",
+  "resolvedRowKeys",
+]) {
+  assertExcludes(dashboard, retired, `retired Monthly Billing Resolve path ${retired}`);
 }
 
 for (const fragment of [
@@ -356,15 +365,10 @@ assertIncludes(
   "loadAdminAiReadOnlyBookingInDispatch",
   "monthly classification review existing exact Dispatch loader",
 );
-assertIncludes(
-  dashboardReviewNavigationSource,
-  "loadAdminMonthlyBillingGroupsRead",
-  "monthly classification Resolve authoritative recheck",
-);
 assertExcludes(
   dashboardReviewNavigationSource,
   /method:\s*"(?:POST|PUT|PATCH|DELETE)"|\b(?:saveBooking|createInvoice|issueInvoice|markInvoice)\s*\(/,
-  "monthly classification review and Resolve write boundary",
+  "monthly classification Review write boundary",
 );
 
 const vercelConfigValue = JSON.parse(vercelConfig);

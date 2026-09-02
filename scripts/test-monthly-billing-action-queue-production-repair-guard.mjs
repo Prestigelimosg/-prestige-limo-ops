@@ -20,6 +20,8 @@ for (const fragment of [
   ".filter(adminMonthlyBillingDashboardJobIsActionable)",
   "need Monthly Billing action for",
   "No completed jobs need Monthly Billing action for this month.",
+  'data-admin-monthly-billing-dashboard-sector="true"',
+  'data-admin-monthly-billing-dashboard-notification="true"',
   'data-admin-monthly-billing-dashboard-position="page-bottom"',
   "data-admin-monthly-billing-dashboard-review-booking",
 ]) {
@@ -30,6 +32,11 @@ assert.equal(
   app.match(/data-admin-monthly-billing-dashboard-classifications="true"/g)?.length,
   1,
   "Monthly Billing action sector must render exactly once.",
+);
+assert.equal(
+  app.match(/data-admin-monthly-billing-dashboard-notification="true"/g)?.length,
+  1,
+  "Monthly Billing notification card must render exactly once.",
 );
 const activeJobsRenderIndex = app.lastIndexOf("{activeJobsMonitorPanel}");
 const monthlyBillingBottomPositionIndex = app.indexOf(
@@ -54,7 +61,13 @@ for (const forbidden of [
 for (const fragment of [
   "nonActionableReferencesAbsent: true",
   "isBottomSector: true",
+  "monthlyNotificationAtBottom: true",
+  "monthlyNotificationBeforeActiveAbsent: true",
+  "monthlyNotificationCount: 1",
+  'monthlyNotificationDoneLabel: "Done"',
+  'monthlyNotificationTitle: "Monthly Billing Draft"',
   "monthlySectorCount: 1",
+  "notificationFeedMonthlyRowAbsent: true",
   "outsideNotificationRow: true",
   "resolveAbsent: true",
   'labels: ["Needs review", "Unpaid", "Needs review"]',

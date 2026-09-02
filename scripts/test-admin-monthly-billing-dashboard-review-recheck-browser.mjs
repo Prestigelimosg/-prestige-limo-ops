@@ -286,15 +286,25 @@ async function main() {
     reporter.step("checking the compact action queue keeps Review and omits non-actionable rows and Resolve");
     const desktopState = await evaluate(`(() => {
       const panel = document.querySelector('[data-admin-monthly-billing-dashboard-classifications="true"]');
+      const sector = document.querySelector('[data-admin-monthly-billing-dashboard-sector="true"]');
+      const monthlyNotification = document.querySelector('[data-admin-monthly-billing-dashboard-notification="true"]');
       const activeJobs = document.querySelector('[data-admin-multi-driver-active-jobs-monitor="true"]');
       const review = document.querySelector('button[aria-label="Review booking 11901 in Dispatch"]');
       const pills = [...document.querySelectorAll('[data-admin-monthly-billing-dashboard-status-pill="true"]')];
       return panel instanceof HTMLElement ? {
-        afterActiveJobs: activeJobs instanceof HTMLElement &&
-          Boolean(activeJobs.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING),
+        afterActiveJobs: activeJobs instanceof HTMLElement && sector instanceof HTMLElement &&
+          Boolean(activeJobs.compareDocumentPosition(sector) & Node.DOCUMENT_POSITION_FOLLOWING),
         heading: panel.querySelector('p')?.textContent?.trim(),
-        isBottomSector: panel.parentElement?.lastElementChild === panel,
+        isBottomSector: sector instanceof HTMLElement && sector.parentElement?.lastElementChild === sector,
+        monthlyNotificationAtBottom: sector instanceof HTMLElement && monthlyNotification instanceof HTMLElement &&
+          sector.contains(monthlyNotification),
+        monthlyNotificationBeforeActiveAbsent: activeJobs instanceof HTMLElement && monthlyNotification instanceof HTMLElement &&
+          Boolean(activeJobs.compareDocumentPosition(monthlyNotification) & Node.DOCUMENT_POSITION_FOLLOWING),
+        monthlyNotificationCount: document.querySelectorAll('[data-admin-monthly-billing-dashboard-notification="true"]').length,
+        monthlyNotificationDoneLabel: monthlyNotification?.querySelector('[data-admin-app-notification-action="read"]')?.textContent?.trim(),
+        monthlyNotificationTitle: monthlyNotification?.querySelector('[data-admin-app-notification-feed-title="true"]')?.textContent?.trim(),
         monthlySectorCount: document.querySelectorAll('[data-admin-monthly-billing-dashboard-classifications="true"]').length,
+        notificationFeedMonthlyRowAbsent: !document.querySelector('[data-admin-app-notification-feed-rows="true"] [data-admin-monthly-billing-dashboard-notification="true"]'),
         outsideNotificationRow: !panel.closest('[data-admin-app-notification-feed-row="true"]'),
         panelText: panel.textContent?.trim(),
         reviewPresent: review instanceof HTMLButtonElement,
@@ -312,7 +322,13 @@ async function main() {
       afterActiveJobs: true,
       heading: "3 jobs need Monthly Billing action for August 2026",
       isBottomSector: true,
+      monthlyNotificationAtBottom: true,
+      monthlyNotificationBeforeActiveAbsent: true,
+      monthlyNotificationCount: 1,
+      monthlyNotificationDoneLabel: "Done",
+      monthlyNotificationTitle: "Monthly Billing Draft",
       monthlySectorCount: 1,
+      notificationFeedMonthlyRowAbsent: true,
       outsideNotificationRow: true,
       panelText: "3 jobs need Monthly Billing action for August 202611901 · Tiger Global (June)Completed booking closeout needs Admin review.Needs review11902 · Tiger Global (June)An issued customer bill already covers this booking.Unpaid11906 · Tiger Global (June)Completed booking closeout needs Admin review.Needs review",
       reviewPresent: true,

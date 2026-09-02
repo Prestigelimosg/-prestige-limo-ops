@@ -20,10 +20,26 @@ for (const fragment of [
   ".filter(adminMonthlyBillingDashboardJobIsActionable)",
   "need Monthly Billing action for",
   "No completed jobs need Monthly Billing action for this month.",
+  'data-admin-monthly-billing-dashboard-position="page-bottom"',
   "data-admin-monthly-billing-dashboard-review-booking",
 ]) {
   assert.ok(app.includes(fragment), `Missing action-queue contract: ${fragment}`);
 }
+
+assert.equal(
+  app.match(/data-admin-monthly-billing-dashboard-classifications="true"/g)?.length,
+  1,
+  "Monthly Billing action sector must render exactly once.",
+);
+const activeJobsRenderIndex = app.lastIndexOf("{activeJobsMonitorPanel}");
+const monthlyBillingBottomPositionIndex = app.indexOf(
+  'data-admin-monthly-billing-dashboard-position="page-bottom"',
+);
+assert.ok(activeJobsRenderIndex >= 0, "Missing established Dashboard Active Jobs render.");
+assert.ok(
+  monthlyBillingBottomPositionIndex > activeJobsRenderIndex,
+  "Monthly Billing action sector must render after the established Dashboard Active Jobs lane.",
+);
 
 for (const forbidden of [
   "handleAdminMonthlyBillingDashboardBookingResolve",
@@ -37,6 +53,9 @@ for (const forbidden of [
 
 for (const fragment of [
   "nonActionableReferencesAbsent: true",
+  "isBottomSector: true",
+  "monthlySectorCount: 1",
+  "outsideNotificationRow: true",
   "resolveAbsent: true",
   'labels: ["Needs review", "Unpaid", "Needs review"]',
   "unexpectedMutationCount: mutationRequests.length",

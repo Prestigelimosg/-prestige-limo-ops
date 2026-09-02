@@ -286,10 +286,16 @@ async function main() {
     reporter.step("checking the compact action queue keeps Review and omits non-actionable rows and Resolve");
     const desktopState = await evaluate(`(() => {
       const panel = document.querySelector('[data-admin-monthly-billing-dashboard-classifications="true"]');
+      const activeJobs = document.querySelector('[data-admin-multi-driver-active-jobs-monitor="true"]');
       const review = document.querySelector('button[aria-label="Review booking 11901 in Dispatch"]');
       const pills = [...document.querySelectorAll('[data-admin-monthly-billing-dashboard-status-pill="true"]')];
       return panel instanceof HTMLElement ? {
+        afterActiveJobs: activeJobs instanceof HTMLElement &&
+          Boolean(activeJobs.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING),
         heading: panel.querySelector('p')?.textContent?.trim(),
+        isBottomSector: panel.parentElement?.lastElementChild === panel,
+        monthlySectorCount: document.querySelectorAll('[data-admin-monthly-billing-dashboard-classifications="true"]').length,
+        outsideNotificationRow: !panel.closest('[data-admin-app-notification-feed-row="true"]'),
         panelText: panel.textContent?.trim(),
         reviewPresent: review instanceof HTMLButtonElement,
         labels: pills.map((pill) => pill.textContent?.trim()),
@@ -303,7 +309,11 @@ async function main() {
       } : null;
     })()`);
     assert.deepEqual(desktopState, {
+      afterActiveJobs: true,
       heading: "3 jobs need Monthly Billing action for August 2026",
+      isBottomSector: true,
+      monthlySectorCount: 1,
+      outsideNotificationRow: true,
       panelText: "3 jobs need Monthly Billing action for August 202611901 · Tiger Global (June)Completed booking closeout needs Admin review.Needs review11902 · Tiger Global (June)An issued customer bill already covers this booking.Unpaid11906 · Tiger Global (June)Completed booking closeout needs Admin review.Needs review",
       reviewPresent: true,
       labels: ["Needs review", "Unpaid", "Needs review"],

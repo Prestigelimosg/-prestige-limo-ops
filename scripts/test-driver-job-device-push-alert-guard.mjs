@@ -41,6 +41,14 @@ function assertExcludes(source, fragments, label) {
   }
 }
 
+function blockBetween(source, startFragment, endFragment) {
+  const start = source.indexOf(startFragment);
+  assert.notEqual(start, -1, `Missing block start: ${startFragment}`);
+  const end = source.indexOf(endFragment, start + startFragment.length);
+  assert.notEqual(end, -1, `Missing block end: ${endFragment}`);
+  return source.slice(start, end);
+}
+
 function transpileTypescript(source, filename) {
   return ts.transpileModule(source.replace('import "server-only";', ""), {
     compilerOptions: {
@@ -404,10 +412,30 @@ assertIncludes(
   ],
   "existing Driver Portal jobs route alert registration",
 );
+const portalAlertSetupSource = blockBetween(
+  portalPageSource,
+  '<div className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm" data-driver-portal-alert-setup={alertState}>',
+  "{availableJobsEnabled ? (",
+);
 assertExcludes(
-  portalPageSource + portalRouteSource,
+  portalAlertSetupSource + portalRouteSource,
   ["invoice", "billing", "payment", "payout", "paynow", "customer_price"],
   "Driver Portal alert isolation",
+);
+const driverPoolAvailableJobsSource = blockBetween(
+  portalPageSource,
+  "{availableJobsEnabled ? (",
+  '<div className="flex items-center justify-between gap-3 px-1">',
+);
+assertIncludes(
+  driverPoolAvailableJobsSource,
+  ["offer_payout_sgd", "Fixed driver payout"],
+  "authenticated Driver Pool exact fixed offer",
+);
+assertExcludes(
+  driverPoolAvailableJobsSource,
+  ["invoice", "billing", "payment", "paynow", "customer_price", "payout_comparison"],
+  "authenticated Driver Pool privacy isolation",
 );
 assertIncludes(
   adminLinkRouteSource + adminLinkPersistenceSource,

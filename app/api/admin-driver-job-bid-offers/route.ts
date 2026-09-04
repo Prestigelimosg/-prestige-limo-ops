@@ -1,183 +1,80 @@
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { adminBookingPersistencePurpose, resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
 import {
-  adminBookingPersistencePurpose,
-  type AdminDispatcherBoundaryContext,
-  resolveAdminDispatcherBoundary,
-} from "../../../lib/admin-dispatcher-auth-boundary";
-import {
-  loadAdminDriverJobBidOffers,
-  parseAdminDriverJobBidOfferSavePayload,
-  parseAdminDriverJobBidOfferStatusUpdatePayload,
-  saveAdminDriverJobBidOffer,
-  updateAdminDriverJobBidOfferStatus,
-} from "../../../lib/driver-portal-bidding-persistence";
+  cancelDriverPoolOffer,
+  getDriverPoolClientForProduction,
+  loadAdminDriverPoolOffer,
+  parseDriverPoolCancelPayload,
+  parseDriverPoolPublishPayload,
+  publishDriverPoolOffer,
+} from "../../../lib/driver-pool-fast-accept";
 
 export const dynamic = "force-dynamic";
 
-async function readJsonBody(request: Request) {
-  try {
-    return await request.json();
-  } catch {
-    return {};
-  }
+function response(body: Record<string, unknown>, status: number) {
+  return Response.json(body, { headers: { "Cache-Control": "no-store" }, status });
 }
 
-function blockedResponse(error: string) {
-  return Response.json(
-    {
-      error,
-      ok: false,
-    },
-    { status: 403 },
-  );
+function boundary(request: Request) {
+  return resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
 }
 
-type AdminDispatcherBoundaryCheck =
-  | {
-      context: AdminDispatcherBoundaryContext;
-      ok: true;
-    }
-  | {
-      ok: false;
-      response: Response;
-    };
-
-function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
-  const boundary = resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose);
-
-  return boundary.ok
-    ? {
-        context: boundary.context,
-        ok: true,
-      }
-    : {
-        ok: false,
-        response: blockedResponse(boundary.error),
-      };
-}
-
-function safeFailureResponse() {
-  return Response.json(
-    {
-      error: "Admin driver bid offer request failed safely.",
-      ok: false,
-    },
-    { status: 500 },
-  );
+async function body(request: Request) {
+  return request.json().catch(() => ({}));
 }
 
 export async function GET(request: Request) {
   try {
-    const boundary = requireAdminDispatcherBoundary(request);
-
-    if (!boundary.ok) {
-      return boundary.response;
+    const access = boundary(request);
+    if (!access.ok) return response({ error: access.error, ok: false }, 403);
+    const params = new URL(request.url).searchParams;
+    if ([...params.keys()].some((key) => key !== "booking_reference")) {
+      return response({ error: "Malformed Driver Pool request.", ok: false }, 400);
     }
-
-    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await loadAdminDriverJobBidOffers(new URL(request.url).searchParams, actor);
-
-    if (!result.ok) {
-      return Response.json(
-        {
-          error: result.error,
-          ok: false,
-        },
-        { status: result.status },
-      );
-    }
-
-    return Response.json({
-      bid_offers: result.data.bid_offers,
-      ok: true,
-      pagination: result.data.pagination,
-      version: result.data.version,
-    });
+    const reference = params.get("booking_reference") || "";
+    const database = getDriverPoolClientForProduction();
+    if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
+    const result = await loadAdminDriverPoolOffer(database.client, reference);
+    return result.ok
+      ? response({ ...result.data, ok: true }, 200)
+      : response({ error: result.error, ok: false }, result.status);
   } catch {
-    return safeFailureResponse();
+    return response({ error: "Driver Pool request failed safely.", ok: false }, 500);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const boundary = requireAdminDispatcherBoundary(request);
-
-    if (!boundary.ok) {
-      return boundary.response;
-    }
-
-    const parsed = parseAdminDriverJobBidOfferSavePayload(await readJsonBody(request));
-
-    if (!parsed.ok) {
-      return Response.json(
-        {
-          error: parsed.error,
-          ok: false,
-        },
-        { status: parsed.status },
-      );
-    }
-
-    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await saveAdminDriverJobBidOffer(parsed.data, actor);
-
-    if (!result.ok) {
-      return Response.json(
-        {
-          error: result.error,
-          ok: false,
-        },
-        { status: result.status },
-      );
-    }
-
-    return Response.json({
-      bid_offer: result.data,
-      ok: true,
-    });
+    const access = boundary(request);
+    if (!access.ok) return response({ error: access.error, ok: false }, 403);
+    const parsed = parseDriverPoolPublishPayload(await body(request));
+    if (!parsed.ok) return response({ error: parsed.error, ok: false }, parsed.status);
+    const database = getDriverPoolClientForProduction();
+    if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(access.context);
+    const result = await publishDriverPoolOffer(database.client, parsed.data, actor);
+    return result.ok
+      ? response({ offer: result.data, ok: true }, 200)
+      : response({ error: result.error, ok: false }, result.status);
   } catch {
-    return safeFailureResponse();
+    return response({ error: "Driver Pool request failed safely.", ok: false }, 500);
   }
 }
 
 export async function PATCH(request: Request) {
   try {
-    const boundary = requireAdminDispatcherBoundary(request);
-
-    if (!boundary.ok) {
-      return boundary.response;
-    }
-
-    const parsed = parseAdminDriverJobBidOfferStatusUpdatePayload(await readJsonBody(request));
-
-    if (!parsed.ok) {
-      return Response.json(
-        {
-          error: parsed.error,
-          ok: false,
-        },
-        { status: parsed.status },
-      );
-    }
-
-    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await updateAdminDriverJobBidOfferStatus(parsed.data, actor);
-
-    if (!result.ok) {
-      return Response.json(
-        {
-          error: result.error,
-          ok: false,
-        },
-        { status: result.status },
-      );
-    }
-
-    return Response.json({
-      bid_offer: result.data,
-      ok: true,
-    });
+    const access = boundary(request);
+    if (!access.ok) return response({ error: access.error, ok: false }, 403);
+    const parsed = parseDriverPoolCancelPayload(await body(request));
+    if (!parsed.ok) return response({ error: parsed.error, ok: false }, parsed.status);
+    const database = getDriverPoolClientForProduction();
+    if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
+    const actor = adminDispatcherBoundaryToPersistenceAdapterActor(access.context);
+    const result = await cancelDriverPoolOffer(database.client, parsed.data, actor);
+    return result.ok
+      ? response({ offer: result.data, ok: true }, 200)
+      : response({ error: result.error, ok: false }, result.status);
   } catch {
-    return safeFailureResponse();
+    return response({ error: "Driver Pool request failed safely.", ok: false }, 500);
   }
 }

@@ -220,7 +220,7 @@ for (const phrase of [
   "Customer booking request, booking memory, and portal saved-bookings client adapters must use `credentials: \"same-origin\"`, `cache: \"no-store\"`, and purpose headers while never manually attaching Cookie, Authorization, or customer session-token headers.",
   "Customer saved-bookings and booking-memory reads may accept a server-validated same-origin session cookie; ambiguous, wrong, unsafe, placeholder, or duplicate cookie values fail closed.",
   "Customer booking status stays on its explicit server session-token header contract and does not set cookies.",
-  "Driver public APIs remain cookie-free except the exact acknowledgement PATCH that issues the encrypted Driver Portal cookie and the read-only same-origin Driver Portal jobs route that validates it; that jobs route may set only the expired secure cookie when an inactive account fails revalidation, never issue or refresh a live session.",
+  "Driver public APIs remain cookie-free except the exact acknowledgement PATCH that issues the encrypted Driver Portal cookie, the read-only same-origin Driver Portal jobs route that validates it, and the authenticated same-origin Driver Pool bids route that validates it; those account-backed routes may set only the expired secure cookie when an inactive account fails revalidation, never issue or refresh a live session.",
   "Public API session/cache contracts must continue checking secure cookie attributes, no-store responses, no manual client auth headers, and cookie-backed fail-closed reads through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -240,6 +240,7 @@ assert.deepEqual(
     "app/api/customer-booking-requests/route.ts",
     "app/api/customer-portal-sessions/route.ts",
     "app/api/driver-job/[token]/route.ts",
+    "app/api/driver-job-bids/route.ts",
     "app/api/driver-portal/jobs/route.ts",
   ],
   "public API Set-Cookie routes",
@@ -252,6 +253,7 @@ assert.deepEqual(
     "app/api/customer-booking-requests/route.ts",
     "app/api/customer-portal-sessions/route.ts",
     "app/api/driver-job/[token]/route.ts",
+    "app/api/driver-job-bids/route.ts",
     "app/api/driver-portal/jobs/route.ts",
   ],
   "public API Cache-Control routes",
@@ -260,7 +262,7 @@ assert.deepEqual(
 for (const routePath of publicApiRoutePaths) {
   assertExcludes(files[routePath], /cookies\s*\(/, `${routePath} direct Next cookies API`);
   assertExcludes(files[routePath], /headers\s*\(/, `${routePath} direct Next headers API`);
-  if (!["app/api/driver-job/[token]/route.ts", "app/api/driver-portal/jobs/route.ts"].includes(routePath)) {
+  if (!["app/api/driver-job/[token]/route.ts", "app/api/driver-job-bids/route.ts", "app/api/driver-portal/jobs/route.ts"].includes(routePath)) {
     assertExcludes(files[routePath], /request\.headers\.get\(["']cookie["']\)/i, `${routePath} raw cookie header parsing`);
   }
 }
@@ -398,7 +400,7 @@ assertIncludes(
 assertExcludes(bookingStatusRead, "request.headers.get(\"cookie\")", "customer booking status cookie parsing");
 
 for (const driverRoutePath of publicApiRoutePaths.filter(
-  (path) => path.includes("/driver-job") && path !== "app/api/driver-job/[token]/route.ts",
+  (path) => path.includes("/driver-job") && !["app/api/driver-job/[token]/route.ts", "app/api/driver-job-bids/route.ts"].includes(path),
 )) {
   assertExcludes(files[driverRoutePath], /Set-Cookie|Cache-Control|request\.headers\.get\(["']cookie["']\)/i, `${driverRoutePath} cookie/cache surface`);
 }
@@ -425,6 +427,29 @@ for (const fragment of [
   assertIncludes(driverPortalJobsRoute, fragment, `Driver Portal jobs session boundary ${fragment}`);
 }
 assertExcludes(driverPortalJobsRoute, /driver_id|token_hash/i, "Driver Portal jobs public response secrets");
+
+const driverJobBidsRoute = files["app/api/driver-job-bids/route.ts"];
+for (const fragment of [
+  'resolveDriverPortalSession(request.headers.get("cookie"))',
+  "verifyDriverAccountSession",
+  '"driver-pool-offers-read"',
+  '"driver-pool-offer-accept"',
+  '"driver-pool-offer-decline"',
+  '"Cache-Control": "no-store"',
+  'Vary: "Cookie"',
+  "clearDriverPortalSessionCookie()",
+  'headers.set("Set-Cookie", cookie)',
+]) {
+  assertIncludes(driverJobBidsRoute, fragment, `Driver Pool bids session boundary ${fragment}`);
+}
+for (const forbiddenFragment of [
+  "createDriverPortalSessionCookie",
+  "serializeDriverPortalSessionCookie",
+  '"Max-Age"',
+  '"Expires"',
+]) {
+  assertExcludes(driverJobBidsRoute, forbiddenFragment, `Driver Pool bids live session writer ${forbiddenFragment}`);
+}
 
 for (const { label, requiredFragments, script } of contractChecks) {
   const source = files[script];

@@ -214,9 +214,18 @@ const routeSafeFragments = [
   {
     path: "app/api/driver-job-bids/route.ts",
     fragments: [
-      "blockedDriverBidResponse",
-      "Driver bidding requires approved driver auth before runtime access.",
-      "driverBidRuntimeAccessBlocked",
+      "function response(body: Record<string, unknown>, status: number, cookie?: string)",
+      "function sameOrigin(request: Request, purpose: string)",
+      "resolveDriverPortalSession(request.headers.get(\"cookie\"))",
+      "verifyDriverAccountSession",
+      "clearDriverPortalSessionCookie()",
+      "parseDriverPoolDecisionPayload",
+      "loadAvailableDriverPoolJobs",
+      "decideDriverPoolOffer",
+      "return response({ jobs: [], ok: false, reason: \"unauthorized\" }, 401)",
+      "return response({ ok: false, reason: \"unauthorized\" }, 401)",
+      "return response({ jobs: [], ok: false, reason: \"unavailable\" }, 500)",
+      "return response({ ok: false, reason: \"unavailable\" }, 500)",
     ],
   },
 ];

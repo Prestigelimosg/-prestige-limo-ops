@@ -141,13 +141,11 @@ const contractChecks = [
     stripTypes: true,
   },
   {
-    label: "driver bidding blocked input contract",
+    label: "authenticated Driver Pool input contract",
     script: "scripts/test-driver-portal-bidding-api-contract.mjs",
     requiredFragments: [
-      "harness.driverRoute.GET",
-      "harness.driverRoute.POST",
-      "harness.driverRoute.PATCH",
-      "Driver portal bidding API contract tests passed.",
+      "test-driver-pool-fast-accept-guard.mjs",
+      "authenticated Driver Pool guard",
     ],
     stripTypes: true,
   },
@@ -274,7 +272,7 @@ for (const phrase of [
   "Customer saved-bookings, booking-memory, and booking-status read inputs must keep explicit query allowlists and forbidden-fragment checks on both query keys and values.",
   "Customer portal session issue input must remain server-gated by purpose/origin/referer/token headers and must not be called from customer UI/client code.",
   "Driver status and notification inputs must stay limited to current safe status, safe note/context, notification id/status, and driver_app delivery surface boundaries; driver issue-alert input must stay enum-only.",
-  "Driver bidding remains blocked for GET/POST/PATCH until approved driver auth exists.",
+  "Driver Pool GET/POST/PATCH accepts only exact allowlisted fields behind same-origin purpose, verified account session, bound installation and feature gates.",
   "Public API request input contracts must continue checking safe field allowlists, forbidden-field rejection, auth-required boundaries, and mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -484,8 +482,17 @@ for (const safeIssue of [
 assertExcludes(driverIssueHelper, /payout|payment|invoice|billing|customer_price|paynow/i, "driver issue enum unsafe issue types");
 
 const driverBidsRoute = files["app/api/driver-job-bids/route.ts"];
-assertExcludes(driverBidsRoute, "request.json", "blocked driver bids route body parsing");
-assertIncludes(driverBidsRoute, "blockedDriverBidResponse", "blocked driver bids input boundary");
+for (const fragment of [
+  'request.headers.get("x-prestige-driver-purpose") !== purpose',
+  'resolveDriverPortalSession(request.headers.get("cookie"))',
+  "verifyDriverAccountSession",
+  "parseDriverPoolDecisionPayload(await body(request))",
+  '!["page", "limit"].includes(key)',
+]) {
+  assertIncludes(driverBidsRoute, fragment, `authenticated Driver Pool input boundary ${fragment}`);
+}
+assertExcludes(driverBidsRoute, /\.\.\.body/, "Driver Pool raw body forwarding");
+assertExcludes(driverBidsRoute, /driver[_ -]?(?:id|reference)\s*[:=].*(?:body|params)/i, "Driver Pool client-supplied driver identity");
 
 const driverPortalJobsRoute = files["app/api/driver-portal/jobs/route.ts"];
 assertExcludes(driverPortalJobsRoute, "searchParams", "driver portal jobs route query parsing");

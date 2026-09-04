@@ -151,11 +151,10 @@ const methodSurfaceChecks = [
     path: "app/api/driver-job-bids/route.ts",
     allowedMethods: ["GET", "PATCH", "POST"],
     requiredFragments: [
-      "function blockedDriverBidResponse()",
-      "driverBidRuntimeAccessBlocked",
-      "export async function GET() {\n  return blockedDriverBidResponse();\n}",
-      "export async function POST() {\n  return blockedDriverBidResponse();\n}",
-      "export async function PATCH() {\n  return blockedDriverBidResponse();\n}",
+      "verifyDriverAccountSession",
+      'sameOrigin(request, "driver-pool-offers-read")',
+      'return decide(request, "accept")',
+      'return decide(request, "decline")',
     ],
   },
   {
@@ -211,7 +210,7 @@ const contractChecks = [
   {
     label: "driver bidding method contract",
     script: "scripts/test-driver-portal-bidding-api-contract.mjs",
-    requiredFragments: ["harness.driverRoute.GET", "harness.driverRoute.POST", "harness.driverRoute.PATCH"],
+    requiredFragments: ["test-driver-pool-fast-accept-guard.mjs", "authenticated Driver Pool guard"],
     stripTypes: true,
   },
   {
@@ -296,7 +295,7 @@ for (const phrase of [
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "Customer booking requests may keep the existing guarded `POST` submission path while `GET`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS` fail closed through `blockedResponse`.",
   "Customer saved-booking, booking-memory, booking-status, portal-session, and app-notification methods must stay on their current safe read/auth-required or submit-only boundaries.",
-  "Driver job methods must stay limited to safe job `GET`, safe token-scoped driver-details `PATCH`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and blocked driver bidding `GET`/`POST`/`PATCH`.",
+  "Driver job methods must stay limited to safe job `GET`, safe token-scoped driver-details `PATCH`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and authenticated feature-gated Driver Pool `GET`/`POST`/`PATCH`.",
   "Public API method contracts must continue checking blocked or setup-only methods through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",

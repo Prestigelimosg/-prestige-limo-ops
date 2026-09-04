@@ -53,6 +53,7 @@ import {
 } from "../lib/company-profile-shared";
 import { formatWhatsAppJobCard } from "../lib/whatsapp-job-card";
 import { formatVerifiedCustomerAccountTitle } from "../lib/admin-customer-account-title";
+import { AdminDriverPoolControl } from "./admin-driver-pool-control";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
@@ -44903,6 +44904,29 @@ export default function Home() {
                         : "Apply Driver to Draft"}
                 </button>
               </div>
+              <AdminDriverPoolControl
+                bookingReference={
+                  cleanReferenceText(appliedAdminBookingSnapshotReference) ||
+                  cleanReferenceText(loadedBookingId)
+                }
+                key={
+                  cleanReferenceText(appliedAdminBookingSnapshotReference) ||
+                  cleanReferenceText(loadedBookingId)
+                }
+                disabled={Boolean(assignedDriverId) || adminBookingPersistenceAction !== null}
+                eligible={Boolean(
+                  !assignedDriverId &&
+                  (cleanReferenceText(appliedAdminBookingSnapshotReference) || cleanReferenceText(loadedBookingId)) &&
+                  clean(loadedAdminBookingBaselineRef.current?.updatedAt)
+                )}
+                expectedUpdatedAt={clean(loadedAdminBookingBaselineRef.current?.updatedAt)}
+                requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}
+                suggestedPayout={
+                  normalizeBookingType(booking.bookingType) === "DSP"
+                    ? 0
+                    : Number(draftPricing.driverPayout) || 0
+                }
+              />
             </section>
 
             {shouldShowParserDebugPanel && parsedDebugBooking ? (

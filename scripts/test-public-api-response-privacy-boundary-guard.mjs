@@ -98,9 +98,8 @@ const responseContractChecks = [
     label: "driver bidding response contract",
     script: "scripts/test-driver-portal-bidding-api-contract.mjs",
     requiredFragments: [
-      "unsafeBiddingLeakPattern",
-      "driverBidBlockedError",
-      "Driver portal bidding API contract tests passed.",
+      "test-driver-pool-fast-accept-guard.mjs",
+      "authenticated Driver Pool guard",
     ],
     stripTypes: true,
   },
@@ -223,7 +222,7 @@ for (const phrase of [
   "Public customer/driver API response privacy is guarded across customer booking request, customer saved bookings, customer booking memory, customer booking status, customer portal session, customer/driver app notifications, driver job link, driver job status, driver issue-alert, driver bidding, and driver flight ETA setup response contracts.",
   "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
   "Customer API responses must stay limited to safe request/status/memory/saved-booking/session metadata and must not expose driver payout, PayNow payout, billing, invoice/payment/PDF, internal finance/admin notes, parser/debug internals, service-role/token/secrets, or mock QA/dev archive fields.",
-  "Driver API responses must stay limited to `SafeDriverJobPayload`, safe status/issue-alert metadata, disabled bidding/auth-required errors, safe notification records, and setup-only flight ETA metadata.",
+  "Driver API responses must stay limited to `SafeDriverJobPayload`, safe status/issue-alert metadata, authenticated Driver Pool offer fields, safe notification records, and setup-only flight ETA metadata.",
   "Public API response contracts must continue checking safe body leak patterns and allowed field lists with mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -341,11 +340,14 @@ for (const safeIssueAlertFragment of [
 }
 
 const driverBidsRoute = files["app/api/driver-job-bids/route.ts"];
-assertIncludes(
-  driverBidsRoute,
-  "Driver bidding requires approved driver auth before runtime access.",
-  "driver bids public blocked response",
-);
+for (const fragment of [
+  "jobs: []",
+  "accepted:",
+  "reason:",
+  "clearDriverPortalSessionCookie()",
+]) {
+  assertIncludes(driverBidsRoute, fragment, `authenticated Driver Pool safe response ${fragment}`);
+}
 
 for (const contractCheck of responseContractChecks) {
   runContractCheck(contractCheck);

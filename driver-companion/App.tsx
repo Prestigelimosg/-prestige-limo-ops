@@ -76,7 +76,7 @@ type ScreenState = {
   jobUrl: string | null;
   message: string;
   navigationKey: number;
-  openTarget: "messages" | null;
+  openTarget: "available_jobs" | "messages" | null;
 };
 
 const initialScreenState: ScreenState = {
@@ -332,6 +332,21 @@ export default function App() {
     const openNotificationData = async (data: unknown) => {
       const request = nativeNotificationOpenRequest(data);
       if (!request) {
+        return;
+      }
+
+      if (request.openTarget === "available_jobs") {
+        const portalUrl = `${productionOrigin}/driver-portal?view=available-jobs`;
+        currentWebViewUrlRef.current = portalUrl;
+        webViewRequestHeadersRef.current = {};
+        setCanGoBack(false);
+        setScreen((current) => ({
+          active: false,
+          jobUrl: portalUrl,
+          message: "Opening available jobs.",
+          navigationKey: current.navigationKey + 1,
+          openTarget: null,
+        }));
         return;
       }
 

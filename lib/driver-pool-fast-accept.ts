@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
@@ -8,6 +9,7 @@ import { sendDriverDevicePushAlertForDriverPoolOffer } from "./driver-device-pus
 
 export const driverPoolFeatureEnvName = "PRESTIGE_DRIVER_POOL_ENABLED";
 export const driverPoolFastAcceptVersion = "driver-pool-fast-accept-v1";
+export const driverPoolPublishRpcTimeoutMs = 10_000;
 
 type UnknownRecord = Record<string, unknown>;
 type DriverPoolClient = Pick<SupabaseClient, "from" | "rpc">;
@@ -189,6 +191,33 @@ function classify(error: unknown) {
   return { status: 503, error: "Driver Pool is temporarily unavailable." };
 }
 
+function safeDiagnosticCode(error: unknown): string {
+  const code = text(asRecord(error).code, 40) || "";
+  return /^[A-Za-z0-9_-]+$/.test(code) ? code : "UNAVAILABLE";
+}
+
+function safeDiagnosticStatus(value: unknown): number {
+  const status = Number(value);
+  return Number.isSafeInteger(status) && status >= 0 && status <= 599 ? status : 0;
+}
+
+function logPublishRpcFailure(input: {
+  correlationId: string;
+  elapsedMs: number;
+  error: unknown;
+  status: unknown;
+  timedOut: boolean;
+}) {
+  console.error("driver_pool_publish_rpc_failure", {
+    code: input.timedOut ? "LOCAL_TIMEOUT" : safeDiagnosticCode(input.error),
+    correlation_id: input.correlationId,
+    elapsed_ms: Math.max(0, Math.round(input.elapsedMs)),
+    outcome: input.timedOut ? "timeout" : "upstream_error",
+    rpc: "publish_driver_pool_offer",
+    status: safeDiagnosticStatus(input.status),
+  });
+}
+
 function actorIsValid(actor: AdminBookingPersistenceAdapterActor) {
   return ["admin", "dispatcher"].includes(actor.actor_role) &&
     actor.boundary_mode === "server-session-role-surface" &&
@@ -202,15 +231,40 @@ export async function publishDriverPoolOffer(
 ): Promise<AdminBookingResult<DriverPoolOfferState>> {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 };
   if (!actorIsValid(actor)) return { error: "Verified Admin or Dispatcher required.", ok: false, status: 403 };
-  const { data, error } = await client.rpc("publish_driver_pool_offer", {
-    p_actor_label: actor.actor_label,
-    p_actor_role: actor.actor_role,
-    p_booking_reference: input.booking_reference,
-    p_expected_updated_at: input.expected_updated_at,
-    p_idempotency_key: input.idempotency_key,
-    p_offer_payout_sgd: input.offer_payout_sgd,
-  });
-  if (error) { const failure = classify(error); return { ...failure, ok: false }; }
+  const correlationId = randomUUID();
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), driverPoolPublishRpcTimeoutMs);
+  let data: unknown = null;
+  let error: unknown = null;
+  let status: unknown = 0;
+  try {
+    ({ data, error, status } = await client.rpc("publish_driver_pool_offer", {
+      p_actor_label: actor.actor_label,
+      p_actor_role: actor.actor_role,
+      p_booking_reference: input.booking_reference,
+      p_expected_updated_at: input.expected_updated_at,
+      p_idempotency_key: input.idempotency_key,
+      p_offer_payout_sgd: input.offer_payout_sgd,
+    }).abortSignal(controller.signal));
+  } catch (caught) {
+    error = caught;
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (error) {
+    const timedOut = controller.signal.aborted;
+    logPublishRpcFailure({ correlationId, elapsedMs: Date.now() - startedAt, error, status, timedOut });
+    if (timedOut) {
+      return {
+        error: "Driver Pool publish timed out before confirmation. Reload this booking to check for an open offer before trying again.",
+        ok: false,
+        status: 504,
+      };
+    }
+    const failure = classify(error);
+    return { ...failure, ok: false };
+  }
   const result = asRecord(data);
   const offer = mapOffer(asRecord(result.offer));
   if (!offer) return { error: "Driver Pool returned an invalid safe result.", ok: false, status: 503 };

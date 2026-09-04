@@ -176,6 +176,16 @@ assert.equal(
   shouldAllowDriverWebViewNavigation("https://app.prestigelimo.sg/driver-portal", baseJobUrl),
   true,
 );
+const availableJobsUrl =
+  "https://app.prestigelimo.sg/driver-portal?view=available-jobs";
+assert.equal(
+  shouldAllowDriverWebViewNavigation(availableJobsUrl, baseJobUrl),
+  true,
+);
+assert.equal(
+  shouldAllowDriverWebViewNavigation(availableJobsUrl, availableJobsUrl),
+  true,
+);
 assert.equal(
   shouldAllowDriverWebViewNavigation(baseJobUrl, "https://app.prestigelimo.sg/driver-portal"),
   true,
@@ -183,6 +193,9 @@ assert.equal(
 for (const blockedNavigation of [
   "https://accounts.google.com/o/oauth2/v2/auth",
   "https://app.prestigelimo.sg/customers",
+  "https://app.prestigelimo.sg/driver-portal?view=assigned-jobs",
+  "https://app.prestigelimo.sg/driver-portal?view=available-jobs&next=https://example.com",
+  "https://app.prestigelimo.sg/driver-portal?view=available-jobs#secret",
   `https://app.prestigelimo.sg/driver-job/${"e".repeat(32)}`,
 ]) {
   assert.equal(

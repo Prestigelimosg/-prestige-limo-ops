@@ -105,6 +105,16 @@ function parseSameOriginUrl(value: string) {
   }
 }
 
+function isAllowedDriverPortalNavigation(parsed: URL) {
+  if (parsed.pathname !== driverPortalPath || parsed.hash) {
+    return false;
+  }
+
+  return !parsed.search ||
+    (parsed.searchParams.size === 1 &&
+      parsed.searchParams.get("view") === "available-jobs");
+}
+
 export function parseNativeCalendarOauthStartUrl(value: string) {
   const parsed = parseSameOriginUrl(value);
 
@@ -151,11 +161,7 @@ export function shouldAllowDriverWebViewNavigation(
   const current = parseSameOriginUrl(currentUrl);
   if (!requested || !current) return false;
 
-  if (
-    requested.pathname === driverPortalPath &&
-    !requested.search &&
-    !requested.hash
-  ) {
+  if (isAllowedDriverPortalNavigation(requested)) {
     return true;
   }
 
@@ -163,7 +169,7 @@ export function shouldAllowDriverWebViewNavigation(
   const currentNativeHandoff = parseNativeDriverJobHandoffUrl(currentUrl);
   if (
     requestedNativeHandoff &&
-    (current.pathname === driverPortalPath || Boolean(currentNativeHandoff))
+    (isAllowedDriverPortalNavigation(current) || Boolean(currentNativeHandoff))
   ) {
     return true;
   }
@@ -179,7 +185,7 @@ export function shouldAllowDriverWebViewNavigation(
   try {
     const requestedJob = parseDriverJobUrl(requestedUrl);
     if (
-      (current.pathname === driverPortalPath && !current.search && !current.hash) ||
+      isAllowedDriverPortalNavigation(current) ||
       Boolean(currentNativeHandoff)
     ) {
       return Boolean(requestedJob.token);

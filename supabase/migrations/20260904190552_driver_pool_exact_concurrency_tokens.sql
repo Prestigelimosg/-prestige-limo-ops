@@ -10,6 +10,7 @@ do $migration$
 declare
   v_target record;
   v_function_definition text;
+  v_security_definer boolean;
   v_serialization_code_count integer;
 begin
   for v_target in
@@ -28,8 +29,10 @@ begin
       )
     ) as target(function_signature, expected_message)
   loop
-    select pg_get_functiondef(to_regprocedure(v_target.function_signature))
-    into v_function_definition;
+    select pg_get_functiondef(p.oid), p.prosecdef
+    into v_function_definition, v_security_definer
+    from pg_proc p
+    where p.oid = to_regprocedure(v_target.function_signature);
 
     if v_function_definition is null then
       raise exception 'Required Driver Pool function is missing: %', v_target.function_signature;
@@ -39,7 +42,10 @@ begin
       raise exception 'Driver Pool function body changed before concurrency repair: %', v_target.function_signature;
     end if;
 
-    if position('SECURITY INVOKER' in upper(v_function_definition)) = 0 then
+    -- SECURITY INVOKER is PostgreSQL's default and pg_get_functiondef omits
+    -- that clause for default-mode functions. Check the authoritative catalog
+    -- flag instead of requiring text PostgreSQL does not emit.
+    if v_security_definer is distinct from false then
       raise exception 'Driver Pool function is not SECURITY INVOKER: %', v_target.function_signature;
     end if;
 

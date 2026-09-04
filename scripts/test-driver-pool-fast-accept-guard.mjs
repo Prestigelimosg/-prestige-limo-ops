@@ -23,6 +23,7 @@ const names = [
   "supabase/migrations/202606090002_driver_portal_bidding_foundation.sql",
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
   "supabase/migrations/20260904125321_driver_pool_completion_repair.sql",
+  "supabase/migrations/20260904190552_driver_pool_exact_concurrency_tokens.sql",
   "vercel.json",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
@@ -92,6 +93,33 @@ async function loadFastAcceptHarness() {
 }
 
 const timeoutHarness = await loadFastAcceptHarness();
+const exactConcurrencyTimestamp = "2026-08-27 09:58:11.934739+00";
+const exactOfferTimestamp = "2026-09-05 00:00:00.286512+00";
+const exactPublishPayload = timeoutHarness.helper.parseDriverPoolPublishPayload({
+  booking_reference: "ADM-DRIVER-POOL-MICROSECONDS",
+  expected_updated_at: exactConcurrencyTimestamp,
+  idempotency_key: "12345678-1234-1234-1234-123456789abc",
+  offer_payout_sgd: 55,
+});
+assert.equal(exactPublishPayload.ok, true, "microsecond booking timestamp must be accepted");
+assert.equal(
+  exactPublishPayload.data.expected_updated_at,
+  exactConcurrencyTimestamp,
+  "publish must preserve the exact database concurrency token instead of truncating it to milliseconds",
+);
+const exactCancelPayload = timeoutHarness.helper.parseDriverPoolCancelPayload({
+  offer_key: "a".repeat(64),
+  expected_updated_at: exactOfferTimestamp,
+});
+assert.equal(exactCancelPayload.ok, true, "microsecond offer timestamp must be accepted for cancel");
+assert.equal(exactCancelPayload.data.expected_updated_at, exactOfferTimestamp);
+const exactDecisionPayload = timeoutHarness.helper.parseDriverPoolDecisionPayload({
+  offer_key: "a".repeat(64),
+  expected_updated_at: exactOfferTimestamp,
+  idempotency_key: "abcdefab-cdef-abcd-efab-cdefabcdefab",
+});
+assert.equal(exactDecisionPayload.ok, true, "microsecond offer timestamp must be accepted for Driver decisions");
+assert.equal(exactDecisionPayload.data.expected_updated_at, exactOfferTimestamp);
 const priorFeatureFlag = process.env.PRESTIGE_DRIVER_POOL_ENABLED;
 const originalConsoleError = console.error;
 const originalSetTimeout = globalThis.setTimeout;
@@ -170,7 +198,7 @@ try {
                 offer_status: "open",
                 push_target_count: 1,
                 recipient_count: 1,
-                updated_at: "2026-09-05T00:00:00.000Z",
+                updated_at: exactOfferTimestamp,
               },
               recipient_driver_ids: [7],
             },
@@ -194,12 +222,98 @@ try {
   assert.equal(successResult.ok, true, "successful publish must still return its safe offer");
   assert.equal(successResult.data.provider_attempted_driver_count, 1);
   assert.equal(successResult.data.provider_accepted_driver_count, 1);
+  assert.equal(
+    successResult.data.updated_at,
+    exactOfferTimestamp,
+    "publish result must preserve the exact offer concurrency token",
+  );
   assert.equal(globalThis.__driverPoolPushCalls, 1, "successful non-idempotent publish must retain the existing push handoff");
   assert.equal(diagnosticLogs.length, 1, "successful publish must not emit a failure diagnostic");
   assert.equal(
     rpcCalls.filter((call) => call.name === "publish_driver_pool_offer").at(-1).payload.p_idempotency_key,
     successIdempotencyKey,
     "successful publish must also preserve its exact idempotency key",
+  );
+
+  const exactActionRpcCalls = [];
+  const cancelResult = await timeoutHarness.helper.cancelDriverPoolOffer({
+    rpc(name, payload) {
+      exactActionRpcCalls.push({ name, payload });
+      return Promise.resolve({
+        data: {
+          closes_at: "2027-09-05T01:00:00.000Z",
+          offer_key: "a".repeat(64),
+          offer_payout_sgd: 55,
+          offer_status: "cancelled",
+          push_target_count: 1,
+          recipient_count: 1,
+          updated_at: exactOfferTimestamp,
+        },
+        error: null,
+      });
+    },
+  }, exactCancelPayload.data, {
+    actor_label: "bounded-admin",
+    actor_role: "admin",
+    boundary_mode: "server-session-role-surface",
+    source_surface: "admin_api",
+  });
+  assert.equal(cancelResult.ok, true, "cancel must retain the established RPC lane");
+  assert.equal(cancelResult.data.updated_at, exactOfferTimestamp);
+  assert.equal(exactActionRpcCalls[0].payload.p_expected_updated_at, exactOfferTimestamp);
+
+  const availableResult = await timeoutHarness.helper.loadAvailableDriverPoolJobs({
+    rpc(name, payload) {
+      exactActionRpcCalls.push({ name, payload });
+      return Promise.resolve({
+        data: {
+          has_more: false,
+          jobs: [{
+            closes_at: "2027-09-05T01:00:00.000Z",
+            offer_key: "a".repeat(64),
+            offer_payout_sgd: 55,
+            pickup_at: "2027-09-05T02:00:00.000Z",
+            public_booking_reference: "10907",
+            safe_dropoff_area: "Drop-off details after assignment",
+            safe_pickup_area: "Pickup details after assignment",
+            safe_trip_summary: "MNG",
+            safe_vehicle_label: "AVF",
+            updated_at: exactOfferTimestamp,
+          }],
+        },
+        error: null,
+      });
+    },
+  }, 7, 1, 20);
+  assert.equal(availableResult.ok, true, "Available Jobs must retain the established RPC lane");
+  assert.equal(availableResult.data.jobs[0].updated_at, exactOfferTimestamp);
+
+  for (const action of ["accept", "decline"]) {
+    const decisionResult = await timeoutHarness.helper.decideDriverPoolOffer({
+      rpc(name, payload) {
+        exactActionRpcCalls.push({ name, payload });
+        return Promise.resolve({
+          data: { ok: true, reason: action === "accept" ? "accepted" : "declined" },
+          error: null,
+        });
+      },
+    }, 7, exactDecisionPayload.data, action);
+    assert.equal(decisionResult.ok, true, `${action} must retain the established RPC lane`);
+    assert.equal(
+      exactActionRpcCalls.at(-1).payload.p_expected_updated_at,
+      exactOfferTimestamp,
+      `${action} must send the exact offer concurrency token`,
+    );
+  }
+  assert.deepEqual(
+    exactActionRpcCalls.map((call) => call.name),
+    [
+      "cancel_driver_pool_offer",
+      "list_driver_pool_available_jobs",
+      "accept_driver_pool_offer",
+      "decline_driver_pool_offer",
+    ],
+    "cancel, list, accept and decline must each use only their one established RPC",
   );
 } finally {
   globalThis.setTimeout = originalSetTimeout;
@@ -295,6 +409,36 @@ assert.doesNotMatch(
 assert.doesNotMatch(completionMigration, /insert\s+into\s+public\.driver_job_links/i);
 assert.doesNotMatch(completionMigration, /insert\s+into\s+public\.driver_job_status_events/i);
 assert.doesNotMatch(completionMigration, /(?:insert\s+into|update|delete\s+from)\s+public\.[a-z0-9_]*(?:calendar|message|live_location|gps)/i);
+
+const concurrencyMigration = files["supabase/migrations/20260904190552_driver_pool_exact_concurrency_tokens.sql"];
+for (const fragment of [
+  "public.publish_driver_pool_offer(text,timestamptz,numeric,text,text,text)",
+  "public.cancel_driver_pool_offer(text,timestamptz,text,text)",
+  "public.accept_driver_pool_offer(text,bigint,timestamptz,text)",
+  "Saved booking changed. Reload before publishing.",
+  "Driver Pool offer changed. Reload before cancelling.",
+  "Saved booking changed during Driver Pool acceptance.",
+  "pg_get_functiondef",
+  "SECURITY INVOKER",
+  "replace(v_function_definition, '40001', 'P0001')",
+  "revoke all on function public.publish_driver_pool_offer",
+  "grant execute on function public.publish_driver_pool_offer",
+]) assert.ok(concurrencyMigration.includes(fragment), `concurrency migration missing ${fragment}`);
+assert.doesNotMatch(
+  concurrencyMigration,
+  /using\s+errcode\s*=\s*'40001'/i,
+  "Driver Pool business-stale checks must not use the retryable serialization-failure code",
+);
+assert.doesNotMatch(
+  concurrencyMigration,
+  /(?:company_id|booker_id|traveler_id|customer_rate|customer_price_amount|invoice|billing|payment|paynow|bank_account)\s*=/i,
+);
+assert.doesNotMatch(concurrencyMigration, /insert\s+into\s+public\.driver_job_links/i);
+assert.doesNotMatch(concurrencyMigration, /insert\s+into\s+public\.driver_job_status_events/i);
+assert.doesNotMatch(
+  concurrencyMigration,
+  /(?:insert\s+into|update|delete\s+from)\s+public\.[a-z0-9_]*(?:calendar|message|live_location|gps)/i,
+);
 
 includes("lib/admin-driver-job-link-persistence.ts", [
   "A Driver Job Link cannot be created for a completed or cancelled booking.",

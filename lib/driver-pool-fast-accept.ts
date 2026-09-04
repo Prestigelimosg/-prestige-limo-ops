@@ -75,6 +75,12 @@ function timestamp(value: unknown): string | null {
   return parsed && Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 }
 
+function exactConcurrencyTimestamp(value: unknown): string | null {
+  const clean = text(value, 80);
+  const parsed = clean ? new Date(clean) : null;
+  return parsed && Number.isFinite(parsed.getTime()) ? clean : null;
+}
+
 function positiveMoney(value: unknown): number | null {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 99999.99
@@ -116,7 +122,7 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
 }> {
   const record = asRecord(value);
   const reference = bookingReference(record.booking_reference);
-  const expected = timestamp(record.expected_updated_at);
+  const expected = exactConcurrencyTimestamp(record.expected_updated_at);
   const payout = positiveMoney(record.offer_payout_sgd);
   const key = idempotencyKey(record.idempotency_key);
   if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key"]) ||
@@ -132,7 +138,7 @@ export function parseDriverPoolCancelPayload(value: unknown): AdminBookingResult
 }> {
   const record = asRecord(value);
   const key = offerKey(record.offer_key);
-  const expected = timestamp(record.expected_updated_at);
+  const expected = exactConcurrencyTimestamp(record.expected_updated_at);
   return exactKeys(record, ["offer_key", "expected_updated_at"]) && key && expected
     ? { data: { expected_updated_at: expected, offer_key: key }, ok: true }
     : { error: "Malformed Driver Pool cancellation rejected.", ok: false, status: 400 };
@@ -145,7 +151,7 @@ export function parseDriverPoolDecisionPayload(value: unknown): AdminBookingResu
 }> {
   const record = asRecord(value);
   const key = offerKey(record.offer_key);
-  const expected = timestamp(record.expected_updated_at);
+  const expected = exactConcurrencyTimestamp(record.expected_updated_at);
   const idempotency = idempotencyKey(record.idempotency_key);
   return exactKeys(record, ["offer_key", "expected_updated_at", "idempotency_key"]) && key && expected && idempotency
     ? { data: { expected_updated_at: expected, idempotency_key: idempotency, offer_key: key }, ok: true }
@@ -156,7 +162,7 @@ function mapOffer(row: UnknownRecord): DriverPoolOfferState | null {
   const key = offerKey(row.offer_key);
   const payout = positiveMoney(row.offer_payout_sgd);
   const closesAt = timestamp(row.closes_at);
-  const updatedAt = timestamp(row.updated_at);
+  const updatedAt = exactConcurrencyTimestamp(row.updated_at);
   const status = text(row.offer_status, 20);
   const recipients = Number(row.recipient_count);
   const targets = Number(row.push_target_count);
@@ -336,7 +342,7 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
   const result = asRecord(data);
   const mapped = asRows(result.jobs).map((row): DriverPoolAvailableJob | null => {
     const key = offerKey(row.offer_key); const payout = positiveMoney(row.offer_payout_sgd);
-    const pickup = timestamp(row.pickup_at); const closes = timestamp(row.closes_at); const updated = timestamp(row.updated_at);
+    const pickup = timestamp(row.pickup_at); const closes = timestamp(row.closes_at); const updated = exactConcurrencyTimestamp(row.updated_at);
     const publicRef = text(row.public_booking_reference, 120);
     if (!key || !payout || !pickup || !closes || !updated || !publicRef) return null;
     return { offer_key: key, public_booking_reference: publicRef, offer_payout_sgd: payout,

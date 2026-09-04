@@ -50,7 +50,7 @@ for (const phrase of [
   "Eligible installed-app Drivers with an active alert subscription receive a generic notification",
   "A fully signed-out Driver may still receive that device alert, but must sign back in on the bound phone before seeing or accepting the offer.",
   "The authenticated Driver Portal `Available Jobs` list shows only public job reference, pickup time, safe service/vehicle labels and the exact fixed SGD offer",
-  "The first valid acceptance assigns only the verified Driver fields on the existing booking; it does not create a Driver Job Link or count as Driver ACK.",
+  "The first valid acceptance assigns the verified Driver fields and exact accepted fixed payout override on the existing booking; it does not execute payout, create a Driver Job Link or count as Driver ACK.",
   "Admin then uses the sole existing Create Link lane",
   "`Cancel Offer` exists only while that exact offer is open.",
   "It expires pending recipients but never cancels, removes or completes the booking.",
@@ -156,8 +156,10 @@ for (const fragment of [
 for (const fragment of [
   "Send to Driver Pool",
   "Cancel Offer",
-  "recipient",
-  "alerted",
+  "eligible",
+  "push targets",
+  "app-only",
+  "push requests accepted by provider; delivery not confirmed.",
   "Offer cancelled. Booking remains active.",
 ]) {
   assertIncludes(files.adminControl, fragment, `Admin Driver Pool compact control ${fragment}`);
@@ -165,7 +167,7 @@ for (const fragment of [
 
 for (const fragment of [
   "driverPoolOfferPayload",
-  "New Driver Job app update. Tap to review.",
+  "A driver-pool job is available. Open the app to review.",
   "target_path: \"/driver-portal?view=available-jobs\"",
   "sendDriverDevicePushAlertForDriverPoolOffer",
 ]) {

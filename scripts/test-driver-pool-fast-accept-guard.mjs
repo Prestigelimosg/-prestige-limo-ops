@@ -17,6 +17,7 @@ const names = [
   "scripts/test-booking-ui-browser.mjs",
   "supabase/migrations/202606090002_driver_portal_bidding_foundation.sql",
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
+  "supabase/migrations/20260904123701_driver_pool_completion_repair.sql",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
 
@@ -48,7 +49,7 @@ includes("app/api/admin-driver-job-bid-offers/route.ts", [
 ]);
 includes("app/admin-driver-pool-control.tsx", [
   "Send to Driver Pool", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
-  "provider_accepted_driver_count",
+  "push targets", "app-only", "delivery not confirmed",
 ]);
 includes("scripts/test-booking-ui-browser.mjs", [
   "__prestigeDriverPoolOfferRequests", "Pool offer total SGD\\s*Send to Driver Pool",
@@ -63,15 +64,20 @@ includes("app/page.tsx", [
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
   "SGD {job.offer_payout_sgd.toFixed(2)}", ">Accept<", ">Decline<", "Load more",
-  "if (!driverPoolAccountSession)", "setAvailableJobs([])",
+  "Pickup area", "Drop-off area", "Offer closes", "job.safe_pickup_area",
+  "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
+  "setAvailableJobs([])",
 ]);
 excludes("app/driver-portal/page.tsx", [/customer_price|invoice_number|paynow|bank_account|payout_comparison|internal_finance/i]);
 includes("lib/driver-device-push-notification.ts", [
-  '"available_jobs" | "messages"', "New job offer available. Open Driver Portal.",
+  '"available_jobs" | "messages"', "A driver-pool job is available. Open the app to review.",
   'target_path: "/driver-portal?view=available-jobs"',
 ]);
 includes("driver-companion/App.tsx", ['request.openTarget === "available_jobs"', "/driver-portal?view=available-jobs"]);
-includes("driver-companion/src/driver-webview-bridge.ts", ['"available_jobs" | "messages" | null', '"available_jobs"']);
+includes("driver-companion/src/driver-webview-bridge.ts", [
+  '"available_jobs" | "messages" | null', '"available_jobs"',
+  'parsed.searchParams.get("view") === "available-jobs"',
+]);
 includes("driver-companion/src/native-notifications.ts", ['notification.open_target === "available_jobs"']);
 includes("public/prestige-driver-push-sw.js", ["/driver-portal?view=available-jobs"]);
 
@@ -95,6 +101,23 @@ assert.doesNotMatch(migration, /update\s+public\.bookings\s+set[\s\S]{0,500}(cus
 assert.doesNotMatch(migration, /insert\s+into\s+public\.driver_job_links/i);
 assert.doesNotMatch(migration, /insert\s+into\s+public\.driver_job_status_events/i);
 assert.doesNotMatch(migration, /(?:insert\s+into|update|delete\s+from)\s+public\.[a-z0-9_]*(?:calendar|message|live_location|gps)/i);
+
+const completionMigration = files["supabase/migrations/20260904123701_driver_pool_completion_repair.sql"];
+for (const fragment of [
+  "create or replace function public.accept_driver_pool_offer",
+  "driver_payout_override=v_offer.offer_payout_sgd",
+  "driver_payout_reason='Driver Pool accepted fixed offer.'",
+  "First valid Driver Pool acceptance assigned the verified Driver at the exact accepted fixed payout",
+  "revoke all on function public.accept_driver_pool_offer",
+  "grant execute on function public.accept_driver_pool_offer",
+]) assert.ok(completionMigration.includes(fragment), `completion migration missing ${fragment}`);
+assert.doesNotMatch(
+  completionMigration,
+  /(?:customer_rate|customer_price_amount|invoice|billing|payment|paynow|bank_account)\s*=/i,
+);
+assert.doesNotMatch(completionMigration, /insert\s+into\s+public\.driver_job_links/i);
+assert.doesNotMatch(completionMigration, /insert\s+into\s+public\.driver_job_status_events/i);
+assert.doesNotMatch(completionMigration, /(?:insert\s+into|update|delete\s+from)\s+public\.[a-z0-9_]*(?:calendar|message|live_location|gps)/i);
 
 includes("lib/admin-driver-job-link-persistence.ts", [
   "A Driver Job Link cannot be created for a completed or cancelled booking.",

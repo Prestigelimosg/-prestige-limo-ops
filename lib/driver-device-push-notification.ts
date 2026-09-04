@@ -133,6 +133,7 @@ type DriverDevicePushAlertInput = {
 
 type DriverNativePushOpenTarget = "available_jobs" | "messages";
 type DriverNativePushVisibleBody =
+  | "A driver-pool job is available. Open the app to review."
   | "Job reassigned, do not proceed."
   | "Job update available"
   | "Job acknowledgement needed. Tap to review."
@@ -142,6 +143,7 @@ type DriverNativePushVisibleBody =
 
 type DriverDevicePushPayload = {
   body:
+    | "A driver-pool job is available. Open the app to review."
     | "Job reassigned, do not proceed."
     | "New Driver Job app update. Tap to review."
     | "New Driver Job issued. Tap to review."
@@ -844,7 +846,7 @@ function driverPoolOfferPayload(offerKey: string): DriverDevicePushPayload {
     .update(`prestige-driver-pool-offer:${offerKey}`)
     .digest("hex");
   return {
-    body: "New Driver Job app update. Tap to review.",
+    body: "A driver-pool job is available. Open the app to review.",
     job_key: jobKey,
     tag: `prestige-driver-pool-${jobKey.slice(0, 24)}`,
     target_path: "/driver-portal?view=available-jobs",
@@ -1312,7 +1314,7 @@ export async function sendDriverDevicePushAlertForDriverPoolOffer(
     config,
     options,
     "available_jobs",
-    "New job offer available. Open Driver Portal.",
+    "A driver-pool job is available. Open the app to review.",
     payload.job_key,
     false,
   );

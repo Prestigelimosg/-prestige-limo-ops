@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import ts from "typescript";
 
 const names = [
   "app/admin-driver-pool-control.tsx",
@@ -10,6 +14,7 @@ const names = [
   "driver-companion/App.tsx",
   "driver-companion/src/driver-webview-bridge.ts",
   "driver-companion/src/native-notifications.ts",
+  "docs/current-implementation-ledger.md",
   "lib/admin-driver-job-link-persistence.ts",
   "lib/driver-device-push-notification.ts",
   "lib/driver-pool-fast-accept.ts",
@@ -33,9 +38,165 @@ includes("lib/driver-pool-fast-accept.ts", [
   "offer_payout_sgd", "publish_driver_pool_offer", "cancel_driver_pool_offer",
   "accept_driver_pool_offer", "decline_driver_pool_offer", "list_driver_pool_available_jobs",
   "sendDriverDevicePushAlertForDriverPoolOffer", "eligible, enabled: true, offer",
-  "public_booking_reference,pickup_at",
+  "public_booking_reference,pickup_at", "driverPoolPublishRpcTimeoutMs = 10_000",
+  ".abortSignal(controller.signal)", "driver_pool_publish_rpc_failure",
+  'code: input.timedOut ? "LOCAL_TIMEOUT"', "correlation_id: input.correlationId",
+  "elapsed_ms:", 'rpc: "publish_driver_pool_offer"', "status: safeDiagnosticStatus",
+  "Driver Pool publish timed out before confirmation. Reload this booking to check for an open offer before trying again.",
 ]);
 excludes("lib/driver-pool-fast-accept.ts", [/customer_price|invoice|billing_amount|payment|paynow|bank_account|internal_finance|payout_comparison/i]);
+includes("docs/current-implementation-ledger.md", [
+  "## Driver Pool Publish RPC Timeout And Diagnostic Repair (source checkpoint 2026-09-05)",
+  "Only the existing `publish_driver_pool_offer` request now has a local 10-second `AbortController` deadline.",
+  "The request is attempted once with the exact Admin-supplied idempotency key and no automatic retry.",
+  "Reload this booking to check for an open offer before trying again.",
+  "Push remains strictly downstream of a valid non-idempotent publish result",
+]);
+
+async function loadFastAcceptHarness() {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-driver-pool-timeout-"));
+  const sourcePath = path.join(process.cwd(), "lib/driver-pool-fast-accept.ts");
+  const outputPath = path.join(tempDir, "lib/driver-pool-fast-accept.js");
+  const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
+  const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const pushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
+  const source = await readFile(sourcePath, "utf8");
+
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await mkdir(path.dirname(serverOnlyPath), { recursive: true });
+  await mkdir(path.dirname(supabasePath), { recursive: true });
+  await writeFile(outputPath, ts.transpileModule(source, {
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: sourcePath,
+  }).outputText);
+  await writeFile(serverOnlyPath, "");
+  await writeFile(supabasePath, "exports.createClient = () => { throw new Error('test client injection required'); };");
+  await writeFile(pushPath, "exports.sendDriverDevicePushAlertForDriverPoolOffer = async () => { globalThis.__driverPoolPushCalls += 1; return { ok: true, provider_request_count: 1 }; };");
+
+  return {
+    cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    helper: createRequire(outputPath)(outputPath),
+  };
+}
+
+const timeoutHarness = await loadFastAcceptHarness();
+const priorFeatureFlag = process.env.PRESTIGE_DRIVER_POOL_ENABLED;
+const originalConsoleError = console.error;
+const originalSetTimeout = globalThis.setTimeout;
+const diagnosticLogs = [];
+const rpcCalls = [];
+globalThis.__driverPoolPushCalls = 0;
+process.env.PRESTIGE_DRIVER_POOL_ENABLED = "true";
+console.error = (...args) => diagnosticLogs.push(args);
+globalThis.setTimeout = (callback, delay, ...args) =>
+  originalSetTimeout(callback, Math.min(Number(delay), 20), ...args);
+try {
+  const exactIdempotencyKey = "12345678-1234-1234-1234-123456789abc";
+  const result = await timeoutHarness.helper.publishDriverPoolOffer({
+    rpc(name, payload) {
+      rpcCalls.push({ name, payload });
+      return {
+        abortSignal(signal) {
+          rpcCalls.push({ operation: "abortSignal", signal });
+          return new Promise((resolve) => signal.addEventListener("abort", () => resolve({
+            data: null,
+            error: { code: "", message: "AbortError: intentionally private upstream detail" },
+            status: 0,
+          }), { once: true }));
+        },
+      };
+    },
+  }, {
+    booking_reference: "ADM-DRIVER-POOL-TIMEOUT",
+    expected_updated_at: "2026-09-05T00:00:00.000Z",
+    idempotency_key: exactIdempotencyKey,
+    offer_payout_sgd: 55,
+  }, {
+    actor_label: "bounded-admin",
+    actor_role: "admin",
+    boundary_mode: "server-session-role-surface",
+    source_surface: "admin_api",
+  });
+
+  assert.deepEqual(result, {
+    error: "Driver Pool publish timed out before confirmation. Reload this booking to check for an open offer before trying again.",
+    ok: false,
+    status: 504,
+  });
+  assert.equal(rpcCalls.filter((call) => call.name === "publish_driver_pool_offer").length, 1, "timeout must not retry publish RPC");
+  assert.equal(rpcCalls[0].payload.p_idempotency_key, exactIdempotencyKey, "publish must preserve the exact idempotency key");
+  assert.equal(rpcCalls[1].operation, "abortSignal", "publish must bind its local abort signal to the RPC");
+  assert.equal(globalThis.__driverPoolPushCalls, 0, "timeout must not attempt Driver push");
+  assert.equal(diagnosticLogs.length, 1, "timeout must emit one server diagnostic");
+  assert.equal(diagnosticLogs[0][0], "driver_pool_publish_rpc_failure");
+  assert.deepEqual(Object.keys(diagnosticLogs[0][1]).sort(), ["code", "correlation_id", "elapsed_ms", "outcome", "rpc", "status"]);
+  assert.equal(diagnosticLogs[0][1].code, "LOCAL_TIMEOUT");
+  assert.equal(diagnosticLogs[0][1].outcome, "timeout");
+  assert.equal(diagnosticLogs[0][1].rpc, "publish_driver_pool_offer");
+  assert.equal(diagnosticLogs[0][1].status, 0);
+  assert.match(diagnosticLogs[0][1].correlation_id, /^[0-9a-f-]{36}$/i);
+  const serializedDiagnostic = JSON.stringify(diagnosticLogs);
+  assert.equal(serializedDiagnostic.includes("ADM-DRIVER-POOL-TIMEOUT"), false, "diagnostic must not log booking identity");
+  assert.equal(serializedDiagnostic.includes(exactIdempotencyKey), false, "diagnostic must not log idempotency identity");
+  assert.equal(serializedDiagnostic.includes("intentionally private upstream detail"), false, "diagnostic must not log raw upstream text");
+
+  globalThis.__driverPoolPushCalls = 0;
+  const successIdempotencyKey = "abcdefab-cdef-abcd-efab-cdefabcdefab";
+  const successResult = await timeoutHarness.helper.publishDriverPoolOffer({
+    rpc(name, payload) {
+      rpcCalls.push({ name, payload });
+      return {
+        abortSignal(signal) {
+          rpcCalls.push({ operation: "successAbortSignal", signal });
+          return Promise.resolve({
+            data: {
+              idempotent: false,
+              offer: {
+                closes_at: "2027-09-05T01:00:00.000Z",
+                offer_key: "a".repeat(64),
+                offer_payout_sgd: 55,
+                offer_status: "open",
+                push_target_count: 1,
+                recipient_count: 1,
+                updated_at: "2026-09-05T00:00:00.000Z",
+              },
+              recipient_driver_ids: [7],
+            },
+            error: null,
+            status: 200,
+          });
+        },
+      };
+    },
+  }, {
+    booking_reference: "ADM-DRIVER-POOL-SUCCESS",
+    expected_updated_at: "2026-09-05T00:00:00.000Z",
+    idempotency_key: successIdempotencyKey,
+    offer_payout_sgd: 55,
+  }, {
+    actor_label: "bounded-admin",
+    actor_role: "admin",
+    boundary_mode: "server-session-role-surface",
+    source_surface: "admin_api",
+  });
+  assert.equal(successResult.ok, true, "successful publish must still return its safe offer");
+  assert.equal(successResult.data.provider_attempted_driver_count, 1);
+  assert.equal(successResult.data.provider_accepted_driver_count, 1);
+  assert.equal(globalThis.__driverPoolPushCalls, 1, "successful non-idempotent publish must retain the existing push handoff");
+  assert.equal(diagnosticLogs.length, 1, "successful publish must not emit a failure diagnostic");
+  assert.equal(
+    rpcCalls.filter((call) => call.name === "publish_driver_pool_offer").at(-1).payload.p_idempotency_key,
+    successIdempotencyKey,
+    "successful publish must also preserve its exact idempotency key",
+  );
+} finally {
+  globalThis.setTimeout = originalSetTimeout;
+  console.error = originalConsoleError;
+  if (priorFeatureFlag === undefined) delete process.env.PRESTIGE_DRIVER_POOL_ENABLED;
+  else process.env.PRESTIGE_DRIVER_POOL_ENABLED = priorFeatureFlag;
+  delete globalThis.__driverPoolPushCalls;
+  await timeoutHarness.cleanup();
+}
 
 includes("app/api/driver-job-bids/route.ts", [
   "verifyDriverAccountSession", "!session.claims.accountId || !session.claims.deviceIdHash",

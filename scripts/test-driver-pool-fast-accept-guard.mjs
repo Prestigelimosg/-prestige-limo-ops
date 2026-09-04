@@ -16,7 +16,7 @@ const names = [
   "public/prestige-driver-push-sw.js",
   "scripts/test-booking-ui-browser.mjs",
   "supabase/migrations/202606090002_driver_portal_bidding_foundation.sql",
-  "supabase/migrations/20260904063351_driver_pool_fast_accept.sql",
+  "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
 
@@ -75,7 +75,7 @@ includes("driver-companion/src/driver-webview-bridge.ts", ['"available_jobs" | "
 includes("driver-companion/src/native-notifications.ts", ['notification.open_target === "available_jobs"']);
 includes("public/prestige-driver-push-sw.js", ["/driver-portal?view=available-jobs"]);
 
-const migration = files["supabase/migrations/20260904063351_driver_pool_fast_accept.sql"];
+const migration = files["supabase/migrations/20260904112430_driver_pool_fast_accept.sql"];
 for (const fragment of [
   "offer_payout_sgd numeric(10,2)", "driver_job_bid_offers_one_open_per_booking_key",
   "publish_driver_pool_offer", "accept_driver_pool_offer", "decline_driver_pool_offer",

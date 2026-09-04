@@ -6,21 +6,27 @@ const configPath = "driver-companion/app.json";
 const easConfigPath = "driver-companion/eas.json";
 const appPath = "driver-companion/App.tsx";
 const iconPath = "driver-companion/assets/icon.png";
+const packagePath = "driver-companion/package.json";
+const packageLockPath = "driver-companion/package-lock.json";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const preactivationPath = "scripts/test-preactivation-verification-suite.mjs";
 
-const [configSource, easConfigSource, appSource, iconBytes, ledgerSource, preactivationSource] =
+const [configSource, easConfigSource, appSource, iconBytes, packageSource, packageLockSource, ledgerSource, preactivationSource] =
   await Promise.all([
     readFile(configPath, "utf8"),
     readFile(easConfigPath, "utf8"),
     readFile(appPath, "utf8"),
     readFile(iconPath),
+    readFile(packagePath, "utf8"),
+    readFile(packageLockPath, "utf8"),
     readFile(ledgerPath, "utf8"),
     readFile(preactivationPath, "utf8"),
   ]);
 
 const companionConfig = JSON.parse(configSource).expo;
 const easConfig = JSON.parse(easConfigSource);
+const packageConfig = JSON.parse(packageSource);
+const packageLock = JSON.parse(packageLockSource);
 const normalizedAppSource = appSource.replace(/\s+/g, " ");
 assert.equal(
   companionConfig.name,
@@ -47,8 +53,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "17",
-  "The approved seventeenth TestFlight build number must be explicit",
+  "18",
+  "The proposed eighteenth Driver release checkpoint build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -60,6 +66,30 @@ assert.equal(
   false,
   "The iOS build must declare its HTTPS-only exempt encryption posture",
 );
+
+const expectedSdk57Patches = {
+  expo: ["~57.0.20", "57.0.20"],
+  "expo-constants": ["~57.0.17", "57.0.17"],
+  "expo-dev-client": ["~57.0.18", "57.0.18"],
+  "expo-location": ["~57.0.16", "57.0.16"],
+  "expo-notifications": ["~57.0.17", "57.0.17"],
+  "expo-secure-store": ["~57.0.3", "57.0.3"],
+  "expo-task-manager": ["~57.0.16", "57.0.16"],
+};
+for (const [packageName, [expectedRange, expectedResolvedVersion]] of Object.entries(
+  expectedSdk57Patches,
+)) {
+  assert.equal(
+    packageConfig.dependencies?.[packageName],
+    expectedRange,
+    `${packagePath} must retain the approved ${packageName} SDK 57 patch range`,
+  );
+  assert.equal(
+    packageLock.packages?.[`node_modules/${packageName}`]?.version,
+    expectedResolvedVersion,
+    `${packageLockPath} must resolve the approved ${packageName} SDK 57 patch`,
+  );
+}
 
 assert.deepEqual(
   [...iconBytes.subarray(0, 8)],
@@ -156,6 +186,18 @@ for (const phrase of [
   "internal state `IN_BETA_TESTING`",
   "Build 17 acceptance remains pending",
   "Reusable QA booking `10906`",
+  "Prestige SG Driver Build 18 Release Checkpoint (source checkpoint 2026-09-04)",
+  "advances only Prestige SG Driver `ios.buildNumber` from accepted TestFlight Build `17` to proposed Build `18`",
+  "Build 17 remains the accepted physical TestFlight baseline",
+  "Build 18 is only a prepared source checkpoint",
+  "no paid EAS build, IPA creation, Apple upload, TestFlight assignment, external notification, Driver Pool offer, booking, device or Production-data mutation is included",
+  "does not recreate QA bookings `10906` or `10908`",
+  "Expo Doctor now passes `21/21`",
+  "no package was added or removed",
+  "no permission/config plugin was changed",
+  "0687fdc06b98d0146afa1be79966fdede42127a48f9293b0ed12e594233d6891",
+  "all 22/22 focused Driver/native/protected-lane guards",
+  "Source checks still do not prove a signed Build 18 binary",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

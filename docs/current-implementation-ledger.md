@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified application source checkpoint:
-e5d50646 Merge pull request #486 from Prestigelimosg/codex/driver-pool-fast-accept
+cd7b485c Merge pull request #488 from Prestigelimosg/codex/driver-pool-post-merge-review-fix
 
 Latest pushed `origin/main` application checkpoint:
-e5d50646 Merge pull request #486 from Prestigelimosg/codex/driver-pool-fast-accept
+cd7b485c Merge pull request #488 from Prestigelimosg/codex/driver-pool-post-merge-review-fix
 
 Latest separately observed `origin/staging` pointer:
 6c6ad94c Merge PR #323: Scroll customer booking details into view
@@ -14,6 +14,17 @@ Production visibly reports exact build `e5d5064699c13e59fb601a5b74e6f1586c378481
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Prestige SG Driver Build 18 Release Checkpoint (source checkpoint 2026-09-04)
+
+- This checkpoint starts from exact current `origin/main` commit `cd7b485c22773bf3ad77360bbde1e8530e7e2fbf`, after Driver Pool PRs `#485` through `#488`. It advances only Prestige SG Driver `ios.buildNumber` from accepted TestFlight Build `17` to proposed Build `18`; public iOS version `1.0.0`, installed name `Prestige Driver`, bundle `sg.prestigelimo.drivercompanion`, EAS project `2a797181-d09d-4384-8d01-583456e83c3e`, App Store Connect app `6800706103`, icon, permissions, entitlements and associated domains remain exact. Only the seven Expo SDK 57 compatibility patch ranges and their mechanical npm lockfile closure advance as recorded below.
+- Build 17 remains the accepted physical TestFlight baseline and its source, EAS, Apple-processing and owner-acceptance evidence below remains historical fact. Build 18 is only a prepared source checkpoint: no paid EAS build, IPA creation, Apple upload, TestFlight assignment, external notification, Driver Pool offer, booking, device or Production-data mutation is included.
+- Relative to exact accepted Build 17 source `afa7ce6ea113146221d9fc0d6a4e316066049634`, the Driver-authored native application source contains only the already-merged `available_jobs` handoff in `driver-companion/App.tsx`, `driver-companion/src/native-notifications.ts` and `driver-companion/src/driver-webview-bridge.ts`. A generic pool alert targets only same-origin `/driver-portal?view=available-jobs`; ordinary exact Driver Job, ACK, personal Calendar, Reports, GPS, messaging and other native notification targets remain unchanged.
+- The Driver Pool web/API/database work is already merged and separately deployed. This checkpoint does not modify Company + Booker identity, Customer or Admin native apps, Customer access, direct assignment, Driver Job Link/ACK, either Calendar lane, Driver Reports, GPS/live location, messaging, invoice/billing/payment, payout execution, PayNow, provider configuration or any other established workflow. It does not recreate QA bookings `10906` or `10908`.
+- Release evidence must include exact lockfile restoration, Driver TypeScript, Expo Doctor `21/21`, resolved public Expo configuration, a fresh iOS Metro/Hermes export, the 22 focused Driver/native/protected-lane guards, staged-application governance, exact diff review and compiled `available_jobs` marker review. These source checks cannot claim physical notification delivery, locked/background tap behavior, first-winner acceptance, Apple processing or installed Build 18 acceptance; those remain after a separately approved paid build/upload and controlled device test.
+- Current Expo Doctor initially ran 21 checks but reported `20/21` because its live SDK metadata required seven later SDK 57 patches. The owner separately approved exactly those compatibility updates: `expo` `~57.0.20`, `expo-constants` `~57.0.17`, `expo-dev-client` `~57.0.18`, `expo-location` `~57.0.16`, `expo-notifications` `~57.0.17`, `expo-secure-store` `~57.0.3` and `expo-task-manager` `~57.0.16`. Their official published changelogs disclose no breaking, entitlement, plugin or native-configuration change: five report no user-facing change, Location fixes an Android foreground-service permission check, Notifications fixes an iOS delegate data-race crash, and Expo fixes an iOS Hermes reload crash.
+- npm mechanically updated those seven direct ranges and only their resolved Expo toolchain closure; no package was added or removed, no permission/config plugin was changed and root dependencies remain unchanged. Expo Doctor now passes `21/21`. The inherited install audit still reports ten moderate Driver dependency-tree advisories; no automatic audit fix, forced downgrade or unrelated dependency rewrite was performed.
+- Final no-cost verification passes Driver and root TypeScript, Expo Doctor `21/21`, the resolved public Expo configuration, changed-guard ESLint, the Next.js 16.2.11 Production build, all 22/22 focused Driver/native/protected-lane guards, cached diff/whitespace review and the staged-application governance gate. A fresh patched iOS Metro/Hermes export bundled 690 modules, produced bytecode SHA-256 `0687fdc06b98d0146afa1be79966fdede42127a48f9293b0ed12e594233d6891`, and contains compiled `available_jobs` plus exact `/driver-portal?view=available-jobs` markers. Source checks still do not prove a signed Build 18 binary or physical locked/background notification receipt and tap behavior.
 
 ## Driver Pool Completion Repair (source checkpoint 2026-09-04)
 

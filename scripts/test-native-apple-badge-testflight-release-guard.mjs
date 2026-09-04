@@ -28,9 +28,9 @@ assert.deepEqual(
   [
     ["Prestige Limo Ops", "sg.prestigelimo.admin", "2dada379-f732-4e25-80a3-cdbbb8f52b11", "7", "6803312296"],
     ["Prestige SG", "sg.prestigelimo.customer", "ce71ff91-7f71-4297-bcef-edf420f94316", "12", "6802691447"],
-    ["Prestige SG Driver", "sg.prestigelimo.drivercompanion", "2a797181-d09d-4384-8d01-583456e83c3e", "17", "6800706103"],
+    ["Prestige SG Driver", "sg.prestigelimo.drivercompanion", "2a797181-d09d-4384-8d01-583456e83c3e", "18", "6800706103"],
   ],
-  "The current acceptance builds must keep their exact native and App Store identities",
+  "The current configured builds must keep their exact native and App Store identities",
 );
 
 for (const app of [admin, customer, driver]) {
@@ -64,6 +64,9 @@ for (const phrase of [
   "b42ea290-492b-472f-bcd1-72a154d9523d",
   "1 Tester · 12 Builds",
   "No second build, submission, group or tester mutation occurred",
+  "Prestige SG Driver Build 18 Release Checkpoint (source checkpoint 2026-09-04)",
+  "Build 17 remains the accepted physical TestFlight baseline",
+  "Build 18 is only a prepared source checkpoint",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `The implementation ledger must include ${phrase}`);
 }

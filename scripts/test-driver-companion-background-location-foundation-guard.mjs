@@ -45,11 +45,11 @@ function countOccurrences(sourceValue, fragment) {
 }
 
 for (const fragment of [
-  '"expo": "~57.0.17"',
-  '"expo-location": "~57.0.14"',
-  '"expo-secure-store": "~57.0.2"',
+  '"expo": "~57.0.20"',
+  '"expo-location": "~57.0.16"',
+  '"expo-secure-store": "~57.0.3"',
   '"expo-system-ui": "~57.0.3"',
-  '"expo-task-manager": "~57.0.14"',
+  '"expo-task-manager": "~57.0.16"',
   '"react-native-safe-area-context": "~5.7.0"',
   '"typecheck": "tsc --noEmit"',
 ]) {

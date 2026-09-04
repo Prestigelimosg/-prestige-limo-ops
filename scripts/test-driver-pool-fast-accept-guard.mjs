@@ -293,7 +293,11 @@ try {
       rpc(name, payload) {
         exactActionRpcCalls.push({ name, payload });
         return Promise.resolve({
-          data: { ok: true, reason: action === "accept" ? "accepted" : "declined" },
+          data: {
+            ok: true,
+            public_booking_reference: action === "accept" ? "10907" : null,
+            reason: action === "accept" ? "accepted" : "declined",
+          },
           error: null,
         });
       },
@@ -303,6 +307,11 @@ try {
       exactActionRpcCalls.at(-1).payload.p_expected_updated_at,
       exactOfferTimestamp,
       `${action} must send the exact offer concurrency token`,
+    );
+    assert.equal(
+      decisionResult.data.public_booking_reference,
+      action === "accept" ? "10907" : null,
+      `${action} must retain only the validated public booking reference returned by its RPC`,
     );
   }
   assert.deepEqual(
@@ -315,6 +324,25 @@ try {
     ],
     "cancel, list, accept and decline must each use only their one established RPC",
   );
+
+  const unsafePublicReferenceResult = await timeoutHarness.helper.decideDriverPoolOffer({
+    rpc() {
+      return Promise.resolve({
+        data: {
+          ok: true,
+          public_booking_reference: "PRIVATE INTERNAL REF",
+          reason: "accepted",
+        },
+        error: null,
+      });
+    },
+  }, 7, exactDecisionPayload.data, "accept");
+  assert.equal(unsafePublicReferenceResult.ok, true);
+  assert.equal(
+    unsafePublicReferenceResult.data.public_booking_reference,
+    null,
+    "an invalid or internal booking reference must not enter the Admin winner alert handoff",
+  );
 } finally {
   globalThis.setTimeout = originalSetTimeout;
   console.error = originalConsoleError;
@@ -324,12 +352,150 @@ try {
   await timeoutHarness.cleanup();
 }
 
+async function loadDriverPoolDecisionRouteHarness() {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-driver-pool-admin-alert-"));
+  const routeSource = await readFile("app/api/driver-job-bids/route.ts", "utf8");
+  const routePath = path.join(tempDir, "app/api/driver-job-bids/route.js");
+  const writeModule = async (relativePath, source) => {
+    const target = path.join(tempDir, relativePath);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, source);
+  };
+
+  await writeModule("node_modules/next/server.js", `
+    exports.after = (callback) => { globalThis.__driverPoolAfterCallbacks.push(callback); };
+  `);
+  await writeModule("lib/admin-device-push-notification.js", `
+    exports.sendAdminDevicePushAlert = async (eventType, options) => {
+      globalThis.__driverPoolAdminAlertCalls.push({ eventType, options });
+      if (globalThis.__driverPoolAdminAlertShouldFail) throw new Error("provider unavailable");
+      return { ok: true };
+    };
+  `);
+  await writeModule("lib/driver-account-device-lock.js", `
+    exports.verifyDriverAccountSession = async () => true;
+  `);
+  await writeModule("lib/driver-portal-session.js", `
+    exports.resolveDriverPortalSession = () => ({
+      ok: true,
+      claims: { accountId: 9, deviceIdHash: "device-hash", driverId: 17 },
+    });
+    exports.clearDriverPortalSessionCookie = () => "cleared=true";
+  `);
+  await writeModule("lib/driver-pool-fast-accept.js", `
+    const client = {
+      from(table) {
+        globalThis.__driverPoolPlateReadTables.push(table);
+        return {
+          select() { return this; },
+          eq() { return this; },
+          maybeSingle: async () => ({ data: { plate_number: globalThis.__driverPoolPlate }, error: null }),
+        };
+      },
+    };
+    exports.getDriverPoolClientForProduction = () => ({ client, ok: true });
+    exports.parseDriverPoolDecisionPayload = () => ({
+      data: { offer_key: "a".repeat(64), expected_updated_at: "2026-09-05T01:00:00.123456+00:00", idempotency_key: "1".repeat(32) },
+      ok: true,
+    });
+    exports.decideDriverPoolOffer = async () => ({ data: globalThis.__driverPoolDecision, ok: true });
+    exports.loadAvailableDriverPoolJobs = async () => ({ data: { enabled: true, has_more: false, jobs: [] }, ok: true });
+  `);
+  await mkdir(path.dirname(routePath), { recursive: true });
+  await writeFile(routePath, ts.transpileModule(routeSource, {
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: "app/api/driver-job-bids/route.ts",
+  }).outputText);
+
+  return {
+    cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    route: createRequire(import.meta.url)(routePath),
+  };
+}
+
+const routeHarness = await loadDriverPoolDecisionRouteHarness();
+try {
+  const decisionRequest = (method = "POST") => new Request("https://app.prestigelimo.sg/api/driver-job-bids", {
+    body: JSON.stringify({}),
+    headers: {
+      cookie: "driver=session",
+      origin: "https://app.prestigelimo.sg",
+      referer: "https://app.prestigelimo.sg/driver-portal",
+      "x-prestige-driver-installation-id": "installation",
+      "x-prestige-driver-purpose": method === "POST" ? "driver-pool-offer-accept" : "driver-pool-offer-decline",
+    },
+    method,
+  });
+  globalThis.__driverPoolAfterCallbacks = [];
+  globalThis.__driverPoolAdminAlertCalls = [];
+  globalThis.__driverPoolPlateReadTables = [];
+  globalThis.__driverPoolPlate = " 9696 ";
+  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10907", reason: "accepted" };
+  globalThis.__driverPoolAdminAlertShouldFail = false;
+
+  const acceptedResponse = await routeHarness.route.POST(decisionRequest());
+  assert.equal(acceptedResponse.status, 200);
+  assert.equal(globalThis.__driverPoolAdminAlertCalls.length, 0, "Admin push must not delay the Driver acceptance response");
+  assert.equal(globalThis.__driverPoolAfterCallbacks.length, 1, "first acceptance must schedule one Admin alert handoff");
+  await globalThis.__driverPoolAfterCallbacks[0]();
+  assert.deepEqual(globalThis.__driverPoolPlateReadTables, ["drivers"]);
+  assert.deepEqual(globalThis.__driverPoolAdminAlertCalls, [{
+    eventType: "driver_pool_accepted",
+    options: { bookingReference: "10907", vehiclePlate: "9696" },
+  }]);
+
+  globalThis.__driverPoolAfterCallbacks = [];
+  globalThis.__driverPoolAdminAlertCalls = [];
+  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10907", reason: "already_accepted" };
+  const replayResponse = await routeHarness.route.POST(decisionRequest());
+  assert.equal(replayResponse.status, 200);
+  assert.equal(globalThis.__driverPoolAfterCallbacks.length, 0, "an idempotent replay must not schedule another Admin alert");
+
+  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10909", reason: "accepted" };
+  globalThis.__driverPoolAfterCallbacks = [];
+  globalThis.__driverPoolAdminAlertCalls = [];
+  globalThis.__driverPoolPlateReadTables = [];
+  globalThis.__driverPoolPlate = "VEHICLE TBC";
+  const invalidPlateResponse = await routeHarness.route.POST(decisionRequest());
+  assert.equal(invalidPlateResponse.status, 200);
+  await globalThis.__driverPoolAfterCallbacks[0]();
+  assert.deepEqual(globalThis.__driverPoolPlateReadTables, ["drivers"]);
+  assert.equal(globalThis.__driverPoolAdminAlertCalls.length, 0, "placeholder plate text must not send an Admin winner alert");
+
+  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10908", reason: "accepted" };
+  globalThis.__driverPoolAfterCallbacks = [];
+  globalThis.__driverPoolPlate = "9696";
+  globalThis.__driverPoolAdminAlertShouldFail = true;
+  const resilientResponse = await routeHarness.route.POST(decisionRequest());
+  assert.equal(resilientResponse.status, 200);
+  await globalThis.__driverPoolAfterCallbacks[0]();
+  assert.equal((await resilientResponse.json()).accepted, true, "provider failure must not roll back the accepted assignment response");
+} finally {
+  delete globalThis.__driverPoolAfterCallbacks;
+  delete globalThis.__driverPoolAdminAlertCalls;
+  delete globalThis.__driverPoolPlateReadTables;
+  delete globalThis.__driverPoolPlate;
+  delete globalThis.__driverPoolDecision;
+  delete globalThis.__driverPoolAdminAlertShouldFail;
+  await routeHarness.cleanup();
+}
+
 includes("app/api/driver-job-bids/route.ts", [
   "verifyDriverAccountSession", "!session.claims.accountId || !session.claims.deviceIdHash",
   "x-prestige-driver-installation-id", "driver-pool-offers-read",
   "driver-pool-offer-accept", "driver-pool-offer-decline",
+  'import { after } from "next/server";',
+  "notifyAdminOfDriverPoolAcceptance", 'sendAdminDevicePushAlert("driver_pool_accepted", {',
+  'result.data.reason === "accepted"', '.from("drivers")', '.select("plate_number")',
+  "safeDriverPlate", "bookingReference: publicBookingReference", "vehiclePlate,",
+  "A completed atomic Driver Pool assignment must not fail because Admin push is unavailable.",
 ]);
 excludes("app/api/driver-job-bids/route.ts", [/driver_reference.*request|driver_id.*request|service_role|SUPABASE/i]);
+assert.doesNotMatch(
+  files["app/api/driver-job-bids/route.ts"],
+  /result\.data\.reason\s*===\s*["']already_accepted["'][\s\S]{0,500}notifyAdminOfDriverPoolAcceptance/,
+  "an idempotent replay must not send a second Admin winner alert",
+);
 includes("app/api/admin-driver-job-bid-offers/route.ts", [
   "resolveAdminDispatcherBoundary", "parseDriverPoolPublishPayload", "publishDriverPoolOffer",
   "parseDriverPoolCancelPayload", "cancelDriverPoolOffer",

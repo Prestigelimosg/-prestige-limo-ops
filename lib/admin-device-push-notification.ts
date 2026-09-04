@@ -173,6 +173,7 @@ export type AdminDevicePushEventType =
   | "customer_driver_details_acknowledged"
   | "customer_to_driver_reply"
   | "driver_acknowledged"
+  | "driver_pool_accepted"
   | "driver_completed"
   | "driver_issue"
   | "driver_ots"
@@ -193,6 +194,7 @@ export type AdminDevicePushSender = (
 
 type AdminDevicePushAlertOptions = {
   badgeClient?: Pick<SupabaseClient, "from">;
+  bookingReference?: unknown;
   env?: EnvInput;
   loadedSubscriptionLoader?: () => Promise<LoadedAdminDevicePushSubscription[]>;
   nativePushSender?: (
@@ -703,6 +705,10 @@ const adminDevicePushEventCopy: Record<
     body: "Driver saved details and acknowledged a job. Open Dashboard to review.",
     title: "Driver acknowledged job",
   },
+  driver_pool_accepted: {
+    body: "A Driver Pool job was accepted. Open Dashboard to review.",
+    title: "Driver Pool job accepted",
+  },
   driver_completed: {
     body: "Driver reported Job Completed. Open Dashboard to review.",
     title: "Driver reported Job Completed",
@@ -773,24 +779,50 @@ function safeVehiclePlate(value: unknown): string | null {
 
   const plate = value.trim().replace(/\s+/g, " ").toUpperCase();
 
-  if (!plate || plate.length > 20 || !/^[A-Z0-9 -]+$/.test(plate)) {
+  if (
+    !plate ||
+    plate.length > 20 ||
+    !/\d/.test(plate) ||
+    !/^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(plate)
+  ) {
     return null;
   }
 
   return plate;
 }
 
+function safePublicBookingReference(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const reference = value.trim().toUpperCase();
+  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(reference)
+    ? reference
+    : null;
+}
+
 function safeAlertPayload(
   eventType: AdminDevicePushEventType,
   vehiclePlate?: unknown,
+  bookingReference?: unknown,
 ): AdminDevicePushPayload {
   const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
+  const publicReference =
+    eventType === "driver_pool_accepted"
+      ? safePublicBookingReference(bookingReference)
+      : null;
   const plate =
-    statusLabel || eventType === "driver_acknowledged"
+    statusLabel || eventType === "driver_acknowledged" || eventType === "driver_pool_accepted"
       ? safeVehiclePlate(vehiclePlate)
       : null;
   const copy =
-    plate && statusLabel
+    plate && publicReference && eventType === "driver_pool_accepted"
+      ? {
+          body: `${plate} won Driver Pool Job ${publicReference}. Open Dashboard to review.`,
+          title: `${plate} won Job ${publicReference}`,
+        }
+      : plate && statusLabel
       ? {
           body: `${plate} reported ${statusLabel}. Open Dashboard to review.`,
           title: `${plate} reported ${statusLabel}`,
@@ -808,6 +840,8 @@ function safeAlertPayload(
     tag:
       eventType === "new_booking_request"
         ? "prestige-new-booking-request"
+        : eventType === "driver_pool_accepted" && publicReference
+          ? `prestige-admin-driver-pool-accepted-${publicReference.toLowerCase()}`
         : `prestige-admin-${eventType.replaceAll("_", "-")}`,
     version: adminDevicePushNotificationVersion,
   };
@@ -903,13 +937,17 @@ async function sendWebPush(
 }
 
 function safeNativePayload(
-  eventType: AdminNativeDevicePushEventType,
+  eventType: AdminDevicePushEventType,
   vehiclePlate?: unknown,
+  bookingReference?: unknown,
 ): AdminNativeDevicePushPayload {
   const plate = safeVehiclePlate(vehiclePlate);
+  const publicReference = safePublicBookingReference(bookingReference);
   const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
   const body =
-    plate && eventType === "driver_acknowledged"
+    plate && publicReference && eventType === "driver_pool_accepted"
+      ? `${plate} won Job ${publicReference}.`
+      : plate && eventType === "driver_acknowledged"
       ? `Driver ${plate} acknowledged the job.`
       : plate && statusLabel
         ? `${plate} reported ${statusLabel}.`
@@ -921,7 +959,7 @@ function safeNativePayload(
     body,
     data: {
       open_target: "/",
-      type: eventType,
+      type: eventType === "driver_pool_accepted" ? "driver_acknowledged" : eventType,
     },
     priority: "high",
     sound: "default",
@@ -1013,7 +1051,7 @@ function writeAdminNativePushEvidence(
     | "admin_native_push_receipt_error"
     | "admin_native_push_receipt_ok"
     | "admin_native_push_receipt_pending",
-  eventType: AdminNativeDevicePushEventType,
+  eventType: AdminDevicePushEventType,
   ticketReceiptId: string,
   errorCode?: string | null,
 ) {
@@ -1100,7 +1138,7 @@ function scheduleAdminNativePushReceiptEvidence(input: {
   badgeClient: Pick<SupabaseClient, "from"> | null;
   badgeReservation: NativePushBadgeReservation | null;
   config: AdminDevicePushConfig;
-  eventType: AdminNativeDevicePushEventType;
+  eventType: AdminDevicePushEventType;
   receiptFetcher?: typeof fetch;
   receiptScheduler?: (task: () => Promise<void>) => void;
   shouldRecordSubscriptionHealth: boolean;
@@ -1258,7 +1296,11 @@ export async function sendAdminDevicePushAlert(
     );
   }
 
-  const payload = safeAlertPayload(eventType, options.vehiclePlate);
+  const payload = safeAlertPayload(
+    eventType,
+    options.vehiclePlate,
+    options.bookingReference,
+  );
   if (payloadHasForbiddenFragments(payload)) {
     return blockedAlertResult("provider_failure", true);
   }
@@ -1281,7 +1323,7 @@ export async function sendAdminDevicePushAlert(
   const nativeSubscriptionCount = subscriptions.filter(
     (subscription) => subscription.channel === "native_ios",
   ).length;
-  const nativeEventType: AdminNativeDevicePushEventType = eventType;
+  const nativeEventType = eventType;
   const eligibleSubscriptions = subscriptions.filter(
     (subscription) =>
       subscription.channel === "web" ||
@@ -1296,7 +1338,11 @@ export async function sendAdminDevicePushAlert(
     ((subscription: PushSubscription, pushPayload: AdminDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
 
-  const nativePayload = safeNativePayload(nativeEventType, options.vehiclePlate);
+  const nativePayload = safeNativePayload(
+    nativeEventType,
+    options.vehiclePlate,
+    options.bookingReference,
+  );
   const shouldRecordSubscriptionHealth =
     !options.loadedSubscriptionLoader &&
     !options.subscriptionLoader &&

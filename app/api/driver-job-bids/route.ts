@@ -1,9 +1,13 @@
+import { after } from "next/server";
+
+import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { verifyDriverAccountSession } from "../../../lib/driver-account-device-lock";
 import {
   decideDriverPoolOffer,
   getDriverPoolClientForProduction,
   loadAvailableDriverPoolJobs,
   parseDriverPoolDecisionPayload,
+  type DriverPoolClient,
 } from "../../../lib/driver-pool-fast-accept";
 import { clearDriverPortalSessionCookie, resolveDriverPortalSession } from "../../../lib/driver-portal-session";
 
@@ -46,6 +50,38 @@ async function body(request: Request) {
   return request.json().catch(() => ({}));
 }
 
+function safeDriverPlate(value: unknown) {
+  if (typeof value !== "string") return null;
+  const plate = value.trim().replace(/\s+/g, " ").toUpperCase();
+  return plate && plate.length <= 20 && /\d/.test(plate) && /^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(plate)
+    ? plate
+    : null;
+}
+
+async function notifyAdminOfDriverPoolAcceptance(
+  client: DriverPoolClient,
+  driverId: number,
+  publicBookingReference: string,
+) {
+  try {
+    const { data, error } = await client
+      .from("drivers")
+      .select("plate_number")
+      .eq("id", driverId)
+      .maybeSingle();
+
+    const vehiclePlate = safeDriverPlate(data?.plate_number);
+    if (error || !vehiclePlate) return;
+
+    await sendAdminDevicePushAlert("driver_pool_accepted", {
+      bookingReference: publicBookingReference,
+      vehiclePlate,
+    });
+  } catch {
+    // A completed atomic Driver Pool assignment must not fail because Admin push is unavailable.
+  }
+}
+
 export async function GET(request: Request) {
   try {
     if (!sameOrigin(request, "driver-pool-offers-read")) return response({ jobs: [], ok: false, reason: "unauthorized" }, 401);
@@ -77,6 +113,23 @@ async function decide(request: Request, action: "accept" | "decline") {
     const parsed = parseDriverPoolDecisionPayload(await body(request));
     if (!parsed.ok) return response({ ok: false, reason: parsed.error }, parsed.status);
     const result = await decideDriverPoolOffer(account.client, account.driverId, parsed.data, action);
+    const acceptedPublicBookingReference = result.ok
+      ? result.data.public_booking_reference
+      : null;
+    if (
+      result.ok &&
+      action === "accept" &&
+      result.data.reason === "accepted" &&
+      acceptedPublicBookingReference
+    ) {
+      after(() =>
+        notifyAdminOfDriverPoolAcceptance(
+          account.client,
+          account.driverId,
+          acceptedPublicBookingReference,
+        ),
+      );
+    }
     return result.ok
       ? response({ accepted: result.data.accepted, ok: true, reason: result.data.reason }, 200)
       : response({ ok: false, reason: result.error }, result.status);

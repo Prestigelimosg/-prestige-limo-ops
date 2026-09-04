@@ -146,7 +146,7 @@ includes(
     '.eq("source_surface", adminNativePushSubscriptionSource)',
     "nativeSubscriptionCount === 1",
     "type AdminNativeDevicePushEventType = AdminDevicePushEventType",
-    "safeNativePayload(nativeEventType, options.vehiclePlate)",
+    "safeNativePayload(",
     'title: "Prestige Limo Ops"',
     '`Driver ${plate} acknowledged the job.`',
     '`${plate} reported ${statusLabel}.`',
@@ -154,6 +154,11 @@ includes(
     "DeviceNotRegistered",
   ],
   "Existing Admin push sender complete native-event extension",
+);
+assert.match(
+  source.helper,
+  /safeNativePayload\(\s*nativeEventType,\s*options\.vehiclePlate,\s*options\.bookingReference,?\s*\)/,
+  "Admin native payload must receive the exact event, vehicle plate and public booking reference",
 );
 includes(
   "ledger",

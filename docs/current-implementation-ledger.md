@@ -15,6 +15,14 @@ Production visibly reports exact build `e5d5064699c13e59fb601a5b74e6f1586c378481
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+## Driver Pool Admin API Singapore Region Locality Repair (source checkpoint 2026-09-05)
+
+- Two owner-approved Production publish attempts for booking `10907` at SGD55 reached the established Admin API in Vercel `iad1` while the Supabase project is in Singapore. The first waited about 125.6 seconds before the Supabase Data API Gateway returned `504`; the second reached the repaired local 10-second deadline and returned `LOCAL_TIMEOUT`. Both attempts persisted zero offers, bids and Driver Pool audit rows and attempted zero push alerts.
+- Vercel request evidence proves the function-runtime boundary was `iad1`; the Vercel build machine's Washington location is corroborative only and is not used as runtime proof. Live database inspection found no active blocker, waiting query or expensive Driver Pool plan. Available logs still do not prove the internal cause of either upstream Data API stall, so this change does not claim that network distance alone caused them.
+- `vercel.json` maps only `app/api/admin-driver-job-bid-offers/route.ts` to Vercel region `sin1`, colocating the existing Node.js Admin Driver Pool API with its Singapore Supabase dependency. It does not set a project-wide region, convert the route to Edge, alter its request, idempotency, timeout, RPC, transaction, push or response behavior, or change another function.
+- The existing 10-second single-attempt deadline, exact Admin-supplied idempotency key, truthful reload-before-retry guidance and downstream-only push handoff remain unchanged. This source repair does not republish booking `10907`, invoke the publish RPC, send an alert, or mutate Production data.
+- `scripts/test-driver-pool-fast-accept-guard.mjs` parses the deployment configuration and proves the exact route-only `sin1` mapping, absence of a project-wide region, and absence of an unsupported Next.js Node-route `preferredRegion` or Edge-runtime conversion. Direct assignment, Driver Job Link/ACK, both Calendar lanes, Driver Reports, customer identity, invoice/billing/payment, payout execution, PayNow, GPS/live location, messaging and all other established lanes remain untouched.
+
 ## Driver Pool Publish RPC Timeout And Diagnostic Repair (source checkpoint 2026-09-05)
 
 - The owner-approved first Production publish attempt for booking `10907` at SGD55 did not create an offer or alert a Driver. Vercel returned `503` after about 125.6 seconds, while the exact Supabase API Gateway `POST /rest/v1/rpc/publish_driver_pool_offer` returned `504` at 2026-09-05 00:15:58 SGT. Immediate read-only verification found zero exact booking offers, zero open offers, zero bids and zero Driver Pool audit rows; the existing push handoff therefore correctly did not run.

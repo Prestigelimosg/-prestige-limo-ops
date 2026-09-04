@@ -23,6 +23,7 @@ const names = [
   "supabase/migrations/202606090002_driver_portal_bidding_foundation.sql",
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
   "supabase/migrations/20260904125321_driver_pool_completion_repair.sql",
+  "vercel.json",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
 
@@ -32,6 +33,15 @@ function includes(name, fragments) {
 function excludes(name, patterns) {
   for (const pattern of patterns) assert.doesNotMatch(files[name], pattern, `${name} leaks or alters forbidden scope: ${pattern}`);
 }
+
+const vercelConfig = JSON.parse(files["vercel.json"]);
+assert.deepEqual(
+  vercelConfig.functions?.["app/api/admin-driver-job-bid-offers/route.ts"]?.regions,
+  ["sin1"],
+  "only the established Driver Pool Admin API function must be pinned to Singapore",
+);
+assert.equal(vercelConfig.regions, undefined, "Driver Pool locality repair must not change the project-wide region");
+excludes("app/api/admin-driver-job-bid-offers/route.ts", [/preferredRegion|runtime\s*=\s*["']edge["']/]);
 
 includes("lib/driver-pool-fast-accept.ts", [
   "PRESTIGE_DRIVER_POOL_ENABLED", "driverPoolIsEnabled", "parseDriverPoolPublishPayload",
@@ -46,6 +56,8 @@ includes("lib/driver-pool-fast-accept.ts", [
 ]);
 excludes("lib/driver-pool-fast-accept.ts", [/customer_price|invoice|billing_amount|payment|paynow|bank_account|internal_finance|payout_comparison/i]);
 includes("docs/current-implementation-ledger.md", [
+  "## Driver Pool Admin API Singapore Region Locality Repair (source checkpoint 2026-09-05)",
+  "maps only `app/api/admin-driver-job-bid-offers/route.ts` to Vercel region `sin1`",
   "## Driver Pool Publish RPC Timeout And Diagnostic Repair (source checkpoint 2026-09-05)",
   "Only the existing `publish_driver_pool_offer` request now has a local 10-second `AbortController` deadline.",
   "The request is attempted once with the exact Admin-supplied idempotency key and no automatic retry.",

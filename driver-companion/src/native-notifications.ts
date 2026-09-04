@@ -36,7 +36,11 @@ export function nativeNotificationOpenRequest(value: unknown) {
 
   return {
     jobKey,
-    openTarget: notification.open_target === "messages" ? ("messages" as const) : null,
+    openTarget: notification.open_target === "messages"
+      ? ("messages" as const)
+      : notification.open_target === "available_jobs"
+        ? ("available_jobs" as const)
+        : null,
   };
 }
 

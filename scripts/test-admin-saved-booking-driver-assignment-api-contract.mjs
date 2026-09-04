@@ -112,10 +112,19 @@ async function writeMockModules(tempDir) {
     tempDir,
     "node_modules/@supabase/supabase-js/index.js",
   );
+  const driverPushPath = path.join(
+    tempDir,
+    "lib/driver-device-push-notification.js",
+  );
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(driverPushPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    driverPushPath,
+    "module.exports = { sendDriverDevicePushAlertForAppUpdate: async () => ({ ok: true }) };",
+  );
   await writeFile(
     supabasePath,
     [

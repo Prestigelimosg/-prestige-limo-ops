@@ -11,6 +11,19 @@ type DriverPortalJob = {
   state_label: string;
 };
 
+type DriverPoolAvailableJob = {
+  closes_at: string;
+  offer_key: string;
+  offer_payout_sgd: number;
+  pickup_at: string;
+  public_booking_reference: string;
+  safe_dropoff_area: string;
+  safe_pickup_area: string;
+  safe_trip_summary: string | null;
+  safe_vehicle_label: string | null;
+  updated_at: string;
+};
+
 type DriverPortalReadState =
   | { kind: "loading" }
   | { accountSession: boolean; kind: "ready"; jobs: DriverPortalJob[] }
@@ -144,6 +157,12 @@ export default function DriverPortalPage() {
   const [alertState, setAlertState] = useState<DriverPortalAlertState>("available");
   const [openingJobKey, setOpeningJobKey] = useState("");
   const [openFeedback, setOpenFeedback] = useState<Record<string, string>>({});
+  const [availableJobs, setAvailableJobs] = useState<DriverPoolAvailableJob[]>([]);
+  const [availableJobsEnabled, setAvailableJobsEnabled] = useState(false);
+  const [availableJobsHasMore, setAvailableJobsHasMore] = useState(false);
+  const [availableJobsPage, setAvailableJobsPage] = useState(1);
+  const [availableJobsBusy, setAvailableJobsBusy] = useState(false);
+  const [availableJobsFeedback, setAvailableJobsFeedback] = useState<Record<string, string>>({});
   const installationId = useSyncExternalStore(
     subscribeToStaticNativeBridge,
     currentNativeInstallationId,
@@ -165,6 +184,7 @@ export default function DriverPortalPage() {
   const [biometricFeedback, setBiometricFeedback] = useState("");
   const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
   const biometricSetupEnabled = nativeBiometricEnabled || biometricEnabledThisSession;
+  const driverPoolAccountSession = readState.kind === "ready" && readState.accountSession;
   const installedAccountSignInRequired = Boolean(
     installationId &&
     (
@@ -229,6 +249,29 @@ export default function DriverPortalPage() {
     }
   }, []);
 
+  const loadAvailableJobs = useCallback(async (page = 1) => {
+    setAvailableJobsBusy(true);
+    try {
+      const nativeInstallationId = currentNativeInstallationId();
+      const response = await fetch(`/api/driver-job-bids?page=${page}&limit=20`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "x-prestige-driver-purpose": "driver-pool-offers-read",
+          ...(nativeInstallationId ? { "x-prestige-driver-installation-id": nativeInstallationId } : {}),
+        },
+      });
+      const result = await response.json() as { enabled?: boolean; has_more?: boolean; jobs?: DriverPoolAvailableJob[]; ok?: boolean };
+      if (!response.ok || result.ok !== true) throw new Error("Available Jobs could not be loaded.");
+      setAvailableJobsEnabled(result.enabled === true);
+      const jobs = Array.isArray(result.jobs) ? result.jobs : [];
+      setAvailableJobs((current) => page === 1 ? jobs : [...current, ...jobs]);
+      setAvailableJobsHasMore(result.has_more === true);
+      setAvailableJobsPage(page);
+    } catch { setAvailableJobsEnabled(false); }
+    finally { setAvailableJobsBusy(false); }
+  }, []);
+
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
       void loadJobs();
@@ -236,6 +279,39 @@ export default function DriverPortalPage() {
 
     return () => window.cancelAnimationFrame(animationFrame);
   }, [loadJobs]);
+
+  useEffect(() => {
+    if (!driverPoolAccountSession) {
+      setAvailableJobs([]);
+      setAvailableJobsEnabled(false);
+      setAvailableJobsHasMore(false);
+      setAvailableJobsPage(1);
+      return;
+    }
+    void loadAvailableJobs(1);
+  }, [driverPoolAccountSession, loadAvailableJobs]);
+
+  async function decideAvailableJob(job: DriverPoolAvailableJob, action: "accept" | "decline") {
+    setAvailableJobsBusy(true);
+    setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: "Working…" }));
+    try {
+      const nativeInstallationId = currentNativeInstallationId();
+      const response = await fetch("/api/driver-job-bids", {
+        body: JSON.stringify({ offer_key: job.offer_key, expected_updated_at: job.updated_at, idempotency_key: crypto.randomUUID() }),
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "x-prestige-driver-purpose": action === "accept" ? "driver-pool-offer-accept" : "driver-pool-offer-decline",
+          ...(nativeInstallationId ? { "x-prestige-driver-installation-id": nativeInstallationId } : {}) },
+        method: action === "accept" ? "POST" : "PATCH",
+      });
+      const result = await response.json() as { accepted?: boolean; ok?: boolean; reason?: string };
+      if (!response.ok || result.ok !== true) throw new Error(result.reason || "This offer is no longer available.");
+      setAvailableJobs((current) => current.filter((item) => item.offer_key !== job.offer_key));
+      setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: result.accepted ? "Accepted. Admin will issue your Driver Job Link." : "Declined." }));
+    } catch (error) {
+      setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: error instanceof Error ? error.message : "This offer is no longer available." }));
+      await loadAvailableJobs(1);
+    } finally { setAvailableJobsBusy(false); }
+  }
 
   useEffect(() => {
     function onBiometricResult(event: Event) {
@@ -635,6 +711,24 @@ export default function DriverPortalPage() {
                 </p>
               ) : null}
             </div>
+
+            {availableJobsEnabled ? (
+              <section className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm" data-driver-pool-available-jobs="true" id="available-jobs">
+                <div className="flex items-center justify-between gap-2">
+                  <div><h2 className="text-lg font-bold text-emerald-950">Available Jobs</h2><p className="text-xs font-semibold text-emerald-800">Fixed driver payout · earliest pickup first</p></div>
+                  <button className="h-9 rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold" disabled={availableJobsBusy} onClick={() => void loadAvailableJobs(1)} type="button">Refresh</button>
+                </div>
+                {availableJobs.length === 0 ? <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700">No open job offers.</p> : availableJobs.map((job) => (
+                  <article className="rounded-md border border-emerald-200 bg-white p-3" data-driver-pool-offer={job.offer_key} key={job.offer_key}>
+                    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase text-slate-500">Job {job.public_booking_reference}</p><p className="font-bold text-slate-950">{new Date(job.pickup_at).toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" })}</p></div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-900">SGD {job.offer_payout_sgd.toFixed(2)}</span></div>
+                    <p className="mt-1 text-xs font-semibold text-slate-600">{job.safe_trip_summary || "Transfer"} · {job.safe_vehicle_label || "Vehicle TBC"}</p>
+                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "accept")} type="button">Accept</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "decline")} type="button">Decline</button></div>
+                    {availableJobsFeedback[job.offer_key] ? <p className="mt-2 text-xs font-semibold text-slate-600" role="status">{availableJobsFeedback[job.offer_key]}</p> : null}
+                  </article>
+                ))}
+                {availableJobsHasMore ? <button className="h-10 w-full rounded-md border border-emerald-300 bg-white text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void loadAvailableJobs(availableJobsPage + 1)} type="button">{availableJobsBusy ? "Loading…" : "Load more"}</button> : null}
+              </section>
+            ) : null}
 
             <div className="flex items-center justify-between gap-3 px-1">
               <div>

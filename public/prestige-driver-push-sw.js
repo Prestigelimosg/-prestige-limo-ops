@@ -77,12 +77,15 @@ self.addEventListener("push", (event) => {
       ? payload.job_key
       : "";
   const tag =
-    typeof payload.tag === "string" && payload.tag.startsWith("prestige-driver-update-")
+    typeof payload.tag === "string" &&
+      (payload.tag.startsWith("prestige-driver-update-") ||
+        payload.tag.startsWith("prestige-driver-pool-"))
       ? payload.tag
       : "prestige-driver-update";
   const targetPath =
     typeof payload.target_path === "string" &&
-      /^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(payload.target_path)
+      (/^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(payload.target_path) ||
+        payload.target_path === "/driver-portal?view=available-jobs")
       ? payload.target_path
       : "";
   const body =
@@ -112,7 +115,8 @@ self.addEventListener("notificationclick", (event) => {
   const targetPath =
     event.notification.data &&
       typeof event.notification.data.targetPath === "string" &&
-      /^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(event.notification.data.targetPath)
+      (/^\/driver-job\/[A-Za-z0-9_-]{20,512}$/.test(event.notification.data.targetPath) ||
+        event.notification.data.targetPath === "/driver-portal?view=available-jobs")
       ? event.notification.data.targetPath
       : "";
 

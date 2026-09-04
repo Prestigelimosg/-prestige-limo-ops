@@ -1126,10 +1126,24 @@ export async function createAdminDriverJobLink(
     return safeAdapterFailure(safeDriverJobLinkCreateError, 500, bookingError);
   }
 
+  if (["1", "true", "enabled"].includes((process.env.PRESTIGE_DRIVER_POOL_ENABLED || "").trim().toLowerCase())) {
+    const { data: openOfferData, error: openOfferError } = await clientResult.data
+      .from("driver_job_bid_offers")
+      .select("id")
+      .eq("booking_reference", input.booking_reference)
+      .eq("offer_status", "open")
+      .gt("closes_at", new Date().toISOString())
+      .limit(1);
+    if (openOfferError) return safeAdapterFailure(safeDriverJobLinkCreateError, 500, openOfferError);
+    if (asArray(openOfferData).length > 0) {
+      return { error: "Cancel the open Driver Pool offer or wait for one Driver to accept before Create Link.", ok: false, status: 409 };
+    }
+  }
+
   const { data: operationalBookingData, error: operationalBookingError } = await clientResult.data
     .from("bookings")
     .select(
-      "service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number",
+      "service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number, admin_internal_status, customer_facing_status",
     )
     .eq("booking_reference", input.booking_reference)
     .maybeSingle();
@@ -1138,9 +1152,18 @@ export async function createAdminDriverJobLink(
     return safeAdapterFailure(safeDriverJobLinkCreateError, 500, operationalBookingError);
   }
 
+  const operationalBookingRecord = asRecord(operationalBookingData);
+  const terminalStatus = [
+    String(operationalBookingRecord.admin_internal_status || ""),
+    String(operationalBookingRecord.customer_facing_status || ""),
+  ].some((status) => ["cancelled", "completed", "archived", "deleted"].includes(status.trim().toLowerCase()));
+  if (terminalStatus) {
+    return { error: "A Driver Job Link cannot be created for a completed or cancelled booking.", ok: false, status: 409 };
+  }
+
   if (
     !savedBookingMatchesDriverJobPayload(
-      asRecord(operationalBookingData),
+      operationalBookingRecord,
       input.driver_job_payload,
     )
   ) {

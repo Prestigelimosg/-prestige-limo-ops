@@ -131,11 +131,12 @@ type DriverDevicePushAlertInput = {
   workflow_area?: string | null;
 };
 
-type DriverNativePushOpenTarget = "messages";
+type DriverNativePushOpenTarget = "available_jobs" | "messages";
 type DriverNativePushVisibleBody =
   | "Job reassigned, do not proceed."
   | "Job update available"
   | "Job acknowledgement needed. Tap to review."
+  | "New job offer available. Open Driver Portal."
   | "New job available. Tap to review."
   | "Pickup is in 1 hour. Open Driver Portal to review.";
 
@@ -838,6 +839,20 @@ function pickupReminderPayload(linkId: string): DriverDevicePushPayload {
   };
 }
 
+function driverPoolOfferPayload(offerKey: string): DriverDevicePushPayload {
+  const jobKey = createHash("sha256")
+    .update(`prestige-driver-pool-offer:${offerKey}`)
+    .digest("hex");
+  return {
+    body: "New Driver Job app update. Tap to review.",
+    job_key: jobKey,
+    tag: `prestige-driver-pool-${jobKey.slice(0, 24)}`,
+    target_path: "/driver-portal?view=available-jobs",
+    title: "Prestige Limo Ops",
+    version: driverDevicePushNotificationVersion,
+  };
+}
+
 async function sendWebPush(
   config: DriverDevicePushProviderConfig,
   subscription: PushSubscription,
@@ -1267,6 +1282,39 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     config,
     options,
     nativeOpenTarget,
+  );
+}
+
+export async function sendDriverDevicePushAlertForDriverPoolOffer(
+  client: DriverDevicePushClient,
+  input: { driver_id: unknown; offer_key: unknown },
+  options: DriverDevicePushAlertOptions = {},
+): Promise<DriverDevicePushAlertResult> {
+  const driverId = safePositiveInteger(input.driver_id);
+  const offerKey = safeText(input.offer_key, 64)?.toLowerCase() || "";
+  if (!driverId || !/^[0-9a-f]{64}$/.test(offerKey)) {
+    return alertResult("invalid_driver_link");
+  }
+  const env = options.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  const config = resolveProviderConfig(env);
+  if (!config) {
+    return alertResult(enabled ? "provider_not_configured" : "push_gate_closed", { enabled });
+  }
+  if (!(await driverHasActiveOnePhoneAccount(client, driverId))) {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+  const payload = driverPoolOfferPayload(offerKey);
+  return sendPayloadToDriverSubscriptions(
+    client,
+    driverId,
+    payload,
+    config,
+    options,
+    "available_jobs",
+    "New job offer available. Open Driver Portal.",
+    payload.job_key,
+    false,
   );
 }
 

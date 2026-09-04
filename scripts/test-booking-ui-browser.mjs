@@ -17002,6 +17002,7 @@ async function runChromeTest() {
         ],
       };
       window.__prestigeAdminDriverJobDspActualTimeRequests = [];
+      window.__prestigeDriverPoolOfferRequests = [];
       window.__prestigeAdminDriverJobDspActualTimeSummaries = {
         "ui-cleanup-load-fixture": [
           {
@@ -17032,6 +17033,20 @@ async function runChromeTest() {
             return {};
           }
         })();
+
+        if (String(target).includes("/api/admin-driver-job-bid-offers")) {
+          const url = new URL(String(target), window.location.origin);
+          window.__prestigeFetchCalls.push(\`\${method} \${url.pathname}\${url.search}\`);
+          window.__prestigeDriverPoolOfferRequests.push({
+            booking_reference: url.searchParams.get("booking_reference") || "",
+            headers,
+            method,
+          });
+          return new Response(
+            JSON.stringify({ eligible: true, enabled: true, offer: null, ok: true }),
+            { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
+          );
+        }
 
         if (String(target).includes("/api/admin-bookings?")) {
           const url = new URL(String(target), window.location.origin);
@@ -18471,6 +18486,20 @@ async function runChromeTest() {
             customerDriverDetailsEmailDisabledSendRequests:
               window.__prestigeCustomerDriverDetailsEmailDisabledSendRequests || [],
             driverJobStatusRequests: window.__prestigeDriverJobStatusRequests || [],
+            driverPoolOfferRequests: window.__prestigeDriverPoolOfferRequests || [],
+            driverPoolControl: (() => {
+              const control = document.querySelector("[data-driver-pool-control='ready']");
+              const payout = control?.querySelector("input[aria-label='Driver Pool offer payout in SGD']");
+              const send = [...(control?.querySelectorAll("button") || [])].find(
+                (button) => button.textContent.trim() === "Send to Driver Pool",
+              );
+              return {
+                payout: payout?.value || "",
+                sendDisabled: send?.disabled ?? true,
+                sendText: send?.textContent.trim() || "",
+                text: control?.textContent.replace(/\s+/g, " ").trim() || "",
+              };
+            })(),
             fetchCalls: window.__prestigeFetchCalls || [],
             completedBillingReadinessAuditRequests:
               window.__prestigeCompletedBillingReadinessAuditRequests || [],
@@ -18722,6 +18751,15 @@ async function runChromeTest() {
 
         return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
           candidateState?.fields?.flight === "SQ999" &&
+          candidateState?.driverPoolControl?.sendText === "Send to Driver Pool" &&
+          candidateState?.driverPoolControl?.payout === "75.00" &&
+          candidateState?.driverPoolControl?.sendDisabled === false &&
+          candidateState?.driverPoolOfferRequests?.some(
+            (request) =>
+              request.method === "GET" &&
+              request.booking_reference === "ui-cleanup-load-fixture" &&
+              request.headers["x-prestige-admin-purpose"] === "admin-booking-persistence",
+          ) &&
           candidateState?.workflowStatusRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -18820,6 +18858,11 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
     assert.match(
+      loadedBookingState.driverPoolControl.text,
+      /Pool offer total SGD\s*Send to Driver Pool/,
+      "Expected one compact Driver Pool row with the resolved fixed-trip payout and explicit Send control",
+    );
+    assert.match(
       loadedBookingState.customerCopy,
       /Booking reference: 10839/,
       "Expected Customer Copy to show the persisted five-digit public booking reference",
@@ -18834,6 +18877,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
+      "GET /api/admin-driver-job-bid-offers?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-driver-job-links?booking_reference=ui-cleanup-load-fixture&limit=1&link_status=active&page=1",
       "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VVV",
       "GET /api/admin-email-activation-preflight-setup",

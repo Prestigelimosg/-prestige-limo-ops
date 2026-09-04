@@ -163,8 +163,8 @@ begin
       driver_name = v_driver.driver_name,
       driver_contact = v_driver.contact_number,
       driver_plate_number = v_driver.plate_number,
-      driver_payout_override=v_offer.offer_payout_sgd,
-      driver_payout_reason='Driver Pool accepted fixed offer.',
+      driver_payout_override = v_offer.offer_payout_sgd,
+      driver_payout_reason = 'Driver Pool accepted fixed offer.',
       updated_at = v_now
   where id = v_booking.id
     and updated_at = v_booking.updated_at;

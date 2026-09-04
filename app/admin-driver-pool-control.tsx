@@ -73,8 +73,8 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
       const attempted = result.offer.provider_attempted_driver_count || 0;
       const accepted = result.offer.provider_accepted_driver_count || 0;
       setFeedback(attempted > 0
-        ? `${accepted}/${attempted} push requests accepted by provider; delivery not confirmed.`
-        : "Offer published. No device push request was attempted.");
+        ? `${accepted}/${attempted} Drivers had a push request accepted by provider; delivery not confirmed.`
+        : "Offer published. No Driver device push was attempted.");
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Offer was not sent."); }
     finally { setBusy(false); }
   }
@@ -97,7 +97,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
     <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-sky-200 pt-2" data-driver-pool-control={offer?.offer_status || "ready"}>
       {offer?.offer_status === "open" ? (
         <>
-          <span className="text-xs font-semibold text-sky-950">Pool open · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible · {Math.min(offer.push_target_count, offer.recipient_count)} push targets · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only</span>
+          <span className="text-xs font-semibold text-sky-950">Pool open · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
           <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy} onClick={() => void cancel()} type="button">{busy ? "Cancelling…" : "Cancel Offer"}</button>
         </>
       ) : offer?.offer_status === "assigned" ? (

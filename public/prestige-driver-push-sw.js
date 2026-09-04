@@ -93,7 +93,9 @@ self.addEventListener("push", (event) => {
       ? "New Driver Job issued. Tap to review."
       : payload.body === "Pickup is in 1 hour. Open Driver Portal to review."
         ? "Pickup is in 1 hour. Open Driver Portal to review."
-        : "New Driver Job app update. Tap to review.";
+        : payload.body === "A driver-pool job is available. Open the app to review."
+          ? "A driver-pool job is available. Open the app to review."
+          : "New Driver Job app update. Tap to review.";
 
   event.waitUntil(
     self.registration.showNotification("Prestige Limo Ops", {

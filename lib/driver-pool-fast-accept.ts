@@ -12,7 +12,7 @@ export const driverPoolFastAcceptVersion = "driver-pool-fast-accept-v1";
 export const driverPoolPublishRpcTimeoutMs = 10_000;
 
 type UnknownRecord = Record<string, unknown>;
-type DriverPoolClient = Pick<SupabaseClient, "from" | "rpc">;
+export type DriverPoolClient = Pick<SupabaseClient, "from" | "rpc">;
 
 export function getDriverPoolClientForProduction():
   | { client: DriverPoolClient; ok: true }
@@ -101,6 +101,11 @@ function offerKey(value: unknown): string | null {
 function bookingReference(value: unknown): string | null {
   const clean = text(value, 120) || "";
   return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/.test(clean) ? clean : null;
+}
+
+function publicBookingReference(value: unknown): string | null {
+  const clean = text(value, 18)?.toUpperCase() || "";
+  return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(clean) ? clean : null;
 }
 
 function exactKeys(record: UnknownRecord, allowed: readonly string[]) {
@@ -362,5 +367,12 @@ export async function decideDriverPoolOffer(client: DriverPoolClient, driverId: 
   if (error) { const failure = classify(error); return { ...failure, ok: false } as const; }
   const result = asRecord(data);
   const reason = text(result.reason, 80) || "no_longer_available";
-  return { data: { accepted: reason === "accepted" || reason === "already_accepted", reason }, ok: true } as const;
+  return {
+    data: {
+      accepted: reason === "accepted" || reason === "already_accepted",
+      public_booking_reference: publicBookingReference(result.public_booking_reference),
+      reason,
+    },
+    ok: true,
+  } as const;
 }

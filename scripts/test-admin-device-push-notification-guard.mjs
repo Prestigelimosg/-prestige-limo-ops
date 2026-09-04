@@ -119,6 +119,7 @@ assertIncludes(
     "email_booking_amendment",
     "email_booking_cancellation",
     "driver_acknowledged",
+    "driver_pool_accepted",
     "driver_otw",
     "driver_ots",
     "driver_pob",
@@ -509,6 +510,10 @@ try {
       "Driver acknowledged job",
       "Driver saved details and acknowledged a job. Open Dashboard to review.",
     ],
+    driver_pool_accepted: [
+      "Driver Pool job accepted",
+      "A Driver Pool job was accepted. Open Dashboard to review.",
+    ],
     driver_completed: [
       "Driver reported Job Completed",
       "Driver reported Job Completed. Open Dashboard to review.",
@@ -667,6 +672,65 @@ try {
     "prestige-admin-driver-acknowledged",
   );
   assert.equal(acknowledgedPlatePayload.url, "/");
+
+  let driverPoolWinnerWebPayload = null;
+  let driverPoolWinnerNativePayload = null;
+  const driverPoolWinnerAlert = await helper.sendAdminDevicePushAlert(
+    "driver_pool_accepted",
+    {
+      bookingReference: " 10907 ",
+      env: configuredEnv,
+      loadedSubscriptionLoader: async () => [
+        {
+          channel: "web",
+          endpoint: "https://push.example.test/driver-pool-winner-web",
+          webSubscription: {
+            endpoint: "https://push.example.test/driver-pool-winner-web",
+            keys: {
+              auth: "fake-auth-driver-pool-winner",
+              p256dh: "fake-p256dh-driver-pool-winner",
+            },
+          },
+        },
+        {
+          channel: "native_ios",
+          endpoint: "ExponentPushToken[driver-pool-winner]",
+          webSubscription: null,
+        },
+      ],
+      nativePushSender: async (_expoPushToken, payload) => {
+        driverPoolWinnerNativePayload = payload;
+      },
+      pushSender: async (_subscription, payload) => {
+        driverPoolWinnerWebPayload = payload;
+      },
+      vehiclePlate: " 9696 ",
+    },
+  );
+  assert.equal(driverPoolWinnerAlert.ok, true);
+  assert.equal(driverPoolWinnerAlert.provider_request_count, 2);
+  assert.deepEqual(driverPoolWinnerWebPayload, {
+    body: "9696 won Driver Pool Job 10907. Open Dashboard to review.",
+    tag: "prestige-admin-driver-pool-accepted-10907",
+    title: "9696 won Job 10907",
+    url: "/",
+    version: "admin-device-push-notification-v1",
+  });
+  assert.deepEqual(driverPoolWinnerNativePayload, {
+    body: "9696 won Job 10907.",
+    data: {
+      open_target: "/",
+      type: "driver_acknowledged",
+    },
+    priority: "high",
+    sound: "default",
+    title: "Prestige Limo Ops",
+  });
+  assertExcludes(
+    JSON.stringify({ driverPoolWinnerNativePayload, driverPoolWinnerWebPayload }),
+    ["passenger", "customer", "payout", "paynow", "billing", "payment", "invoice", "price", "internal note"],
+    "Driver Pool winner Admin push payloads",
+  );
 
   let unsafePlatePayload = null;
   const unsafePlateAlert = await helper.sendAdminDevicePushAlert("driver_otw", {

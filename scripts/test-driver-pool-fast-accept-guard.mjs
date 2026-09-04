@@ -17,7 +17,7 @@ const names = [
   "scripts/test-booking-ui-browser.mjs",
   "supabase/migrations/202606090002_driver_portal_bidding_foundation.sql",
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
-  "supabase/migrations/20260904123701_driver_pool_completion_repair.sql",
+  "supabase/migrations/20260904125321_driver_pool_completion_repair.sql",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
 
@@ -49,7 +49,8 @@ includes("app/api/admin-driver-job-bid-offers/route.ts", [
 ]);
 includes("app/admin-driver-pool-control.tsx", [
   "Send to Driver Pool", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
-  "push targets", "app-only", "delivery not confirmed",
+  "eligible Drivers", "push-capable Drivers", "app-only Drivers",
+  "Drivers had a push request accepted by provider", "delivery not confirmed",
 ]);
 includes("scripts/test-booking-ui-browser.mjs", [
   "__prestigeDriverPoolOfferRequests", "Pool offer total SGD\\s*Send to Driver Pool",
@@ -79,7 +80,10 @@ includes("driver-companion/src/driver-webview-bridge.ts", [
   'parsed.searchParams.get("view") === "available-jobs"',
 ]);
 includes("driver-companion/src/native-notifications.ts", ['notification.open_target === "available_jobs"']);
-includes("public/prestige-driver-push-sw.js", ["/driver-portal?view=available-jobs"]);
+includes("public/prestige-driver-push-sw.js", [
+  "/driver-portal?view=available-jobs",
+  "A driver-pool job is available. Open the app to review.",
+]);
 
 const migration = files["supabase/migrations/20260904112430_driver_pool_fast_accept.sql"];
 for (const fragment of [
@@ -102,11 +106,11 @@ assert.doesNotMatch(migration, /insert\s+into\s+public\.driver_job_links/i);
 assert.doesNotMatch(migration, /insert\s+into\s+public\.driver_job_status_events/i);
 assert.doesNotMatch(migration, /(?:insert\s+into|update|delete\s+from)\s+public\.[a-z0-9_]*(?:calendar|message|live_location|gps)/i);
 
-const completionMigration = files["supabase/migrations/20260904123701_driver_pool_completion_repair.sql"];
+const completionMigration = files["supabase/migrations/20260904125321_driver_pool_completion_repair.sql"];
 for (const fragment of [
   "create or replace function public.accept_driver_pool_offer",
-  "driver_payout_override=v_offer.offer_payout_sgd",
-  "driver_payout_reason='Driver Pool accepted fixed offer.'",
+  "driver_payout_override = v_offer.offer_payout_sgd",
+  "driver_payout_reason = 'Driver Pool accepted fixed offer.'",
   "First valid Driver Pool acceptance assigned the verified Driver at the exact accepted fixed payout",
   "revoke all on function public.accept_driver_pool_offer",
   "grant execute on function public.accept_driver_pool_offer",

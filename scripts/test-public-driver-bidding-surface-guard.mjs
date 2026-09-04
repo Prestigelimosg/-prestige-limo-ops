@@ -156,10 +156,10 @@ for (const fragment of [
 for (const fragment of [
   "Send to Driver Pool",
   "Cancel Offer",
-  "eligible",
-  "push targets",
-  "app-only",
-  "push requests accepted by provider; delivery not confirmed.",
+  "eligible Drivers",
+  "push-capable Drivers",
+  "app-only Drivers",
+  "Drivers had a push request accepted by provider; delivery not confirmed.",
   "Offer cancelled. Booking remains active.",
 ]) {
   assertIncludes(files.adminControl, fragment, `Admin Driver Pool compact control ${fragment}`);
@@ -186,6 +186,7 @@ for (const forbidden of [
 for (const fragment of [
   "prestige-driver-pool-",
   "/driver-portal?view=available-jobs",
+  "A driver-pool job is available. Open the app to review.",
 ]) {
   assertIncludes(files.serviceWorker, fragment, `Driver Pool service worker generic target ${fragment}`);
 }

@@ -11,7 +11,7 @@ const paths = {
   driverRoute: "app/api/driver-job-bids/route.ts",
   driverPortal: "app/driver-portal/page.tsx",
   fastAccept: "lib/driver-pool-fast-accept.ts",
-  migration: "supabase/migrations/20260904063351_driver_pool_fast_accept.sql",
+  migration: "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
 };
 
 const files = Object.fromEntries(

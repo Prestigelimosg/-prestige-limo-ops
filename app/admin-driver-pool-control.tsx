@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Offer = {
+export type DriverPoolAdminOffer = {
   closes_at: string;
   offer_key: string;
   offer_payout_sgd: number;
@@ -14,6 +14,10 @@ type Offer = {
   updated_at: string;
 };
 
+export type AssignedDriverPoolAdminOffer = DriverPoolAdminOffer & {
+  booking_reference: string;
+};
+
 type Props = {
   bookingReference: string;
   disabled: boolean;
@@ -21,14 +25,15 @@ type Props = {
   expectedUpdatedAt: string;
   requiresExplicitPayout: boolean;
   suggestedPayout: number;
+  onAssignedOfferChange?: (offer: AssignedDriverPoolAdminOffer | null) => void;
 };
 
 const headers = { "Content-Type": "application/json", "x-prestige-admin-purpose": "admin-booking-persistence" };
 
-export function AdminDriverPoolControl({ bookingReference, disabled, eligible, expectedUpdatedAt, requiresExplicitPayout, suggestedPayout }: Props) {
+export function AdminDriverPoolControl({ bookingReference, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, requiresExplicitPayout, suggestedPayout }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [serverEligible, setServerEligible] = useState(false);
-  const [offer, setOffer] = useState<Offer | null>(null);
+  const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
   const [payout, setPayout] = useState(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -37,7 +42,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
     if (!bookingReference) return;
     try {
       const response = await fetch(`/api/admin-driver-job-bid-offers?booking_reference=${encodeURIComponent(bookingReference)}`, { cache: "no-store", headers });
-      const result = await response.json() as { eligible?: boolean; enabled?: boolean; offer?: Offer | null };
+      const result = await response.json() as { eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null };
       if (response.ok) {
         setEnabled(result.enabled === true);
         setServerEligible(result.eligible === true);
@@ -55,9 +60,17 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
     const timer = window.setInterval(() => void load(), 10000);
     return () => window.clearInterval(timer);
   }, [load, offer?.offer_status]);
+  useEffect(() => {
+    onAssignedOfferChange?.(
+      offer?.offer_status === "assigned"
+        ? { ...offer, booking_reference: bookingReference }
+        : null,
+    );
+    return () => onAssignedOfferChange?.(null);
+  }, [bookingReference, offer, onAssignedOfferChange]);
 
   const offerNeedsAttention = offer?.offer_status === "open" ||
-    (offer?.offer_status === "assigned" && eligible);
+    offer?.offer_status === "assigned";
   if (!enabled || ((!eligible || !serverEligible) && !offerNeedsAttention)) return null;
 
   async function publish() {
@@ -67,7 +80,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
         body: JSON.stringify({ booking_reference: bookingReference, expected_updated_at: expectedUpdatedAt,
           idempotency_key: crypto.randomUUID(), offer_payout_sgd: Number(payout) }), headers, method: "POST",
       });
-      const result = await response.json() as { error?: string; offer?: Offer; ok?: boolean };
+      const result = await response.json() as { error?: string; offer?: DriverPoolAdminOffer; ok?: boolean };
       if (!response.ok || result.ok !== true || !result.offer) throw new Error(result.error || "Offer was not sent.");
       setOffer(result.offer);
       const attempted = result.offer.provider_attempted_driver_count || 0;
@@ -86,7 +99,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
       const response = await fetch("/api/admin-driver-job-bid-offers", {
         body: JSON.stringify({ offer_key: offer.offer_key, expected_updated_at: offer.updated_at }), headers, method: "PATCH",
       });
-      const result = await response.json() as { error?: string; offer?: Offer; ok?: boolean };
+      const result = await response.json() as { error?: string; offer?: DriverPoolAdminOffer; ok?: boolean };
       if (!response.ok || result.ok !== true || !result.offer) throw new Error(result.error || "Offer was not cancelled.");
       setOffer(result.offer); setFeedback("Offer cancelled. Booking remains active.");
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Offer was not cancelled."); }

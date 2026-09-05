@@ -132,8 +132,14 @@ type DriverDevicePushAlertInput = {
 };
 
 type DriverNativePushOpenTarget = "available_jobs" | "messages";
+type DriverPoolWinnerVisibleBody =
+  "Accepted! Ack when admin send job link";
+type DriverPoolAssignmentCancelledVisibleBody =
+  "Job assignment cancelled, do not proceed.";
 type DriverNativePushVisibleBody =
   | "A driver-pool job is available. Open the app to review."
+  | DriverPoolWinnerVisibleBody
+  | DriverPoolAssignmentCancelledVisibleBody
   | "Job reassigned, do not proceed."
   | "Job update available"
   | "Job acknowledgement needed. Tap to review."
@@ -144,6 +150,8 @@ type DriverNativePushVisibleBody =
 type DriverDevicePushPayload = {
   body:
     | "A driver-pool job is available. Open the app to review."
+    | DriverPoolWinnerVisibleBody
+    | DriverPoolAssignmentCancelledVisibleBody
     | "Job reassigned, do not proceed."
     | "New Driver Job app update. Tap to review."
     | "New Driver Job issued. Tap to review."
@@ -168,11 +176,18 @@ export type DriverNativePushSender = (
   badgeCount?: number,
 ) => Promise<void>;
 
+export type DriverNativeSilentPushSender = (
+  expoPushToken: string,
+  jobKey: string,
+  openTarget: DriverNativePushOpenTarget,
+) => Promise<void>;
+
 type DriverDevicePushAlertOptions = {
   badgeClient?: DriverDevicePushClient;
   env?: EnvInput;
   nativeFetch?: typeof fetch;
   nativePushSender?: DriverNativePushSender;
+  nativeSilentPushSender?: DriverNativeSilentPushSender;
   pushSender?: DriverDevicePushSender;
 };
 
@@ -841,12 +856,18 @@ function pickupReminderPayload(linkId: string): DriverDevicePushPayload {
   };
 }
 
-function driverPoolOfferPayload(offerKey: string): DriverDevicePushPayload {
+function driverPoolOfferPayload(
+  offerKey: string,
+  visibleBody:
+    | "A driver-pool job is available. Open the app to review."
+    | DriverPoolWinnerVisibleBody
+    | DriverPoolAssignmentCancelledVisibleBody,
+): DriverDevicePushPayload {
   const jobKey = createHash("sha256")
     .update(`prestige-driver-pool-offer:${offerKey}`)
     .digest("hex");
   return {
-    body: "A driver-pool job is available. Open the app to review.",
+    body: visibleBody,
     job_key: jobKey,
     tag: `prestige-driver-pool-${jobKey.slice(0, 24)}`,
     target_path: "/driver-portal?view=available-jobs",
@@ -911,6 +932,54 @@ async function sendNativePush(
 
     if (!response.ok || ticket.status !== "ok") {
       const error = new Error("Native push provider rejected the request.") as Error & {
+        statusCode?: number;
+      };
+      error.statusCode = asRecord(ticket.details).error === "DeviceNotRegistered"
+        ? 410
+        : response.status || 502;
+      throw error;
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function sendNativeSilentPush(
+  expoPushToken: string,
+  jobKey: string,
+  openTarget: DriverNativePushOpenTarget,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), driverDevicePushProviderTimeoutMs);
+
+  try {
+    const response = await fetcher(expoPushEndpoint, {
+      body: JSON.stringify({
+        contentAvailable: true,
+        data: {
+          driver_pool_refresh: true,
+          job_key: jobKey,
+          open_target: openTarget,
+        },
+        priority: "high",
+        ttl: 60,
+        to: expoPushToken,
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+      signal: controller.signal,
+    });
+    const body = asRecord(await response.json().catch(() => null));
+    const ticket = Array.isArray(body.data)
+      ? asRecord(body.data[0])
+      : asRecord(body.data);
+
+    if (!response.ok || ticket.status !== "ok") {
+      const error = new Error("Native silent push provider rejected the request.") as Error & {
         statusCode?: number;
       };
       error.statusCode = asRecord(ticket.details).error === "DeviceNotRegistered"
@@ -1014,6 +1083,7 @@ async function sendPayloadToDriverSubscriptions(
   nativeJobKey: string | null = payload.target_path ? null : payload.job_key,
   requireSingleNativeSubscription = false,
   nativeOnly = false,
+  silentNative = false,
 ): Promise<DriverDevicePushAlertResult> {
   const loaded = await loadActiveDriverSubscriptions(client, driverId);
   if (!loaded.ok) {
@@ -1026,9 +1096,13 @@ async function sendPayloadToDriverSubscriptions(
   const sender = options.pushSender ??
     ((subscription: PushSubscription, pushPayload: DriverDevicePushPayload) =>
       sendWebPush(config, subscription, pushPayload));
-  const shouldRecordHealth = !options.pushSender;
+  const shouldRecordHealth = !options.pushSender &&
+    !options.nativePushSender &&
+    !options.nativeSilentPushSender;
   const badgeClient = options.badgeClient ??
-    (!options.nativePushSender && !options.pushSender ? client : null);
+    (!options.nativePushSender && !options.nativeSilentPushSender && !options.pushSender
+      ? client
+      : null);
   const nativeSubscriptionCount = loaded.subscriptions.filter(
     (subscription) => subscription.channel === "native_ios",
   ).length;
@@ -1048,7 +1122,7 @@ async function sendPayloadToDriverSubscriptions(
         return sender(subscription.webSubscription!, payload);
       }
 
-      const badgeReservation = badgeClient
+      const badgeReservation = badgeClient && !silentNative
         ? await reserveNativePushBadgeCount(badgeClient, {
             table: "driver_device_push_subscriptions",
             token: subscription.endpoint,
@@ -1056,6 +1130,20 @@ async function sendPayloadToDriverSubscriptions(
           }).catch(() => null)
         : null;
       try {
+        if (silentNative) {
+          return options.nativeSilentPushSender
+            ? await options.nativeSilentPushSender(
+                subscription.endpoint,
+                nativeJobKey!,
+                nativeOpenTarget!,
+              )
+            : await sendNativeSilentPush(
+                subscription.endpoint,
+                nativeJobKey!,
+                nativeOpenTarget!,
+                options.nativeFetch,
+              );
+        }
         return options.nativePushSender
           ? await options.nativePushSender(
               subscription.endpoint,
@@ -1081,7 +1169,7 @@ async function sendPayloadToDriverSubscriptions(
     }),
   );
 
-  if (shouldRecordHealth && !options.nativePushSender) {
+  if (shouldRecordHealth) {
     await Promise.all(
       eligibleSubscriptions.map((subscription, index) =>
         recordDeliveryHealth(
@@ -1289,6 +1377,57 @@ export async function sendDriverDevicePushAlertForAppUpdate(
 
 export async function sendDriverDevicePushAlertForDriverPoolOffer(
   client: DriverDevicePushClient,
+  input: {
+    driver_id: unknown;
+    notification_kind?: "available" | "winner" | "assignment_cancelled";
+    offer_key: unknown;
+    public_booking_reference?: unknown;
+  },
+  options: DriverDevicePushAlertOptions = {},
+): Promise<DriverDevicePushAlertResult> {
+  const driverId = safePositiveInteger(input.driver_id);
+  const offerKey = safeText(input.offer_key, 64)?.toLowerCase() || "";
+  if (!driverId || !/^[0-9a-f]{64}$/.test(offerKey)) {
+    return alertResult("invalid_driver_link");
+  }
+  const env = options.env ?? process.env;
+  const enabled = isTruthyGate(cleanEnvValue(env, driverDevicePushEnabledEnvName));
+  const config = resolveProviderConfig(env);
+  if (!config) {
+    return alertResult(enabled ? "provider_not_configured" : "push_gate_closed", { enabled });
+  }
+  if (!(await driverHasActiveOnePhoneAccount(client, driverId))) {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+  const notificationKind = input.notification_kind ?? "available";
+  const publicBookingReference = safeText(input.public_booking_reference, 18)?.toUpperCase() || "";
+  if (
+    !["available", "winner", "assignment_cancelled"].includes(notificationKind) ||
+    (notificationKind !== "available" && !/^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(publicBookingReference))
+  ) {
+    return alertResult("invalid_driver_link", { enabled: true });
+  }
+  const visibleBody: DriverNativePushVisibleBody = notificationKind === "winner"
+    ? "Accepted! Ack when admin send job link"
+    : notificationKind === "assignment_cancelled"
+      ? "Job assignment cancelled, do not proceed."
+      : "A driver-pool job is available. Open the app to review.";
+  const payload = driverPoolOfferPayload(offerKey, visibleBody);
+  return sendPayloadToDriverSubscriptions(
+    client,
+    driverId,
+    payload,
+    config,
+    options,
+    "available_jobs",
+    visibleBody,
+    payload.job_key,
+    false,
+  );
+}
+
+export async function sendDriverDeviceSilentRefreshForDriverPoolOffer(
+  client: DriverDevicePushClient,
   input: { driver_id: unknown; offer_key: unknown },
   options: DriverDevicePushAlertOptions = {},
 ): Promise<DriverDevicePushAlertResult> {
@@ -1306,7 +1445,10 @@ export async function sendDriverDevicePushAlertForDriverPoolOffer(
   if (!(await driverHasActiveOnePhoneAccount(client, driverId))) {
     return alertResult("invalid_driver_link", { enabled: true });
   }
-  const payload = driverPoolOfferPayload(offerKey);
+  const payload = driverPoolOfferPayload(
+    offerKey,
+    "A driver-pool job is available. Open the app to review.",
+  );
   return sendPayloadToDriverSubscriptions(
     client,
     driverId,
@@ -1314,9 +1456,11 @@ export async function sendDriverDevicePushAlertForDriverPoolOffer(
     config,
     options,
     "available_jobs",
-    "A driver-pool job is available. Open the app to review.",
+    "Job update available",
     payload.job_key,
     false,
+    true,
+    true,
   );
 }
 

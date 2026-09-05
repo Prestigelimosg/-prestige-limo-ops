@@ -24,6 +24,7 @@ const names = [
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
   "supabase/migrations/20260904125321_driver_pool_completion_repair.sql",
   "supabase/migrations/20260904190552_driver_pool_exact_concurrency_tokens.sql",
+  "supabase/migrations/20260905003818_driver_pool_admin_cancel_assigned_offer.sql",
   "vercel.json",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
@@ -57,6 +58,11 @@ includes("lib/driver-pool-fast-accept.ts", [
 ]);
 excludes("lib/driver-pool-fast-accept.ts", [/customer_price|invoice|billing_amount|payment|paynow|bank_account|internal_finance|payout_comparison/i]);
 includes("docs/current-implementation-ledger.md", [
+  "## Driver Pool Winner Driver Alert, Silent Loser Refresh And Pre-Link Assignment Recovery (source checkpoint 2026-09-05)",
+  "Accepted! Ack when admin send job link",
+  "The losing-Driver signal has no title, body, sound or badge.",
+  "the established manual Driver A to Driver B save closes the old assigned offer",
+  "existing full-width Assigned Driver action; no new button or panel is added",
   "## Driver Pool Admin API Singapore Region Locality Repair (source checkpoint 2026-09-05)",
   "maps only `app/api/admin-driver-job-bid-offers/route.ts` to Vercel region `sin1`",
   "## Driver Pool Publish RPC Timeout And Diagnostic Repair (source checkpoint 2026-09-05)",
@@ -241,13 +247,18 @@ try {
       exactActionRpcCalls.push({ name, payload });
       return Promise.resolve({
         data: {
-          closes_at: "2027-09-05T01:00:00.000Z",
-          offer_key: "a".repeat(64),
-          offer_payout_sgd: 55,
-          offer_status: "cancelled",
-          push_target_count: 1,
-          recipient_count: 1,
-          updated_at: exactOfferTimestamp,
+          assignment_cancelled: true,
+          cancelled_driver_id: 7,
+          offer: {
+            closes_at: "2027-09-05T01:00:00.000Z",
+            offer_key: "a".repeat(64),
+            offer_payout_sgd: 55,
+            offer_status: "cancelled",
+            push_target_count: 1,
+            recipient_count: 1,
+            updated_at: exactOfferTimestamp,
+          },
+          public_booking_reference: "10909",
         },
         error: null,
       });
@@ -259,8 +270,37 @@ try {
     source_surface: "admin_api",
   });
   assert.equal(cancelResult.ok, true, "cancel must retain the established RPC lane");
-  assert.equal(cancelResult.data.updated_at, exactOfferTimestamp);
+  assert.equal(cancelResult.data.offer.updated_at, exactOfferTimestamp);
+  assert.equal(cancelResult.data.assignment_cancelled, true);
+  assert.equal(cancelResult.data.cancelled_driver_id, 7);
+  assert.equal(cancelResult.data.public_booking_reference, "10909");
   assert.equal(exactActionRpcCalls[0].payload.p_expected_updated_at, exactOfferTimestamp);
+
+  const legacyCancelResult = await timeoutHarness.helper.cancelDriverPoolOffer({
+    rpc: () => Promise.resolve({
+      data: {
+        closes_at: "2027-09-05T01:00:00.000Z",
+        offer_key: "b".repeat(64),
+        offer_payout_sgd: 60,
+        offer_status: "cancelled",
+        push_target_count: 1,
+        recipient_count: 1,
+        updated_at: exactOfferTimestamp,
+      },
+      error: null,
+    }),
+  }, {
+    expected_updated_at: exactOfferTimestamp,
+    offer_key: "b".repeat(64),
+  }, {
+    actor_label: "William",
+    actor_role: "admin",
+    boundary_mode: "server-session-role-surface",
+    source_surface: "admin_api",
+  });
+  assert.equal(legacyCancelResult.ok, true, "existing open-offer cancellation must survive the migration/deploy handoff");
+  assert.equal(legacyCancelResult.data.assignment_cancelled, false);
+  assert.equal(legacyCancelResult.data.offer.offer_key, "b".repeat(64));
 
   const availableResult = await timeoutHarness.helper.loadAvailableDriverPoolJobs({
     rpc(name, payload) {
@@ -294,6 +334,7 @@ try {
         exactActionRpcCalls.push({ name, payload });
         return Promise.resolve({
           data: {
+            other_recipient_driver_ids: action === "accept" ? [8, 9] : [],
             ok: true,
             public_booking_reference: action === "accept" ? "10907" : null,
             reason: action === "accept" ? "accepted" : "declined",
@@ -307,6 +348,11 @@ try {
       exactActionRpcCalls.at(-1).payload.p_expected_updated_at,
       exactOfferTimestamp,
       `${action} must send the exact offer concurrency token`,
+    );
+    assert.deepEqual(
+      decisionResult.data.other_recipient_driver_ids,
+      action === "accept" ? [8, 9] : [],
+      "only a first acceptance may return the other exact offer recipients for the unavailable push",
     );
     assert.equal(
       decisionResult.data.public_booking_reference,
@@ -372,6 +418,18 @@ async function loadDriverPoolDecisionRouteHarness() {
       return { ok: true };
     };
   `);
+  await writeModule("lib/driver-device-push-notification.js", `
+    exports.sendDriverDevicePushAlertForDriverPoolOffer = async (_client, input) => {
+      globalThis.__driverPoolWinnerDriverAlertCalls.push(input);
+      if (globalThis.__driverPoolWinnerDriverAlertShouldFail) throw new Error("driver provider unavailable");
+      return { ok: true };
+    };
+    exports.sendDriverDeviceSilentRefreshForDriverPoolOffer = async (_client, input) => {
+      globalThis.__driverPoolSilentRefreshCalls.push(input);
+      if (globalThis.__driverPoolWinnerDriverAlertShouldFail) throw new Error("driver provider unavailable");
+      return { ok: true };
+    };
+  `);
   await writeModule("lib/driver-account-device-lock.js", `
     exports.verifyDriverAccountSession = async () => true;
   `);
@@ -428,32 +486,53 @@ try {
   });
   globalThis.__driverPoolAfterCallbacks = [];
   globalThis.__driverPoolAdminAlertCalls = [];
+  globalThis.__driverPoolWinnerDriverAlertCalls = [];
+  globalThis.__driverPoolSilentRefreshCalls = [];
   globalThis.__driverPoolPlateReadTables = [];
   globalThis.__driverPoolPlate = " 9696 ";
-  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10907", reason: "accepted" };
+  globalThis.__driverPoolDecision = { accepted: true, other_recipient_driver_ids: [18, 19], public_booking_reference: "10907", reason: "accepted" };
   globalThis.__driverPoolAdminAlertShouldFail = false;
+  globalThis.__driverPoolWinnerDriverAlertShouldFail = false;
 
   const acceptedResponse = await routeHarness.route.POST(decisionRequest());
   assert.equal(acceptedResponse.status, 200);
   assert.equal(globalThis.__driverPoolAdminAlertCalls.length, 0, "Admin push must not delay the Driver acceptance response");
-  assert.equal(globalThis.__driverPoolAfterCallbacks.length, 1, "first acceptance must schedule one Admin alert handoff");
+  assert.equal(globalThis.__driverPoolWinnerDriverAlertCalls.length, 0, "winner push must not delay the Driver acceptance response");
+  assert.equal(globalThis.__driverPoolSilentRefreshCalls.length, 0, "other-Driver refresh push must not delay the acceptance response");
+  assert.equal(globalThis.__driverPoolAfterCallbacks.length, 1, "first acceptance must schedule one winner alert handoff");
   await globalThis.__driverPoolAfterCallbacks[0]();
   assert.deepEqual(globalThis.__driverPoolPlateReadTables, ["drivers"]);
   assert.deepEqual(globalThis.__driverPoolAdminAlertCalls, [{
     eventType: "driver_pool_accepted",
     options: { bookingReference: "10907", vehiclePlate: "9696" },
   }]);
+  assert.deepEqual(globalThis.__driverPoolWinnerDriverAlertCalls, [{
+    driver_id: 17,
+    notification_kind: "winner",
+    offer_key: "a".repeat(64),
+    public_booking_reference: "10907",
+  }]);
+  assert.deepEqual(globalThis.__driverPoolSilentRefreshCalls, [
+    { driver_id: 18, offer_key: "a".repeat(64) },
+    { driver_id: 19, offer_key: "a".repeat(64) },
+  ]);
 
   globalThis.__driverPoolAfterCallbacks = [];
   globalThis.__driverPoolAdminAlertCalls = [];
+  globalThis.__driverPoolWinnerDriverAlertCalls = [];
+  globalThis.__driverPoolSilentRefreshCalls = [];
   globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10907", reason: "already_accepted" };
   const replayResponse = await routeHarness.route.POST(decisionRequest());
   assert.equal(replayResponse.status, 200);
   assert.equal(globalThis.__driverPoolAfterCallbacks.length, 0, "an idempotent replay must not schedule another Admin alert");
+  assert.equal(globalThis.__driverPoolWinnerDriverAlertCalls.length, 0, "an idempotent replay must not send a winner Driver alert");
+  assert.equal(globalThis.__driverPoolSilentRefreshCalls.length, 0, "an idempotent replay must not refresh other Drivers again");
 
-  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10909", reason: "accepted" };
+  globalThis.__driverPoolDecision = { accepted: true, other_recipient_driver_ids: [18], public_booking_reference: "10909", reason: "accepted" };
   globalThis.__driverPoolAfterCallbacks = [];
   globalThis.__driverPoolAdminAlertCalls = [];
+  globalThis.__driverPoolWinnerDriverAlertCalls = [];
+  globalThis.__driverPoolSilentRefreshCalls = [];
   globalThis.__driverPoolPlateReadTables = [];
   globalThis.__driverPoolPlate = "VEHICLE TBC";
   const invalidPlateResponse = await routeHarness.route.POST(decisionRequest());
@@ -461,11 +540,14 @@ try {
   await globalThis.__driverPoolAfterCallbacks[0]();
   assert.deepEqual(globalThis.__driverPoolPlateReadTables, ["drivers"]);
   assert.equal(globalThis.__driverPoolAdminAlertCalls.length, 0, "placeholder plate text must not send an Admin winner alert");
+  assert.equal(globalThis.__driverPoolWinnerDriverAlertCalls.length, 1, "an invalid Admin plate must not suppress the winner Driver alert");
+  assert.equal(globalThis.__driverPoolSilentRefreshCalls.length, 1, "an invalid Admin plate must not suppress the other-Driver silent refresh");
 
-  globalThis.__driverPoolDecision = { accepted: true, public_booking_reference: "10908", reason: "accepted" };
+  globalThis.__driverPoolDecision = { accepted: true, other_recipient_driver_ids: [18], public_booking_reference: "10908", reason: "accepted" };
   globalThis.__driverPoolAfterCallbacks = [];
   globalThis.__driverPoolPlate = "9696";
   globalThis.__driverPoolAdminAlertShouldFail = true;
+  globalThis.__driverPoolWinnerDriverAlertShouldFail = true;
   const resilientResponse = await routeHarness.route.POST(decisionRequest());
   assert.equal(resilientResponse.status, 200);
   await globalThis.__driverPoolAfterCallbacks[0]();
@@ -473,11 +555,143 @@ try {
 } finally {
   delete globalThis.__driverPoolAfterCallbacks;
   delete globalThis.__driverPoolAdminAlertCalls;
+  delete globalThis.__driverPoolWinnerDriverAlertCalls;
+  delete globalThis.__driverPoolSilentRefreshCalls;
   delete globalThis.__driverPoolPlateReadTables;
   delete globalThis.__driverPoolPlate;
   delete globalThis.__driverPoolDecision;
   delete globalThis.__driverPoolAdminAlertShouldFail;
+  delete globalThis.__driverPoolWinnerDriverAlertShouldFail;
   await routeHarness.cleanup();
+}
+
+async function loadAdminDriverPoolCancelRouteHarness() {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "prestige-driver-pool-cancel-alert-"));
+  const routeSource = await readFile("app/api/admin-driver-job-bid-offers/route.ts", "utf8");
+  const routePath = path.join(tempDir, "app/api/admin-driver-job-bid-offers/route.js");
+  const writeModule = async (relativePath, source) => {
+    const target = path.join(tempDir, relativePath);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, source);
+  };
+
+  await writeModule("node_modules/next/server.js", `
+    exports.after = (callback) => { globalThis.__driverPoolCancelAfterCallbacks.push(callback); };
+  `);
+  await writeModule("lib/admin-booking-supabase-adapter.js", `
+    exports.adminDispatcherBoundaryToPersistenceAdapterActor = () => ({ actorLabel: "Admin", actorRole: "admin" });
+  `);
+  await writeModule("lib/admin-dispatcher-auth-boundary.js", `
+    exports.adminBookingPersistencePurpose = "admin-booking-persistence";
+    exports.resolveAdminDispatcherBoundary = () => ({ context: {}, ok: true });
+  `);
+  await writeModule("lib/driver-device-push-notification.js", `
+    exports.sendDriverDevicePushAlertForDriverPoolOffer = async (_client, input) => {
+      globalThis.__driverPoolCancelAlertCalls.push(input);
+      if (globalThis.__driverPoolCancelAlertShouldFail) throw new Error("provider unavailable");
+      return { ok: true };
+    };
+  `);
+  await writeModule("lib/driver-pool-fast-accept.js", `
+    const client = {};
+    exports.getDriverPoolClientForProduction = () => ({ client, ok: true });
+    exports.parseDriverPoolCancelPayload = () => ({ data: { offer_key: "a".repeat(64), expected_updated_at: "2026-09-05T01:00:00.123456+00:00" }, ok: true });
+    exports.cancelDriverPoolOffer = async () => globalThis.__driverPoolCancelResult;
+    exports.loadAdminDriverPoolOffer = async () => ({ data: {}, ok: true });
+    exports.parseDriverPoolPublishPayload = () => ({ data: {}, ok: true });
+    exports.publishDriverPoolOffer = async () => ({ data: {}, ok: true });
+  `);
+  await mkdir(path.dirname(routePath), { recursive: true });
+  await writeFile(routePath, ts.transpileModule(routeSource, {
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: "app/api/admin-driver-job-bid-offers/route.ts",
+  }).outputText);
+
+  return {
+    cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    route: createRequire(import.meta.url)(routePath),
+  };
+}
+
+const cancelRouteHarness = await loadAdminDriverPoolCancelRouteHarness();
+try {
+  const cancelRequest = () => new Request("https://app.prestigelimo.sg/api/admin-driver-job-bid-offers", {
+    body: JSON.stringify({}),
+    method: "PATCH",
+  });
+  const cancelledOffer = {
+    offer_key: "a".repeat(64),
+    offer_status: "cancelled",
+  };
+  globalThis.__driverPoolCancelAfterCallbacks = [];
+  globalThis.__driverPoolCancelAlertCalls = [];
+  globalThis.__driverPoolCancelAlertShouldFail = false;
+  globalThis.__driverPoolCancelResult = {
+    data: {
+      assignment_cancelled: true,
+      cancelled_driver_id: 17,
+      offer: cancelledOffer,
+      public_booking_reference: "10909",
+    },
+    ok: true,
+  };
+
+  const assignmentCancelResponse = await cancelRouteHarness.route.PATCH(cancelRequest());
+  assert.equal(assignmentCancelResponse.status, 200);
+  assert.equal(globalThis.__driverPoolCancelAlertCalls.length, 0, "cancellation push must not delay the atomic API response");
+  assert.equal(globalThis.__driverPoolCancelAfterCallbacks.length, 1, "assignment cancellation must schedule one former-winner alert");
+  await globalThis.__driverPoolCancelAfterCallbacks[0]();
+  assert.deepEqual(globalThis.__driverPoolCancelAlertCalls, [{
+    driver_id: 17,
+    notification_kind: "assignment_cancelled",
+    offer_key: "a".repeat(64),
+    public_booking_reference: "10909",
+  }]);
+  assert.deepEqual(await assignmentCancelResponse.json(), {
+    assignment_cancelled: true,
+    cancelled_driver_id: 17,
+    offer: cancelledOffer,
+    ok: true,
+    public_booking_reference: "10909",
+  });
+
+  globalThis.__driverPoolCancelAfterCallbacks = [];
+  globalThis.__driverPoolCancelAlertCalls = [];
+  globalThis.__driverPoolCancelResult = {
+    data: {
+      assignment_cancelled: false,
+      cancelled_driver_id: null,
+      offer: cancelledOffer,
+      public_booking_reference: "10909",
+    },
+    ok: true,
+  };
+  const openOfferCancelResponse = await cancelRouteHarness.route.PATCH(cancelRequest());
+  assert.equal(openOfferCancelResponse.status, 200);
+  assert.equal(globalThis.__driverPoolCancelAfterCallbacks.length, 0, "ordinary open-offer cancellation must not send an assignment alert");
+
+  globalThis.__driverPoolCancelAfterCallbacks = [];
+  globalThis.__driverPoolCancelAlertCalls = [];
+  globalThis.__driverPoolCancelAlertShouldFail = true;
+  globalThis.__driverPoolCancelResult = {
+    data: {
+      assignment_cancelled: true,
+      cancelled_driver_id: 17,
+      offer: cancelledOffer,
+      public_booking_reference: "10909",
+    },
+    ok: true,
+  };
+  const resilientCancelResponse = await cancelRouteHarness.route.PATCH(cancelRequest());
+  assert.equal(resilientCancelResponse.status, 200);
+  await globalThis.__driverPoolCancelAfterCallbacks[0]();
+  assert.equal((await resilientCancelResponse.json()).assignment_cancelled, true, "provider failure must not roll back atomic cancellation");
+} finally {
+  delete globalThis.__driverPoolCancelAfterCallbacks;
+  delete globalThis.__driverPoolCancelAlertCalls;
+  delete globalThis.__driverPoolCancelAlertShouldFail;
+  delete globalThis.__driverPoolCancelResult;
+  await cancelRouteHarness.cleanup();
 }
 
 includes("app/api/driver-job-bids/route.ts", [
@@ -486,6 +700,9 @@ includes("app/api/driver-job-bids/route.ts", [
   "driver-pool-offer-accept", "driver-pool-offer-decline",
   'import { after } from "next/server";',
   "notifyAdminOfDriverPoolAcceptance", 'sendAdminDevicePushAlert("driver_pool_accepted", {',
+  "sendDriverDevicePushAlertForDriverPoolOffer", 'notification_kind: "winner"',
+  "sendDriverDeviceSilentRefreshForDriverPoolOffer", "other_recipient_driver_ids",
+  "public_booking_reference: acceptedPublicBookingReference", "Promise.allSettled",
   'result.data.reason === "accepted"', '.from("drivers")', '.select("plate_number")',
   "safeDriverPlate", "bookingReference: publicBookingReference", "vehiclePlate,",
   "A completed atomic Driver Pool assignment must not fail because Admin push is unavailable.",
@@ -502,6 +719,7 @@ includes("app/api/admin-driver-job-bid-offers/route.ts", [
 ]);
 includes("app/admin-driver-pool-control.tsx", [
   "Send to Driver Pool", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
+  "onAssignedOfferChange", 'offer?.offer_status === "assigned"',
   "eligible Drivers", "push-capable Drivers", "app-only Drivers",
   "Drivers had a push request accepted by provider", "delivery not confirmed",
 ]);
@@ -512,8 +730,23 @@ includes("scripts/test-booking-ui-browser.mjs", [
 assert.equal((files["app/page.tsx"].match(/<AdminDriverPoolControl/g) || []).length, 1);
 includes("app/page.tsx", [
   "Manual assignment with payout control.", "Apply Driver to Draft",
+  "Cancel Driver Assignment", "cancelAssignedDriverPoolAssignment",
   'requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}',
 ]);
+const assignmentHandlerStart = files["app/page.tsx"].indexOf("async function assignDraftDriver()");
+const assignmentHandlerEnd = files["app/page.tsx"].indexOf("async function copyDraftDriverDispatch()", assignmentHandlerStart);
+const assignmentHandler = files["app/page.tsx"].slice(assignmentHandlerStart, assignmentHandlerEnd);
+assert.ok(assignmentHandlerStart >= 0 && assignmentHandlerEnd > assignmentHandlerStart, "Assigned Driver action handler missing");
+assert.ok(
+  assignmentHandler.indexOf("if (saveLoadedDriverAssignmentAvailable)") <
+    assignmentHandler.indexOf("if (currentAssignedDriverPoolAdminOffer)"),
+  "A deliberately selected replacement Driver must retain the established saved-assignment action before Pool cancellation",
+);
+assert.ok(
+  assignmentHandler.indexOf("if (currentAssignedDriverPoolAdminOffer)") <
+    assignmentHandler.indexOf("if (draftDriverAssignmentApplied)"),
+  "The visible Cancel Driver Assignment state must reach atomic cancellation before the old local draft-clear branch",
+);
 
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
@@ -521,10 +754,14 @@ includes("app/driver-portal/page.tsx", [
   "Pickup area", "Drop-off area", "Offer closes", "job.safe_pickup_area",
   "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
   "setAvailableJobs([])",
+  "driverPoolAvailableJobsRefreshIntervalMs", "window.setInterval",
+  'document.visibilityState === "visible"', "quiet: true",
 ]);
 excludes("app/driver-portal/page.tsx", [/customer_price|invoice_number|paynow|bank_account|payout_comparison|internal_finance/i]);
 includes("lib/driver-device-push-notification.ts", [
   '"available_jobs" | "messages"', "A driver-pool job is available. Open the app to review.",
+  "Accepted! Ack when admin send job link", 'notification_kind?: "available" | "winner"',
+  "sendDriverDeviceSilentRefreshForDriverPoolOffer", "Job assignment cancelled, do not proceed.",
   'target_path: "/driver-portal?view=available-jobs"',
 ]);
 includes("driver-companion/App.tsx", ['request.openTarget === "available_jobs"', "/driver-portal?view=available-jobs"]);
@@ -536,7 +773,34 @@ includes("driver-companion/src/native-notifications.ts", ['notification.open_tar
 includes("public/prestige-driver-push-sw.js", [
   "/driver-portal?view=available-jobs",
   "A driver-pool job is available. Open the app to review.",
+  "Accepted! Ack when admin send job link",
+  "Job assignment cancelled, do not proceed.",
 ]);
+
+const assignmentCancellationMigration = files["supabase/migrations/20260905003818_driver_pool_admin_cancel_assigned_offer.sql"];
+for (const fragment of [
+  "create or replace function public.cancel_driver_pool_offer",
+  "Only an untouched assigned Driver Pool offer without a Driver Job Link or Driver status may be cancelled.",
+  "offer_status = 'cancelled'",
+  "driver_id = null",
+  "driver_payout_override = null",
+  "driver_payout_reason = null",
+  "from public.driver_job_links",
+  "from public.driver_job_status_events",
+  "accepted Driver Pool assignment cancelled before Driver Job Link issuance",
+  "'admin_dispatcher_override', v_booking.booking_reference, 'admin_api'",
+  "create or replace function public.accept_driver_pool_offer",
+  "other_recipient_driver_ids",
+  "booking_assigned_elsewhere",
+  "revoke all on function public.cancel_driver_pool_offer",
+  "grant execute on function public.cancel_driver_pool_offer",
+  "p.prosecdef",
+  "security invoker",
+]) assert.ok(assignmentCancellationMigration.includes(fragment), `assignment cancellation migration missing ${fragment}`);
+assert.doesNotMatch(assignmentCancellationMigration, /(?:company_id|booker_id|traveler_id|customer_price_amount|invoice|billing|payment|paynow|bank_account)\s*=/i);
+assert.doesNotMatch(assignmentCancellationMigration, /insert\s+into\s+public\.driver_job_links/i);
+assert.doesNotMatch(assignmentCancellationMigration, /insert\s+into\s+public\.driver_job_status_events/i);
+assert.doesNotMatch(assignmentCancellationMigration, /(?:insert\s+into|update|delete\s+from)\s+public\.[a-z0-9_]*(?:calendar|message|live_location|gps)/i);
 
 const migration = files["supabase/migrations/20260904112430_driver_pool_fast_accept.sql"];
 for (const fragment of [

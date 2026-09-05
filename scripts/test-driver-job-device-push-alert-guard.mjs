@@ -300,6 +300,12 @@ assertIncludes(
     "registerDriverDevicePushSubscriptionForPortalSession",
     "sendDriverDevicePushAlertForNewJobLink",
     "sendDriverDevicePushAlertForPickupReminder",
+    "sendDriverDevicePushAlertForDriverPoolOffer",
+    "sendDriverDeviceSilentRefreshForDriverPoolOffer",
+    "Accepted! Ack when admin send job link",
+    "Job assignment cancelled, do not proceed.",
+    "contentAvailable: true",
+    "driver_pool_refresh: true",
     "New Driver Job issued. Tap to review.",
     "New Driver Job app update. Tap to review.",
     "Pickup is in 1 hour. Open Driver Portal to review.",
@@ -465,8 +471,19 @@ assertIncludes(
     'self.addEventListener("notificationclick"',
     "target_path",
     '"/driver-portal"',
+    "Accepted! Ack when admin send job link",
   ],
   "driver-scoped service worker",
+);
+assertIncludes(
+  nativeAppSource,
+  [
+    "Notifications.addNotificationReceivedListener",
+    "data.driver_pool_refresh === true",
+    "void openNotificationData(data)",
+    "receivedSubscription.remove()",
+  ],
+  "native silent Driver Pool refresh listener",
 );
 assertExcludes(
   serviceWorkerSource,
@@ -857,6 +874,166 @@ try {
 
   const nativeExpoPushToken =
     "ExpoPushToken[abcdefghijklmnopqrstuvwxyz1234567890]";
+  let winnerNativeRequest = null;
+  let winnerWebPayload = null;
+  const winnerAlert = await helper.sendDriverDevicePushAlertForDriverPoolOffer(
+    createMockClient({
+      subscriptions: [
+        {
+          auth: "native_expo_push_token",
+          endpoint: nativeExpoPushToken,
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+        {
+          auth: "web-auth",
+          endpoint: "https://push.example.test/driver-pool-winner",
+          p256dh: "web-p256dh",
+          source_surface: "driver_portal",
+        },
+      ],
+    }),
+    {
+      driver_id: 8,
+      notification_kind: "winner",
+      offer_key: "a".repeat(64),
+      public_booking_reference: "10909",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async (expoToken, jobKey, openTarget, visibleBody) => {
+        winnerNativeRequest = { expoToken, jobKey, openTarget, visibleBody };
+      },
+      pushSender: async (_subscription, payload) => { winnerWebPayload = payload; },
+    },
+  );
+  assert.equal(winnerAlert.ok, true);
+  assert.equal(winnerAlert.provider_request_count, 2);
+  assert.deepEqual(winnerNativeRequest, {
+    expoToken: nativeExpoPushToken,
+    jobKey: winnerWebPayload.job_key,
+    openTarget: "available_jobs",
+    visibleBody: "Accepted! Ack when admin send job link",
+  });
+  assert.equal(winnerWebPayload.body, "Accepted! Ack when admin send job link");
+  assert.equal(winnerWebPayload.target_path, "/driver-portal?view=available-jobs");
+  assert.match(winnerWebPayload.job_key, /^[0-9a-f]{64}$/);
+  assertExcludes(
+    JSON.stringify({ winnerNativeRequest, winnerWebPayload }),
+    ["passenger", "customer", "contact", "price", "payout", "invoice", "billing", "payment", "paynow"],
+    "Driver Pool winner push privacy",
+  );
+  let invalidWinnerSendCount = 0;
+  const invalidWinnerAlert = await helper.sendDriverDevicePushAlertForDriverPoolOffer(
+    createMockClient(),
+    {
+      driver_id: 8,
+      notification_kind: "winner",
+      offer_key: "a".repeat(64),
+      public_booking_reference: "PRIVATE-BOOKING-REFERENCE",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async () => { invalidWinnerSendCount += 1; },
+      pushSender: async () => { invalidWinnerSendCount += 1; },
+    },
+  );
+  assert.equal(invalidWinnerAlert.ok, false);
+  assert.equal(invalidWinnerAlert.reason, "invalid_driver_link");
+  assert.equal(invalidWinnerSendCount, 0);
+
+  let silentNativePayload = null;
+  let silentWebSendCount = 0;
+  const silentRefreshAlert = await helper.sendDriverDeviceSilentRefreshForDriverPoolOffer(
+    createMockClient({
+      subscriptions: [
+        {
+          auth: "native_expo_push_token",
+          endpoint: nativeExpoPushToken,
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+        {
+          auth: "web-auth",
+          endpoint: "https://push.example.test/driver-pool-loser",
+          p256dh: "web-p256dh",
+          source_surface: "driver_portal",
+        },
+      ],
+    }),
+    { driver_id: 8, offer_key: "b".repeat(64) },
+    {
+      env: configuredEnv,
+      nativeFetch: async (_url, init) => {
+        silentNativePayload = JSON.parse(String(init?.body || "{}"));
+        return new Response(JSON.stringify({ data: { status: "ok" } }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      },
+      pushSender: async () => { silentWebSendCount += 1; },
+    },
+  );
+  assert.equal(silentRefreshAlert.ok, true);
+  assert.equal(silentRefreshAlert.provider_request_count, 1);
+  assert.equal(silentRefreshAlert.native_provider_request_count, 1);
+  assert.equal(silentWebSendCount, 0, "losing Drivers must not receive visible web push copy");
+  assert.equal(silentNativePayload.contentAvailable, true);
+  assert.equal(silentNativePayload.data.driver_pool_refresh, true);
+  assert.equal(silentNativePayload.data.open_target, "available_jobs");
+  assert.match(silentNativePayload.data.job_key, /^[0-9a-f]{64}$/);
+  for (const visibleField of ["badge", "body", "sound", "title"]) {
+    assert.equal(
+      Object.hasOwn(silentNativePayload, visibleField),
+      false,
+      `silent losing-Driver refresh must omit ${visibleField}`,
+    );
+  }
+  assertExcludes(
+    JSON.stringify(silentNativePayload),
+    ["passenger", "customer", "contact", "price", "payout", "invoice", "billing", "payment", "paynow"],
+    "silent losing-Driver refresh privacy",
+  );
+
+  let cancellationNativeRequest = null;
+  let cancellationWebPayload = null;
+  const cancellationAlert = await helper.sendDriverDevicePushAlertForDriverPoolOffer(
+    createMockClient({
+      subscriptions: [
+        {
+          auth: "native_expo_push_token",
+          endpoint: nativeExpoPushToken,
+          p256dh: "native_expo_push_token",
+          source_surface: "driver_native_ios",
+        },
+        {
+          auth: "web-auth",
+          endpoint: "https://push.example.test/driver-pool-cancelled",
+          p256dh: "web-p256dh",
+          source_surface: "driver_portal",
+        },
+      ],
+    }),
+    {
+      driver_id: 8,
+      notification_kind: "assignment_cancelled",
+      offer_key: "c".repeat(64),
+      public_booking_reference: "10909",
+    },
+    {
+      env: configuredEnv,
+      nativePushSender: async (expoToken, jobKey, openTarget, visibleBody) => {
+        cancellationNativeRequest = { expoToken, jobKey, openTarget, visibleBody };
+      },
+      pushSender: async (_subscription, payload) => { cancellationWebPayload = payload; },
+    },
+  );
+  assert.equal(cancellationAlert.ok, true);
+  assert.equal(cancellationAlert.provider_request_count, 2);
+  assert.equal(cancellationNativeRequest.visibleBody, "Job assignment cancelled, do not proceed.");
+  assert.equal(cancellationNativeRequest.openTarget, "available_jobs");
+  assert.equal(cancellationWebPayload.body, "Job assignment cancelled, do not proceed.");
+  assert.equal(cancellationWebPayload.target_path, "/driver-portal?view=available-jobs");
   const nativeRegistrationClient = createMockClient();
   const nativeRegistration =
     await helper.registerDriverNativeDevicePushSubscriptionForAcknowledgedLink({

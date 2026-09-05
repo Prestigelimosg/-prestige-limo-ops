@@ -1335,6 +1335,10 @@ const guardChecks = [
     script: "scripts/test-driver-ota-testflight-build19-release-guard.mjs",
   },
   {
+    label: "Three Apple apps external TestFlight guard",
+    script: "scripts/test-three-apple-app-external-testflight-guard.mjs",
+  },
+  {
     label: "Customer Live Location link readiness contract guard",
     script: "scripts/test-customer-live-location-link-readiness-contract-guard.mjs",
   },

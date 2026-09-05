@@ -253,6 +253,7 @@ async function runChromeTest() {
           "alerts-on",
           "faceid-off",
           "faceid-on",
+          "pool-winner",
         ].includes(embeddedDriverMode);
         if (embeddedDriverHarness) {
           window.__PRESTIGE_DRIVER_NATIVE_APP__ = true;
@@ -284,6 +285,7 @@ async function runChromeTest() {
           safeTitle: "Dispatch app update",
           visibilityState: "visible",
         };
+        window.__driverPoolWinnerTest = { accepted: false, decisions: [] };
         Object.defineProperty(document, "visibilityState", {
           configurable: true,
           get: () => window.__driverAppUpdateTest.visibilityState,
@@ -406,6 +408,46 @@ async function runChromeTest() {
           const method = args[1]?.method || args[0]?.method || "GET";
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
+
+          if (
+            embeddedDriverMode === "pool-winner" &&
+            new URL(url, window.location.origin).pathname === "/api/driver-job-bids"
+          ) {
+            if (method === "POST") {
+              try {
+                window.__driverPoolWinnerTest.decisions.push(JSON.parse(args[1]?.body || "{}"));
+              } catch {}
+              window.__driverPoolWinnerTest.accepted = true;
+              return Promise.resolve(new Response(JSON.stringify({
+                accepted: true,
+                ok: true,
+                reason: "accepted",
+              }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }));
+            }
+            return Promise.resolve(new Response(JSON.stringify({
+              enabled: true,
+              has_more: false,
+              jobs: window.__driverPoolWinnerTest.accepted ? [] : [{
+                closes_at: "2026-09-07T01:00:00.000Z",
+                offer_key: "c".repeat(64),
+                offer_payout_sgd: 55,
+                pickup_at: "2026-09-07T00:00:00.000Z",
+                public_booking_reference: "10909",
+                safe_dropoff_area: "Airport area",
+                safe_pickup_area: "City area",
+                safe_trip_summary: "Departure",
+                safe_vehicle_label: "AVF",
+                updated_at: "2026-09-05T00:00:00.000Z",
+              }],
+              ok: true,
+            }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }));
+          }
 
           if (new URL(url, window.location.origin).pathname.endsWith("/live-location")) {
             if (method === "DELETE") {
@@ -591,7 +633,7 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
-                session: embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-")
+                session: embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-") || embeddedDriverMode.startsWith("pool-")
                   ? "account"
                   : "link",
                 version: "driver-portal-browser-mock",
@@ -2462,6 +2504,63 @@ async function runChromeTest() {
       faceIdSetupAfterReload,
       { jobCount: 2, setupCount: 0, signInCount: 0 },
       "A signed-in installed Driver account with persisted Face ID enabled must keep the setup panel absent after reload.",
+    );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=pool-winner", appUrl).toString(),
+      "JOB 10909",
+      "Driver Pool available job before acceptance",
+    );
+    const poolAcceptClicked = await evaluate(`(() => {
+      const offer = document.querySelector('[data-driver-pool-offer="${"c".repeat(64)}"]');
+      const button = [...(offer?.querySelectorAll("button") || [])].find((item) => item.textContent.trim() === "Accept");
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(poolAcceptClicked, true, "The existing Driver Pool Accept action must remain available.");
+    const poolWinnerState = await waitForCondition(
+      () => evaluate(`(() => {
+        const confirmation = document.querySelector('[data-driver-pool-accepted-confirmation="true"]');
+        if (!confirmation) return false;
+        return {
+          className: confirmation.className,
+          confirmationCount: document.querySelectorAll('[data-driver-pool-accepted-confirmation="true"]').length,
+          decisions: window.__driverPoolWinnerTest?.decisions || [],
+          fetchCalls: window.__driverJobFetchCalls || [],
+          offerCount: document.querySelectorAll("[data-driver-pool-offer]").length,
+          tagName: confirmation.tagName,
+          text: confirmation.textContent.trim(),
+        };
+      })()`),
+      10000,
+      "Driver Pool retained in-app winner confirmation",
+    );
+    assert.deepEqual(poolWinnerState.decisions.map((decision) => Object.keys(decision).sort()), [[
+      "expected_updated_at",
+      "idempotency_key",
+      "offer_key",
+    ]]);
+    assert.equal(poolWinnerState.fetchCalls.some((call) => call.includes("POST /api/driver-job-bids")), true);
+    assert.equal(poolWinnerState.offerCount, 0, "The won offer must leave Available Jobs immediately.");
+    assert.equal(poolWinnerState.confirmationCount, 1, "Only one retained winner confirmation may render.");
+    assert.equal(poolWinnerState.tagName, "P", "The retained winner confirmation must remain normal compact text.");
+    assert.equal(poolWinnerState.className.includes("text-xs"), true, "The retained winner confirmation must use compact text sizing.");
+    assert.equal(poolWinnerState.text, "Accepted! Pls ack when admin send job link");
+    const poolRefreshClicked = await evaluate(`(() => {
+      const section = document.querySelector('[data-driver-pool-available-jobs="true"]');
+      const button = [...(section?.querySelectorAll("button") || [])].find((item) => item.textContent.trim() === "Refresh");
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(poolRefreshClicked, true, "The established Available Jobs Refresh action must remain available.");
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-pool-accepted-confirmation="true"]')?.textContent.trim() === "Accepted! Pls ack when admin send job link"`),
+      10000,
+      "Driver Pool winner confirmation retained after authoritative refresh",
     );
 
     await navigateAndWaitForBodyText(

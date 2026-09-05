@@ -1,10 +1,10 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified application source checkpoint:
-e3c6a39c Merge pull request #495 from Prestigelimosg/codex/driver-pool-winner-driver-alert
+36ac9958 Merge pull request #498 from Prestigelimosg/codex/driver-pool-winner-receipt
 
 Latest pushed `origin/main` application checkpoint:
-e3c6a39c Merge pull request #495 from Prestigelimosg/codex/driver-pool-winner-driver-alert
+36ac9958 Merge pull request #498 from Prestigelimosg/codex/driver-pool-winner-receipt
 
 Latest separately observed `origin/staging` pointer:
 6c6ad94c Merge PR #323: Scroll customer booking details into view
@@ -14,6 +14,13 @@ Vercel Production deployment `dpl_9SdkJnwrhcjEzFwxhovJ4SdH6kAP` for merge `e3c6a
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
+
+## Three Native Apps EAS Update Foundation (source checkpoint 2026-09-05)
+
+- The established Admin (`Prestige Limo Ops`), Customer (`Prestige SG`) and Driver (`Prestige SG Driver`) native projects now each include the Expo Updates runtime and their own exact existing EAS project update URL. Preview builds are fixed to the `preview` channel and Store-distribution builds are fixed to the `production` channel inside each app's existing EAS configuration; no project, bundle, Apple app, Team, certificate, provisioning profile, tester or group is shared or replaced.
+- Every app uses Expo's `appVersion` runtime policy, automatic startup checking and zero launch wait. The embedded signed bundle therefore remains the immediate fallback; only an update compatible with that app, platform, runtime version and channel may be selected. Future native dependency, plugin, permission or app-configuration changes must advance the native app version before an OTA publication can target the replacement runtime.
+- This is configuration foundation only. No OTA update is published, no EAS build or TestFlight upload is started, and the three currently installed builds cannot gain OTA support retroactively. Each app requires one later separately approved native build containing `expo-updates` before that exact app can receive a separately reviewed and approved compatible OTA publication.
+- No update prompt, screen, button, forced reload, background task, notification, badge, booking, Driver Pool, Driver Job Link/ACK, Driver Reports, Customer Company + Booker identity/profile, Calendar, GPS, messaging, invoice, billing, payment, payout, PayNow, Supabase, Vercel, Production data or provider-send behavior changes. `scripts/test-three-native-app-eas-update-foundation-guard.mjs` failed first on the absent foundation and protects all three exact projects, URLs, channels, runtime policy, dependency, App Store target and absence of a duplicate native update UI.
 
 ## Driver Native Visible Alert Badge Persistence Repair (source checkpoint 2026-09-05)
 

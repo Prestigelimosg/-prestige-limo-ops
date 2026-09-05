@@ -15,6 +15,12 @@ Vercel Production deployment `dpl_9SdkJnwrhcjEzFwxhovJ4SdH6kAP` for merge `e3c6a
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
 
+## Manual WhatsApp Copy Compact Card (source checkpoint 2026-09-05)
+
+- Owner-visible Production evidence showed the existing `Manual WhatsApp Copy — Optional` disclosure and its nested preview working correctly, but the expanded outer card retained oversized heading, padding, action spacing and unused desktop height. The repair stays inside that one established manual fallback card: it uses a compact heading and description, tighter card and preview padding, and aligns the unchanged Edit/Copy actions beside the title on large screens. The card and preview remain collapsed by default and retain their existing disclosure behavior.
+- The existing assigned-driver template generator, Edit, Save Edit, Cancel Edit, Copy, copied/error feedback and full preview text remain unchanged. Clipboard-error feedback stays in normal document flow below the desktop-positioned actions so it cannot cover the preview when Copy fails. No WhatsApp provider send, Driver in-app message, Driver Pool, assignment, Driver Job Link/ACK, notification/badge, Calendar, GPS/live location, booking, Company + Booker Customer profile, invoice, billing, payment, payout or PayNow behavior changes.
+- Focused protection is the extended `scripts/test-driver-message-job-link-human-ui-guard.mjs`, which locks the compact card markers, heading, action placement, control height and preview title while preserving the established manual-copy controls and human Driver Job Link layout. Runtime acceptance must keep Edit/Copy usable, the preview expandable and the compact desktop card free of overlap.
+
 ## Prestige SG Driver Build 19 OTA Foundation TestFlight Release Checkpoint (source checkpoint 2026-09-05)
 
 - The owner approved exactly one Driver-only iOS Production build and App Store Connect upload after the bounded source checks pass. This checkpoint starts from exact current `origin/main` merge `5ca0ae12` and advances only Driver `ios.buildNumber` from completed Build `18` to `19`. Public iOS version `1.0.0`, installed label `Prestige Driver`, bundle `sg.prestigelimo.drivercompanion`, EAS project `2a797181-d09d-4384-8d01-583456e83c3e`, App Store Connect app `6800706103`, light mode, icon, permissions, signing identity, entitlements and associated domains remain exact. Admin Build `7` and Customer Build `12` remain parked and are not built or uploaded.

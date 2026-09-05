@@ -18,12 +18,26 @@ for (const fragment of [
   "<summary",
   "Manual WhatsApp Copy — Optional",
   "Copy the assigned-driver update, then paste it into WhatsApp manually.",
+  'data-driver-manual-copy-heading="true"',
+  'className="text-sm font-semibold leading-5"',
+  'data-driver-manual-copy-actions="true"',
+  "lg:absolute lg:right-2 lg:top-2",
+  'data-driver-manual-copy-feedback-row="true"',
+  "min-h-9",
+  'data-dispatch-compact-panel="driver-dispatch-copy-preview"',
+  "text-[11px] font-semibold leading-5",
   'data-copy-edit-button="driverDispatch"',
   'data-copy-copy-button="driverDispatch"',
 ]) {
   assert.ok(messagePanel.includes(fragment), `Missing manual WhatsApp copy fragment: ${fragment}`);
 }
 assert.ok(!messagePanel.includes(">Driver Dispatch<"), "Visible Driver Dispatch title must be renamed.");
+assert.ok(!messagePanel.includes('className="text-lg font-semibold">Manual WhatsApp Copy'), "Manual WhatsApp Copy heading must stay compact.");
+assert.ok(!messagePanel.includes('bg-white p-3"\n              data-dispatch-workflow-step="driver-dispatch-copy"'), "Manual WhatsApp Copy card must not regain its taller padding.");
+assert.ok(
+  messagePanel.indexOf('data-driver-manual-copy-actions="true"') < messagePanel.indexOf('data-driver-manual-copy-feedback-row="true"'),
+  "Clipboard error feedback must stay outside the desktop-positioned action group.",
+);
 assert.ok(!messagePanel.includes("Send Driver In-App"), "Dispatch must not retain a second in-app driver send action.");
 assert.ok(!messagePanel.includes("Driver In-App status"), "Dispatch must not retain a second in-app driver status panel.");
 

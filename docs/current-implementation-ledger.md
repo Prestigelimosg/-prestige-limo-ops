@@ -1,16 +1,16 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
 Latest verified application source checkpoint:
-5dd87cb7 Merge pull request #493 from Prestigelimosg/codex/driver-pool-invoker-preflight
+e3c6a39c Merge pull request #495 from Prestigelimosg/codex/driver-pool-winner-driver-alert
 
 Latest pushed `origin/main` application checkpoint:
-5dd87cb7 Merge pull request #493 from Prestigelimosg/codex/driver-pool-invoker-preflight
+e3c6a39c Merge pull request #495 from Prestigelimosg/codex/driver-pool-winner-driver-alert
 
 Latest separately observed `origin/staging` pointer:
 6c6ad94c Merge PR #323: Scroll customer booking details into view
 
 Latest directly observed Production deployment checkpoint:
-Production visibly reports exact build `5dd87cb7bdb010f05617819ca66b20e1c6c84fd9` on `app.prestigelimo.sg` with the separately enabled Driver Pool Admin control.
+Vercel Production deployment `dpl_9SdkJnwrhcjEzFwxhovJ4SdH6kAP` for merge `e3c6a39c` reached `Ready` and owns the `app.prestigelimo.sg` alias.
 
 Purpose:
 This file is the repo source of truth for Codex and future work. Inspect this file before adding new UI, API, helper, test, or docs.
@@ -24,6 +24,7 @@ This file is the repo source of truth for Codex and future work. Inspect this fi
 - The existing booking-change trigger now preserves the first winner when the atomic accept writes that same verified Driver, while the established manual Driver A to Driver B save closes the old assigned offer when the accepted Driver no longer matches. The migration/deployment handoff remains compatible with the prior direct open-offer cancellation response, so the existing `Cancel Offer` action is not broken during rollout.
 - Push delivery remains best-effort. The foreground/focus read is authoritative, but iOS does not guarantee immediate background execution of data-only notifications. The native silent-receive listener is a Driver companion source change and therefore requires a separately approved new Driver TestFlight build before physical native silent-refresh acceptance; the web content fallback can be accepted after Production web deployment without changing the installed binary.
 - Focused fail-then-pass protection is the updated `scripts/test-driver-pool-fast-accept-guard.mjs` and `scripts/test-driver-job-device-push-alert-guard.mjs`. They execute the first-accept Admin/winner/loser fan-out, idempotent replay, exact silent Expo payload with no visible fields, native refresh listener, cancellation copy, legacy response compatibility, exact guarded migration boundary and protected privacy exclusions. The Driver Pool API/public-surface guards and Next.js Production build also pass locally. Production migration, deployment, booking `10909` reuse, physical two-Driver removal, Admin alert, winner alert and cancellation remain unclaimed until their exact later runtime steps complete.
+- Owner-approved PR `#495` merged as `e3c6a39c`; automatic Vercel Production deployment `dpl_9SdkJnwrhcjEzFwxhovJ4SdH6kAP` reached `Ready` on `app.prestigelimo.sg`. Production migration history records exact version `20260905012642 driver_pool_admin_cancel_assigned_offer`. Read-back proved the accept, cancel and booking-change functions remain `SECURITY INVOKER`, deny `anon` and `authenticated`, grant `service_role`, and contain the exact new contracts. Supabase security and performance advisors introduced no new Driver Pool finding. Booking `10909` remained unchanged with one assigned offer, verified Driver `17`, zero Driver Job Links and zero Driver status events. No cancellation, republish, link issuance, customer/profile, Company + Booker, Calendar, invoice, payment or other protected-lane write was performed during deployment verification.
 
 ## Driver Pool Winner Admin Alert (source checkpoint 2026-09-05)
 

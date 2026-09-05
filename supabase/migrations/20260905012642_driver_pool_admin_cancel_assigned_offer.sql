@@ -2,6 +2,7 @@
 -- Driver Job Link or Driver status exists. The same migration returns the
 -- other exact recipients after first acceptance for a silent app refresh and
 -- keeps manual Driver A -> B reassignment consistent with the assigned offer.
+-- The filename matches the exact Production migration history version.
 
 do $$
 declare

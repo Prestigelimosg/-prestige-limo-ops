@@ -24,7 +24,7 @@ const names = [
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
   "supabase/migrations/20260904125321_driver_pool_completion_repair.sql",
   "supabase/migrations/20260904190552_driver_pool_exact_concurrency_tokens.sql",
-  "supabase/migrations/20260905003818_driver_pool_admin_cancel_assigned_offer.sql",
+  "supabase/migrations/20260905012642_driver_pool_admin_cancel_assigned_offer.sql",
   "vercel.json",
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
@@ -777,7 +777,7 @@ includes("public/prestige-driver-push-sw.js", [
   "Job assignment cancelled, do not proceed.",
 ]);
 
-const assignmentCancellationMigration = files["supabase/migrations/20260905003818_driver_pool_admin_cancel_assigned_offer.sql"];
+const assignmentCancellationMigration = files["supabase/migrations/20260905012642_driver_pool_admin_cancel_assigned_offer.sql"];
 for (const fragment of [
   "create or replace function public.cancel_driver_pool_offer",
   "Only an untouched assigned Driver Pool offer without a Driver Job Link or Driver status may be cancelled.",

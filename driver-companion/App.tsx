@@ -381,6 +381,19 @@ export default function App() {
         void openNotificationData(response.notification.request.content.data);
       },
     );
+    const receivedSubscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const data = notification.request.content.data;
+        if (
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          data.driver_pool_refresh === true
+        ) {
+          void openNotificationData(data);
+        }
+      },
+    );
 
     const openLatestBadgeNotification = async () => {
       const [count, presented] = await Promise.all([
@@ -419,6 +432,7 @@ export default function App() {
     return () => {
       mounted = false;
       subscription.remove();
+      receivedSubscription.remove();
       appStateSubscription.remove();
     };
   }, [installationId, receiveDriverJobUrl]);

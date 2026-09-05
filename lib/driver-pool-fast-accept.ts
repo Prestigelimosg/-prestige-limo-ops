@@ -41,6 +41,13 @@ export type DriverPoolOfferState = {
   updated_at: string;
 };
 
+export type DriverPoolCancelResult = {
+  assignment_cancelled: boolean;
+  cancelled_driver_id: number | null;
+  offer: DriverPoolOfferState;
+  public_booking_reference: string | null;
+};
+
 export type DriverPoolAvailableJob = {
   closes_at: string;
   offer_key: string;
@@ -111,6 +118,11 @@ function publicBookingReference(value: unknown): string | null {
 function exactKeys(record: UnknownRecord, allowed: readonly string[]) {
   const safe = new Set(allowed);
   return Object.keys(record).every((key) => safe.has(key));
+}
+
+function positiveDriverIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))];
 }
 
 export function driverPoolIsEnabled(env: Record<string, string | undefined> = process.env) {
@@ -330,8 +342,24 @@ export async function cancelDriverPoolOffer(client: DriverPoolClient, input: { o
     p_expected_updated_at: input.expected_updated_at, p_offer_key: input.offer_key,
   });
   if (error) { const failure = classify(error); return { ...failure, ok: false } as const; }
-  const offer = mapOffer(asRecord(data));
-  return offer ? { data: offer, ok: true } as const : { error: "Driver Pool returned an invalid safe result.", ok: false, status: 503 } as const;
+  const result = asRecord(data);
+  // Keep the existing open-offer cancellation response compatible during the
+  // narrow migration/deployment handoff. The prior RPC returns the offer row
+  // directly; the new atomic assignment cancellation wraps it in `offer`.
+  const offer = mapOffer(asRecord(result.offer)) ?? mapOffer(result);
+  if (!offer) return { error: "Driver Pool returned an invalid safe result.", ok: false, status: 503 } as const;
+  const cancelledDriverId = result.assignment_cancelled === true
+    ? positiveDriverIds([result.cancelled_driver_id])[0] ?? null
+    : null;
+  return {
+    data: {
+      assignment_cancelled: result.assignment_cancelled === true,
+      cancelled_driver_id: cancelledDriverId,
+      offer,
+      public_booking_reference: publicBookingReference(result.public_booking_reference),
+    } satisfies DriverPoolCancelResult,
+    ok: true,
+  } as const;
 }
 
 export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driverId: number, page: number, limit: number) {
@@ -367,9 +395,13 @@ export async function decideDriverPoolOffer(client: DriverPoolClient, driverId: 
   if (error) { const failure = classify(error); return { ...failure, ok: false } as const; }
   const result = asRecord(data);
   const reason = text(result.reason, 80) || "no_longer_available";
+  const otherRecipientDriverIds = reason === "accepted"
+    ? positiveDriverIds(result.other_recipient_driver_ids).filter((id) => id !== driverId)
+    : [];
   return {
     data: {
       accepted: reason === "accepted" || reason === "already_accepted",
+      other_recipient_driver_ids: otherRecipientDriverIds,
       public_booking_reference: publicBookingReference(result.public_booking_reference),
       reason,
     },

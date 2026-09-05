@@ -53,7 +53,10 @@ import {
 } from "../lib/company-profile-shared";
 import { formatWhatsAppJobCard } from "../lib/whatsapp-job-card";
 import { formatVerifiedCustomerAccountTitle } from "../lib/admin-customer-account-title";
-import { AdminDriverPoolControl } from "./admin-driver-pool-control";
+import {
+  AdminDriverPoolControl,
+  type AssignedDriverPoolAdminOffer,
+} from "./admin-driver-pool-control";
 
 const adminLegacyDataPurpose = "admin-booking-persistence";
 const adminWorkflowStatusApiPath = "/api/admin-booking-workflow-statuses";
@@ -15072,6 +15075,10 @@ export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const bookingFormRef = useRef(booking);
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
+  const [assignedDriverPoolAdminOffer, setAssignedDriverPoolAdminOffer] =
+    useState<AssignedDriverPoolAdminOffer | null>(null);
+  const [driverPoolAssignmentCancellationBusy, setDriverPoolAssignmentCancellationBusy] =
+    useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
   const activeTabRef = useRef<AppTab>(initialTab);
   const [isInternalQaMockArchiveOpen, setIsInternalQaMockArchiveOpen] = useState(false);
@@ -19049,6 +19056,12 @@ export default function Home() {
       clean(booking.returnTripRequested) !== "yes" &&
       !dispatchHandoffCustomerReturnUrlRef.current,
   );
+  const loadedDriverPoolBookingReference =
+    cleanReferenceText(appliedAdminBookingSnapshotReference) || cleanReferenceText(loadedBookingId);
+  const currentAssignedDriverPoolAdminOffer =
+    assignedDriverPoolAdminOffer?.booking_reference === loadedDriverPoolBookingReference
+      ? assignedDriverPoolAdminOffer
+      : null;
   const customerLiveLocation = useMemo(
     () => customerLiveLocationState(booking, currentTimeMs),
     [booking, currentTimeMs],
@@ -27529,7 +27542,75 @@ export default function Home() {
     }
   }
 
+  async function cancelAssignedDriverPoolAssignment() {
+    const offer = currentAssignedDriverPoolAdminOffer;
+    const bookingReference = loadedDriverPoolBookingReference;
+    if (!offer || !bookingReference || driverPoolAssignmentCancellationBusy) return;
+
+    setDriverPoolAssignmentCancellationBusy(true);
+    try {
+      const response = await fetch("/api/admin-driver-job-bid-offers", {
+        body: JSON.stringify({
+          expected_updated_at: offer.updated_at,
+          offer_key: offer.offer_key,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": "admin-booking-persistence",
+        },
+        method: "PATCH",
+      });
+      const result = await response.json().catch(() => null) as {
+        assignment_cancelled?: boolean;
+        error?: string;
+        ok?: boolean;
+      } | null;
+      if (!response.ok || result?.ok !== true || result.assignment_cancelled !== true) {
+        throw new Error(result?.error || "Driver Pool assignment was not cancelled.");
+      }
+
+      const exactBooking = await loadExactAdminBookingPersistenceRecord(
+        bookingReference,
+        `Booking ${bookingReference} could not be reloaded after cancelling its Driver Pool assignment.`,
+      );
+      const exactBookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(exactBooking);
+      await loadSelectedBooking(exactBookingRecord, {
+        adminBookingRecordOverride: exactBooking,
+        bookingFormOverride: bookingRecordToForm(exactBookingRecord),
+        suppressCustomerRequestHandledMemory: true,
+      });
+      setAssignedDriverPoolAdminOffer(null);
+      const successMessage = {
+        tone: "success",
+        text: `Driver assignment cancelled for ${adminVisibleBookingReference(bookingReference)}. The booking remains active and has no Driver Job Link.`,
+      } satisfies Message;
+      setAdminBookingPersistenceMessage(successMessage);
+      setMessage(successMessage);
+      setBookingSaveMessage(successMessage);
+    } catch (error) {
+      const failureMessage = {
+        tone: "error",
+        text: `${error instanceof Error ? error.message : "Driver Pool assignment was not cancelled."} No other booking lane was changed.`,
+      } satisfies Message;
+      setAdminBookingPersistenceMessage(failureMessage);
+      setMessage(failureMessage);
+      setBookingSaveMessage(failureMessage);
+    } finally {
+      setDriverPoolAssignmentCancellationBusy(false);
+    }
+  }
+
   async function assignDraftDriver() {
+    if (saveLoadedDriverAssignmentAvailable) {
+      await updateAppliedAdminBookingOperationalSnapshot({ assignmentOnly: true });
+      return;
+    }
+
+    if (currentAssignedDriverPoolAdminOffer) {
+      await cancelAssignedDriverPoolAssignment();
+      return;
+    }
+
     if (draftDriverAssignmentApplied) {
       setAppliedDraftDriverAssignmentSignature("");
       setMessage({
@@ -27541,11 +27622,6 @@ export default function Home() {
 
     if (!clean(booking.driverName)) {
       setMessage({ tone: "error", text: "Enter a driver name before assigning this draft." });
-      return;
-    }
-
-    if (saveLoadedDriverAssignmentAvailable) {
-      await updateAppliedAdminBookingOperationalSnapshot({ assignmentOnly: true });
       return;
     }
 
@@ -44889,19 +44965,30 @@ export default function Home() {
                       : "border-sky-300 bg-white text-sky-900 hover:bg-sky-50"
                   }`}
                   data-admin-draft-driver-assignment-state={
-                    draftDriverAssignmentApplied ? "applied" : "ready"
+                    currentAssignedDriverPoolAdminOffer
+                      ? "cancel-assignment"
+                      : draftDriverAssignmentApplied
+                        ? "applied"
+                        : "ready"
                   }
-                  disabled={adminBookingPersistenceAction !== null}
+                  disabled={
+                    adminBookingPersistenceAction !== null ||
+                    driverPoolAssignmentCancellationBusy
+                  }
                   onClick={assignDraftDriver}
                   type="button"
                 >
-                  {adminBookingPersistenceAction === "update" && saveLoadedDriverAssignmentAvailable
+                  {driverPoolAssignmentCancellationBusy
+                    ? "Cancelling Driver Assignment..."
+                    : adminBookingPersistenceAction === "update" && saveLoadedDriverAssignmentAvailable
                     ? "Saving Driver Assignment..."
-                    : draftDriverAssignmentApplied
-                      ? "Applied / Cancel to Revise"
-                      : saveLoadedDriverAssignmentAvailable
-                        ? "Save Driver Assignment"
-                        : "Apply Driver to Draft"}
+                    : saveLoadedDriverAssignmentAvailable
+                      ? "Save Driver Assignment"
+                      : currentAssignedDriverPoolAdminOffer
+                        ? "Cancel Driver Assignment"
+                        : draftDriverAssignmentApplied
+                          ? "Applied / Cancel to Revise"
+                          : "Apply Driver to Draft"}
                 </button>
               </div>
               <AdminDriverPoolControl
@@ -44920,6 +45007,7 @@ export default function Home() {
                   clean(loadedAdminBookingBaselineRef.current?.updatedAt)
                 )}
                 expectedUpdatedAt={clean(loadedAdminBookingBaselineRef.current?.updatedAt)}
+                onAssignedOfferChange={setAssignedDriverPoolAdminOffer}
                 requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}
                 suggestedPayout={
                   normalizeBookingType(booking.bookingType) === "DSP"

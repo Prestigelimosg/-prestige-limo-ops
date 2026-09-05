@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
@@ -40,6 +40,8 @@ type DriverPortalAlertState =
   | "enabled"
   | "enabling"
   | "unavailable";
+
+const driverPoolAvailableJobsRefreshIntervalMs = 3_000;
 
 type DriverNativeWindow = Window & {
   ReactNativeWebView?: { postMessage: (message: string) => void };
@@ -163,6 +165,7 @@ export default function DriverPortalPage() {
   const [availableJobsPage, setAvailableJobsPage] = useState(1);
   const [availableJobsBusy, setAvailableJobsBusy] = useState(false);
   const [availableJobsFeedback, setAvailableJobsFeedback] = useState<Record<string, string>>({});
+  const availableJobsReadRevisionRef = useRef(0);
   const installationId = useSyncExternalStore(
     subscribeToStaticNativeBridge,
     currentNativeInstallationId,
@@ -249,8 +252,10 @@ export default function DriverPortalPage() {
     }
   }, []);
 
-  const loadAvailableJobs = useCallback(async (page = 1) => {
-    setAvailableJobsBusy(true);
+  const loadAvailableJobs = useCallback(async (page = 1, options: { quiet?: boolean } = {}) => {
+    const revision = availableJobsReadRevisionRef.current + 1;
+    availableJobsReadRevisionRef.current = revision;
+    if (!options.quiet) setAvailableJobsBusy(true);
     try {
       const nativeInstallationId = currentNativeInstallationId();
       const response = await fetch(`/api/driver-job-bids?page=${page}&limit=20`, {
@@ -263,13 +268,21 @@ export default function DriverPortalPage() {
       });
       const result = await response.json() as { enabled?: boolean; has_more?: boolean; jobs?: DriverPoolAvailableJob[]; ok?: boolean };
       if (!response.ok || result.ok !== true) throw new Error("Available Jobs could not be loaded.");
+      if (availableJobsReadRevisionRef.current !== revision) return;
       setAvailableJobsEnabled(result.enabled === true);
       const jobs = Array.isArray(result.jobs) ? result.jobs : [];
       setAvailableJobs((current) => page === 1 ? jobs : [...current, ...jobs]);
       setAvailableJobsHasMore(result.has_more === true);
       setAvailableJobsPage(page);
-    } catch { setAvailableJobsEnabled(false); }
-    finally { setAvailableJobsBusy(false); }
+    } catch {
+      if (availableJobsReadRevisionRef.current === revision && !options.quiet) {
+        setAvailableJobsEnabled(false);
+      }
+    } finally {
+      if (availableJobsReadRevisionRef.current === revision && !options.quiet) {
+        setAvailableJobsBusy(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -291,7 +304,28 @@ export default function DriverPortalPage() {
     void loadAvailableJobs(1);
   }, [driverPoolAccountSession, loadAvailableJobs]);
 
+  useEffect(() => {
+    if (!driverPoolAccountSession || availableJobs.length === 0) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible" && !availableJobsBusy) {
+        void loadAvailableJobs(1, { quiet: true });
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const timer = window.setInterval(refresh, driverPoolAvailableJobsRefreshIntervalMs);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [availableJobs.length, availableJobsBusy, driverPoolAccountSession, loadAvailableJobs]);
+
   async function decideAvailableJob(job: DriverPoolAvailableJob, action: "accept" | "decline") {
+    availableJobsReadRevisionRef.current += 1;
     setAvailableJobsBusy(true);
     setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: "Working…" }));
     try {

@@ -93,7 +93,11 @@ self.addEventListener("push", (event) => {
       ? "New Driver Job issued. Tap to review."
       : payload.body === "Pickup is in 1 hour. Open Driver Portal to review."
         ? "Pickup is in 1 hour. Open Driver Portal to review."
-        : payload.body === "A driver-pool job is available. Open the app to review."
+        : payload.body === "Job assignment cancelled, do not proceed."
+          ? "Job assignment cancelled, do not proceed."
+          : payload.body === "Accepted! Ack when admin send job link"
+          ? "Accepted! Ack when admin send job link"
+          : payload.body === "A driver-pool job is available. Open the app to review."
           ? "A driver-pool job is available. Open the app to review."
           : "New Driver Job app update. Tap to review.";
 

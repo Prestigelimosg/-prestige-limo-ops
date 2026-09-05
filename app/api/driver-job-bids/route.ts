@@ -3,6 +3,10 @@ import { after } from "next/server";
 import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { verifyDriverAccountSession } from "../../../lib/driver-account-device-lock";
 import {
+  sendDriverDevicePushAlertForDriverPoolOffer,
+  sendDriverDeviceSilentRefreshForDriverPoolOffer,
+} from "../../../lib/driver-device-push-notification";
+import {
   decideDriverPoolOffer,
   getDriverPoolClientForProduction,
   loadAvailableDriverPoolJobs,
@@ -122,13 +126,27 @@ async function decide(request: Request, action: "accept" | "decline") {
       result.data.reason === "accepted" &&
       acceptedPublicBookingReference
     ) {
-      after(() =>
-        notifyAdminOfDriverPoolAcceptance(
-          account.client,
-          account.driverId,
-          acceptedPublicBookingReference,
-        ),
-      );
+      after(async () => {
+        await Promise.allSettled([
+          notifyAdminOfDriverPoolAcceptance(
+            account.client,
+            account.driverId,
+            acceptedPublicBookingReference,
+          ),
+          sendDriverDevicePushAlertForDriverPoolOffer(account.client, {
+            driver_id: account.driverId,
+            notification_kind: "winner",
+            offer_key: parsed.data.offer_key,
+            public_booking_reference: acceptedPublicBookingReference,
+          }),
+          ...result.data.other_recipient_driver_ids.map((driverId) =>
+            sendDriverDeviceSilentRefreshForDriverPoolOffer(account.client, {
+              driver_id: driverId,
+              offer_key: parsed.data.offer_key,
+            })
+          ),
+        ]);
+      });
     }
     return result.ok
       ? response({ accepted: result.data.accepted, ok: true, reason: result.data.reason }, 200)

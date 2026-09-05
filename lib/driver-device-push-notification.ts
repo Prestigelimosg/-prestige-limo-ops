@@ -133,7 +133,7 @@ type DriverDevicePushAlertInput = {
 
 type DriverNativePushOpenTarget = "available_jobs" | "messages";
 type DriverPoolWinnerVisibleBody =
-  "Accepted! Ack when admin send job link";
+  "Accepted! Pls ack when admin send job link";
 type DriverPoolAssignmentCancelledVisibleBody =
   "Job assignment cancelled, do not proceed.";
 type DriverNativePushVisibleBody =
@@ -1408,7 +1408,7 @@ export async function sendDriverDevicePushAlertForDriverPoolOffer(
     return alertResult("invalid_driver_link", { enabled: true });
   }
   const visibleBody: DriverNativePushVisibleBody = notificationKind === "winner"
-    ? "Accepted! Ack when admin send job link"
+    ? "Accepted! Pls ack when admin send job link"
     : notificationKind === "assignment_cancelled"
       ? "Job assignment cancelled, do not proceed."
       : "A driver-pool job is available. Open the app to review.";

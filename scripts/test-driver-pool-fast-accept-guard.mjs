@@ -20,6 +20,7 @@ const names = [
   "lib/driver-pool-fast-accept.ts",
   "public/prestige-driver-push-sw.js",
   "scripts/test-booking-ui-browser.mjs",
+  "scripts/test-driver-job-page-browser.mjs",
   "supabase/migrations/202606090002_driver_portal_bidding_foundation.sql",
   "supabase/migrations/20260904112430_driver_pool_fast_accept.sql",
   "supabase/migrations/20260904125321_driver_pool_completion_repair.sql",
@@ -59,7 +60,7 @@ includes("lib/driver-pool-fast-accept.ts", [
 excludes("lib/driver-pool-fast-accept.ts", [/customer_price|invoice|billing_amount|payment|paynow|bank_account|internal_finance|payout_comparison/i]);
 includes("docs/current-implementation-ledger.md", [
   "## Driver Pool Winner Driver Alert, Silent Loser Refresh And Pre-Link Assignment Recovery (source checkpoint 2026-09-05)",
-  "Accepted! Ack when admin send job link",
+  "Accepted! Pls ack when admin send job link",
   "The losing-Driver signal has no title, body, sound or badge.",
   "the established manual Driver A to Driver B save closes the old assigned offer",
   "existing full-width Assigned Driver action; no new button or panel is added",
@@ -707,6 +708,37 @@ includes("app/api/driver-job-bids/route.ts", [
   "safeDriverPlate", "bookingReference: publicBookingReference", "vehiclePlate,",
   "A completed atomic Driver Pool assignment must not fail because Admin push is unavailable.",
 ]);
+includes("app/driver-portal/page.tsx", [
+  "availableJobsAcceptedConfirmation",
+  "Accepted! Pls ack when admin send job link",
+  'data-driver-pool-accepted-confirmation="true"',
+  'role="status"',
+]);
+assert.match(
+  files["app/driver-portal/page.tsx"],
+  /setAvailableJobs\(\(current\) => current\.filter\([\s\S]{0,500}setAvailableJobsAcceptedConfirmation\(/,
+  "A successful first-winner response must retain one compact in-app confirmation after its Available Job card is removed",
+);
+assert.match(
+  files["app/driver-portal/page.tsx"],
+  /data-driver-pool-accepted-confirmation="true"[\s\S]{0,500}availableJobs\.length === 0/,
+  "The retained Driver Pool winner confirmation must render outside the removed offer card",
+);
+assert.doesNotMatch(
+  files["app/driver-portal/page.tsx"],
+  /data-driver-pool-accepted-confirmation="true"[\s\S]{0,200}<h[1-6]/,
+  "The Driver Pool winner confirmation must remain compact text rather than a large heading",
+);
+includes("scripts/test-booking-ui-browser.mjs", [
+  "data-driver-pool-control='assigned'",
+  "Accepted · Driver assigned. Create the Driver Job Link when ready.",
+]);
+includes("scripts/test-driver-job-page-browser.mjs", [
+  "Driver Pool retained in-app winner confirmation",
+  "The won offer must leave Available Jobs immediately.",
+  "The retained winner confirmation must use compact text sizing.",
+  "Accepted! Pls ack when admin send job link",
+]);
 excludes("app/api/driver-job-bids/route.ts", [/driver_reference.*request|driver_id.*request|service_role|SUPABASE/i]);
 assert.doesNotMatch(
   files["app/api/driver-job-bids/route.ts"],
@@ -779,7 +811,7 @@ includes("app/driver-portal/page.tsx", [
 excludes("app/driver-portal/page.tsx", [/customer_price|invoice_number|paynow|bank_account|payout_comparison|internal_finance/i]);
 includes("lib/driver-device-push-notification.ts", [
   '"available_jobs" | "messages"', "A driver-pool job is available. Open the app to review.",
-  "Accepted! Ack when admin send job link", 'notification_kind?: "available" | "winner"',
+  "Accepted! Pls ack when admin send job link", 'notification_kind?: "available" | "winner"',
   "sendDriverDeviceSilentRefreshForDriverPoolOffer", "Job assignment cancelled, do not proceed.",
   'target_path: "/driver-portal?view=available-jobs"',
 ]);
@@ -792,7 +824,7 @@ includes("driver-companion/src/native-notifications.ts", ['notification.open_tar
 includes("public/prestige-driver-push-sw.js", [
   "/driver-portal?view=available-jobs",
   "A driver-pool job is available. Open the app to review.",
-  "Accepted! Ack when admin send job link",
+  "Accepted! Pls ack when admin send job link",
   "Job assignment cancelled, do not proceed.",
 ]);
 

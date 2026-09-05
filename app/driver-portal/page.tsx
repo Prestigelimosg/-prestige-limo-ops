@@ -165,6 +165,7 @@ export default function DriverPortalPage() {
   const [availableJobsPage, setAvailableJobsPage] = useState(1);
   const [availableJobsBusy, setAvailableJobsBusy] = useState(false);
   const [availableJobsFeedback, setAvailableJobsFeedback] = useState<Record<string, string>>({});
+  const [availableJobsAcceptedConfirmation, setAvailableJobsAcceptedConfirmation] = useState("");
   const availableJobsReadRevisionRef = useRef(0);
   const installationId = useSyncExternalStore(
     subscribeToStaticNativeBridge,
@@ -299,6 +300,7 @@ export default function DriverPortalPage() {
       setAvailableJobsEnabled(false);
       setAvailableJobsHasMore(false);
       setAvailableJobsPage(1);
+      setAvailableJobsAcceptedConfirmation("");
       return;
     }
     void loadAvailableJobs(1);
@@ -340,7 +342,10 @@ export default function DriverPortalPage() {
       const result = await response.json() as { accepted?: boolean; ok?: boolean; reason?: string };
       if (!response.ok || result.ok !== true) throw new Error(result.reason || "This offer is no longer available.");
       setAvailableJobs((current) => current.filter((item) => item.offer_key !== job.offer_key));
-      setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: result.accepted ? "Accepted. Admin will issue your Driver Job Link." : "Declined." }));
+      if (result.accepted) {
+        setAvailableJobsAcceptedConfirmation("Accepted! Pls ack when admin send job link");
+      }
+      setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: result.accepted ? "Accepted! Pls ack when admin send job link" : "Declined." }));
     } catch (error) {
       setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: error instanceof Error ? error.message : "This offer is no longer available." }));
       await loadAvailableJobs(1);
@@ -752,6 +757,11 @@ export default function DriverPortalPage() {
                   <div><h2 className="text-lg font-bold text-emerald-950">Available Jobs</h2><p className="text-xs font-semibold text-emerald-800">Fixed driver payout · earliest pickup first</p></div>
                   <button className="h-9 rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold" disabled={availableJobsBusy} onClick={() => void loadAvailableJobs(1)} type="button">Refresh</button>
                 </div>
+                {availableJobsAcceptedConfirmation ? (
+                  <p className="text-xs font-semibold text-emerald-900" data-driver-pool-accepted-confirmation="true" role="status">
+                    {availableJobsAcceptedConfirmation}
+                  </p>
+                ) : null}
                 {availableJobs.length === 0 ? <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700">No open job offers.</p> : availableJobs.map((job) => (
                   <article className="rounded-md border border-emerald-200 bg-white p-3" data-driver-pool-offer={job.offer_key} key={job.offer_key}>
                     <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase text-slate-500">Job {job.public_booking_reference}</p><p className="font-bold text-slate-950">{new Date(job.pickup_at).toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" })}</p></div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-900">SGD {job.offer_payout_sgd.toFixed(2)}</span></div>

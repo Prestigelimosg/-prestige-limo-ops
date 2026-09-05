@@ -302,7 +302,7 @@ assertIncludes(
     "sendDriverDevicePushAlertForPickupReminder",
     "sendDriverDevicePushAlertForDriverPoolOffer",
     "sendDriverDeviceSilentRefreshForDriverPoolOffer",
-    "Accepted! Ack when admin send job link",
+    "Accepted! Pls ack when admin send job link",
     "Job assignment cancelled, do not proceed.",
     "contentAvailable: true",
     "driver_pool_refresh: true",
@@ -471,7 +471,7 @@ assertIncludes(
     'self.addEventListener("notificationclick"',
     "target_path",
     '"/driver-portal"',
-    "Accepted! Ack when admin send job link",
+    "Accepted! Pls ack when admin send job link",
   ],
   "driver-scoped service worker",
 );
@@ -913,9 +913,9 @@ try {
     expoToken: nativeExpoPushToken,
     jobKey: winnerWebPayload.job_key,
     openTarget: "available_jobs",
-    visibleBody: "Accepted! Ack when admin send job link",
+    visibleBody: "Accepted! Pls ack when admin send job link",
   });
-  assert.equal(winnerWebPayload.body, "Accepted! Ack when admin send job link");
+  assert.equal(winnerWebPayload.body, "Accepted! Pls ack when admin send job link");
   assert.equal(winnerWebPayload.target_path, "/driver-portal?view=available-jobs");
   assert.match(winnerWebPayload.job_key, /^[0-9a-f]{64}$/);
   assertExcludes(

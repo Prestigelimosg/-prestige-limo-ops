@@ -24,13 +24,14 @@ type Props = {
   eligible: boolean;
   expectedUpdatedAt: string;
   requiresExplicitPayout: boolean;
+  showPleaseAssignDriver: boolean;
   suggestedPayout: number;
   onAssignedOfferChange?: (offer: AssignedDriverPoolAdminOffer | null) => void;
 };
 
 const headers = { "Content-Type": "application/json", "x-prestige-admin-purpose": "admin-booking-persistence" };
 
-export function AdminDriverPoolControl({ bookingReference, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, requiresExplicitPayout, suggestedPayout }: Props) {
+export function AdminDriverPoolControl({ bookingReference, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [serverEligible, setServerEligible] = useState(false);
   const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
@@ -52,9 +53,12 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
   }, [bookingReference]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    const timer = window.setTimeout(() => {
+      setFeedback("");
+      void load();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [expectedUpdatedAt, load]);
   useEffect(() => {
     if (offer?.offer_status !== "open") return;
     const timer = window.setInterval(() => void load(), 10000);
@@ -114,13 +118,16 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
           <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy} onClick={() => void cancel()} type="button">{busy ? "Cancelling…" : "Cancel Offer"}</button>
         </>
       ) : offer?.offer_status === "assigned" ? (
-        <span className="text-xs font-semibold text-emerald-800">Accepted · Driver assigned. Reload this booking to Create Link.</span>
+        <span className="text-xs font-semibold text-emerald-800">Accepted · Driver assigned. Create the Driver Job Link when ready.</span>
       ) : (
         <>
           <label className="text-xs font-semibold text-slate-700">Pool offer total SGD
             <input aria-label="Driver Pool offer payout in SGD" className="ml-2 h-8 w-28 rounded-md border border-sky-300 bg-white px-2 text-sm" min="0.01" onChange={(event) => setPayout(event.target.value)} step="0.01" type="number" value={payout} />
           </label>
           <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to Driver Pool"}</button>
+          {showPleaseAssignDriver ? (
+            <span className="text-xs font-semibold text-emerald-800">Please assign driver.</span>
+          ) : null}
         </>
       )}
       {feedback ? <span className="text-xs font-semibold text-slate-600" role="status">{feedback}</span> : null}

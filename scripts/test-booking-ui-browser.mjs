@@ -17003,6 +17003,7 @@ async function runChromeTest() {
       };
       window.__prestigeAdminDriverJobDspActualTimeRequests = [];
       window.__prestigeDriverPoolOfferRequests = [];
+      window.__prestigeDriverPoolOffer = null;
       window.__prestigeAdminDriverJobDspActualTimeSummaries = {
         "ui-cleanup-load-fixture": [
           {
@@ -17036,14 +17037,51 @@ async function runChromeTest() {
 
         if (String(target).includes("/api/admin-driver-job-bid-offers")) {
           const url = new URL(String(target), window.location.origin);
+          let parsedBody = null;
+
+          if (bodyText) {
+            try {
+              parsedBody = JSON.parse(bodyText);
+            } catch {}
+          }
+
           window.__prestigeFetchCalls.push(\`\${method} \${url.pathname}\${url.search}\`);
           window.__prestigeDriverPoolOfferRequests.push({
+            body: parsedBody,
             booking_reference: url.searchParams.get("booking_reference") || "",
             headers,
             method,
           });
+
+          if (method === "PATCH" && window.__prestigeDriverPoolOffer?.offer_status === "assigned") {
+            const cancelledOffer = {
+              ...window.__prestigeDriverPoolOffer,
+              offer_status: "cancelled",
+              updated_at: "2026-05-19T00:02:00.000Z",
+            };
+            window.__prestigeDriverPoolOffer = cancelledOffer;
+            window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
+              booking.id === "ui-cleanup-load-fixture"
+                ? {
+                    ...booking,
+                    driver_contact: null,
+                    driver_id: null,
+                    driver_name: null,
+                    driver_payout_amount: null,
+                    driver_plate_number: null,
+                    updated_at: "2026-05-19T00:02:00.000Z",
+                  }
+                : booking,
+            );
+
+            return new Response(
+              JSON.stringify({ assignment_cancelled: true, offer: cancelledOffer, ok: true }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
           return new Response(
-            JSON.stringify({ eligible: true, enabled: true, offer: null, ok: true }),
+            JSON.stringify({ eligible: true, enabled: true, offer: window.__prestigeDriverPoolOffer, ok: true }),
             { status: method === "GET" ? 200 : 405, headers: { "content-type": "application/json" } },
           );
         }
@@ -21191,6 +21229,160 @@ async function runChromeTest() {
       ),
       false,
       "Expected driver acknowledgement workflow status request bodies to avoid private finance, notification, parser, and secret fields",
+    );
+
+    reporter.step("Driver Pool accepted assignment cancel refreshes in place");
+    await evaluate(`(() => {
+      window.__prestigeAdminDriverJobLinks = [];
+      window.__prestigeDriverPoolOffer = {
+        closes_at: "2026-05-28T03:00:00.000Z",
+        offer_key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        offer_payout_sgd: 75,
+        offer_status: "assigned",
+        provider_accepted_driver_count: 1,
+        provider_attempted_driver_count: 1,
+        push_target_count: 1,
+        recipient_count: 2,
+        updated_at: "2026-05-19T00:01:00.000Z",
+      };
+      window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
+        booking.id === "ui-cleanup-load-fixture"
+          ? {
+              ...booking,
+              driver_contact: "+65 8888 0000",
+              driver_id: 17,
+              driver_name: "LOADED SAVED DRIVER",
+              driver_payout_amount: 75,
+              driver_plate_number: "SLA1234X",
+              updated_at: "2026-05-19T00:01:00.000Z",
+            }
+          : booking,
+      );
+    })()`);
+
+    await clickTab("Completed", "Completed / History");
+    await setInputValue(
+      "[data-completed-search-input='true']",
+      "LOADED SAVED TRAVELER",
+      "Completed / History Driver Pool cancellation search",
+    );
+    const clickedAssignedDriverPoolBooking = await evaluate(`(() => {
+      const recentArticle = [...document.querySelectorAll("article")].find(
+        (article) =>
+          article.innerText.includes("LOADED SAVED TRAVELER") &&
+          article.innerText.includes("SQ999"),
+      );
+      const loadThisBookingButton = [...(recentArticle?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent.trim() === "Load this booking",
+      );
+
+      if (!loadThisBookingButton || loadThisBookingButton.disabled) {
+        return false;
+      }
+
+      loadThisBookingButton.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedAssignedDriverPoolBooking,
+      true,
+      "Expected the assigned Driver Pool fixture to load through the existing booking lane",
+    );
+
+    const assignedDriverPoolUi = await waitForCondition(
+      async () => evaluate(`(() => {
+        const control = document.querySelector("[data-driver-pool-control='assigned']");
+        const cancelButton = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent.trim() === "Cancel Driver Assignment",
+        );
+
+        return control && cancelButton && !cancelButton.disabled
+          ? {
+              acceptedText: control.textContent.replace(/\\s+/g, " ").trim(),
+              cancelText: cancelButton.textContent.trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "assigned Driver Pool booking with cancel control",
+    );
+    assert.equal(
+      assignedDriverPoolUi.acceptedText,
+      "Accepted · Driver assigned. Create the Driver Job Link when ready.",
+      "Assigned Driver Pool wording must not require a manual reload",
+    );
+
+    const clickedCancelDriverAssignment = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (candidate) => candidate.textContent.trim() === "Cancel Driver Assignment",
+      );
+
+      if (!button || button.disabled) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`);
+    assert.equal(
+      clickedCancelDriverAssignment,
+      true,
+      "Expected the existing Cancel Driver Assignment control to be clickable",
+    );
+
+    const cancelledDriverPoolUi = await waitForCondition(
+      async () => evaluate(`(() => {
+        const control = document.querySelector(
+          "[data-driver-pool-control='ready'], [data-driver-pool-control='cancelled']",
+        );
+        const sendButton = [...(control?.querySelectorAll("button") || [])].find(
+          (button) => button.textContent.trim() === "Send to Driver Pool",
+        );
+        const bodyText = document.body.innerText.replace(/\\s+/g, " ");
+        const patchRequest = (window.__prestigeDriverPoolOfferRequests || []).find(
+          (request) =>
+            request.method === "PATCH" &&
+            request.body?.offer_key ===
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        );
+
+        return control && sendButton
+          ? {
+              controlText: control.textContent.replace(/\\s+/g, " ").trim(),
+              oldReloadWordingVisible: bodyText.includes("Reload this booking to Create Link"),
+              patchRequest: patchRequest || null,
+              pleaseAssignDriverVisible: bodyText.includes("Please assign driver."),
+              sendDisabled: sendButton.disabled,
+              sendText: sendButton.textContent.trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "Driver Pool cancellation in-place ready state",
+    );
+    assert.equal(cancelledDriverPoolUi.sendText, "Send to Driver Pool");
+    assert.equal(cancelledDriverPoolUi.sendDisabled, false);
+    assert.equal(cancelledDriverPoolUi.oldReloadWordingVisible, false);
+    assert.equal(
+      cancelledDriverPoolUi.pleaseAssignDriverVisible,
+      true,
+      "Expected successful cancellation to show Please assign driver. in the same screen, got " +
+        cancelledDriverPoolUi.controlText,
+    );
+    assert.ok(
+      cancelledDriverPoolUi.patchRequest,
+      "Expected one exact Driver Pool assignment cancellation PATCH",
+    );
+    assert.deepEqual(
+      {
+        expected_updated_at: cancelledDriverPoolUi.patchRequest.body.expected_updated_at,
+        offer_key: cancelledDriverPoolUi.patchRequest.body.offer_key,
+      },
+      {
+        expected_updated_at: "2026-05-19T00:01:00.000Z",
+        offer_key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      "Driver Pool cancellation must keep the exact established offer concurrency request",
     );
 
     await evaluate(`(() => {

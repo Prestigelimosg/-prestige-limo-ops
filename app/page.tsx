@@ -15077,6 +15077,8 @@ export default function Home() {
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
   const [assignedDriverPoolAdminOffer, setAssignedDriverPoolAdminOffer] =
     useState<AssignedDriverPoolAdminOffer | null>(null);
+  const [driverPoolAssignmentCancelled, setDriverPoolAssignmentCancelled] =
+    useState(false);
   const [driverPoolAssignmentCancellationBusy, setDriverPoolAssignmentCancellationBusy] =
     useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(initialTab);
@@ -24207,6 +24209,7 @@ export default function Home() {
   ) {
     const requestRevision = loadSelectedBookingRequestRevisionRef.current + 1;
     loadSelectedBookingRequestRevisionRef.current = requestRevision;
+    setDriverPoolAssignmentCancelled(false);
     const persistedBookingReference = bookingRecordPersistedReference(bookingRecord);
     const bookingReference =
       persistedBookingReference ||
@@ -27580,9 +27583,10 @@ export default function Home() {
         suppressCustomerRequestHandledMemory: true,
       });
       setAssignedDriverPoolAdminOffer(null);
+      setDriverPoolAssignmentCancelled(true);
       const successMessage = {
         tone: "success",
-        text: `Driver assignment cancelled for ${adminVisibleBookingReference(bookingReference)}. The booking remains active and has no Driver Job Link.`,
+        text: "Please assign driver.",
       } satisfies Message;
       setAdminBookingPersistenceMessage(successMessage);
       setMessage(successMessage);
@@ -45009,6 +45013,7 @@ export default function Home() {
                 expectedUpdatedAt={clean(loadedAdminBookingBaselineRef.current?.updatedAt)}
                 onAssignedOfferChange={setAssignedDriverPoolAdminOffer}
                 requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}
+                showPleaseAssignDriver={driverPoolAssignmentCancelled}
                 suggestedPayout={
                   normalizeBookingType(booking.bookingType) === "DSP"
                     ? 0

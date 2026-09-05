@@ -6,6 +6,14 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/2dada379-f732-4e25-80a3-cdbbb8f52b11"
+    },
     "scheme": "prestige-admin",
     "icon": "./assets/app-icon.png",
     "platforms": [

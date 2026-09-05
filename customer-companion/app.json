@@ -6,6 +6,14 @@
     "orientation": "portrait",
     "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/ce71ff91-7f71-4297-bcef-edf420f94316"
+    },
     "scheme": "prestige-customer",
     "platforms": [
       "ios"

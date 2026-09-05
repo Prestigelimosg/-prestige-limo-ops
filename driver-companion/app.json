@@ -6,6 +6,14 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/2a797181-d09d-4384-8d01-583456e83c3e"
+    },
     "ios": {
       "version": "1.0.0",
       "supportsTablet": true,

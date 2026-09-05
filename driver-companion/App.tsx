@@ -130,7 +130,6 @@ export default function App() {
   );
   const unlockStateRef = useRef<"checking" | "ready" | "locked">("checking");
   const bridgeBusyRef = useRef(false);
-  const badgeNotificationHandledRef = useRef("");
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
   const webViewRequestHeadersRef = useRef<Record<string, string> | null>(null);
   const pendingOauthTokenRef = useRef("");
@@ -376,7 +375,6 @@ export default function App() {
 
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        badgeNotificationHandledRef.current = response.notification.request.identifier;
         void Notifications.setBadgeCountAsync(0).catch(() => false);
         void openNotificationData(response.notification.request.content.data);
       },
@@ -395,35 +393,12 @@ export default function App() {
       },
     );
 
-    const openLatestBadgeNotification = async () => {
-      const [count, presented] = await Promise.all([
-        Notifications.getBadgeCountAsync(),
-        Notifications.getPresentedNotificationsAsync(),
-      ]);
-      if (count > 0 && presented.length > 0) {
-        const latest = [...presented].sort((first, second) => second.date - first.date)[0];
-        if (badgeNotificationHandledRef.current !== latest.request.identifier) {
-          badgeNotificationHandledRef.current = latest.request.identifier;
-          await openNotificationData(latest.request.content.data);
-        }
-      }
-      await Notifications.setBadgeCountAsync(0).catch(() => false);
-    };
-    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        void openLatestBadgeNotification().catch(() => undefined);
-      }
-    });
-
     try {
       const initialResponse = Notifications.getLastNotificationResponse();
       if (initialResponse) {
-        badgeNotificationHandledRef.current = initialResponse.notification.request.identifier;
         void Notifications.setBadgeCountAsync(0).catch(() => false);
         void openNotificationData(initialResponse.notification.request.content.data)
           .finally(() => Notifications.clearLastNotificationResponse());
-      } else {
-        void openLatestBadgeNotification().catch(() => undefined);
       }
     } catch {
       // A notification response is optional; ordinary exact-link opening remains available.
@@ -433,7 +408,6 @@ export default function App() {
       mounted = false;
       subscription.remove();
       receivedSubscription.remove();
-      appStateSubscription.remove();
     };
   }, [installationId, receiveDriverJobUrl]);
 

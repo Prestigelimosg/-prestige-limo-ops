@@ -45,7 +45,19 @@ for (const [label, source] of [
   assert.ok(source.includes("shouldSetBadge: true"), `${label} app must allow the assigned iOS badge`);
 }
 assert.ok(customerNative.includes("Notifications.getBadgeCountAsync()"));
-assert.ok(driverNative.includes("Notifications.getPresentedNotificationsAsync()"));
+assert.ok(
+  !driverNative.includes("Notifications.getPresentedNotificationsAsync()"),
+  "Driver app must not consume and clear a visible badge merely because the app becomes active",
+);
+assert.ok(
+  !driverNative.includes("openLatestBadgeNotification"),
+  "Driver app must preserve the visible badge until the exact notification is opened",
+);
+assert.equal(
+  (driverNative.match(/Notifications\.setBadgeCountAsync\(0\)/g) || []).length,
+  2,
+  "Driver badge may clear only from an explicit live or cold-start notification response",
+);
 assert.ok(driverNativeOpenRoute.includes("resetDriverNativePushBadgeCount"));
 
 for (const table of [

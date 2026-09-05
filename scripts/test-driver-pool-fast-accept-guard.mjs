@@ -720,17 +720,36 @@ includes("app/api/admin-driver-job-bid-offers/route.ts", [
 includes("app/admin-driver-pool-control.tsx", [
   "Send to Driver Pool", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
   "onAssignedOfferChange", 'offer?.offer_status === "assigned"',
+  "Accepted · Driver assigned. Create the Driver Job Link when ready.",
+  "showPleaseAssignDriver", ">Please assign driver.<",
   "eligible Drivers", "push-capable Drivers", "app-only Drivers",
   "Drivers had a push request accepted by provider", "delivery not confirmed",
 ]);
+assert.match(
+  files["app/admin-driver-pool-control.tsx"],
+  /useEffect\(\(\) => \{\s*const timer = window\.setTimeout\(\(\) => \{\s*setFeedback\(""\);\s*void load\(\);\s*\}, 0\);[\s\S]*?\}, \[expectedUpdatedAt, load\]\);/,
+  "A successful Admin cancellation must re-read the same Driver Pool control when the saved booking revision changes and clear stale feedback",
+);
+assert.doesNotMatch(
+  files["app/admin-driver-pool-control.tsx"],
+  /Reload this booking to Create Link/,
+  "The assigned state must not instruct Admin to reload before using the established Driver Job Link lane",
+);
 includes("scripts/test-booking-ui-browser.mjs", [
   "__prestigeDriverPoolOfferRequests", "Pool offer total SGD\\s*Send to Driver Pool",
   'payout === "75.00"', 'sendText === "Send to Driver Pool"',
+  "Driver Pool accepted assignment cancel refreshes in place",
+  "Accepted · Driver assigned. Create the Driver Job Link when ready.",
+  'bodyText.includes("Please assign driver.")',
+  'oldReloadWordingVisible: bodyText.includes("Reload this booking to Create Link")',
 ]);
 assert.equal((files["app/page.tsx"].match(/<AdminDriverPoolControl/g) || []).length, 1);
 includes("app/page.tsx", [
   "Manual assignment with payout control.", "Apply Driver to Draft",
   "Cancel Driver Assignment", "cancelAssignedDriverPoolAssignment",
+  "driverPoolAssignmentCancelled", "setDriverPoolAssignmentCancelled(false)",
+  "setDriverPoolAssignmentCancelled(true)",
+  'text: "Please assign driver."',
   'requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}',
 ]);
 const assignmentHandlerStart = files["app/page.tsx"].indexOf("async function assignDraftDriver()");

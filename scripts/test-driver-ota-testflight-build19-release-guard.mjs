@@ -64,6 +64,12 @@ for (const phrase of [
   "No OTA update is published by this checkpoint",
   "Driver Native Visible Alert Badge Persistence Repair",
   "Driver Pool Winner Driver Alert, Silent Loser Refresh And Pre-Link Assignment Recovery",
+  "f6b2ee9a-735d-4b48-b7b3-8067a7857ba0",
+  "dc802f9a-596c-4629-b57b-13c833cd9743",
+  "e5924107-10a2-4dbc-829d-adcf02fb03f0",
+  "777eea4005ddac70a8089d65520ead8dab2344631f8a2355cde4675f68e2cc08",
+  "no OTA update was published",
+  "Admin/Customer remained parked",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `Implementation ledger must include ${phrase}`);
 }

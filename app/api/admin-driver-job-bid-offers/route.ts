@@ -6,8 +6,10 @@ import { sendDriverDevicePushAlertForDriverPoolOffer } from "../../../lib/driver
 import {
   cancelDriverPoolOffer,
   getDriverPoolClientForProduction,
+  loadAdminDriverPoolAttentionOffers,
   loadAdminDriverPoolOffer,
   parseDriverPoolCancelPayload,
+  parseDriverPoolAttentionQuery,
   parseDriverPoolPublishPayload,
   publishDriverPoolOffer,
 } from "../../../lib/driver-pool-fast-accept";
@@ -31,12 +33,26 @@ export async function GET(request: Request) {
     const access = boundary(request);
     if (!access.ok) return response({ error: access.error, ok: false }, 403);
     const params = new URL(request.url).searchParams;
+    const database = getDriverPoolClientForProduction();
+    if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
+
+    if (params.has("scope")) {
+      const parsed = parseDriverPoolAttentionQuery(params);
+      if (!parsed.ok) return response({ error: parsed.error, ok: false }, parsed.status);
+      const result = await loadAdminDriverPoolAttentionOffers(
+        database.client,
+        parsed.data.page,
+        parsed.data.limit,
+      );
+      return result.ok
+        ? response({ ...result.data, ok: true }, 200)
+        : response({ error: result.error, ok: false }, result.status);
+    }
+
     if ([...params.keys()].some((key) => key !== "booking_reference")) {
       return response({ error: "Malformed Driver Pool request.", ok: false }, 400);
     }
     const reference = params.get("booking_reference") || "";
-    const database = getDriverPoolClientForProduction();
-    if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
     const result = await loadAdminDriverPoolOffer(database.client, reference);
     return result.ok
       ? response({ ...result.data, ok: true }, 200)

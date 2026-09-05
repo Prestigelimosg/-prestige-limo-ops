@@ -41,6 +41,13 @@ export type DriverPoolOfferState = {
   updated_at: string;
 };
 
+export type AdminDriverPoolAttentionItem = DriverPoolOfferState & {
+  attention_status: "accepted_link_pending" | "open";
+  booking_reference: string;
+  pickup_at: string;
+  public_booking_reference: string;
+};
+
 export type DriverPoolCancelResult = {
   assignment_cancelled: boolean;
   cancelled_driver_id: number | null;
@@ -173,6 +180,29 @@ export function parseDriverPoolDecisionPayload(value: unknown): AdminBookingResu
   return exactKeys(record, ["offer_key", "expected_updated_at", "idempotency_key"]) && key && expected && idempotency
     ? { data: { expected_updated_at: expected, idempotency_key: idempotency, offer_key: key }, ok: true }
     : { error: "Malformed Driver Pool decision rejected.", ok: false, status: 400 };
+}
+
+export function parseDriverPoolAttentionQuery(params: URLSearchParams): AdminBookingResult<{
+  limit: number;
+  page: number;
+}> {
+  const allowed = new Set(["limit", "page", "scope"]);
+  const keys = [...params.keys()];
+  const pageText = params.get("page") || "1";
+  const limitText = params.get("limit") || "20";
+  const page = Number(pageText);
+  const limit = Number(limitText);
+  const valid = params.get("scope") === "attention" &&
+    keys.every((key) => allowed.has(key)) &&
+    [...allowed].every((key) => params.getAll(key).length <= 1) &&
+    /^[1-9][0-9]*$/.test(pageText) &&
+    /^[1-9][0-9]*$/.test(limitText) &&
+    Number.isSafeInteger(page) && page <= 1000 &&
+    Number.isSafeInteger(limit) && limit <= 20;
+
+  return valid
+    ? { data: { limit, page }, ok: true }
+    : { error: "Malformed Driver Pool pending-list request.", ok: false, status: 400 };
 }
 
 function mapOffer(row: UnknownRecord): DriverPoolOfferState | null {
@@ -332,6 +362,105 @@ export async function loadAdminDriverPoolOffer(client: DriverPoolClient, referen
     !["cancelled", "completed"].includes(customerStatus),
   );
   return { data: { eligible, enabled: true, offer }, ok: true } as const;
+}
+
+export async function loadAdminDriverPoolAttentionOffers(
+  client: DriverPoolClient,
+  page: number,
+  limit: number,
+) {
+  if (!driverPoolIsEnabled()) {
+    return {
+      data: { enabled: false, has_more: false, items: [] as AdminDriverPoolAttentionItem[], page: 1 },
+      ok: true,
+    } as const;
+  }
+
+  const boundedPage = Number.isSafeInteger(page) && page > 0 && page <= 1000 ? page : 1;
+  const boundedLimit = Number.isSafeInteger(limit) && limit > 0 && limit <= 20 ? limit : 20;
+  const targetCount = boundedPage * boundedLimit + 1;
+  const scanChunkSize = 100;
+  const attentionItems: AdminDriverPoolAttentionItem[] = [];
+  let rawOffset = 0;
+  let rawRowsRemain = true;
+
+  while (attentionItems.length < targetCount && rawRowsRemain) {
+    const { data, error } = await client.from("driver_job_bid_offers")
+      .select("booking_reference,public_booking_reference,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,pickup_at,closes_at,updated_at")
+      .in("offer_status", ["open", "assigned"])
+      .order("pickup_at", { ascending: true })
+      .order("offer_key", { ascending: true })
+      .range(rawOffset, rawOffset + scanChunkSize - 1);
+    if (error) {
+      const failure = classify(error);
+      return { ...failure, ok: false } as const;
+    }
+
+    const rows = asRows(data);
+    rawRowsRemain = rows.length === scanChunkSize;
+    rawOffset += rows.length;
+
+    const assignedReferences = [...new Set(rows
+      .filter((row) => text(row.offer_status, 20) === "assigned")
+      .map((row) => bookingReference(row.booking_reference))
+      .filter((reference): reference is string => Boolean(reference)))];
+    const linkedReferences = new Set<string>();
+
+    if (assignedReferences.length > 0) {
+      const { data: linkData, error: linkError } = await client.from("driver_job_links")
+        .select("booking_reference")
+        .in("booking_reference", assignedReferences)
+        .limit(scanChunkSize * 10);
+      if (linkError) {
+        const failure = classify(linkError);
+        return { ...failure, ok: false } as const;
+      }
+      for (const link of asRows(linkData)) {
+        const reference = bookingReference(link.booking_reference);
+        if (reference) linkedReferences.add(reference);
+      }
+    }
+
+    for (const row of rows) {
+      const offer = mapOffer(row);
+      const exactBookingReference = bookingReference(row.booking_reference);
+      const publicReference = publicBookingReference(row.public_booking_reference);
+      const pickupAt = timestamp(row.pickup_at);
+      if (!offer || !exactBookingReference || !publicReference || !pickupAt) continue;
+
+      if (offer.offer_status === "open") {
+        attentionItems.push({
+          ...offer,
+          attention_status: "open",
+          booking_reference: exactBookingReference,
+          pickup_at: pickupAt,
+          public_booking_reference: publicReference,
+        });
+      } else if (
+        offer.offer_status === "assigned" &&
+        !linkedReferences.has(exactBookingReference)
+      ) {
+        attentionItems.push({
+          ...offer,
+          attention_status: "accepted_link_pending",
+          booking_reference: exactBookingReference,
+          pickup_at: pickupAt,
+          public_booking_reference: publicReference,
+        });
+      }
+    }
+  }
+
+  const start = (boundedPage - 1) * boundedLimit;
+  return {
+    data: {
+      enabled: true,
+      has_more: attentionItems.length > start + boundedLimit,
+      items: attentionItems.slice(start, start + boundedLimit),
+      page: boundedPage,
+    },
+    ok: true,
+  } as const;
 }
 
 export async function cancelDriverPoolOffer(client: DriverPoolClient, input: { offer_key: string; expected_updated_at: string }, actor: AdminBookingPersistenceAdapterActor) {

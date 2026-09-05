@@ -48979,18 +48979,22 @@ export default function Home() {
             </div>
 
             <details
-              className="order-[56] min-w-0 rounded-md border border-stone-200 bg-white p-3"
+              className="relative order-[56] min-w-0 rounded-md border border-stone-200 bg-white p-2"
               data-dispatch-workflow-step="driver-dispatch-copy"
               data-driver-message-disclosure="true"
             >
-              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <h2 className="text-lg font-semibold">Manual WhatsApp Copy — Optional</h2>
-                <p className="text-xs text-slate-500">Copy the assigned-driver update, then paste it into WhatsApp manually.</p>
+              <summary className="cursor-pointer list-none lg:pr-64 [&::-webkit-details-marker]:hidden">
+                <h2 className="text-sm font-semibold leading-5" data-driver-manual-copy-heading="true">
+                  Manual WhatsApp Copy — Optional
+                </h2>
+                <p className="text-[11px] leading-4 text-slate-500">Copy the assigned-driver update, then paste it into WhatsApp manually.</p>
               </summary>
-              <div className="mt-3">
-              <div className="mb-2 flex flex-col items-start gap-2 sm:items-end">
-                <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="mt-1.5">
+              <div
+                className="mb-1 flex flex-col items-start gap-1.5 lg:absolute lg:right-2 lg:top-2 lg:mb-0 lg:items-end"
+                data-driver-manual-copy-actions="true"
+              >
+                <div className="flex flex-col gap-1.5 sm:flex-row">
                     {driverDispatchCopyEditState.isEditing ? (
                       <>
                         <button
@@ -49042,17 +49046,17 @@ export default function Home() {
                     >
                       {driverDispatchCopied ? "Copied" : "Copy"}
                     </button>
-                  </div>
-                  {driverDispatchFeedback?.tone === "error" ? (
-                    <div
-                      className={`rounded-md border px-2 py-1 text-xs font-medium ${statusClass(driverDispatchFeedback.tone)}`}
-                      data-copy-feedback="driver-dispatch"
-                    >
-                      {driverDispatchFeedback.text}
-                    </div>
-                  ) : null}
                 </div>
               </div>
+              {driverDispatchFeedback?.tone === "error" ? (
+                <div
+                  className={`mb-1 rounded-md border px-2 py-1 text-xs font-medium ${statusClass(driverDispatchFeedback.tone)}`}
+                  data-copy-feedback="driver-dispatch"
+                  data-driver-manual-copy-feedback-row="true"
+                >
+                  {driverDispatchFeedback.text}
+                </div>
+              ) : null}
               {driverDispatchCopyEditState.isEditing ? (
                 <textarea
                   aria-label="Edit Driver Dispatch"
@@ -49063,10 +49067,10 @@ export default function Home() {
                 />
               ) : (
                 <details
-                  className="rounded-md border border-sky-100 bg-white px-2 py-1.5"
+                  className="rounded-md border border-sky-100 bg-white px-2 py-1"
                   data-dispatch-compact-panel="driver-dispatch-copy-preview"
                 >
-                  <summary className="cursor-pointer list-none text-xs font-semibold text-sky-950 [&::-webkit-details-marker]:hidden">
+                  <summary className="cursor-pointer list-none text-[11px] font-semibold leading-5 text-sky-950 [&::-webkit-details-marker]:hidden">
                     Preview assigned-driver copy
                   </summary>
                   <pre

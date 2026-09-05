@@ -17004,6 +17004,7 @@ async function runChromeTest() {
       window.__prestigeAdminDriverJobDspActualTimeRequests = [];
       window.__prestigeDriverPoolOfferRequests = [];
       window.__prestigeDriverPoolOffer = null;
+      window.__prestigeDriverPoolAttentionItems = [];
       window.__prestigeAdminDriverJobDspActualTimeSummaries = {
         "ui-cleanup-load-fixture": [
           {
@@ -17051,7 +17052,35 @@ async function runChromeTest() {
             booking_reference: url.searchParams.get("booking_reference") || "",
             headers,
             method,
+            scope: url.searchParams.get("scope") || "",
           });
+
+          if (method === "GET" && url.searchParams.get("scope") === "attention") {
+            const items = window.__prestigeDriverPoolAttentionItems || [];
+            return new Response(
+              JSON.stringify({ enabled: true, has_more: false, items, ok: true, page: 1 }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          }
+
+          if (method === "PATCH") {
+            const pendingOffer = (window.__prestigeDriverPoolAttentionItems || []).find(
+              (item) => item.offer_key === parsedBody?.offer_key && item.attention_status === "open",
+            );
+            if (pendingOffer) {
+              window.__prestigeDriverPoolAttentionItems = window.__prestigeDriverPoolAttentionItems.filter(
+                (item) => item.offer_key !== pendingOffer.offer_key,
+              );
+              return new Response(
+                JSON.stringify({
+                  assignment_cancelled: false,
+                  offer: { ...pendingOffer, offer_status: "cancelled" },
+                  ok: true,
+                }),
+                { status: 200, headers: { "content-type": "application/json" } },
+              );
+            }
+          }
 
           if (method === "PATCH" && window.__prestigeDriverPoolOffer?.offer_status === "assigned") {
             const cancelledOffer = {
@@ -18915,6 +18944,7 @@ async function runChromeTest() {
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=dispatch_release",
       "GET /api/admin-booking-workflow-statuses?booking_reference=ui-cleanup-load-fixture&workflow_area=driver_acknowledgement",
       "GET /api/admin-completed-booking-closeouts?booking_reference=ui-cleanup-load-fixture",
+      "GET /api/admin-driver-job-bid-offers?scope=attention&page=1&limit=20",
       "GET /api/admin-driver-job-bid-offers?booking_reference=ui-cleanup-load-fixture",
       "GET /api/admin-driver-job-links?booking_reference=ui-cleanup-load-fixture&limit=1&link_status=active&page=1",
       "GET /api/admin-customer-driver-details-email-review-item-setup?booking_reference=ui-cleanup-load-fixture&driver_ack_status=pending&customer_email=booker%40loadedsaved.example.com&driver_name=LOADED+SAVED+DRIVER&driver_phone=%2B65+8888+0000&vehicle_plate=SLA1234X&vehicle_type=VVV",
@@ -21245,6 +21275,38 @@ async function runChromeTest() {
         recipient_count: 2,
         updated_at: "2026-05-19T00:01:00.000Z",
       };
+      window.__prestigeDriverPoolAttentionItems = [
+        ...[0, 1, 2, 3, 4].map((index) => ({
+          attention_status: "open",
+          booking_reference: "ui-pool-open-" + (index + 1),
+          closes_at: "2027-05-28T03:00:00.000Z",
+          offer_key: String(index + 1).repeat(64),
+          offer_payout_sgd: 55 + index,
+          offer_status: "open",
+          pickup_at: "2027-05-" + String(20 + index).padStart(2, "0") + "T01:00:00.000Z",
+          provider_accepted_driver_count: 0,
+          provider_attempted_driver_count: 0,
+          public_booking_reference: String(10931 + index),
+          push_target_count: 1,
+          recipient_count: 2,
+          updated_at: "2026-05-19T00:01:00.000Z",
+        })),
+        {
+          attention_status: "accepted_link_pending",
+          booking_reference: "ui-cleanup-load-fixture",
+          closes_at: "2027-05-28T03:00:00.000Z",
+          offer_key: "b".repeat(64),
+          offer_payout_sgd: 75,
+          offer_status: "assigned",
+          pickup_at: "2027-05-25T01:00:00.000Z",
+          provider_accepted_driver_count: 1,
+          provider_attempted_driver_count: 1,
+          public_booking_reference: "10839",
+          push_target_count: 1,
+          recipient_count: 2,
+          updated_at: "2026-05-19T00:01:00.000Z",
+        },
+      ];
       window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
         booking.id === "ui-cleanup-load-fixture"
           ? {
@@ -21311,6 +21373,92 @@ async function runChromeTest() {
       "Accepted · Driver assigned. Create the Driver Job Link when ready.",
       "Assigned Driver Pool wording must not require a manual reload",
     );
+
+    const driverPoolPendingListUi = await waitForCondition(
+      async () => evaluate(`(() => {
+        const list = document.querySelector("[data-admin-driver-pool-pending-list='true']");
+        const rows = [...(list?.querySelectorAll("[data-admin-driver-pool-pending-row]") || [])];
+        const acceptedRow = rows.find((row) => row.innerText.includes("Accepted · Job Link pending"));
+        return list && rows.length === 6 && acceptedRow
+          ? {
+              acceptedReference: acceptedRow.getAttribute("data-admin-driver-pool-pending-row"),
+              cancelCount: [...list.querySelectorAll("button")].filter(
+                (button) => button.textContent.trim() === "Cancel Offer",
+              ).length,
+              clientHeight: list.querySelector(".overflow-y-auto")?.clientHeight || 0,
+              loadJobCount: [...list.querySelectorAll("button")].filter(
+                (button) => button.textContent.trim() === "Load Job",
+              ).length,
+              rowCount: rows.length,
+              scrollHeight: list.querySelector(".overflow-y-auto")?.scrollHeight || 0,
+              text: list.textContent.replace(/\s+/g, " ").trim(),
+            }
+          : false;
+      })()`),
+      10000,
+      "compact Admin Driver Pool pending jobs list",
+    );
+    assert.equal(driverPoolPendingListUi.rowCount, 6);
+    assert.equal(driverPoolPendingListUi.cancelCount, 5, "each open pending offer must retain its exact Cancel Offer action");
+    assert.equal(driverPoolPendingListUi.loadJobCount, 1, "the accepted pre-link job must have one exact Load Job action");
+    assert.equal(driverPoolPendingListUi.acceptedReference, "10839");
+    assert.match(driverPoolPendingListUi.text, /Driver Pool pending/);
+    assert.ok(
+      driverPoolPendingListUi.clientHeight > 0 && driverPoolPendingListUi.scrollHeight > driverPoolPendingListUi.clientHeight,
+      "more than five compact pending rows must scroll inside the Assigned Driver sector",
+    );
+
+    const exactReadCountBeforePendingLoad = await evaluate(
+      `(window.__prestigeAdminBookingExactReadRequests || []).length`,
+    );
+    const clickedAcceptedPendingJob = await evaluate(`(() => {
+      const row = document.querySelector("[data-admin-driver-pool-pending-row='10839']");
+      const button = [...(row?.querySelectorAll("button") || [])].find(
+        (candidate) => candidate.textContent.trim() === "Load Job",
+      );
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedAcceptedPendingJob, true, "accepted pre-link pending job must load through its compact row");
+    const acceptedPendingJobLoaded = await waitForCondition(
+      async () => evaluate(`(() => {
+        const exactReads = window.__prestigeAdminBookingExactReadRequests || [];
+        return exactReads.length > ${exactReadCountBeforePendingLoad}
+          ? { exactReads }
+          : false;
+      })()`),
+      10000,
+      "accepted Driver Pool pending job exact load",
+    );
+    assert.equal(
+      acceptedPendingJobLoaded.exactReads.at(-1).search,
+      "?booking_reference=ui-cleanup-load-fixture",
+      "Load Job must use the existing exact guarded booking read",
+    );
+
+    const clickedOpenPendingCancel = await evaluate(`(() => {
+      const row = document.querySelector("[data-admin-driver-pool-pending-row='10931']");
+      const button = [...(row?.querySelectorAll("button") || [])].find(
+        (candidate) => candidate.textContent.trim() === "Cancel Offer",
+      );
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedOpenPendingCancel, true, "open compact pending row must expose its existing cancel path");
+    const openPendingCancelled = await waitForCondition(
+      async () => evaluate(`(() => {
+        const row = document.querySelector("[data-admin-driver-pool-pending-row='10931']");
+        const request = (window.__prestigeDriverPoolOfferRequests || []).find(
+          (candidate) => candidate.method === "PATCH" && candidate.body?.offer_key === "1".repeat(64),
+        );
+        return !row && request ? { request } : false;
+      })()`),
+      10000,
+      "open Driver Pool pending offer cancellation",
+    );
+    assert.equal(openPendingCancelled.request.body.expected_updated_at, "2026-05-19T00:01:00.000Z");
 
     const clickedCancelDriverAssignment = await evaluate(`(() => {
       const button = [...document.querySelectorAll("button")].find(

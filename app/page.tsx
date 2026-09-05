@@ -27604,6 +27604,25 @@ export default function Home() {
     }
   }
 
+  async function loadAdminDriverPoolPendingBooking(bookingReference: string) {
+    const exactBookingReference = cleanReferenceText(bookingReference);
+    if (!exactBookingReference) {
+      throw new Error("Driver Pool pending job has no valid booking reference.");
+    }
+
+    const exactBooking = await loadExactAdminBookingPersistenceRecord(
+      exactBookingReference,
+      `Exact saved booking ${adminVisibleBookingReference(exactBookingReference)} could not be loaded.`,
+    );
+    const exactBookingRecord = adminBookingPersistenceRecordToCalendarBookingRecord(exactBooking);
+    await loadSelectedBooking(exactBookingRecord, {
+      adminBookingRecordOverride: exactBooking,
+      bookingFormOverride: bookingRecordToForm(exactBookingRecord),
+      focusDriverJobLink: true,
+      suppressCustomerRequestHandledMemory: true,
+    });
+  }
+
   async function assignDraftDriver() {
     if (saveLoadedDriverAssignmentAvailable) {
       await updateAppliedAdminBookingOperationalSnapshot({ assignmentOnly: true });
@@ -45012,6 +45031,7 @@ export default function Home() {
                 )}
                 expectedUpdatedAt={clean(loadedAdminBookingBaselineRef.current?.updatedAt)}
                 onAssignedOfferChange={setAssignedDriverPoolAdminOffer}
+                onLoadBooking={loadAdminDriverPoolPendingBooking}
                 requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}
                 showPleaseAssignDriver={driverPoolAssignmentCancelled}
                 suggestedPayout={

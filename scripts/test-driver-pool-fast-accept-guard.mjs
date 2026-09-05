@@ -48,6 +48,8 @@ excludes("app/api/admin-driver-job-bid-offers/route.ts", [/preferredRegion|runti
 
 includes("lib/driver-pool-fast-accept.ts", [
   "PRESTIGE_DRIVER_POOL_ENABLED", "driverPoolIsEnabled", "parseDriverPoolPublishPayload",
+  "parseDriverPoolAttentionQuery", "loadAdminDriverPoolAttentionOffers",
+  'attention_status: "accepted_link_pending"', '.from("driver_job_links")',
   "offer_payout_sgd", "publish_driver_pool_offer", "cancel_driver_pool_offer",
   "accept_driver_pool_offer", "decline_driver_pool_offer", "list_driver_pool_available_jobs",
   "sendDriverDevicePushAlertForDriverPoolOffer", "eligible, enabled: true, offer",
@@ -59,6 +61,9 @@ includes("lib/driver-pool-fast-accept.ts", [
 ]);
 excludes("lib/driver-pool-fast-accept.ts", [/customer_price|invoice|billing_amount|payment|paynow|bank_account|internal_finance|payout_comparison/i]);
 includes("docs/current-implementation-ledger.md", [
+  "## Admin Driver Pool Pending Jobs Compact List (source checkpoint 2026-09-05)",
+  "approximately five slim rows inside its own scroll area",
+  "It does not create, issue, copy, send, acknowledge or revoke a link automatically.",
   "## Driver Pool Winner Driver Alert, Silent Loser Refresh And Pre-Link Assignment Recovery (source checkpoint 2026-09-05)",
   "Accepted! Pls ack when admin send job link",
   "The losing-Driver signal has no title, body, sound or badge.",
@@ -138,6 +143,105 @@ console.error = (...args) => diagnosticLogs.push(args);
 globalThis.setTimeout = (callback, delay, ...args) =>
   originalSetTimeout(callback, Math.min(Number(delay), 20), ...args);
 try {
+  assert.deepEqual(
+    timeoutHarness.helper.parseDriverPoolAttentionQuery(new URLSearchParams("scope=attention&page=2&limit=20")),
+    { data: { limit: 20, page: 2 }, ok: true },
+    "the Admin pending-list query must accept only its bounded established-route scope",
+  );
+  assert.equal(
+    timeoutHarness.helper.parseDriverPoolAttentionQuery(new URLSearchParams("scope=attention&page=1&limit=21")).ok,
+    false,
+    "the Admin pending-list API must reject a page larger than 20",
+  );
+  assert.equal(
+    timeoutHarness.helper.parseDriverPoolAttentionQuery(new URLSearchParams("scope=attention&page=1&page=2")).ok,
+    false,
+    "duplicate Admin pending-list query keys must fail closed",
+  );
+
+  const attentionOfferRows = [
+    {
+      booking_reference: "ADM-OPEN",
+      closes_at: "2027-09-05T01:00:00.000Z",
+      offer_key: "1".repeat(64),
+      offer_payout_sgd: 55,
+      offer_status: "open",
+      pickup_at: "2027-09-06T02:00:00.000Z",
+      public_booking_reference: "10921",
+      push_target_count: 1,
+      recipient_count: 2,
+      updated_at: exactOfferTimestamp,
+    },
+    {
+      booking_reference: "ADM-ACCEPTED-NO-LINK",
+      closes_at: "2027-09-05T01:00:00.000Z",
+      offer_key: "2".repeat(64),
+      offer_payout_sgd: 60,
+      offer_status: "assigned",
+      pickup_at: "2027-09-06T03:00:00.000Z",
+      public_booking_reference: "10922",
+      push_target_count: 1,
+      recipient_count: 2,
+      updated_at: exactOfferTimestamp,
+    },
+    {
+      booking_reference: "ADM-ACCEPTED-WITH-LINK",
+      closes_at: "2027-09-05T01:00:00.000Z",
+      offer_key: "3".repeat(64),
+      offer_payout_sgd: 65,
+      offer_status: "assigned",
+      pickup_at: "2027-09-06T04:00:00.000Z",
+      public_booking_reference: "10923",
+      push_target_count: 1,
+      recipient_count: 2,
+      updated_at: exactOfferTimestamp,
+    },
+    {
+      booking_reference: "ADM-EXPIRED",
+      closes_at: "2020-09-05T01:00:00.000Z",
+      offer_key: "4".repeat(64),
+      offer_payout_sgd: 70,
+      offer_status: "open",
+      pickup_at: "2027-09-06T05:00:00.000Z",
+      public_booking_reference: "10924",
+      push_target_count: 1,
+      recipient_count: 2,
+      updated_at: exactOfferTimestamp,
+    },
+  ];
+  function attentionQuery(table) {
+    let result = table === "driver_job_bid_offers"
+      ? { data: attentionOfferRows, error: null }
+      : { data: [{ booking_reference: "ADM-ACCEPTED-WITH-LINK" }], error: null };
+    const query = {
+      in() { return query; },
+      limit() { return query; },
+      order() { return query; },
+      range(from, to) {
+        if (table === "driver_job_bid_offers") result = { data: attentionOfferRows.slice(from, to + 1), error: null };
+        return query;
+      },
+      select() { return query; },
+      then(resolve, reject) { return Promise.resolve(result).then(resolve, reject); },
+    };
+    return query;
+  }
+  const attentionResult = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers({
+    from(table) { return attentionQuery(table); },
+  }, 1, 1);
+  assert.equal(attentionResult.ok, true);
+  assert.equal(attentionResult.data.has_more, true, "one additional actionable offer must expose Load more");
+  assert.equal(attentionResult.data.items.length, 1, "the server page size must be enforced");
+  assert.equal(attentionResult.data.items[0].attention_status, "open");
+  const allAttentionResult = await timeoutHarness.helper.loadAdminDriverPoolAttentionOffers({
+    from(table) { return attentionQuery(table); },
+  }, 1, 20);
+  assert.deepEqual(
+    allAttentionResult.data.items.map((item) => [item.public_booking_reference, item.attention_status]),
+    [["10921", "open"], ["10922", "accepted_link_pending"]],
+    "only open offers and accepted offers without any Driver Job Link belong in the compact Admin pending list",
+  );
+
   const exactIdempotencyKey = "12345678-1234-1234-1234-123456789abc";
   const result = await timeoutHarness.helper.publishDriverPoolOffer({
     rpc(name, payload) {
@@ -599,6 +703,8 @@ async function loadAdminDriverPoolCancelRouteHarness() {
     exports.parseDriverPoolCancelPayload = () => ({ data: { offer_key: "a".repeat(64), expected_updated_at: "2026-09-05T01:00:00.123456+00:00" }, ok: true });
     exports.cancelDriverPoolOffer = async () => globalThis.__driverPoolCancelResult;
     exports.loadAdminDriverPoolOffer = async () => ({ data: {}, ok: true });
+    exports.parseDriverPoolAttentionQuery = () => ({ data: { limit: 20, page: 1 }, ok: true });
+    exports.loadAdminDriverPoolAttentionOffers = async () => globalThis.__driverPoolAttentionResult;
     exports.parseDriverPoolPublishPayload = () => ({ data: {}, ok: true });
     exports.publishDriverPoolOffer = async () => ({ data: {}, ok: true });
   `);
@@ -616,6 +722,27 @@ async function loadAdminDriverPoolCancelRouteHarness() {
 
 const cancelRouteHarness = await loadAdminDriverPoolCancelRouteHarness();
 try {
+  globalThis.__driverPoolAttentionResult = {
+    data: {
+      enabled: true,
+      has_more: false,
+      items: [{ attention_status: "accepted_link_pending", public_booking_reference: "10909" }],
+      page: 1,
+    },
+    ok: true,
+  };
+  const attentionResponse = await cancelRouteHarness.route.GET(
+    new Request("https://app.prestigelimo.sg/api/admin-driver-job-bid-offers?scope=attention&page=1&limit=20"),
+  );
+  assert.equal(attentionResponse.status, 200);
+  assert.deepEqual(await attentionResponse.json(), {
+    enabled: true,
+    has_more: false,
+    items: [{ attention_status: "accepted_link_pending", public_booking_reference: "10909" }],
+    ok: true,
+    page: 1,
+  });
+
   const cancelRequest = () => new Request("https://app.prestigelimo.sg/api/admin-driver-job-bid-offers", {
     body: JSON.stringify({}),
     method: "PATCH",
@@ -692,6 +819,7 @@ try {
   delete globalThis.__driverPoolCancelAlertCalls;
   delete globalThis.__driverPoolCancelAlertShouldFail;
   delete globalThis.__driverPoolCancelResult;
+  delete globalThis.__driverPoolAttentionResult;
   await cancelRouteHarness.cleanup();
 }
 
@@ -748,9 +876,12 @@ assert.doesNotMatch(
 includes("app/api/admin-driver-job-bid-offers/route.ts", [
   "resolveAdminDispatcherBoundary", "parseDriverPoolPublishPayload", "publishDriverPoolOffer",
   "parseDriverPoolCancelPayload", "cancelDriverPoolOffer",
+  "parseDriverPoolAttentionQuery", "loadAdminDriverPoolAttentionOffers",
 ]);
 includes("app/admin-driver-pool-control.tsx", [
   "Send to Driver Pool", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
+  "Driver Pool pending", "Accepted · Job Link pending", "Load more", "onLoadBooking",
+  'data-admin-driver-pool-pending-list="true"', "max-h-52 overflow-y-auto",
   "onAssignedOfferChange", 'offer?.offer_status === "assigned"',
   "Accepted · Driver assigned. Create the Driver Job Link when ready.",
   "showPleaseAssignDriver", ">Please assign driver.<",
@@ -769,6 +900,8 @@ assert.doesNotMatch(
 );
 includes("scripts/test-booking-ui-browser.mjs", [
   "__prestigeDriverPoolOfferRequests", "Pool offer total SGD\\s*Send to Driver Pool",
+  "compact Admin Driver Pool pending jobs list", "accepted Driver Pool pending job exact load",
+  "open Driver Pool pending offer cancellation",
   'payout === "75.00"', 'sendText === "Send to Driver Pool"',
   "Driver Pool accepted assignment cancel refreshes in place",
   "Accepted · Driver assigned. Create the Driver Job Link when ready.",
@@ -778,12 +911,18 @@ includes("scripts/test-booking-ui-browser.mjs", [
 assert.equal((files["app/page.tsx"].match(/<AdminDriverPoolControl/g) || []).length, 1);
 includes("app/page.tsx", [
   "Manual assignment with payout control.", "Apply Driver to Draft",
+  "loadAdminDriverPoolPendingBooking", "onLoadBooking={loadAdminDriverPoolPendingBooking}",
   "Cancel Driver Assignment", "cancelAssignedDriverPoolAssignment",
   "driverPoolAssignmentCancelled", "setDriverPoolAssignmentCancelled(false)",
   "setDriverPoolAssignmentCancelled(true)",
   'text: "Please assign driver."',
   'requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}',
 ]);
+assert.equal(
+  (files["app/api/admin-driver-job-bid-offers/route.ts"].match(/export async function GET/g) || []).length,
+  1,
+  "the compact Admin pending list must reuse the one existing Driver Pool GET route",
+);
 const assignmentHandlerStart = files["app/page.tsx"].indexOf("async function assignDraftDriver()");
 const assignmentHandlerEnd = files["app/page.tsx"].indexOf("async function copyDraftDriverDispatch()", assignmentHandlerStart);
 const assignmentHandler = files["app/page.tsx"].slice(assignmentHandlerStart, assignmentHandlerEnd);

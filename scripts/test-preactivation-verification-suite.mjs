@@ -1331,6 +1331,10 @@ const guardChecks = [
     script: "scripts/test-driver-companion-ios-release-config-guard.mjs",
   },
   {
+    label: "Driver Build 19 OTA-foundation TestFlight release guard",
+    script: "scripts/test-driver-ota-testflight-build19-release-guard.mjs",
+  },
+  {
     label: "Customer Live Location link readiness contract guard",
     script: "scripts/test-customer-live-location-link-readiness-contract-guard.mjs",
   },

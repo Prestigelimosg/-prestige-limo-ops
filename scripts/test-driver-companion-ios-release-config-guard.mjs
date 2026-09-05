@@ -53,8 +53,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "18",
-  "The proposed eighteenth Driver release checkpoint build number must be explicit",
+  "19",
+  "The approved nineteenth Driver OTA-foundation release checkpoint build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,
@@ -198,6 +198,11 @@ for (const phrase of [
   "0687fdc06b98d0146afa1be79966fdede42127a48f9293b0ed12e594233d6891",
   "all 22/22 focused Driver/native/protected-lane guards",
   "Source checks still do not prove a signed Build 18 binary",
+  "Prestige SG Driver Build 19 OTA Foundation TestFlight Release Checkpoint (source checkpoint 2026-09-05)",
+  "advances only Driver `ios.buildNumber` from completed Build `18` to `19`",
+  "Admin Build `7` and Customer Build `12` remain parked",
+  "No OTA update is published by this checkpoint",
+  "scripts/test-driver-ota-testflight-build19-release-guard.mjs",
 ]) {
   assert.equal(ledgerSource.includes(phrase), true, `${ledgerPath} must include ${phrase}`);
 }

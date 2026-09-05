@@ -92,7 +92,7 @@ const customer = JSON.parse(customerConfigSource).expo;
 const driver = JSON.parse(driverConfigSource).expo;
 assert.equal(admin.ios.buildNumber, "7", "Admin return-grace acceptance requires Build 7");
 assert.equal(customer.ios.buildNumber, "12", "Customer Build 12 must retain the accepted Customer identity");
-assert.equal(driver.ios.buildNumber, "18", "Driver Build 18 must retain the proposed Driver release identity");
+assert.equal(driver.ios.buildNumber, "19", "Driver Build 19 must retain the approved Driver release identity");
 
 for (const phrase of [
   "Admin All Native Alerts And Badge Build 5",
@@ -106,6 +106,8 @@ for (const phrase of [
   "Prestige SG Driver Build 18 Release Checkpoint (source checkpoint 2026-09-04)",
   "Build 17 remains the accepted physical TestFlight baseline",
   "Build 18 is only a prepared source checkpoint",
+  "Prestige SG Driver Build 19 OTA Foundation TestFlight Release Checkpoint (source checkpoint 2026-09-05)",
+  "Admin Build `7` and Customer Build `12` remain parked",
 ]) {
   assert.equal(ledger.includes(phrase), true, `Implementation ledger must include ${phrase}`);
 }

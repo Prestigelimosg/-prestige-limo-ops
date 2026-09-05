@@ -101,10 +101,10 @@ assert.deepEqual(
   [
     "Prestige SG Driver",
     "sg.prestigelimo.drivercompanion",
-    "18",
+    "19",
     "2a797181-d09d-4384-8d01-583456e83c3e",
   ],
-  "Proposed Driver Build 18 native release identity must remain exact",
+  "Approved Driver Build 19 native release identity must remain exact",
 );
 
 for (const requiredLedgerFragment of [
@@ -124,6 +124,8 @@ for (const requiredLedgerFragment of [
   "Prestige SG Driver Build 18 Release Checkpoint (source checkpoint 2026-09-04)",
   "Build 17 remains the accepted physical TestFlight baseline",
   "Build 18 is only a prepared source checkpoint",
+  "Prestige SG Driver Build 19 OTA Foundation TestFlight Release Checkpoint (source checkpoint 2026-09-05)",
+  "Admin Build `7` and Customer Build `12` remain parked",
   "Admin received its JC in-app alert and app-icon badge",
   "Customer received its JC in-app alert and app-icon badge",
   "did not move automatically to Completed/History",

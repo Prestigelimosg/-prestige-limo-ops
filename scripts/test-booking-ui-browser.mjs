@@ -8815,6 +8815,58 @@ async function runChromeTest() {
     assert.equal(emailAiDashboardState.dashboardBadgeText, "2 new");
     assert.equal(emailAiDashboardState.dashboardNewRequestCount, "2");
     assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "2");
+    const openedSingleCategoryNotificationCentre = await evaluate(`(() => {
+      const badge = document.querySelector('[data-bookings-new-request-badge="true"]');
+
+      if (!(badge instanceof HTMLElement)) {
+        return false;
+      }
+
+      badge.click();
+      return true;
+    })()`);
+    assert.equal(
+      openedSingleCategoryNotificationCentre,
+      true,
+      "Expected the existing Dashboard badge to open the Admin notification centre",
+    );
+    const singleCategoryNotificationCentreState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const centre = document.querySelector('[data-admin-notification-centre="true"]');
+          const emailOption = centre?.querySelector('[data-admin-notification-centre-option="email"]');
+
+          return centre && emailOption
+            ? {
+                categoryCount: centre.getAttribute("data-admin-notification-centre-categories"),
+                emailText: emailOption.textContent.replace(/\\s+/g, " ").trim(),
+                optionCount: centre.querySelectorAll("[data-admin-notification-centre-option]").length,
+              }
+            : false;
+        })()`),
+      5000,
+      "single-category Admin notification purpose list",
+    );
+    assert.equal(singleCategoryNotificationCentreState.categoryCount, "1");
+    assert.equal(singleCategoryNotificationCentreState.optionCount, 1);
+    assert.match(singleCategoryNotificationCentreState.emailText, /2 booking email/);
+    assert.match(singleCategoryNotificationCentreState.emailText, /existing booking inbox/);
+    const openedEmailReviewFromNotificationCentre = await evaluate(`(() => {
+      const emailOption = document.querySelector('[data-admin-notification-centre-option="email"]');
+
+      if (!(emailOption instanceof HTMLButtonElement)) {
+        return false;
+      }
+
+      emailOption.click();
+      return !document.querySelector('[data-admin-notification-centre="true"]') &&
+        Boolean(document.querySelector('[data-dashboard-new-booking-requests-panel="true"]'));
+    })()`);
+    assert.equal(
+      openedEmailReviewFromNotificationCentre,
+      true,
+      "Expected the notification purpose row to reuse the existing Booking Requests sector",
+    );
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),
       true,
@@ -10111,7 +10163,7 @@ async function runChromeTest() {
           hasSessionTokenHeader: false,
           method: "GET",
           purpose: "admin-booking-persistence",
-          search: "?limit=5&notification_status=queued&page=1",
+          search: "?limit=100&notification_status=queued&page=1",
         },
       ],
       "Expected Dashboard notification feed to GET queued admin app notifications through the guarded read API path",

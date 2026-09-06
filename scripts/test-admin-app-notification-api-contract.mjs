@@ -139,10 +139,13 @@ class MockSupabaseQuery {
     this.client = client;
     this.filters = [];
     this.operation = null;
+    this.orders = [];
     this.payload = null;
+    this.resultRange = null;
     this.resultLimit = null;
     this.resultMode = "many";
     this.selectedColumns = null;
+    this.selectOptions = null;
     this.table = table;
   }
 
@@ -169,12 +172,28 @@ class MockSupabaseQuery {
     return this;
   }
 
-  select(columns) {
+  order(column, options = {}) {
+    this.orders.push({
+      ascending: options.ascending !== false,
+      column,
+    });
+
+    return this;
+  }
+
+  range(from, to) {
+    this.resultRange = { from, to };
+
+    return this;
+  }
+
+  select(columns, options = null) {
     if (!this.operation) {
       this.operation = "select";
     }
 
     this.selectedColumns = columns;
+    this.selectOptions = options;
 
     return this;
   }
@@ -216,7 +235,15 @@ class MockSupabaseQuery {
       );
     }
 
-    return this.client.selectRows(this.table, this.resultLimit, this.selectedColumns);
+    return this.client.selectRows(
+      this.table,
+      this.filters,
+      this.orders,
+      this.resultRange,
+      this.resultLimit,
+      this.selectedColumns,
+      this.selectOptions,
+    );
   }
 }
 
@@ -290,12 +317,24 @@ class MockSupabaseClient {
     };
   }
 
-  selectRows(table, resultLimit, selectedColumns) {
+  selectRows(
+    table,
+    filters,
+    orders,
+    resultRange,
+    resultLimit,
+    selectedColumns,
+    selectOptions,
+  ) {
     const failure = this.failureFor("select", table);
 
     this.selectHistory.push({
+      filters: clone(filters),
       limit: resultLimit,
+      orders: clone(orders),
+      range: clone(resultRange),
       selectedColumns,
+      selectOptions: clone(selectOptions),
       table,
     });
     this.operations.push({
@@ -311,8 +350,27 @@ class MockSupabaseClient {
       };
     }
 
+    const filteredRows = this.filterRows(table, filters);
+    const orderedRows = [...filteredRows].sort((first, second) => {
+      for (const order of orders) {
+        const comparison = String(first[order.column] || "").localeCompare(
+          String(second[order.column] || ""),
+        );
+
+        if (comparison !== 0) {
+          return order.ascending ? comparison : -comparison;
+        }
+      }
+
+      return 0;
+    });
+    const rangedRows = resultRange
+      ? orderedRows.slice(resultRange.from, resultRange.to + 1)
+      : orderedRows.slice(0, resultLimit || undefined);
+
     return {
-      data: this.tables[table].slice(0, resultLimit || undefined).map((row) => clone(row)),
+      count: selectOptions?.count === "exact" ? filteredRows.length : null,
+      data: rangedRows.map((row) => clone(row)),
       error: null,
     };
   }
@@ -437,15 +495,53 @@ try {
 
   try {
     setEnv(validProductionEnv());
+    const historicalNotificationDecoys = Array.from({ length: 501 }, (_, index) => ({
+      actor_label: "System",
+      actor_role: "system",
+      booking_reference: `APP-NOTIFY-HISTORY-${String(index + 1).padStart(3, "0")}`,
+      created_at: new Date(Date.UTC(2026, 5, 1, 0, 0, index)).toISOString(),
+      delivery_surface: "admin_app",
+      id: `read-history-${String(index + 1).padStart(3, "0")}`,
+      notification_status: "read",
+      notification_type: "system_notice",
+      priority: "normal",
+      safe_context: {},
+      safe_message: "Historical notification already reviewed.",
+      safe_title: "Historical notification",
+      source_surface: "system",
+      updated_at: new Date(Date.UTC(2026, 5, 1, 0, 0, index)).toISOString(),
+      workflow_area: "system",
+    }));
     const mock = installMockClient({
       admin_app_notification_outbox: [
+        ...historicalNotificationDecoys,
+        {
+          actor_label: "System",
+          actor_role: "system",
+          booking_reference: "APP-NOTIFY-REF-001",
+          created_at: "2026-06-07T02:00:00.000Z",
+          delivery_surface: "admin_app",
+          event_key: "APP-NOTIFY-REF-001:queued-older",
+          id: "queued-older",
+          notification_status: "queued",
+          notification_type: "driver_status",
+          priority: "high",
+          safe_context: {
+            next_action: "Review saved status.",
+          },
+          safe_message: "Older saved driver status is ready for review.",
+          safe_title: "Older saved driver status",
+          source_surface: "system",
+          updated_at: "2026-06-07T02:00:00.000Z",
+          workflow_area: "day_of_trip_dispatch_monitor",
+        },
         {
           actor_label: "System",
           actor_role: "system",
           booking_reference: "APP-NOTIFY-REF-001",
           created_at: "2026-06-07T03:00:00.000Z",
           delivery_surface: "admin_app",
-          event_key: "APP-NOTIFY-REF-001:queued",
+          event_key: "APP-NOTIFY-REF-001:queued-newer",
           id: "queued-newer",
           notification_status: "queued",
           notification_type: "driver_status",
@@ -453,28 +549,11 @@ try {
           safe_context: {
             next_action: "Review saved status.",
           },
-          safe_message: "Saved driver status is ready for review.",
-          safe_title: "Saved driver status",
+          safe_message: "Newer saved driver status is ready for review.",
+          safe_title: "Newer saved driver status",
           source_surface: "system",
           updated_at: "2026-06-07T03:00:00.000Z",
           workflow_area: "day_of_trip_dispatch_monitor",
-        },
-        {
-          actor_label: "System",
-          actor_role: "system",
-          booking_reference: "APP-NOTIFY-REF-002",
-          created_at: "2026-06-07T02:00:00.000Z",
-          delivery_surface: "admin_app",
-          id: "read-older",
-          notification_status: "read",
-          notification_type: "monthly_billing",
-          priority: "normal",
-          safe_context: {},
-          safe_message: "Monthly billing draft plan is ready for review.",
-          safe_title: "Billing draft plan ready",
-          source_surface: "system",
-          updated_at: "2026-06-07T02:00:00.000Z",
-          workflow_area: "monthly_billing",
         },
       ],
     });
@@ -506,31 +585,78 @@ try {
           notification_status: "queued",
           notification_type: "driver_status",
           priority: "high",
-          safe_title: "Saved driver status",
+          safe_title: "Newer saved driver status",
         },
       ],
-      "Expected GET to return only safe queued admin app notifications",
+      "Expected GET page one to return the newest queued notification beyond 500 historical rows",
     );
     assert.deepEqual(getResult.body.pagination, {
-      has_next_page: false,
+      has_next_page: true,
       has_previous_page: false,
       page: 1,
-      page_count: 1,
+      page_count: 2,
       page_size: 1,
-      total_notification_count: 1,
+      total_notification_count: 2,
+    });
+    const secondPageResult = await responseJson(
+      await route.GET(
+        new Request(
+          "http://localhost/api/admin-app-notifications?notification_status=queued&limit=1&page=2",
+          {
+            headers: validAdminHeaders(),
+          },
+        ),
+      ),
+    );
+
+    assert.equal(secondPageResult.status, 200);
+    assert.deepEqual(
+      secondPageResult.body.notifications.map((notification) => notification.id),
+      ["queued-older"],
+      "Expected GET page two to return the older queued notification without rereading page one",
+    );
+    assert.deepEqual(secondPageResult.body.pagination, {
+      has_next_page: false,
+      has_previous_page: true,
+      page: 2,
+      page_count: 2,
+      page_size: 1,
+      total_notification_count: 2,
     });
     assert.deepEqual(
       mock.client.selectHistory.map((entry) => ({
+        filters: entry.filters,
         limit: entry.limit,
+        orders: entry.orders,
+        range: entry.range,
+        selectOptions: entry.selectOptions,
         table: entry.table,
       })),
       [
         {
-          limit: 500,
+          filters: [{ column: "notification_status", type: "eq", value: "queued" }],
+          limit: null,
+          orders: [
+            { ascending: false, column: "created_at" },
+            { ascending: false, column: "id" },
+          ],
+          range: { from: 0, to: 0 },
+          selectOptions: { count: "exact" },
+          table: "admin_app_notification_outbox",
+        },
+        {
+          filters: [{ column: "notification_status", type: "eq", value: "queued" }],
+          limit: null,
+          orders: [
+            { ascending: false, column: "created_at" },
+            { ascending: false, column: "id" },
+          ],
+          range: { from: 1, to: 1 },
+          selectOptions: { count: "exact" },
           table: "admin_app_notification_outbox",
         },
       ],
-      "Expected GET to read only from admin_app_notification_outbox",
+      "Expected GET to filter, count, order and range the existing outbox query in Supabase",
     );
     assert.equal(
       safeApiLeakPattern.test(JSON.stringify(getResult.body)),

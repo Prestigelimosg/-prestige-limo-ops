@@ -92,7 +92,7 @@ assertExcludes(
 );
 
 for (const fragment of [
-  "Delete this job from Completed / History? This cannot be undone.",
+  "Permanently delete this job and its linked operational records from the app and Supabase? This cannot be undone.",
   "Deleting job...",
   "Job deleted.",
   "Delete job failed",
@@ -107,12 +107,15 @@ for (const fragment of [
   "bookingStatusLabel(completedHistoryDisplayStatus)",
   "md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)]",
   "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",
-  "const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);",
-  "{canDeleteCompletedHistoryBooking ? (",
   "data-completed-delete-booking={bookingId}",
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed history driver fragment ${fragment}`);
 }
+assertExcludes(
+  completedHistoryPanel,
+  "bookingRecordCanBeDeletedFromCompletedHistory",
+  "completed history deletion must remain available independently of terminal status",
+);
 
 for (const forbiddenFragment of [
   "Driver completed {monthGroup.driverCompletedCount}",

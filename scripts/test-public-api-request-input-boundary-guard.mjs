@@ -267,10 +267,11 @@ const ledgerSection = sectionBetween(ledger, "### Public API Request Input Bound
 
 for (const phrase of [
   "Public customer/driver API request input boundaries are guarded across customer booking request, customer saved bookings, customer booking memory, customer booking status, customer portal session issue, customer app notifications, driver job status, driver job notifications, driver issue-alert, driver flight ETA setup, and driver bidding routes.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
+  "This guard permits only the authenticated Customer current-alert Clear input described above in addition to existing inputs; it does not approve endpoint migration, env changes, live reads, other DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, another UI sector, or new shims.",
   "Customer booking request POST input must stay limited to the approved customer form fields and must reject forbidden or unknown finance/internal/parser/token/archive fields before persistence.",
   "Customer saved-bookings, booking-memory, and booking-status read inputs must keep explicit query allowlists and forbidden-fragment checks on both query keys and values.",
   "Customer portal session issue input must remain server-gated by purpose/origin/referer/token headers and must not be called from customer UI/client code.",
+  "Customer current-alert Clear input must be exactly `{ action: \"dismiss_current\" }`, reject unknown and forbidden content, and pass the same-origin authenticated Customer boundary before parsing can lead to any write.",
   "Driver status and notification inputs must stay limited to current safe status, safe note/context, notification id/status, and driver_app delivery surface boundaries; driver issue-alert input must stay enum-only.",
   "Driver Pool GET/POST/PATCH accepts only exact allowlisted fields behind same-origin purpose, verified account session, bound installation and feature gates.",
   "Public API request input contracts must continue checking safe field allowlists, forbidden-field rejection, auth-required boundaries, and mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
@@ -398,12 +399,11 @@ for (const fragment of [
 }
 
 const customerAppNotificationsRoute = files["app/api/customer-app-notifications/route.ts"];
-assertExcludes(customerAppNotificationsRoute, "request.json", "customer app notifications public route body parsing");
 assertExcludes(customerAppNotificationsRoute, "searchParams", "customer app notifications public route query parsing");
 assertIncludes(
   customerAppNotificationsRoute,
-  "return safeCustomerAuthRequiredResponse();",
-  "customer app notifications auth-required input boundary",
+  "dismissCustomerNotificationCentreForAuthenticatedRuntime(\n      request,\n      await readJsonBody(request),",
+  "customer app notifications exact Clear input handoff",
 );
 
 const notificationsPersistence = files["lib/customer-driver-app-notification-persistence.ts"];
@@ -413,6 +413,10 @@ assert.deepEqual(extractSetItems(notificationsPersistence, "allowedUpdateFields"
   "notification_status",
 ]);
 for (const fragment of [
+  "const allowedCustomerNotificationCentreDismissFields = new Set([\"action\"]);",
+  "parseCustomerNotificationCentreDismissPayload",
+  'record.action !== "dismiss_current"',
+  "unknownKeys(record, allowedCustomerNotificationCentreDismissFields).length > 0",
   "unknownKeys(record, allowedUpdateFields).length > 0",
   "findForbiddenFieldNames(record).length > 0",
   "findForbiddenTextValues(record).length > 0",

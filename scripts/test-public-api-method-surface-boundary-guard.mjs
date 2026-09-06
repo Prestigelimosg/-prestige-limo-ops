@@ -80,7 +80,9 @@ const methodSurfaceChecks = [
       "customerAppNotificationsRequireAuthResult",
       "readCustomerAppNotificationsForStagingEvidence",
       "export async function GET(request: Request)",
-      "export async function PATCH() {\n  return safeCustomerAuthRequiredResponse();\n}",
+      "export async function PATCH(request: Request)",
+      "dismissCustomerNotificationCentreForAuthenticatedRuntime(",
+      "await readJsonBody(request)",
     ],
   },
   {
@@ -292,9 +294,9 @@ const ledgerSection = sectionBetween(ledger, "### Public API Method Surface Boun
 
 for (const phrase of [
   "Public customer/driver API method surfaces are guarded across customer booking request, customer portal session, customer saved bookings, customer booking memory, customer booking status, customer app notifications, driver job link, driver job status, driver notifications, driver issue-alert, driver flight ETA setup, and driver bidding routes.",
-  "This is a docs/test-only/read-only guard; it does not approve endpoint migration, env changes, deployment, live reads, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, or new shims.",
+  "This guard permits the existing methods plus only the authenticated Customer current-alert Clear PATCH described above; it does not approve another endpoint or method, env changes, live reads, other DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, another UI sector, or new shims.",
   "Customer booking requests may keep the existing guarded `POST` submission path while `GET`, `PUT`, `PATCH`, `DELETE`, `HEAD`, and `OPTIONS` fail closed through `blockedResponse`.",
-  "Customer saved-booking, booking-memory, booking-status, portal-session, and app-notification methods must stay on their current safe read/auth-required or submit-only boundaries.",
+  "Customer saved-booking, booking-memory, booking-status and portal-session methods must stay on their current safe read/auth-required or submit-only boundaries; app notifications additionally allow only the exact authenticated current-alert Clear PATCH.",
   "Driver job methods must stay limited to safe job `GET`, safe token-scoped driver-details `PATCH`, status `PATCH`, notification `GET`/`PATCH`, issue-alert `POST`, setup-only flight ETA `GET`, setup-only acknowledgement `GET`, and authenticated feature-gated Driver Pool `GET`/`POST`/`PATCH`.",
   "Public API method contracts must continue checking blocked or setup-only methods through mocked route harnesses; this guard coordinates those scripts in the preactivation suite.",
   "No Save Booking + CRM change.",

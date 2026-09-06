@@ -14,6 +14,7 @@ import {
   type CustomerPortalDriverTrackingResult,
 } from "../../lib/customer-portal-driver-tracking-adapter";
 import {
+  dismissCustomerNotificationCentre,
   loadCustomerNotificationCentre,
   loadCustomerPortalTripUpdates,
   type CustomerNotificationCentreAlert,
@@ -475,6 +476,10 @@ export default function CustomerPortalPage() {
   const [customerNotificationCentreOpen, setCustomerNotificationCentreOpen] = useState(false);
   const [customerNotificationCentreStatus, setCustomerNotificationCentreStatus] =
     useState<CustomerNotificationCentreStatus>("loading");
+  const [customerNotificationCentreClearing, setCustomerNotificationCentreClearing] =
+    useState(false);
+  const [customerNotificationCentreClearError, setCustomerNotificationCentreClearError] =
+    useState("");
   const [customerNotificationOpeningReference, setCustomerNotificationOpeningReference] =
     useState("");
   const [customerNotificationNavigationMessage, setCustomerNotificationNavigationMessage] =
@@ -1858,6 +1863,33 @@ export default function CustomerPortalPage() {
     }
   }
 
+  async function clearCustomerNotificationCentre() {
+    if (
+      customerNotificationCentreClearing ||
+      customerNotificationCentreStatus !== "ready" ||
+      customerNotificationCentreCount < 1
+    ) {
+      return;
+    }
+
+    setCustomerNotificationCentreClearing(true);
+    setCustomerNotificationCentreClearError("");
+    const result = await dismissCustomerNotificationCentre();
+    if (result.status !== "ready") {
+      setCustomerNotificationCentreClearError(
+        "Current alerts could not be cleared. Refresh and try again.",
+      );
+      setCustomerNotificationCentreClearing(false);
+      return;
+    }
+
+    setCustomerNotificationCentreAlerts([]);
+    setCustomerNotificationCentreCount(0);
+    setCustomerNotificationCentreStatus("loading");
+    await refreshCustomerNotificationCentre();
+    setCustomerNotificationCentreClearing(false);
+  }
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-3 py-4 text-slate-950 sm:px-4 lg:px-6"
@@ -1956,12 +1988,35 @@ export default function CustomerPortalPage() {
               data-customer-notification-centre="true"
               id="customer-notification-centre"
             >
-              <div className="px-2 py-1">
-                <h2 className="text-sm font-bold text-slate-950">Current alerts</h2>
-                <p className="text-xs font-semibold leading-5 text-slate-500">
-                  Driver and Prestige updates for this Customer account.
-                </p>
+              <div className="flex items-start justify-between gap-2 px-2 py-1">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-slate-950">Current alerts</h2>
+                  <p className="text-xs font-semibold leading-5 text-slate-500">
+                    Driver and Prestige updates for this Customer account.
+                  </p>
+                </div>
+                {customerNotificationCentreStatus === "ready" &&
+                customerNotificationCentreCount > 0 ? (
+                  <button
+                    aria-label="Clear current alerts"
+                    className="h-7 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                    data-customer-notification-centre-clear="true"
+                    disabled={customerNotificationCentreClearing}
+                    onClick={() => void clearCustomerNotificationCentre()}
+                    type="button"
+                  >
+                    {customerNotificationCentreClearing ? "Clearing..." : "Clear"}
+                  </button>
+                ) : null}
               </div>
+              {customerNotificationCentreClearError ? (
+                <p
+                  aria-live="polite"
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
+                >
+                  {customerNotificationCentreClearError}
+                </p>
+              ) : null}
               {customerNotificationNavigationMessage ? (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
                   {customerNotificationNavigationMessage}

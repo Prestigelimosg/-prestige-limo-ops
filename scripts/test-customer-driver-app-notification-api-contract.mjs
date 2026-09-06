@@ -828,6 +828,43 @@ try {
     assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.length, 500);
     assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.endsWith("..."), true);
 
+    const customerCentreDismissCalls = [];
+    const mappedCustomerCentreDismiss = await tripUpdatesAdapter.dismissCustomerNotificationCentre({
+      fetcher: async (url, init) => {
+        customerCentreDismissCalls.push({ url, init });
+        return new Response(JSON.stringify({
+          delivery_surface: "customer_app",
+          dismissed_count: 3,
+          external_send: false,
+          ok: true,
+          provider_send: false,
+          version: "customer-notification-centre-dismiss-contract",
+        }), { status: 200 });
+      },
+    });
+    assert.deepEqual(mappedCustomerCentreDismiss, { dismissedCount: 3, status: "ready" });
+    assert.equal(customerCentreDismissCalls.length, 1);
+    assert.equal(customerCentreDismissCalls[0].url, "/api/customer-app-notifications?view=centre");
+    assert.equal(customerCentreDismissCalls[0].init.method, "PATCH");
+    assert.equal(customerCentreDismissCalls[0].init.credentials, "same-origin");
+    assert.equal(
+      customerCentreDismissCalls[0].init.headers["x-prestige-customer-purpose"],
+      "customer-in-app-notification-dismiss",
+    );
+    assert.equal(customerCentreDismissCalls[0].init.body, '{"action":"dismiss_current"}');
+    const unsafeCustomerCentreDismiss = await tripUpdatesAdapter.dismissCustomerNotificationCentre({
+      fetcher: async () => new Response(JSON.stringify({
+        delivery_surface: "customer_app",
+        dismissed_count: 3,
+        external_send: false,
+        ok: true,
+        provider_send: false,
+        raw_token: "must-not-pass",
+        version: "customer-notification-centre-dismiss-contract",
+      }), { status: 200 }),
+    });
+    assert.deepEqual(unsafeCustomerCentreDismiss, { dismissedCount: 0, status: "blocked" });
+
     setEnv({
       ...validEnv(),
       PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
@@ -1807,6 +1844,112 @@ try {
     assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
     assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
 
+    const malformedCustomerCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current", booking_reference: "10906" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(malformedCustomerCentreDismiss.status, 400);
+    assert.deepEqual(malformedCustomerCentreDismiss.body, {
+      error: "Customer alert clear request is malformed.",
+      ok: false,
+    });
+    assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+
+    const crossOriginCustomerCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "https://attacker.example/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(crossOriginCustomerCentreDismiss.status, 403);
+    assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+
+    const customerPrincipalCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(customerPrincipalCentreDismiss.status, 200);
+    assert.deepEqual(customerPrincipalCentreDismiss.body, {
+      delivery_surface: "customer_app",
+      dismissed_count: 501,
+      external_send: false,
+      ok: true,
+      provider_send: false,
+      version: "stage-customer-in-app-notification-runtime-v1",
+    });
+    assert.equal(
+      customerPrincipalCentreMock.client.updateHistory.length,
+      11,
+      "Expected all 501 exact scoped IDs to be dismissed in bounded 50-row batches.",
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.tables[notificationTable].filter(
+        (row) => row.booking_reference === "BOOK-CUST-CENTRE-001" && row.notification_status === "dismissed",
+      ).length,
+      501,
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-outside-booking-history-window",
+      )?.notification_status,
+      "queued",
+      "Clear must not dismiss an alert outside the established My Bookings history window.",
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-cross-account",
+      )?.notification_status,
+      "queued",
+      "Clear must not dismiss another Company+Booker account's alert.",
+    );
+    assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
+    const customerPrincipalCentreAfterDismiss = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(customerPrincipalCentreAfterDismiss.status, 200);
+    assert.equal(customerPrincipalCentreAfterDismiss.body.alert_count, 0);
+    assert.deepEqual(customerPrincipalCentreAfterDismiss.body.alerts, []);
+
     const customerBossCentreMock = installMockClient({
       [notificationTable]: [
         seededNotification({
@@ -1896,6 +2039,37 @@ try {
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerBossCentre.body)), false);
     assert.equal(customerBossCentreMock.client.insertHistory.length, 0);
     assert.equal(customerBossCentreMock.client.updateHistory.length, 0);
+
+    const customerBossCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": bossPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(customerBossCentreDismiss.status, 200);
+    assert.equal(customerBossCentreDismiss.body.dismissed_count, 1);
+    assert.equal(
+      customerBossCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-boss",
+      )?.notification_status,
+      "dismissed",
+    );
+    assert.equal(
+      customerBossCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-sibling",
+      )?.notification_status,
+      "queued",
+      "Boss Clear must not dismiss a sibling Traveller's alert in the shared Company+Booker account.",
+    );
 
     const unstableCustomerCentreMock = installMockClient({
       [notificationTable]: pagedCentreNotifications,

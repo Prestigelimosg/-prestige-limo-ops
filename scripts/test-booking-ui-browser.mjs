@@ -13014,7 +13014,7 @@ async function runChromeTest() {
       "cancelled completed delete feedback",
     );
     assert.deepEqual(cancelledCompletedDeleteState.confirmMessages, [
-      "Delete this job from Completed / History? This cannot be undone.",
+      "Permanently delete this job and its linked operational records from the app and Supabase? This cannot be undone.",
     ]);
     assert.deepEqual(
       cancelledCompletedDeleteState.deleteRequests,
@@ -13097,7 +13097,7 @@ async function runChromeTest() {
       "confirmed completed delete feedback",
     );
     assert.deepEqual(confirmedCompletedDeleteState.confirmMessages, [
-      "Delete this job from Completed / History? This cannot be undone.",
+      "Permanently delete this job and its linked operational records from the app and Supabase? This cannot be undone.",
     ]);
     assert.deepEqual(
       confirmedCompletedDeleteState.unhandledSupabaseCalls,
@@ -13124,6 +13124,7 @@ async function runChromeTest() {
       confirmedCompletedDeleteState.deleteRequests[0]?.body,
       {
         booking_id: String(dashboardCompletionActionFixture.id),
+        delete_scope: "completed_history_any_status",
       },
     );
     assert.equal(
@@ -21850,6 +21851,9 @@ async function runChromeTest() {
                 hasCompletedLoadButton: Boolean(
                   completedArticle.querySelector("[data-completed-load-booking='true']"),
                 ),
+                hasEarlierDeleteButton: Boolean(
+                  earlierHistoryArticle?.querySelector("[data-completed-delete-booking]"),
+                ),
               }
             : false;
         })()`),
@@ -21879,6 +21883,11 @@ async function runChromeTest() {
       completedTabState.earlierHistoryArticleText,
       /Earlier/,
       "Expected earlier non-completed jobs to appear in Completed / History as history rows",
+    );
+    assert.equal(
+      completedTabState.hasEarlierDeleteButton,
+      true,
+      "Expected every Earlier history row, including non-completed jobs, to offer Delete",
     );
 
     await setInputValue("[data-completed-search-input='true']", "COMPLETED TEST TRAVELER", "Completed search");

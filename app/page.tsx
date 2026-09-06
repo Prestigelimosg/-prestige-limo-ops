@@ -120,6 +120,7 @@ const adminDriverPayoutRulesRuntimeWriteActionApiPath =
 const adminFullDriverProfileRuntimeWriteActionApiPath =
   "/api/admin-full-driver-profile-runtime-write-action";
 const adminSavedBookingsApiPath = "/api/admin-saved-bookings";
+const adminCompletedHistoryAnyStatusDeleteScope = "completed_history_any_status";
 const adminBookingsApiPath = "/api/admin-bookings";
 const adminLoadBookingsListLimit = "100";
 const adminUpcomingBookingsPageSize = 20;
@@ -28161,13 +28162,6 @@ export default function Home() {
     }
   }
 
-  function bookingRecordCanBeDeletedFromCompletedHistory(bookingRecord: BookingRecord) {
-    const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
-    const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-
-    return isCompletedStatus || isCancelledStatus;
-  }
-
   async function resolveCompletedHistoryDeleteBookingId(
     bookingRecord: BookingRecord,
     operationalCard?: LoadBookingsOperationalDisplayCard,
@@ -28232,18 +28226,9 @@ export default function Home() {
     operationalCard?: LoadBookingsOperationalDisplayCard,
   ) {
     const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
-    const isCompletedStatus = bookingRecordIsCompletedStatus(bookingRecord);
-    const isCancelledStatus = bookingRecordIsCancelledStatus(bookingRecord);
-
-    if (!isCompletedStatus && !isCancelledStatus) {
-      setBookingCompletionMessage(bookingId, {
-        tone: "error",
-        text: "Delete job failed: only completed or cancelled jobs can be deleted here.",
-      });
-      return;
-    }
-
-    const confirmed = window.confirm("Delete this job from Completed / History? This cannot be undone.");
+    const confirmed = window.confirm(
+      "Permanently delete this job and its linked operational records from the app and Supabase? This cannot be undone.",
+    );
 
     if (!confirmed) {
       setBookingCompletionMessage(bookingId, { tone: "info", text: "Delete cancelled." });
@@ -28271,6 +28256,7 @@ export default function Home() {
       const response = await fetch(adminSavedBookingsApiPath, {
         body: JSON.stringify({
           booking_id: deleteBookingId,
+          delete_scope: adminCompletedHistoryAnyStatusDeleteScope,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -28284,8 +28270,7 @@ export default function Home() {
         !response.ok ||
         responseBody?.ok !== true ||
         !responseBody.booking ||
-        cleanReferenceText(responseBody.booking.id) !== deleteBookingId ||
-        !["completed", "cancelled"].includes(clean(responseBody.booking.status).toLowerCase())
+        cleanReferenceText(responseBody.booking.id) !== deleteBookingId
       ) {
         const error = readAdminLegacyDataError(
           responseBody,
@@ -29635,7 +29620,6 @@ export default function Home() {
                   : isCompletedStatus
                     ? "completed"
                     : savedBooking.status;
-              const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);
               const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);
               return (
                 <article
@@ -29780,23 +29764,19 @@ export default function Home() {
                           </button>
                         </>
                       ) : null}
-                      {canDeleteCompletedHistoryBooking ? (
-                        <>
-                          <button
-                            className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                            data-completed-delete-booking={bookingId}
-                            disabled={
-                              deletingCompletedBookingId === bookingId ||
-                              completingBookingId === bookingId ||
-                              completedHistoryBillingReadyBookingId === bookingId
-                            }
-                            onClick={() => deleteCompletedHistoryBooking(savedBooking, operationalCard)}
-                            type="button"
-                          >
-                            {deletingCompletedBookingId === bookingId ? "Deleting..." : "Delete"}
-                          </button>
-                        </>
-                      ) : null}
+                      <button
+                        className="h-10 rounded-md border border-rose-300 bg-white px-3 text-sm font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        data-completed-delete-booking={bookingId}
+                        disabled={
+                          deletingCompletedBookingId === bookingId ||
+                          completingBookingId === bookingId ||
+                          completedHistoryBillingReadyBookingId === bookingId
+                        }
+                        onClick={() => deleteCompletedHistoryBooking(savedBooking, operationalCard)}
+                        type="button"
+                      >
+                        {deletingCompletedBookingId === bookingId ? "Deleting..." : "Delete"}
+                      </button>
                       {bookingCompletionMessage ? (
                         <div
                           className={`rounded-md border px-3 py-2 text-xs ${statusClass(

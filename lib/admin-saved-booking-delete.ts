@@ -5,6 +5,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 
 export const adminSavedBookingDeleteVersion = "admin-saved-booking-delete-v1";
+export const adminSavedBookingCompletedHistoryAnyStatusDeleteScope =
+  "completed_history_any_status";
 export const adminSavedBookingFutureDraftCleanupDeleteScope =
   "future_draft_2099_exact_refs";
 export const adminSavedBookingFutureDraftCleanupDeleteVersion =
@@ -12,6 +14,7 @@ export const adminSavedBookingFutureDraftCleanupDeleteVersion =
 
 export type AdminSavedBookingDeleteInput = {
   booking_id: string;
+  delete_scope?: typeof adminSavedBookingCompletedHistoryAnyStatusDeleteScope;
 };
 
 export type AdminSavedBookingFutureDraftCleanupDeleteInput = {
@@ -26,13 +29,13 @@ type AdminSavedBookingDeleteStatusColumn = "admin_internal_status" | "status";
 
 export type AdminSavedBookingDeleteRecord = {
   id: string | number;
-  status: AdminSavedBookingDeletableStatus;
+  status: string;
 };
 
 type AdminSavedBookingDeleteTargetRecord = AdminSavedBookingDeleteRecord & {
   booking_reference: string;
   delete_status_column: AdminSavedBookingDeleteStatusColumn;
-  delete_status_value: AdminSavedBookingDeletableStatus;
+  delete_status_value?: AdminSavedBookingDeletableStatus;
 };
 
 export type AdminSavedBookingDeleteData = {
@@ -81,7 +84,7 @@ type SavedBookingDeleteSelectResult<T> = {
 };
 
 const allowedAdapterActorRoles = new Set(["admin", "dispatcher", "system"]);
-const allowedPayloadKeys = new Set(["booking_id"]);
+const allowedPayloadKeys = new Set(["booking_id", "delete_scope"]);
 const allowedFutureDraftCleanupPayloadKeys = new Set([
   "booking_references",
   "cleanup_scope",
@@ -375,12 +378,24 @@ function deletableStatusFromRecord(value: UnknownRecord) {
   );
 }
 
+function savedBookingStatusFromRecord(value: UnknownRecord) {
+  return (
+    textOrNull(value.admin_internal_status, 40) ||
+    textOrNull(value.status, 40) ||
+    textOrNull(value.customer_facing_status, 40) ||
+    "unknown"
+  ).toLowerCase();
+}
+
+function savedBookingDeleteRecordId(value: UnknownRecord) {
+  return typeof value.id === "number" && Number.isSafeInteger(value.id)
+    ? value.id
+    : textOrNull(value.id, 120);
+}
+
 function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
   const row = asRecord(value);
-  const id =
-    typeof row.id === "number" && Number.isSafeInteger(row.id)
-      ? row.id
-      : textOrNull(row.id, 120);
+  const id = savedBookingDeleteRecordId(row);
   const status = deletableStatusFromRecord(row);
 
   if (id === null || !status) {
@@ -391,6 +406,35 @@ function toDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
     id,
     status,
   };
+}
+
+function toAnyStatusDeleteRecord(value: unknown): AdminSavedBookingDeleteRecord | null {
+  const row = asRecord(value);
+  const id = savedBookingDeleteRecordId(row);
+
+  return id === null
+    ? null
+    : {
+        id,
+        status: savedBookingStatusFromRecord(row),
+      };
+}
+
+function toAnyStatusDeleteTargetRecord(
+  value: unknown,
+  deleteStatusColumn: AdminSavedBookingDeleteStatusColumn,
+): AdminSavedBookingDeleteTargetRecord | null {
+  const row = asRecord(value);
+  const booking = toAnyStatusDeleteRecord(row);
+  const bookingReference = validBookingReference(row.booking_reference);
+
+  return booking && bookingReference
+    ? {
+        ...booking,
+        booking_reference: bookingReference,
+        delete_status_column: deleteStatusColumn,
+      }
+    : null;
 }
 
 function toDeleteTargetRecord(
@@ -449,8 +493,12 @@ export function parseAdminSavedBookingDeletePayload(
   const record = asRecord(input);
   const unsupportedKey = Object.keys(record).find((key) => !allowedPayloadKeys.has(key));
   const bookingId = validBookingId(record.booking_id);
+  const deleteScope =
+    record.delete_scope === adminSavedBookingCompletedHistoryAnyStatusDeleteScope
+      ? adminSavedBookingCompletedHistoryAnyStatusDeleteScope
+      : null;
 
-  if (unsupportedKey || !bookingId) {
+  if (unsupportedKey || !bookingId || (record.delete_scope !== undefined && !deleteScope)) {
     return {
       error: malformedPayloadError,
       ok: false,
@@ -461,6 +509,7 @@ export function parseAdminSavedBookingDeletePayload(
   return {
     data: {
       booking_id: bookingId,
+      ...(deleteScope ? { delete_scope: deleteScope } : {}),
     },
     ok: true,
   };
@@ -528,10 +577,11 @@ export async function deleteAdminCompletedSavedBooking(
     return clientResult;
   }
 
-  const targetResult = await findCompletedSavedBookingDeleteTarget(
-    clientResult.data,
-    parsed.data.booking_id,
-  );
+  const anyStatusDelete =
+    parsed.data.delete_scope === adminSavedBookingCompletedHistoryAnyStatusDeleteScope;
+  const targetResult = anyStatusDelete
+    ? await findAnyStatusSavedBookingDeleteTarget(clientResult.data, parsed.data.booking_id)
+    : await findCompletedSavedBookingDeleteTarget(clientResult.data, parsed.data.booking_id);
 
   if (targetResult.error) {
     return safeDatabaseFailure(safeDeleteError, 500, targetResult.error);
@@ -565,7 +615,7 @@ export async function deleteAdminCompletedSavedBooking(
     return cleanupResult;
   }
 
-  const { data, error } = await deleteCompletedSavedBookingTarget(
+  const { data, error } = await deleteSavedBookingTarget(
     clientResult.data,
     target,
   );
@@ -574,7 +624,9 @@ export async function deleteAdminCompletedSavedBooking(
     return safeDatabaseFailure(safeDeleteError, 500, error);
   }
 
-  const booking = toDeleteRecord(data);
+  const booking = anyStatusDelete
+    ? toAnyStatusDeleteRecord(data)
+    : toDeleteRecord(data);
 
   if (!booking) {
     return {
@@ -590,6 +642,42 @@ export async function deleteAdminCompletedSavedBooking(
       version: adminSavedBookingDeleteVersion,
     },
     ok: true,
+  };
+}
+
+async function findAnyStatusSavedBookingDeleteTarget(
+  client: SavedBookingDeleteClient,
+  bookingId: string,
+): Promise<SavedBookingDeleteSelectResult<AdminSavedBookingDeleteTargetRecord>> {
+  const currentResult = await client
+    .from("bookings")
+    .select("id, booking_reference, admin_internal_status, customer_facing_status")
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  if (currentResult.error) {
+    if (classifyDatabaseFailure(currentResult.error) !== "column_missing") {
+      return {
+        data: null,
+        error: currentResult.error,
+      };
+    }
+  } else {
+    return {
+      data: toAnyStatusDeleteTargetRecord(currentResult.data, "admin_internal_status"),
+      error: null,
+    };
+  }
+
+  const legacyResult = await client
+    .from("bookings")
+    .select("id, booking_reference, status")
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  return {
+    data: toAnyStatusDeleteTargetRecord(legacyResult.data, "status"),
+    error: legacyResult.error,
   };
 }
 
@@ -645,7 +733,7 @@ async function findCompletedSavedBookingDeleteTarget(
   };
 }
 
-async function deleteCompletedSavedBookingTarget(
+async function deleteSavedBookingTarget(
   client: SavedBookingDeleteClient,
   target: AdminSavedBookingDeleteTargetRecord,
 ): Promise<SavedBookingDeleteSelectResult<unknown>> {
@@ -654,14 +742,17 @@ async function deleteCompletedSavedBookingTarget(
       ? "id, booking_reference, admin_internal_status, customer_facing_status"
       : "id, booking_reference, status";
 
-  return client
+  let deleteQuery = client
     .from("bookings")
     .delete()
     .eq("id", target.id)
-    .eq("booking_reference", target.booking_reference)
-    .eq(target.delete_status_column, target.delete_status_value)
-    .select(selectedColumns)
-    .maybeSingle();
+    .eq("booking_reference", target.booking_reference);
+
+  if (target.delete_status_value) {
+    deleteQuery = deleteQuery.eq(target.delete_status_column, target.delete_status_value);
+  }
+
+  return deleteQuery.select(selectedColumns).maybeSingle();
 }
 
 async function deleteSavedBookingChildRowsForBookingId(
@@ -689,6 +780,8 @@ async function deleteOperationalJobArtifactsForBookingReference(
   bookingReference: string,
 ): Promise<AdminSavedBookingDeleteResult<null>> {
   const cleanupTables = [
+    "driver_job_bids",
+    "driver_job_bid_offers",
     "customer_driver_app_notification_outbox",
     "driver_live_location_latest_positions",
     "driver_live_location_audit_events",

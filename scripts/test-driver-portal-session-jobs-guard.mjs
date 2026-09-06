@@ -511,8 +511,11 @@ try {
   assert.match(portalSource, /data-driver-notification-purpose="job-update"/);
   assert.match(portalSource, /data-driver-notification-job=\{alert\.job_key\}/);
   assert.match(portalSource, /availableJobsEnabled && availableJobs\.length > 0/);
-  assert.match(portalSource, /readState\.alertsAvailable && driverPoolVisibleAlertCount === 0 && driverPortalCurrentAlertCount === 0/);
+  assert.match(portalSource, /driverPortalCountsAvailable && driverPortalCurrentAlertCount === 0/);
+  assert.match(portalSource, /setAvailableJobsReadAvailable\(true\)/);
+  assert.match(portalSource, /setAvailableJobsReadAvailable\(false\)/);
   assert.match(portalSource, /data-driver-notification-open-feedback=\{job\.job_key\}/);
+  assert.doesNotMatch(portalSource, /type: "native_job_open",[\s\S]{0,120}setNotificationCentreOpen\(false\)/);
   assert.match(portalSource, /scrollIntoView\(\{[\s\S]*?behavior: "smooth",[\s\S]*?block: "start",?[\s\S]*?\}\)/);
   assert.doesNotMatch(portalSource, /customer_price|driver_payout|invoice|payment|paynow/i);
 

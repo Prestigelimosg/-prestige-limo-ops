@@ -185,6 +185,7 @@ export default function DriverPortalPage() {
   const [openFeedback, setOpenFeedback] = useState<Record<string, string>>({});
   const [availableJobs, setAvailableJobs] = useState<DriverPoolAvailableJob[]>([]);
   const [availableJobsEnabled, setAvailableJobsEnabled] = useState(false);
+  const [availableJobsReadAvailable, setAvailableJobsReadAvailable] = useState(false);
   const [availableJobsHasMore, setAvailableJobsHasMore] = useState(false);
   const [availableJobsPage, setAvailableJobsPage] = useState(1);
   const [availableJobsBusy, setAvailableJobsBusy] = useState(false);
@@ -216,11 +217,12 @@ export default function DriverPortalPage() {
   const driverPoolAccountSession = readState.kind === "ready" && readState.accountSession;
   const driverPortalSavedAlertsAvailable = readState.kind === "ready" && readState.alertsAvailable;
   const driverPortalSavedAlertCount = driverPortalSavedAlertsAvailable ? readState.alertCount : 0;
-  const driverPoolVisibleAlertCount = availableJobsEnabled ? availableJobs.length : 0;
+  const driverPoolVisibleAlertCount = availableJobsReadAvailable && availableJobsEnabled ? availableJobs.length : 0;
   const driverPortalCurrentAlertCount = driverPortalSavedAlertCount + driverPoolVisibleAlertCount;
-  const driverPortalAlertCountLabel = !driverPortalSavedAlertsAvailable
-    ? driverPoolVisibleAlertCount > 0
-      ? `${driverPoolVisibleAlertCount}+`
+  const driverPortalCountsAvailable = driverPortalSavedAlertsAvailable && availableJobsReadAvailable;
+  const driverPortalAlertCountLabel = !driverPortalCountsAvailable
+    ? driverPortalCurrentAlertCount > 0
+      ? `${driverPortalCurrentAlertCount}+`
       : "?"
     : availableJobsEnabled && availableJobsHasMore
       ? `${driverPortalCurrentAlertCount}+`
@@ -314,6 +316,7 @@ export default function DriverPortalPage() {
       const result = await response.json() as { enabled?: boolean; has_more?: boolean; jobs?: DriverPoolAvailableJob[]; ok?: boolean };
       if (!response.ok || result.ok !== true) throw new Error("Available Jobs could not be loaded.");
       if (availableJobsReadRevisionRef.current !== revision) return;
+      setAvailableJobsReadAvailable(true);
       setAvailableJobsEnabled(result.enabled === true);
       const jobs = Array.isArray(result.jobs) ? result.jobs : [];
       setAvailableJobs((current) => page === 1 ? jobs : [...current, ...jobs]);
@@ -321,6 +324,7 @@ export default function DriverPortalPage() {
       setAvailableJobsPage(page);
     } catch {
       if (availableJobsReadRevisionRef.current === revision && !options.quiet) {
+        setAvailableJobsReadAvailable(false);
         setAvailableJobsEnabled(false);
       }
     } finally {
@@ -342,6 +346,7 @@ export default function DriverPortalPage() {
     if (!driverPoolAccountSession) {
       setAvailableJobs([]);
       setAvailableJobsEnabled(false);
+      setAvailableJobsReadAvailable(false);
       setAvailableJobsHasMore(false);
       setAvailableJobsPage(1);
       setAvailableJobsAcceptedConfirmation("");
@@ -613,7 +618,6 @@ export default function DriverPortalPage() {
           job_key: job.job_key,
           type: "native_job_open",
         }));
-        setNotificationCentreOpen(false);
         return;
       }
       const url = await storedDriverJobUrl(job.job_key);
@@ -728,7 +732,7 @@ export default function DriverPortalPage() {
                   </button>
                 ) : null;
               })}
-              {readState.alertsAvailable && driverPoolVisibleAlertCount === 0 && driverPortalCurrentAlertCount === 0 ? (
+              {driverPortalCountsAvailable && driverPortalCurrentAlertCount === 0 ? (
                 <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
                   No current alerts.
                 </p>
@@ -736,6 +740,11 @@ export default function DriverPortalPage() {
               {!readState.alertsAvailable ? (
                 <p className="px-2 py-1 text-xs font-semibold leading-5 text-amber-800">
                   Saved job updates are temporarily unavailable. Current Driver Pool offers remain authoritative.
+                </p>
+              ) : null}
+              {!availableJobsReadAvailable ? (
+                <p className="px-2 py-1 text-xs font-semibold leading-5 text-amber-800">
+                  Available job offers are temporarily unavailable. Refresh before relying on this alert count.
                 </p>
               ) : null}
             </section>

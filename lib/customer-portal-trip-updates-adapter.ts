@@ -33,6 +33,20 @@ export type CustomerNotificationCentreResult = {
   status: "blocked" | "ready";
 };
 
+export type CustomerNotificationCentreDismissResult = {
+  dismissedCount: number;
+  status: "blocked" | "ready";
+};
+
+const allowedCustomerNotificationCentreDismissResponseFields = new Set([
+  "delivery_surface",
+  "dismissed_count",
+  "external_send",
+  "ok",
+  "provider_send",
+  "version",
+]);
+
 type UnknownRecord = Record<string, unknown>;
 type CustomerPortalTripUpdatesFetch = typeof fetch;
 
@@ -422,5 +436,46 @@ export async function loadCustomerNotificationCentre({
     return mapCustomerNotificationCentrePayload(await response.json());
   } catch {
     return { alertCount: 0, alerts: [], status: "blocked" };
+  }
+}
+
+export async function dismissCustomerNotificationCentre({
+  fetcher = fetch,
+}: {
+  fetcher?: CustomerPortalTripUpdatesFetch;
+} = {}): Promise<CustomerNotificationCentreDismissResult> {
+  try {
+    const params = new URLSearchParams();
+    params.set("view", "centre");
+    const response = await fetcher(
+      `${customerPortalTripUpdatesApiPath}?${params.toString()}`,
+      {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+        },
+        method: "PATCH",
+        body: JSON.stringify({ action: "dismiss_current" }),
+      },
+    );
+    const payload = asRecord(await response.json().catch(() => null));
+    const dismissedCount = Number(payload.dismissed_count);
+    if (
+      !response.ok ||
+      hasUnsafeKeys(payload, allowedCustomerNotificationCentreDismissResponseFields) ||
+      payload.ok !== true ||
+      payload.delivery_surface !== "customer_app" ||
+      payload.external_send !== false ||
+      payload.provider_send !== false ||
+      !Number.isSafeInteger(dismissedCount) ||
+      dismissedCount < 0
+    ) {
+      return { dismissedCount: 0, status: "blocked" };
+    }
+    return { dismissedCount, status: "ready" };
+  } catch {
+    return { dismissedCount: 0, status: "blocked" };
   }
 }

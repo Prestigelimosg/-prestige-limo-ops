@@ -211,6 +211,7 @@ export type CustomerInAppNotificationReadEvidenceResult = {
 
 type UnknownRecord = Record<string, unknown>;
 type NotificationClient = Pick<SupabaseClient, "from">;
+type CustomerNotificationCentreClient = Pick<SupabaseClient, "from" | "rpc">;
 type CustomerSavedBookingsSessionTokenSource =
   | "ambiguous-cookie"
   | "missing"
@@ -294,6 +295,7 @@ const quickReplyPostPobDisabledError =
   "Customer/driver quick replies are disabled after POB.";
 const quickReplyCreateError = "Customer/driver quick reply create failed safely.";
 const safeNotificationUpdateError = "Customer/driver app notification status update failed safely.";
+const safeCustomerNotificationDismissError = "Customer alerts could not be cleared safely.";
 const customerSavedBookingsSessionCookieName =
   "prestige_customer_saved_bookings_session";
 const customerSavedBookingsFallbackSessionCookieName =
@@ -396,6 +398,7 @@ const allowedUpdateFields = new Set([
   "notification_id",
   "notification_status",
 ]);
+const allowedCustomerNotificationCentreDismissFields = new Set(["action"]);
 const forbiddenNotificationFragments = [
   "amount_due",
   "auth_link",
@@ -1248,6 +1251,7 @@ function resolveCustomerInAppNotificationReadBoundary(
 function resolveCustomerInAppNotificationRuntimeBoundary(
   request: Request,
   runtimeGate: ControlledCustomerRuntimeGate,
+  expectedPurpose = "customer-in-app-notification-read",
 ): AdminBookingResult<{
   auth_user_id: string;
   booking_reference: string | null;
@@ -1264,7 +1268,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   const referer = request.headers.get("referer");
   const purpose = request.headers.get("x-prestige-customer-purpose");
 
-  if (purpose !== "customer-in-app-notification-read") {
+  if (purpose !== expectedPurpose) {
     return customerAppNotificationsRequireAuthResult();
   }
 
@@ -1437,6 +1441,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
 
 function resolveCustomerInAppNotificationPortalAccessBoundary(
   request: Request,
+  expectedPurpose = "customer-in-app-notification-read",
 ): AdminBookingResult<{
   auth_user_id: string;
   booking_reference: string | null;
@@ -1453,7 +1458,7 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
   const referer = request.headers.get("referer");
   const purpose = request.headers.get("x-prestige-customer-purpose");
 
-  if (purpose !== "customer-in-app-notification-read") {
+  if (purpose !== expectedPurpose) {
     return customerAppNotificationsRequireAuthResult();
   }
 
@@ -1564,7 +1569,7 @@ function parseCustomerInAppNotificationReadLimit(value: string | null) {
     : null;
 }
 
-function getCustomerInAppNotificationReadClient(): AdminBookingResult<NotificationClient> {
+function getCustomerInAppNotificationReadClient(): AdminBookingResult<CustomerNotificationCentreClient> {
   if (process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== "true") {
     return {
       error: disabledNotificationPersistenceError,
@@ -2085,6 +2090,16 @@ type CustomerNotificationCentreBookingFilter = {
   value: string | number;
 };
 
+type CustomerNotificationCentreBoundary = {
+  auth_user_id: string;
+  customer_account_reference?: string | null;
+  mode?: "principal-device-session" | "server-session-cookie" | "server-session-token";
+  principal_session_token?: string | null;
+  portal_link_issued_at?: number | null;
+  portal_link_revision?: string | null;
+  runtime_gate: ControlledCustomerRuntimeGate;
+};
+
 async function loadCustomerNotificationCentreBookingRows(
   client: NotificationClient,
   filters: CustomerNotificationCentreBookingFilter[],
@@ -2260,18 +2275,11 @@ async function loadCustomerNotificationCentreRows(
 }
 
 async function loadCustomerNotificationCentreForBoundary(
-  boundary: {
-    auth_user_id: string;
-    customer_account_reference?: string | null;
-    mode?: "principal-device-session" | "server-session-cookie" | "server-session-token";
-    principal_session_token?: string | null;
-    portal_link_issued_at?: number | null;
-    portal_link_revision?: string | null;
-    runtime_gate: ControlledCustomerRuntimeGate;
-  },
+  boundary: CustomerNotificationCentreBoundary,
 ): Promise<AdminBookingResult<{
   alert_count: number;
   alerts: CustomerNotificationCentreAlertRecord[];
+  notification_ids: string[];
 }>> {
   const clientResult = getCustomerInAppNotificationReadClient();
   if (!clientResult.ok) {
@@ -2370,7 +2378,7 @@ async function loadCustomerNotificationCentreForBoundary(
   }
 
   if (bookingRows.size === 0) {
-    return { data: { alert_count: 0, alerts: [] }, ok: true };
+    return { data: { alert_count: 0, alerts: [], notification_ids: [] }, ok: true };
   }
 
   const notificationRows = await loadCustomerNotificationCentreRows(
@@ -2411,9 +2419,83 @@ async function loadCustomerNotificationCentreForBoundary(
     data: {
       alert_count: notificationRows.data.length,
       alerts: [...alertsByBooking.values()],
+      notification_ids: notificationRows.data.map(({ id }) => id),
     },
     ok: true,
   };
+}
+
+async function dismissCustomerNotificationCentreForBoundary(
+  boundary: CustomerNotificationCentreBoundary,
+): Promise<AdminBookingResult<{ dismissed_count: number }>> {
+  const centre = await loadCustomerNotificationCentreForBoundary(boundary);
+  if (!centre.ok) {
+    return centre;
+  }
+  if (centre.data.notification_ids.length === 0) {
+    return { data: { dismissed_count: 0 }, ok: true };
+  }
+
+  const clientResult = getCustomerInAppNotificationReadClient();
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+
+  const exactNotificationIds = centre.data.notification_ids;
+  const { data, error } = await clientResult.data.rpc(
+    "dismiss_customer_notification_centre",
+    { p_notification_ids: exactNotificationIds },
+  );
+  if (error) {
+    return safeAdapterFailure(safeCustomerNotificationDismissError, 500, error);
+  }
+
+  const rpcRows = asArray(data);
+  const rpcRow = asRecord(rpcRows[0]);
+  const expectedIds = new Set(exactNotificationIds);
+  const updatedIds = asArray(rpcRow.updated_ids)
+    .map((value) => safeIdentifier(value, maxNotificationIdLength))
+    .filter((id): id is string => Boolean(id));
+  const updatedIdSet = new Set(updatedIds);
+  const updatedCountValue =
+    typeof rpcRow.updated_count === "number" || typeof rpcRow.updated_count === "string"
+      ? Number(rpcRow.updated_count)
+      : Number.NaN;
+
+  if (
+    rpcRows.length !== 1 ||
+    !Number.isSafeInteger(updatedCountValue) ||
+    updatedCountValue < 0 ||
+    updatedIds.length !== updatedIdSet.size ||
+    updatedCountValue !== updatedIdSet.size ||
+    updatedIds.some((id) => !expectedIds.has(id))
+  ) {
+    return safeAdapterFailure(safeCustomerNotificationDismissError, 500);
+  }
+
+  return { data: { dismissed_count: updatedCountValue }, ok: true };
+}
+
+async function dismissCustomerNotificationCentreBoundaryResponse(
+  boundary: CustomerNotificationCentreBoundary,
+  payload: unknown,
+): Promise<Required<CustomerInAppNotificationReadEvidenceResult>> {
+  const parsed = parseCustomerNotificationCentreDismissPayload(payload);
+  if (!parsed.ok) {
+    return customerInAppNotificationReadError(parsed.error, parsed.status);
+  }
+  const result = await dismissCustomerNotificationCentreForBoundary(boundary);
+  if (!result.ok) {
+    return customerInAppNotificationReadError(result.error, result.status);
+  }
+  return customerInAppNotificationReadHandled(200, {
+    delivery_surface: "customer_app",
+    dismissed_count: result.data.dismissed_count,
+    external_send: false,
+    ok: true,
+    provider_send: false,
+    version: customerInAppNotificationRuntimeVersion,
+  });
 }
 
 async function loadCustomerAppNotificationsForControlledRuntime(
@@ -2649,6 +2731,37 @@ export async function readCustomerAppNotificationsForPortalAccessRuntime(
     provider_send: false,
     version: customerInAppNotificationRuntimeVersion,
   });
+}
+
+export async function dismissCustomerNotificationCentreForAuthenticatedRuntime(
+  request: Request,
+  payload: unknown,
+): Promise<CustomerInAppNotificationReadEvidenceResult> {
+  const expectedPurpose = "customer-in-app-notification-dismiss";
+  const portalBoundary = resolveCustomerInAppNotificationPortalAccessBoundary(
+    request,
+    expectedPurpose,
+  );
+  if (portalBoundary.ok) {
+    return dismissCustomerNotificationCentreBoundaryResponse(portalBoundary.data, payload);
+  }
+  if (portalBoundary.status !== 403) {
+    return customerInAppNotificationReadError(portalBoundary.error, portalBoundary.status);
+  }
+
+  const gate = resolveControlledCustomerInAppNotificationRuntimeGate();
+  if (!gate.ok) {
+    return customerInAppNotificationReadError(gate.error, gate.status);
+  }
+  const runtimeBoundary = resolveCustomerInAppNotificationRuntimeBoundary(
+    request,
+    gate.data,
+    expectedPurpose,
+  );
+  if (!runtimeBoundary.ok) {
+    return customerInAppNotificationReadError(runtimeBoundary.error, runtimeBoundary.status);
+  }
+  return dismissCustomerNotificationCentreBoundaryResponse(runtimeBoundary.data, payload);
 }
 
 export async function readCustomerAppNotificationsForStagingEvidence(
@@ -3811,6 +3924,26 @@ export function parseCustomerDriverAppNotificationUpdatePayload(
   };
 }
 
+export function parseCustomerNotificationCentreDismissPayload(
+  value: unknown,
+): AdminBookingResult<{ action: "dismiss_current" }> {
+  const record = asRecord(value);
+  if (
+    unknownKeys(record, allowedCustomerNotificationCentreDismissFields).length > 0 ||
+    findForbiddenFieldNames(record).length > 0 ||
+    findForbiddenTextValues(record).length > 0 ||
+    record.action !== "dismiss_current"
+  ) {
+    return {
+      error: "Customer alert clear request is malformed.",
+      ok: false,
+      status: 400,
+    };
+  }
+
+  return { data: { action: "dismiss_current" }, ok: true };
+}
+
 function normalizeRecord(value: unknown): CustomerDriverAppNotificationRecord {
   const record = asRecord(value);
   const notificationType = validType(record.notification_type) || "system_notice";
@@ -3879,6 +4012,23 @@ function buildPagination(
   page: number,
 ): CustomerDriverAppNotificationPagination {
   const total = records.length;
+  const pageCount = Math.max(1, Math.ceil(total / limit));
+
+  return {
+    has_next_page: page < pageCount,
+    has_previous_page: page > 1,
+    page,
+    page_count: pageCount,
+    page_size: limit,
+    total_notification_count: total,
+  };
+}
+
+function buildCountedPagination(
+  total: number,
+  limit: number,
+  page: number,
+): CustomerDriverAppNotificationPagination {
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
   return {
@@ -4208,6 +4358,53 @@ export async function loadDriverAppNotificationsForToken(
     return linkResult;
   }
 
+  if (!params.notification_status) {
+    const offset = (params.page - 1) * params.limit;
+    const driverLinkNotificationScope = linkResult.data.id
+      ? `driver_job_link_id.is.null,driver_job_link_id.eq.${linkResult.data.id}`
+      : "driver_job_link_id.is.null";
+    const intendedDriverHistoryScope = [
+      "and(delivery_surface.eq.driver_app,notification_status.eq.queued)",
+      "and(delivery_surface.eq.customer_app,actor_role.eq.driver,workflow_area.eq.customer_driver_quick_replies,notification_status.in.(queued,read,dismissed,archived))",
+    ].join(",");
+    const { count, data, error } = await clientResult.data
+      .from(notificationTable)
+      .select(notificationSelect, { count: "exact" })
+      .eq("booking_reference", linkResult.data.booking_reference)
+      .or(intendedDriverHistoryScope)
+      .or(driverLinkNotificationScope)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + params.limit - 1);
+
+    if (error || !Number.isSafeInteger(count) || Number(count) < 0) {
+      return safeAdapterFailure(safeNotificationLoadError, 500, error);
+    }
+
+    const uniqueRecords = new Map<string, CustomerDriverAppNotificationRecord>();
+    for (const value of asArray(data)) {
+      const record = normalizeRecord(value);
+      if (!record.id || uniqueRecords.has(record.id)) continue;
+      uniqueRecords.set(record.id, record);
+    }
+    const notifications = [...uniqueRecords.values()].map((record) =>
+      toSafeRecord(
+        record.delivery_surface === "customer_app"
+          ? { ...record, delivery_surface: "driver_app" }
+          : record,
+      ),
+    );
+
+    return {
+      data: {
+        notifications,
+        pagination: buildCountedPagination(Number(count), params.limit, params.page),
+        version: customerDriverAppNotificationPersistenceVersion,
+      },
+      ok: true,
+    };
+  }
+
   let query = clientResult.data
     .from(notificationTable)
     .select(notificationSelect)
@@ -4215,11 +4412,7 @@ export async function loadDriverAppNotificationsForToken(
     .order("created_at", { ascending: false })
     .limit(maxReadRows);
 
-  if (params.notification_status) {
-    query = query.eq("notification_status", params.notification_status);
-  } else {
-    query = query.eq("notification_status", "queued");
-  }
+  query = query.eq("notification_status", params.notification_status);
 
   const { data, error } = await query;
 
@@ -4243,7 +4436,10 @@ export async function loadDriverAppNotificationsForToken(
         record.delivery_surface === "customer_app"
           ? { ...record, delivery_surface: "driver_app" }
           : record,
-      ),
+        ),
+    )
+    .sort((left, right) =>
+      String(right.created_at || "").localeCompare(String(left.created_at || "")),
     );
 
   return {

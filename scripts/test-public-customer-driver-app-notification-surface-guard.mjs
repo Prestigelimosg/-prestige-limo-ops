@@ -87,7 +87,8 @@ const contractChecks = [
     label: "customer/driver app notification API contract",
     requiredFragments: [
       "customerAuthRequiredMessage",
-      "Expected driver GET to verify token hash before the scoped shared-conversation read",
+      "Expected all 501 exact scoped IDs in one RPC request body, never a PostgREST URL filter.",
+      "Expected one database-filtered Driver notification read after token verification.",
       "Expected driver PATCH to update only exact queued notifications scoped to the verified link",
       "Customer/driver app notification API contract tests passed.",
     ],
@@ -299,15 +300,15 @@ const ledgerSection = sectionBetween(
 
 for (const phrase of [
   "Public customer/driver app notification surfaces are guarded across `/api/customer-app-notifications`, `/api/driver-job/[token]/notifications`, `/api/admin-customer-driver-app-notifications`, `lib/customer-driver-app-notification-persistence.ts`, and public client pages.",
-  "This guard approves only the existing notification routes plus the `/my-bookings` customer-safe Trip Updates read adapter; it does not approve endpoint migration, env changes, deployment by CLI, DB writes, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, UI sectors, auth expansion, or new shims.",
-  "`/api/customer-app-notifications` must remain blocked for GET and PATCH by the customer auth-required result by default; the only allowed customer GET read is the disabled-by-default staging evidence path after the customer in-app read gate, staging reference, same-origin customer portal headers, and existing saved-bookings session boundary pass.",
-  "`/api/customer-app-notifications` must not parse request bodies, directly read env, create Supabase clients in the route, set cookies, or execute DB writes; any future customer GET evidence DB read must stay isolated in the gated server helper after the route boundary passes.",
+  "This guard approves only the existing notification routes plus the `/my-bookings` customer-safe Trip Updates and current-alert read/dismiss adapter; it does not approve endpoint migration, env changes, deployment by CLI, provider sends, migrations, parser changes, Save Booking changes, `/api/admin-saved-bookings` changes, payment/PDF/pricing/payout/auth/location/photo/calendar activation, another UI sector, auth expansion, or new shims. Its only newly approved DB write is the exact authenticated current-alert `queued` to `dismissed` status update described above.",
+  "`/api/customer-app-notifications` remains customer-auth-required by default. Its allowed Customer GET reads require the established authenticated customer boundary; its only allowed PATCH is the exact same-origin authenticated `{ action: \"dismiss_current\" }` request after the same verified account boundary succeeds.",
+  "`/api/customer-app-notifications` may parse only that bounded Clear request body and must not directly read env, create Supabase clients in the route, set cookies, or execute DB writes; every Customer GET read and exact scoped dismiss write stays isolated in the gated server helper after the route boundary passes.",
   "`/api/driver-job/[token]/notifications` must remain limited to token-scoped GET and PATCH, with PATCH forced to `delivery_surface: \"driver_app\"` before persistence update.",
   "Driver notification reads and updates must verify the hashed driver job token, reject revoked/expired/outside-window links, scope rows to `driver_app`, booking reference, queued status, and the matching driver job link id or booking-wide null link id, then return safe notification records only.",
   "`/api/admin-customer-driver-app-notifications` must keep GET, POST, and PATCH behind the internal admin/dispatcher boundary, with create/read/update mediated by `lib/customer-driver-app-notification-persistence.ts`.",
   "Customer/driver app notification safe records must stay limited to booking reference, delivery surface, notification type/status, priority, safe title/message/context, workflow area, id, and created/updated timestamps.",
   "Customer/driver app notification surfaces must exclude customer price, billing, invoice/payment/PDF, payout comparisons, PayNow payout details, internal finance/admin notes, parser/debug internals, tokens/secrets, provider/send payloads, live location/photo fields, and mock QA/dev archive fields.",
-  "Public client pages must not directly call `/api/customer-app-notifications` or `/api/admin-customer-driver-app-notifications`; `/my-bookings` may read safe customer trip updates only through `lib/customer-portal-trip-updates-adapter.ts` with same-origin credentials and the customer in-app purpose header. Public pages must not expose admin purpose/session-token headers, Cookie, Authorization, browser credential storage, or service-role/Supabase env names.",
+  "Public client pages must not directly call `/api/customer-app-notifications` or `/api/admin-customer-driver-app-notifications`; `/my-bookings` may read safe customer trip updates and current alerts or dismiss its current alert set only through `lib/customer-portal-trip-updates-adapter.ts` with same-origin credentials and the exact customer purpose header. Public pages must not expose admin purpose/session-token headers, Cookie, Authorization, browser credential storage, notification IDs, or service-role/Supabase env names.",
   "This guard coordinates the customer/driver app notification API contract, schema contract, public API method guard, request input guard, response privacy guard, runtime gate guard, client caller guard, and session cookie/cache guard in the preactivation suite.",
   "No Save Booking + CRM change.",
   "No `/api/admin-saved-bookings` change.",
@@ -336,12 +337,13 @@ for (const fragment of [
   "readCustomerAppNotificationsForStagingEvidence",
   "Customer app notifications require secure customer account auth.",
   "export async function GET(request: Request)",
-  "export async function PATCH() {\n  return safeCustomerAuthRequiredResponse();\n}",
+  "export async function PATCH(request: Request)",
+  "dismissCustomerNotificationCentreForAuthenticatedRuntime(",
+  "await readJsonBody(request)",
 ]) {
   assertIncludes(customerNotificationsRoute, fragment, `customer notifications route boundary ${fragment}`);
 }
 for (const forbiddenPattern of [
-  /request\.json/i,
   /\bprocess\.env\b/,
   /@supabase\/supabase-js/,
   /\bcreateClient\b/,
@@ -461,9 +463,28 @@ for (const fragment of [
   "actor_label: \"verified_driver_job_link\"",
   "actor_role: \"driver\"",
   "source_surface: \"driver_api\"",
+  "parseCustomerNotificationCentreDismissPayload",
+  'record.action !== "dismiss_current"',
+  "dismissCustomerNotificationCentreForAuthenticatedRuntime",
+  "dismissCustomerNotificationCentreForBoundary",
+  '"dismiss_customer_notification_centre"',
+  "{ p_notification_ids: exactNotificationIds }",
+  "rpcRow.updated_ids",
+  "rpcRow.updated_count",
+  "updatedIds.some((id) => !expectedIds.has(id))",
+  '.select(notificationSelect, { count: "exact" })',
+  ".or(intendedDriverHistoryScope)",
+  ".or(driverLinkNotificationScope)",
+  ".range(offset, offset + params.limit - 1)",
+  "const uniqueRecords = new Map",
 ]) {
   assertIncludes(notificationPersistence, fragment, `notification persistence boundary ${fragment}`);
 }
+assertExcludes(
+  notificationPersistence,
+  '.in("id", exactNotificationIds)',
+  "Customer notification Clear unbounded PostgREST URL filter",
+);
 assertSameList(
   extractArrayLiteralItems(notificationPersistence, "customerDriverAppNotificationSurfaces"),
   expectedSurfaces,
@@ -548,6 +569,10 @@ for (const fragment of [
   'cache: "no-store"',
   'credentials: "same-origin"',
   '"x-prestige-customer-purpose": "customer-in-app-notification-read"',
+  '"x-prestige-customer-purpose": "customer-in-app-notification-dismiss"',
+  "export async function dismissCustomerNotificationCentre",
+  'method: "PATCH"',
+  'body: JSON.stringify({ action: "dismiss_current" })',
   "mapCustomerPortalTripUpdatesPayload",
   "allowedPayloadFields",
   "allowedUpdateFields",

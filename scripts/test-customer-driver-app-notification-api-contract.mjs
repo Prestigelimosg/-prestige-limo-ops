@@ -192,27 +192,44 @@ function transpileTypescript(source, filename) {
   }).outputText.replace(/require\("([^"]+)\.ts"\)/g, 'require("$1.js")');
 }
 
+function splitPostgrestConditions(expression) {
+  const conditions = [];
+  let depth = 0;
+  let start = 0;
+
+  for (let index = 0; index < expression.length; index += 1) {
+    if (expression[index] === "(") depth += 1;
+    if (expression[index] === ")") depth -= 1;
+    if (expression[index] === "," && depth === 0) {
+      conditions.push(expression.slice(start, index));
+      start = index + 1;
+    }
+  }
+  conditions.push(expression.slice(start));
+  return conditions;
+}
+
+function parsePostgrestCondition(condition) {
+  if (condition.startsWith("and(") && condition.endsWith(")")) {
+    return {
+      conditions: parseOrFilterExpression(condition.slice(4, -1)),
+      type: "and",
+    };
+  }
+
+  const [column, operator, ...rest] = condition.split(".");
+  const value = rest.join(".");
+  if (operator === "is" && value === "null") {
+    return { column, type: "is", value: null };
+  }
+  if (operator === "in" && value.startsWith("(") && value.endsWith(")")) {
+    return { column, type: "in", value: splitPostgrestConditions(value.slice(1, -1)) };
+  }
+  return { column, type: operator, value };
+}
+
 function parseOrFilterExpression(expression) {
-  return String(expression)
-    .split(",")
-    .map((condition) => {
-      const [column, operator, ...rest] = condition.split(".");
-      const value = rest.join(".");
-
-      if (operator === "is" && value === "null") {
-        return {
-          column,
-          type: "is",
-          value: null,
-        };
-      }
-
-      return {
-        column,
-        type: operator,
-        value,
-      };
-    });
+  return splitPostgrestConditions(String(expression)).map(parsePostgrestCondition);
 }
 
 async function writeHarnessFile(tempDir, relativePath) {
@@ -305,11 +322,13 @@ class MockSupabaseQuery {
     this.client = client;
     this.filters = [];
     this.operation = null;
-    this.orderBy = null;
+    this.orderBy = [];
     this.payload = null;
     this.resultLimit = null;
+    this.resultRange = null;
     this.resultMode = "many";
     this.selectedColumns = null;
+    this.selectOptions = null;
     this.table = table;
   }
 
@@ -383,7 +402,7 @@ class MockSupabaseQuery {
   }
 
   order(column, options) {
-    this.orderBy = { column, options };
+    this.orderBy.push({ column, options });
 
     return this;
   }
@@ -397,12 +416,19 @@ class MockSupabaseQuery {
     return this;
   }
 
-  select(columns) {
+  range(from, to) {
+    this.resultRange = { from, to };
+
+    return this;
+  }
+
+  select(columns, options = null) {
     if (!this.operation) {
       this.operation = "select";
     }
 
     this.selectedColumns = columns;
+    this.selectOptions = options;
 
     return this;
   }
@@ -449,8 +475,10 @@ class MockSupabaseQuery {
       this.filters,
       this.orderBy,
       this.resultLimit,
+      this.resultRange,
       this.resultMode,
       this.selectedColumns,
+      this.selectOptions,
     );
   }
 }
@@ -460,6 +488,7 @@ class MockSupabaseClient {
     this.failures = options.failures || {};
     this.insertHistory = [];
     this.operations = [];
+    this.rpcHistory = [];
     this.selectHistory = [];
     this.tables = {
       [notificationTable]: [],
@@ -485,6 +514,37 @@ class MockSupabaseClient {
     return new MockSupabaseQuery(this, table);
   }
 
+  rpc(functionName, args) {
+    this.rpcHistory.push({ args: clone(args), functionName });
+    this.operations.push({ action: "rpc", args: clone(args), functionName });
+    const failure = this.failureFor("rpc", functionName);
+    if (failure) return Promise.resolve({ data: null, error: failure });
+    assert.equal(
+      functionName,
+      "dismiss_customer_notification_centre",
+      `Unexpected mocked Supabase RPC: ${functionName}`,
+    );
+
+    const requestedIds = new Set(Array.isArray(args?.p_notification_ids) ? args.p_notification_ids : []);
+    const updatedIds = [];
+    this.tables[notificationTable] = this.tables[notificationTable].map((row) => {
+      if (
+        row.delivery_surface !== "customer_app" ||
+        row.notification_status !== "queued" ||
+        !requestedIds.has(row.id)
+      ) {
+        return row;
+      }
+      updatedIds.push(row.id);
+      return { ...row, notification_status: "dismissed", updated_at: new Date().toISOString() };
+    });
+    updatedIds.sort();
+    return Promise.resolve({
+      data: [{ updated_count: updatedIds.length, updated_ids: updatedIds }],
+      error: null,
+    });
+  }
+
   failureFor(action, table) {
     return this.failures[`${action}:${table}`] || this.failures[table] || null;
   }
@@ -496,6 +556,10 @@ class MockSupabaseClient {
   rowMatchesFilter(row, filter) {
     if (filter.type === "or") {
       return filter.conditions.some((condition) => this.rowMatchesFilter(row, condition));
+    }
+
+    if (filter.type === "and") {
+      return filter.conditions.every((condition) => this.rowMatchesFilter(row, condition));
     }
 
     if (filter.type === "is") {
@@ -557,15 +621,26 @@ class MockSupabaseClient {
     };
   }
 
-  selectRows(table, filters, orderBy, resultLimit, resultMode, selectedColumns) {
+  selectRows(
+    table,
+    filters,
+    orderBy,
+    resultLimit,
+    resultRange,
+    resultMode,
+    selectedColumns,
+    selectOptions,
+  ) {
     const failure = this.failureFor("select", table);
 
     this.selectHistory.push({
       filters: clone(filters),
       limit: resultLimit,
       orderBy: clone(orderBy),
+      range: clone(resultRange),
       resultMode,
       selectedColumns,
+      selectOptions: clone(selectOptions),
       table,
     });
     this.operations.push({
@@ -582,18 +657,29 @@ class MockSupabaseClient {
     }
 
     const rows = this.filterRows(table, filters);
-    if (filters.some((filter) => filter.type === "gt" || filter.type === "lt") && orderBy) {
+    const exactCount = rows.length;
+    if (
+      (resultRange || filters.some((filter) => filter.type === "gt" || filter.type === "lt")) &&
+      orderBy.length > 0
+    ) {
       rows.sort((left, right) => {
-        const comparison = String(left[orderBy.column] || "").localeCompare(
-          String(right[orderBy.column] || ""),
-        );
-        return orderBy.options?.ascending === false ? -comparison : comparison;
+        for (const order of orderBy) {
+          const comparison = String(left[order.column] || "").localeCompare(
+            String(right[order.column] || ""),
+          );
+          if (comparison !== 0) {
+            return order.options?.ascending === false ? -comparison : comparison;
+          }
+        }
+        return 0;
       });
     }
-    const limitedRows = typeof resultLimit === "number" ? rows.slice(0, resultLimit) : rows;
+    let limitedRows = typeof resultLimit === "number" ? rows.slice(0, resultLimit) : rows;
+    if (resultRange) limitedRows = limitedRows.slice(resultRange.from, resultRange.to + 1);
 
     if (resultMode === "single") {
       return {
+        count: selectOptions?.count === "exact" ? exactCount : null,
         data: clone(limitedRows[0] || null),
         error: null,
       };
@@ -601,12 +687,14 @@ class MockSupabaseClient {
 
     if (resultMode === "maybeSingle") {
       return {
+        count: selectOptions?.count === "exact" ? exactCount : null,
         data: clone(limitedRows[0] || null),
         error: null,
       };
     }
 
     return {
+      count: selectOptions?.count === "exact" ? exactCount : null,
       data: limitedRows.map((row) => clone(row)),
       error: null,
     };
@@ -827,6 +915,43 @@ try {
     assert.equal(mappedLongMessageCentre.alerts.length, 1);
     assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.length, 500);
     assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.endsWith("..."), true);
+
+    const customerCentreDismissCalls = [];
+    const mappedCustomerCentreDismiss = await tripUpdatesAdapter.dismissCustomerNotificationCentre({
+      fetcher: async (url, init) => {
+        customerCentreDismissCalls.push({ url, init });
+        return new Response(JSON.stringify({
+          delivery_surface: "customer_app",
+          dismissed_count: 3,
+          external_send: false,
+          ok: true,
+          provider_send: false,
+          version: "customer-notification-centre-dismiss-contract",
+        }), { status: 200 });
+      },
+    });
+    assert.deepEqual(mappedCustomerCentreDismiss, { dismissedCount: 3, status: "ready" });
+    assert.equal(customerCentreDismissCalls.length, 1);
+    assert.equal(customerCentreDismissCalls[0].url, "/api/customer-app-notifications?view=centre");
+    assert.equal(customerCentreDismissCalls[0].init.method, "PATCH");
+    assert.equal(customerCentreDismissCalls[0].init.credentials, "same-origin");
+    assert.equal(
+      customerCentreDismissCalls[0].init.headers["x-prestige-customer-purpose"],
+      "customer-in-app-notification-dismiss",
+    );
+    assert.equal(customerCentreDismissCalls[0].init.body, '{"action":"dismiss_current"}');
+    const unsafeCustomerCentreDismiss = await tripUpdatesAdapter.dismissCustomerNotificationCentre({
+      fetcher: async () => new Response(JSON.stringify({
+        delivery_surface: "customer_app",
+        dismissed_count: 3,
+        external_send: false,
+        ok: true,
+        provider_send: false,
+        raw_token: "must-not-pass",
+        version: "customer-notification-centre-dismiss-contract",
+      }), { status: 200 }),
+    });
+    assert.deepEqual(unsafeCustomerCentreDismiss, { dismissedCount: 0, status: "blocked" });
 
     setEnv({
       ...validEnv(),
@@ -1807,6 +1932,123 @@ try {
     assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
     assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
 
+    const malformedCustomerCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current", booking_reference: "10906" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(malformedCustomerCentreDismiss.status, 400);
+    assert.deepEqual(malformedCustomerCentreDismiss.body, {
+      error: "Customer alert clear request is malformed.",
+      ok: false,
+    });
+    assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+    assert.equal(customerPrincipalCentreMock.client.rpcHistory.length, 0);
+
+    const crossOriginCustomerCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "https://attacker.example/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(crossOriginCustomerCentreDismiss.status, 403);
+    assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+    assert.equal(customerPrincipalCentreMock.client.rpcHistory.length, 0);
+
+    const customerPrincipalCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(customerPrincipalCentreDismiss.status, 200);
+    assert.deepEqual(customerPrincipalCentreDismiss.body, {
+      delivery_surface: "customer_app",
+      dismissed_count: 501,
+      external_send: false,
+      ok: true,
+      provider_send: false,
+      version: "stage-customer-in-app-notification-runtime-v1",
+    });
+    assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+    assert.equal(customerPrincipalCentreMock.client.rpcHistory.length, 1);
+    assert.equal(
+      customerPrincipalCentreMock.client.rpcHistory[0]?.functionName,
+      "dismiss_customer_notification_centre",
+    );
+    const rpcNotificationIds =
+      customerPrincipalCentreMock.client.rpcHistory[0]?.args.p_notification_ids || [];
+    assert.equal(rpcNotificationIds.length, 501);
+    assert.deepEqual(
+      [...rpcNotificationIds].sort(),
+      pagedCentreNotifications.map(({ id }) => id).sort(),
+      "Expected all 501 exact scoped IDs in one RPC request body, never a PostgREST URL filter.",
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.tables[notificationTable].filter(
+        (row) => row.booking_reference === "BOOK-CUST-CENTRE-001" && row.notification_status === "dismissed",
+      ).length,
+      501,
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-outside-booking-history-window",
+      )?.notification_status,
+      "queued",
+      "Clear must not dismiss an alert outside the established My Bookings history window.",
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-cross-account",
+      )?.notification_status,
+      "queued",
+      "Clear must not dismiss another Company+Booker account's alert.",
+    );
+    assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
+    const customerPrincipalCentreAfterDismiss = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(customerPrincipalCentreAfterDismiss.status, 200);
+    assert.equal(customerPrincipalCentreAfterDismiss.body.alert_count, 0);
+    assert.deepEqual(customerPrincipalCentreAfterDismiss.body.alerts, []);
+
     const customerBossCentreMock = installMockClient({
       [notificationTable]: [
         seededNotification({
@@ -1896,6 +2138,37 @@ try {
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerBossCentre.body)), false);
     assert.equal(customerBossCentreMock.client.insertHistory.length, 0);
     assert.equal(customerBossCentreMock.client.updateHistory.length, 0);
+
+    const customerBossCentreDismiss = await responseJson(
+      await customerRoute.PATCH(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          body: JSON.stringify({ action: "dismiss_current" }),
+          headers: {
+            "content-type": "application/json",
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-dismiss",
+            "x-prestige-customer-session-token": bossPrincipalToken,
+          },
+          method: "PATCH",
+        },
+      )),
+    );
+    assert.equal(customerBossCentreDismiss.status, 200);
+    assert.equal(customerBossCentreDismiss.body.dismissed_count, 1);
+    assert.equal(
+      customerBossCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-boss",
+      )?.notification_status,
+      "dismissed",
+    );
+    assert.equal(
+      customerBossCentreMock.client.tables[notificationTable].find(
+        (row) => row.id === "notification-centre-sibling",
+      )?.notification_status,
+      "queued",
+      "Boss Clear must not dismiss a sibling Traveller's alert in the shared Company+Booker account.",
+    );
 
     const unstableCustomerCentreMock = installMockClient({
       [notificationTable]: pagedCentreNotifications,
@@ -2322,6 +2595,7 @@ try {
       [notificationTable]: [
         seededNotification({
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          created_at: "2026-06-08T01:00:00.000Z",
           delivery_surface: "driver_app",
           driver_job_link_id: driverLinkId,
           id: "notification-driver-safe-one",
@@ -2338,6 +2612,18 @@ try {
           safe_message: "Please meet your driver at the hotel lobby for this booking.",
           safe_title: "Message from dispatch",
           workflow_area: "admin_customer_job_messages",
+        }),
+        seededNotification({
+          actor_role: "driver",
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          created_at: "2026-06-08T02:00:00.000Z",
+          delivery_surface: "customer_app",
+          id: "notification-driver-reply-dismissed-by-customer-centre",
+          notification_status: "dismissed",
+          notification_type: "trip_update",
+          safe_message: "I have arrived at the pickup point.",
+          safe_title: "Message from driver",
+          workflow_area: "customer_driver_quick_replies",
         }),
         seededNotification({
           booking_reference: "BOOK-OTHER-NOTIFY-001",
@@ -2376,33 +2662,191 @@ try {
         {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
           delivery_surface: "driver_app",
+          notification_status: "dismissed",
+          notification_type: "trip_update",
+          safe_title: "Message from driver",
+        },
+        {
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
           notification_status: "queued",
           notification_type: "trip_update",
           safe_title: "Dispatch update",
         },
       ],
-      "Expected driver token route to return only scoped driver-app notifications",
+      "Expected Driver history to retain its exact sent quick reply after Customer clears the current alert",
     );
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(driverGet.body)), false);
+    assert.equal(driverGetMock.client.selectHistory.length, 2);
+    assert.deepEqual(driverGetMock.client.selectHistory[0].filters, [
+      { column: "token_hash", type: "eq", value: tokenHash(driverToken) },
+    ]);
+    const driverNotificationRead = driverGetMock.client.selectHistory[1];
+    assert.equal(driverNotificationRead.table, notificationTable);
+    assert.deepEqual(driverNotificationRead.range, { from: 0, to: 9 });
+    assert.deepEqual(driverNotificationRead.selectOptions, { count: "exact" });
     assert.deepEqual(
-      driverGetMock.client.selectHistory.map((entry) => ({
-        filters: entry.filters,
-        table: entry.table,
-      })),
+      driverNotificationRead.filters,
       [
+        { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
         {
-          filters: [{ column: "token_hash", type: "eq", value: tokenHash(driverToken) }],
-          table: "driver_job_links",
+          conditions: [
+            {
+              conditions: [
+                { column: "delivery_surface", type: "eq", value: "driver_app" },
+                { column: "notification_status", type: "eq", value: "queued" },
+              ],
+              type: "and",
+            },
+            {
+              conditions: [
+                { column: "delivery_surface", type: "eq", value: "customer_app" },
+                { column: "actor_role", type: "eq", value: "driver" },
+                {
+                  column: "workflow_area",
+                  type: "eq",
+                  value: "customer_driver_quick_replies",
+                },
+                {
+                  column: "notification_status",
+                  type: "in",
+                  value: ["queued", "read", "dismissed", "archived"],
+                },
+              ],
+              type: "and",
+            },
+          ],
+          type: "or",
         },
         {
-          filters: [
-            { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
-            { column: "notification_status", type: "eq", value: "queued" },
+          conditions: [
+            { column: "driver_job_link_id", type: "is", value: null },
+            { column: "driver_job_link_id", type: "eq", value: driverLinkId },
           ],
-          table: notificationTable,
+          type: "or",
         },
       ],
-      "Expected driver GET to verify token hash before the scoped shared-conversation read",
+      "Expected one database-filtered Driver notification read after token verification.",
+    );
+
+    const pagedOtherDriverLinkId = "22222222-2222-4222-8222-222222222222";
+    const pagedDriverNotifications = Array.from({ length: 7 }, (_, index) =>
+      seededNotification({
+        booking_reference: "BOOK-DRIVER-NOTIFY-PAGED",
+        created_at: new Date(Date.UTC(2026, 7, 2, 0, index, 0)).toISOString(),
+        delivery_surface: "driver_app",
+        driver_job_link_id: driverLinkId,
+        id: `notification-driver-paged-${index + 1}`,
+        safe_message: `Safe paged Driver update ${index + 1}.`,
+        safe_title: `Driver update ${index + 1}`,
+      }),
+    );
+    const irrelevantDriverCandidates = Array.from({ length: 510 }, (_, index) =>
+      seededNotification({
+        actor_role: "admin",
+        booking_reference: "BOOK-DRIVER-NOTIFY-PAGED",
+        created_at: new Date(Date.UTC(2026, 8, 2, 0, index, 0)).toISOString(),
+        delivery_surface: index % 2 === 0 ? "customer_app" : "driver_app",
+        driver_job_link_id: index % 2 === 0 ? driverLinkId : pagedOtherDriverLinkId,
+        id: `notification-driver-irrelevant-${index + 1}`,
+        notification_status: "queued",
+        workflow_area: "admin_customer_job_messages",
+      }),
+    );
+    setEnv(validEnv());
+    const driverPagedMock = installMockClient({
+      [notificationTable]: [...irrelevantDriverCandidates, ...pagedDriverNotifications],
+      driver_job_links: [{
+        booking_reference: "BOOK-DRIVER-NOTIFY-PAGED",
+        expires_at: validDriverLinkExpiresAt,
+        id: driverLinkId,
+        link_status: "active",
+        revoked_at: null,
+        token_hash: tokenHash(driverToken),
+      }],
+    });
+    const driverPagedGet = await responseJson(
+      await driverRoute.GET(
+        new Request(`http://localhost/api/driver-job/${driverToken}/notifications?limit=5&page=1`),
+        routeContext(driverToken),
+      ),
+    );
+    assert.equal(driverPagedGet.status, 200);
+    assert.deepEqual(
+      driverPagedGet.body.notifications.map(({ id }) => id),
+      [
+        "notification-driver-paged-7",
+        "notification-driver-paged-6",
+        "notification-driver-paged-5",
+        "notification-driver-paged-4",
+        "notification-driver-paged-3",
+      ],
+      "Driver limit=5 must be applied after exact surface/status/current-link eligibility in the database.",
+    );
+    assert.deepEqual(driverPagedGet.body.pagination, {
+      has_next_page: true,
+      has_previous_page: false,
+      page: 1,
+      page_count: 2,
+      page_size: 5,
+      total_notification_count: 7,
+    });
+    assert.equal(
+      driverPagedMock.client.selectHistory.filter((entry) => entry.table === notificationTable).length,
+      1,
+    );
+    assert.deepEqual(
+      driverPagedMock.client.selectHistory.find((entry) => entry.table === notificationTable)?.range,
+      { from: 0, to: 4 },
+    );
+
+    setEnv(validEnv());
+    const statusRaceNotificationId = "notification-driver-status-race";
+    const driverStatusRaceMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          actor_role: "system",
+          booking_reference: "BOOK-DRIVER-NOTIFY-RACE",
+          delivery_surface: "driver_app",
+          driver_job_link_id: driverLinkId,
+          id: statusRaceNotificationId,
+          notification_status: "queued",
+        }),
+        seededNotification({
+          actor_role: "driver",
+          booking_reference: "BOOK-DRIVER-NOTIFY-RACE",
+          delivery_surface: "customer_app",
+          driver_job_link_id: driverLinkId,
+          id: statusRaceNotificationId,
+          notification_status: "dismissed",
+          workflow_area: "customer_driver_quick_replies",
+        }),
+      ],
+      driver_job_links: [{
+        booking_reference: "BOOK-DRIVER-NOTIFY-RACE",
+        expires_at: validDriverLinkExpiresAt,
+        id: driverLinkId,
+        link_status: "active",
+        revoked_at: null,
+        token_hash: tokenHash(driverToken),
+      }],
+    });
+    const driverStatusRaceGet = await responseJson(
+      await driverRoute.GET(
+        new Request(`http://localhost/api/driver-job/${driverToken}/notifications?limit=5&page=1`),
+        routeContext(driverToken),
+      ),
+    );
+    assert.equal(driverStatusRaceGet.status, 200);
+    assert.deepEqual(
+      driverStatusRaceGet.body.notifications.map(({ id }) => id),
+      [statusRaceNotificationId],
+      "Defensive ID dedupe must prevent a queued-to-dismissed transition artifact from duplicating one notification.",
+    );
+    assert.equal(
+      driverStatusRaceMock.client.selectHistory.filter((entry) => entry.table === notificationTable).length,
+      1,
+      "A Driver default read must use one notification query, removing the former between-query status race.",
     );
 
     setEnv(validEnv());

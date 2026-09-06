@@ -117,6 +117,10 @@ async function main() {
   const browserConsoleErrors = [];
   let customerNotificationReadCount = 0;
   let customerNotificationCentreReadCount = 0;
+  let customerNotificationCentreCleared = false;
+  let heldPreClearCustomerNotificationCentreResponse = null;
+  let holdNextCustomerNotificationCentreRead = false;
+  const customerNotificationCentreDismissRequests = [];
   const savedBookingReadQueries = [];
 
   try {
@@ -209,8 +213,8 @@ async function main() {
       ) {
         customerNotificationCentreReadCount += 1;
         responseBody = {
-          alert_count: 3,
-          alerts: [
+          alert_count: customerNotificationCentreCleared ? 0 : 3,
+          alerts: customerNotificationCentreCleared ? [] : [
             {
               created_at: "2026-09-06T03:30:00.000Z",
               latest_message: "Your Prestige Limo driver is at the pickup location.",
@@ -224,7 +228,37 @@ async function main() {
           ],
           delivery_surface: "customer_app",
           external_send: false,
-          notification_count: 3,
+          notification_count: customerNotificationCentreCleared ? 0 : 3,
+          ok: true,
+          provider_send: false,
+          version: "customer-notification-centre-browser-fixture",
+        };
+        if (holdNextCustomerNotificationCentreRead) {
+          holdNextCustomerNotificationCentreRead = false;
+          heldPreClearCustomerNotificationCentreResponse = {
+            body: Buffer.from(JSON.stringify(responseBody)).toString("base64"),
+            requestId,
+            responseCode,
+          };
+          return;
+        }
+      } else if (
+        requestUrl.pathname === "/api/customer-app-notifications" &&
+        method === "PATCH" &&
+        requestUrl.searchParams.get("view") === "centre"
+      ) {
+        const normalizedHeaders = Object.fromEntries(
+          Object.entries(request.headers || {}).map(([key, value]) => [key.toLowerCase(), value]),
+        );
+        customerNotificationCentreDismissRequests.push({
+          body: JSON.parse(request.postData || "null"),
+          purpose: normalizedHeaders["x-prestige-customer-purpose"] || null,
+        });
+        customerNotificationCentreCleared = true;
+        responseBody = {
+          delivery_surface: "customer_app",
+          dismissed_count: 3,
+          external_send: false,
           ok: true,
           provider_send: false,
           version: "customer-notification-centre-browser-fixture",
@@ -802,9 +836,93 @@ async function main() {
       true,
     );
 
+    const searchBeforeClear = await evaluate("window.location.search");
+    await evaluate(
+      `document.querySelector('[data-customer-notification-centre-trigger="true"]')?.click()`,
+    );
+    const clearControlState = await waitForCondition(
+      () => evaluate(`(() => {
+        const centre = document.querySelector('[data-customer-notification-centre="true"]');
+        const button = centre?.querySelector('[data-customer-notification-centre-clear="true"]');
+        const buttonRect = button?.getBoundingClientRect();
+        const centreRect = centre?.getBoundingClientRect();
+        if (!button || !buttonRect || !centreRect) return false;
+        return {
+          ariaLabel: button.getAttribute("aria-label"),
+          centreWithinViewport: centreRect.left >= 0 && centreRect.right <= window.innerWidth,
+          height: buttonRect.height,
+          text: button.textContent?.trim() || "",
+        };
+      })()`),
+      10000,
+      "390px Customer current-alert Clear control",
+    );
+    assert.deepEqual(clearControlState, {
+      ariaLabel: "Clear current alerts",
+      centreWithinViewport: true,
+      height: 28,
+      text: "Clear",
+    });
+    holdNextCustomerNotificationCentreRead = true;
+    await evaluate("window.dispatchEvent(new Event('focus'))");
+    await waitForCondition(
+      () => Boolean(heldPreClearCustomerNotificationCentreResponse),
+      10000,
+      "held pre-Clear Customer centre response",
+    );
+    await evaluate(
+      `document.querySelector('[data-customer-notification-centre-clear="true"]')?.click()`,
+    );
+    const clearedCentreState = await waitForCondition(
+      () => evaluate(`(() => {
+        const centre = document.querySelector('[data-customer-notification-centre="true"]');
+        const trigger = document.querySelector('[data-customer-notification-centre-trigger="true"]');
+        if (
+          trigger?.textContent?.trim() !== "Alerts 0" ||
+          !centre?.innerText.includes("No current alerts.")
+        ) return false;
+        return {
+          clearControlPresent: Boolean(centre.querySelector('[data-customer-notification-centre-clear="true"]')),
+          documentWidth: document.documentElement.scrollWidth,
+          search: window.location.search,
+          viewportWidth: document.documentElement.clientWidth,
+        };
+      })()`),
+      10000,
+      "Customer current alerts cleared in place",
+    );
+    assert.equal(clearedCentreState.clearControlPresent, false);
+    assert.equal(clearedCentreState.documentWidth, clearedCentreState.viewportWidth);
+    assert.equal(clearedCentreState.search, searchBeforeClear);
+    await client.send("Fetch.fulfillRequest", {
+      ...heldPreClearCustomerNotificationCentreResponse,
+      responseHeaders: responseHeaders(),
+    });
+    heldPreClearCustomerNotificationCentreResponse = null;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const staleReadState = await evaluate(`(() => ({
+      centreText: document.querySelector('[data-customer-notification-centre="true"]')?.innerText || "",
+      triggerText: document.querySelector('[data-customer-notification-centre-trigger="true"]')?.textContent?.trim() || "",
+    }))()`);
+    assert.equal(staleReadState.triggerText, "Alerts 0");
+    assert.match(staleReadState.centreText, /No current alerts\./);
+    assert.deepEqual(customerNotificationCentreDismissRequests, [
+      {
+        body: { action: "dismiss_current" },
+        purpose: "customer-in-app-notification-dismiss",
+      },
+    ]);
+    assert.equal(
+      apiCalls.filter((call) => call === "PATCH /api/customer-app-notifications").length,
+      1,
+    );
+
     assert.deepEqual(browserErrors, []);
     assert.deepEqual(browserConsoleErrors, []);
-    assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
+    assert.deepEqual(
+      apiCalls.filter((call) => !call.startsWith("GET ")),
+      ["PATCH /api/customer-app-notifications"],
+    );
 
     console.log(
       JSON.stringify(

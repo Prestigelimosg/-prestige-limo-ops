@@ -1,11 +1,20 @@
 import {
   customerAppNotificationsRequireAuthResult,
+  dismissCustomerNotificationCentreForAuthenticatedRuntime,
   readCustomerAppNotificationsForControlledRuntime,
   readCustomerAppNotificationsForPortalAccessRuntime,
   readCustomerAppNotificationsForStagingEvidence,
 } from "../../../lib/customer-driver-app-notification-persistence";
 
 export const dynamic = "force-dynamic";
+
+async function readJsonBody(request: Request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
+}
 
 function safeCustomerAuthRequiredResponse() {
   const result = customerAppNotificationsRequireAuthResult();
@@ -63,6 +72,22 @@ export async function GET(request: Request) {
   return safeCustomerAuthRequiredResponse();
 }
 
-export async function PATCH() {
+export async function PATCH(request: Request) {
+  try {
+    const result = await dismissCustomerNotificationCentreForAuthenticatedRuntime(
+      request,
+      await readJsonBody(request),
+    );
+    if (result.handled) {
+      const { body, status } = result;
+      return Response.json(body, { status });
+    }
+  } catch {
+    return Response.json(
+      { error: "Customer alerts could not be cleared safely.", ok: false },
+      { status: 500 },
+    );
+  }
+
   return safeCustomerAuthRequiredResponse();
 }

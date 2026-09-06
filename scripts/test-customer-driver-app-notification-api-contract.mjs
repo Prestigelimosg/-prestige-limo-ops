@@ -32,6 +32,7 @@ const sourceFiles = [
   "lib/customer-device-push-notification.ts",
   "lib/driver-device-push-notification.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/customer-portal-trip-updates-adapter.ts",
   "lib/customer-portal-access-account.ts",
   "lib/customer-portal-access-link.ts",
   "lib/admin-booking-supabase-adapter.ts",
@@ -291,6 +292,9 @@ async function loadHarness() {
     driverRoute: require(path.join(tempDir, "app/api/driver-job/[token]/notifications/route.js")),
     notificationPersistence: require(
       path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
+    ),
+    tripUpdatesAdapter: require(
+      path.join(tempDir, "lib/customer-portal-trip-updates-adapter.js"),
     ),
   };
 }
@@ -777,9 +781,38 @@ try {
     driverQuickReplyRoute,
     driverRoute,
     notificationPersistence,
+    tripUpdatesAdapter,
   } = await loadHarness();
 
   try {
+    const maximumStoredCustomerMessage = "A".repeat(1000);
+    const mappedLongMessageCentre = tripUpdatesAdapter.mapCustomerNotificationCentrePayload({
+      alert_count: 1,
+      alerts: [
+        {
+          created_at: "2026-09-06T03:30:00.000Z",
+          latest_message: maximumStoredCustomerMessage,
+          latest_title: "Prestige update",
+          notification_count: 1,
+          notification_type: "trip_update",
+          priority: "normal",
+          public_booking_reference: "10906",
+          workflow_area: "admin_customer_job_messages",
+        },
+      ],
+      delivery_surface: "customer_app",
+      external_send: false,
+      notification_count: 1,
+      ok: true,
+      provider_send: false,
+      version: "customer-notification-centre-long-message-contract",
+    });
+    assert.equal(mappedLongMessageCentre.status, "ready");
+    assert.equal(mappedLongMessageCentre.alertCount, 1);
+    assert.equal(mappedLongMessageCentre.alerts.length, 1);
+    assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.length, 500);
+    assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.endsWith("..."), true);
+
     setEnv({
       ...validEnv(),
       PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,

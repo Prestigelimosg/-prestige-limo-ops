@@ -340,7 +340,11 @@ function mapCustomerNotificationCentreAlert(
     safeText(record.public_booking_reference, 120),
   );
   const latestTitle = safeText(record.latest_title, 160);
-  const latestMessage = safeText(record.latest_message, 500);
+  const persistedLatestMessage = safeText(record.latest_message, 1000);
+  const latestMessage =
+    persistedLatestMessage && persistedLatestMessage.length > 500
+      ? `${persistedLatestMessage.slice(0, 497)}...`
+      : persistedLatestMessage;
   const notificationCount = Number(record.notification_count);
   const priority = safeText(record.priority, 40);
   if (

@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  findCustomerPortalSavedBooking,
   loadCustomerPortalSavedBookings,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
@@ -69,6 +70,7 @@ type CustomerPrincipalAccessState =
   | { status: "legacy" }
   | {
       status: "principal";
+      booker_root: boolean;
       principal_role: "boss" | "pa";
       managed_bosses: Array<{ traveler_id: number; verified_boss_name: string }>;
     };
@@ -266,11 +268,16 @@ function readCustomerPortalBookingDeepLink() {
 
   const params = new URLSearchParams(window.location.search);
   const bookingReference = safePortalBookingReference(params.get("booking"));
+  const savedPage = Number(params.get("saved_page"));
+  const travelerId = Number(params.get("traveler_id"));
 
   return bookingReference
     ? {
         bookingReference,
         openTracking: params.get("tracking") === "1",
+        savedPage: Number.isSafeInteger(savedPage) && savedPage > 0 ? savedPage : 1,
+        travelerId:
+          Number.isSafeInteger(travelerId) && travelerId > 0 ? travelerId : null,
       }
     : null;
 }
@@ -450,6 +457,10 @@ export default function CustomerPortalPage() {
   const [customerNotificationCentreOpen, setCustomerNotificationCentreOpen] = useState(false);
   const [customerNotificationCentreStatus, setCustomerNotificationCentreStatus] =
     useState<CustomerNotificationCentreStatus>("loading");
+  const [customerNotificationOpeningReference, setCustomerNotificationOpeningReference] =
+    useState("");
+  const [customerNotificationNavigationMessage, setCustomerNotificationNavigationMessage] =
+    useState("");
   const [customerQuickReplies, setCustomerQuickReplies] = useState<CustomerQuickReplyState>({});
   const [customerMessageDrafts, setCustomerMessageDrafts] = useState<Record<string, string>>({});
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
@@ -460,6 +471,7 @@ export default function CustomerPortalPage() {
   const [customerInvoicesLoadState, setCustomerInvoicesLoadState] =
     useState<PortalInvoicesLoadState>("loading");
   const [principalLogoutBusy, setPrincipalLogoutBusy] = useState(false);
+  const portalSavedBookingsServerPageRef = useRef(1);
   const [invoiceDownloadStates, setInvoiceDownloadStates] =
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
@@ -490,7 +502,18 @@ export default function CustomerPortalPage() {
 
   const refreshCustomerPortalSavedBookings = useCallback(
     async ({ resetView = false, signal }: { resetView?: boolean; signal: AbortSignal }) => {
-      const loadedBookings = await loadCustomerPortalSavedBookings({ signal, travelerId: selectedManagedBossId });
+      const deepLink = resetView ? readCustomerPortalBookingDeepLink() : null;
+      const deepLinkMatchesScope =
+        deepLink &&
+        (deepLink.travelerId === null || deepLink.travelerId === selectedManagedBossId);
+      const requestedPage = deepLinkMatchesScope
+        ? deepLink.savedPage
+        : portalSavedBookingsServerPageRef.current;
+      const loadedBookings = await loadCustomerPortalSavedBookings({
+        page: requestedPage,
+        signal,
+        travelerId: selectedManagedBossId,
+      });
 
       if (signal.aborted) {
         return;
@@ -498,6 +521,9 @@ export default function CustomerPortalPage() {
 
       setPortalBookings(loadedBookings || []);
       setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
+      if (loadedBookings !== null) {
+        portalSavedBookingsServerPageRef.current = requestedPage;
+      }
 
       if (!resetView) {
         return;
@@ -554,8 +580,17 @@ export default function CustomerPortalPage() {
           (role === "pa" || role === "boss") &&
           (rootMembership || bosses.length > 0)
         ) {
-          setCustomerPrincipalAccess({ managed_bosses: bosses, principal_role: role, status: "principal" });
-          if (bosses[0]) setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
+          setCustomerPrincipalAccess({ booker_root: rootMembership, managed_bosses: bosses, principal_role: role, status: "principal" });
+          const deepLinkTravelerId = readCustomerPortalBookingDeepLink()?.travelerId;
+          const verifiedDeepLinkBoss = bosses.find(
+            (boss: { traveler_id: number; verified_boss_name: string }) =>
+              boss.traveler_id === deepLinkTravelerId,
+          );
+          if (verifiedDeepLinkBoss) {
+            setSelectedManagedBossId(verifiedDeepLinkBoss.traveler_id);
+          } else if (bosses[0]) {
+            setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
+          }
           setActiveSection((current) => current === "Invoices" ? "Upcoming" : current);
           return;
         }
@@ -1732,12 +1767,49 @@ export default function CustomerPortalPage() {
     }
   }
 
-  function openCustomerNotificationBooking(publicBookingReference: string) {
-    setCustomerNotificationCentreOpen(false);
-    const nextUrl = new URL("/my-bookings", window.location.origin);
-    nextUrl.searchParams.set("booking", publicBookingReference);
-    nextUrl.searchParams.set("tracking", "1");
-    window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
+  async function openCustomerNotificationBooking(publicBookingReference: string) {
+    setCustomerNotificationOpeningReference(publicBookingReference);
+    setCustomerNotificationNavigationMessage("");
+    const travelerIds = customerPrincipalAccess.status === "principal"
+      ? customerPrincipalAccess.booker_root
+        ? [null]
+        : [
+            selectedManagedBossId,
+            ...customerPrincipalAccess.managed_bosses.map((boss) => boss.traveler_id),
+          ].filter(
+            (travelerId, index, values): travelerId is number =>
+              Number.isSafeInteger(travelerId) &&
+              Number(travelerId) > 0 &&
+              values.indexOf(travelerId) === index,
+          )
+      : [null];
+
+    try {
+      for (const travelerId of travelerIds) {
+        const target = await findCustomerPortalSavedBooking({
+          publicBookingReference,
+          travelerId,
+        });
+        if (!target) {
+          continue;
+        }
+        setCustomerNotificationCentreOpen(false);
+        const nextUrl = new URL("/my-bookings", window.location.origin);
+        nextUrl.searchParams.set("booking", publicBookingReference);
+        nextUrl.searchParams.set("tracking", "1");
+        nextUrl.searchParams.set("saved_page", String(target.page));
+        if (travelerId !== null) {
+          nextUrl.searchParams.set("traveler_id", String(travelerId));
+        }
+        window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
+        return;
+      }
+      setCustomerNotificationNavigationMessage(
+        "This booking is no longer available for this signed-in account.",
+      );
+    } finally {
+      setCustomerNotificationOpeningReference("");
+    }
   }
 
   return (
@@ -1844,12 +1916,18 @@ export default function CustomerPortalPage() {
                   Driver and Prestige updates for this Customer account.
                 </p>
               </div>
+              {customerNotificationNavigationMessage ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                  {customerNotificationNavigationMessage}
+                </p>
+              ) : null}
               {customerNotificationCentreAlerts.map((alert) => (
                 <button
                   className="flex min-h-16 w-full items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left ring-1 ring-slate-200"
                   data-customer-notification-purpose="booking-update"
                   key={alert.publicBookingReference}
-                  onClick={() => openCustomerNotificationBooking(alert.publicBookingReference)}
+                  disabled={customerNotificationOpeningReference === alert.publicBookingReference}
+                  onClick={() => void openCustomerNotificationBooking(alert.publicBookingReference)}
                   type="button"
                 >
                   <span className="min-w-0 break-words">
@@ -1929,7 +2007,10 @@ export default function CustomerPortalPage() {
             View bookings for
             <select
               className="mt-1 w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-slate-950"
-              onChange={(event) => setSelectedManagedBossId(Number(event.target.value))}
+              onChange={(event) => {
+                portalSavedBookingsServerPageRef.current = 1;
+                setSelectedManagedBossId(Number(event.target.value));
+              }}
               value={selectedManagedBossId || ""}
             >
               {customerPrincipalAccess.managed_bosses.map((boss) => (

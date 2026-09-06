@@ -69,6 +69,23 @@ const savedBookingsPayload = {
   version: "customer-view-details-browser-fixture",
 };
 
+const pagedAlertBookingPayload = {
+  ...savedBookingsPayload,
+  pagination: {
+    has_next_page: false,
+    has_previous_page: true,
+    page: 2,
+    page_size: 25,
+  },
+  saved_bookings: [
+    {
+      ...savedBookingsPayload.saved_bookings[1],
+      booking_reference: "VIEW-026",
+      public_booking_reference: "99126",
+    },
+  ],
+};
+
 async function main() {
   const chromeProfileDir = await mkdtemp(
     path.join(os.tmpdir(), "prestige-customer-view-details-chrome-"),
@@ -100,6 +117,7 @@ async function main() {
   const browserConsoleErrors = [];
   let customerNotificationReadCount = 0;
   let customerNotificationCentreReadCount = 0;
+  const savedBookingReadQueries = [];
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -159,11 +177,27 @@ async function main() {
       let responseCode = 200;
 
       if (requestUrl.pathname === "/api/customer-saved-bookings" && method === "GET") {
-        responseBody = savedBookingsPayload;
+        savedBookingReadQueries.push(requestUrl.search);
+        const page = requestUrl.searchParams.get("page");
+        const travelerId = requestUrl.searchParams.get("traveler_id");
+        if (page === "2" && travelerId === "78") {
+          responseBody = pagedAlertBookingPayload;
+        } else {
+          responseBody = {
+            ...savedBookingsPayload,
+            pagination: {
+              ...savedBookingsPayload.pagination,
+              has_next_page: travelerId === "78",
+            },
+          };
+        }
       } else if (requestUrl.pathname === "/api/customer-principal-access" && method === "GET") {
         responseBody = {
           data: {
-            memberships: [{ traveler_id: 77, verified_boss_name: "Owner Boss Native Push Test" }],
+            memberships: [
+              { traveler_id: 77, verified_boss_name: "Owner Boss Native Push Test" },
+              { traveler_id: 78, verified_boss_name: "Second Authorized Boss" },
+            ],
             principal_role: "pa",
           },
           ok: true,
@@ -184,7 +218,7 @@ async function main() {
               notification_count: 3,
               notification_type: "driver_status",
               priority: "normal",
-              public_booking_reference: "99102",
+              public_booking_reference: "99126",
               workflow_area: "driver_status_customer_in_app",
             },
           ],
@@ -268,8 +302,9 @@ async function main() {
         evaluate(`(() => {
           const rows = document.querySelectorAll("[data-customer-portal-row]");
           const button = document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]');
+          const bossSelector = document.querySelector('[data-customer-managed-boss-selector="true"] select');
 
-          if (rows.length !== 10 || !button) {
+          if (rows.length !== 10 || !button || bossSelector?.value !== "77") {
             return false;
           }
 
@@ -352,7 +387,7 @@ async function main() {
     assert.equal(notificationCentreState.centreWithinViewport, true);
     assert.equal(notificationCentreState.documentWidth, notificationCentreState.viewportWidth);
     assert.equal(notificationCentreState.triggerExpanded, "true");
-    assert.match(notificationCentreState.rowText, /Booking 99102/i);
+    assert.match(notificationCentreState.rowText, /Booking 99126/i);
     assert.match(notificationCentreState.rowText, /Driver arrived/);
     assert.match(notificationCentreState.rowText, /driver is at the pickup location/i);
     assert.match(notificationCentreState.rowText, /3$/);
@@ -687,23 +722,39 @@ async function main() {
       () =>
         evaluate(`(() => {
           const params = new URLSearchParams(window.location.search);
-          const detail = document.querySelector('[data-customer-portal-detail="${targetBookingId}"]');
+          const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-026"]');
           if (!detail) return false;
           return {
             booking: params.get("booking"),
             detailText: detail.innerText,
             documentWidth: document.documentElement.scrollWidth,
             tracking: params.get("tracking"),
+            savedPage: params.get("saved_page"),
+            travelerId: params.get("traveler_id"),
             viewportWidth: document.documentElement.clientWidth,
           };
         })()`),
       10000,
       "Customer notification exact-booking handoff",
     );
-    assert.equal(notificationHandoffState.booking, "99102");
+    assert.equal(notificationHandoffState.booking, "99126");
     assert.equal(notificationHandoffState.tracking, "1");
+    assert.equal(notificationHandoffState.savedPage, "2");
+    assert.equal(notificationHandoffState.travelerId, "78");
     assert.match(notificationHandoffState.detailText, /Booking Details/);
     assert.equal(notificationHandoffState.documentWidth, notificationHandoffState.viewportWidth);
+    assert.equal(
+      savedBookingReadQueries.some((query) => query.includes("page=1") && query.includes("traveler_id=77")),
+      true,
+    );
+    assert.equal(
+      savedBookingReadQueries.some((query) => query.includes("page=1") && query.includes("traveler_id=78")),
+      true,
+    );
+    assert.equal(
+      savedBookingReadQueries.some((query) => query.includes("page=2") && query.includes("traveler_id=78")),
+      true,
+    );
 
     assert.deepEqual(browserErrors, []);
     assert.deepEqual(browserConsoleErrors, []);

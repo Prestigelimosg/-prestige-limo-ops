@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const pagePath = "app/my-bookings/page.tsx";
 const adapterPath = "lib/customer-portal-trip-updates-adapter.ts";
+const savedBookingsAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts";
 const persistencePath = "lib/customer-driver-app-notification-persistence.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
@@ -23,8 +24,8 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n## ") {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
-const [page, adapter, persistence, ledger, suite] = await Promise.all(
-  [pagePath, adapterPath, persistencePath, ledgerPath, suitePath].map((path) =>
+const [page, adapter, savedBookingsAdapter, persistence, ledger, suite] = await Promise.all(
+  [pagePath, adapterPath, savedBookingsAdapterPath, persistencePath, ledgerPath, suitePath].map((path) =>
     readFile(path, "utf8"),
   ),
 );
@@ -42,12 +43,35 @@ for (const fragment of [
   "No current alerts.",
   "Customer alerts are temporarily unavailable. Refresh before relying on this count.",
   "customerNotificationTime(alert.createdAt)",
-  "openCustomerNotificationBooking(alert.publicBookingReference)",
+  "void openCustomerNotificationBooking(alert.publicBookingReference)",
   'nextUrl.searchParams.set("booking", publicBookingReference)',
   'nextUrl.searchParams.set("tracking", "1")',
+  'nextUrl.searchParams.set("saved_page", String(target.page))',
+  'nextUrl.searchParams.set("traveler_id", String(travelerId))',
+  "findCustomerPortalSavedBooking",
 ]) {
   includes(page, fragment, `Customer notification centre UI ${fragment}`);
 }
+
+for (const fragment of [
+  "export async function findCustomerPortalSavedBooking",
+  'params.set("page", String(page))',
+  'params.set("traveler_id", String(travelerId))',
+  "hasNextPage",
+  "publicBookingReference",
+]) {
+  includes(savedBookingsAdapter, fragment, `Customer saved-booking exact-alert lookup ${fragment}`);
+}
+
+const notificationOpenSource = page.slice(
+  page.indexOf("async function openCustomerNotificationBooking"),
+  page.indexOf("return (", page.indexOf("async function openCustomerNotificationBooking")),
+);
+excludes(
+  notificationOpenSource,
+  /verified_boss_name|passengerName|companyName|bookerName/i,
+  "Customer notification exact-booking lookup identity inference",
+);
 
 assert.match(
   page,

@@ -9,7 +9,7 @@ import {
 } from "./driver-job-link.ts";
 import { validateDriverJobStatusUpdate } from "./driver-job-link.ts";
 
-export const driverPortalJobsVersion = "driver-portal-jobs-v1";
+export const driverPortalJobsVersion = "driver-portal-jobs-v2";
 
 type DriverPortalJobsClient = Pick<SupabaseClient, "from">;
 type UnknownRecord = Record<string, unknown>;
@@ -21,15 +21,31 @@ export type DriverPortalJob = {
   stateLabel: "Assigned · Awaiting OTW" | "On the way" | "On site" | "Passenger on board";
 };
 
+export type DriverPortalAlert = {
+  createdAt: string;
+  jobKey: string;
+  jobReference: string;
+  latestMessage: string;
+  latestTitle: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  updateCount: number;
+};
+
 export type DriverPortalJobsResult =
   | {
       jobs: DriverPortalJob[];
+      alertCount: number;
+      alerts: DriverPortalAlert[];
+      alertsAvailable: boolean;
       ok: true;
       reason: "ok";
       version: typeof driverPortalJobsVersion;
     }
   | {
       jobs: [];
+      alertCount: 0;
+      alerts: [];
+      alertsAvailable: false;
       ok: false;
       reason: "not_configured";
       version: typeof driverPortalJobsVersion;
@@ -41,12 +57,18 @@ const terminalStatuses = new Set([
   "canceled",
   "complete",
   "completed",
+  "declined",
   "declined_internal",
+  "history",
   "job completed",
   "job_completed",
 ]);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const driverPortalAlertPriorities = new Set(["low", "normal", "high", "urgent"]);
+const driverPortalAlertSelect =
+  "id, actor_role, booking_reference, created_at, delivery_surface, driver_job_link_id, notification_status, priority, safe_message, safe_title, workflow_area";
+const driverPortalAlertPageSize = 100;
 
 function asRecord(value: unknown): UnknownRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -102,6 +124,9 @@ function stateLabel(state: DriverPortalJob["state"]): DriverPortalJob["stateLabe
 
 function failedJobsResult(): DriverPortalJobsResult {
   return {
+    alertCount: 0,
+    alerts: [],
+    alertsAvailable: false,
     jobs: [],
     ok: false,
     reason: "not_configured",
@@ -109,13 +134,157 @@ function failedJobsResult(): DriverPortalJobsResult {
   };
 }
 
+function safeAlertPriority(value: unknown): DriverPortalAlert["priority"] {
+  const priority = cleanText(value, 20).toLowerCase();
+  return driverPortalAlertPriorities.has(priority)
+    ? priority as DriverPortalAlert["priority"]
+    : "normal";
+}
+
+async function loadCurrentDriverPortalAlerts(
+  client: DriverPortalJobsClient,
+  scopes: Array<{
+    bookingReference: string;
+    jobKey: string;
+    jobReference: string;
+    linkId: string;
+  }>,
+) {
+  if (scopes.length === 0) {
+    return { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: true };
+  }
+
+  const scopeByLinkId = new Map(scopes.map((scope) => [scope.linkId, scope]));
+  const scopeByReference = new Map(scopes.map((scope) => [scope.bookingReference, scope]));
+  const currentLinkFilter = [...scopeByLinkId.keys()].join(",");
+  const exactScopeFilter =
+    `driver_job_link_id.in.(${currentLinkFilter}),and(driver_job_link_id.is.null,workflow_area.eq.customer_driver_quick_replies,actor_role.eq.customer)`;
+  async function readStableCandidate() {
+    const candidateRecords: UnknownRecord[] = [];
+    let candidateCount: number | null = null;
+
+    for (let offset = 0; candidateCount === null || offset < candidateCount; offset += driverPortalAlertPageSize) {
+      const { count, data, error } = await client
+        .from("customer_driver_app_notification_outbox")
+        .select(driverPortalAlertSelect, { count: "exact" })
+        .eq("delivery_surface", "driver_app")
+        .eq("notification_status", "queued")
+        .in("booking_reference", [...scopeByReference.keys()])
+        .or(exactScopeFilter)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + driverPortalAlertPageSize - 1);
+
+      if (
+        error ||
+        typeof count !== "number" ||
+        count < 0 ||
+        (candidateCount !== null && count !== candidateCount)
+      ) {
+        return null;
+      }
+      candidateCount = count;
+      const page = asRows(data);
+      candidateRecords.push(...page);
+
+      if (
+        candidateRecords.length > candidateCount ||
+        (page.length < driverPortalAlertPageSize && candidateRecords.length !== candidateCount)
+      ) {
+        return null;
+      }
+    }
+
+    const orderedIds = candidateRecords.map((record) => cleanText(record.id, 80));
+    if (
+      orderedIds.length !== candidateCount ||
+      orderedIds.some((id) => !uuidPattern.test(id)) ||
+      new Set(orderedIds).size !== orderedIds.length
+    ) {
+      return null;
+    }
+    return { count: candidateCount, orderedIds, records: candidateRecords };
+  }
+
+  const firstCandidate = await readStableCandidate();
+  const secondCandidate = await readStableCandidate();
+  if (
+    !firstCandidate ||
+    !secondCandidate ||
+    firstCandidate.count !== secondCandidate.count ||
+    firstCandidate.orderedIds.some((id, index) => secondCandidate.orderedIds[index] !== id)
+  ) {
+    return { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: false };
+  }
+  const exactCount = secondCandidate.count;
+  const records = secondCandidate.records;
+
+  const grouped = new Map<string, DriverPortalAlert>();
+  for (const record of records) {
+    const id = cleanText(record.id, 80);
+    const bookingReference = cleanText(record.booking_reference, 120);
+    const createdAt = cleanText(record.created_at, 80);
+    const linkedScope = scopeByLinkId.get(cleanText(record.driver_job_link_id, 80));
+    const unlinkedScope = record.driver_job_link_id === null &&
+      record.workflow_area === "customer_driver_quick_replies" &&
+      record.actor_role === "customer"
+      ? scopeByReference.get(bookingReference)
+      : null;
+    const scope = linkedScope || unlinkedScope;
+    const latestTitle = cleanText(record.safe_title, 160);
+    const latestMessage = cleanText(record.safe_message, 1000);
+    if (
+      !scope ||
+      !uuidPattern.test(id) ||
+      bookingReference !== scope.bookingReference ||
+      record.delivery_surface !== "driver_app" ||
+      record.notification_status !== "queued" ||
+      !latestTitle ||
+      !latestMessage ||
+      !createdAt ||
+      !Number.isFinite(Date.parse(createdAt))
+    ) {
+      return { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: false };
+    }
+
+    const existing = grouped.get(scope.jobKey);
+    if (!existing) {
+      grouped.set(scope.jobKey, {
+        createdAt,
+        jobKey: scope.jobKey,
+        jobReference: scope.jobReference,
+        latestMessage,
+        latestTitle,
+        priority: safeAlertPriority(record.priority),
+        updateCount: 1,
+      });
+    } else {
+      existing.updateCount += 1;
+    }
+  }
+
+  const alerts = [...grouped.values()]
+    .sort((left, right) =>
+      Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
+      right.jobKey.localeCompare(left.jobKey)
+    );
+
+  return {
+    alertCount: exactCount || 0,
+    alerts,
+    alertsAvailable: true,
+  };
+}
+
 export async function loadDriverPortalJobs({
   client,
   driverId,
+  includeAlerts = false,
   now = new Date(),
 }: {
   client: DriverPortalJobsClient;
   driverId: number;
+  includeAlerts?: boolean;
   now?: Date | string | number;
 }): Promise<DriverPortalJobsResult> {
   const verifiedDriverId = positiveInteger(driverId);
@@ -166,7 +335,15 @@ export async function loadDriverPortalJobs({
 
   const references = [...newestAcknowledgedLinks.keys()];
   if (references.length === 0) {
-    return { jobs: [], ok: true, reason: "ok", version: driverPortalJobsVersion };
+    return {
+      alertCount: 0,
+      alerts: [],
+      alertsAvailable: includeAlerts,
+      jobs: [],
+      ok: true,
+      reason: "ok",
+      version: driverPortalJobsVersion,
+    };
   }
 
   const [bookingRead, statusRead] = await Promise.all([
@@ -199,6 +376,12 @@ export async function loadDriverPortalJobs({
   }
 
   const jobs: DriverPortalJob[] = [];
+  const alertScopes: Array<{
+    bookingReference: string;
+    jobKey: string;
+    jobReference: string;
+    linkId: string;
+  }> = [];
   for (const booking of asRows(bookingRead.data)) {
     const reference = cleanText(booking.booking_reference, 120);
     const link = newestAcknowledgedLinks.get(reference);
@@ -234,11 +417,19 @@ export async function loadDriverPortalJobs({
       public_reference: cleanText(booking.public_booking_reference, 120) || reference,
       status: state,
     });
+    const linkId = cleanText(link.id, 80);
+    const jobKey = opaqueDriverJobLinkKey(linkId);
     jobs.push({
-      jobKey: opaqueDriverJobLinkKey(cleanText(link.id, 80)),
+      jobKey,
       payload,
       state,
       stateLabel: stateLabel(state),
+    });
+    alertScopes.push({
+      bookingReference: reference,
+      jobKey,
+      jobReference: payload.reference,
+      linkId,
     });
   }
 
@@ -249,5 +440,15 @@ export async function loadDriverPortalJobs({
       (Number.isFinite(rightTime) ? rightTime : Number.MAX_SAFE_INTEGER);
   });
 
-  return { jobs, ok: true, reason: "ok", version: driverPortalJobsVersion };
+  const alertState = includeAlerts
+    ? await loadCurrentDriverPortalAlerts(client, alertScopes)
+    : { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: false };
+
+  return {
+    ...alertState,
+    jobs,
+    ok: true,
+    reason: "ok",
+    version: driverPortalJobsVersion,
+  };
 }

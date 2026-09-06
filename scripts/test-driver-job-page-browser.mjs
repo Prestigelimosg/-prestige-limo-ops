@@ -253,6 +253,7 @@ async function runChromeTest() {
           "alerts-on",
           "faceid-off",
           "faceid-on",
+          "pool-more-empty",
           "pool-winner",
         ].includes(embeddedDriverMode);
         if (embeddedDriverHarness) {
@@ -410,7 +411,7 @@ async function runChromeTest() {
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
 
           if (
-            embeddedDriverMode === "pool-winner" &&
+            embeddedDriverMode.startsWith("pool-") &&
             new URL(url, window.location.origin).pathname === "/api/driver-job-bids"
           ) {
             if (method === "POST") {
@@ -429,8 +430,8 @@ async function runChromeTest() {
             }
             return Promise.resolve(new Response(JSON.stringify({
               enabled: true,
-              has_more: false,
-              jobs: window.__driverPoolWinnerTest.accepted ? [] : [{
+              has_more: embeddedDriverMode === "pool-more-empty",
+              jobs: embeddedDriverMode === "pool-more-empty" || window.__driverPoolWinnerTest.accepted ? [] : [{
                 closes_at: "2026-09-07T01:00:00.000Z",
                 offer_key: "c".repeat(64),
                 offer_payout_sgd: 55,
@@ -581,6 +582,28 @@ async function runChromeTest() {
             }
             return Promise.resolve(
               new Response(JSON.stringify({
+                alert_count: embeddedDriverMode === "account-browser-empty" ? 0 : 3,
+                alerts: embeddedDriverMode === "account-browser-empty" ? [] : [
+                  {
+                    created_at: "2026-09-06T01:00:00.000Z",
+                    job_key: "a".repeat(64),
+                    job_reference: "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+                    latest_message: "Meet the passenger at the updated pickup point.",
+                    latest_title: "Message from dispatch",
+                    priority: "high",
+                    update_count: 2,
+                  },
+                  {
+                    created_at: "2026-09-06T00:30:00.000Z",
+                    job_key: "b".repeat(64),
+                    job_reference: "MOCK-DRIVER-PORTAL-B",
+                    latest_message: "I am waiting at the lobby.",
+                    latest_title: "Passenger reply",
+                    priority: "normal",
+                    update_count: 1,
+                  },
+                ],
+                alerts_available: true,
                 device_alerts: {
                   enabled: true,
                   public_key: "AQIDBA",
@@ -633,7 +656,7 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
-                session: embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-") || embeddedDriverMode.startsWith("pool-")
+                session: embeddedDriverMode.startsWith("account-browser") || embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-") || embeddedDriverMode.startsWith("pool-")
                   ? "account"
                   : "link",
                 version: "driver-portal-browser-mock",
@@ -2366,6 +2389,12 @@ async function runChromeTest() {
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
 
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
     await navigateAndWaitForBodyText(
       client,
       evaluate,
@@ -2513,6 +2542,84 @@ async function runChromeTest() {
       "JOB 10909",
       "Driver Pool available job before acceptance",
     );
+    const driverNotificationCentreState = await waitForCondition(
+      () => evaluate(`(() => {
+        const trigger = document.querySelector('[data-driver-notification-centre-trigger="true"]');
+        if (!trigger || trigger.textContent.trim() !== "Alerts 4") return false;
+        trigger.click();
+        const centre = document.querySelector('[data-driver-notification-centre="true"]');
+        if (!centre) return false;
+        const bounds = centre.getBoundingClientRect();
+        return {
+          availableRows: centre.querySelectorAll('[data-driver-notification-purpose="available-jobs"]').length,
+          expanded: trigger.getAttribute("aria-expanded"),
+          jobRows: centre.querySelectorAll('[data-driver-notification-purpose="job-update"]').length,
+          left: bounds.left,
+          right: bounds.right,
+          text: centre.textContent || "",
+          viewportWidth: window.innerWidth,
+        };
+      })()`),
+      10000,
+      "Driver Portal notification purpose centre",
+    );
+    assert.equal(driverNotificationCentreState.expanded, "true");
+    assert.equal(driverNotificationCentreState.availableRows, 1);
+    assert.equal(driverNotificationCentreState.jobRows, 2);
+    assert.equal(driverNotificationCentreState.left >= 0, true);
+    assert.equal(driverNotificationCentreState.right <= driverNotificationCentreState.viewportWidth, true);
+    assert.equal(driverNotificationCentreState.text.includes("Available jobs"), true);
+    assert.equal(driverNotificationCentreState.text.includes("Message from dispatch"), true);
+    assert.equal(driverNotificationCentreState.text.includes("Passenger reply"), true);
+    assertNoSensitiveText({
+      fetchCalls: [],
+      resourceCalls: [],
+      visibleText: driverNotificationCentreState.text,
+    });
+    await evaluate(`(() => {
+      const trigger = document.querySelector('[data-driver-notification-centre-trigger="true"]');
+      if (trigger?.getAttribute("aria-expanded") !== "true") trigger?.click();
+    })()`);
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-notification-job="${"b".repeat(64)}"]') !== null`),
+      5000,
+      "installed Driver notification row",
+    );
+    const nativeMissingShortcutClicked = await evaluate(`(() => {
+      const button = document.querySelector('[data-driver-notification-job="${"b".repeat(64)}"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(nativeMissingShortcutClicked, true);
+    const nativeAlertOpenState = await waitForCondition(
+      () => evaluate(`(() => {
+        const message = window.__driverNativeBridgeMessages?.at(-1);
+        return message?.type === "native_job_open"
+          ? {
+              centreOpen: document.querySelector('[data-driver-notification-centre="true"]') !== null,
+              message,
+            }
+          : false;
+      })()`),
+      5000,
+      "installed Driver alert native-open request",
+    );
+    assert.equal(nativeAlertOpenState.centreOpen, true, "The alert centre must remain mounted until native navigation succeeds.");
+    assert.deepEqual(nativeAlertOpenState.message, {
+      job_key: "b".repeat(64),
+      type: "native_job_open",
+    });
+    await evaluate(`window.dispatchEvent(new CustomEvent("prestige-driver-native-job-open-result", {
+      detail: { jobKey: "${"b".repeat(64)}", ok: false },
+    }))`);
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-notification-open-feedback="${"b".repeat(64)}"]')?.textContent.includes("Open the latest link from dispatch once.") === true`),
+      5000,
+      "installed Driver alert missing SecureStore mapping feedback",
+    );
+    await evaluate(`document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click()`);
+    await client.send("Emulation.clearDeviceMetricsOverride");
     const poolAcceptClicked = await evaluate(`(() => {
       const offer = document.querySelector('[data-driver-pool-offer="${"c".repeat(64)}"]');
       const button = [...(offer?.querySelectorAll("button") || [])].find((item) => item.textContent.trim() === "Accept");
@@ -2562,6 +2669,31 @@ async function runChromeTest() {
       10000,
       "Driver Pool winner confirmation retained after authoritative refresh",
     );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=pool-more-empty", appUrl).toString(),
+      "Alerts 3+",
+      "Driver Pool remaining-page notification purpose",
+    );
+    await evaluate(`document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click()`);
+    const poolRemainingPageState = await waitForCondition(
+      () => evaluate(`(() => {
+        const row = document.querySelector('[data-driver-notification-purpose="available-jobs"]');
+        const centre = document.querySelector('[data-driver-notification-centre="true"]');
+        return row
+          ? {
+              hasFalseZero: centre?.textContent.includes("No current alerts.") === true,
+              rowText: row.textContent.trim(),
+            }
+          : false;
+      })()`),
+      5000,
+      "Driver Pool remaining-page purpose row",
+    );
+    assert.equal(poolRemainingPageState.hasFalseZero, false);
+    assert.equal(poolRemainingPageState.rowText.includes("0+"), true);
 
     await navigateAndWaitForBodyText(
       client,
@@ -2775,8 +2907,45 @@ async function runChromeTest() {
     assert.equal(restoredPortalAlertState.text.includes("Enable once on this device"), true);
     assert.equal(restoredPortalAlertState.text.includes("iPhone"), false);
 
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=account-browser-empty", appUrl).toString(),
+      "Alerts ?",
+      "browser Driver unknown Pool alert count",
+    );
+    const unknownPoolAlertState = await evaluate(`(() => {
+      document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click();
+      return new Promise((resolve) => requestAnimationFrame(() => {
+        const centre = document.querySelector('[data-driver-notification-centre="true"]');
+        resolve({
+          hasFalseZero: centre?.textContent.includes("No current alerts.") === true,
+          hasUnavailable: centre?.textContent.includes("Available job offers are temporarily unavailable.") === true,
+          trigger: document.querySelector('[data-driver-notification-centre-trigger="true"]')?.textContent.trim() || "",
+        });
+      }));
+    })()`);
+    assert.deepEqual(unknownPoolAlertState, {
+      hasFalseZero: false,
+      hasUnavailable: true,
+      trigger: "Alerts ?",
+    });
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=account-browser", appUrl).toString(),
+      "Alerts 3",
+      "browser Driver account notification centre",
+    );
+    await evaluate(`document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click()`);
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-notification-job="${"b".repeat(64)}"]') !== null`),
+      5000,
+      "browser Driver account notification row",
+    );
     const missingShortcutClicked = await evaluate(`(() => {
-      const button = document.querySelector('[data-driver-portal-open-job="${"b".repeat(64)}"]');
+      const button = document.querySelector('[data-driver-notification-job="${"b".repeat(64)}"]');
       if (!button) return false;
       button.click();
       return true;
@@ -2784,15 +2953,20 @@ async function runChromeTest() {
     assert.equal(missingShortcutClicked, true);
     const missingShortcutState = await waitForCondition(
       () => evaluate(`(() => {
-        const feedback = document.querySelector('[data-driver-portal-open-feedback="${"b".repeat(64)}"]');
+        const feedback = document.querySelector('[data-driver-notification-open-feedback="${"b".repeat(64)}"]');
         return feedback?.textContent.includes("Open and acknowledge the latest private link from dispatch once on this device.")
-          ? { href: location.href, text: feedback.textContent.trim() }
+          ? {
+              centreOpen: document.querySelector('[data-driver-notification-centre="true"]') !== null,
+              href: location.href,
+              text: feedback.textContent.trim(),
+            }
           : false;
       })()`),
       10000,
       "Driver Portal missing local private-link fallback",
     );
     assert.equal(new URL(missingShortcutState.href).pathname, "/driver-portal");
+    assert.equal(missingShortcutState.centreOpen, true, "A failed alert shortcut must explain itself inside the still-open purpose centre.");
 
     const localShortcut = await evaluate(`(async () => {
       const database = await new Promise((resolve, reject) => {

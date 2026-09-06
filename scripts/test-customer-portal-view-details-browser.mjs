@@ -718,25 +718,38 @@ async function main() {
     await evaluate(
       `document.querySelector('[data-customer-notification-purpose="booking-update"]')?.click()`,
     );
-    const notificationHandoffState = await waitForCondition(
-      () =>
-        evaluate(`(() => {
-          const params = new URLSearchParams(window.location.search);
-          const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-026"]');
-          if (!detail) return false;
-          return {
-            booking: params.get("booking"),
-            detailText: detail.innerText,
-            documentWidth: document.documentElement.scrollWidth,
-            tracking: params.get("tracking"),
-            savedPage: params.get("saved_page"),
-            travelerId: params.get("traveler_id"),
-            viewportWidth: document.documentElement.clientWidth,
-          };
-        })()`),
-      10000,
-      "Customer notification exact-booking handoff",
-    );
+    let notificationHandoffState;
+    try {
+      notificationHandoffState = await waitForCondition(
+        () =>
+          evaluate(`(() => {
+            const params = new URLSearchParams(window.location.search);
+            const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-026"]');
+            if (!detail) return false;
+            return {
+              booking: params.get("booking"),
+              detailText: detail.innerText,
+              documentWidth: document.documentElement.scrollWidth,
+              tracking: params.get("tracking"),
+              savedPage: params.get("saved_page"),
+              travelerId: params.get("traveler_id"),
+              viewportWidth: document.documentElement.clientWidth,
+            };
+          })()`),
+        10000,
+        "Customer notification exact-booking handoff",
+      );
+    } catch (error) {
+      const handoffDiagnostic = await evaluate(`(() => ({
+        bodyText: document.body.innerText.slice(0, 1200),
+        detailIds: [...document.querySelectorAll('[data-customer-portal-detail]')].map((node) => node.getAttribute('data-customer-portal-detail')),
+        rowIds: [...document.querySelectorAll('[data-customer-portal-row]')].map((node) => node.getAttribute('data-customer-portal-row')),
+        search: window.location.search,
+      }))()`);
+      throw new Error(
+        `${normalizeErrorMessage(error)}; saved-booking queries=${JSON.stringify(savedBookingReadQueries)}; page=${JSON.stringify(handoffDiagnostic)}`,
+      );
+    }
     assert.equal(notificationHandoffState.booking, "99126");
     assert.equal(notificationHandoffState.tracking, "1");
     assert.equal(notificationHandoffState.savedPage, "2");
@@ -746,6 +759,39 @@ async function main() {
     assert.equal(
       savedBookingReadQueries.some((query) => query.includes("page=1") && query.includes("traveler_id=77")),
       true,
+    );
+
+    await evaluate(
+      `document.querySelector('[data-customer-portal-section="Upcoming"]')?.click()`,
+    );
+    const restoredCurrentBookingsState = await waitForCondition(
+      () => evaluate(`(() => {
+        const params = new URLSearchParams(window.location.search);
+        const button = document.querySelector('[data-customer-portal-detail-button="saved-VIEW-002"]');
+        const bossSelector = document.querySelector('[data-customer-managed-boss-selector="true"] select');
+        if (!button || bossSelector?.value !== "78") return false;
+        return {
+          booking: params.get("booking"),
+          savedPage: params.get("saved_page"),
+          tracking: params.get("tracking"),
+          travelerId: params.get("traveler_id"),
+        };
+      })()`),
+      10000,
+      "Customer alert handoff restores current saved bookings after section navigation",
+    );
+    assert.deepEqual(restoredCurrentBookingsState, {
+      booking: null,
+      savedPage: null,
+      tracking: null,
+      travelerId: null,
+    });
+    assert.equal(
+      savedBookingReadQueries.filter(
+        (query) => query.includes("page=1") && query.includes("traveler_id=78"),
+      ).length >= 2,
+      true,
+      "Expected ordinary section navigation after an alert handoff to return the verified Traveller scope to page 1.",
     );
     assert.equal(
       savedBookingReadQueries.some((query) => query.includes("page=1") && query.includes("traveler_id=78")),

@@ -282,6 +282,24 @@ function readCustomerPortalBookingDeepLink() {
     : null;
 }
 
+function clearCustomerPortalBookingDeepLink() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const alertParameterNames = new Set(["booking", "tracking", "saved_page", "traveler_id"]);
+  const retainedParameters = new URLSearchParams(
+    [...new URLSearchParams(window.location.search).entries()].filter(
+      ([key]) => !alertParameterNames.has(key),
+    ),
+  ).toString();
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${window.location.pathname}${retainedParameters ? `?${retainedParameters}` : ""}${window.location.hash}`,
+  );
+}
+
 function customerPortalInvoiceFolder(invoice: CustomerPortalInvoiceRecord): InvoiceFolder {
   if (invoice.documentType === "quotation") {
     return "Quotations";
@@ -472,6 +490,7 @@ export default function CustomerPortalPage() {
     useState<PortalInvoicesLoadState>("loading");
   const [principalLogoutBusy, setPrincipalLogoutBusy] = useState(false);
   const portalSavedBookingsServerPageRef = useRef(1);
+  const portalSavedBookingsTravelerIdRef = useRef<number | null>(null);
   const [invoiceDownloadStates, setInvoiceDownloadStates] =
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
@@ -523,6 +542,7 @@ export default function CustomerPortalPage() {
       setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
       if (loadedBookings !== null) {
         portalSavedBookingsServerPageRef.current = requestedPage;
+        portalSavedBookingsTravelerIdRef.current = selectedManagedBossId;
       }
 
       if (!resetView) {
@@ -1077,6 +1097,10 @@ export default function CustomerPortalPage() {
 
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = bookingFilterSet.has(section) ? (section as BookingFilter) : "Upcoming";
+    const restoreCurrentSavedBookings = portalSavedBookingsServerPageRef.current !== 1;
+
+    clearCustomerPortalBookingDeepLink();
+    portalSavedBookingsServerPageRef.current = 1;
 
     setActiveSection(section);
     setExpandedBookingId("");
@@ -1087,6 +1111,9 @@ export default function CustomerPortalPage() {
     setCheckingTripUpdatesId("");
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
+    if (restoreCurrentSavedBookings) {
+      void refreshCustomerPortalSavedBookings({ signal: new AbortController().signal });
+    }
   }
 
   function handleSearchChange(value: string) {
@@ -1257,11 +1284,28 @@ export default function CustomerPortalPage() {
         return;
       }
 
+      if (
+        deepLink.travelerId !== null &&
+        deepLink.travelerId !== selectedManagedBossId
+      ) {
+        return;
+      }
+
+      if (
+        portalSavedBookingsServerPageRef.current !== deepLink.savedPage ||
+        portalSavedBookingsTravelerIdRef.current !== selectedManagedBossId
+      ) {
+        return;
+      }
+
       const targetBooking = portalBookings.find(
         (booking) => booking.publicBookingReference === deepLink.bookingReference,
       );
 
       if (!targetBooking) {
+        clearCustomerPortalBookingDeepLink();
+        portalSavedBookingsServerPageRef.current = 1;
+        void refreshCustomerPortalSavedBookings({ signal: new AbortController().signal });
         setDeepLinkApplied(true);
         return;
       }
@@ -1327,7 +1371,9 @@ export default function CustomerPortalPage() {
     loadTripUpdatesForBooking,
     portalBookings,
     portalBookingsLoadState,
+    refreshCustomerPortalSavedBookings,
     refreshCustomerTrackingForBooking,
+    selectedManagedBossId,
   ]);
 
   useEffect(() => {

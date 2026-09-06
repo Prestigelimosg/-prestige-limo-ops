@@ -31,6 +31,7 @@ const sourceFiles = [
   "lib/customer-runtime-session-map.ts",
   "lib/customer-device-push-notification.ts",
   "lib/driver-device-push-notification.ts",
+  "lib/customer-saved-bookings-read.ts",
   "lib/customer-driver-app-notification-persistence.ts",
   "lib/customer-portal-trip-updates-adapter.ts",
   "lib/customer-portal-access-account.ts",
@@ -332,6 +333,16 @@ class MockSupabaseQuery {
     return this;
   }
 
+  gte(column, value) {
+    this.filters.push({
+      column,
+      type: "gte",
+      value,
+    });
+
+    return this;
+  }
+
   in(column, values) {
     this.filters.push({
       column,
@@ -497,6 +508,10 @@ class MockSupabaseClient {
 
     if (filter.type === "gt") {
       return row[filter.column] > filter.value;
+    }
+
+    if (filter.type === "gte") {
+      return row[filter.column] >= filter.value;
     }
 
     if (filter.type === "lt") {
@@ -1688,6 +1703,12 @@ try {
       [notificationTable]: [
         ...pagedCentreNotifications,
         seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-OLD",
+          id: "notification-centre-outside-booking-history-window",
+          safe_message: "An old booking alert must not remain in the current centre.",
+          safe_title: "Old booking update",
+        }),
+        seededNotification({
           booking_reference: "BOOK-CUST-CENTRE-OTHER",
           id: "notification-centre-cross-account",
           safe_message: "Another account must not see this alert.",
@@ -1701,6 +1722,16 @@ try {
           company_id: 53,
           customer_id: "customer-runtime-account-001",
           public_booking_reference: "10906",
+          pickup_at: new Date().toISOString(),
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-OLD",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10800",
+          pickup_at: "2024-01-01T00:00:00.000Z",
           traveler_id: 41,
         },
         {
@@ -1709,6 +1740,7 @@ try {
           company_id: 53,
           customer_id: "other-account",
           public_booking_reference: "10907",
+          pickup_at: new Date().toISOString(),
           traveler_id: 42,
         },
       ],
@@ -1754,8 +1786,22 @@ try {
       [
         { column: "company_id", type: "eq", value: 53 },
         { column: "booker_id", type: "eq", value: 26 },
+        {
+          column: "pickup_at",
+          type: "gte",
+          value: customerPrincipalCentreMock.client.selectHistory.find(
+            (entry) => entry.table === "bookings",
+          )?.filters.find((filter) => filter.column === "pickup_at")?.value,
+        },
       ],
-      "Expected the Customer centre to scope the PA root by verified Company+Booker identity.",
+      "Expected the Customer centre to scope the PA root by verified Company+Booker identity and the My Bookings history window.",
+    );
+    assert.match(
+      customerPrincipalCentreMock.client.selectHistory.find(
+        (entry) => entry.table === "bookings",
+      )?.filters.find((filter) => filter.column === "pickup_at")?.value || "",
+      /^\d{4}-\d{2}-01T00:00:00\.000Z$/,
+      "Expected the Customer centre to use the established month-boundary history window.",
     );
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerPrincipalCentre.body)), false);
     assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
@@ -1783,6 +1829,7 @@ try {
           company_id: 53,
           customer_id: "customer-runtime-account-001",
           public_booking_reference: "10908",
+          pickup_at: new Date().toISOString(),
           traveler_id: 41,
         },
         {
@@ -1791,6 +1838,7 @@ try {
           company_id: 53,
           customer_id: "customer-runtime-account-001",
           public_booking_reference: "10909",
+          pickup_at: new Date().toISOString(),
           traveler_id: 41,
         },
         {
@@ -1799,6 +1847,7 @@ try {
           company_id: 53,
           customer_id: "customer-runtime-account-001",
           public_booking_reference: "10910",
+          pickup_at: new Date().toISOString(),
           traveler_id: 42,
         },
       ],
@@ -1830,8 +1879,15 @@ try {
         { column: "company_id", type: "eq", value: 53 },
         { column: "booker_id", type: "eq", value: 26 },
         { column: "traveler_id", type: "eq", value: 41 },
+        {
+          column: "pickup_at",
+          type: "gte",
+          value: customerBossCentreMock.client.selectHistory.find(
+            (entry) => entry.table === "bookings",
+          )?.filters.find((filter) => filter.column === "pickup_at")?.value,
+        },
       ],
-      "Expected Boss alerts to require exact Company+Booker+Traveller membership.",
+      "Expected Boss alerts to require exact Company+Booker+Traveller membership inside the My Bookings history window.",
     );
     assert.equal(
       JSON.stringify(customerBossCentre.body).includes("Sibling booking update"),
@@ -1849,6 +1905,7 @@ try {
         company_id: 53,
         customer_id: "customer-runtime-account-001",
         public_booking_reference: "10906",
+        pickup_at: new Date().toISOString(),
         traveler_id: 41,
       }],
     });

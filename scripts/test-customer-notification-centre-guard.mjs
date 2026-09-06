@@ -49,6 +49,13 @@ for (const fragment of [
   'nextUrl.searchParams.set("saved_page", String(target.page))',
   'nextUrl.searchParams.set("traveler_id", String(travelerId))',
   "findCustomerPortalSavedBooking",
+  "clearCustomerPortalBookingDeepLink",
+  "portalSavedBookingsServerPageRef.current = 1",
+  "refreshCustomerPortalSavedBookings({ signal: new AbortController().signal })",
+  "deepLink.travelerId !== selectedManagedBossId",
+  "portalSavedBookingsTravelerIdRef.current = selectedManagedBossId",
+  "portalSavedBookingsServerPageRef.current !== deepLink.savedPage",
+  "portalSavedBookingsTravelerIdRef.current !== selectedManagedBossId",
 ]) {
   includes(page, fragment, `Customer notification centre UI ${fragment}`);
 }
@@ -112,6 +119,7 @@ for (const fragment of [
   '.in("booking_reference", bookingReferenceBatch)',
   '.order("id", { ascending: false })',
   '.gt("booking_reference", bookingReferenceCursor)',
+  '.gte("pickup_at", customerPortalHistoryWindowStartIso())',
   '.lt("id", notificationIdCursor)',
   ".limit(customerNotificationCentrePageSize)",
   '{ column: "company_id", value: membership.company_id }',

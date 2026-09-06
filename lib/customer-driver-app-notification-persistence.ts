@@ -32,6 +32,7 @@ import {
   assertActiveCustomerPrincipalSession,
   resolveCustomerPrincipalSessionToken,
 } from "./customer-principal-access";
+import { customerPortalHistoryWindowStartIso } from "./customer-saved-bookings-read";
 import { customerNativeAudienceReadyForBooking } from "./customer-device-push-notification";
 
 export const customerDriverAppNotificationPersistenceVersion =
@@ -2109,6 +2110,8 @@ async function loadCustomerNotificationCentreBookingRows(
         query = query.eq("customer_id", filter.value);
       }
     }
+
+    query = query.gte("pickup_at", customerPortalHistoryWindowStartIso());
 
     if (bookingReferenceCursor) {
       query = query.gt("booking_reference", bookingReferenceCursor);

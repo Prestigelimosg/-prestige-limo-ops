@@ -124,7 +124,6 @@ type UnknownRecord = Record<string, unknown>;
 const defaultNotificationLimit = 25;
 const maxNotificationLimit = 100;
 const maxNotificationPage = 1000;
-const maxReadRows = 500;
 const maxBookingReferenceLength = 120;
 const maxEventKeyLength = 160;
 const maxNotificationIdLength = 120;
@@ -639,51 +638,12 @@ function normalizeNotificationRecord(row: UnknownRecord): AdminAppNotificationRe
   };
 }
 
-function filterNotifications(
-  notifications: AdminAppNotificationRecord[],
-  params: AdminAppNotificationLoadParams,
-) {
-  return notifications.filter((notification) => {
-    if (
-      params.booking_reference &&
-      notification.booking_reference !== params.booking_reference
-    ) {
-      return false;
-    }
-
-    if (
-      params.notification_status &&
-      notification.notification_status !== params.notification_status
-    ) {
-      return false;
-    }
-
-    if (
-      params.notification_type &&
-      notification.notification_type !== params.notification_type
-    ) {
-      return false;
-    }
-
-    return !params.priority || notification.priority === params.priority;
-  });
-}
-
-function paginateNotifications(
-  notifications: AdminAppNotificationRecord[],
-  params: AdminAppNotificationLoadParams,
-) {
-  const startIndex = (params.page - 1) * params.limit;
-
-  return notifications.slice(startIndex, startIndex + params.limit);
-}
-
 function buildPagination(
-  notifications: AdminAppNotificationRecord[],
+  totalNotificationCount: number,
   params: AdminAppNotificationLoadParams,
 ): AdminAppNotificationPagination {
   const pageCount =
-    notifications.length > 0 ? Math.ceil(notifications.length / params.limit) : 0;
+    totalNotificationCount > 0 ? Math.ceil(totalNotificationCount / params.limit) : 0;
 
   return {
     has_next_page: pageCount > 0 && params.page < pageCount,
@@ -691,7 +651,7 @@ function buildPagination(
     page: params.page,
     page_count: pageCount,
     page_size: params.limit,
-    total_notification_count: notifications.length,
+    total_notification_count: totalNotificationCount,
   };
 }
 
@@ -906,28 +866,54 @@ export async function loadAdminAppNotifications(
     return clientResult;
   }
 
-  const { data, error } = await clientResult.data
+  let query = clientResult.data
     .from("admin_app_notification_outbox")
-    .select(notificationSelect)
-    .limit(maxReadRows);
+    .select(notificationSelect, { count: "exact" });
+
+  if (parsed.data.booking_reference) {
+    query = query.eq("booking_reference", parsed.data.booking_reference);
+  }
+
+  if (parsed.data.notification_status) {
+    query = query.eq("notification_status", parsed.data.notification_status);
+  }
+
+  if (parsed.data.notification_type) {
+    query = query.eq("notification_type", parsed.data.notification_type);
+  }
+
+  if (parsed.data.priority) {
+    query = query.eq("priority", parsed.data.priority);
+  }
+
+  const startIndex = (parsed.data.page - 1) * parsed.data.limit;
+  const endIndex = startIndex + parsed.data.limit - 1;
+  const { count, data, error } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(startIndex, endIndex);
 
   if (error) {
     return safeAdapterFailure(safeNotificationLoadError, 500, error);
   }
 
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) {
+    return safeAdapterFailure(
+      safeNotificationLoadError,
+      500,
+      new Error("Admin app notification exact count was unavailable."),
+    );
+  }
+
   const notifications = asArray(data)
     .map(asRecord)
     .map(normalizeNotificationRecord)
-    .filter((notification) => notification.safe_title && notification.safe_message)
-    .sort((first, second) =>
-      String(second.created_at || "").localeCompare(String(first.created_at || "")),
-    );
-  const filteredNotifications = filterNotifications(notifications, parsed.data);
+    .filter((notification) => notification.safe_title && notification.safe_message);
 
   return {
     data: {
-      notifications: paginateNotifications(filteredNotifications, parsed.data),
-      pagination: buildPagination(filteredNotifications, parsed.data),
+      notifications,
+      pagination: buildPagination(count, parsed.data),
       version: adminAppNotificationPersistenceVersion,
     },
     ok: true,

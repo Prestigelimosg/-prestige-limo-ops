@@ -4,6 +4,10 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const appPage = fs.readFileSync(path.join(root, "app/page.tsx"), "utf8");
+const notificationPersistence = fs.readFileSync(
+  path.join(root, "lib/admin-app-notification-persistence.ts"),
+  "utf8",
+);
 const ledger = fs.readFileSync(path.join(root, "docs/current-implementation-ledger.md"), "utf8");
 const preactivationSuite = fs.readFileSync(
   path.join(root, "scripts/test-preactivation-verification-suite.mjs"),
@@ -27,6 +31,17 @@ const adminNotificationReadEnd = appPage.indexOf(
 const adminNotificationReadSource = appPage.slice(
   adminNotificationReadStart,
   adminNotificationReadEnd,
+);
+const notificationPersistenceReadStart = notificationPersistence.indexOf(
+  "export async function loadAdminAppNotifications(",
+);
+const notificationPersistenceReadEnd = notificationPersistence.indexOf(
+  "export async function createAdminAppNotification(",
+  notificationPersistenceReadStart,
+);
+const notificationPersistenceReadSource = notificationPersistence.slice(
+  notificationPersistenceReadStart,
+  notificationPersistenceReadEnd,
 );
 
 for (const fragment of [
@@ -64,6 +79,30 @@ assert.equal(
   adminNotificationReadSource.includes('limit: "5"'),
   false,
   "The notification-centre read must not truncate purpose counts to five queued records.",
+);
+
+for (const fragment of [
+  '.select(notificationSelect, { count: "exact" })',
+  'query = query.eq("booking_reference", parsed.data.booking_reference);',
+  'query = query.eq("notification_status", parsed.data.notification_status);',
+  'query = query.eq("notification_type", parsed.data.notification_type);',
+  'query = query.eq("priority", parsed.data.priority);',
+  '.order("created_at", { ascending: false })',
+  '.order("id", { ascending: false })',
+  '.range(startIndex, endIndex)',
+  "pagination: buildPagination(count, parsed.data)",
+]) {
+  assert.equal(
+    notificationPersistenceReadSource.includes(fragment),
+    true,
+    `Admin notification persistence read must include ${fragment}`,
+  );
+}
+
+assert.equal(
+  notificationPersistenceReadSource.includes("maxReadRows"),
+  false,
+  "The persisted notification read must not cap the candidate rows before filtering and pagination.",
 );
 
 assert.match(
@@ -105,6 +144,7 @@ assert.equal(
 for (const fragment of [
   "## Admin Dashboard Notification Centre Purpose List (source checkpoint 2026-09-06)",
   "The existing Dashboard tab remains the one Admin Action Center.",
+  "The existing guarded notification read now applies every validated filter in Supabase before exact counting and deterministic ranged pagination.",
   "The repair adds no second badge, bell, page, panel, route, API, table, schema, migration, notification producer, push sender, polling loop, database write or provider action.",
   "`scripts/test-admin-notification-centre-guard.mjs`",
 ]) {
@@ -134,6 +174,8 @@ for (const fragment of [
   "single-category Driver ACK purpose list",
   "Dashboard notification centre opened the existing ACK Queue",
   "keyboard-opened Driver ACK notification centre",
+  'centre.getBoundingClientRect().left >= 0',
+  'centre.getBoundingClientRect().right <= window.innerWidth',
 ]) {
   assert.equal(
     pendingAckBrowser.includes(fragment),

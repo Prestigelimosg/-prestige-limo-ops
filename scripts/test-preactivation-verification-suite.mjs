@@ -474,6 +474,10 @@ const guardChecks = [
     script: "scripts/test-customer-device-push-notification-guard.mjs",
   },
   {
+    label: "Customer notification centre guard",
+    script: "scripts/test-customer-notification-centre-guard.mjs",
+  },
+  {
     label: "Customer principal access and native alert guard",
     script: "scripts/test-customer-principal-native-alert-guard.mjs",
   },

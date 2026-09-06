@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  findCustomerPortalSavedBooking,
   loadCustomerPortalSavedBookings,
   type CustomerPortalBooking,
 } from "../../lib/customer-portal-saved-bookings-adapter";
@@ -13,7 +14,9 @@ import {
   type CustomerPortalDriverTrackingResult,
 } from "../../lib/customer-portal-driver-tracking-adapter";
 import {
+  loadCustomerNotificationCentre,
   loadCustomerPortalTripUpdates,
+  type CustomerNotificationCentreAlert,
   type CustomerPortalTripUpdatesResult,
 } from "../../lib/customer-portal-trip-updates-adapter";
 import { submitCustomerPortalBookingChangeRequest } from "../../lib/customer-portal-booking-change-request-adapter";
@@ -67,11 +70,13 @@ type CustomerPrincipalAccessState =
   | { status: "legacy" }
   | {
       status: "principal";
+      booker_root: boolean;
       principal_role: "boss" | "pa";
       managed_bosses: Array<{ traveler_id: number; verified_boss_name: string }>;
     };
 type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
 type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
+type CustomerNotificationCentreStatus = "blocked" | "loading" | "ready";
 type CustomerQuickReplyState = Record<
   string,
   {
@@ -101,6 +106,7 @@ type BookingChangeRequestDraft = {
 
 const visibleBookingLimit = 10;
 const CUSTOMER_MESSAGES_VISIBLE_REFRESH_MS = 5_000;
+const CUSTOMER_NOTIFICATION_CENTRE_REFRESH_MS = 10_000;
 const customerBookingChangeServiceOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -164,6 +170,17 @@ function normalize(value: string) {
 
 function compactSingaporeTimeLabel(value: string) {
   return value.match(/\b\d{2}:\d{2}\b/)?.[0] || "";
+}
+
+function customerNotificationTime(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Intl.DateTimeFormat("en-SG", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Singapore",
+      }).format(new Date(timestamp))
+    : "Time unavailable";
 }
 
 function getBookingMonthInfo(booking: CustomerPortalBooking) {
@@ -251,13 +268,36 @@ function readCustomerPortalBookingDeepLink() {
 
   const params = new URLSearchParams(window.location.search);
   const bookingReference = safePortalBookingReference(params.get("booking"));
+  const savedPage = Number(params.get("saved_page"));
+  const travelerId = Number(params.get("traveler_id"));
 
   return bookingReference
     ? {
         bookingReference,
         openTracking: params.get("tracking") === "1",
+        savedPage: Number.isSafeInteger(savedPage) && savedPage > 0 ? savedPage : 1,
+        travelerId:
+          Number.isSafeInteger(travelerId) && travelerId > 0 ? travelerId : null,
       }
     : null;
+}
+
+function clearCustomerPortalBookingDeepLink() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const alertParameterNames = new Set(["booking", "tracking", "saved_page", "traveler_id"]);
+  const retainedParameters = new URLSearchParams(
+    [...new URLSearchParams(window.location.search).entries()].filter(
+      ([key]) => !alertParameterNames.has(key),
+    ),
+  ).toString();
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${window.location.pathname}${retainedParameters ? `?${retainedParameters}` : ""}${window.location.hash}`,
+  );
 }
 
 function customerPortalInvoiceFolder(invoice: CustomerPortalInvoiceRecord): InvoiceFolder {
@@ -429,6 +469,16 @@ export default function CustomerPortalPage() {
   const [activeTrackingBookingId, setActiveTrackingBookingId] = useState("");
   const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
   const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
+  const [customerNotificationCentreAlerts, setCustomerNotificationCentreAlerts] =
+    useState<CustomerNotificationCentreAlert[]>([]);
+  const [customerNotificationCentreCount, setCustomerNotificationCentreCount] = useState(0);
+  const [customerNotificationCentreOpen, setCustomerNotificationCentreOpen] = useState(false);
+  const [customerNotificationCentreStatus, setCustomerNotificationCentreStatus] =
+    useState<CustomerNotificationCentreStatus>("loading");
+  const [customerNotificationOpeningReference, setCustomerNotificationOpeningReference] =
+    useState("");
+  const [customerNotificationNavigationMessage, setCustomerNotificationNavigationMessage] =
+    useState("");
   const [customerQuickReplies, setCustomerQuickReplies] = useState<CustomerQuickReplyState>({});
   const [customerMessageDrafts, setCustomerMessageDrafts] = useState<Record<string, string>>({});
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
@@ -439,14 +489,50 @@ export default function CustomerPortalPage() {
   const [customerInvoicesLoadState, setCustomerInvoicesLoadState] =
     useState<PortalInvoicesLoadState>("loading");
   const [principalLogoutBusy, setPrincipalLogoutBusy] = useState(false);
+  const portalSavedBookingsServerPageRef = useRef(1);
+  const portalSavedBookingsTravelerIdRef = useRef<number | null>(null);
   const [invoiceDownloadStates, setInvoiceDownloadStates] =
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const companyContactLines = companyProfileContactLines(companyProfile);
+  const customerNotificationCentreCountLabel =
+    customerNotificationCentreStatus === "ready"
+      ? String(customerNotificationCentreCount)
+      : customerNotificationCentreCount > 0
+        ? `${customerNotificationCentreCount}+`
+        : "?";
+
+  const refreshCustomerNotificationCentre = useCallback(
+    async ({ signal }: { signal?: AbortSignal } = {}) => {
+      const result = await loadCustomerNotificationCentre({ signal });
+      if (signal?.aborted) {
+        return;
+      }
+      if (result.status !== "ready") {
+        setCustomerNotificationCentreStatus("blocked");
+        return;
+      }
+      setCustomerNotificationCentreAlerts(result.alerts);
+      setCustomerNotificationCentreCount(result.alertCount);
+      setCustomerNotificationCentreStatus("ready");
+    },
+    [],
+  );
 
   const refreshCustomerPortalSavedBookings = useCallback(
     async ({ resetView = false, signal }: { resetView?: boolean; signal: AbortSignal }) => {
-      const loadedBookings = await loadCustomerPortalSavedBookings({ signal, travelerId: selectedManagedBossId });
+      const deepLink = resetView ? readCustomerPortalBookingDeepLink() : null;
+      const deepLinkMatchesScope =
+        deepLink &&
+        (deepLink.travelerId === null || deepLink.travelerId === selectedManagedBossId);
+      const requestedPage = deepLinkMatchesScope
+        ? deepLink.savedPage
+        : portalSavedBookingsServerPageRef.current;
+      const loadedBookings = await loadCustomerPortalSavedBookings({
+        page: requestedPage,
+        signal,
+        travelerId: selectedManagedBossId,
+      });
 
       if (signal.aborted) {
         return;
@@ -454,6 +540,10 @@ export default function CustomerPortalPage() {
 
       setPortalBookings(loadedBookings || []);
       setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
+      if (loadedBookings !== null) {
+        portalSavedBookingsServerPageRef.current = requestedPage;
+        portalSavedBookingsTravelerIdRef.current = selectedManagedBossId;
+      }
 
       if (!resetView) {
         return;
@@ -510,8 +600,17 @@ export default function CustomerPortalPage() {
           (role === "pa" || role === "boss") &&
           (rootMembership || bosses.length > 0)
         ) {
-          setCustomerPrincipalAccess({ managed_bosses: bosses, principal_role: role, status: "principal" });
-          if (bosses[0]) setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
+          setCustomerPrincipalAccess({ booker_root: rootMembership, managed_bosses: bosses, principal_role: role, status: "principal" });
+          const deepLinkTravelerId = readCustomerPortalBookingDeepLink()?.travelerId;
+          const verifiedDeepLinkBoss = bosses.find(
+            (boss: { traveler_id: number; verified_boss_name: string }) =>
+              boss.traveler_id === deepLinkTravelerId,
+          );
+          if (verifiedDeepLinkBoss) {
+            setSelectedManagedBossId(verifiedDeepLinkBoss.traveler_id);
+          } else if (bosses[0]) {
+            setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
+          }
           setActiveSection((current) => current === "Invoices" ? "Upcoming" : current);
           return;
         }
@@ -863,6 +962,42 @@ export default function CustomerPortalPage() {
   }, [refreshCustomerPortalSavedBookings]);
 
   useEffect(() => {
+    if (
+      portalBookingsLoadState !== "ready" ||
+      customerPrincipalAccess.status === "checking"
+    ) {
+      return;
+    }
+
+    let controller = new AbortController();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      controller.abort();
+      controller = new AbortController();
+      void refreshCustomerNotificationCentre({ signal: controller.signal });
+    };
+    refresh();
+    const interval = window.setInterval(
+      refresh,
+      CUSTOMER_NOTIFICATION_CENTRE_REFRESH_MS,
+    );
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [
+    customerPrincipalAccess.status,
+    portalBookingsLoadState,
+    refreshCustomerNotificationCentre,
+  ]);
+
+  useEffect(() => {
     let activeController: AbortController | null = null;
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
@@ -962,6 +1097,10 @@ export default function CustomerPortalPage() {
 
   function handleSectionChange(section: PortalSection) {
     const nextFilter: BookingFilter = bookingFilterSet.has(section) ? (section as BookingFilter) : "Upcoming";
+    const restoreCurrentSavedBookings = portalSavedBookingsServerPageRef.current !== 1;
+
+    clearCustomerPortalBookingDeepLink();
+    portalSavedBookingsServerPageRef.current = 1;
 
     setActiveSection(section);
     setExpandedBookingId("");
@@ -972,6 +1111,9 @@ export default function CustomerPortalPage() {
     setCheckingTripUpdatesId("");
     setBookingPages((current) => ({ ...current, [nextFilter]: 1 }));
     setSelectedBookingMonths((current) => ({ ...current, [nextFilter]: "" }));
+    if (restoreCurrentSavedBookings) {
+      void refreshCustomerPortalSavedBookings({ signal: new AbortController().signal });
+    }
   }
 
   function handleSearchChange(value: string) {
@@ -1142,11 +1284,28 @@ export default function CustomerPortalPage() {
         return;
       }
 
+      if (
+        deepLink.travelerId !== null &&
+        deepLink.travelerId !== selectedManagedBossId
+      ) {
+        return;
+      }
+
+      if (
+        portalSavedBookingsServerPageRef.current !== deepLink.savedPage ||
+        portalSavedBookingsTravelerIdRef.current !== selectedManagedBossId
+      ) {
+        return;
+      }
+
       const targetBooking = portalBookings.find(
         (booking) => booking.publicBookingReference === deepLink.bookingReference,
       );
 
       if (!targetBooking) {
+        clearCustomerPortalBookingDeepLink();
+        portalSavedBookingsServerPageRef.current = 1;
+        void refreshCustomerPortalSavedBookings({ signal: new AbortController().signal });
         setDeepLinkApplied(true);
         return;
       }
@@ -1212,7 +1371,9 @@ export default function CustomerPortalPage() {
     loadTripUpdatesForBooking,
     portalBookings,
     portalBookingsLoadState,
+    refreshCustomerPortalSavedBookings,
     refreshCustomerTrackingForBooking,
+    selectedManagedBossId,
   ]);
 
   useEffect(() => {
@@ -1652,6 +1813,51 @@ export default function CustomerPortalPage() {
     }
   }
 
+  async function openCustomerNotificationBooking(publicBookingReference: string) {
+    setCustomerNotificationOpeningReference(publicBookingReference);
+    setCustomerNotificationNavigationMessage("");
+    const travelerIds = customerPrincipalAccess.status === "principal"
+      ? customerPrincipalAccess.booker_root
+        ? [null]
+        : [
+            selectedManagedBossId,
+            ...customerPrincipalAccess.managed_bosses.map((boss) => boss.traveler_id),
+          ].filter(
+            (travelerId, index, values): travelerId is number =>
+              Number.isSafeInteger(travelerId) &&
+              Number(travelerId) > 0 &&
+              values.indexOf(travelerId) === index,
+          )
+      : [null];
+
+    try {
+      for (const travelerId of travelerIds) {
+        const target = await findCustomerPortalSavedBooking({
+          publicBookingReference,
+          travelerId,
+        });
+        if (!target) {
+          continue;
+        }
+        setCustomerNotificationCentreOpen(false);
+        const nextUrl = new URL("/my-bookings", window.location.origin);
+        nextUrl.searchParams.set("booking", publicBookingReference);
+        nextUrl.searchParams.set("tracking", "1");
+        nextUrl.searchParams.set("saved_page", String(target.page));
+        if (travelerId !== null) {
+          nextUrl.searchParams.set("traveler_id", String(travelerId));
+        }
+        window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
+        return;
+      }
+      setCustomerNotificationNavigationMessage(
+        "This booking is no longer available for this signed-in account.",
+      );
+    } finally {
+      setCustomerNotificationOpeningReference("");
+    }
+  }
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-3 py-4 text-slate-950 sm:px-4 lg:px-6"
@@ -1726,7 +1932,93 @@ export default function CustomerPortalPage() {
               ) : null}
             </div>
           </div>
-          <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
+            {portalBookingsLoadState === "ready" && customerPrincipalAccess.status !== "checking" ? (
+              <button
+                aria-controls="customer-notification-centre"
+                aria-expanded={customerNotificationCentreOpen}
+                className="min-h-11 shrink-0 rounded-full border border-sky-700 bg-white px-3 text-xs font-bold text-sky-900"
+                data-customer-notification-centre-trigger="true"
+                onClick={() => setCustomerNotificationCentreOpen((current) => !current)}
+                type="button"
+              >
+                Alerts {customerNotificationCentreCountLabel}
+              </button>
+            ) : null}
+          </div>
+          {portalBookingsLoadState === "ready" &&
+          customerPrincipalAccess.status !== "checking" &&
+          customerNotificationCentreOpen ? (
+            <section
+              aria-label="Customer alerts"
+              className="mt-2 max-h-[28rem] space-y-2 overflow-y-auto rounded-xl border border-sky-200 bg-white p-2 shadow-lg"
+              data-customer-notification-centre="true"
+              id="customer-notification-centre"
+            >
+              <div className="px-2 py-1">
+                <h2 className="text-sm font-bold text-slate-950">Current alerts</h2>
+                <p className="text-xs font-semibold leading-5 text-slate-500">
+                  Driver and Prestige updates for this Customer account.
+                </p>
+              </div>
+              {customerNotificationNavigationMessage ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                  {customerNotificationNavigationMessage}
+                </p>
+              ) : null}
+              {customerNotificationCentreAlerts.map((alert) => (
+                <button
+                  className="flex min-h-16 w-full items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left ring-1 ring-slate-200"
+                  data-customer-notification-purpose="booking-update"
+                  key={alert.publicBookingReference}
+                  disabled={customerNotificationOpeningReference === alert.publicBookingReference}
+                  onClick={() => void openCustomerNotificationBooking(alert.publicBookingReference)}
+                  type="button"
+                >
+                  <span className="min-w-0 break-words">
+                    <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Booking {alert.publicBookingReference}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-bold text-slate-950">
+                      {alert.latestTitle}
+                    </span>
+                    <span className="block text-xs font-semibold leading-5 text-slate-600">
+                      {alert.latestMessage}
+                    </span>
+                    <span className="mt-1 block text-[11px] font-semibold text-slate-500">
+                      {customerNotificationTime(alert.createdAt)}
+                    </span>
+                  </span>
+                  <span
+                    className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                      alert.priority === "urgent" || alert.priority === "high"
+                        ? "bg-amber-100 text-amber-950"
+                        : "bg-sky-100 text-sky-950"
+                    }`}
+                  >
+                    {alert.notificationCount}
+                  </span>
+                </button>
+              ))}
+              {customerNotificationCentreStatus === "loading" ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
+                  Checking current alerts…
+                </p>
+              ) : null}
+              {customerNotificationCentreStatus === "ready" &&
+              customerNotificationCentreCount === 0 ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
+                  No current alerts.
+                </p>
+              ) : null}
+              {customerNotificationCentreStatus === "blocked" ? (
+                <p className="px-2 py-1 text-xs font-semibold leading-5 text-amber-800">
+                  Customer alerts are temporarily unavailable. Refresh before relying on this count.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           {companyContactLines.length > 0 ? (
             <p
               className="text-xs leading-5 text-slate-600"
@@ -1761,7 +2053,10 @@ export default function CustomerPortalPage() {
             View bookings for
             <select
               className="mt-1 w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-slate-950"
-              onChange={(event) => setSelectedManagedBossId(Number(event.target.value))}
+              onChange={(event) => {
+                portalSavedBookingsServerPageRef.current = 1;
+                setSelectedManagedBossId(Number(event.target.value));
+              }}
               value={selectedManagedBossId || ""}
             >
               {customerPrincipalAccess.managed_bosses.map((boss) => (

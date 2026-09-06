@@ -31,7 +31,9 @@ const sourceFiles = [
   "lib/customer-runtime-session-map.ts",
   "lib/customer-device-push-notification.ts",
   "lib/driver-device-push-notification.ts",
+  "lib/customer-saved-bookings-read.ts",
   "lib/customer-driver-app-notification-persistence.ts",
+  "lib/customer-portal-trip-updates-adapter.ts",
   "lib/customer-portal-access-account.ts",
   "lib/customer-portal-access-link.ts",
   "lib/admin-booking-supabase-adapter.ts",
@@ -292,6 +294,9 @@ async function loadHarness() {
     notificationPersistence: require(
       path.join(tempDir, "lib/customer-driver-app-notification-persistence.js"),
     ),
+    tripUpdatesAdapter: require(
+      path.join(tempDir, "lib/customer-portal-trip-updates-adapter.js"),
+    ),
   };
 }
 
@@ -318,6 +323,26 @@ class MockSupabaseQuery {
     return this;
   }
 
+  gt(column, value) {
+    this.filters.push({
+      column,
+      type: "gt",
+      value,
+    });
+
+    return this;
+  }
+
+  gte(column, value) {
+    this.filters.push({
+      column,
+      type: "gte",
+      value,
+    });
+
+    return this;
+  }
+
   in(column, values) {
     this.filters.push({
       column,
@@ -337,6 +362,16 @@ class MockSupabaseQuery {
 
   limit(count) {
     this.resultLimit = count;
+
+    return this;
+  }
+
+  lt(column, value) {
+    this.filters.push({
+      column,
+      type: "lt",
+      value,
+    });
 
     return this;
   }
@@ -471,6 +506,18 @@ class MockSupabaseClient {
       return filter.value.includes(row[filter.column]);
     }
 
+    if (filter.type === "gt") {
+      return row[filter.column] > filter.value;
+    }
+
+    if (filter.type === "gte") {
+      return row[filter.column] >= filter.value;
+    }
+
+    if (filter.type === "lt") {
+      return row[filter.column] < filter.value;
+    }
+
     return row[filter.column] === filter.value;
   }
 
@@ -535,6 +582,14 @@ class MockSupabaseClient {
     }
 
     const rows = this.filterRows(table, filters);
+    if (filters.some((filter) => filter.type === "gt" || filter.type === "lt") && orderBy) {
+      rows.sort((left, right) => {
+        const comparison = String(left[orderBy.column] || "").localeCompare(
+          String(right[orderBy.column] || ""),
+        );
+        return orderBy.options?.ascending === false ? -comparison : comparison;
+      });
+    }
     const limitedRows = typeof resultLimit === "number" ? rows.slice(0, resultLimit) : rows;
 
     if (resultMode === "single") {
@@ -741,9 +796,38 @@ try {
     driverQuickReplyRoute,
     driverRoute,
     notificationPersistence,
+    tripUpdatesAdapter,
   } = await loadHarness();
 
   try {
+    const maximumStoredCustomerMessage = "A".repeat(1000);
+    const mappedLongMessageCentre = tripUpdatesAdapter.mapCustomerNotificationCentrePayload({
+      alert_count: 1,
+      alerts: [
+        {
+          created_at: "2026-09-06T03:30:00.000Z",
+          latest_message: maximumStoredCustomerMessage,
+          latest_title: "Prestige update",
+          notification_count: 1,
+          notification_type: "trip_update",
+          priority: "normal",
+          public_booking_reference: "10906",
+          workflow_area: "admin_customer_job_messages",
+        },
+      ],
+      delivery_surface: "customer_app",
+      external_send: false,
+      notification_count: 1,
+      ok: true,
+      provider_send: false,
+      version: "customer-notification-centre-long-message-contract",
+    });
+    assert.equal(mappedLongMessageCentre.status, "ready");
+    assert.equal(mappedLongMessageCentre.alertCount, 1);
+    assert.equal(mappedLongMessageCentre.alerts.length, 1);
+    assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.length, 500);
+    assert.equal(mappedLongMessageCentre.alerts[0].latestMessage.endsWith("..."), true);
+
     setEnv({
       ...validEnv(),
       PRESTIGE_CUSTOMER_IN_APP_NOTIFICATION_ACCOUNT_ALLOWLIST: undefined,
@@ -1514,6 +1598,7 @@ try {
     );
 
     const rootPrincipalToken = "customer_principal_v1.booker-root-notifications";
+    const bossPrincipalToken = "customer_principal_v1.boss-notifications";
     const wrongRootPrincipalToken = "customer_principal_v1.wrong-booker-notifications";
     globalThis.__prestigeCustomerNotificationPrincipalSessions = new Map([
       [
@@ -1530,6 +1615,22 @@ try {
           normalized_email: "booker@example.test",
           principal_id: "11111111-1111-4111-8111-111111111111",
           principal_role: "pa",
+        },
+      ],
+      [
+        bossPrincipalToken,
+        {
+          memberships: [{
+            booker_id: 26,
+            company_id: 53,
+            customer_account_reference: "customer-runtime-account-001",
+            membership_role: "boss",
+            traveler_id: 41,
+            verified_boss_name: "Verified Boss",
+          }],
+          normalized_email: "boss@example.test",
+          principal_id: "33333333-3333-4333-8333-333333333333",
+          principal_role: "boss",
         },
       ],
       [
@@ -1586,6 +1687,260 @@ try {
     assert.equal(rootPrincipalRead.body.notifications.length, 1);
     assert.equal(rootPrincipalRead.body.notifications[0].safe_message, "Shared booking message.");
     assert.equal(rootPrincipalReadMock.client.insertHistory.length, 0);
+
+    const pagedCentreNotifications = Array.from({ length: 501 }, (_, index) =>
+      seededNotification({
+        booking_reference: "BOOK-CUST-CENTRE-001",
+        created_at: new Date(Date.UTC(2026, 7, 1, 0, 0, index)).toISOString(),
+        id: `notification-centre-${String(501 - index).padStart(4, "0")}`,
+        notification_type: index % 2 === 0 ? "booking_status" : "trip_update",
+        safe_message: `Safe customer update ${index + 1}.`,
+        safe_title: index === 500 ? "Latest safe customer update" : "Customer update",
+        workflow_area: index % 2 === 0 ? "customer_booking_request" : "admin_customer_job_messages",
+      }),
+    );
+    const customerPrincipalCentreMock = installMockClient({
+      [notificationTable]: [
+        ...pagedCentreNotifications,
+        seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-OLD",
+          id: "notification-centre-outside-booking-history-window",
+          safe_message: "An old booking alert must not remain in the current centre.",
+          safe_title: "Old booking update",
+        }),
+        seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-OTHER",
+          id: "notification-centre-cross-account",
+          safe_message: "Another account must not see this alert.",
+          safe_title: "Cross-account alert",
+        }),
+      ],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-CENTRE-001",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10906",
+          pickup_at: new Date().toISOString(),
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-OLD",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10800",
+          pickup_at: "2024-01-01T00:00:00.000Z",
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-OTHER",
+          booker_id: 27,
+          company_id: 53,
+          customer_id: "other-account",
+          public_booking_reference: "10907",
+          pickup_at: new Date().toISOString(),
+          traveler_id: 42,
+        },
+      ],
+    });
+    const customerPrincipalCentre = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(customerPrincipalCentre.status, 200);
+    assert.equal(customerPrincipalCentre.body.alert_count, 501);
+    assert.equal(customerPrincipalCentre.body.notification_count, 501);
+    assert.deepEqual(customerPrincipalCentre.body.alerts, [
+      {
+        created_at: "2026-08-01T00:08:20.000Z",
+        latest_message: "Safe customer update 501.",
+        latest_title: "Latest safe customer update",
+        notification_count: 501,
+        notification_type: "booking_status",
+        priority: "normal",
+        public_booking_reference: "10906",
+        workflow_area: "customer_booking_request",
+      },
+    ]);
+    assert.equal(
+      customerPrincipalCentreMock.client.selectHistory.filter(
+        (entry) => entry.table === notificationTable,
+      ).length,
+      4,
+      "Expected two stable account-scoped snapshots to cursor beyond the first 500 queued alerts.",
+    );
+    assert.deepEqual(
+      customerPrincipalCentreMock.client.selectHistory.find(
+        (entry) => entry.table === "bookings",
+      )?.filters,
+      [
+        { column: "company_id", type: "eq", value: 53 },
+        { column: "booker_id", type: "eq", value: 26 },
+        {
+          column: "pickup_at",
+          type: "gte",
+          value: customerPrincipalCentreMock.client.selectHistory.find(
+            (entry) => entry.table === "bookings",
+          )?.filters.find((filter) => filter.column === "pickup_at")?.value,
+        },
+      ],
+      "Expected the Customer centre to scope the PA root by verified Company+Booker identity and the My Bookings history window.",
+    );
+    assert.match(
+      customerPrincipalCentreMock.client.selectHistory.find(
+        (entry) => entry.table === "bookings",
+      )?.filters.find((filter) => filter.column === "pickup_at")?.value || "",
+      /^\d{4}-\d{2}-01T00:00:00\.000Z$/,
+      "Expected the Customer centre to use the established month-boundary history window.",
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerPrincipalCentre.body)), false);
+    assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
+    assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+
+    const customerBossCentreMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-BOSS",
+          id: "notification-centre-boss",
+          safe_message: "The driver is on the way for the Boss booking.",
+          safe_title: "Driver on the way",
+        }),
+        seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-SIBLING",
+          id: "notification-centre-sibling",
+          safe_message: "A sibling verified Boss must not see this sibling booking.",
+          safe_title: "Sibling booking update",
+        }),
+      ],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-CENTRE-BOSS-NO-ALERT",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10908",
+          pickup_at: new Date().toISOString(),
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-BOSS",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10909",
+          pickup_at: new Date().toISOString(),
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-SIBLING",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10910",
+          pickup_at: new Date().toISOString(),
+          traveler_id: 42,
+        },
+      ],
+    });
+    const customerBossCentre = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": bossPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(customerBossCentre.status, 200);
+    assert.equal(customerBossCentre.body.alert_count, 1);
+    assert.deepEqual(
+      customerBossCentre.body.alerts.map((alert) => alert.public_booking_reference),
+      ["10909"],
+      "Expected the Boss to use the same notification centre while seeing only that verified Traveller's booking.",
+    );
+    assert.deepEqual(
+      customerBossCentreMock.client.selectHistory.find(
+        (entry) => entry.table === "bookings",
+      )?.filters,
+      [
+        { column: "company_id", type: "eq", value: 53 },
+        { column: "booker_id", type: "eq", value: 26 },
+        { column: "traveler_id", type: "eq", value: 41 },
+        {
+          column: "pickup_at",
+          type: "gte",
+          value: customerBossCentreMock.client.selectHistory.find(
+            (entry) => entry.table === "bookings",
+          )?.filters.find((filter) => filter.column === "pickup_at")?.value,
+        },
+      ],
+      "Expected Boss alerts to require exact Company+Booker+Traveller membership inside the My Bookings history window.",
+    );
+    assert.equal(
+      JSON.stringify(customerBossCentre.body).includes("Sibling booking update"),
+      false,
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerBossCentre.body)), false);
+    assert.equal(customerBossCentreMock.client.insertHistory.length, 0);
+    assert.equal(customerBossCentreMock.client.updateHistory.length, 0);
+
+    const unstableCustomerCentreMock = installMockClient({
+      [notificationTable]: pagedCentreNotifications,
+      bookings: [{
+        booking_reference: "BOOK-CUST-CENTRE-001",
+        booker_id: 26,
+        company_id: 53,
+        customer_id: "customer-runtime-account-001",
+        public_booking_reference: "10906",
+        pickup_at: new Date().toISOString(),
+        traveler_id: 41,
+      }],
+    });
+    const stableSelectRows = unstableCustomerCentreMock.client.selectRows.bind(
+      unstableCustomerCentreMock.client,
+    );
+    let unstableNotificationReadCount = 0;
+    unstableCustomerCentreMock.client.selectRows = (...args) => {
+      if (args[0] === notificationTable) {
+        unstableNotificationReadCount += 1;
+        if (unstableNotificationReadCount === 3) {
+          unstableCustomerCentreMock.client.tables[notificationTable].pop();
+        }
+      }
+      return stableSelectRows(...args);
+    };
+    const unstableCustomerCentre = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": rootPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(unstableCustomerCentre.status, 409);
+    assert.deepEqual(unstableCustomerCentre.body, {
+      error: "Customer app notification read failed safely.",
+      ok: false,
+    });
+    assert.equal(unstableCustomerCentreMock.client.insertHistory.length, 0);
+    assert.equal(unstableCustomerCentreMock.client.updateHistory.length, 0);
 
     const wrongRootPrincipalRead = await responseJson(
       await customerRoute.GET(new Request(

@@ -24,6 +24,17 @@ export type CustomerPortalBooking = {
   vehicleType: string;
 };
 
+export type CustomerPortalSavedBookingMatch = {
+  booking: CustomerPortalBooking;
+  page: number;
+};
+
+type CustomerPortalSavedBookingsPage = {
+  bookings: CustomerPortalBooking[];
+  hasNextPage: boolean;
+  page: number;
+};
+
 type UnknownRecord = Record<string, unknown>;
 type CustomerPortalSavedBookingsFetch = typeof fetch;
 
@@ -373,17 +384,47 @@ export function mapCustomerSavedBookingsPayload(payload: unknown): CustomerPorta
   return mappedBookings;
 }
 
-export async function loadCustomerPortalSavedBookings({
+function mapCustomerSavedBookingsPagePayload(
+  payload: unknown,
+): CustomerPortalSavedBookingsPage | null {
+  const record = asRecord(payload);
+  const pagination = asRecord(record?.pagination);
+  const page = Number(pagination?.page);
+  const bookings = mapCustomerSavedBookingsPayload(payload);
+  if (
+    !pagination ||
+    bookings === null ||
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    typeof pagination.has_next_page !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    bookings,
+    hasNextPage: pagination.has_next_page,
+    page,
+  };
+}
+
+async function loadCustomerPortalSavedBookingsPage({
   fetcher = fetch,
+  page = 1,
   signal,
   travelerId,
 }: {
   fetcher?: CustomerPortalSavedBookingsFetch;
+  page?: number;
   signal?: AbortSignal;
   travelerId?: number | null;
-} = {}): Promise<CustomerPortalBooking[] | null> {
+} = {}): Promise<CustomerPortalSavedBookingsPage | null> {
   try {
+    if (!Number.isSafeInteger(page) || page < 1) {
+      return null;
+    }
     const params = new URLSearchParams({ limit: "25", page: "1" });
+    if (page !== 1) params.set("page", String(page));
     if (travelerId && Number.isSafeInteger(travelerId)) params.set("traveler_id", String(travelerId));
     const response = await fetcher(`${customerPortalSavedBookingsApiPath}?${params.toString()}`, {
       cache: "no-store",
@@ -398,8 +439,66 @@ export async function loadCustomerPortalSavedBookings({
       return null;
     }
 
-    return mapCustomerSavedBookingsPayload(await response.json());
+    const mappedPage = mapCustomerSavedBookingsPagePayload(await response.json());
+    return mappedPage?.page === page ? mappedPage : null;
   } catch {
     return null;
   }
+}
+
+export async function loadCustomerPortalSavedBookings({
+  fetcher = fetch,
+  page = 1,
+  signal,
+  travelerId,
+}: {
+  fetcher?: CustomerPortalSavedBookingsFetch;
+  page?: number;
+  signal?: AbortSignal;
+  travelerId?: number | null;
+} = {}): Promise<CustomerPortalBooking[] | null> {
+  const result = await loadCustomerPortalSavedBookingsPage({ fetcher, page, signal, travelerId });
+  return result?.bookings || null;
+}
+
+export async function findCustomerPortalSavedBooking({
+  fetcher = fetch,
+  publicBookingReference,
+  signal,
+  travelerId,
+}: {
+  fetcher?: CustomerPortalSavedBookingsFetch;
+  publicBookingReference: string;
+  signal?: AbortSignal;
+  travelerId?: number | null;
+}): Promise<CustomerPortalSavedBookingMatch | null> {
+  const safeReference = safeBookingReference(publicBookingReference);
+  if (!safeReference) {
+    return null;
+  }
+
+  let page = 1;
+  while (!signal?.aborted) {
+    const result = await loadCustomerPortalSavedBookingsPage({
+      fetcher,
+      page,
+      signal,
+      travelerId,
+    });
+    if (!result) {
+      return null;
+    }
+    const booking = result.bookings.find(
+      (candidate) => candidate.publicBookingReference === safeReference,
+    );
+    if (booking) {
+      return { booking, page };
+    }
+    if (!result.hasNextPage) {
+      return null;
+    }
+    page += 1;
+  }
+
+  return null;
 }

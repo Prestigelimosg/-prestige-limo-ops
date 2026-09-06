@@ -16,6 +16,23 @@ export type CustomerPortalTripUpdatesResult = {
   updates: CustomerPortalTripUpdate[];
 };
 
+export type CustomerNotificationCentreAlert = {
+  createdAt: string;
+  latestMessage: string;
+  latestTitle: string;
+  notificationCount: number;
+  notificationType: string;
+  priority: "high" | "low" | "normal" | "urgent";
+  publicBookingReference: string;
+  workflowArea: string;
+};
+
+export type CustomerNotificationCentreResult = {
+  alertCount: number;
+  alerts: CustomerNotificationCentreAlert[];
+  status: "blocked" | "ready";
+};
+
 type UnknownRecord = Record<string, unknown>;
 type CustomerPortalTripUpdatesFetch = typeof fetch;
 
@@ -28,6 +45,26 @@ const allowedPayloadFields = new Set([
   "ok",
   "provider_send",
   "version",
+]);
+const allowedNotificationCentrePayloadFields = new Set([
+  "alert_count",
+  "alerts",
+  "delivery_surface",
+  "external_send",
+  "notification_count",
+  "ok",
+  "provider_send",
+  "version",
+]);
+const allowedNotificationCentreAlertFields = new Set([
+  "created_at",
+  "latest_message",
+  "latest_title",
+  "notification_count",
+  "notification_type",
+  "priority",
+  "public_booking_reference",
+  "workflow_area",
 ]);
 const allowedUpdateFields = new Set([
   "booking_reference",
@@ -289,5 +326,101 @@ export async function loadCustomerPortalTripUpdates({
       status: "empty",
       updates: [],
     };
+  }
+}
+
+function mapCustomerNotificationCentreAlert(
+  value: unknown,
+): CustomerNotificationCentreAlert | null {
+  const record = asRecord(value);
+  if (hasUnsafeKeys(record, allowedNotificationCentreAlertFields)) {
+    return null;
+  }
+  const publicBookingReference = safeBookingReference(
+    safeText(record.public_booking_reference, 120),
+  );
+  const latestTitle = safeText(record.latest_title, 160);
+  const persistedLatestMessage = safeText(record.latest_message, 1000);
+  const latestMessage =
+    persistedLatestMessage && persistedLatestMessage.length > 500
+      ? `${persistedLatestMessage.slice(0, 497)}...`
+      : persistedLatestMessage;
+  const notificationCount = Number(record.notification_count);
+  const priority = safeText(record.priority, 40);
+  if (
+    !publicBookingReference ||
+    !latestTitle ||
+    !latestMessage ||
+    !Number.isSafeInteger(notificationCount) ||
+    notificationCount < 1 ||
+    !["high", "low", "normal", "urgent"].includes(priority)
+  ) {
+    return null;
+  }
+  return {
+    createdAt: safeText(record.created_at, 80),
+    latestMessage,
+    latestTitle,
+    notificationCount,
+    notificationType: safeText(record.notification_type, 80),
+    priority: priority as CustomerNotificationCentreAlert["priority"],
+    publicBookingReference,
+    workflowArea: safeText(record.workflow_area, 80),
+  };
+}
+
+export function mapCustomerNotificationCentrePayload(
+  payload: unknown,
+): CustomerNotificationCentreResult {
+  const record = asRecord(payload);
+  const alertCount = Number(record.alert_count);
+  if (
+    record.ok !== true ||
+    record.delivery_surface !== "customer_app" ||
+    record.external_send !== false ||
+    record.provider_send !== false ||
+    hasUnsafeKeys(record, allowedNotificationCentrePayloadFields) ||
+    !Array.isArray(record.alerts) ||
+    !Number.isSafeInteger(alertCount) ||
+    alertCount < 0
+  ) {
+    return { alertCount: 0, alerts: [], status: "blocked" };
+  }
+  const alerts = record.alerts
+    .map(mapCustomerNotificationCentreAlert)
+    .filter((alert): alert is CustomerNotificationCentreAlert => Boolean(alert));
+  if (alerts.length !== record.alerts.length) {
+    return { alertCount: 0, alerts: [], status: "blocked" };
+  }
+  return { alertCount, alerts, status: "ready" };
+}
+
+export async function loadCustomerNotificationCentre({
+  fetcher = fetch,
+  signal,
+}: {
+  fetcher?: CustomerPortalTripUpdatesFetch;
+  signal?: AbortSignal;
+} = {}): Promise<CustomerNotificationCentreResult> {
+  try {
+    const params = new URLSearchParams();
+    params.set("view", "centre");
+    const response = await fetcher(
+      `${customerPortalTripUpdatesApiPath}?${params.toString()}`,
+      {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "x-prestige-customer-purpose": "customer-in-app-notification-read",
+        },
+        signal,
+      },
+    );
+    if (!response.ok) {
+      return { alertCount: 0, alerts: [], status: "blocked" };
+    }
+    return mapCustomerNotificationCentrePayload(await response.json());
+  } catch {
+    return { alertCount: 0, alerts: [], status: "blocked" };
   }
 }

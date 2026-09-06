@@ -50,6 +50,7 @@ includes("lib/driver-pool-fast-accept.ts", [
   "PRESTIGE_DRIVER_POOL_ENABLED", "driverPoolIsEnabled", "parseDriverPoolPublishPayload",
   "parseDriverPoolAttentionQuery", "loadAdminDriverPoolAttentionOffers",
   'attention_status: "accepted_link_pending"', '.from("driver_job_links")',
+  "loadDriverPoolWinnerPlate", '.from("drivers")', '.select("plate_number")',
   "offer_payout_sgd", "publish_driver_pool_offer", "cancel_driver_pool_offer",
   "accept_driver_pool_offer", "decline_driver_pool_offer", "list_driver_pool_available_jobs",
   "sendDriverDevicePushAlertForDriverPoolOffer", "eligible, enabled: true, offer",
@@ -143,6 +144,40 @@ console.error = (...args) => diagnosticLogs.push(args);
 globalThis.setTimeout = (callback, delay, ...args) =>
   originalSetTimeout(callback, Math.min(Number(delay), 20), ...args);
 try {
+  const winnerPlateReadTables = [];
+  const winnerPlate = await timeoutHarness.helper.loadDriverPoolWinnerPlate({
+    from(table) {
+      winnerPlateReadTables.push(table);
+      return {
+        select(columns) {
+          assert.equal(columns, "plate_number");
+          return this;
+        },
+        eq(column, value) {
+          assert.equal(column, "id");
+          assert.equal(value, 17);
+          return this;
+        },
+        maybeSingle: async () => ({ data: { plate_number: "  SKA   9696 A  " }, error: null }),
+      };
+    },
+  }, 17);
+  assert.equal(winnerPlate, "SKA 9696 A", "winner plate helper must return only the bounded normalized plate");
+  assert.deepEqual(winnerPlateReadTables, ["drivers"], "winner plate helper must read only the exact Driver table");
+  assert.equal(
+    await timeoutHarness.helper.loadDriverPoolWinnerPlate({
+      from() {
+        return {
+          select() { return this; },
+          eq() { return this; },
+          maybeSingle: async () => ({ data: { plate_number: "VEHICLE TBC" }, error: null }),
+        };
+      },
+    }, 17),
+    null,
+    "placeholder plate text must fail closed before the Admin winner alert",
+  );
+
   assert.deepEqual(
     timeoutHarness.helper.parseDriverPoolAttentionQuery(new URLSearchParams("scope=attention&page=2&limit=20")),
     { data: { limit: 20, page: 2 }, ok: true },
@@ -546,17 +581,14 @@ async function loadDriverPoolDecisionRouteHarness() {
     exports.clearDriverPortalSessionCookie = () => "cleared=true";
   `);
   await writeModule("lib/driver-pool-fast-accept.js", `
-    const client = {
-      from(table) {
-        globalThis.__driverPoolPlateReadTables.push(table);
-        return {
-          select() { return this; },
-          eq() { return this; },
-          maybeSingle: async () => ({ data: { plate_number: globalThis.__driverPoolPlate }, error: null }),
-        };
-      },
-    };
+    const client = {};
     exports.getDriverPoolClientForProduction = () => ({ client, ok: true });
+    exports.loadDriverPoolWinnerPlate = async (_client, driverId) => {
+      globalThis.__driverPoolPlateReadTables.push("drivers");
+      if (!Number.isSafeInteger(driverId) || driverId <= 0 || typeof globalThis.__driverPoolPlate !== "string") return null;
+      const plate = globalThis.__driverPoolPlate.trim().replace(/\\s+/g, " ").toUpperCase();
+      return plate && plate.length <= 20 && /\\d/.test(plate) && /^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(plate) ? plate : null;
+    };
     exports.parseDriverPoolDecisionPayload = () => ({
       data: { offer_key: "a".repeat(64), expected_updated_at: "2026-09-05T01:00:00.123456+00:00", idempotency_key: "1".repeat(32) },
       ok: true,
@@ -832,10 +864,15 @@ includes("app/api/driver-job-bids/route.ts", [
   "sendDriverDevicePushAlertForDriverPoolOffer", 'notification_kind: "winner"',
   "sendDriverDeviceSilentRefreshForDriverPoolOffer", "other_recipient_driver_ids",
   "public_booking_reference: acceptedPublicBookingReference", "Promise.allSettled",
-  'result.data.reason === "accepted"', '.from("drivers")', '.select("plate_number")',
-  "safeDriverPlate", "bookingReference: publicBookingReference", "vehiclePlate,",
+  'result.data.reason === "accepted"', "loadDriverPoolWinnerPlate",
+  "bookingReference: publicBookingReference", "vehiclePlate,",
   "A completed atomic Driver Pool assignment must not fail because Admin push is unavailable.",
 ]);
+assert.doesNotMatch(
+  files["app/api/driver-job-bids/route.ts"],
+  /\.(?:from|insert|upsert|update|delete|rpc)\s*\(/,
+  "the public Driver Pool route must keep all database reads and writes behind existing server helpers",
+);
 includes("app/driver-portal/page.tsx", [
   "availableJobsAcceptedConfirmation",
   "Accepted! Pls ack when admin send job link",

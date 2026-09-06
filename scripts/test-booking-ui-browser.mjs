@@ -8812,10 +8812,10 @@ async function runChromeTest() {
       "private email AI rows inside existing Booking Requests",
     );
     assert.equal(emailAiDashboardState.countAttribute, "2");
-    assert.equal(emailAiDashboardState.dashboardBadgeText, "2 new");
+    assert.equal(emailAiDashboardState.dashboardBadgeText, "3 alerts");
     assert.equal(emailAiDashboardState.dashboardNewRequestCount, "2");
-    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "2");
-    const openedSingleCategoryNotificationCentre = await evaluate(`(() => {
+    assert.equal(emailAiDashboardState.dashboardTotalAlertCount, "3");
+    const openedCombinedNotificationCentre = await evaluate(`(() => {
       const badge = document.querySelector('[data-bookings-new-request-badge="true"]');
 
       if (!(badge instanceof HTMLElement)) {
@@ -8826,31 +8826,38 @@ async function runChromeTest() {
       return true;
     })()`);
     assert.equal(
-      openedSingleCategoryNotificationCentre,
+      openedCombinedNotificationCentre,
       true,
       "Expected the existing Dashboard badge to open the Admin notification centre",
     );
-    const singleCategoryNotificationCentreState = await waitForCondition(
+    const combinedNotificationCentreState = await waitForCondition(
       () =>
         evaluate(`(() => {
           const centre = document.querySelector('[data-admin-notification-centre="true"]');
           const emailOption = centre?.querySelector('[data-admin-notification-centre-option="email"]');
+          const savedUpdateOption = centre?.querySelector('[data-admin-notification-centre-option="saved-update"]');
 
-          return centre && emailOption
+          return centre && emailOption && savedUpdateOption
             ? {
                 categoryCount: centre.getAttribute("data-admin-notification-centre-categories"),
                 emailText: emailOption.textContent.replace(/\\s+/g, " ").trim(),
                 optionCount: centre.querySelectorAll("[data-admin-notification-centre-option]").length,
+                savedUpdateText: savedUpdateOption.textContent.replace(/\\s+/g, " ").trim(),
               }
             : false;
         })()`),
       5000,
-      "single-category Admin notification purpose list",
+      "combined Admin notification purpose list",
     );
-    assert.equal(singleCategoryNotificationCentreState.categoryCount, "1");
-    assert.equal(singleCategoryNotificationCentreState.optionCount, 1);
-    assert.match(singleCategoryNotificationCentreState.emailText, /2 booking email/);
-    assert.match(singleCategoryNotificationCentreState.emailText, /existing booking inbox/);
+    assert.equal(combinedNotificationCentreState.categoryCount, "2");
+    assert.equal(combinedNotificationCentreState.optionCount, 2);
+    assert.match(combinedNotificationCentreState.emailText, /2 booking email/);
+    assert.match(combinedNotificationCentreState.emailText, /existing booking inbox/);
+    assert.match(combinedNotificationCentreState.savedUpdateText, /1 Admin update/);
+    assert.match(
+      combinedNotificationCentreState.savedUpdateText,
+      /Driver issue, closeout, billing prep, or system notice/,
+    );
     const openedEmailReviewFromNotificationCentre = await evaluate(`(() => {
       const emailOption = document.querySelector('[data-admin-notification-centre-option="email"]');
 
@@ -8859,13 +8866,21 @@ async function runChromeTest() {
       }
 
       emailOption.click();
-      return !document.querySelector('[data-admin-notification-centre="true"]') &&
-        Boolean(document.querySelector('[data-dashboard-new-booking-requests-panel="true"]'));
+      return true;
     })()`);
     assert.equal(
       openedEmailReviewFromNotificationCentre,
       true,
-      "Expected the notification purpose row to reuse the existing Booking Requests sector",
+      "Expected the email notification purpose row to remain clickable",
+    );
+    await waitForCondition(
+      () =>
+        evaluate(`(() =>
+          !document.querySelector('[data-admin-notification-centre="true"]') &&
+          Boolean(document.querySelector('[data-dashboard-new-booking-requests-panel="true"]'))
+        )()`),
+      5000,
+      "notification purpose row existing Booking Requests handoff",
     );
     assert.equal(
       emailAiDashboardState.requestMethods.every((method) => method === "GET"),

@@ -122,6 +122,14 @@ function publicBookingReference(value: unknown): string | null {
   return /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(clean) ? clean : null;
 }
 
+function safeDriverPlate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const plate = value.trim().replace(/\s+/g, " ").toUpperCase();
+  return plate && plate.length <= 20 && /\d/.test(plate) && /^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(plate)
+    ? plate
+    : null;
+}
+
 function exactKeys(record: UnknownRecord, allowed: readonly string[]) {
   const safe = new Set(allowed);
   return Object.keys(record).every((key) => safe.has(key));
@@ -513,6 +521,20 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
       safe_vehicle_label: text(row.safe_vehicle_label, 120), safe_trip_summary: text(row.safe_trip_summary, 120), updated_at: updated };
   }).filter((job): job is DriverPoolAvailableJob => Boolean(job));
   return { data: { enabled: true, has_more: result.has_more === true, jobs: mapped }, ok: true } as const;
+}
+
+export async function loadDriverPoolWinnerPlate(
+  client: DriverPoolClient,
+  driverId: number,
+): Promise<string | null> {
+  const exactDriverId = positiveDriverIds([driverId])[0];
+  if (!exactDriverId) return null;
+  const { data, error } = await client
+    .from("drivers")
+    .select("plate_number")
+    .eq("id", exactDriverId)
+    .maybeSingle();
+  return error ? null : safeDriverPlate(asRecord(data).plate_number);
 }
 
 export async function decideDriverPoolOffer(client: DriverPoolClient, driverId: number, input: { offer_key: string; expected_updated_at: string; idempotency_key: string }, action: "accept" | "decline") {

@@ -10,6 +10,7 @@ import {
   decideDriverPoolOffer,
   getDriverPoolClientForProduction,
   loadAvailableDriverPoolJobs,
+  loadDriverPoolWinnerPlate,
   parseDriverPoolDecisionPayload,
   type DriverPoolClient,
 } from "../../../lib/driver-pool-fast-accept";
@@ -54,28 +55,14 @@ async function body(request: Request) {
   return request.json().catch(() => ({}));
 }
 
-function safeDriverPlate(value: unknown) {
-  if (typeof value !== "string") return null;
-  const plate = value.trim().replace(/\s+/g, " ").toUpperCase();
-  return plate && plate.length <= 20 && /\d/.test(plate) && /^[A-Z0-9][A-Z0-9 -]{0,19}$/.test(plate)
-    ? plate
-    : null;
-}
-
 async function notifyAdminOfDriverPoolAcceptance(
   client: DriverPoolClient,
   driverId: number,
   publicBookingReference: string,
 ) {
   try {
-    const { data, error } = await client
-      .from("drivers")
-      .select("plate_number")
-      .eq("id", driverId)
-      .maybeSingle();
-
-    const vehiclePlate = safeDriverPlate(data?.plate_number);
-    if (error || !vehiclePlate) return;
+    const vehiclePlate = await loadDriverPoolWinnerPlate(client, driverId);
+    if (!vehiclePlate) return;
 
     await sendAdminDevicePushAlert("driver_pool_accepted", {
       bookingReference: publicBookingReference,

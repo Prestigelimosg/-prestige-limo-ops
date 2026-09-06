@@ -34,6 +34,14 @@ function exportedMethods(source) {
   return [...source.matchAll(/export\s+async\s+function\s+([A-Z]+)\s*\(/g)].map((match) => match[1]).sort();
 }
 
+function exportedFunctionSource(source, functionName, nextFunctionName) {
+  const start = source.indexOf(`export async function ${functionName}(`);
+  const end = source.indexOf(`export async function ${nextFunctionName}(`, start);
+  assert.notEqual(start, -1, `${functionName} must remain exported.`);
+  assert.notEqual(end, -1, `${nextFunctionName} must remain after ${functionName}.`);
+  return source.slice(start, end);
+}
+
 assert.deepEqual(exportedMethods(files.adminRoute), ["GET", "PATCH", "POST"], "Admin Driver Pool route methods");
 assert.deepEqual(exportedMethods(files.driverRoute), ["GET", "PATCH", "POST"], "Driver Pool route methods");
 
@@ -103,6 +111,27 @@ for (const fragment of [
   assertIncludes(files.fastAccept, fragment, `Driver Pool persistence helper contract ${fragment}`);
 }
 
+const attentionLoader = exportedFunctionSource(
+  files.fastAccept,
+  "loadAdminDriverPoolAttentionOffers",
+  "cancelDriverPoolOffer",
+);
+assert.equal(
+  [...attentionLoader.matchAll(/\.from\("driver_job_links"\)/g)].length,
+  1,
+  "Driver Pool attention loader must keep one exact Driver Job Link read.",
+);
+for (const fragment of [
+  '.from("driver_job_links")',
+  '.select("booking_reference")',
+  '.in("booking_reference", assignedReferences)',
+]) {
+  assertIncludes(attentionLoader, fragment, `Driver Pool attention safe link-read contract ${fragment}`);
+}
+for (const forbidden of [".insert(", ".update(", ".upsert(", ".delete(", ".rpc("]) {
+  assertExcludes(attentionLoader, forbidden, "Driver Pool attention loader Driver Job Link read-only boundary");
+}
+
 for (const forbidden of [
   "customer_price",
   "invoice_number",
@@ -111,7 +140,6 @@ for (const forbidden of [
   "bank_account",
   "internal_admin_notes",
   "parser_debug",
-  "driver_job_links",
   "driver_job_status_events",
   "customer_driver_app_messages",
   "driver_live_location_latest_positions",

@@ -214,11 +214,17 @@ export default function DriverPortalPage() {
   const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
   const biometricSetupEnabled = nativeBiometricEnabled || biometricEnabledThisSession;
   const driverPoolAccountSession = readState.kind === "ready" && readState.accountSession;
-  const driverPortalSavedAlertCount = readState.kind === "ready" ? readState.alertCount : 0;
-  const driverPortalCurrentAlertCount = driverPortalSavedAlertCount + availableJobs.length;
-  const driverPortalAlertCountLabel = availableJobsHasMore
-    ? `${driverPortalCurrentAlertCount}+`
-    : String(driverPortalCurrentAlertCount);
+  const driverPortalSavedAlertsAvailable = readState.kind === "ready" && readState.alertsAvailable;
+  const driverPortalSavedAlertCount = driverPortalSavedAlertsAvailable ? readState.alertCount : 0;
+  const driverPoolVisibleAlertCount = availableJobsEnabled ? availableJobs.length : 0;
+  const driverPortalCurrentAlertCount = driverPortalSavedAlertCount + driverPoolVisibleAlertCount;
+  const driverPortalAlertCountLabel = !driverPortalSavedAlertsAvailable
+    ? driverPoolVisibleAlertCount > 0
+      ? `${driverPoolVisibleAlertCount}+`
+      : "?"
+    : availableJobsEnabled && availableJobsHasMore
+      ? `${driverPortalCurrentAlertCount}+`
+      : String(driverPortalCurrentAlertCount);
   const installedAccountSignInRequired = Boolean(
     installationId &&
     (
@@ -674,7 +680,7 @@ export default function DriverPortalPage() {
                   Safe current actions only. Old, reassigned and completed jobs stay hidden.
                 </p>
               </div>
-              {availableJobs.length > 0 ? (
+              {availableJobsEnabled && availableJobs.length > 0 ? (
                 <button
                   className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-left ring-1 ring-emerald-200"
                   data-driver-notification-purpose="available-jobs"
@@ -695,6 +701,7 @@ export default function DriverPortalPage() {
                 return job ? (
                   <button
                     className="flex min-h-16 w-full items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left ring-1 ring-slate-200"
+                    data-driver-notification-job={alert.job_key}
                     data-driver-notification-purpose="job-update"
                     key={alert.job_key}
                     onClick={() => void openJob(job)}
@@ -705,6 +712,15 @@ export default function DriverPortalPage() {
                       <span className="mt-0.5 block truncate text-sm font-bold text-slate-950">{alert.latest_title}</span>
                       <span className="block truncate text-xs font-semibold text-slate-600">{alert.latest_message}</span>
                       <span className="mt-1 block text-[11px] font-semibold text-slate-500">{notificationTime(alert.created_at)}</span>
+                      {openFeedback[job.job_key] ? (
+                        <span
+                          className="mt-1 block text-xs font-semibold leading-5 text-amber-900"
+                          data-driver-notification-open-feedback={job.job_key}
+                          role="status"
+                        >
+                          {openFeedback[job.job_key]}
+                        </span>
+                      ) : null}
                     </span>
                     <span className={`mt-1 rounded-full px-2.5 py-1 text-xs font-bold ${alert.priority === "urgent" || alert.priority === "high" ? "bg-amber-100 text-amber-950" : "bg-sky-100 text-sky-950"}`}>
                       {alert.update_count}
@@ -712,7 +728,7 @@ export default function DriverPortalPage() {
                   </button>
                 ) : null;
               })}
-              {driverPortalCurrentAlertCount === 0 ? (
+              {readState.alertsAvailable && driverPoolVisibleAlertCount === 0 && driverPortalCurrentAlertCount === 0 ? (
                 <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
                   No current alerts.
                 </p>

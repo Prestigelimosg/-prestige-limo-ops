@@ -200,6 +200,16 @@ try {
         pickup_location: "Wrong Driver Pickup",
         status: "assigned",
       },
+      {
+        admin_internal_status: "assigned",
+        booking_reference: "PORTAL-DECLINED",
+        cancellation_review_status: null,
+        customer_facing_status: "declined",
+        driver_id: 7,
+        pickup_at: "2026-07-23T06:00:00.000Z",
+        pickup_location: "Declined Pickup",
+        status: "assigned",
+      },
     ],
     driver_job_links: [
       {
@@ -267,6 +277,17 @@ try {
         revoked_at: null,
         safe_link_context: { driver_acknowledged_at: "2026-07-22T07:35:00.000Z" },
         token_hash: harness.link.hashDriverJobLinkToken(tokenB),
+      },
+      {
+        booking_reference: "PORTAL-DECLINED",
+        created_at: "2026-07-22T07:40:00.000Z",
+        driver_id: 7,
+        expires_at: validExpiry,
+        id: "77777777-7777-4777-8777-777777777778",
+        link_status: "active",
+        revoked_at: null,
+        safe_link_context: { driver_acknowledged_at: "2026-07-22T07:45:00.000Z" },
+        token_hash: harness.link.hashDriverJobLinkToken("declined-token"),
       },
     ],
     driver_job_status_events: [
@@ -343,6 +364,20 @@ try {
         notification_type: "trip_update",
         priority: "urgent",
         safe_message: "Completed-job update",
+        safe_title: "Must stay hidden",
+        workflow_area: "admin_driver_job_messages",
+      },
+      {
+        actor_role: "admin",
+        booking_reference: "PORTAL-DECLINED",
+        created_at: "2026-07-22T08:00:00.000Z",
+        delivery_surface: "driver_app",
+        driver_job_link_id: "77777777-7777-4777-8777-777777777778",
+        id: "ffffffff-ffff-4fff-8fff-000000000001",
+        notification_status: "queued",
+        notification_type: "trip_update",
+        priority: "urgent",
+        safe_message: "Declined-job update",
         safe_title: "Must stay hidden",
         workflow_area: "admin_driver_job_messages",
       },
@@ -459,6 +494,7 @@ try {
   assert.equal(jobs.alerts.some((alert) => alert.latestMessage.includes("Stale-link")), false);
   assert.equal(jobs.alerts.some((alert) => alert.latestMessage.includes("Other-driver")), false);
   assert.equal(jobs.alerts.some((alert) => alert.latestMessage.includes("Completed-job")), false);
+  assert.equal(jobs.alerts.some((alert) => alert.latestMessage.includes("Declined-job")), false);
   const output = JSON.stringify(jobs);
   for (const forbidden of ["customer_price", "driver_payout", "invoice", "payment", "paynow", "internal_note", "token_hash", tokenA]) {
     assert.equal(output.toLowerCase().includes(forbidden.toLowerCase()), false, `Driver Portal output leaked ${forbidden}.`);
@@ -473,6 +509,10 @@ try {
   assert.match(portalSource, /data-driver-notification-centre="true"/);
   assert.match(portalSource, /data-driver-notification-purpose="available-jobs"/);
   assert.match(portalSource, /data-driver-notification-purpose="job-update"/);
+  assert.match(portalSource, /data-driver-notification-job=\{alert\.job_key\}/);
+  assert.match(portalSource, /availableJobsEnabled && availableJobs\.length > 0/);
+  assert.match(portalSource, /readState\.alertsAvailable && driverPoolVisibleAlertCount === 0 && driverPortalCurrentAlertCount === 0/);
+  assert.match(portalSource, /data-driver-notification-open-feedback=\{job\.job_key\}/);
   assert.match(portalSource, /scrollIntoView\(\{[\s\S]*?behavior: "smooth",[\s\S]*?block: "start",?[\s\S]*?\}\)/);
   assert.doesNotMatch(portalSource, /customer_price|driver_payout|invoice|payment|paynow/i);
 

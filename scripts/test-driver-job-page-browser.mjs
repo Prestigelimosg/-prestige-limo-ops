@@ -655,7 +655,7 @@ async function runChromeTest() {
                   },
                 ],
                 ok: true,
-                session: embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-") || embeddedDriverMode.startsWith("pool-")
+                session: embeddedDriverMode === "account-browser" || embeddedDriverMode.startsWith("faceid-") || embeddedDriverMode.startsWith("alerts-") || embeddedDriverMode.startsWith("pool-")
                   ? "account"
                   : "link",
                 version: "driver-portal-browser-mock",
@@ -2839,8 +2839,21 @@ async function runChromeTest() {
     assert.equal(restoredPortalAlertState.text.includes("Enable once on this device"), true);
     assert.equal(restoredPortalAlertState.text.includes("iPhone"), false);
 
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=account-browser", appUrl).toString(),
+      "Alerts 3",
+      "browser Driver account notification centre",
+    );
+    await evaluate(`document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click()`);
+    await waitForCondition(
+      () => evaluate(`document.querySelector('[data-driver-notification-job="${"b".repeat(64)}"]') !== null`),
+      5000,
+      "browser Driver account notification row",
+    );
     const missingShortcutClicked = await evaluate(`(() => {
-      const button = document.querySelector('[data-driver-portal-open-job="${"b".repeat(64)}"]');
+      const button = document.querySelector('[data-driver-notification-job="${"b".repeat(64)}"]');
       if (!button) return false;
       button.click();
       return true;
@@ -2848,15 +2861,20 @@ async function runChromeTest() {
     assert.equal(missingShortcutClicked, true);
     const missingShortcutState = await waitForCondition(
       () => evaluate(`(() => {
-        const feedback = document.querySelector('[data-driver-portal-open-feedback="${"b".repeat(64)}"]');
+        const feedback = document.querySelector('[data-driver-notification-open-feedback="${"b".repeat(64)}"]');
         return feedback?.textContent.includes("Open and acknowledge the latest private link from dispatch once on this device.")
-          ? { href: location.href, text: feedback.textContent.trim() }
+          ? {
+              centreOpen: document.querySelector('[data-driver-notification-centre="true"]') !== null,
+              href: location.href,
+              text: feedback.textContent.trim(),
+            }
           : false;
       })()`),
       10000,
       "Driver Portal missing local private-link fallback",
     );
     assert.equal(new URL(missingShortcutState.href).pathname, "/driver-portal");
+    assert.equal(missingShortcutState.centreOpen, true, "A failed alert shortcut must explain itself inside the still-open purpose centre.");
 
     const localShortcut = await evaluate(`(async () => {
       const database = await new Promise((resolve, reject) => {

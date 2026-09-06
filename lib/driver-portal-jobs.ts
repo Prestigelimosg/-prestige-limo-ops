@@ -57,7 +57,9 @@ const terminalStatuses = new Set([
   "canceled",
   "complete",
   "completed",
+  "declined",
   "declined_internal",
+  "history",
   "job completed",
   "job_completed",
 ]);

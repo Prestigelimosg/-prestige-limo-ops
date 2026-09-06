@@ -117,6 +117,7 @@ export async function GET(request: Request) {
   const jobsResult = await loadDriverPortalJobs({
     client: clientResult.client,
     driverId: session.claims.driverId,
+    includeAlerts: Boolean(session.claims.accountId && session.claims.deviceIdHash),
   });
   if (!jobsResult.ok) {
     return response({ jobs: [], ok: false, reason: "not_configured" }, 503);
@@ -125,6 +126,17 @@ export async function GET(request: Request) {
   return response(
     {
       device_alerts: publicDriverDeviceAlertReadiness(),
+      alert_count: jobsResult.alertCount,
+      alerts: jobsResult.alerts.map((alert) => ({
+        created_at: alert.createdAt,
+        job_key: alert.jobKey,
+        job_reference: alert.jobReference,
+        latest_message: alert.latestMessage,
+        latest_title: alert.latestTitle,
+        priority: alert.priority,
+        update_count: alert.updateCount,
+      })),
+      alerts_available: jobsResult.alertsAvailable,
       jobs: jobsResult.jobs.map((job) => ({
         job_key: job.jobKey,
         payload: job.payload,

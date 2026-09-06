@@ -24,9 +24,26 @@ type DriverPoolAvailableJob = {
   updated_at: string;
 };
 
+type DriverPortalNotificationAlert = {
+  created_at: string;
+  job_key: string;
+  job_reference: string;
+  latest_message: string;
+  latest_title: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  update_count: number;
+};
+
 type DriverPortalReadState =
   | { kind: "loading" }
-  | { accountSession: boolean; kind: "ready"; jobs: DriverPortalJob[] }
+  | {
+      accountSession: boolean;
+      alertCount: number;
+      alerts: DriverPortalNotificationAlert[];
+      alertsAvailable: boolean;
+      kind: "ready";
+      jobs: DriverPortalJob[];
+    }
   | { kind: "blocked"; reason: "not_configured" | "unauthorized" | "unavailable" };
 
 type DriverPortalAlertReadiness = {
@@ -63,6 +80,13 @@ function displayValue(value: string | null | undefined) {
 
 function pickupDisplay(job: SafeDriverJobPayload) {
   return [job.pickupDate, job.pickupTime].filter(Boolean).join(" · ") || "Schedule pending";
+}
+
+function notificationTime(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed)
+    ? new Date(parsed).toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" })
+    : "Time unavailable";
 }
 
 function currentNativeInstallationId() {
@@ -166,6 +190,7 @@ export default function DriverPortalPage() {
   const [availableJobsBusy, setAvailableJobsBusy] = useState(false);
   const [availableJobsFeedback, setAvailableJobsFeedback] = useState<Record<string, string>>({});
   const [availableJobsAcceptedConfirmation, setAvailableJobsAcceptedConfirmation] = useState("");
+  const [notificationCentreOpen, setNotificationCentreOpen] = useState(false);
   const availableJobsReadRevisionRef = useRef(0);
   const installationId = useSyncExternalStore(
     subscribeToStaticNativeBridge,
@@ -189,6 +214,11 @@ export default function DriverPortalPage() {
   const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
   const biometricSetupEnabled = nativeBiometricEnabled || biometricEnabledThisSession;
   const driverPoolAccountSession = readState.kind === "ready" && readState.accountSession;
+  const driverPortalSavedAlertCount = readState.kind === "ready" ? readState.alertCount : 0;
+  const driverPortalCurrentAlertCount = driverPortalSavedAlertCount + availableJobs.length;
+  const driverPortalAlertCountLabel = availableJobsHasMore
+    ? `${driverPortalCurrentAlertCount}+`
+    : String(driverPortalCurrentAlertCount);
   const installedAccountSignInRequired = Boolean(
     installationId &&
     (
@@ -211,6 +241,9 @@ export default function DriverPortalPage() {
         },
       });
       const result = await response.json() as {
+        alert_count?: number;
+        alerts?: DriverPortalNotificationAlert[];
+        alerts_available?: boolean;
         device_alerts?: { public_key?: string | null; ready?: boolean };
         jobs?: DriverPortalJob[];
         ok?: boolean;
@@ -245,6 +278,11 @@ export default function DriverPortalPage() {
       );
       setReadState({
         accountSession: result.session === "account",
+        alertCount: Number.isSafeInteger(result.alert_count) && Number(result.alert_count) >= 0
+          ? Number(result.alert_count)
+          : 0,
+        alerts: Array.isArray(result.alerts) ? result.alerts : [],
+        alertsAvailable: result.alerts_available === true,
         kind: "ready",
         jobs: Array.isArray(result.jobs) ? result.jobs : [],
       });
@@ -301,10 +339,29 @@ export default function DriverPortalPage() {
       setAvailableJobsHasMore(false);
       setAvailableJobsPage(1);
       setAvailableJobsAcceptedConfirmation("");
+      setNotificationCentreOpen(false);
       return;
     }
     void loadAvailableJobs(1);
   }, [driverPoolAccountSession, loadAvailableJobs]);
+
+  useEffect(() => {
+    if (
+      !driverPoolAccountSession ||
+      !availableJobsEnabled ||
+      new URLSearchParams(window.location.search).get("view") !== "available-jobs"
+    ) {
+      return;
+    }
+
+    const scrollFrame = window.requestAnimationFrame(() => {
+      document.getElementById("available-jobs")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(scrollFrame);
+  }, [availableJobsEnabled, driverPoolAccountSession]);
 
   useEffect(() => {
     if (!driverPoolAccountSession || availableJobs.length === 0) return;
@@ -527,6 +584,16 @@ export default function DriverPortalPage() {
     }
   }
 
+  function openAvailableJobsFromNotificationCentre() {
+    setNotificationCentreOpen(false);
+    window.requestAnimationFrame(() => {
+      document.getElementById("available-jobs")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
   async function openJob(job: DriverPortalJob) {
     setOpeningJobKey(job.job_key);
     setOpenFeedback((current) => ({ ...current, [job.job_key]: "" }));
@@ -540,6 +607,7 @@ export default function DriverPortalPage() {
           job_key: job.job_key,
           type: "native_job_open",
         }));
+        setNotificationCentreOpen(false);
         return;
       }
       const url = await storedDriverJobUrl(job.job_key);
@@ -550,6 +618,7 @@ export default function DriverPortalPage() {
         }));
         return;
       }
+      setNotificationCentreOpen(false);
       window.location.assign(url);
     } catch {
       setOpenFeedback((current) => ({
@@ -568,14 +637,93 @@ export default function DriverPortalPage() {
     >
       <div className="mx-auto max-w-3xl space-y-4">
         <header className="rounded-2xl bg-slate-950 px-4 py-5 text-white shadow-sm sm:px-6">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Prestige Limo</p>
-          <h1 className="mt-1 text-2xl font-bold" data-driver-portal-heading="true">
-            Driver Portal
-          </h1>
-          <PublicAppBuildMarker tone="dark" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Prestige Limo</p>
+              <h1 className="mt-1 text-2xl font-bold" data-driver-portal-heading="true">
+                Driver Portal
+              </h1>
+              <PublicAppBuildMarker tone="dark" />
+            </div>
+            {readState.kind === "ready" && readState.accountSession ? (
+              <button
+                aria-controls="driver-notification-centre"
+                aria-expanded={notificationCentreOpen}
+                className="min-h-11 shrink-0 rounded-full border border-slate-600 bg-slate-900 px-3 text-sm font-bold text-white"
+                data-driver-notification-centre-trigger="true"
+                onClick={() => setNotificationCentreOpen((current) => !current)}
+                type="button"
+              >
+                Alerts {driverPortalAlertCountLabel}
+              </button>
+            ) : null}
+          </div>
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">
             Your acknowledged upcoming and active jobs on this device.
           </p>
+          {readState.kind === "ready" && readState.accountSession && notificationCentreOpen ? (
+            <section
+              aria-label="Driver alerts"
+              className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto rounded-xl border border-slate-700 bg-white p-2 text-slate-950 shadow-lg"
+              data-driver-notification-centre="true"
+              id="driver-notification-centre"
+            >
+              <div className="px-2 py-1">
+                <h2 className="text-base font-bold">Current alerts</h2>
+                <p className="text-xs font-semibold leading-5 text-slate-500">
+                  Safe current actions only. Old, reassigned and completed jobs stay hidden.
+                </p>
+              </div>
+              {availableJobs.length > 0 ? (
+                <button
+                  className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-left ring-1 ring-emerald-200"
+                  data-driver-notification-purpose="available-jobs"
+                  onClick={openAvailableJobsFromNotificationCentre}
+                  type="button"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-emerald-950">Available jobs</span>
+                    <span className="block text-xs font-semibold text-emerald-800">Review privacy-safe Driver Pool offers</span>
+                  </span>
+                  <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">
+                    {availableJobs.length}{availableJobsHasMore ? "+" : ""}
+                  </span>
+                </button>
+              ) : null}
+              {readState.alerts.map((alert) => {
+                const job = readState.jobs.find((candidate) => candidate.job_key === alert.job_key);
+                return job ? (
+                  <button
+                    className="flex min-h-16 w-full items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left ring-1 ring-slate-200"
+                    data-driver-notification-purpose="job-update"
+                    key={alert.job_key}
+                    onClick={() => void openJob(job)}
+                    type="button"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">Job {alert.job_reference}</span>
+                      <span className="mt-0.5 block truncate text-sm font-bold text-slate-950">{alert.latest_title}</span>
+                      <span className="block truncate text-xs font-semibold text-slate-600">{alert.latest_message}</span>
+                      <span className="mt-1 block text-[11px] font-semibold text-slate-500">{notificationTime(alert.created_at)}</span>
+                    </span>
+                    <span className={`mt-1 rounded-full px-2.5 py-1 text-xs font-bold ${alert.priority === "urgent" || alert.priority === "high" ? "bg-amber-100 text-amber-950" : "bg-sky-100 text-sky-950"}`}>
+                      {alert.update_count}
+                    </span>
+                  </button>
+                ) : null;
+              })}
+              {driverPortalCurrentAlertCount === 0 ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
+                  No current alerts.
+                </p>
+              ) : null}
+              {!readState.alertsAvailable ? (
+                <p className="px-2 py-1 text-xs font-semibold leading-5 text-amber-800">
+                  Saved job updates are temporarily unavailable. Current Driver Pool offers remain authoritative.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
         </header>
 
         {readState.kind === "loading" ? (

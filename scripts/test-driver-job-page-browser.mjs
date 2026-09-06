@@ -581,6 +581,28 @@ async function runChromeTest() {
             }
             return Promise.resolve(
               new Response(JSON.stringify({
+                alert_count: 3,
+                alerts: [
+                  {
+                    created_at: "2026-09-06T01:00:00.000Z",
+                    job_key: "a".repeat(64),
+                    job_reference: "MOCK-DRIVER-JOB-ARRIVAL-WORKFLOW",
+                    latest_message: "Meet the passenger at the updated pickup point.",
+                    latest_title: "Message from dispatch",
+                    priority: "high",
+                    update_count: 2,
+                  },
+                  {
+                    created_at: "2026-09-06T00:30:00.000Z",
+                    job_key: "b".repeat(64),
+                    job_reference: "MOCK-DRIVER-PORTAL-B",
+                    latest_message: "I am waiting at the lobby.",
+                    latest_title: "Passenger reply",
+                    priority: "normal",
+                    update_count: 1,
+                  },
+                ],
+                alerts_available: true,
                 device_alerts: {
                   enabled: true,
                   public_key: "AQIDBA",
@@ -2366,6 +2388,12 @@ async function runChromeTest() {
     assertNoSensitiveText(arrivalCompletedState);
     await resetMockDriverJobData();
 
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
     await navigateAndWaitForBodyText(
       client,
       evaluate,
@@ -2513,6 +2541,42 @@ async function runChromeTest() {
       "JOB 10909",
       "Driver Pool available job before acceptance",
     );
+    const driverNotificationCentreState = await waitForCondition(
+      () => evaluate(`(() => {
+        const trigger = document.querySelector('[data-driver-notification-centre-trigger="true"]');
+        if (!trigger || trigger.textContent.trim() !== "Alerts 4") return false;
+        trigger.click();
+        const centre = document.querySelector('[data-driver-notification-centre="true"]');
+        if (!centre) return false;
+        const bounds = centre.getBoundingClientRect();
+        return {
+          availableRows: centre.querySelectorAll('[data-driver-notification-purpose="available-jobs"]').length,
+          expanded: trigger.getAttribute("aria-expanded"),
+          jobRows: centre.querySelectorAll('[data-driver-notification-purpose="job-update"]').length,
+          left: bounds.left,
+          right: bounds.right,
+          text: centre.textContent || "",
+          viewportWidth: window.innerWidth,
+        };
+      })()`),
+      10000,
+      "Driver Portal notification purpose centre",
+    );
+    assert.equal(driverNotificationCentreState.expanded, "true");
+    assert.equal(driverNotificationCentreState.availableRows, 1);
+    assert.equal(driverNotificationCentreState.jobRows, 2);
+    assert.equal(driverNotificationCentreState.left >= 0, true);
+    assert.equal(driverNotificationCentreState.right <= driverNotificationCentreState.viewportWidth, true);
+    assert.equal(driverNotificationCentreState.text.includes("Available jobs"), true);
+    assert.equal(driverNotificationCentreState.text.includes("Message from dispatch"), true);
+    assert.equal(driverNotificationCentreState.text.includes("Passenger reply"), true);
+    assertNoSensitiveText({
+      fetchCalls: [],
+      resourceCalls: [],
+      visibleText: driverNotificationCentreState.text,
+    });
+    await evaluate(`document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click()`);
+    await client.send("Emulation.clearDeviceMetricsOverride");
     const poolAcceptClicked = await evaluate(`(() => {
       const offer = document.querySelector('[data-driver-pool-offer="${"c".repeat(64)}"]');
       const button = [...(offer?.querySelectorAll("button") || [])].find((item) => item.textContent.trim() === "Accept");

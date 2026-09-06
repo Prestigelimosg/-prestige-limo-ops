@@ -7,7 +7,7 @@ const savedBookingsAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts"
 const persistencePath = "lib/customer-driver-app-notification-persistence.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
 const migrationPath =
-  "supabase/migrations/20260906154254_customer_notification_centre_atomic_dismiss.sql";
+  "supabase/migrations/20260906162227_customer_notification_centre_atomic_dismiss.sql";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardPath = "scripts/test-customer-notification-centre-guard.mjs";
 
@@ -217,12 +217,21 @@ for (const phrase of [
   "Defensive exact-ID dedupe",
   "older in-flight read cannot restore stale alerts",
   "keeps Trip Updates history",
-  "Production application remains a separate owner-approved action-time gate",
+  "Production Supabase project `kvvsguhklmfgkebhxatm`",
+  "recorded as migration `20260906162227`",
+  "SHA-256 0621c63983f2a1f4563fe391e8d1cd986a49b438407cba8f7a66ba9dd4a3d3c8",
+  "`updated_count = 0`",
+  "outbox remained at 163 rows",
   "No Expo OTA, EAS build, Apple/TestFlight action",
   "`scripts/test-customer-notification-centre-guard.mjs`",
 ]) {
   includes(ledgerSection, phrase, `Customer notification centre ledger ${phrase}`);
 }
+excludes(
+  ledgerSection,
+  /Production application remains a separate owner-approved action-time gate/,
+  "Customer notification centre ledger superseded Production gate",
+);
 
 includes(suite, guardPath, "Customer notification centre preactivation registration");
 

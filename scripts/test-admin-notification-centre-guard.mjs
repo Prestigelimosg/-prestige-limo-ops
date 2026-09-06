@@ -158,8 +158,11 @@ assert.equal(
 );
 
 for (const fragment of [
-  "single-category Admin notification purpose list",
-  "openedSingleCategoryNotificationCentre",
+  "combined Admin notification purpose list",
+  "openedCombinedNotificationCentre",
+  'assert.equal(emailAiDashboardState.dashboardBadgeText, "3 alerts");',
+  'assert.equal(combinedNotificationCentreState.categoryCount, "2");',
+  "combinedNotificationCentreState.savedUpdateText",
   "openedEmailReviewFromNotificationCentre",
 ]) {
   assert.equal(

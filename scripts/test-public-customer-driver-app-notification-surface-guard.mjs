@@ -87,7 +87,8 @@ const contractChecks = [
     label: "customer/driver app notification API contract",
     requiredFragments: [
       "customerAuthRequiredMessage",
-      "Expected driver GET to verify token hash before queued alerts and exact sent-message history reads",
+      "Expected all 501 exact scoped IDs in one RPC request body, never a PostgREST URL filter.",
+      "Expected one database-filtered Driver notification read after token verification.",
       "Expected driver PATCH to update only exact queued notifications scoped to the verified link",
       "Customer/driver app notification API contract tests passed.",
     ],
@@ -466,16 +467,24 @@ for (const fragment of [
   'record.action !== "dismiss_current"',
   "dismissCustomerNotificationCentreForAuthenticatedRuntime",
   "dismissCustomerNotificationCentreForBoundary",
-  '.eq("delivery_surface", "customer_app")',
-  '.eq("notification_status", "queued")',
-  '.in("id", exactNotificationIds)',
-  '.in("notification_status", ["read", "dismissed", "archived"])',
-  '.eq("actor_role", "driver")',
-  '.eq("workflow_area", "customer_driver_quick_replies")',
-  'notification_status: "dismissed"',
+  '"dismiss_customer_notification_centre"',
+  "{ p_notification_ids: exactNotificationIds }",
+  "rpcRow.updated_ids",
+  "rpcRow.updated_count",
+  "updatedIds.some((id) => !expectedIds.has(id))",
+  '.select(notificationSelect, { count: "exact" })',
+  ".or(intendedDriverHistoryScope)",
+  ".or(driverLinkNotificationScope)",
+  ".range(offset, offset + params.limit - 1)",
+  "const uniqueRecords = new Map",
 ]) {
   assertIncludes(notificationPersistence, fragment, `notification persistence boundary ${fragment}`);
 }
+assertExcludes(
+  notificationPersistence,
+  '.in("id", exactNotificationIds)',
+  "Customer notification Clear unbounded PostgREST URL filter",
+);
 assertSameList(
   extractArrayLiteralItems(notificationPersistence, "customerDriverAppNotificationSurfaces"),
   expectedSurfaces,

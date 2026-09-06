@@ -6,6 +6,8 @@ const adapterPath = "lib/customer-portal-trip-updates-adapter.ts";
 const savedBookingsAdapterPath = "lib/customer-portal-saved-bookings-adapter.ts";
 const persistencePath = "lib/customer-driver-app-notification-persistence.ts";
 const ledgerPath = "docs/current-implementation-ledger.md";
+const migrationPath =
+  "supabase/migrations/20260906154254_customer_notification_centre_atomic_dismiss.sql";
 const suitePath = "scripts/test-preactivation-verification-suite.mjs";
 const guardPath = "scripts/test-customer-notification-centre-guard.mjs";
 
@@ -24,8 +26,16 @@ function sectionBetween(source, startHeading, nextHeadingPrefix = "\n## ") {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
-const [page, adapter, savedBookingsAdapter, persistence, ledger, suite] = await Promise.all(
-  [pagePath, adapterPath, savedBookingsAdapterPath, persistencePath, ledgerPath, suitePath].map((path) =>
+const [page, adapter, savedBookingsAdapter, persistence, ledger, migration, suite] = await Promise.all(
+  [
+    pagePath,
+    adapterPath,
+    savedBookingsAdapterPath,
+    persistencePath,
+    ledgerPath,
+    migrationPath,
+    suitePath,
+  ].map((path) =>
     readFile(path, "utf8"),
   ),
 );
@@ -127,11 +137,15 @@ for (const fragment of [
   "secondSnapshot.data[index]?.id !== id",
   'eq("delivery_surface", "customer_app")',
   'eq("notification_status", "queued")',
-  'notification_status: "dismissed"',
-  '.in("id", exactNotificationIds)',
-  '.in("notification_status", ["read", "dismissed", "archived"])',
-  '.eq("actor_role", "driver")',
-  '.eq("workflow_area", "customer_driver_quick_replies")',
+  '"dismiss_customer_notification_centre"',
+  "{ p_notification_ids: exactNotificationIds }",
+  "rpcRow.updated_ids",
+  "rpcRow.updated_count",
+  '.select(notificationSelect, { count: "exact" })',
+  ".or(intendedDriverHistoryScope)",
+  ".or(driverLinkNotificationScope)",
+  ".range(offset, offset + params.limit - 1)",
+  "const uniqueRecords = new Map",
   '.in("booking_reference", bookingReferenceBatch)',
   '.order("id", { ascending: false })',
   '.gt("booking_reference", bookingReferenceCursor)',
@@ -152,6 +166,33 @@ for (const fragment of [
   includes(persistence, fragment, `Customer notification centre persistence ${fragment}`);
 }
 
+for (const fragment of [
+  "create or replace function public.dismiss_customer_notification_centre",
+  "p_notification_ids uuid[]",
+  "returns table (updated_ids uuid[], updated_count bigint)",
+  "security invoker",
+  "set search_path = ''",
+  "update public.customer_driver_app_notification_outbox as notification",
+  "notification.delivery_surface = 'customer_app'",
+  "notification.notification_status = 'queued'",
+  "notification.id = any(coalesce(p_notification_ids, array[]::uuid[]))",
+  "returning notification.id",
+  "array_agg(updated.id order by updated.id)",
+  "count(*)::bigint as updated_count",
+  "revoke execute on function public.dismiss_customer_notification_centre(uuid[]) from public",
+  "revoke execute on function public.dismiss_customer_notification_centre(uuid[]) from anon",
+  "revoke execute on function public.dismiss_customer_notification_centre(uuid[]) from authenticated",
+  "grant execute on function public.dismiss_customer_notification_centre(uuid[]) to service_role",
+]) {
+  includes(migration, fragment, `Customer notification centre atomic-dismiss migration ${fragment}`);
+}
+excludes(migration, /security\s+definer/i, "Customer notification centre RPC privilege mode");
+excludes(
+  migration,
+  /\b(?:create|alter|drop)\s+table\b|\bcreate\s+(?:unique\s+)?index\b|\bdelete\s+from\b|\binsert\s+into\b|\btruncate\b/i,
+  "Customer notification centre migration unrelated DDL/DML",
+);
+
 const centreSource = page.slice(
   page.indexOf('data-customer-notification-centre="true"'),
   page.indexOf("companyContactLines.length > 0"),
@@ -171,11 +212,13 @@ for (const phrase of [
   "verified Company + Booker account",
   "existing `/api/customer-app-notifications` GET route",
   "one tiny `Clear` control",
-  "one atomic filtered update",
-  "Driver's sent quick-reply history remains visible",
+  "POST body of one service-role-only `SECURITY INVOKER` RPC",
+  "exact booking and current-link eligibility",
+  "Defensive exact-ID dedupe",
   "older in-flight read cannot restore stale alerts",
   "keeps Trip Updates history",
-  "No schema, migration, Expo OTA, EAS build, Apple/TestFlight action",
+  "Production application remains a separate owner-approved action-time gate",
+  "No Expo OTA, EAS build, Apple/TestFlight action",
   "`scripts/test-customer-notification-centre-guard.mjs`",
 ]) {
   includes(ledgerSection, phrase, `Customer notification centre ledger ${phrase}`);

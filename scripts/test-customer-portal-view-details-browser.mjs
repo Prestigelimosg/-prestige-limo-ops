@@ -99,6 +99,7 @@ async function main() {
   const browserErrors = [];
   const browserConsoleErrors = [];
   let customerNotificationReadCount = 0;
+  let customerNotificationCentreReadCount = 0;
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -166,6 +167,33 @@ async function main() {
             principal_role: "pa",
           },
           ok: true,
+        };
+      } else if (
+        requestUrl.pathname === "/api/customer-app-notifications" &&
+        method === "GET" &&
+        requestUrl.searchParams.get("view") === "centre"
+      ) {
+        customerNotificationCentreReadCount += 1;
+        responseBody = {
+          alert_count: 3,
+          alerts: [
+            {
+              created_at: "2026-09-06T03:30:00.000Z",
+              latest_message: "Your Prestige Limo driver is at the pickup location.",
+              latest_title: "Driver arrived",
+              notification_count: 3,
+              notification_type: "driver_status",
+              priority: "normal",
+              public_booking_reference: "99102",
+              workflow_area: "driver_status_customer_in_app",
+            },
+          ],
+          delivery_surface: "customer_app",
+          external_send: false,
+          notification_count: 3,
+          ok: true,
+          provider_send: false,
+          version: "customer-notification-centre-browser-fixture",
         };
       } else if (requestUrl.pathname === "/api/customer-app-notifications" && method === "GET") {
         customerNotificationReadCount += 1;
@@ -262,6 +290,8 @@ async function main() {
       const targetRow = rows.find((row) => row.contains(targetButton));
       const targetRowStyle = targetRow ? window.getComputedStyle(targetRow) : null;
       return {
+        alertCentreTriggerCount: document.querySelectorAll('[data-customer-notification-centre-trigger="true"]').length,
+        alertCentreTriggerText: document.querySelector('[data-customer-notification-centre-trigger="true"]')?.textContent?.trim() || "",
         alertsToggleCount: document.querySelectorAll('[data-customer-device-push-toggle="true"]').length,
         detailCount: document.querySelectorAll("[data-customer-portal-detail]").length,
         documentWidth: document.documentElement.scrollWidth,
@@ -283,6 +313,8 @@ async function main() {
     })()`);
 
     assert.deepEqual(initialState, {
+      alertCentreTriggerCount: 1,
+      alertCentreTriggerText: "Alerts 3",
       alertsToggleCount: 1,
       detailCount: 0,
       documentWidth: 390,
@@ -295,6 +327,39 @@ async function main() {
       viewportWidth: 390,
     });
     assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
+
+    await evaluate(
+      `document.querySelector('[data-customer-notification-centre-trigger="true"]')?.click()`,
+    );
+    const notificationCentreState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const centre = document.querySelector('[data-customer-notification-centre="true"]');
+          const row = centre?.querySelector('[data-customer-notification-purpose="booking-update"]');
+          const rect = centre?.getBoundingClientRect();
+          if (!centre || !row || !rect) return false;
+          return {
+            centreWithinViewport: rect.left >= 0 && rect.right <= window.innerWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            rowText: row.innerText.replace(/\\s+/g, " ").trim(),
+            triggerExpanded: document.querySelector('[data-customer-notification-centre-trigger="true"]')?.getAttribute("aria-expanded"),
+            viewportWidth: document.documentElement.clientWidth,
+          };
+        })()`),
+      10000,
+      "390px Customer notification centre",
+    );
+    assert.equal(notificationCentreState.centreWithinViewport, true);
+    assert.equal(notificationCentreState.documentWidth, notificationCentreState.viewportWidth);
+    assert.equal(notificationCentreState.triggerExpanded, "true");
+    assert.match(notificationCentreState.rowText, /Booking 99102/i);
+    assert.match(notificationCentreState.rowText, /Driver arrived/);
+    assert.match(notificationCentreState.rowText, /driver is at the pickup location/i);
+    assert.match(notificationCentreState.rowText, /3$/);
+    assert.equal(customerNotificationCentreReadCount >= 1, true);
+    await evaluate(
+      `document.querySelector('[data-customer-notification-centre-trigger="true"]')?.click()`,
+    );
 
     await evaluate(`(() => {
       window.scrollTo({ left: 0, top: 0 });
@@ -593,6 +658,52 @@ async function main() {
         `document.querySelector('[data-customer-portal-detail-button="${targetBookingId}"]').click()`,
       );
     }
+
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 3,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
+    await navigateWithLoadEvent(client, new URL("/my-bookings", appUrl).toString());
+    await waitForCondition(
+      () =>
+        evaluate(`document.querySelector('[data-customer-notification-centre-trigger="true"]')?.textContent?.trim() === "Alerts 3"`),
+      10000,
+      "Customer alert count before exact booking handoff",
+    );
+    await evaluate(
+      `document.querySelector('[data-customer-notification-centre-trigger="true"]')?.click()`,
+    );
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector('[data-customer-notification-purpose="booking-update"]'))`),
+      10000,
+      "Customer notification booking row",
+    );
+    await evaluate(
+      `document.querySelector('[data-customer-notification-purpose="booking-update"]')?.click()`,
+    );
+    const notificationHandoffState = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const params = new URLSearchParams(window.location.search);
+          const detail = document.querySelector('[data-customer-portal-detail="${targetBookingId}"]');
+          if (!detail) return false;
+          return {
+            booking: params.get("booking"),
+            detailText: detail.innerText,
+            documentWidth: document.documentElement.scrollWidth,
+            tracking: params.get("tracking"),
+            viewportWidth: document.documentElement.clientWidth,
+          };
+        })()`),
+      10000,
+      "Customer notification exact-booking handoff",
+    );
+    assert.equal(notificationHandoffState.booking, "99102");
+    assert.equal(notificationHandoffState.tracking, "1");
+    assert.match(notificationHandoffState.detailText, /Booking Details/);
+    assert.equal(notificationHandoffState.documentWidth, notificationHandoffState.viewportWidth);
 
     assert.deepEqual(browserErrors, []);
     assert.deepEqual(browserConsoleErrors, []);

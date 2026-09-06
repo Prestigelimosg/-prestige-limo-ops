@@ -191,6 +191,17 @@ export type CustomerInAppNotificationReadEvidenceRecord = {
   workflow_area: string | null;
 };
 
+export type CustomerNotificationCentreAlertRecord = {
+  created_at: string;
+  latest_message: string;
+  latest_title: string;
+  notification_count: number;
+  notification_type: CustomerDriverAppNotificationType;
+  priority: CustomerDriverAppNotificationPriority;
+  public_booking_reference: string;
+  workflow_area: string | null;
+};
+
 export type CustomerInAppNotificationReadEvidenceResult = {
   handled: boolean;
   body?: Record<string, unknown>;
@@ -230,12 +241,16 @@ const customerInAppNotificationReadSelect =
   "notification_type, notification_status, priority, delivery_surface, booking_reference, workflow_area, safe_title, safe_message, safe_context, created_at, updated_at";
 const customerSharedConversationReadSelect =
   `${customerInAppNotificationReadSelect}, actor_role`;
+const customerNotificationCentreSelect =
+  `id, ${customerInAppNotificationReadSelect}`;
 const defaultNotificationLimit = 25;
 const defaultCustomerInAppNotificationReadLimit = 5;
 const maxCustomerInAppNotificationReadLimit = 10;
 const maxNotificationLimit = 100;
 const maxNotificationPage = 1000;
 const maxReadRows = 500;
+const customerNotificationCentreBookingBatchSize = 50;
+const customerNotificationCentrePageSize = 500;
 const maxBookingReferenceLength = 120;
 const maxDriverJobLinkIdLength = 120;
 const maxEventKeyLength = 180;
@@ -299,6 +314,7 @@ const allowedCustomerInAppNotificationReadQueryParams = new Set([
   "booking_reference",
   "limit",
   "page",
+  "view",
 ]);
 const driverStatusCustomerInAppTemplates: Record<
   DriverStatusCustomerInAppStatus,
@@ -1233,9 +1249,10 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
   runtimeGate: ControlledCustomerRuntimeGate,
 ): AdminBookingResult<{
   auth_user_id: string;
-  booking_reference: string;
+  booking_reference: string | null;
   customer_account_reference?: string | null;
   mode: "principal-device-session" | "server-session-cookie" | "server-session-token";
+  notification_centre: boolean;
   principal_session_token?: string | null;
   portal_link_issued_at?: number | null;
   portal_link_revision?: string | null;
@@ -1287,8 +1304,9 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
     requestUrl.searchParams.get("booking_reference"),
     maxBookingReferenceLength,
   );
+  const notificationCentre = requestUrl.searchParams.get("view") === "centre";
 
-  if (!bookingReference) {
+  if ((!bookingReference && !notificationCentre) || (bookingReference && notificationCentre)) {
     return customerAppNotificationsRequireAuthResult();
   }
 
@@ -1301,6 +1319,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
         auth_user_id: principalSession.principal_id,
         booking_reference: bookingReference,
         mode: "principal-device-session",
+        notification_centre: notificationCentre,
         principal_session_token: providedToken.token,
         runtime_gate: runtimeGate,
       },
@@ -1340,6 +1359,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
         booking_reference: bookingReference,
         customer_account_reference: portalAccessSession.data.customer_account_reference,
         mode: "server-session-cookie",
+        notification_centre: notificationCentre,
         portal_link_issued_at: portalAccessSession.data.issued_at,
         portal_link_revision: portalAccessSession.data.link_revision,
         runtime_gate: effectiveRuntimeGate,
@@ -1407,6 +1427,7 @@ function resolveCustomerInAppNotificationRuntimeBoundary(
       booking_reference: bookingReference,
       customer_account_reference: customerAccountReference,
       mode: providedToken.source === "request-cookie" ? "server-session-cookie" : "server-session-token",
+      notification_centre: notificationCentre,
       runtime_gate: runtimeGate,
     },
     ok: true,
@@ -1417,9 +1438,10 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
   request: Request,
 ): AdminBookingResult<{
   auth_user_id: string;
-  booking_reference: string;
+  booking_reference: string | null;
   customer_account_reference?: string | null;
   mode: "principal-device-session" | "server-session-cookie";
+  notification_centre: boolean;
   principal_session_token?: string | null;
   portal_link_issued_at?: number | null;
   portal_link_revision?: string | null;
@@ -1471,8 +1493,9 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
     requestUrl.searchParams.get("booking_reference"),
     maxBookingReferenceLength,
   );
+  const notificationCentre = requestUrl.searchParams.get("view") === "centre";
 
-  if (!bookingReference) {
+  if ((!bookingReference && !notificationCentre) || (bookingReference && notificationCentre)) {
     return customerAppNotificationsRequireAuthResult();
   }
 
@@ -1485,6 +1508,7 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
         auth_user_id: principalSession.principal_id,
         booking_reference: bookingReference,
         mode: "principal-device-session",
+        notification_centre: notificationCentre,
         principal_session_token: providedToken.token,
         runtime_gate: {
           account_allowlist: new Set(),
@@ -1519,6 +1543,7 @@ function resolveCustomerInAppNotificationPortalAccessBoundary(
       booking_reference: bookingReference,
       customer_account_reference: customerAccountReference,
       mode: "server-session-cookie",
+      notification_centre: notificationCentre,
       portal_link_issued_at: portalAccessSession.data.issued_at,
       portal_link_revision: portalAccessSession.data.link_revision,
       runtime_gate: {
@@ -2054,6 +2079,340 @@ async function assertControlledCustomerAppNotificationWriteAllowed(
   };
 }
 
+type CustomerNotificationCentreBookingFilter = {
+  column: "booker_id" | "company_id" | "customer_id" | "traveler_id";
+  value: string | number;
+};
+
+async function loadCustomerNotificationCentreBookingRows(
+  client: NotificationClient,
+  filters: CustomerNotificationCentreBookingFilter[],
+): Promise<AdminBookingResult<Map<string, string>>> {
+  const bookings = new Map<string, string>();
+  let bookingReferenceCursor: string | null = null;
+
+  for (;;) {
+    let query = client
+      .from("bookings")
+      .select("booking_reference, public_booking_reference")
+      .order("booking_reference", { ascending: true })
+      .limit(customerNotificationCentrePageSize);
+
+    for (const filter of filters) {
+      if (filter.column === "company_id") {
+        query = query.eq("company_id", filter.value);
+      } else if (filter.column === "booker_id") {
+        query = query.eq("booker_id", filter.value);
+      } else if (filter.column === "traveler_id") {
+        query = query.eq("traveler_id", filter.value);
+      } else {
+        query = query.eq("customer_id", filter.value);
+      }
+    }
+
+    if (bookingReferenceCursor) {
+      query = query.gt("booking_reference", bookingReferenceCursor);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+    }
+
+    const rows = asArray(data);
+    for (const value of rows) {
+      const row = asRecord(value);
+      const bookingReference = safeIdentifier(
+        row.booking_reference,
+        maxBookingReferenceLength,
+      );
+      const publicBookingReference =
+        safeIdentifier(row.public_booking_reference, maxBookingReferenceLength) ||
+        bookingReference;
+      if (bookingReference && publicBookingReference) {
+        bookings.set(bookingReference, publicBookingReference);
+      }
+    }
+
+    const lastBookingReference = safeIdentifier(
+      asRecord(rows.at(-1)).booking_reference,
+      maxBookingReferenceLength,
+    );
+    if (
+      rows.length < customerNotificationCentrePageSize ||
+      !lastBookingReference ||
+      lastBookingReference === bookingReferenceCursor
+    ) {
+      return { data: bookings, ok: true };
+    }
+    bookingReferenceCursor = lastBookingReference;
+  }
+}
+
+async function loadCustomerNotificationCentreRowsSnapshot(
+  client: NotificationClient,
+  bookingReferences: string[],
+): Promise<AdminBookingResult<Array<{ id: string; notification: CustomerInAppNotificationReadEvidenceRecord }>>> {
+  const notifications = new Map<
+    string,
+    { id: string; notification: CustomerInAppNotificationReadEvidenceRecord }
+  >();
+
+  for (
+    let batchStart = 0;
+    batchStart < bookingReferences.length;
+    batchStart += customerNotificationCentreBookingBatchSize
+  ) {
+    const bookingReferenceBatch = bookingReferences.slice(
+      batchStart,
+      batchStart + customerNotificationCentreBookingBatchSize,
+    );
+    let notificationIdCursor: string | null = null;
+
+    for (;;) {
+      let query = client
+        .from(notificationTable)
+        .select(customerNotificationCentreSelect)
+        .eq("delivery_surface", "customer_app")
+        .eq("notification_status", "queued")
+        .in("booking_reference", bookingReferenceBatch)
+        .order("id", { ascending: false })
+        .limit(customerNotificationCentrePageSize);
+      if (notificationIdCursor) {
+        query = query.lt("id", notificationIdCursor);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        return safeAdapterFailure(safeCustomerInAppReadError, 500, error);
+      }
+
+      const rows = asArray(data);
+      for (const value of rows) {
+        const row = asRecord(value);
+        const id = safeIdentifier(row.id, maxNotificationIdLength);
+        const notification = toCustomerInAppNotificationReadEvidenceRecord(value);
+        if (id && notification?.booking_reference) {
+          notifications.set(id, { id, notification });
+        }
+      }
+
+      const lastNotificationId = safeIdentifier(
+        asRecord(rows.at(-1)).id,
+        maxNotificationIdLength,
+      );
+      if (
+        rows.length < customerNotificationCentrePageSize ||
+        !lastNotificationId ||
+        lastNotificationId === notificationIdCursor
+      ) {
+        break;
+      }
+      notificationIdCursor = lastNotificationId;
+    }
+  }
+
+  return {
+    data: [...notifications.values()].sort((left, right) => {
+      const createdAtDifference = String(
+        right.notification.created_at || right.notification.updated_at || "",
+      ).localeCompare(
+        String(left.notification.created_at || left.notification.updated_at || ""),
+      );
+      return createdAtDifference || right.id.localeCompare(left.id);
+    }),
+    ok: true,
+  };
+}
+
+async function loadCustomerNotificationCentreRows(
+  client: NotificationClient,
+  bookingReferences: string[],
+): Promise<AdminBookingResult<Array<{ id: string; notification: CustomerInAppNotificationReadEvidenceRecord }>>> {
+  const firstSnapshot = await loadCustomerNotificationCentreRowsSnapshot(
+    client,
+    bookingReferences,
+  );
+  if (!firstSnapshot.ok) {
+    return firstSnapshot;
+  }
+  const secondSnapshot = await loadCustomerNotificationCentreRowsSnapshot(
+    client,
+    bookingReferences,
+  );
+  if (!secondSnapshot.ok) {
+    return secondSnapshot;
+  }
+  if (
+    firstSnapshot.data.length !== secondSnapshot.data.length ||
+    firstSnapshot.data.some(({ id }, index) => secondSnapshot.data[index]?.id !== id)
+  ) {
+    return {
+      error: safeCustomerInAppReadError,
+      ok: false,
+      status: 409,
+    };
+  }
+  return secondSnapshot;
+}
+
+async function loadCustomerNotificationCentreForBoundary(
+  boundary: {
+    auth_user_id: string;
+    customer_account_reference?: string | null;
+    mode?: "principal-device-session" | "server-session-cookie" | "server-session-token";
+    principal_session_token?: string | null;
+    portal_link_issued_at?: number | null;
+    portal_link_revision?: string | null;
+    runtime_gate: ControlledCustomerRuntimeGate;
+  },
+): Promise<AdminBookingResult<{
+  alert_count: number;
+  alerts: CustomerNotificationCentreAlertRecord[];
+}>> {
+  const clientResult = getCustomerInAppNotificationReadClient();
+  if (!clientResult.ok) {
+    return clientResult;
+  }
+  const client = clientResult.data;
+  const bookingRows = new Map<string, string>();
+
+  if (boundary.mode === "principal-device-session" && boundary.principal_session_token) {
+    const principal = await assertActiveCustomerPrincipalSession(
+      boundary.principal_session_token,
+    );
+    if (!principal.ok) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+
+    for (const membership of principal.data.memberships) {
+      const filters: CustomerNotificationCentreBookingFilter[] = [
+        { column: "company_id", value: membership.company_id },
+        { column: "booker_id", value: membership.booker_id },
+      ];
+      if (membership.traveler_id !== null) {
+        filters.push({ column: "traveler_id", value: membership.traveler_id });
+      }
+      const scopedBookings = await loadCustomerNotificationCentreBookingRows(
+        client,
+        filters,
+      );
+      if (!scopedBookings.ok) {
+        return scopedBookings;
+      }
+      for (const [bookingReference, publicBookingReference] of scopedBookings.data) {
+        bookingRows.set(bookingReference, publicBookingReference);
+      }
+    }
+  } else {
+    const mappedAccountReference = safeIdentifier(
+      boundary.customer_account_reference,
+      maxBookingReferenceLength,
+    );
+    const accountReference = mappedAccountReference
+      ? { data: mappedAccountReference, ok: true as const }
+      : await loadControlledCustomerAccountReference(client, boundary.auth_user_id);
+    if (
+      !accountReference.ok ||
+      !accountReference.data ||
+      !customerAccountAllowedByControlledRuntime(
+        accountReference.data,
+        boundary.runtime_gate,
+      )
+    ) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+
+    const activeAccessAccount = await assertActiveCustomerPortalAccessAccount(
+      accountReference.data,
+      client,
+      boundary.portal_link_revision || boundary.portal_link_issued_at
+        ? {
+            issuedAt: boundary.portal_link_issued_at,
+            linkRevision: boundary.portal_link_revision,
+          }
+        : undefined,
+    );
+    if (!activeAccessAccount.ok) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+
+    const hasCompanyIdentity = Boolean(activeAccessAccount.data.company_id);
+    const hasBookerIdentity = Boolean(activeAccessAccount.data.booker_id);
+    if (hasCompanyIdentity !== hasBookerIdentity) {
+      return customerAppNotificationsRequireAuthResult();
+    }
+    const filters: CustomerNotificationCentreBookingFilter[] =
+      activeAccessAccount.data.company_id && activeAccessAccount.data.booker_id
+        ? [
+            { column: "company_id", value: activeAccessAccount.data.company_id },
+            { column: "booker_id", value: activeAccessAccount.data.booker_id },
+          ]
+        : [
+            {
+              column: "customer_id",
+              value: activeAccessAccount.data.customer_account_reference,
+            },
+          ];
+    const scopedBookings = await loadCustomerNotificationCentreBookingRows(
+      client,
+      filters,
+    );
+    if (!scopedBookings.ok) {
+      return scopedBookings;
+    }
+    for (const [bookingReference, publicBookingReference] of scopedBookings.data) {
+      bookingRows.set(bookingReference, publicBookingReference);
+    }
+  }
+
+  if (bookingRows.size === 0) {
+    return { data: { alert_count: 0, alerts: [] }, ok: true };
+  }
+
+  const notificationRows = await loadCustomerNotificationCentreRows(
+    client,
+    [...bookingRows.keys()],
+  );
+  if (!notificationRows.ok) {
+    return notificationRows;
+  }
+
+  const alertsByBooking = new Map<string, CustomerNotificationCentreAlertRecord>();
+  for (const { notification } of notificationRows.data) {
+    const bookingReference = notification.booking_reference;
+    const publicBookingReference = bookingReference
+      ? bookingRows.get(bookingReference)
+      : null;
+    if (!bookingReference || !publicBookingReference) {
+      continue;
+    }
+    const existing = alertsByBooking.get(bookingReference);
+    if (existing) {
+      existing.notification_count += 1;
+      continue;
+    }
+    alertsByBooking.set(bookingReference, {
+      created_at: notification.created_at || notification.updated_at || "",
+      latest_message: notification.safe_message || "Booking update is ready.",
+      latest_title: notification.safe_title || "Booking update",
+      notification_count: 1,
+      notification_type: notification.notification_type,
+      priority: notification.priority,
+      public_booking_reference: publicBookingReference,
+      workflow_area: notification.workflow_area,
+    });
+  }
+
+  return {
+    data: {
+      alert_count: notificationRows.data.length,
+      alerts: [...alertsByBooking.values()],
+    },
+    ok: true,
+  };
+}
+
 async function loadCustomerAppNotificationsForControlledRuntime(
   request: Request,
   boundary: {
@@ -2194,7 +2553,31 @@ export async function readCustomerAppNotificationsForControlledRuntime(
     return customerInAppNotificationReadError(boundary.error, boundary.status);
   }
 
-  const result = await loadCustomerAppNotificationsForControlledRuntime(request, boundary.data);
+  if (boundary.data.notification_centre) {
+    const centre = await loadCustomerNotificationCentreForBoundary(boundary.data);
+    if (!centre.ok) {
+      return customerInAppNotificationReadError(centre.error, centre.status);
+    }
+    return customerInAppNotificationReadHandled(200, {
+      alert_count: centre.data.alert_count,
+      alerts: centre.data.alerts,
+      delivery_surface: "customer_app",
+      external_send: false,
+      notification_count: centre.data.alert_count,
+      ok: true,
+      provider_send: false,
+      version: customerInAppNotificationRuntimeVersion,
+    });
+  }
+
+  if (!boundary.data.booking_reference) {
+    return customerInAppNotificationReadError(customerAuthRequiredError, 403);
+  }
+
+  const result = await loadCustomerAppNotificationsForControlledRuntime(request, {
+    ...boundary.data,
+    booking_reference: boundary.data.booking_reference,
+  });
 
   if (!result.ok) {
     return customerInAppNotificationReadError(result.error, result.status);
@@ -2224,7 +2607,31 @@ export async function readCustomerAppNotificationsForPortalAccessRuntime(
     return customerInAppNotificationReadError(boundary.error, boundary.status);
   }
 
-  const result = await loadCustomerAppNotificationsForControlledRuntime(request, boundary.data);
+  if (boundary.data.notification_centre) {
+    const centre = await loadCustomerNotificationCentreForBoundary(boundary.data);
+    if (!centre.ok) {
+      return customerInAppNotificationReadError(centre.error, centre.status);
+    }
+    return customerInAppNotificationReadHandled(200, {
+      alert_count: centre.data.alert_count,
+      alerts: centre.data.alerts,
+      delivery_surface: "customer_app",
+      external_send: false,
+      notification_count: centre.data.alert_count,
+      ok: true,
+      provider_send: false,
+      version: customerInAppNotificationRuntimeVersion,
+    });
+  }
+
+  if (!boundary.data.booking_reference) {
+    return customerInAppNotificationReadError(customerAuthRequiredError, 403);
+  }
+
+  const result = await loadCustomerAppNotificationsForControlledRuntime(request, {
+    ...boundary.data,
+    booking_reference: boundary.data.booking_reference,
+  });
 
   if (!result.ok) {
     return customerInAppNotificationReadError(result.error, result.status);

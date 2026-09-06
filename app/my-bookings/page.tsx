@@ -13,7 +13,9 @@ import {
   type CustomerPortalDriverTrackingResult,
 } from "../../lib/customer-portal-driver-tracking-adapter";
 import {
+  loadCustomerNotificationCentre,
   loadCustomerPortalTripUpdates,
+  type CustomerNotificationCentreAlert,
   type CustomerPortalTripUpdatesResult,
 } from "../../lib/customer-portal-trip-updates-adapter";
 import { submitCustomerPortalBookingChangeRequest } from "../../lib/customer-portal-booking-change-request-adapter";
@@ -72,6 +74,7 @@ type CustomerPrincipalAccessState =
     };
 type DriverTrackingByBookingId = Record<string, CustomerPortalDriverTrackingResult>;
 type TripUpdatesByBookingId = Record<string, CustomerPortalTripUpdatesResult>;
+type CustomerNotificationCentreStatus = "blocked" | "loading" | "ready";
 type CustomerQuickReplyState = Record<
   string,
   {
@@ -101,6 +104,7 @@ type BookingChangeRequestDraft = {
 
 const visibleBookingLimit = 10;
 const CUSTOMER_MESSAGES_VISIBLE_REFRESH_MS = 5_000;
+const CUSTOMER_NOTIFICATION_CENTRE_REFRESH_MS = 10_000;
 const customerBookingChangeServiceOptions = [
   "Airport Arrival",
   "Airport Departure",
@@ -164,6 +168,17 @@ function normalize(value: string) {
 
 function compactSingaporeTimeLabel(value: string) {
   return value.match(/\b\d{2}:\d{2}\b/)?.[0] || "";
+}
+
+function customerNotificationTime(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Intl.DateTimeFormat("en-SG", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Singapore",
+      }).format(new Date(timestamp))
+    : "Time unavailable";
 }
 
 function getBookingMonthInfo(booking: CustomerPortalBooking) {
@@ -429,6 +444,12 @@ export default function CustomerPortalPage() {
   const [activeTrackingBookingId, setActiveTrackingBookingId] = useState("");
   const [tripUpdatesByBookingId, setTripUpdatesByBookingId] = useState<TripUpdatesByBookingId>({});
   const [checkingTripUpdatesId, setCheckingTripUpdatesId] = useState("");
+  const [customerNotificationCentreAlerts, setCustomerNotificationCentreAlerts] =
+    useState<CustomerNotificationCentreAlert[]>([]);
+  const [customerNotificationCentreCount, setCustomerNotificationCentreCount] = useState(0);
+  const [customerNotificationCentreOpen, setCustomerNotificationCentreOpen] = useState(false);
+  const [customerNotificationCentreStatus, setCustomerNotificationCentreStatus] =
+    useState<CustomerNotificationCentreStatus>("loading");
   const [customerQuickReplies, setCustomerQuickReplies] = useState<CustomerQuickReplyState>({});
   const [customerMessageDrafts, setCustomerMessageDrafts] = useState<Record<string, string>>({});
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
@@ -443,6 +464,29 @@ export default function CustomerPortalPage() {
     useState<Record<string, InvoiceDownloadState>>({});
   const companyName = companyProfile.company_name || defaultCompanyProfile.company_name;
   const companyContactLines = companyProfileContactLines(companyProfile);
+  const customerNotificationCentreCountLabel =
+    customerNotificationCentreStatus === "ready"
+      ? String(customerNotificationCentreCount)
+      : customerNotificationCentreCount > 0
+        ? `${customerNotificationCentreCount}+`
+        : "?";
+
+  const refreshCustomerNotificationCentre = useCallback(
+    async ({ signal }: { signal?: AbortSignal } = {}) => {
+      const result = await loadCustomerNotificationCentre({ signal });
+      if (signal?.aborted) {
+        return;
+      }
+      if (result.status !== "ready") {
+        setCustomerNotificationCentreStatus("blocked");
+        return;
+      }
+      setCustomerNotificationCentreAlerts(result.alerts);
+      setCustomerNotificationCentreCount(result.alertCount);
+      setCustomerNotificationCentreStatus("ready");
+    },
+    [],
+  );
 
   const refreshCustomerPortalSavedBookings = useCallback(
     async ({ resetView = false, signal }: { resetView?: boolean; signal: AbortSignal }) => {
@@ -861,6 +905,42 @@ export default function CustomerPortalPage() {
       document.removeEventListener("visibilitychange", refreshOnForeground);
     };
   }, [refreshCustomerPortalSavedBookings]);
+
+  useEffect(() => {
+    if (
+      portalBookingsLoadState !== "ready" ||
+      customerPrincipalAccess.status === "checking"
+    ) {
+      return;
+    }
+
+    let controller = new AbortController();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      controller.abort();
+      controller = new AbortController();
+      void refreshCustomerNotificationCentre({ signal: controller.signal });
+    };
+    refresh();
+    const interval = window.setInterval(
+      refresh,
+      CUSTOMER_NOTIFICATION_CENTRE_REFRESH_MS,
+    );
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [
+    customerPrincipalAccess.status,
+    portalBookingsLoadState,
+    refreshCustomerNotificationCentre,
+  ]);
 
   useEffect(() => {
     let activeController: AbortController | null = null;
@@ -1652,6 +1732,14 @@ export default function CustomerPortalPage() {
     }
   }
 
+  function openCustomerNotificationBooking(publicBookingReference: string) {
+    setCustomerNotificationCentreOpen(false);
+    const nextUrl = new URL("/my-bookings", window.location.origin);
+    nextUrl.searchParams.set("booking", publicBookingReference);
+    nextUrl.searchParams.set("tracking", "1");
+    window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
+  }
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-stone-50 px-3 py-4 text-slate-950 sm:px-4 lg:px-6"
@@ -1726,7 +1814,87 @@ export default function CustomerPortalPage() {
               ) : null}
             </div>
           </div>
-          <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="mt-0.5 text-xl font-bold text-slate-950 sm:text-2xl">My Bookings</h1>
+            {portalBookingsLoadState === "ready" && customerPrincipalAccess.status !== "checking" ? (
+              <button
+                aria-controls="customer-notification-centre"
+                aria-expanded={customerNotificationCentreOpen}
+                className="min-h-11 shrink-0 rounded-full border border-sky-700 bg-white px-3 text-xs font-bold text-sky-900"
+                data-customer-notification-centre-trigger="true"
+                onClick={() => setCustomerNotificationCentreOpen((current) => !current)}
+                type="button"
+              >
+                Alerts {customerNotificationCentreCountLabel}
+              </button>
+            ) : null}
+          </div>
+          {portalBookingsLoadState === "ready" &&
+          customerPrincipalAccess.status !== "checking" &&
+          customerNotificationCentreOpen ? (
+            <section
+              aria-label="Customer alerts"
+              className="mt-2 max-h-[28rem] space-y-2 overflow-y-auto rounded-xl border border-sky-200 bg-white p-2 shadow-lg"
+              data-customer-notification-centre="true"
+              id="customer-notification-centre"
+            >
+              <div className="px-2 py-1">
+                <h2 className="text-sm font-bold text-slate-950">Current alerts</h2>
+                <p className="text-xs font-semibold leading-5 text-slate-500">
+                  Driver and Prestige updates for this Customer account.
+                </p>
+              </div>
+              {customerNotificationCentreAlerts.map((alert) => (
+                <button
+                  className="flex min-h-16 w-full items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left ring-1 ring-slate-200"
+                  data-customer-notification-purpose="booking-update"
+                  key={alert.publicBookingReference}
+                  onClick={() => openCustomerNotificationBooking(alert.publicBookingReference)}
+                  type="button"
+                >
+                  <span className="min-w-0 break-words">
+                    <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Booking {alert.publicBookingReference}
+                    </span>
+                    <span className="mt-0.5 block text-sm font-bold text-slate-950">
+                      {alert.latestTitle}
+                    </span>
+                    <span className="block text-xs font-semibold leading-5 text-slate-600">
+                      {alert.latestMessage}
+                    </span>
+                    <span className="mt-1 block text-[11px] font-semibold text-slate-500">
+                      {customerNotificationTime(alert.createdAt)}
+                    </span>
+                  </span>
+                  <span
+                    className={`mt-1 shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                      alert.priority === "urgent" || alert.priority === "high"
+                        ? "bg-amber-100 text-amber-950"
+                        : "bg-sky-100 text-sky-950"
+                    }`}
+                  >
+                    {alert.notificationCount}
+                  </span>
+                </button>
+              ))}
+              {customerNotificationCentreStatus === "loading" ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
+                  Checking current alerts…
+                </p>
+              ) : null}
+              {customerNotificationCentreStatus === "ready" &&
+              customerNotificationCentreCount === 0 ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
+                  No current alerts.
+                </p>
+              ) : null}
+              {customerNotificationCentreStatus === "blocked" ? (
+                <p className="px-2 py-1 text-xs font-semibold leading-5 text-amber-800">
+                  Customer alerts are temporarily unavailable. Refresh before relying on this count.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
           {companyContactLines.length > 0 ? (
             <p
               className="text-xs leading-5 text-slate-600"

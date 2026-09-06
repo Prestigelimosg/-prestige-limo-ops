@@ -1550,6 +1550,7 @@ try {
     );
 
     const rootPrincipalToken = "customer_principal_v1.booker-root-notifications";
+    const bossPrincipalToken = "customer_principal_v1.boss-notifications";
     const wrongRootPrincipalToken = "customer_principal_v1.wrong-booker-notifications";
     globalThis.__prestigeCustomerNotificationPrincipalSessions = new Map([
       [
@@ -1566,6 +1567,22 @@ try {
           normalized_email: "booker@example.test",
           principal_id: "11111111-1111-4111-8111-111111111111",
           principal_role: "pa",
+        },
+      ],
+      [
+        bossPrincipalToken,
+        {
+          memberships: [{
+            booker_id: 26,
+            company_id: 53,
+            customer_account_reference: "customer-runtime-account-001",
+            membership_role: "boss",
+            traveler_id: 41,
+            verified_boss_name: "Verified Boss",
+          }],
+          normalized_email: "boss@example.test",
+          principal_id: "33333333-3333-4333-8333-333333333333",
+          principal_role: "boss",
         },
       ],
       [
@@ -1710,6 +1727,86 @@ try {
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerPrincipalCentre.body)), false);
     assert.equal(customerPrincipalCentreMock.client.insertHistory.length, 0);
     assert.equal(customerPrincipalCentreMock.client.updateHistory.length, 0);
+
+    const customerBossCentreMock = installMockClient({
+      [notificationTable]: [
+        seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-BOSS",
+          id: "notification-centre-boss",
+          safe_message: "The driver is on the way for the Boss booking.",
+          safe_title: "Driver on the way",
+        }),
+        seededNotification({
+          booking_reference: "BOOK-CUST-CENTRE-SIBLING",
+          id: "notification-centre-sibling",
+          safe_message: "A sibling verified Boss must not see this sibling booking.",
+          safe_title: "Sibling booking update",
+        }),
+      ],
+      bookings: [
+        {
+          booking_reference: "BOOK-CUST-CENTRE-BOSS-NO-ALERT",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10908",
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-BOSS",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10909",
+          traveler_id: 41,
+        },
+        {
+          booking_reference: "BOOK-CUST-CENTRE-SIBLING",
+          booker_id: 26,
+          company_id: 53,
+          customer_id: "customer-runtime-account-001",
+          public_booking_reference: "10910",
+          traveler_id: 42,
+        },
+      ],
+    });
+    const customerBossCentre = await responseJson(
+      await customerRoute.GET(new Request(
+        "http://localhost/api/customer-app-notifications?view=centre",
+        {
+          headers: {
+            referer: "http://localhost/my-bookings",
+            "x-prestige-customer-purpose": "customer-in-app-notification-read",
+            "x-prestige-customer-session-token": bossPrincipalToken,
+          },
+        },
+      )),
+    );
+    assert.equal(customerBossCentre.status, 200);
+    assert.equal(customerBossCentre.body.alert_count, 1);
+    assert.deepEqual(
+      customerBossCentre.body.alerts.map((alert) => alert.public_booking_reference),
+      ["10909"],
+      "Expected the Boss to use the same notification centre while seeing only that verified Traveller's booking.",
+    );
+    assert.deepEqual(
+      customerBossCentreMock.client.selectHistory.find(
+        (entry) => entry.table === "bookings",
+      )?.filters,
+      [
+        { column: "company_id", type: "eq", value: 53 },
+        { column: "booker_id", type: "eq", value: 26 },
+        { column: "traveler_id", type: "eq", value: 41 },
+      ],
+      "Expected Boss alerts to require exact Company+Booker+Traveller membership.",
+    );
+    assert.equal(
+      JSON.stringify(customerBossCentre.body).includes("Sibling booking update"),
+      false,
+    );
+    assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(customerBossCentre.body)), false);
+    assert.equal(customerBossCentreMock.client.insertHistory.length, 0);
+    assert.equal(customerBossCentreMock.client.updateHistory.length, 0);
 
     const unstableCustomerCentreMock = installMockClient({
       [notificationTable]: pagedCentreNotifications,

@@ -80,9 +80,10 @@ for (const fragment of [
 for (const fragment of [
   "bookingRecordStableKey(bookingRecord, operationalCard)",
   "resolveCompletedHistoryDeleteBookingId(bookingRecord, operationalCard)",
-  "Delete this job from Completed / History? This cannot be undone.",
+  "Permanently delete this job and its linked operational records from the app and Supabase? This cannot be undone.",
   "method: \"DELETE\"",
   "booking_id: deleteBookingId",
+  "delete_scope: adminCompletedHistoryAnyStatusDeleteScope",
   "currentBookingId !== deleteBookingId && currentBookingReference !== deletedBookingReference",
   "await loadBookings(\"Bookings synced.\", { silent: true });",
 ]) {
@@ -96,11 +97,26 @@ for (const fragment of [
   assertIncludes(completedHistoryPanel, fragment, `completed history delete panel fragment ${fragment}`);
 }
 
+for (const forbiddenFragment of [
+  "bookingRecordCanBeDeletedFromCompletedHistory",
+  "only completed or cancelled jobs can be deleted here",
+  "![\"completed\", \"cancelled\"].includes",
+]) {
+  assertExcludes(appPage, forbiddenFragment, `completed history any-status delete boundary ${forbiddenFragment}`);
+}
+
 assertIncludes(
   routeSource,
   'allowServerSessionRoleMethodsWithoutRequestToken: ["DELETE"]',
   "admin saved bookings DELETE internal-dashboard boundary",
 );
+for (const fragment of [
+  "requestHasCompletedHistoryReferer(request)",
+  'new URL(referer).pathname === "/"',
+  "Any-status saved booking delete is available only from Completed / History.",
+]) {
+  assertIncludes(routeSource, fragment, `completed history route scope fragment ${fragment}`);
+}
 
 for (const forbiddenPattern of [
   /method:\s*"POST"/i,

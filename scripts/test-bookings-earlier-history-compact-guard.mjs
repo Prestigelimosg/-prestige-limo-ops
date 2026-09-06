@@ -71,7 +71,7 @@ const bookingsTabSection = sliceBetween(
 const dashboardSection = sliceBetween(
   appPage,
   '{activeTab === "dashboard" ? (',
-  "      </div>\n    </main>",
+  'aria-label="Open Ask AI"',
 );
 const completedTabSection = sliceBetween(
   appPage,
@@ -304,7 +304,6 @@ for (const fragment of [
   "const completedHistoryDisplayStatus = isCancelledStatus",
   "? \"cancelled\"",
   ": isCompletedStatus",
-  "const canDeleteCompletedHistoryBooking = bookingRecordCanBeDeletedFromCompletedHistory(savedBooking);",
   "md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)]",
   "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",
   "inline-flex items-center rounded-full",
@@ -312,7 +311,6 @@ for (const fragment of [
   "Earlier",
   "{isCompletedStatus ? (",
   "data-completed-undo-booking={bookingId}",
-  "{canDeleteCompletedHistoryBooking ? (",
   "data-completed-delete-booking={bookingId}",
   'className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2"',
   'data-completed-operational-detail-grid={bookingId}',
@@ -334,6 +332,22 @@ assertIncludes(
   completedTabSection,
   'id="completed-history"',
   "completed/history tab must expose the inline link target",
+);
+
+for (const fragment of [
+  "data-completed-delete-booking={bookingId}",
+  "onClick={() => deleteCompletedHistoryBooking(savedBooking, operationalCard)}",
+]) {
+  assertIncludes(
+    completedHistoryPanel,
+    fragment,
+    `every completed/earlier history row delete fragment ${fragment}`,
+  );
+}
+assertExcludes(
+  completedHistoryPanel,
+  "bookingRecordCanBeDeletedFromCompletedHistory",
+  "completed/earlier delete must not depend on terminal booking status",
 );
 
 for (const fragment of [
@@ -420,8 +434,9 @@ for (const phrase of [
   "Completed / History rows are grouped under compact monthly headers such as `June 2026`, with known-date months sorted newest first and unknown dates grouped under `Date to confirm`.",
   "The Dashboard no longer renders earlier booking cards; it shows a compact count plus an `Open Completed / History` handoff.",
   "Expanded Current / Upcoming and Completed / History rows use compact detail strips instead of large mini-cards.",
-  "Earlier non-completed rows do not show `Undo completed` or `Delete` because they are history rows, not completed-status rows.",
-  "This is UI-only grouping/layout on existing loaded booking data; it does not add routes/APIs, DB writes, env changes, provider sends, GPS/live location, billing/payment/PDF/invoice/payout, calendar sync, parser changes, or shims.",
+  "Every Completed / Earlier row shows the existing `Delete` control regardless of saved booking status.",
+  "The existing exact-id delete API permanently removes that booking and its linked operational job records from Supabase immediately after the explicit irreversible confirmation.",
+  "Customer Folder deletion remains completed/cancelled-only; invoices, payments, customer profiles, Calendar events, external providers, schema, migrations, and environment configuration remain unchanged.",
   "Guard coverage lives in `scripts/test-bookings-earlier-history-compact-guard.mjs` and is registered in `scripts/test-preactivation-verification-suite.mjs`.",
 ]) {
   assertIncludes(ledgerSection, phrase, `ledger phrase: ${phrase}`);

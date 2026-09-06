@@ -16,7 +16,6 @@ const sourceFiles = [
   "lib/admin-saved-booking-create.ts",
   "lib/admin-saved-booking-delete.ts",
   "lib/admin-saved-booking-read.ts",
-  "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
   "app/api/admin-saved-bookings/route.ts",
 ];
@@ -108,10 +107,16 @@ async function writeHarnessFile(tempDir, relativePath) {
 async function writeMockModules(tempDir) {
   const serverOnlyPath = path.join(tempDir, "node_modules/server-only/index.js");
   const supabasePath = path.join(tempDir, "node_modules/@supabase/supabase-js/index.js");
+  const adapterPath = path.join(tempDir, "lib/admin-booking-supabase-adapter.js");
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
+  await mkdir(path.dirname(adapterPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(
+    adapterPath,
+    "exports.adminDispatcherBoundaryToPersistenceAdapterActor = (context) => ({ actor_label: context.actorLabel, actor_role: context.role, boundary_mode: context.mode, source_surface: 'admin_api' });\n",
+  );
   await writeFile(
     supabasePath,
     [
@@ -404,6 +409,10 @@ const seed = {
       id: "route-delete-current-cancelled-1",
     },
     {
+      booking_id: "delete-current-draft-1",
+      id: "route-delete-current-draft-1",
+    },
+    {
       booking_id: "keep-other-1",
       id: "route-keep-other-1",
     },
@@ -424,6 +433,10 @@ const seed = {
     {
       booking_id: "delete-current-cancelled-1",
       id: "service-delete-current-cancelled-1",
+    },
+    {
+      booking_id: "delete-current-draft-1",
+      id: "service-delete-current-draft-1",
     },
     {
       booking_id: "keep-other-1",
@@ -452,6 +465,12 @@ const seed = {
       booking_reference: "ADM-DELETE-CURRENT-CANCELLED-1",
       customer_facing_status: "cancelled",
       id: "delete-current-cancelled-1",
+    },
+    {
+      admin_internal_status: "draft",
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      customer_facing_status: "pending",
+      id: "delete-current-draft-1",
     },
     {
       booking_reference: "ADM-DELETE-CONFIRMED-1",
@@ -484,6 +503,42 @@ const seed = {
       pickup_at: "2099-12-30T16:00:00+00:00",
     },
   ],
+  driver_job_bid_offers: [
+    {
+      booking_reference: "ADM-DELETE-COMPLETED-1",
+      id: "offer-delete-completed-1",
+    },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
+      id: "offer-delete-current-completed-1",
+    },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "offer-delete-current-draft-1",
+    },
+    {
+      booking_reference: "ADM-KEEP-OTHER",
+      id: "offer-keep-other-1",
+    },
+  ],
+  driver_job_bids: [
+    {
+      booking_reference: "ADM-DELETE-COMPLETED-1",
+      id: "bid-delete-completed-1",
+    },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
+      id: "bid-delete-current-completed-1",
+    },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "bid-delete-current-draft-1",
+    },
+    {
+      booking_reference: "ADM-KEEP-OTHER",
+      id: "bid-keep-other-1",
+    },
+  ],
   customer_driver_app_notification_outbox: [
     {
       booking_reference: "ADM-DELETE-COMPLETED-1",
@@ -502,6 +557,10 @@ const seed = {
       id: "notification-delete-current-cancelled-1",
     },
     {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "notification-delete-current-draft-1",
+    },
+    {
       booking_reference: "ADM-KEEP-OTHER",
       id: "notification-keep-other-1",
     },
@@ -515,6 +574,10 @@ const seed = {
       booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
       id: "dsp-delete-current-completed-1",
     },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "dsp-delete-current-draft-1",
+    },
   ],
   driver_job_links: [
     {
@@ -524,6 +587,10 @@ const seed = {
     {
       booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
       id: "link-delete-current-completed-1",
+    },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "link-delete-current-draft-1",
     },
     {
       booking_reference: "ADM-KEEP-OTHER",
@@ -547,6 +614,10 @@ const seed = {
       booking_reference: "ADM-DELETE-CURRENT-CANCELLED-1",
       id: "status-delete-current-cancelled-1",
     },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "status-delete-current-draft-1",
+    },
   ],
   driver_live_location_audit_events: [
     {
@@ -556,6 +627,10 @@ const seed = {
     {
       booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
       id: "live-audit-delete-current-completed-1",
+    },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "live-audit-delete-current-draft-1",
     },
   ],
   driver_live_location_latest_positions: [
@@ -567,6 +642,10 @@ const seed = {
       booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
       id: "live-latest-delete-current-completed-1",
     },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "live-latest-delete-current-draft-1",
+    },
   ],
   driver_ots_photo_proofs: [
     {
@@ -577,6 +656,10 @@ const seed = {
       booking_reference: "ADM-DELETE-CURRENT-COMPLETED-1",
       id: "ots-delete-current-completed-1",
     },
+    {
+      booking_reference: "ADM-DELETE-CURRENT-DRAFT-1",
+      id: "ots-delete-current-draft-1",
+    },
   ],
 };
 
@@ -586,6 +669,10 @@ try {
   const { deletePersistence, route } = harness;
 
   assert.equal(deletePersistence.adminSavedBookingDeleteVersion, "admin-saved-booking-delete-v1");
+  assert.equal(
+    deletePersistence.adminSavedBookingCompletedHistoryAnyStatusDeleteScope,
+    "completed_history_any_status",
+  );
   assert.equal(
     deletePersistence.adminSavedBookingFutureDraftCleanupDeleteScope,
     "future_draft_2099_exact_refs",
@@ -602,8 +689,19 @@ try {
     },
     ok: true,
   });
+  assert.deepEqual(deletePersistence.parseAdminSavedBookingDeletePayload({
+    booking_id: "delete-confirmed-1",
+    delete_scope: "completed_history_any_status",
+  }), {
+    data: {
+      booking_id: "delete-confirmed-1",
+      delete_scope: "completed_history_any_status",
+    },
+    ok: true,
+  });
   assert.equal(deletePersistence.parseAdminSavedBookingDeletePayload({}).ok, false);
   assert.equal(deletePersistence.parseAdminSavedBookingDeletePayload({ booking_id: "delete-completed-1", status: "completed" }).ok, false);
+  assert.equal(deletePersistence.parseAdminSavedBookingDeletePayload({ booking_id: "delete-completed-1", delete_scope: "wrong_scope" }).ok, false);
   assert.deepEqual(deletePersistence.parseAdminSavedBookingFutureDraftCleanupDeletePayload({
     booking_references: ["ADM-CLEANUP-2099-DRAFT"],
     cleanup_scope: "future_draft_2099_exact_refs",
@@ -636,6 +734,27 @@ try {
   assert.equal(blockedMock.createdClients.length, 0);
   assertNoDeletes(blockedMock, "blocked customer surface");
   assertNoUnsafeResponse(blockedResult, "blocked response");
+
+  setEnv(enabledEnv());
+
+  const customerFolderAnyStatusMock = installMockClient(seed);
+  const customerFolderAnyStatusResult = await routeJson(
+    await route.DELETE(
+      deleteRequest("http://localhost/api/admin-saved-bookings", {
+        booking_id: "delete-current-draft-1",
+        delete_scope: "completed_history_any_status",
+      }, sessionHeaders({ referer: "http://localhost/customers/test-customer" })),
+    ),
+  );
+
+  assert.equal(customerFolderAnyStatusResult.status, 403);
+  assert.equal(
+    customerFolderAnyStatusResult.body.error,
+    "Any-status saved booking delete is available only from Completed / History.",
+  );
+  assert.equal(customerFolderAnyStatusMock.createdClients.length, 0);
+  assertNoDeletes(customerFolderAnyStatusMock, "customer folder any-status delete");
+  assertNoUnsafeResponse(customerFolderAnyStatusResult, "customer folder any-status response");
 
   setEnv(enabledEnv());
 
@@ -705,6 +824,146 @@ try {
 
   setEnv(enabledEnv());
 
+  const anyStatusDraftMock = installMockClient(seed);
+  const anyStatusDraftResult = await routeJson(
+    await route.DELETE(
+      deleteRequest("http://localhost/api/admin-saved-bookings", {
+        booking_id: "delete-current-draft-1",
+        delete_scope: "completed_history_any_status",
+      }),
+    ),
+  );
+
+  assert.equal(anyStatusDraftResult.status, 200);
+  assert.deepEqual(anyStatusDraftResult.body, {
+    booking: {
+      id: "delete-current-draft-1",
+      status: "draft",
+    },
+    ok: true,
+    version: "admin-saved-booking-delete-v1",
+  });
+  assert.equal(anyStatusDraftMock.createdClients.length, 1);
+  assert.equal(anyStatusDraftMock.client.selectHistory.length, 1);
+  assert.deepEqual(anyStatusDraftMock.client.selectHistory[0].filters, [
+    {
+      column: "id",
+      type: "eq",
+      value: "delete-current-draft-1",
+    },
+  ]);
+  assert.equal(
+    anyStatusDraftMock.client.selectHistory[0].selectedColumns,
+    "id, booking_reference, admin_internal_status, customer_facing_status",
+  );
+  assert.deepEqual(
+    anyStatusDraftMock.client.deleteHistory.map(({ filters, table }) => ({ filters, table })),
+    [
+      "booking_service_items",
+      "booking_route_points",
+      "driver_job_bids",
+      "driver_job_bid_offers",
+      "customer_driver_app_notification_outbox",
+      "driver_live_location_latest_positions",
+      "driver_live_location_audit_events",
+      "driver_ots_photo_proofs",
+      "driver_job_dsp_actual_time_events",
+      "driver_job_status_events",
+      "driver_job_links",
+      "bookings",
+    ].map((table) => ({
+      filters:
+        table === "bookings"
+          ? [
+              {
+                column: "id",
+                type: "eq",
+                value: "delete-current-draft-1",
+              },
+              {
+                column: "booking_reference",
+                type: "eq",
+                value: "ADM-DELETE-CURRENT-DRAFT-1",
+              },
+            ]
+          : ["booking_service_items", "booking_route_points"].includes(table)
+            ? [
+                {
+                  column: "booking_id",
+                  type: "eq",
+                  value: "delete-current-draft-1",
+                },
+              ]
+            : [
+                {
+                  column: "booking_reference",
+                  type: "eq",
+                  value: "ADM-DELETE-CURRENT-DRAFT-1",
+                },
+              ],
+      table,
+    })),
+    "Completed / Earlier any-status delete must remove the exact draft and linked operational artifacts without a status mutation.",
+  );
+  assert.equal(
+    anyStatusDraftMock.client.rows.bookings.some(
+      (booking) => booking.id === "delete-current-draft-1",
+    ),
+    false,
+  );
+  for (const table of ["booking_service_items", "booking_route_points"]) {
+    assert.equal(
+      anyStatusDraftMock.client.rows[table].some(
+        (row) => row.booking_id === "delete-current-draft-1",
+      ),
+      false,
+      `${table} exact draft booking children must be gone after any-status delete.`,
+    );
+  }
+  for (const table of [
+    "driver_job_bids",
+    "driver_job_bid_offers",
+    "customer_driver_app_notification_outbox",
+    "driver_live_location_latest_positions",
+    "driver_live_location_audit_events",
+    "driver_ots_photo_proofs",
+    "driver_job_dsp_actual_time_events",
+    "driver_job_status_events",
+    "driver_job_links",
+  ]) {
+    assert.equal(
+      anyStatusDraftMock.client.rows[table].some(
+        (row) => row.booking_reference === "ADM-DELETE-CURRENT-DRAFT-1",
+      ),
+      false,
+      `${table} exact draft booking artifacts must be gone after any-status delete.`,
+    );
+  }
+  assert.equal(
+    anyStatusDraftMock.client.rows.booking_route_points.some(
+      (row) => row.booking_id === "keep-other-1",
+    ),
+    true,
+    "Any-status delete must keep unrelated route points.",
+  );
+  assert.equal(
+    anyStatusDraftMock.client.rows.driver_job_links.some(
+      (row) => row.booking_reference === "ADM-KEEP-OTHER",
+    ),
+    true,
+    "Any-status delete must keep unrelated driver job links.",
+  );
+  assert.equal(
+    anyStatusDraftMock.client.rows.driver_job_bid_offers.some(
+      (row) => row.booking_reference === "ADM-KEEP-OTHER",
+    ),
+    true,
+    "Any-status delete must keep unrelated Driver Pool offers.",
+  );
+  assertNoUnsafeResponse(anyStatusDraftResult, "any-status draft response");
+
+  setEnv(enabledEnv());
+
   const currentValidMock = installMockClient(seed);
   const currentValidResult = await routeJson(
     await route.DELETE(
@@ -746,6 +1005,8 @@ try {
     [
       "booking_service_items",
       "booking_route_points",
+      "driver_job_bids",
+      "driver_job_bid_offers",
       "customer_driver_app_notification_outbox",
       "driver_live_location_latest_positions",
       "driver_live_location_audit_events",
@@ -813,6 +1074,8 @@ try {
     );
   }
   for (const table of [
+    "driver_job_bids",
+    "driver_job_bid_offers",
     "customer_driver_app_notification_outbox",
     "driver_live_location_latest_positions",
     "driver_live_location_audit_events",
@@ -908,6 +1171,8 @@ try {
     [
       "booking_service_items",
       "booking_route_points",
+      "driver_job_bids",
+      "driver_job_bid_offers",
       "customer_driver_app_notification_outbox",
       "driver_live_location_latest_positions",
       "driver_live_location_audit_events",
@@ -965,6 +1230,8 @@ try {
     );
   }
   for (const table of [
+    "driver_job_bids",
+    "driver_job_bid_offers",
     "customer_driver_app_notification_outbox",
     "driver_live_location_latest_positions",
     "driver_live_location_audit_events",
@@ -1003,6 +1270,13 @@ try {
     true,
     "Unrelated driver job links must not be deleted.",
   );
+  assert.equal(
+    validMock.client.rows.driver_job_bid_offers.some(
+      (row) => row.booking_reference === "ADM-KEEP-OTHER",
+    ),
+    true,
+    "Unrelated Driver Pool offers must not be deleted.",
+  );
   assertNoUnsafeResponse(validResult, "valid response");
 
   setEnv(enabledEnv());
@@ -1025,7 +1299,7 @@ try {
     ok: true,
     version: "admin-saved-booking-delete-v1",
   });
-  assert.equal(cancelledMock.client.deleteHistory.length, 10);
+  assert.equal(cancelledMock.client.deleteHistory.length, 12);
   assert.equal(cancelledMock.client.rows.bookings.some((booking) => booking.id === "delete-cancelled-1"), false);
   assert.equal(
     cancelledMock.client.rows.booking_route_points.some(
@@ -1073,7 +1347,7 @@ try {
     ok: true,
     version: "admin-saved-booking-delete-v1",
   });
-  assert.equal(currentCancelledMock.client.deleteHistory.length, 10);
+  assert.equal(currentCancelledMock.client.deleteHistory.length, 12);
   assert.deepEqual(currentCancelledMock.client.selectHistory[0].filters, [
     {
       column: "id",
@@ -1298,7 +1572,7 @@ try {
 
   assert.equal(failureResult.status, 500);
   assert.equal(failureResult.body.error, "Admin saved booking delete failed safely.");
-  assert.equal(failureMock.client.deleteHistory.length, 10);
+  assert.equal(failureMock.client.deleteHistory.length, 12);
   assert.equal(
     failureMock.client.rows.bookings.some((booking) => booking.id === "delete-completed-1"),
     true,

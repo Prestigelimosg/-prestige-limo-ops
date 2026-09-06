@@ -6,6 +6,7 @@ import {
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import { createAdminSavedBooking } from "../../../lib/admin-saved-booking-create";
 import {
+  adminSavedBookingCompletedHistoryAnyStatusDeleteScope,
   deleteAdminCompletedSavedBooking,
   deleteAdminFutureDraft2099SavedBookingsByReference,
   isAdminSavedBookingFutureDraftCleanupDeletePayload,
@@ -47,6 +48,20 @@ async function readJsonBody(request: Request) {
 
 function isProductionRuntime() {
   return process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+}
+
+function requestHasCompletedHistoryReferer(request: Request) {
+  const referer = request.headers.get("referer");
+
+  if (!referer) {
+    return false;
+  }
+
+  try {
+    return new URL(referer).pathname === "/";
+  } catch {
+    return false;
+  }
 }
 
 function requireAdminDispatcherBoundary(request: Request): AdminDispatcherBoundaryCheck {
@@ -186,6 +201,16 @@ export async function DELETE(request: Request) {
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
     const body = await readJsonBody(request);
+
+    if (
+      body?.delete_scope === adminSavedBookingCompletedHistoryAnyStatusDeleteScope &&
+      !requestHasCompletedHistoryReferer(request)
+    ) {
+      return blockedResponse(
+        "Any-status saved booking delete is available only from Completed / History.",
+      );
+    }
+
     const result = isAdminSavedBookingFutureDraftCleanupDeletePayload(body)
       ? await deleteAdminFutureDraft2099SavedBookingsByReference(body, actor)
       : await deleteAdminCompletedSavedBooking(body, actor);

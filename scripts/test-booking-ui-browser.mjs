@@ -10163,7 +10163,7 @@ async function runChromeTest() {
           hasSessionTokenHeader: false,
           method: "GET",
           purpose: "admin-booking-persistence",
-          search: "?limit=5&notification_status=queued&page=1",
+          search: "?limit=100&notification_status=queued&page=1",
         },
       ],
       "Expected Dashboard notification feed to GET queued admin app notifications through the guarded read API path",

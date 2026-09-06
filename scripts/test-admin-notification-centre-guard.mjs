@@ -17,6 +17,17 @@ const pendingAckBrowser = fs.readFileSync(
   path.join(root, "scripts/test-pending-driver-ack-queue-browser.mjs"),
   "utf8",
 );
+const adminNotificationReadStart = appPage.indexOf(
+  "async function loadAdminAppNotificationsRead()",
+);
+const adminNotificationReadEnd = appPage.indexOf(
+  "async function loadAdminEmailAiIntakeRead()",
+  adminNotificationReadStart,
+);
+const adminNotificationReadSource = appPage.slice(
+  adminNotificationReadStart,
+  adminNotificationReadEnd,
+);
 
 for (const fragment of [
   "const adminNotificationCentreCount =",
@@ -32,6 +43,9 @@ for (const fragment of [
   "function openPendingDriverAckQueueFromNotificationCentre()",
   "function openSavedAdminNotificationsFromNotificationCentre()",
   "data-pending-driver-ack-queue=\"true\"",
+  "const adminAppNotificationReadPageSize = 100;",
+  'aria-haspopup={isDashboardTab && showAdminActionBadge ? "menu" : undefined}',
+  "data-admin-notification-centre-keyboard-trigger=",
 ]) {
   assert.equal(
     appPage.includes(fragment),
@@ -39,6 +53,18 @@ for (const fragment of [
     `Admin notification centre must include ${fragment}`,
   );
 }
+
+assert.match(
+  adminNotificationReadSource,
+  /for \(let page = 1; page <= pageCount; page \+= 1\)[\s\S]*?limit: String\(adminAppNotificationReadPageSize\)[\s\S]*?page: String\(page\)[\s\S]*?pagePagination\?\.page_count/,
+  "The notification centre must load every queued notification page before computing its purpose counts.",
+);
+
+assert.equal(
+  adminNotificationReadSource.includes('limit: "5"'),
+  false,
+  "The notification-centre read must not truncate purpose counts to five queued records.",
+);
 
 assert.match(
   appPage,
@@ -62,6 +88,12 @@ assert.match(
   appPage,
   /if \(isDashboardTab && showAdminActionBadge && clickedAlertBadge\) \{\s*setBookingsAlertMenuOpen\(\(isOpen\) => !isOpen\);\s*return;/,
   "Every Dashboard badge click must reveal its purpose list, even when only one category is active.",
+);
+
+assert.match(
+  appPage,
+  /onKeyDown=\{\(event\) => \{[\s\S]*?isDashboardTab &&[\s\S]*?showAdminActionBadge &&[\s\S]*?\(event\.key === "Enter" \|\| event\.key === " "\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?setBookingsAlertMenuOpen/,
+  "The focused Dashboard tab must expose an explicit Enter/Space path to the notification purpose menu.",
 );
 
 assert.equal(
@@ -101,6 +133,7 @@ for (const fragment of [
   "Dashboard notification centre ACK count",
   "single-category Driver ACK purpose list",
   "Dashboard notification centre opened the existing ACK Queue",
+  "keyboard-opened Driver ACK notification centre",
 ]) {
   assert.equal(
     pendingAckBrowser.includes(fragment),

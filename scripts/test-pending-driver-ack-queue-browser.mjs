@@ -421,12 +421,21 @@ async function runChromeTest() {
     );
     assert.equal(dashboardAckBadge, "2 ACK");
     const openedAckNotificationCentre = await evaluate(`(() => {
-      const badge = document.querySelector('[data-app-tab="dashboard"] [data-bookings-new-request-badge="true"]');
-      if (!(badge instanceof HTMLElement)) return false;
-      badge.click();
-      return true;
+      const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+      if (!(dashboardTab instanceof HTMLButtonElement)) return false;
+      dashboardTab.focus();
+      dashboardTab.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        code: "Enter",
+        key: "Enter",
+      }));
+      return document.activeElement === dashboardTab;
     })()`);
-    assert.equal(openedAckNotificationCentre, true, "Expected the Dashboard ACK badge to be clickable.");
+    assert.equal(
+      openedAckNotificationCentre,
+      true,
+      "Expected the focused Dashboard tab to have keyboard-opened Driver ACK notification centre.",
+    );
     const ackNotificationCentre = await waitForCondition(
       () =>
         evaluate(`(() => {

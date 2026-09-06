@@ -85,6 +85,8 @@ const adminMonthlyInvoiceNumberReservationsApiPath =
   "/api/admin-monthly-invoice-number-reservations";
 const adminCompanyProfileApiPath = "/api/admin-company-profile";
 const adminAppNotificationsApiPath = "/api/admin-app-notifications";
+const adminAppNotificationReadPageSize = 100;
+const adminAppNotificationReadMaxPages = 1000;
 const adminEmailAiIntakeApiPath = "/api/admin-email-ai-intake";
 const adminAutomationRuntimeApiPath = "/api/admin-automation-runtime";
 const adminDevicePushSubscriptionsApiPath = "/api/admin-device-push-subscriptions";
@@ -12341,30 +12343,48 @@ async function updateAdminAutomationRuntimeControl(enabled: boolean) {
 }
 
 async function loadAdminAppNotificationsRead() {
-  const params = new URLSearchParams({
-    limit: "5",
-    notification_status: "queued",
-    page: "1",
-  });
+  const notifications: AdminAppNotificationRecord[] = [];
+  let pageCount = 1;
+  let pagination: AdminAppNotificationPagination | null = null;
 
-  const response = await fetch(`${adminAppNotificationsApiPath}?${params.toString()}`, {
-    headers: {
-      "x-prestige-admin-purpose": adminLegacyDataPurpose,
-    },
-    method: "GET",
-  });
-  const result = await response.json().catch(() => null);
+  for (let page = 1; page <= pageCount; page += 1) {
+    const params = new URLSearchParams({
+      limit: String(adminAppNotificationReadPageSize),
+      notification_status: "queued",
+      page: String(page),
+    });
+    const response = await fetch(`${adminAppNotificationsApiPath}?${params.toString()}`, {
+      headers: {
+        "x-prestige-admin-purpose": adminLegacyDataPurpose,
+      },
+      method: "GET",
+    });
+    const result = await response.json().catch(() => null);
 
-  if (!response.ok || !result?.ok) {
-    throw new Error(result?.error || "Admin app notification read failed.");
+    if (!response.ok || !result?.ok) {
+      throw new Error(result?.error || "Admin app notification read failed.");
+    }
+
+    const pageNotifications = Array.isArray(result.notifications)
+      ? (result.notifications as AdminAppNotificationRecord[])
+      : [];
+    const pagePagination = (result.pagination || null) as AdminAppNotificationPagination | null;
+    const reportedPageCount = adminMonthlyBillingGroupingCount(pagePagination?.page_count);
+
+    if (reportedPageCount > adminAppNotificationReadMaxPages) {
+      throw new Error("Admin app notification page count exceeded its safe read boundary.");
+    }
+
+    notifications.push(...pageNotifications);
+    pagination ||= pagePagination;
+    pageCount = Math.max(pageCount, reportedPageCount);
+
+    if (!pagePagination?.has_next_page) {
+      break;
+    }
   }
 
-  return {
-    notifications: Array.isArray(result.notifications)
-      ? (result.notifications as AdminAppNotificationRecord[])
-      : [],
-    pagination: (result.pagination || null) as AdminAppNotificationPagination | null,
-  };
+  return { notifications, pagination };
 }
 
 async function loadAdminEmailAiIntakeRead() {
@@ -36544,6 +36564,17 @@ export default function Home() {
 	            return (
 	              <div className="relative w-full" key={tab.id}>
 	              <button
+	                aria-controls={
+	                  isDashboardTab && showAdminActionBadge
+	                    ? "admin-notification-centre-menu"
+	                    : undefined
+	                }
+	                aria-expanded={
+	                  isDashboardTab && showAdminActionBadge
+	                    ? bookingsAlertMenuOpen
+	                    : undefined
+	                }
+	                aria-haspopup={isDashboardTab && showAdminActionBadge ? "menu" : undefined}
 	                aria-selected={selected}
                 className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded px-2 py-1 text-xs font-semibold transition ${
                   selected
@@ -36560,6 +36591,9 @@ export default function Home() {
                 data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
 	                data-dashboard-tab-total-alerts={isDashboardTab ? String(adminNotificationCentreCount) : undefined}
 	                data-admin-notification-centre-count={isDashboardTab ? String(adminNotificationCentreCount) : undefined}
+	                data-admin-notification-centre-keyboard-trigger={
+	                  isDashboardTab && showAdminActionBadge ? "true" : undefined
+	                }
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
 		                onClick={(event) => {
 		                  const clickedAlertBadge =
@@ -36573,6 +36607,16 @@ export default function Home() {
 
 	                  setBookingsAlertMenuOpen(false);
 	                  selectAppTab(tab.id);
+	                }}
+	                onKeyDown={(event) => {
+	                  if (
+	                    isDashboardTab &&
+	                    showAdminActionBadge &&
+	                    (event.key === "Enter" || event.key === " ")
+	                  ) {
+	                    event.preventDefault();
+	                    setBookingsAlertMenuOpen((isOpen) => !isOpen);
+	                  }
 	                }}
                 role="tab"
                 style={{ minHeight: 44 }}
@@ -36597,6 +36641,7 @@ export default function Home() {
 		                    data-admin-notification-centre="true"
 		                    data-admin-notification-centre-categories={String(adminNotificationCentreCategoryCount)}
 		                    data-bookings-alert-menu="true"
+		                    id="admin-notification-centre-menu"
 		                    role="menu"
 		                  >
 		                    <div className="border-b border-stone-200 px-2 py-1.5">

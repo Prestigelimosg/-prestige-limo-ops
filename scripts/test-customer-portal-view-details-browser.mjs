@@ -118,6 +118,8 @@ async function main() {
   let customerNotificationReadCount = 0;
   let customerNotificationCentreReadCount = 0;
   let customerNotificationCentreCleared = false;
+  let heldPreClearCustomerNotificationCentreResponse = null;
+  let holdNextCustomerNotificationCentreRead = false;
   const customerNotificationCentreDismissRequests = [];
   const savedBookingReadQueries = [];
 
@@ -231,6 +233,15 @@ async function main() {
           provider_send: false,
           version: "customer-notification-centre-browser-fixture",
         };
+        if (holdNextCustomerNotificationCentreRead) {
+          holdNextCustomerNotificationCentreRead = false;
+          heldPreClearCustomerNotificationCentreResponse = {
+            body: Buffer.from(JSON.stringify(responseBody)).toString("base64"),
+            requestId,
+            responseCode,
+          };
+          return;
+        }
       } else if (
         requestUrl.pathname === "/api/customer-app-notifications" &&
         method === "PATCH" &&
@@ -852,6 +863,13 @@ async function main() {
       height: 28,
       text: "Clear",
     });
+    holdNextCustomerNotificationCentreRead = true;
+    await evaluate("window.dispatchEvent(new Event('focus'))");
+    await waitForCondition(
+      () => Boolean(heldPreClearCustomerNotificationCentreResponse),
+      10000,
+      "held pre-Clear Customer centre response",
+    );
     await evaluate(
       `document.querySelector('[data-customer-notification-centre-clear="true"]')?.click()`,
     );
@@ -876,6 +894,18 @@ async function main() {
     assert.equal(clearedCentreState.clearControlPresent, false);
     assert.equal(clearedCentreState.documentWidth, clearedCentreState.viewportWidth);
     assert.equal(clearedCentreState.search, searchBeforeClear);
+    await client.send("Fetch.fulfillRequest", {
+      ...heldPreClearCustomerNotificationCentreResponse,
+      responseHeaders: responseHeaders(),
+    });
+    heldPreClearCustomerNotificationCentreResponse = null;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const staleReadState = await evaluate(`(() => ({
+      centreText: document.querySelector('[data-customer-notification-centre="true"]')?.innerText || "",
+      triggerText: document.querySelector('[data-customer-notification-centre-trigger="true"]')?.textContent?.trim() || "",
+    }))()`);
+    assert.equal(staleReadState.triggerText, "Alerts 0");
+    assert.match(staleReadState.centreText, /No current alerts\./);
     assert.deepEqual(customerNotificationCentreDismissRequests, [
       {
         body: { action: "dismiss_current" },

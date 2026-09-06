@@ -87,7 +87,7 @@ const contractChecks = [
     label: "customer/driver app notification API contract",
     requiredFragments: [
       "customerAuthRequiredMessage",
-      "Expected driver GET to verify token hash before the scoped shared-conversation read",
+      "Expected driver GET to verify token hash before queued alerts and exact sent-message history reads",
       "Expected driver PATCH to update only exact queued notifications scoped to the verified link",
       "Customer/driver app notification API contract tests passed.",
     ],
@@ -468,7 +468,10 @@ for (const fragment of [
   "dismissCustomerNotificationCentreForBoundary",
   '.eq("delivery_surface", "customer_app")',
   '.eq("notification_status", "queued")',
-  '.in("id", notificationIdBatch)',
+  '.in("id", exactNotificationIds)',
+  '.in("notification_status", ["read", "dismissed", "archived"])',
+  '.eq("actor_role", "driver")',
+  '.eq("workflow_area", "customer_driver_quick_replies")',
   'notification_status: "dismissed"',
 ]) {
   assertIncludes(notificationPersistence, fragment, `notification persistence boundary ${fragment}`);

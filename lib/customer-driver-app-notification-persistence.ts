@@ -251,7 +251,6 @@ const maxNotificationLimit = 100;
 const maxNotificationPage = 1000;
 const maxReadRows = 500;
 const customerNotificationCentreBookingBatchSize = 50;
-const customerNotificationCentreDismissBatchSize = 50;
 const customerNotificationCentrePageSize = 500;
 const maxBookingReferenceLength = 120;
 const maxDriverJobLinkIdLength = 120;
@@ -2441,36 +2440,26 @@ async function dismissCustomerNotificationCentreForBoundary(
     return clientResult;
   }
 
-  let dismissedCount = 0;
-  for (
-    let batchStart = 0;
-    batchStart < centre.data.notification_ids.length;
-    batchStart += customerNotificationCentreDismissBatchSize
-  ) {
-    const notificationIdBatch = centre.data.notification_ids.slice(
-      batchStart,
-      batchStart + customerNotificationCentreDismissBatchSize,
-    );
-    const { data, error } = await clientResult.data
-      .from(notificationTable)
-      .update({
-        notification_status: "dismissed",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("delivery_surface", "customer_app")
-      .eq("notification_status", "queued")
-      .in("id", notificationIdBatch)
-      .select("id");
-    if (error) {
-      return safeAdapterFailure(safeCustomerNotificationDismissError, 500, error);
-    }
-    const expectedIds = new Set(notificationIdBatch);
-    dismissedCount += new Set(
-      asArray(data)
-        .map((value) => safeIdentifier(asRecord(value).id, maxNotificationIdLength))
-        .filter((id): id is string => Boolean(id && expectedIds.has(id))),
-    ).size;
+  const exactNotificationIds = centre.data.notification_ids;
+  const { data, error } = await clientResult.data
+    .from(notificationTable)
+    .update({
+      notification_status: "dismissed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("delivery_surface", "customer_app")
+    .eq("notification_status", "queued")
+    .in("id", exactNotificationIds)
+    .select("id");
+  if (error) {
+    return safeAdapterFailure(safeCustomerNotificationDismissError, 500, error);
   }
+  const expectedIds = new Set(exactNotificationIds);
+  const dismissedCount = new Set(
+    asArray(data)
+      .map((value) => safeIdentifier(asRecord(value).id, maxNotificationIdLength))
+      .filter((id): id is string => Boolean(id && expectedIds.has(id))),
+  ).size;
 
   return { data: { dismissed_count: dismissedCount }, ok: true };
 }
@@ -4359,7 +4348,25 @@ export async function loadDriverAppNotificationsForToken(
     return safeAdapterFailure(safeNotificationLoadError, 500, error);
   }
 
-  const allRecords = asArray(data)
+  let sentQuickReplyHistory: unknown[] = [];
+  if (!params.notification_status) {
+    const historyResult = await clientResult.data
+      .from(notificationTable)
+      .select(notificationSelect)
+      .eq("booking_reference", linkResult.data.booking_reference)
+      .eq("delivery_surface", "customer_app")
+      .eq("actor_role", "driver")
+      .eq("workflow_area", "customer_driver_quick_replies")
+      .in("notification_status", ["read", "dismissed", "archived"])
+      .order("created_at", { ascending: false })
+      .limit(maxReadRows);
+    if (historyResult.error) {
+      return safeAdapterFailure(safeNotificationLoadError, 500, historyResult.error);
+    }
+    sentQuickReplyHistory = asArray(historyResult.data);
+  }
+
+  const allRecords = [...asArray(data), ...sentQuickReplyHistory]
     .map(normalizeRecord)
     .filter(
       (record) =>
@@ -4375,7 +4382,10 @@ export async function loadDriverAppNotificationsForToken(
         record.delivery_surface === "customer_app"
           ? { ...record, delivery_surface: "driver_app" }
           : record,
-      ),
+        ),
+    )
+    .sort((left, right) =>
+      String(right.created_at || "").localeCompare(String(left.created_at || "")),
     );
 
   return {

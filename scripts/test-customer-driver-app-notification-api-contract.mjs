@@ -1910,8 +1910,15 @@ try {
     });
     assert.equal(
       customerPrincipalCentreMock.client.updateHistory.length,
-      11,
-      "Expected all 501 exact scoped IDs to be dismissed in bounded 50-row batches.",
+      1,
+      "Expected all 501 exact scoped IDs to be dismissed by one atomic database update.",
+    );
+    assert.equal(
+      customerPrincipalCentreMock.client.updateHistory[0]?.filters.find(
+        (filter) => filter.column === "id" && filter.type === "in",
+      )?.value.length,
+      501,
+      "Expected the one atomic update to stay limited to the complete stable scoped ID snapshot.",
     );
     assert.equal(
       customerPrincipalCentreMock.client.tables[notificationTable].filter(
@@ -2496,6 +2503,7 @@ try {
       [notificationTable]: [
         seededNotification({
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          created_at: "2026-06-08T01:00:00.000Z",
           delivery_surface: "driver_app",
           driver_job_link_id: driverLinkId,
           id: "notification-driver-safe-one",
@@ -2512,6 +2520,18 @@ try {
           safe_message: "Please meet your driver at the hotel lobby for this booking.",
           safe_title: "Message from dispatch",
           workflow_area: "admin_customer_job_messages",
+        }),
+        seededNotification({
+          actor_role: "driver",
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          created_at: "2026-06-08T02:00:00.000Z",
+          delivery_surface: "customer_app",
+          id: "notification-driver-reply-dismissed-by-customer-centre",
+          notification_status: "dismissed",
+          notification_type: "trip_update",
+          safe_message: "I have arrived at the pickup point.",
+          safe_title: "Message from driver",
+          workflow_area: "customer_driver_quick_replies",
         }),
         seededNotification({
           booking_reference: "BOOK-OTHER-NOTIFY-001",
@@ -2550,12 +2570,19 @@ try {
         {
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
           delivery_surface: "driver_app",
+          notification_status: "dismissed",
+          notification_type: "trip_update",
+          safe_title: "Message from driver",
+        },
+        {
+          booking_reference: "BOOK-DRIVER-NOTIFY-001",
+          delivery_surface: "driver_app",
           notification_status: "queued",
           notification_type: "trip_update",
           safe_title: "Dispatch update",
         },
       ],
-      "Expected driver token route to return only scoped driver-app notifications",
+      "Expected Driver history to retain its exact sent quick reply after Customer clears the current alert",
     );
     assert.equal(unsafeNotificationLeakPattern.test(JSON.stringify(driverGet.body)), false);
     assert.deepEqual(
@@ -2575,8 +2602,22 @@ try {
           ],
           table: notificationTable,
         },
+        {
+          filters: [
+            { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
+            { column: "delivery_surface", type: "eq", value: "customer_app" },
+            { column: "actor_role", type: "eq", value: "driver" },
+            { column: "workflow_area", type: "eq", value: "customer_driver_quick_replies" },
+            {
+              column: "notification_status",
+              type: "in",
+              value: ["read", "dismissed", "archived"],
+            },
+          ],
+          table: notificationTable,
+        },
       ],
-      "Expected driver GET to verify token hash before the scoped shared-conversation read",
+      "Expected driver GET to verify token hash before queued alerts and exact sent-message history reads",
     );
 
     setEnv(validEnv());

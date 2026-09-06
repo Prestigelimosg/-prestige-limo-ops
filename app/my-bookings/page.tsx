@@ -484,6 +484,7 @@ export default function CustomerPortalPage() {
     useState("");
   const [customerNotificationNavigationMessage, setCustomerNotificationNavigationMessage] =
     useState("");
+  const customerNotificationCentreRequestSequenceRef = useRef(0);
   const [customerQuickReplies, setCustomerQuickReplies] = useState<CustomerQuickReplyState>({});
   const [customerMessageDrafts, setCustomerMessageDrafts] = useState<Record<string, string>>({});
   const [deepLinkApplied, setDeepLinkApplied] = useState(false);
@@ -509,8 +510,13 @@ export default function CustomerPortalPage() {
 
   const refreshCustomerNotificationCentre = useCallback(
     async ({ signal }: { signal?: AbortSignal } = {}) => {
+      const requestSequence = customerNotificationCentreRequestSequenceRef.current + 1;
+      customerNotificationCentreRequestSequenceRef.current = requestSequence;
       const result = await loadCustomerNotificationCentre({ signal });
-      if (signal?.aborted) {
+      if (
+        signal?.aborted ||
+        requestSequence !== customerNotificationCentreRequestSequenceRef.current
+      ) {
         return;
       }
       if (result.status !== "ready") {
@@ -1883,6 +1889,7 @@ export default function CustomerPortalPage() {
       return;
     }
 
+    customerNotificationCentreRequestSequenceRef.current += 1;
     setCustomerNotificationCentreAlerts([]);
     setCustomerNotificationCentreCount(0);
     setCustomerNotificationCentreStatus("loading");

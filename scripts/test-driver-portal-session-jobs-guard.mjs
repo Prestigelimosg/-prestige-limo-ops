@@ -136,9 +136,10 @@ class ReadQuery {
   }
 }
 
-function createClient(tables) {
+function createClient(tables, { onFrom } = {}) {
   return {
     from(table) {
+      onFrom?.(table, tables);
       return new ReadQuery(table, tables[table] || []);
     },
   };
@@ -504,14 +505,50 @@ try {
   assert.equal(wrongDriverJobs.ok, true);
   assert.deepEqual(wrongDriverJobs.jobs, []);
 
+  const shiftingTables = structuredClone(tables);
+  let shiftingAlertReads = 0;
+  const shiftingClient = createClient(shiftingTables, {
+    onFrom(table, currentTables) {
+      if (table !== "customer_driver_app_notification_outbox") return;
+      shiftingAlertReads += 1;
+      if (shiftingAlertReads !== 2) return;
+      currentTables.customer_driver_app_notification_outbox = currentTables.customer_driver_app_notification_outbox
+        .filter((row) => row.id !== "aaaaaaaa-aaaa-4aaa-8aaa-000000000001");
+      currentTables.customer_driver_app_notification_outbox.push({
+        actor_role: "admin",
+        booking_reference: "PORTAL-A",
+        created_at: "2026-07-22T08:00:01.000Z",
+        delivery_surface: "driver_app",
+        driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+        id: "99999999-9999-4999-8999-999999999999",
+        notification_status: "queued",
+        notification_type: "trip_update",
+        priority: "high",
+        safe_message: "Concurrent replacement update",
+        safe_title: "Message from dispatch",
+        workflow_area: "admin_driver_job_messages",
+      });
+    },
+  });
+  const shiftingJobs = await harness.jobs.loadDriverPortalJobs({
+    client: shiftingClient,
+    driverId: 7,
+    includeAlerts: true,
+    now,
+  });
+  assert.equal(shiftingJobs.ok, true);
+  assert.equal(shiftingJobs.alertsAvailable, false, "A same-count queued-row shift between pages must fail closed.");
+  assert.equal(shiftingJobs.alertCount, 0);
+  assert.deepEqual(shiftingJobs.alerts, []);
+
   const portalSource = await readFile(path.join(process.cwd(), "app/driver-portal/page.tsx"), "utf8");
   assert.match(portalSource, /data-driver-notification-centre-trigger="true"/);
   assert.match(portalSource, /data-driver-notification-centre="true"/);
   assert.match(portalSource, /data-driver-notification-purpose="available-jobs"/);
   assert.match(portalSource, /data-driver-notification-purpose="job-update"/);
   assert.match(portalSource, /data-driver-notification-job=\{alert\.job_key\}/);
-  assert.match(portalSource, /availableJobsEnabled && availableJobs\.length > 0/);
-  assert.match(portalSource, /driverPortalCountsAvailable && driverPortalCurrentAlertCount === 0/);
+  assert.match(portalSource, /availableJobs\.length > 0 \|\| availableJobsHasMore/);
+  assert.match(portalSource, /driverPortalCountsAvailable && !driverPoolHasCurrentAlerts && driverPortalCurrentAlertCount === 0/);
   assert.match(portalSource, /setAvailableJobsReadAvailable\(true\)/);
   assert.match(portalSource, /setAvailableJobsReadAvailable\(false\)/);
   assert.match(portalSource, /data-driver-notification-open-feedback=\{job\.job_key\}/);

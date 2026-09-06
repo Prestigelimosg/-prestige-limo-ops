@@ -253,6 +253,7 @@ async function runChromeTest() {
           "alerts-on",
           "faceid-off",
           "faceid-on",
+          "pool-more-empty",
           "pool-winner",
         ].includes(embeddedDriverMode);
         if (embeddedDriverHarness) {
@@ -410,7 +411,7 @@ async function runChromeTest() {
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
 
           if (
-            embeddedDriverMode === "pool-winner" &&
+            embeddedDriverMode.startsWith("pool-") &&
             new URL(url, window.location.origin).pathname === "/api/driver-job-bids"
           ) {
             if (method === "POST") {
@@ -429,8 +430,8 @@ async function runChromeTest() {
             }
             return Promise.resolve(new Response(JSON.stringify({
               enabled: true,
-              has_more: false,
-              jobs: window.__driverPoolWinnerTest.accepted ? [] : [{
+              has_more: embeddedDriverMode === "pool-more-empty",
+              jobs: embeddedDriverMode === "pool-more-empty" || window.__driverPoolWinnerTest.accepted ? [] : [{
                 closes_at: "2026-09-07T01:00:00.000Z",
                 offer_key: "c".repeat(64),
                 offer_payout_sgd: 55,
@@ -2668,6 +2669,31 @@ async function runChromeTest() {
       10000,
       "Driver Pool winner confirmation retained after authoritative refresh",
     );
+
+    await navigateAndWaitForBodyText(
+      client,
+      evaluate,
+      new URL("/driver-portal?embedded=pool-more-empty", appUrl).toString(),
+      "Alerts 3+",
+      "Driver Pool remaining-page notification purpose",
+    );
+    await evaluate(`document.querySelector('[data-driver-notification-centre-trigger="true"]')?.click()`);
+    const poolRemainingPageState = await waitForCondition(
+      () => evaluate(`(() => {
+        const row = document.querySelector('[data-driver-notification-purpose="available-jobs"]');
+        const centre = document.querySelector('[data-driver-notification-centre="true"]');
+        return row
+          ? {
+              hasFalseZero: centre?.textContent.includes("No current alerts.") === true,
+              rowText: row.textContent.trim(),
+            }
+          : false;
+      })()`),
+      5000,
+      "Driver Pool remaining-page purpose row",
+    );
+    assert.equal(poolRemainingPageState.hasFalseZero, false);
+    assert.equal(poolRemainingPageState.rowText.includes("0+"), true);
 
     await navigateAndWaitForBodyText(
       client,

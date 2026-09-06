@@ -159,40 +159,65 @@ async function loadCurrentDriverPortalAlerts(
   const currentLinkFilter = [...scopeByLinkId.keys()].join(",");
   const exactScopeFilter =
     `driver_job_link_id.in.(${currentLinkFilter}),and(driver_job_link_id.is.null,workflow_area.eq.customer_driver_quick_replies,actor_role.eq.customer)`;
-  const records: UnknownRecord[] = [];
-  let exactCount: number | null = null;
+  async function readStableCandidate() {
+    const candidateRecords: UnknownRecord[] = [];
+    let candidateCount: number | null = null;
 
-  for (let offset = 0; exactCount === null || offset < exactCount; offset += driverPortalAlertPageSize) {
-    const { count, data, error } = await client
-      .from("customer_driver_app_notification_outbox")
-      .select(driverPortalAlertSelect, { count: "exact" })
-      .eq("delivery_surface", "driver_app")
-      .eq("notification_status", "queued")
-      .in("booking_reference", [...scopeByReference.keys()])
-      .or(exactScopeFilter)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(offset, offset + driverPortalAlertPageSize - 1);
+    for (let offset = 0; candidateCount === null || offset < candidateCount; offset += driverPortalAlertPageSize) {
+      const { count, data, error } = await client
+        .from("customer_driver_app_notification_outbox")
+        .select(driverPortalAlertSelect, { count: "exact" })
+        .eq("delivery_surface", "driver_app")
+        .eq("notification_status", "queued")
+        .in("booking_reference", [...scopeByReference.keys()])
+        .or(exactScopeFilter)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + driverPortalAlertPageSize - 1);
 
-    if (
-      error ||
-      typeof count !== "number" ||
-      count < 0 ||
-      (exactCount !== null && count !== exactCount)
-    ) {
-      return { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: false };
+      if (
+        error ||
+        typeof count !== "number" ||
+        count < 0 ||
+        (candidateCount !== null && count !== candidateCount)
+      ) {
+        return null;
+      }
+      candidateCount = count;
+      const page = asRows(data);
+      candidateRecords.push(...page);
+
+      if (
+        candidateRecords.length > candidateCount ||
+        (page.length < driverPortalAlertPageSize && candidateRecords.length !== candidateCount)
+      ) {
+        return null;
+      }
     }
-    exactCount = count;
-    const page = asRows(data);
-    records.push(...page);
 
+    const orderedIds = candidateRecords.map((record) => cleanText(record.id, 80));
     if (
-      records.length > exactCount ||
-      (page.length < driverPortalAlertPageSize && records.length !== exactCount)
+      orderedIds.length !== candidateCount ||
+      orderedIds.some((id) => !uuidPattern.test(id)) ||
+      new Set(orderedIds).size !== orderedIds.length
     ) {
-      return { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: false };
+      return null;
     }
+    return { count: candidateCount, orderedIds, records: candidateRecords };
   }
+
+  const firstCandidate = await readStableCandidate();
+  const secondCandidate = await readStableCandidate();
+  if (
+    !firstCandidate ||
+    !secondCandidate ||
+    firstCandidate.count !== secondCandidate.count ||
+    firstCandidate.orderedIds.some((id, index) => secondCandidate.orderedIds[index] !== id)
+  ) {
+    return { alertCount: 0, alerts: [] as DriverPortalAlert[], alertsAvailable: false };
+  }
+  const exactCount = secondCandidate.count;
+  const records = secondCandidate.records;
 
   const grouped = new Map<string, DriverPortalAlert>();
   for (const record of records) {

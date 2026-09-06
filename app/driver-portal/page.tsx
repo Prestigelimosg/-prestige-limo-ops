@@ -218,6 +218,7 @@ export default function DriverPortalPage() {
   const driverPortalSavedAlertsAvailable = readState.kind === "ready" && readState.alertsAvailable;
   const driverPortalSavedAlertCount = driverPortalSavedAlertsAvailable ? readState.alertCount : 0;
   const driverPoolVisibleAlertCount = availableJobsReadAvailable && availableJobsEnabled ? availableJobs.length : 0;
+  const driverPoolHasCurrentAlerts = availableJobsReadAvailable && availableJobsEnabled && (availableJobs.length > 0 || availableJobsHasMore);
   const driverPortalCurrentAlertCount = driverPortalSavedAlertCount + driverPoolVisibleAlertCount;
   const driverPortalCountsAvailable = driverPortalSavedAlertsAvailable && availableJobsReadAvailable;
   const driverPortalAlertCountLabel = !driverPortalCountsAvailable
@@ -684,7 +685,7 @@ export default function DriverPortalPage() {
                   Safe current actions only. Old, reassigned and completed jobs stay hidden.
                 </p>
               </div>
-              {availableJobsEnabled && availableJobs.length > 0 ? (
+              {driverPoolHasCurrentAlerts ? (
                 <button
                   className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-left ring-1 ring-emerald-200"
                   data-driver-notification-purpose="available-jobs"
@@ -732,7 +733,7 @@ export default function DriverPortalPage() {
                   </button>
                 ) : null;
               })}
-              {driverPortalCountsAvailable && driverPortalCurrentAlertCount === 0 ? (
+              {driverPortalCountsAvailable && !driverPoolHasCurrentAlerts && driverPortalCurrentAlertCount === 0 ? (
                 <p className="rounded-lg bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
                   No current alerts.
                 </p>

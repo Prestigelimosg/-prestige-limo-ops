@@ -354,6 +354,12 @@ async function runChromeTest() {
     await client.ready;
     await client.send("Runtime.enable");
     await client.send("Page.enable");
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: true,
+      width: 390,
+    });
     client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
       browserErrors.push(
         exceptionDetails?.exception?.description || exceptionDetails?.text || "Unknown browser exception",
@@ -399,6 +405,66 @@ async function runChromeTest() {
         "Pending Driver ACK Queue after opening Dispatch",
       );
     };
+
+    const dashboardAckBadge = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const dashboardTab = document.querySelector('[data-app-tab="dashboard"]');
+          const badge = dashboardTab?.querySelector('[data-bookings-new-request-badge="true"]');
+
+          return dashboardTab?.getAttribute("data-admin-notification-centre-count") === "2" && badge
+            ? badge.textContent.trim()
+            : false;
+        })()`),
+      15000,
+      "Dashboard notification centre ACK count",
+    );
+    assert.equal(dashboardAckBadge, "2 ACK");
+    const openedAckNotificationCentre = await evaluate(`(() => {
+      const badge = document.querySelector('[data-app-tab="dashboard"] [data-bookings-new-request-badge="true"]');
+      if (!(badge instanceof HTMLElement)) return false;
+      badge.click();
+      return true;
+    })()`);
+    assert.equal(openedAckNotificationCentre, true, "Expected the Dashboard ACK badge to be clickable.");
+    const ackNotificationCentre = await waitForCondition(
+      () =>
+        evaluate(`(() => {
+          const centre = document.querySelector('[data-admin-notification-centre="true"]');
+          const ackOption = centre?.querySelector('[data-admin-notification-centre-option="driver-ack"]');
+
+          return centre && ackOption
+            ? {
+                categoryCount: centre.getAttribute("data-admin-notification-centre-categories"),
+                contained:
+                  centre.getBoundingClientRect().left >= 0 &&
+                  centre.getBoundingClientRect().right <= window.innerWidth,
+                optionCount: centre.querySelectorAll("[data-admin-notification-centre-option]").length,
+                text: ackOption.textContent.replace(/\\s+/g, " ").trim(),
+              }
+            : false;
+        })()`),
+      5000,
+      "single-category Driver ACK purpose list",
+    );
+    assert.equal(ackNotificationCentre.categoryCount, "1");
+    assert.equal(ackNotificationCentre.contained, true);
+    assert.equal(ackNotificationCentre.optionCount, 1);
+    assert.match(ackNotificationCentre.text, /2 waiting for Driver ACK/);
+    assert.match(ackNotificationCentre.text, /existing Dispatch ACK Queue/);
+    const openedExistingAckQueue = await evaluate(`(() => {
+      const ackOption = document.querySelector('[data-admin-notification-centre-option="driver-ack"]');
+      if (!(ackOption instanceof HTMLButtonElement)) return false;
+      ackOption.click();
+      return true;
+    })()`);
+    assert.equal(openedExistingAckQueue, true, "Expected the ACK purpose row to be clickable.");
+    await waitForCondition(
+      () => evaluate(`Boolean(document.querySelector("[data-pending-driver-ack-queue='true']"))`),
+      10000,
+      "existing Pending Driver ACK Queue from notification centre",
+    );
+    reporter.step("Dashboard notification centre opened the existing ACK Queue");
 
     await openDispatchTab();
 

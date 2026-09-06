@@ -10,7 +10,7 @@ function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
 }
 
-const queueStart = app.indexOf('data-pending-driver-ack-queue="true"');
+const queueStart = app.lastIndexOf('data-pending-driver-ack-queue="true"');
 const driverJobLinkStart = app.indexOf('data-dispatch-workflow-step="driver-job-link"');
 const driverReportsStart = app.indexOf('data-admin-driver-reports-disclosure="true"');
 

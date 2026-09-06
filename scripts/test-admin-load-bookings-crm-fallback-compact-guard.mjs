@@ -108,7 +108,7 @@ const saveBookingBlock = sliceBetween(appPage, "async function saveBooking", "as
 const dashboardBlock = sliceBetween(
   appPage,
   '{activeTab === "dashboard" ? (',
-  "      </div>\n    </main>",
+  '      <button\n        aria-label="Open Ask AI"',
 );
 const dispatchBlock = sliceBetween(
   appPage,
@@ -268,7 +268,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  'data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}',
+  'data-dashboard-tab-total-alerts={isDashboardTab ? String(adminNotificationCentreCount) : undefined}',
   "Dashboard tab total attention count marker",
 );
 assertIncludes(
@@ -318,8 +318,8 @@ assertIncludes(appPage, "return `${changeRequestCount} change", "Dashboard actio
 assertIncludes(appPage, "return `${newBookingRequestCount} new`;", "Dashboard action badge new wording");
 assertIncludes(appPage, "return `${urgentBookingRequestCount} urgent`;", "Dashboard action badge urgent wording");
 assertIncludes(appPage, "return `${totalCount} alerts`;", "Dashboard action badge combined wording");
-assertIncludes(appPage, "function locateBookingsTabAlert()", "Dashboard action badge locator helper");
-assertIncludes(appPage, "bookingsTabAlertTypeCount", "Dashboard action badge mixed alert type count");
+assertIncludes(appPage, "const adminNotificationCentreCount =", "Dashboard notification centre count");
+assertIncludes(appPage, "const adminNotificationCentreCategoryCount =", "Dashboard notification category count");
 assertIncludes(appPage, 'data-bookings-alert-menu="true"', "Dashboard action badge mixed alert menu");
 assertIncludes(appPage, 'data-bookings-alert-menu-option="change"', "Dashboard action badge change menu option");
 assertIncludes(appPage, 'data-bookings-alert-menu-option="new"', "Dashboard action badge new menu option");

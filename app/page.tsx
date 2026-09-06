@@ -1574,6 +1574,7 @@ type AdminAlertLocatorTarget =
   | "admin-app-notification"
   | "admin-action-summary"
   | "new-booking-requests"
+  | "pending-driver-ack-queue"
   | "urgent-booking-requests";
 
 type AdminBookingChangeRequestReviewAction = {
@@ -19805,11 +19806,6 @@ export default function Home() {
     totalCount: bookingsTabAttentionCount,
     urgentBookingRequestCount: bookingsTabUrgentUnderOneHourCount,
   });
-  const bookingsTabAlertTypeCount = [
-    customerBookingChangeRequestCount,
-    bookingsTabNewBookingRequestCount,
-    bookingsTabUrgentUnderOneHourCount,
-  ].filter((count) => count > 0).length;
   const dashboardUrgentBookingRequestDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleDashboardUrgentBookingRequestBookings, {
       useTypedOperationalOrder: true,
@@ -24853,6 +24849,11 @@ export default function Home() {
         return;
       }
 
+      if (target === "pending-driver-ack-queue") {
+        scrollToSelector('[data-pending-driver-ack-queue="true"]', "center");
+        return;
+      }
+
       if (target === "admin-action-summary") {
         if (scrollToSelector('[data-dashboard-new-booking-requests-panel="true"]')) {
           return;
@@ -24995,25 +24996,23 @@ export default function Home() {
     return false;
   }
 
-  function locateBookingsTabAlert() {
-    if (openBookingsTabChangeRequestAlert()) {
-      return;
-    }
+  function openPendingDriverAckQueueFromNotificationCentre() {
+    setBookingsAlertMenuOpen(false);
+    selectAppTab("dispatch");
+    scrollToAdminAlertLocatorTarget("pending-driver-ack-queue");
+    window.setTimeout(
+      () => scrollToAdminAlertLocatorTarget("pending-driver-ack-queue"),
+      150,
+    );
+  }
 
-    if (dashboardNewBookingRequestAttentionCount > 0) {
-      openCustomerBookingRequestsReview({ highlight: true });
-      return;
-    }
-
-    if (bookingsTabUrgentUnderOneHourCount > 0) {
-      openDashboardUrgentBookingRequestsReview();
-      return;
-    }
+  function openSavedAdminNotificationsFromNotificationCentre() {
+    const notificationId = clean(otherAdminAppNotifications[0]?.id);
 
     setBookingsAlertMenuOpen(false);
     selectAppTab("dashboard");
-    markAdminAlertLocatorHighlight("urgent-booking-requests");
-    scrollToAdminAlertLocatorTarget("urgent-booking-requests");
+    markAdminAlertLocatorHighlight("admin-app-notification", notificationId || undefined);
+    scrollToAdminAlertLocatorTarget("admin-app-notification", notificationId || undefined);
   }
 
   async function saveAdminBookingOperationalSnapshot() {
@@ -31344,6 +31343,28 @@ export default function Home() {
           })
           .filter((item): item is NonNullable<typeof item> => Boolean(item))
       : [];
+  const adminNotificationCentreCount =
+    bookingsTabAttentionCount +
+    pendingDriverAckQueueItems.length +
+    otherAdminAppNotifications.length;
+  const adminNotificationCentreCategoryCount = [
+    customerBookingChangeRequestCount,
+    dashboardNewBookingRequestAttentionCount,
+    adminEmailAiIntakeCount,
+    bookingsTabUrgentUnderOneHourCount,
+    pendingDriverAckQueueItems.length,
+    otherAdminAppNotifications.length,
+  ].filter((count) => count > 0).length;
+  const adminNotificationCentreBadgeLabel =
+    adminNotificationCentreCount === bookingsTabAttentionCount
+      ? bookingsTabAlertBadgeLabel
+      : adminNotificationCentreCount === pendingDriverAckQueueItems.length
+        ? `${pendingDriverAckQueueItems.length} ACK`
+        : adminNotificationCentreCount === otherAdminAppNotifications.length
+          ? `${otherAdminAppNotifications.length} update${
+              otherAdminAppNotifications.length === 1 ? "" : "s"
+            }`
+          : `${adminNotificationCentreCount} alerts`;
   const liveDispatchMapReferenceList = [
     ...new Set(
       liveDispatchMapEligibleBookings
@@ -36537,7 +36558,7 @@ export default function Home() {
           {appTabs.map((tab) => {
             const selected = activeTab === tab.id;
             const isDashboardTab = tab.id === "dashboard";
-            const showAdminActionBadge = isDashboardTab && bookingsTabAttentionCount > 0;
+            const showAdminActionBadge = isDashboardTab && adminNotificationCentreCount > 0;
             const highlightDashboardTab = showAdminActionBadge && !selected;
 
 	            return (
@@ -36557,22 +36578,18 @@ export default function Home() {
                 data-dashboard-tab-change-requests={isDashboardTab ? String(customerBookingChangeRequestCount) : undefined}
 	                data-dashboard-tab-new-booking-requests={isDashboardTab ? String(bookingsTabNewBookingRequestCount) : undefined}
                 data-dashboard-tab-new-requests={showAdminActionBadge ? "true" : undefined}
-	                data-dashboard-tab-total-alerts={isDashboardTab ? String(bookingsTabAttentionCount) : undefined}
+	                data-dashboard-tab-total-alerts={isDashboardTab ? String(adminNotificationCentreCount) : undefined}
+	                data-admin-notification-centre-count={isDashboardTab ? String(adminNotificationCentreCount) : undefined}
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
 		                onClick={(event) => {
 		                  const clickedAlertBadge =
 		                    event.target instanceof HTMLElement &&
 		                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
 
-		                  if (isDashboardTab && showAdminActionBadge && clickedAlertBadge) {
-		                    if (bookingsTabAlertTypeCount > 1) {
-		                      setBookingsAlertMenuOpen((isOpen) => !isOpen);
-		                      return;
-		                    }
-
-		                    locateBookingsTabAlert();
-		                    return;
-		                  }
+	                  if (isDashboardTab && showAdminActionBadge && clickedAlertBadge) {
+	                    setBookingsAlertMenuOpen((isOpen) => !isOpen);
+	                    return;
+	                  }
 
 	                  setBookingsAlertMenuOpen(false);
 	                  selectAppTab(tab.id);
@@ -36589,52 +36606,128 @@ export default function Home() {
                     }`}
                     data-bookings-new-request-badge="true"
                   >
-                    {bookingsTabAlertBadgeLabel}
+                    {adminNotificationCentreBadgeLabel}
 	                  </span>
 	                ) : null}
 	              </button>
 		                {isDashboardTab && showAdminActionBadge && bookingsAlertMenuOpen ? (
 		                  <div
-		                    className="absolute left-1/2 top-full z-30 mt-1 grid min-w-36 -translate-x-1/2 gap-1 rounded-md border border-emerald-200 bg-white p-1 text-left text-xs font-semibold text-slate-800 shadow-lg"
+		                    aria-label="Admin notifications"
+		                    className="absolute left-1/2 top-full z-30 mt-1 grid min-w-64 -translate-x-1/2 gap-1 rounded-md border border-emerald-200 bg-white p-1.5 text-left text-xs text-slate-800 shadow-lg"
+		                    data-admin-notification-centre="true"
+		                    data-admin-notification-centre-categories={String(adminNotificationCentreCategoryCount)}
 		                    data-bookings-alert-menu="true"
+		                    role="menu"
 		                  >
-		                    {customerBookingChangeRequestCount > 0 ? (
-		                      <button
-		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
-		                        data-bookings-alert-menu-option="change"
-		                        onClick={(event) => {
-		                          event.stopPropagation();
-		                          openBookingsTabChangeRequestAlert();
-		                        }}
-		                        type="button"
-		                      >
-		                        {customerBookingChangeRequestCount} change
-		                      </button>
-		                    ) : null}
-		                    {dashboardNewBookingRequestAttentionCount > 0 ? (
-		                      <button
-		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
-		                        data-bookings-alert-menu-option="new"
-		                        onClick={(event) => {
-		                          event.stopPropagation();
-		                          openCustomerBookingRequestsReview({ highlight: true });
-		                        }}
-		                        type="button"
-		                      >
-		                        {dashboardNewBookingRequestAttentionCount} new
-		                      </button>
-		                    ) : null}
+		                    <div className="border-b border-stone-200 px-2 py-1.5">
+		                      <p className="font-semibold text-slate-950">Admin notifications</p>
+		                      <p className="font-normal text-slate-500">
+		                        {adminNotificationCentreCount} item{adminNotificationCentreCount === 1 ? "" : "s"} need review
+		                      </p>
+		                    </div>
 		                    {bookingsTabUrgentUnderOneHourCount > 0 ? (
 		                      <button
-		                        className="cursor-pointer rounded px-2 py-1.5 hover:bg-emerald-50"
+		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-amber-50"
+		                        data-admin-notification-centre-option="urgent"
 		                        data-bookings-alert-menu-option="urgent"
 		                        onClick={(event) => {
 		                          event.stopPropagation();
 		                          openDashboardUrgentBookingRequestsReview();
 		                        }}
+		                        role="menuitem"
 		                        type="button"
 		                      >
-		                        {bookingsTabUrgentUnderOneHourCount} urgent
+		                        <span className="block font-semibold text-amber-900">
+		                          {bookingsTabUrgentUnderOneHourCount} urgent pickup
+		                        </span>
+		                        <span className="block font-normal text-slate-500">Driver TBC within one hour</span>
+		                      </button>
+		                    ) : null}
+		                    {customerBookingChangeRequestCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-sky-50"
+		                        data-admin-notification-centre-option="change"
+		                        data-bookings-alert-menu-option="change"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openBookingsTabChangeRequestAlert();
+		                        }}
+		                        role="menuitem"
+		                        type="button"
+		                      >
+		                        <span className="block font-semibold text-sky-900">
+		                          {customerBookingChangeRequestCount} booking change/cancel
+		                        </span>
+		                        <span className="block font-normal text-slate-500">Review the requested booking update</span>
+		                      </button>
+		                    ) : null}
+		                    {dashboardNewBookingRequestAttentionCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-emerald-50"
+		                        data-admin-notification-centre-option="new"
+		                        data-bookings-alert-menu-option="new"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openCustomerBookingRequestsReview({ highlight: true });
+		                        }}
+		                        role="menuitem"
+		                        type="button"
+		                      >
+		                        <span className="block font-semibold text-emerald-900">
+		                          {dashboardNewBookingRequestAttentionCount} new booking
+		                        </span>
+		                        <span className="block font-normal text-slate-500">Customer or GroundBooker request</span>
+		                      </button>
+		                    ) : null}
+		                    {pendingDriverAckQueueItems.length > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-amber-50"
+		                        data-admin-notification-centre-option="driver-ack"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openPendingDriverAckQueueFromNotificationCentre();
+		                        }}
+		                        role="menuitem"
+		                        type="button"
+		                      >
+		                        <span className="block font-semibold text-amber-900">
+		                          {pendingDriverAckQueueItems.length} waiting for Driver ACK
+		                        </span>
+		                        <span className="block font-normal text-slate-500">Open the existing Dispatch ACK Queue</span>
+		                      </button>
+		                    ) : null}
+		                    {adminEmailAiIntakeCount > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-indigo-50"
+		                        data-admin-notification-centre-option="email"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openCustomerBookingRequestsReview({ highlight: true });
+		                        }}
+		                        role="menuitem"
+		                        type="button"
+		                      >
+		                        <span className="block font-semibold text-indigo-900">
+		                          {adminEmailAiIntakeCount} booking email
+		                        </span>
+		                        <span className="block font-normal text-slate-500">Review in the existing booking inbox</span>
+		                      </button>
+		                    ) : null}
+		                    {otherAdminAppNotifications.length > 0 ? (
+		                      <button
+		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-slate-50"
+		                        data-admin-notification-centre-option="saved-update"
+		                        onClick={(event) => {
+		                          event.stopPropagation();
+		                          openSavedAdminNotificationsFromNotificationCentre();
+		                        }}
+		                        role="menuitem"
+		                        type="button"
+		                      >
+		                        <span className="block font-semibold text-slate-900">
+		                          {otherAdminAppNotifications.length} Admin update{otherAdminAppNotifications.length === 1 ? "" : "s"}
+		                        </span>
+		                        <span className="block font-normal text-slate-500">Driver issue, closeout, billing prep, or system notice</span>
 		                      </button>
 		                    ) : null}
 		                  </div>

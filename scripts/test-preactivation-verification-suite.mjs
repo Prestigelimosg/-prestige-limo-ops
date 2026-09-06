@@ -166,6 +166,10 @@ const guardChecks = [
     script: "scripts/test-pending-driver-ack-queue-guard.mjs",
   },
   {
+    label: "admin Dashboard notification centre guard",
+    script: "scripts/test-admin-notification-centre-guard.mjs",
+  },
+  {
     label: "pending Driver ACK native reminder guard",
     script: "scripts/test-pending-driver-ack-reminder-guard.mjs",
   },

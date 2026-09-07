@@ -30,6 +30,60 @@ const names = [
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
 
+// Execute the real refresh effect: an initially empty list must discover a new
+// offer without a manual Refresh; hidden/signed-out/busy screens must not poll.
+const portalSource = files["app/driver-portal/page.tsx"];
+const poolHeading = portalSource.match(/<h3\b[^>]*data-driver-pool-service-vehicle="true"[^>]*>[\s\S]*?<\/h3>/)?.[0];
+assert.ok(poolHeading, "Pool offer must identify service and vehicle in its heading");
+assert.match(poolHeading, /text-lg font-extrabold uppercase/);
+const headingModule = { exports: {} };
+new Function("require", "module", "exports", ts.transpileModule(
+  `export const render = (job: any) => (${poolHeading});`,
+  { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } },
+).outputText)(createRequire(import.meta.url), headingModule, headingModule.exports);
+const { renderToStaticMarkup } = createRequire(import.meta.url)("react-dom/server");
+for (const code of ["MNG", "DEP", "TRF", "DSP"]) {
+  const rendered = renderToStaticMarkup(headingModule.exports.render({ safe_trip_summary: code, safe_vehicle_label: "Alphard" }));
+  assert.ok(rendered.includes(`${code} · AVF`));
+}
+assert.ok(renderToStaticMarkup(headingModule.exports.render({ safe_trip_summary: "DEP", safe_vehicle_label: null })).includes("DEP · Vehicle TBC"));
+assert.ok(renderToStaticMarkup(headingModule.exports.render({ safe_trip_summary: "DEP", safe_vehicle_label: "AVF" })).includes("DEP · AVF"));
+const refreshStart = portalSource.lastIndexOf("  useEffect(() => {", portalSource.indexOf("const refresh = () => {"));
+const refreshEnd = portalSource.indexOf("\n\n  async function decideAvailableJob", refreshStart);
+const refreshEffect = portalSource.slice(refreshStart, refreshEnd);
+for (const count of [0, 1, 2]) {
+  for (const signedIn of [false, true]) {
+    for (const busy of [false, true]) {
+      const events = new Map();
+      let timer; let cleanup; let reads = 0;
+      const document = {
+        visibilityState: "visible",
+        addEventListener: (name, fn) => events.set(name, fn),
+        removeEventListener: (name) => events.delete(name),
+      };
+      const window = {
+        setInterval: (fn, ms) => { assert.equal(ms, 3000); timer = fn; return 1; },
+        clearInterval: () => { timer = undefined; },
+        addEventListener: (name, fn) => events.set(name, fn),
+        removeEventListener: (name) => events.delete(name),
+      };
+      new Function("useEffect", "driverPoolAccountSession", "availableJobs", "availableJobsBusy", "loadAvailableJobs", "driverPoolAvailableJobsRefreshIntervalMs", "window", "document", refreshEffect)(
+        (effect) => { cleanup = effect(); }, signedIn, Array(count).fill({}), busy,
+        (page, options) => { assert.equal(page, 1); assert.deepEqual(options, { quiet: true }); reads++; },
+        3000, window, document,
+      );
+      if (!signedIn) { assert.equal(timer, undefined); continue; }
+      assert.equal(typeof timer, "function", `signed-in list with ${count} offers must refresh`);
+      timer(); events.get("focus")(); events.get("visibilitychange")();
+      assert.equal(reads, busy ? 0 : 3);
+      document.visibilityState = "hidden";
+      timer(); events.get("focus")(); events.get("visibilitychange")();
+      assert.equal(reads, busy ? 0 : 3, "hidden page must not fetch offers");
+      cleanup(); assert.equal(timer, undefined); assert.equal(events.size, 0);
+    }
+  }
+}
+
 function includes(name, fragments) {
   for (const fragment of fragments) assert.ok(files[name].includes(fragment), `${name} missing ${fragment}`);
 }

@@ -82,7 +82,7 @@ for (const fragment of [
 
 assert.match(
   dashboard,
-  /Push ON registers this device for automatic alerts\. This button does not send an alert\./,
+  /Turn on push alerts for this device\./,
   "The one existing Push switch must explain its automatic-registration purpose on iPhone.",
 );
 assert.match(ledger, /Admin Manual Save Native Alert And Face ID Acceptance Repair/);

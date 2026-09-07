@@ -113,7 +113,7 @@ for (const fragment of [
   "driverJobLinkVehicleFallbackRefreshLastRequestedRef",
   "requestDriverJobLinkVehicleFallbackRefresh",
   "now - lastRequestedAt < 8_000",
-  "All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.",
+  "Driver updates refresh automatically.",
   "No assigned active jobs to monitor.",
   'data-admin-multi-driver-active-job-driver-report-history="true"',
   "Boolean(cleanReferenceText(bookingRecord.booking_reference))",

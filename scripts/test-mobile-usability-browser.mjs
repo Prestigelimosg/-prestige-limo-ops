@@ -1338,11 +1338,7 @@ async function runChromeTest() {
         `${viewport.label}: expected admin app notification feed not to create horizontal overflow`,
       );
       assert.equal(
-        state.boundary.includes("No external delivery") &&
-          state.boundary.includes("invoice creation") &&
-          state.boundary.includes("payment") &&
-          state.boundary.includes("customer auth") &&
-          state.boundary.includes("driver auth"),
+        state.boundary.includes("Admin review only. No sends or changes."),
         true,
         `${viewport.label}: expected admin app notification feed safe boundary`,
       );

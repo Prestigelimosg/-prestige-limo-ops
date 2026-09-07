@@ -56,7 +56,7 @@ for (const fragment of [
   "data-admin-notification-centre-option=\"urgent\"",
   "data-admin-notification-centre-option=\"saved-update\"",
   "function openPendingDriverAckQueueFromNotificationCentre()",
-  "function openSavedAdminNotificationsFromNotificationCentre()",
+  "function openSavedAdminNotificationsFromNotificationCentre(requestedNotificationId?: string | null)",
   "data-pending-driver-ack-queue=\"true\"",
   "const adminAppNotificationReadPageSize = 100;",
   'aria-haspopup={isDashboardTab && showAdminActionBadge ? "menu" : undefined}',
@@ -125,8 +125,8 @@ assert.match(
 
 assert.match(
   appPage,
-  /if \(isDashboardTab && showAdminActionBadge && clickedAlertBadge\) \{\s*setBookingsAlertMenuOpen\(\(isOpen\) => !isOpen\);\s*return;/,
-  "Every Dashboard badge click must reveal its purpose list, even when only one category is active.",
+  /if \(isDashboardTab && showAdminActionBadge\) \{\s*selectAppTab\(tab.id\);\s*setBookingsAlertMenuOpen\(\(isOpen\) => !isOpen\);\s*return;/,
+  "The whole Dashboard control must reveal the alert list, including a tap outside the tiny badge.",
 );
 
 assert.match(
@@ -187,4 +187,55 @@ for (const fragment of [
   );
 }
 
+assert.equal(appPage.includes("otherAdminAppNotifications.map((notification) =>"), true, "Each saved alert must have its own menu row");
+assert.equal(appPage.includes("openSavedAdminNotificationsFromNotificationCentre(notification.id)"), true, "Alert selection must carry its exact ID");
+assert.equal(appPage.includes('clean(notification.safe_title) || "Admin update"'), true, "Show each alert title");
+assert.equal(appPage.includes('clean(notification.safe_message)'), true, "Show each alert message");
+assert.equal(appPage.includes('clean(otherAdminAppNotifications[0]?.id)'), false, "Never silently open the first alert instead of the selected alert");
 console.log("Admin notification centre guard passed");
+
+// Execute the real saved-alert handoff with distinct and unknown IDs.
+const ts = (await import('typescript')).default;
+const handlerStart = appPage.indexOf('function openSavedAdminNotificationsFromNotificationCentre(');
+const handlerEnd = appPage.indexOf('\n  async function ', handlerStart);
+const compiledHandler = ts.transpileModule(appPage.slice(handlerStart, handlerEnd), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+const alertRows = Array.from({length: 7}, (_, index) => ({
+  id: `alert-${index + 1}`, safe_title: `Job ${index + 1}`, safe_message: `Dispatch message ${index + 1}`,
+}));
+const actions = [];
+const openAlert = new Function('clean', 'otherAdminAppNotifications', 'setBookingsAlertMenuOpen', 'selectAppTab', 'markAdminAlertLocatorHighlight', 'scrollToAdminAlertLocatorTarget',
+  compiledHandler + '\nreturn openSavedAdminNotificationsFromNotificationCentre;')(
+  (value) => String(value ?? '').trim(), alertRows,
+  (value) => actions.push(['menu', value]), (value) => actions.push(['tab', value]),
+  (target, id) => actions.push(['highlight', target, id]),
+  (target, id) => actions.push(['scroll', target, id]),
+);
+for (const id of ['alert-2', 'alert-3', 'alert-7']) {
+  actions.length = 0;
+  openAlert(id);
+  assert.deepEqual(actions, [['menu', false], ['tab', 'dashboard'], ['highlight', 'admin-app-notification', id], ['scroll', 'admin-app-notification', id]]);
+}
+actions.length = 0;
+openAlert('not-in-current-account');
+assert.deepEqual(actions, [], 'Unknown alert must not navigate to an unrelated message');
+assert.match(appPage, /const visibleOtherAdminAppNotifications = otherAdminAppNotifications;/, 'Every listed saved alert needs its existing destination, including alerts beyond five');
+
+// Render the actual menu rows, retaining each safe title, message and exact ID.
+const React = (await import('react')).default;
+const {renderToStaticMarkup} = await import('react-dom/server');
+const menuStart = appPage.indexOf('otherAdminAppNotifications.map((notification) =>');
+const menuEnd = appPage.indexOf('))}', menuStart) + 2;
+const compiledMenu = ts.transpileModule('function renderMenu(){return <>' + '{' + appPage.slice(menuStart, menuEnd) + '}' + '</>}', {
+  compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React}, fileName: 'menu.tsx',
+}).outputText;
+const renderMenu = new Function('React', 'otherAdminAppNotifications', 'clean', 'openSavedAdminNotificationsFromNotificationCentre', compiledMenu + '\nreturn renderMenu;')(React, alertRows, (value) => String(value ?? '').trim(), openAlert);
+const markup = renderToStaticMarkup(renderMenu());
+for (const row of alertRows) {
+  assert.ok(markup.includes(`data-admin-notification-centre-id="${row.id}"`));
+  assert.ok(markup.includes(row.safe_title));
+  assert.ok(markup.includes(row.safe_message));
+}
+assert.equal((markup.match(/role="menuitem"/g) || []).length, 7);
+console.log('Admin exact-alert selection and rendered message previews passed');

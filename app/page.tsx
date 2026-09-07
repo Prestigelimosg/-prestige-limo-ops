@@ -19788,7 +19788,7 @@ export default function Home() {
       !adminAppNotificationIsNewBookingRequest(notification) &&
       !adminAppNotificationChangeRequestContext(notification),
   );
-  const visibleOtherAdminAppNotifications = otherAdminAppNotifications.slice(0, 5);
+  const visibleOtherAdminAppNotifications = otherAdminAppNotifications;
   const dashboardMonthlyBillingNotificationIndex = visibleOtherAdminAppNotifications.findIndex((notification) =>
     Boolean(adminAppNotificationMonthlyBillingMonth(notification)),
   );
@@ -25027,8 +25027,11 @@ export default function Home() {
     );
   }
 
-  function openSavedAdminNotificationsFromNotificationCentre() {
-    const notificationId = clean(otherAdminAppNotifications[0]?.id);
+  function openSavedAdminNotificationsFromNotificationCentre(requestedNotificationId?: string | null) {
+    const notificationId = clean(requestedNotificationId);
+    if (!notificationId || !otherAdminAppNotifications.some((notification) => clean(notification.id) === notificationId)) {
+      return;
+    }
 
     setBookingsAlertMenuOpen(false);
     selectAppTab("dashboard");
@@ -36596,14 +36599,11 @@ export default function Home() {
 	                }
 	                data-dashboard-tab-urgent-under-one-hour={isDashboardTab ? String(bookingsTabUrgentUnderOneHourCount) : undefined}
 		                onClick={(event) => {
-		                  const clickedAlertBadge =
-		                    event.target instanceof HTMLElement &&
-		                    Boolean(event.target.closest('[data-bookings-new-request-badge="true"]'));
-
-	                  if (isDashboardTab && showAdminActionBadge && clickedAlertBadge) {
-	                    setBookingsAlertMenuOpen((isOpen) => !isOpen);
-	                    return;
-	                  }
+                      if (isDashboardTab && showAdminActionBadge) {
+                        selectAppTab(tab.id);
+                        setBookingsAlertMenuOpen((isOpen) => !isOpen);
+                        return;
+                      }
 
 	                  setBookingsAlertMenuOpen(false);
 	                  selectAppTab(tab.id);
@@ -36637,7 +36637,7 @@ export default function Home() {
 		                {isDashboardTab && showAdminActionBadge && bookingsAlertMenuOpen ? (
 		                  <div
 		                    aria-label="Admin notifications"
-		                    className="absolute left-1/2 top-full z-30 mt-1 grid min-w-64 -translate-x-1/2 gap-1 rounded-md border border-emerald-200 bg-white p-1.5 text-left text-xs text-slate-800 shadow-lg"
+		                    className="absolute left-1/2 top-full z-30 mt-1 grid max-h-[60vh] w-72 max-w-[calc(100vw-1rem)] min-w-64 -translate-x-1/2 overflow-y-auto gap-1 rounded-md border border-emerald-200 bg-white p-1.5 text-left text-xs text-slate-800 shadow-lg"
 		                    data-admin-notification-centre="true"
 		                    data-admin-notification-centre-categories={String(adminNotificationCentreCategoryCount)}
 		                    data-bookings-alert-menu="true"
@@ -36738,23 +36738,27 @@ export default function Home() {
 		                        <span className="block font-normal text-slate-500">Review in the existing booking inbox</span>
 		                      </button>
 		                    ) : null}
-		                    {otherAdminAppNotifications.length > 0 ? (
-		                      <button
-		                        className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-slate-50"
-		                        data-admin-notification-centre-option="saved-update"
-		                        onClick={(event) => {
-		                          event.stopPropagation();
-		                          openSavedAdminNotificationsFromNotificationCentre();
-		                        }}
-		                        role="menuitem"
-		                        type="button"
-		                      >
-		                        <span className="block font-semibold text-slate-900">
-		                          {otherAdminAppNotifications.length} Admin update{otherAdminAppNotifications.length === 1 ? "" : "s"}
-		                        </span>
-		                        <span className="block font-normal text-slate-500">Driver issue, closeout, billing prep, or system notice</span>
-		                      </button>
-		                    ) : null}
+                        {otherAdminAppNotifications.map((notification) => (
+                          <button
+                            className="cursor-pointer rounded px-2 py-1.5 text-left hover:bg-slate-50"
+                            data-admin-notification-centre-option="saved-update"
+                            data-admin-notification-centre-id={clean(notification.id)}
+                            key={clean(notification.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openSavedAdminNotificationsFromNotificationCentre(notification.id);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            <span className="block font-semibold text-slate-900">
+                              {clean(notification.safe_title) || "Admin update"}
+                            </span>
+                            <span className="block line-clamp-2 break-words font-normal text-slate-500">
+                              {clean(notification.safe_message)}
+                            </span>
+                          </button>
+                        ))}
 		                  </div>
 		                ) : null}
 		              </div>

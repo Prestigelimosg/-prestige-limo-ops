@@ -8853,10 +8853,10 @@ async function runChromeTest() {
     assert.equal(combinedNotificationCentreState.optionCount, 2);
     assert.match(combinedNotificationCentreState.emailText, /2 booking email/);
     assert.match(combinedNotificationCentreState.emailText, /existing booking inbox/);
-    assert.match(combinedNotificationCentreState.savedUpdateText, /1 Admin update/);
+    assert.match(combinedNotificationCentreState.savedUpdateText, /Monthly billing draft prep saved/);
     assert.match(
       combinedNotificationCentreState.savedUpdateText,
-      /Driver issue, closeout, billing prep, or system notice/,
+      /Admin monthly billing draft prep was saved from grouped completed trip data/,
     );
     const openedEmailReviewFromNotificationCentre = await evaluate(`(() => {
       const emailOption = document.querySelector('[data-admin-notification-centre-option="email"]');

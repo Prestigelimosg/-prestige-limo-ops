@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const pagePath = "app/my-bookings/page.tsx";
 const adapterPath = "lib/customer-portal-trip-updates-adapter.ts";
@@ -40,6 +41,109 @@ const [page, adapter, savedBookingsAdapter, persistence, ledger, migration, suit
   ),
 );
 
+function evaluateTs(source, bindings = {}) {
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  return new Function(...Object.keys(bindings), compiled)(...Object.values(bindings));
+}
+const nativeExports = {};
+evaluateTs(await readFile("customer-companion/src/customer-navigation.ts", "utf8"), { exports: nativeExports });
+const pageAst = ts.createSourceFile(pagePath, page, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let openHandler;
+let refreshHandler;
+function findOpenHandler(node) {
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "openCustomerNotificationBooking") openHandler = node.getText(pageAst);
+  if (ts.isVariableDeclaration(node) && node.name.getText(pageAst) === "refreshCustomerPortalSavedBookings") {
+    refreshHandler = node.initializer.arguments[0].getText(pageAst);
+  }
+  ts.forEachChild(node, findOpenHandler);
+}
+findOpenHandler(pageAst);
+
+// Execute the real reload callback: page/scope resolution must survive the
+// installed app's intentionally limited URL contract without trusting URL IDs.
+assert.ok(refreshHandler);
+async function resolveAlert({ selected = null, candidates = [null], explicit = null, match = null, abort = false, checking = false, resetView = true } = {}) {
+  const calls = [];
+  const resolved = { current: null };
+  const pageRef = { current: resetView ? 1 : 2 };
+  const scopeRef = { current: selected };
+  const controller = new AbortController();
+  const setters = Object.fromEntries([
+    "setPortalBookingsLoadState", "setSelectedManagedBossId", "setCustomerNotificationCentreOpen",
+    "setCustomerNotificationNavigationMessage", "setPortalBookings", "setExpandedBookingId",
+    "setChangeFeedback", "setChangeRequestDraft", "setDriverTrackingByBookingId",
+    "setCheckingDriverTrackingId", "setActiveTrackingBookingId", "setTripUpdatesByBookingId",
+    "setCheckingTripUpdatesId", "setDeepLinkApplied", "setBookingPages", "setSelectedBookingMonths",
+  ].map((name) => [name, (value) => calls.push([name, value])]));
+  const refresh = evaluateTs(`return (${refreshHandler});`, {
+    ...setters,
+    customerPrincipalAccess: { status: checking ? "checking" : "principal", managed_bosses: candidates.filter(Number.isInteger).map((traveler_id) => ({ traveler_id })) },
+    customerNotificationTravelerIds: candidates,
+    selectedManagedBossId: selected,
+    resolvedCustomerAlertTargetRef: resolved,
+    portalSavedBookingsServerPageRef: pageRef,
+    portalSavedBookingsTravelerIdRef: scopeRef,
+    initialBookingPages: {}, initialSelectedBookingMonths: {},
+    readCustomerPortalBookingDeepLink: () => ({ bookingReference: "99126", savedPage: 1, travelerId: explicit, tracking: true }),
+    clearCustomerPortalBookingDeepLink: () => calls.push(["clear"]),
+    findCustomerPortalSavedBooking: async ({ travelerId, publicBookingReference }) => {
+      calls.push(["find", travelerId, publicBookingReference]);
+      if (abort) controller.abort();
+      return match?.travelerId === travelerId ? { page: match.page, booking: { publicBookingReference } } : null;
+    },
+    loadCustomerPortalSavedBookings: async ({ page, travelerId }) => {
+      calls.push(["load", page, travelerId]);
+      return [{ publicBookingReference: "99126" }];
+    },
+  });
+  await refresh({ resetView, signal: controller.signal });
+  return { calls, resolved: resolved.current, page: pageRef.current, scope: scopeRef.current };
+}
+for (const page of [1, 2, 5]) {
+  const result = await resolveAlert({ match: { travelerId: null, page } });
+  assert.deepEqual(result.calls.filter(([name]) => name === "load"), [["load", page, null]]);
+  assert.equal(result.resolved.savedPage, page);
+  assert.equal(result.page, page);
+}
+const switchBoss = await resolveAlert({ selected: 77, candidates: [77, 78], match: { travelerId: 78, page: 2 } });
+assert.deepEqual(switchBoss.calls.filter(([name]) => name === "find"), [["find", 77, "99126"], ["find", 78, "99126"]]);
+assert.ok(switchBoss.calls.some(([name, value]) => name === "setSelectedManagedBossId" && value === 78));
+assert.equal(switchBoss.calls.some(([name]) => name === "load"), false, "Old scope must not load the matched page before the verified scope changes");
+const switched = await resolveAlert({ selected: 78, candidates: [78, 77], match: { travelerId: 78, page: 2 } });
+assert.deepEqual(switched.calls.filter(([name]) => name === "load"), [["load", 2, 78]]);
+assert.equal(switched.resolved.travelerId, 78);
+for (const options of [{}, { selected: 77, candidates: [77], explicit: 999, match: { travelerId: 999, page: 2 } }]) {
+  const missing = await resolveAlert(options);
+  assert.equal(missing.resolved, null);
+  assert.ok(missing.calls.some(([name]) => name === "clear"));
+  assert.ok(missing.calls.some(([name, value]) => name === "setCustomerNotificationCentreOpen" && value));
+  assert.equal(missing.calls.some(([name, value]) => name === "find" && value === 999), false);
+}
+const aborted = await resolveAlert({ abort: true, match: { travelerId: null, page: 2 } });
+assert.equal(aborted.resolved, null);
+assert.equal(aborted.calls.some(([name]) => name === "load" || name === "setSelectedManagedBossId"), false);
+assert.deepEqual((await resolveAlert({ checking: true })).calls, []);
+const foreground = await resolveAlert({ resetView: false });
+assert.equal(foreground.calls.some(([name]) => name === "find" || name === "clear"), false);
+assert.deepEqual(foreground.calls.filter(([name]) => name === "load"), [["load", 2, null]]);
+assert.ok(openHandler);
+for (const [root, travelerId, targetPage] of [[true, null, 1], [true, null, 2], [false, 78, 2]]) {
+  let destination = "";
+  const open = evaluateTs(`${openHandler}\nreturn openCustomerNotificationBooking;`, {
+    customerPrincipalAccess: { status: "principal", booker_root: root, managed_bosses: [{ traveler_id: 78 }] },
+    selectedManagedBossId: travelerId,
+    customerNotificationTravelerIds: [travelerId],
+    setCustomerNotificationOpeningReference() {}, setCustomerNotificationNavigationMessage() {}, setCustomerNotificationCentreOpen() {},
+    findCustomerPortalSavedBooking: async () => ({ booking: { publicBookingReference: "99126" }, page: targetPage }),
+    window: { location: { origin: "https://app.prestigelimo.sg", assign(url) { destination = new URL(url, this.origin).toString(); } } },
+  });
+  await open("99126");
+  assert.equal(nativeExports.shouldAllowCustomerWebViewNavigation(destination), true,
+    `Actual alert handler must produce a URL accepted by the unchanged installed Customer navigation policy (page ${targetPage})`);
+}
+
 for (const fragment of [
   "loadCustomerNotificationCentre",
   "customerNotificationCentreOpen",
@@ -62,8 +166,9 @@ for (const fragment of [
   "void openCustomerNotificationBooking(alert.publicBookingReference)",
   'nextUrl.searchParams.set("booking", publicBookingReference)',
   'nextUrl.searchParams.set("tracking", "1")',
-  'nextUrl.searchParams.set("saved_page", String(target.page))',
-  'nextUrl.searchParams.set("traveler_id", String(travelerId))',
+  "resolvedCustomerAlertTargetRef",
+  "customerNotificationTravelerIds",
+  "savedPage: target.page, travelerId",
   "findCustomerPortalSavedBooking",
   "clearCustomerPortalBookingDeepLink",
   "portalSavedBookingsServerPageRef.current = 1",
@@ -90,6 +195,10 @@ const notificationOpenSource = page.slice(
   page.indexOf("async function openCustomerNotificationBooking"),
   page.indexOf("return (", page.indexOf("async function openCustomerNotificationBooking")),
 );
+const alertDetailEffect = page.slice(page.indexOf("const requestedDeepLink = readCustomerPortalBookingDeepLink()"), page.indexOf("async function openCustomerNotificationBooking"));
+assert.match(alertDetailEffect, /pendingManualDetailScrollIdRef\.current = targetBooking\.id;\s*setExpandedBookingId\(targetBooking\.id\)/,
+  "Alert detail must reuse the existing post-render detail scroll effect, not a timer before React commits the panel");
+excludes(notificationOpenSource, /nextUrl\.searchParams\.set\("(?:saved_page|traveler_id)"/, "Installed Customer navigation query contract");
 excludes(
   notificationOpenSource,
   /verified_boss_name|passengerName|companyName|bookerName/i,

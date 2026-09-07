@@ -238,6 +238,7 @@ class MockSupabaseQuery {
 class MockSupabaseClient {
   constructor(seed = {}, options = {}) {
     this.failures = options.failures || {};
+    this.projectSelectedColumns = options.projectSelectedColumns !== false;
     this.operations = [];
     this.selectHistory = [];
     this.tables = {
@@ -259,6 +260,13 @@ class MockSupabaseClient {
     return this.tables[table].filter((row) =>
       filters.every((filter) => {
         if (filter.type === "or") {
+          const mixedStatusMatch = String(filter.expression).match(
+            /^and\(status\.not\.is\.null,status\.not\.in\.\(([^)]+)\)\),and\(status\.is\.null,or\(admin_internal_status\.is\.null,admin_internal_status\.not\.in\.\(\1\)\)\)$/,
+          );
+          if (mixedStatusMatch) {
+            const effectiveStatus = row.status ?? row.admin_internal_status;
+            return effectiveStatus == null || !mixedStatusMatch[1].split(",").includes(String(effectiveStatus));
+          }
           const match = String(filter.expression).match(
             /^([a-z_]+)\.is\.null,\1\.not\.in\.\(([^)]+)\)$/,
           );
@@ -332,7 +340,11 @@ class MockSupabaseClient {
 
         return 0;
       })
-      .slice(resultOffset, resultLimit ? resultOffset + resultLimit : undefined);
+      .slice(resultOffset, resultLimit ? resultOffset + resultLimit : undefined)
+      .map((row) => this.projectSelectedColumns ? Object.fromEntries(
+        Object.entries(row).filter(([key]) => selectedColumns.split(/,(?![^(]*\))/)
+          .some((column) => column.trim() === key || column.trim().startsWith(`${key}(`))),
+      ) : row);
 
     return {
       data: resultMode === "maybeSingle" ? rows[0] ?? null : rows,
@@ -519,6 +531,44 @@ try {
   );
 
   setEnv(enabledEnv());
+
+  const mixedSchemaMock = installMockClient({ bookings: [
+    { ...seed.bookings[0], status: "completed", admin_internal_status: "draft" },
+    { ...seed.bookings[0], id: "mixed-active", booking_reference: "MIXED-ACTIVE", status: "assigned", admin_internal_status: "draft" },
+    { ...seed.bookings[0], id: "newer-completed", status: null, admin_internal_status: "completed" },
+    { ...seed.bookings[0], id: "newer-review", status: null, admin_internal_status: "admin_review_required" },
+  ] }, {
+    projectSelectedColumns: true,
+    failures: { "select:bookings": ({ selectedColumns }) =>
+      selectedColumns.split(", ").includes("vehicle_type")
+        ? { code: "42703", message: "column bookings.vehicle_type does not exist" } : null },
+  });
+  const mixedMonitorResult = await routeJson(await route.GET(new Request(
+    "http://localhost/api/admin-saved-bookings?scope=monitorable", { headers: sessionHeaders() },
+  )));
+  assert.equal(mixedMonitorResult.status, 200);
+  assert.deepEqual(mixedMonitorResult.body.bookings.map((row) => row.id), ["mixed-active", "newer-review"],
+    "Legacy completed rows must remain excluded when newer status defaults to draft");
+  const mixedDetailResult = await routeJson(await route.GET(new Request(
+    "http://localhost/api/admin-saved-bookings?id=save-read-1", { headers: sessionHeaders() },
+  )));
+  assert.equal(mixedMonitorResult.body.bookings[1].status, "admin_review_required");
+  assert.equal(mixedDetailResult.body.booking.status, "completed");
+  assert.equal(mixedDetailResult.body.booking.booking_type, "MNG");
+  assert.equal(mixedDetailResult.body.booking.pickup_address, "Changi Airport T3");
+  assert.equal(mixedDetailResult.body.booking.customer_price_amount, 88);
+  assert.equal(mixedDetailResult.body.booking.driver_payout_amount, 55);
+  assert.equal(mixedDetailResult.body.booking.vehicle, "AVF");
+  const mixedPageResult = await routeJson(await route.GET(new Request(
+    "http://localhost/api/admin-saved-bookings?scope=monitorable&offset=1&limit=1",
+    { headers: sessionHeaders() },
+  )));
+  assert.deepEqual(mixedPageResult.body.bookings.map((row) => row.id), ["newer-review"],
+    "Both terminal variants must be filtered before pagination");
+  assert.equal(mixedSchemaMock.client.selectHistory.length, 3,
+    "Verified mixed schema must succeed once per read without vehicle_type probes");
+  assertNoWrites(mixedSchemaMock, "mixed schema legacy semantics");
+  assertNoUnsafeResponse(mixedDetailResult, "mixed schema legacy semantics");
 
   const monitorCoverageBookings = [
     ...Array.from({ length: 101 }, (_, index) => ({
@@ -822,7 +872,7 @@ try {
     {
       failures: {
         "select:bookings": ({ selectedColumns }) =>
-          /(?:^|, )vehicle_type(?:,|$)/.test(selectedColumns)
+          selectedColumns.split(", ").includes("source_channel")
             ? {
                 code: "42703",
                 message: `Legacy scalar column cache miss with ${serviceRoleSentinel} SHOULD_NOT_LEAK`,
@@ -863,15 +913,15 @@ try {
   assert.equal(currentSchemaResult.body.booking.status, "draft");
   assert.equal(currentSchemaResult.body.booking.internal_admin_note, undefined);
   assert.equal(currentSchemaResult.body.booking.parser_debug, undefined);
-  assert.equal(currentSchemaMock.client.selectHistory.length, 1, "Current schema must not probe missing legacy columns first");
-  assert.equal(currentSchemaMock.client.selectHistory[0].selectedColumns.includes("companies("), true);
-  assert.equal(currentSchemaMock.client.selectHistory[0].selectedColumns.split(", ").includes("vehicle_type"), false);
-  assert.equal(currentSchemaMock.client.selectHistory[0].selectedColumns.includes("bookers("), true);
-  assert.equal(currentSchemaMock.client.selectHistory[0].selectedColumns.includes("travelers("), true);
-  assert.equal(currentSchemaMock.client.selectHistory[0].selectedColumns.includes("contact_display_name"), true);
-  assert.equal(currentSchemaMock.client.selectHistory[0].selectedColumns.includes("driver_plate_number"), true);
+  assert.equal(currentSchemaMock.client.selectHistory.length, 5, "Pure current schema retains its existing fallback");
+  assert.equal(currentSchemaMock.client.selectHistory[4].selectedColumns.includes("companies("), true);
+  assert.equal(currentSchemaMock.client.selectHistory[4].selectedColumns.split(", ").includes("vehicle_type"), false);
+  assert.equal(currentSchemaMock.client.selectHistory[4].selectedColumns.includes("bookers("), true);
+  assert.equal(currentSchemaMock.client.selectHistory[4].selectedColumns.includes("travelers("), true);
+  assert.equal(currentSchemaMock.client.selectHistory[4].selectedColumns.includes("contact_display_name"), true);
+  assert.equal(currentSchemaMock.client.selectHistory[4].selectedColumns.includes("driver_plate_number"), true);
   assert.equal(
-    currentSchemaMock.client.selectHistory[0].selectedColumns.includes(
+    currentSchemaMock.client.selectHistory[4].selectedColumns.includes(
       "booking_service_items(item_type, quantity, notes)",
     ),
     true,
@@ -882,21 +932,21 @@ try {
       `http://localhost/api/admin-saved-bookings?${query}`, { headers: sessionHeaders() },
     )));
     assert.equal(result.status, 200, query);
-    assert.equal(currentSchemaMock.client.selectHistory.length - before, 1, query);
+    assert.equal(currentSchemaMock.client.selectHistory.length - before, 5, query);
     assert.equal((result.body.booking || result.body.bookings[0]).id, "current-schema-booking", query);
     assertNoUnsafeResponse(result, query);
   }
-  assertNoWrites(currentSchemaMock, "current schema first-query read");
-  assertNoUnsafeResponse(currentSchemaResult, "current schema first-query response");
+  assertNoWrites(currentSchemaMock, "pure current schema fallback read");
+  assertNoUnsafeResponse(currentSchemaResult, "pure current schema fallback response");
 
   for (const [label, rejectedColumn, expectedQueries] of [
-    ["legacy schema fallback", "admin_internal_status", 3],
+    ["legacy schema fallback", "booking_service_items", 3],
     ["current schema without public reference", "public_booking_reference", 2],
   ]) {
     const compatibilityMock = installMockClient(seed, {
       failures: {
         "select:bookings": ({ selectedColumns }) =>
-          selectedColumns.split(", ").includes(rejectedColumn)
+          selectedColumns.split(", ").some((column) => column === rejectedColumn || column.startsWith(`${rejectedColumn}(`))
             ? { code: "42703", message: "Column does not exist" }
             : null,
       },
@@ -924,8 +974,8 @@ try {
     }),
   }, {
     failures: {
-      "select:bookings": ({ selectedColumns }) => selectedColumns.includes("admin_internal_status")
-        ? { code: "42703", message: "Current status column does not exist" } : null,
+      "select:bookings": ({ selectedColumns }) => selectedColumns.includes("booking_service_items")
+        ? { code: "PGRST200", message: "Normalized service relationship missing from schema cache" } : null,
     },
   });
   const legacyMonitorResult = await routeJson(await route.GET(new Request(
@@ -1004,9 +1054,9 @@ try {
   assert.equal(foundationFallbackResult.body.booking.status, "assigned");
   assert.equal(foundationFallbackResult.body.booking.internal_admin_note, undefined);
   assert.equal(foundationFallbackResult.body.booking.parser_debug, undefined);
-  assert.equal(foundationFallbackMock.client.selectHistory.length, 7);
-  assert.equal(foundationFallbackMock.client.selectHistory[6].selectedColumns.includes("contact_display_name"), false);
-  assert.equal(foundationFallbackMock.client.selectHistory[6].selectedColumns.includes("pickup_time"), true);
+  assert.equal(foundationFallbackMock.client.selectHistory.length, 9);
+  assert.equal(foundationFallbackMock.client.selectHistory[8].selectedColumns.includes("contact_display_name"), false);
+  assert.equal(foundationFallbackMock.client.selectHistory[8].selectedColumns.includes("pickup_time"), true);
   assertNoWrites(foundationFallbackMock, "foundation schema fallback read");
   assertNoUnsafeResponse(foundationFallbackResult, "foundation schema fallback response");
 

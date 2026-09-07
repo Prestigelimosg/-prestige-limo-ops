@@ -153,6 +153,11 @@ const allowedSingleReadQueryParams = new Set(["booking_id", "booking_reference",
 const allowedListReadQueryParams = new Set(["limit", "offset", "scope"]);
 const adminSavedBookingLegacyReadSelect =
   "id, booking_reference, source_channel, source_surface, customer_id, company_id, booker_id, traveler_id, booking_type, service_type, route_type, vehicle, vehicle_type, vehicle_type_or_category, pickup_time, pickup_at, pickup_datetime, pickup_address, pickup_location, dropoff_address, dropoff_location, flight_no, route, route_summary, pax, pax_count, luggage_count, passenger_name, passenger_phone, customer_display_name, contact_display_name, contact_phone, contact_email, job_card, status, driver_id, driver_name, driver_contact, driver_plate_number, customer_rate, customer_rate_unit, customer_price_amount, customer_rate_override, customer_price_override_reason, driver_payout_min, driver_payout_max, driver_payout_amount, driver_payout_override, driver_payout_reason, driver_payout_unit, driver_notes, driver_dispatch_include_payout, midnight_surcharge, midnight_payout, extra_stop_count, extra_stop_surcharge, extra_stop_payout, child_seat_required, child_seat_count, child_seat_type, child_seat_customer_surcharge, child_seat_driver_payout, pricing_source, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name)";
+// The deployed operational schema retains the legacy safe fields but has no
+// bookings.vehicle_type. Keep legacy status/pricing and normalized extra stops.
+const adminSavedBookingOperationalReadSelect =
+  adminSavedBookingLegacyReadSelect.replace(", vehicle_type, ", ", ") +
+  ", admin_internal_status, customer_facing_status, booking_service_items(item_type, quantity, notes)";
 const adminSavedBookingCurrentReadSelect =
   "id, booking_reference, source_surface, customer_id, company_id, booker_id, traveler_id, customer_display_name, contact_display_name, contact_phone, contact_email, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, passenger_phone, flight_no, pax_count, luggage_count, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, customer_price_amount, admin_internal_status, customer_facing_status, created_at, updated_at, companies(company_name, domain), bookers(booker_name, email, phone), travelers(traveler_name), booking_service_items(item_type, quantity, notes)";
 const adminSavedBookingCurrentMinimalReadSelect =
@@ -162,10 +167,12 @@ const adminSavedBookingFoundationScalarReadSelect =
 const withPublicBookingReference = (select: string) =>
   select.replace("booking_reference, ", "booking_reference, public_booking_reference, ");
 const adminSavedBookingReadSelects = [
-  withPublicBookingReference(adminSavedBookingCurrentReadSelect),
-  adminSavedBookingCurrentReadSelect,
+  withPublicBookingReference(adminSavedBookingOperationalReadSelect),
+  adminSavedBookingOperationalReadSelect,
   withPublicBookingReference(adminSavedBookingLegacyReadSelect),
   adminSavedBookingLegacyReadSelect,
+  withPublicBookingReference(adminSavedBookingCurrentReadSelect),
+  adminSavedBookingCurrentReadSelect,
   withPublicBookingReference(adminSavedBookingCurrentMinimalReadSelect),
   adminSavedBookingCurrentMinimalReadSelect,
   withPublicBookingReference(adminSavedBookingFoundationScalarReadSelect),
@@ -861,8 +868,13 @@ export async function loadAdminSavedBookingList(
       .order("created_at", { ascending: false });
 
     if (parsed.data.scope === "monitorable") {
+      const hasLegacyAndCurrentStatus =
+        selectedColumns.split(", ").includes("status") &&
+        selectedColumns.includes("admin_internal_status");
       query = query.or(
-        `${statusColumn}.is.null,${statusColumn}.not.in.${terminalSavedBookingStatuses}`,
+        hasLegacyAndCurrentStatus
+          ? `and(status.not.is.null,status.not.in.${terminalSavedBookingStatuses}),and(status.is.null,or(admin_internal_status.is.null,admin_internal_status.not.in.${terminalSavedBookingStatuses}))`
+          : `${statusColumn}.is.null,${statusColumn}.not.in.${terminalSavedBookingStatuses}`,
       );
     }
 

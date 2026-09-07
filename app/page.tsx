@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   mergeParsedBookingState,
   parseJobCardBookingMessage,
@@ -15092,6 +15093,34 @@ function companyProfileSettingsFailureMessage(action: "load" | "save", rawError:
 }
 
 export default function Home() {
+  // Recover the existing mounted Admin page only after authoritative session rejection.
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    let mounted = true;
+    let recovering = false;
+    const adminSessionRecoveryFetch: typeof window.fetch = async (input, init) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, window.location.href);
+      const adminRequest = url.origin === window.location.origin &&
+        (url.pathname.startsWith("/api/admin-") || url.pathname === "/api/ai-parse") &&
+        url.pathname !== "/api/admin-auth/session";
+      if (mounted && recovering && adminRequest) throw new Error("Admin sign-in required.");
+      const response = await originalFetch.call(window, input, init);
+      if (mounted && !recovering && adminRequest &&
+        (response.status === 401 || response.status === 403) &&
+        response.headers.get("x-prestige-admin-session") === "required") {
+        recovering = true;
+        const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.replace(`/admin-sign-in?return_to=${encodeURIComponent(returnTo)}`);
+      }
+      return response;
+    };
+    window.fetch = adminSessionRecoveryFetch;
+    return () => {
+      mounted = false;
+      if (window.fetch === adminSessionRecoveryFetch) window.fetch = originalFetch;
+    };
+  }, []);
+  // End mounted Admin session recovery.
   const initialTab: AppTab = usePathname() === "/settings/invoice" ? "company" : "dashboard";
   const showSetupReadinessArchive = false;
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
@@ -15439,6 +15468,28 @@ export default function Home() {
     target: AdminAlertLocatorTarget;
   } | null>(null);
   const [bookingsAlertMenuOpen, setBookingsAlertMenuOpen] = useState(false);
+  const [adminAlertMenuPosition, setAdminAlertMenuPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  useEffect(() => {
+    if (!bookingsAlertMenuOpen) return;
+    const positionMenu = () => {
+      const anchor = document.querySelector('[data-app-tab="dashboard"]');
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 88));
+      setAdminAlertMenuPosition({
+        left: Math.max(8, Math.min(rect.left + rect.width / 2 - 144, window.innerWidth - 296)),
+        top,
+        maxHeight: Math.max(72, Math.min(window.innerHeight * 0.6, window.innerHeight - top - 8)),
+      });
+    };
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [bookingsAlertMenuOpen]);
   const [adminAppNotificationReadRevision, setAdminAppNotificationReadRevision] = useState(0);
   const [adminAppNotificationAction, setAdminAppNotificationAction] =
     useState<AdminAppNotificationAction>(null);
@@ -36634,10 +36685,11 @@ export default function Home() {
 	                  </span>
 	                ) : null}
 	              </button>
-		                {isDashboardTab && showAdminActionBadge && bookingsAlertMenuOpen ? (
+		                {isDashboardTab && showAdminActionBadge && bookingsAlertMenuOpen && adminAlertMenuPosition ? createPortal(
 		                  <div
 		                    aria-label="Admin notifications"
-		                    className="absolute left-1/2 top-full z-30 mt-1 grid max-h-[60vh] w-72 max-w-[calc(100vw-1rem)] min-w-64 -translate-x-1/2 overflow-y-auto gap-1 rounded-md border border-emerald-200 bg-white p-1.5 text-left text-xs text-slate-800 shadow-lg"
+		                    className="fixed z-50 grid w-72 max-w-[calc(100vw-1rem)] overflow-y-auto gap-1 rounded-md border border-emerald-200 bg-white p-1.5 text-left text-xs text-slate-800 shadow-lg"
+                            style={adminAlertMenuPosition}
 		                    data-admin-notification-centre="true"
 		                    data-admin-notification-centre-categories={String(adminNotificationCentreCategoryCount)}
 		                    data-bookings-alert-menu="true"
@@ -36760,7 +36812,7 @@ export default function Home() {
                           </button>
                         ))}
 		                  </div>
-		                ) : null}
+		                 , document.body) : null}
 		              </div>
             );
           })}

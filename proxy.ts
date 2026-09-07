@@ -61,11 +61,18 @@ export async function proxy(request: NextRequest) {
   const authenticated = session.ok && revalidated?.ok === true;
 
   if (protectedAdminApiPath(pathname)) {
-    if (!hasAdminCookie) return NextResponse.next();
+    if (!hasAdminCookie) {
+      const response = NextResponse.next();
+      response.headers.set("x-prestige-admin-session", "required");
+      return response;
+    }
     return authenticated
       ? NextResponse.next()
       : clearInvalidSession(
-          NextResponse.json({ ok: false, reason: "admin_session_invalid" }, { status: 403 }),
+          NextResponse.json({ ok: false, reason: "admin_session_invalid" }, {
+            status: 403,
+            headers: { "x-prestige-admin-session": "required" },
+          }),
           true,
         );
   }

@@ -239,3 +239,26 @@ for (const row of alertRows) {
 }
 assert.equal((markup.match(/role="menuitem"/g) || []).length, 7);
 console.log('Admin exact-alert selection and rendered message previews passed');
+
+assert.match(appPage, /bookingsAlertMenuOpen && adminAlertMenuPosition \? createPortal\(/);
+assert.match(appPage, /style=\{adminAlertMenuPosition\}/);
+assert.match(appPage, /, document\.body\) : null\}/, "The existing menu must escape the horizontally scrolling tab bar");
+const positionStart = appPage.indexOf("  useEffect(() => {", appPage.indexOf("const [adminAlertMenuPosition"));
+const positionEnd = appPage.indexOf("  const [adminAppNotificationReadRevision", positionStart);
+const positionCode = appPage.slice(positionStart, positionEnd);
+for (const width of [320, 390, 589, 1280]) {
+  let cleanup; let position;
+  const listeners = new Map();
+  const window = { innerWidth: width, innerHeight: 844, addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name) => listeners.delete(name) };
+  const document = { querySelector: () => ({ getBoundingClientRect: () => ({ left: 104, width: 76, bottom: 160 }) }) };
+  new Function("useEffect", "bookingsAlertMenuOpen", "setAdminAlertMenuPosition", "window", "document", positionCode)(
+    (effect) => { cleanup = effect(); }, true, (next) => { position = next; }, window, document,
+  );
+  assert.ok(position.left >= 8 && position.left + Math.min(288, width - 16) <= width - 8);
+  assert.ok(position.top + position.maxHeight <= 836);
+  assert.equal(position.top, 164);
+  window.innerWidth = 320; listeners.get("resize")();
+  assert.ok(position.left + 288 <= 312);
+  cleanup(); assert.equal(listeners.size, 0);
+}
+console.log("Admin alert menu viewport placement and cleanup passed");

@@ -101,10 +101,10 @@ assert.deepEqual(
   [
     "Prestige SG Driver",
     "sg.prestigelimo.drivercompanion",
-    "19",
+    "20",
     "2a797181-d09d-4384-8d01-583456e83c3e",
   ],
-  "Approved Driver Build 19 native release identity must remain exact",
+  "Approved Driver Build 20 native release identity must remain exact",
 );
 
 for (const requiredLedgerFragment of [

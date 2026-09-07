@@ -90,9 +90,9 @@ for (const fragment of [
 const admin = JSON.parse(adminConfigSource).expo;
 const customer = JSON.parse(customerConfigSource).expo;
 const driver = JSON.parse(driverConfigSource).expo;
-assert.equal(admin.ios.buildNumber, "7", "Admin return-grace acceptance requires Build 7");
+assert.equal(admin.ios.buildNumber, "8", "Admin loading recovery release requires Build 8");
 assert.equal(customer.ios.buildNumber, "12", "Customer Build 12 must retain the accepted Customer identity");
-assert.equal(driver.ios.buildNumber, "19", "Driver Build 19 must retain the approved Driver release identity");
+assert.equal(driver.ios.buildNumber, "20", "Driver Build 20 must retain the approved Driver release identity");
 
 for (const phrase of [
   "Admin All Native Alerts And Badge Build 5",

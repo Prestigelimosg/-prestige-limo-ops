@@ -24,8 +24,8 @@ assert.equal(config.version, "1.0.0");
 assert.equal(config.ios.version, "1.0.0");
 assert.equal(
   config.ios.buildNumber,
-  "7",
-  "The accepted seventh Admin TestFlight build number must remain explicit",
+  "8",
+  "The approved eighth Admin TestFlight build number must remain explicit",
 );
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.admin");
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Limo Ops");
@@ -36,7 +36,7 @@ assert.equal(
   config.extra?.eas?.projectId,
   "2dada379-f732-4e25-80a3-cdbbb8f52b11",
 );
-assert.equal(eas.build?.production && Object.keys(eas.build.production).length, 0);
+assert.deepEqual(eas.build?.production, { channel: "production" });
 assert.equal(eas.submit?.production?.ios?.ascAppId, "6803312296");
 assert.equal(config.plugins.includes("expo-notifications"), true);
 assert.equal(Object.hasOwn(config.ios, "associatedDomains"), false);
@@ -70,4 +70,4 @@ assert.equal(
   "The Admin Build 2 release guard must run in preactivation verification",
 );
 
-console.log("Admin Companion accepted Build 7 release identity guard passed.");
+console.log("Admin Companion Build 8 release identity guard passed.");

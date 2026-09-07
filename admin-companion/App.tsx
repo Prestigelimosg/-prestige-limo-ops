@@ -348,12 +348,20 @@ export default function App() {
         });
       }
       if (biometricAction === "reveal") setAdminScreenMode("web");
+      if (
+        biometricAction === "reveal" &&
+        !webViewHasCompletedLoadRef.current &&
+        !webViewLoadFailurePendingRef.current
+      ) {
+        handleAdminWebViewLoadStart();
+      }
       if (biometricAction === "unlock") void unlockAdminApp();
     });
 
     return () => subscription.remove();
   }, [
     clearAdminWebViewLoadTimeout,
+    handleAdminWebViewLoadStart,
     setAdminScreenMode,
     unlockAdminApp,
   ]);

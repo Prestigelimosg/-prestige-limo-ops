@@ -13,6 +13,7 @@ const supabaseUrlSentinel = "https://admin-saved-booking-status-contract.supabas
 const unsafeResponsePattern =
   /SUPABASE_SERVICE_ROLE_KEY_ADMIN_SAVED_BOOKING_STATUS_SENTINEL|mock-admin-saved-booking-status-session-token|admin-saved-booking-status-contract\.supabase\.co|customer_price|customer_rate|driver_payout|paynow|invoice|payment|pdf|billing|payout|finance|parser_debug|raw_ai|parser_prompt|internal_admin_note|admin_finance|mock_archive|mock_qa|service_role|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
+  "lib/customer-portal-saved-bookings-adapter.ts",
   "lib/admin-saved-booking-status-persistence.ts",
   "lib/admin-booking-supabase-adapter.ts",
   "lib/admin-dispatcher-auth-boundary.ts",
@@ -116,6 +117,13 @@ async function writeMockModules(tempDir) {
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await mkdir(path.dirname(customerNotificationPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await writeFile(path.join(tempDir, "lib/driver-device-push-notification.js"), [
+    "async function sendDriverDevicePushAlertForAppUpdate() {",
+    "  globalThis.__prestigeAdminSavedBookingStatusApiMock.pushCalls += 1;",
+    "  throw new Error('Unexpected Driver push during status contract');",
+    "}",
+    "module.exports = { sendDriverDevicePushAlertForAppUpdate };",
+  ].join("\n"));
   await writeFile(
     supabasePath,
     [
@@ -134,6 +142,7 @@ async function writeMockModules(tempDir) {
     customerNotificationPath,
     [
       "async function createCustomerDriverAppNotification(input) {",
+      "  globalThis.__prestigeAdminSavedBookingStatusApiMock.notificationCalls += 1;",
       "  return { data: { ...input, id: 'status-alert-contract-notification' }, ok: true };",
       "}",
       "module.exports = { createCustomerDriverAppNotification };",
@@ -154,6 +163,7 @@ async function loadHarness() {
 
   return {
     cleanup: () => rm(tempDir, { force: true, recursive: true }),
+    customerAdapter: require(path.join(tempDir, "lib/customer-portal-saved-bookings-adapter.js")),
     persistence: require(path.join(tempDir, "lib/admin-saved-booking-status-persistence.js")),
     route: require(path.join(tempDir, "app/api/admin-saved-booking-statuses/route.js")),
   };
@@ -274,6 +284,8 @@ function installMockClient(seed, failures = {}) {
   const mock = {
     client: new MockSupabaseClient(seed, failures),
     createdClients: [],
+    pushCalls: 0,
+    notificationCalls: 0,
   };
 
   globalThis.__prestigeAdminSavedBookingStatusApiMock = mock;
@@ -651,6 +663,71 @@ try {
   assertNoUnsafeResponse(cancelledResult, "cancelled status response");
 
   setEnv(enabledEnv());
+
+  // Execute the existing Undo choice and local/grouping helpers against rows saved
+  // by the real PATCH route. A reload must agree with the optimistic screen state.
+  function dashboardFunction(name, endName) {
+    const start = dashboardSource.indexOf(`function ${name}(`);
+    const end = dashboardSource.indexOf(`function ${endName}(`, start);
+    assert.ok(start >= 0 && end > start);
+    return dashboardSource.slice(start, end);
+  }
+  const lifecycleSource = [
+    dashboardFunction("hasBookingDriver", "bookingStatusLabel"),
+    dashboardFunction("bookingRecordStatusValues", "getBookingDriverJobStatusReference"),
+    "return { undoCompletedStatus, applyBookingStatusToLocalRecord, bookingRecordIsCompletedStatus, bookingRecordIsCancelledStatus };",
+  ].join("\n");
+  const lifecycle = new Function("clean", transpileTypescript(lifecycleSource, "undo-lifecycle.ts"))(
+    (value) => String(value ?? "").trim(),
+  );
+  for (const driver of [{ driver_id: "verified-driver", driver_name: "Driver" }, { driver_id: null, driver_name: null }]) {
+    const original = {
+      ...seed.bookings[1], ...driver,
+      booking_reference: "CUST-20260701174619-UNDO",
+      customer_facing_status: "completed",
+      passenger_name: "Preserved passenger",
+      company_id: 41, booker_id: 42, traveler_id: 43,
+      customer_price_amount: 88, driver_payout_amount: 55,
+    };
+    const reopenStatus = lifecycle.undoCompletedStatus(original);
+    const expectedStatus = driver.driver_id ? "driver_assigned" : "confirmed";
+    const reports = [{ booking_reference: original.booking_reference, status_value: "completed", occurred_at: "2026-09-07T02:00:00Z" }];
+    const undoMock = installMockClient({ bookings: [original, seed.bookings[0]], driver_job_status_events: reports });
+    const undoResult = await routeJson(await route.PATCH(jsonRequest(
+      "http://localhost/api/admin-saved-booking-statuses",
+      { booking_id: original.id, status: reopenStatus },
+    )));
+    assert.equal(undoResult.status, 200);
+    assert.equal(undoResult.body.customer_notification, null);
+    const reloaded = clone(undoMock.client.rows.bookings[0]);
+    assert.equal(reloaded.customer_facing_status, expectedStatus, "Undo must persist the reopened customer status before refresh");
+    assert.equal(reloaded.admin_internal_status, expectedStatus);
+    assert.equal(reloaded.status, reopenStatus);
+    assert.equal(lifecycle.bookingRecordIsCompletedStatus(reloaded), false);
+    assert.equal(lifecycle.bookingRecordIsCancelledStatus(reloaded), false);
+    assert.deepEqual(reloaded, lifecycle.applyBookingStatusToLocalRecord(original, reopenStatus, reloaded.updated_at));
+    assert.deepEqual(undoMock.client.rows.bookings[1], seed.bookings[0]);
+    assert.deepEqual(Object.keys(undoMock.client.updateHistory[0].payload).sort(), ["admin_internal_status", "customer_facing_status", "updated_at"]);
+    assert.deepEqual(Object.keys(undoMock.client.updateHistory[1].payload).sort(), ["status", "updated_at"]);
+    assert.equal(undoMock.client.updateHistory.length, 2);
+    assert.ok(undoMock.client.updateHistory.every((op) => op.table === "bookings" && op.filters.length === 1 && op.filters[0].value === original.id));
+    assert.equal(undoMock.pushCalls, 0);
+    assert.equal(undoMock.notificationCalls, 0);
+    assert.deepEqual(undoMock.client.rows.driver_job_status_events, reports, "Undo must preserve Driver JC evidence");
+    // The customer reader exposes this field through its existing safe projection.
+    const customerBookings = harness.customerAdapter.mapCustomerSavedBookingsPayload({
+      ok: true,
+      saved_bookings: [{
+        booking_reference: reloaded.booking_reference,
+        customer_facing_status: reloaded.customer_facing_status,
+        pickup_at: "2026-09-08T02:00:00Z", service_type: "TRF",
+        passenger_name: reloaded.passenger_name,
+        pickup_location: "Safe pickup", dropoff_location: "Safe dropoff",
+      }],
+    });
+    assert.equal(customerBookings?.[0]?.status, "Confirmed", "Customer list must no longer show Completed");
+    assertNoUnsafeResponse(undoResult, "Undo response");
+  }
 
   const missingLegacyMirrorMock = installMockClient(seed, {
     "update:bookings": [

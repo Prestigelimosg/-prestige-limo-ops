@@ -94,6 +94,14 @@ async function writeMockModules(tempDir) {
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  const driverPushPath = path.join(tempDir, "lib/driver-device-push-notification.js");
+  await mkdir(path.dirname(driverPushPath), { recursive: true });
+  await writeFile(driverPushPath, [
+    "exports.sendDriverDevicePushAlertForAppUpdate = async () => {",
+    "  globalThis.__prestigeAdminCustomerSavedBookingsReadMock.pushCalls += 1;",
+    "  throw new Error('Customer saved-booking reads must not send Driver push alerts.');",
+    "};",
+  ].join("\n"));
   await writeFile(
     supabasePath,
     [
@@ -227,6 +235,7 @@ function installMockClient(seed = {}, options = {}) {
   const mock = {
     client: new MockSupabaseClient(seed, options),
     createdClients: [],
+    pushCalls: 0,
   };
 
   globalThis.__prestigeAdminCustomerSavedBookingsReadMock = mock;
@@ -290,6 +299,7 @@ function assertNoLeaks(value, label) {
 function assertNoSupabaseTouched(mock, label) {
   assert.equal(mock.createdClients.length, 0, `${label}: expected no Supabase client`);
   assert.equal(mock.client.operations.length, 0, `${label}: expected no mocked write`);
+  assert.equal(mock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(mock.client.selectHistory.length, 0, `${label}: expected no mocked read`);
 }
 
@@ -508,6 +518,7 @@ try {
     },
   ]);
   assert.equal(readMock.client.operations.length, 0);
+  assert.equal(readMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(readMock.client.selectHistory.length, 1);
   assert.equal(readMock.client.selectHistory[0].table, "bookings");
   assert.match(
@@ -543,6 +554,7 @@ try {
     ["UBS-SAFE-002"],
   );
   assert.equal(scopedReadMock.client.operations.length, 0);
+  assert.equal(scopedReadMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(scopedReadMock.client.selectHistory.length, 1);
   assertNoLeaks(scopedReadResult, "scoped saved bookings read response should stay safe");
 
@@ -608,6 +620,7 @@ try {
     ],
   );
   assert.equal(scopedBookerTravellerMock.client.operations.length, 0);
+  assert.equal(scopedBookerTravellerMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(scopedBookerTravellerMock.client.selectHistory.length, 1);
   assertNoLeaks(
     scopedBookerTravellerResult,
@@ -637,6 +650,7 @@ try {
     ["UBS-SAFE-002", "UBS-SAFE-001"],
   );
   assert.equal(customerDashboardMock.client.operations.length, 0);
+  assert.equal(customerDashboardMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(customerDashboardMock.client.selectHistory.length, 1);
   assert.equal(customerDashboardMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(customerDashboardReadResult, "customer dashboard saved bookings read response should stay safe");
@@ -664,6 +678,7 @@ try {
     ["UBS-SAFE-002", "UBS-SAFE-001"],
   );
   assert.equal(customerFolderMock.client.operations.length, 0);
+  assert.equal(customerFolderMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(customerFolderMock.client.selectHistory.length, 1);
   assert.equal(customerFolderMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(customerFolderReadResult, "customer folder saved bookings read response should stay safe");
@@ -699,6 +714,7 @@ try {
     ["UBS-SAFE-002", "UBS-SAFE-001"],
   );
   assert.equal(authenticatedCustomerFolderMock.client.operations.length, 0);
+  assert.equal(authenticatedCustomerFolderMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(authenticatedCustomerFolderMock.client.selectHistory.length, 1);
   assertNoLeaks(
     authenticatedCustomerFolderReadResult,
@@ -747,6 +763,7 @@ try {
     ["UBS-SAFE-001"],
   );
   assert.equal(exactCustomerFolderMock.client.operations.length, 0);
+  assert.equal(exactCustomerFolderMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assertNoLeaks(exactCustomerFolderReadResult, "exact customer folder saved booking read should stay safe");
 
   setEnv(enabledEnv());
@@ -771,6 +788,7 @@ try {
   });
   assert.deepEqual(wrongCustomerExactReferenceResult.body.saved_bookings, []);
   assert.equal(wrongCustomerExactReferenceMock.client.operations.length, 0);
+  assert.equal(wrongCustomerExactReferenceMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assertNoLeaks(
     wrongCustomerExactReferenceResult,
     "wrong-customer exact-reference read should return no booking",
@@ -802,6 +820,7 @@ try {
     ["HOURLY-SAFE-001"],
   );
   assert.equal(customerFolderSlugMock.client.operations.length, 0);
+  assert.equal(customerFolderSlugMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assert.equal(customerFolderSlugMock.client.selectHistory.length, 1);
   assert.equal(customerFolderSlugMock.client.selectHistory[0].table, "bookings");
   assertNoLeaks(
@@ -833,6 +852,7 @@ try {
     ok: false,
   });
   assert.equal(failureMock.client.operations.length, 0);
+  assert.equal(failureMock.pushCalls, 0, "Saved-booking reads must not send Driver push alerts");
   assertNoLeaks(failureResult, "database failure response should stay sanitized");
 } finally {
   restoreEnv();

@@ -162,10 +162,10 @@ const adminSavedBookingFoundationScalarReadSelect =
 const withPublicBookingReference = (select: string) =>
   select.replace("booking_reference, ", "booking_reference, public_booking_reference, ");
 const adminSavedBookingReadSelects = [
-  withPublicBookingReference(adminSavedBookingLegacyReadSelect),
-  adminSavedBookingLegacyReadSelect,
   withPublicBookingReference(adminSavedBookingCurrentReadSelect),
   adminSavedBookingCurrentReadSelect,
+  withPublicBookingReference(adminSavedBookingLegacyReadSelect),
+  adminSavedBookingLegacyReadSelect,
   withPublicBookingReference(adminSavedBookingCurrentMinimalReadSelect),
   adminSavedBookingCurrentMinimalReadSelect,
   withPublicBookingReference(adminSavedBookingFoundationScalarReadSelect),

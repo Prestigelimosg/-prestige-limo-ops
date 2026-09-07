@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const localPdfHelperPath = "lib/customer-local-invoices.ts";
 const persistencePath = "lib/customer-invoice-record-persistence.ts";
@@ -91,6 +92,48 @@ const ledgerSection = sectionBetween(
   "### Customer Stored Invoice Record PDF And Portal Folder Lock",
   "\n### ",
 );
+
+// Bill To contains customer-facing details, never the internal CRM identity.
+const billToReview = sectionBetween(customersPage, '<p className="font-semibold text-slate-500">Bill To</p>', '<div className="mt-5 overflow-x-auto">');
+assertExcludes(billToReview, "crmCustomerId", "Bill To address area");
+assertIncludes(customersPage, 'data-selected-job-invoice-recipient-details="true"');
+assertIncludes(customersPage, "grid-cols-[minmax(0,1fr)_auto]", "side-by-side recipient and details");
+assertIncludes(customersPage, "grid-cols-1 gap-x-3 gap-y-2 min-[360px]:grid-cols-", "very narrow phones retain readable recipient width");
+assertIncludes(billToReview, "grid-cols-[auto_auto]", "content-sized date label and value columns");
+assertExcludes(billToReview, "grid-cols-[auto_1fr]", "invoice details must not stretch the label/value gap");
+assertIncludes(customersPage, '? "min-w-0 bg-transparent"', "selected invoice grid child must shrink to the phone width");
+const invoiceItems = sectionBetween(customersPage, 'data-selected-job-invoice-items="true"', "</table>");
+assertIncludes(customersPage, '<table className="w-full text-left" data-selected-job-invoice-items="true">');
+assertIncludes(invoiceItems, "w-px whitespace-nowrap", "numeric columns fit their contents");
+assertIncludes(invoiceItems, "tabular-nums", "numeric columns retain aligned figures");
+assertIncludes(invoiceItems, "whitespace-pre-wrap break-words", "long descriptions wrap in the remaining space");
+
+function loadPdfModule(source, dependencies = {}) {
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const loadedModule = { exports: {} };
+  new Function("require", "exports", "module", compiled)((name) => {
+    assert.ok(Object.hasOwn(dependencies, name), `Unexpected PDF dependency ${name}`);
+    return dependencies[name];
+  }, loadedModule.exports, loadedModule);
+  return loadedModule.exports;
+}
+const profileModule = loadPdfModule(await readFile("lib/company-profile-shared.ts", "utf8"));
+const pdfModule = loadPdfModule(localPdfHelper, { "./company-profile-shared": profileModule });
+for (const documentType of ["invoice", "quotation", "credit_note"]) {
+  const invoice = pdfModule.createCustomerLocalInvoiceRecord({
+    amountCents: 26000, billingMonthLabel: "September 2026", customerId: "INTERNAL-CRM-ONLY-99042",
+    customerName: "Example Company", dueDateIso: "2026-09-14", documentType,
+    reference: "99001", route: "Airport > Hotel", service: "TRF", status: "Unpaid",
+  }, []);
+  const before = JSON.stringify(invoice);
+  const rendered = Buffer.from(pdfModule.createCustomerInvoicePdfBytes(invoice)).toString("latin1");
+  assert.ok(rendered.includes("Example Company"));
+  assert.ok(rendered.includes("Reference: 99001"));
+  assert.ok(!rendered.includes(invoice.customerId), "Missing address must never print the internal account ID");
+  assert.equal(JSON.stringify(invoice), before, "Presentation must retain exact stored ownership and invoice values");
+}
 
 for (const fragment of [
   "export type CustomerLocalInvoiceRecord = {",

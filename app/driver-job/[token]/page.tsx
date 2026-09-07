@@ -2685,6 +2685,13 @@ export default function DriverJobPage() {
     <main className="min-h-screen bg-stone-50 text-slate-950" data-driver-job-page="true">
       <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6">
         <header className="space-y-1 border-b border-stone-200 pb-3">
+          {embeddedDriverApp ? (
+            <button type="button" data-driver-back-to-jobs="true"
+              className="mb-1 min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-sm font-semibold"
+              onClick={() => window.location.assign("/driver-portal")}>
+              ← Back to jobs
+            </button>
+          ) : null}
           <p className="text-xs font-semibold uppercase text-slate-500">Prestige Limo Ops</p>
           <h1 className="text-xl font-semibold text-slate-950">Prestige Limo Driver Job</h1>
           <PublicAppBuildMarker />

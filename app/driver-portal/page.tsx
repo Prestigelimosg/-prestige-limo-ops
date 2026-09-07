@@ -25,6 +25,7 @@ type DriverPoolAvailableJob = {
 };
 
 type DriverPortalNotificationAlert = {
+  notification_ids: string[];
   created_at: string;
   job_key: string;
   job_reference: string;
@@ -66,6 +67,7 @@ type DriverNativeWindow = Window & {
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
+  __PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__?: boolean;
 };
 
 type DriverAccountSignInState = "idle" | "signing_in" | "failed";
@@ -192,6 +194,10 @@ export default function DriverPortalPage() {
   const [availableJobsFeedback, setAvailableJobsFeedback] = useState<Record<string, string>>({});
   const [availableJobsAcceptedConfirmation, setAvailableJobsAcceptedConfirmation] = useState("");
   const [notificationCentreOpen, setNotificationCentreOpen] = useState(false);
+  const [clearingAlerts, setClearingAlerts] = useState(false);
+  const [clearAlertsFeedback, setClearAlertsFeedback] = useState("");
+  const clearingAlertsRef = useRef(false);
+  const jobsReadRevisionRef = useRef(0);
   const availableJobsReadRevisionRef = useRef(0);
   const installationId = useSyncExternalStore(
     subscribeToStaticNativeBridge,
@@ -237,6 +243,8 @@ export default function DriverPortalPage() {
   );
 
   const loadJobs = useCallback(async () => {
+    if (clearingAlertsRef.current) return;
+    const revision = ++jobsReadRevisionRef.current;
     try {
       const nativeInstallationId = currentNativeInstallationId();
       const response = await fetch("/api/driver-portal/jobs", {
@@ -259,6 +267,7 @@ export default function DriverPortalPage() {
         reason?: string;
         session?: "account" | "link";
       };
+      if (revision !== jobsReadRevisionRef.current) return;
       if (!response.ok || result.ok !== true) {
         setReadState({
           kind: "blocked",
@@ -285,6 +294,7 @@ export default function DriverPortalPage() {
             : "available"
           : await readDriverPortalAlertState(),
       );
+      if (revision !== jobsReadRevisionRef.current) return;
       setReadState({
         accountSession: result.session === "account",
         alertCount: Number.isSafeInteger(result.alert_count) && Number(result.alert_count) >= 0
@@ -296,6 +306,7 @@ export default function DriverPortalPage() {
         jobs: Array.isArray(result.jobs) ? result.jobs : [],
       });
     } catch {
+      if (revision !== jobsReadRevisionRef.current) return;
       setReadState({ kind: "blocked", reason: "unavailable" });
     }
   }, []);
@@ -596,6 +607,37 @@ export default function DriverPortalPage() {
     }
   }
 
+  async function clearCurrentAlerts() {
+    if (clearingAlertsRef.current || readState.kind !== "ready" || !readState.alertsAvailable) return;
+    const notificationIds = [...new Set(readState.alerts.flatMap((alert) => alert.notification_ids || []))];
+    if (!notificationIds.length) return;
+    clearingAlertsRef.current = true;
+    ++jobsReadRevisionRef.current;
+    setClearingAlerts(true);
+    setClearAlertsFeedback("");
+    try {
+      for (let offset = 0; offset < notificationIds.length; offset += 100) {
+        const result = await fetch("/api/driver-portal/jobs", {
+          method: "PATCH", credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+            "x-prestige-driver-purpose": "driver-portal-alerts-clear",
+            ...(installationId ? { "x-prestige-driver-installation-id": installationId } : {}),
+          },
+          body: JSON.stringify({ notification_ids: notificationIds.slice(offset, offset + 100) }),
+        });
+        const body = await result.json();
+        if (!result.ok || body.ok !== true) throw new Error("Clear failed");
+      }
+    } catch {
+      setClearAlertsFeedback("Some alerts could not be cleared. Refresh and try again.");
+    } finally {
+      clearingAlertsRef.current = false;
+      await loadJobs();
+      setClearingAlerts(false);
+    }
+  }
+
   function openAvailableJobsFromNotificationCentre() {
     setNotificationCentreOpen(false);
     window.requestAnimationFrame(() => {
@@ -606,7 +648,7 @@ export default function DriverPortalPage() {
     });
   }
 
-  async function openJob(job: DriverPortalJob) {
+  async function openJob(job: DriverPortalJob, openMessages = false) {
     setOpeningJobKey(job.job_key);
     setOpenFeedback((current) => ({ ...current, [job.job_key]: "" }));
     try {
@@ -618,6 +660,9 @@ export default function DriverPortalPage() {
         nativeBridge.postMessage(JSON.stringify({
           job_key: job.job_key,
           type: "native_job_open",
+          ...(openMessages && (window as DriverNativeWindow).__PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__ === true
+            ? { open_target: "messages" }
+            : {}),
         }));
         return;
       }
@@ -680,7 +725,17 @@ export default function DriverPortalPage() {
               id="driver-notification-centre"
             >
               <div className="px-2 py-1">
-                <h2 className="text-base font-bold">Current alerts</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base font-bold">Current alerts</h2>
+                  {driverPortalSavedAlertsAvailable && driverPortalSavedAlertCount > 0 ? (
+                    <button type="button" data-driver-notification-centre-clear="true"
+                      className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold"
+                      disabled={clearingAlerts} onClick={() => void clearCurrentAlerts()}>
+                      {clearingAlerts ? "Clearing…" : "Clear"}
+                    </button>
+                  ) : null}
+                </div>
+                {clearAlertsFeedback ? <p role="status" className="text-xs text-amber-800">{clearAlertsFeedback}</p> : null}
                 <p className="text-xs font-semibold leading-5 text-slate-500">
                   Safe current actions only. Old, reassigned and completed jobs stay hidden.
                 </p>
@@ -709,7 +764,7 @@ export default function DriverPortalPage() {
                     data-driver-notification-job={alert.job_key}
                     data-driver-notification-purpose="job-update"
                     key={alert.job_key}
-                    onClick={() => void openJob(job)}
+                    onClick={() => void openJob(job, true)}
                     type="button"
                   >
                     <span className="min-w-0">

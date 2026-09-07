@@ -625,7 +625,7 @@ export default function CustomerPortalPage() {
       }
       if (retryingAlert) {
         setCustomerNotificationNavigationMessage("Booking temporarily unavailable. Retrying...");
-      } else if (loadedBookings !== null || failedStatus === 401 || failedStatus === 403) {
+      } else if ((loadedBookings !== null && resolvedCustomerAlertTargetRef.current) || failedStatus === 401 || failedStatus === 403) {
         setCustomerNotificationNavigationMessage("");
       }
       if (loadedBookings !== null) {

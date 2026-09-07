@@ -148,6 +148,7 @@ assert.equal(switched.resolved.travelerId, 78);
 for (const options of [{}, { selected: 77, candidates: [77], explicit: 999, match: { travelerId: 999, page: 2 } }]) {
   const missing = await resolveAlert(options);
   assert.equal(missing.resolved, null);
+  assert.match(missing.calls.filter(([name]) => name === "setCustomerNotificationNavigationMessage").at(-1)[1], /no longer available/, "Reloading page 1 must retain the verified unavailable explanation");
   assert.ok(missing.calls.some(([name]) => name === "clear"));
   assert.ok(missing.calls.some(([name, value]) => name === "setCustomerNotificationCentreOpen" && value));
   assert.equal(missing.calls.some(([name, value]) => name === "find" && value === 999), false);

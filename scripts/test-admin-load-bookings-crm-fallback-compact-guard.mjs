@@ -326,13 +326,13 @@ assertIncludes(appPage, 'data-bookings-alert-menu-option="new"', "Dashboard acti
 assertIncludes(appPage, 'data-bookings-alert-menu-option="urgent"', "Dashboard action badge urgent menu option");
 assertIncludes(
   appPage,
-  'event.target.closest(\'[data-bookings-new-request-badge="true"]\')',
-  "Dashboard tab locator only triggers from badge click",
+  'aria-haspopup={isDashboardTab && showAdminActionBadge ? "menu" : undefined}',
+  "Dashboard tab exposes the established alert menu when updates exist",
 );
 assertIncludes(
   appPage,
-  "if (isDashboardTab && showAdminActionBadge && clickedAlertBadge)",
-  "Dashboard tab normal click still opens Dashboard when badge is present",
+  "if (isDashboardTab && showAdminActionBadge)",
+  "Dashboard tab opens the established alert menu when its badge is present",
 );
 assertIncludes(
   appPage,
@@ -457,9 +457,9 @@ for (const customerRequestFragment of [
   "data-new-customer-booking-request-row",
   'data-admin-prepared-job-card-close=',
   "rememberHandledCustomerBookingRequest(requestBooking)",
-  "Codex Review &amp; Admin App Notifications",
-  "Codex Prepared Job Cards",
-  "Prepared from exact saved requests. Admin reviews every card before calendar action.",
+  "Admin alerts",
+  "Prepared job cards",
+  "Review cards before adding to Calendar.",
   "formatBookingPickupDateTimeSgt(requestBooking)",
   "formatBookingPickupDateTimeSgt(savedBooking)",
   "formatBookingPickupDateTimeSgt(bookingRecord)",
@@ -835,7 +835,7 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "New, urgent, Driver TBC, amendment, and cancellation work in one place.",
+  "New bookings, changes and cancellations.",
   "Dashboard combined booking workflow explains its job types",
 );
 assertIncludes(

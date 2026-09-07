@@ -8509,11 +8509,11 @@ async function runChromeTest() {
     assert.equal(dashboardCommandCentreState.urgentRequestsPanelInsideNotificationFeed, true);
     assert.match(
       dashboardCommandCentreState.urgentRequestsPanelText,
-      /No new, urgent, amendment, or cancellation requests\./,
+      /No requests\./,
     );
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardsInsideNotificationFeed, true);
     assert.equal(dashboardCommandCentreState.codexPreparedJobCardListOverflowY, "auto");
-    assert.match(dashboardCommandCentreState.codexPreparedJobCardsText, /Codex Prepared Job Cards/);
+    assert.match(dashboardCommandCentreState.codexPreparedJobCardsText, /Prepared job cards/);
     assert.doesNotMatch(
       dashboardCommandCentreState.codexPreparedJobCardsText,
       /No Codex-prepared job cards waiting for admin review\./,
@@ -8526,7 +8526,7 @@ async function runChromeTest() {
     assert.match(dashboardCommandCentreState.visibleText, /Booking Requests/);
     assert.doesNotMatch(dashboardCommandCentreState.visibleText, /Urgent \/ Customer Requests/);
     assert.match(dashboardCommandCentreState.visibleText, /Active Assigned Jobs/);
-    assert.match(dashboardCommandCentreState.visibleText, /Codex Review & Admin App Notifications/);
+    assert.match(dashboardCommandCentreState.visibleText, /Admin alerts/);
 
     await evaluate(`(() => {
       window.__prestigeEmailAiCustomerRecommendationRequests = [];
@@ -9638,10 +9638,10 @@ async function runChromeTest() {
     assert.equal(codexPreparedRequestState.closeButtonDisabled, false);
     assert.equal(codexPreparedRequestState.closeButtonText, "Close");
     assert.equal(codexPreparedRequestState.oldControlCount, 0);
-    assert.match(codexPreparedRequestState.panelText, /Codex Prepared Job Cards/);
+    assert.match(codexPreparedRequestState.panelText, /Prepared job cards/);
     assert.match(
       codexPreparedRequestState.panelText,
-      /Prepared from exact saved requests\. Admin reviews every card before calendar action\./,
+      /Review cards before adding to Calendar\./,
     );
     assert.doesNotMatch(
       codexPreparedRequestState.panelText,
@@ -10191,11 +10191,7 @@ async function runChromeTest() {
       "Expected notification feed rows not to expose finance, parser, secret, token, or context internals",
     );
     assert.equal(
-      adminAppNotificationFeedState.boundary.includes("No external delivery") &&
-        adminAppNotificationFeedState.boundary.includes("invoice creation") &&
-        adminAppNotificationFeedState.boundary.includes("payment") &&
-        adminAppNotificationFeedState.boundary.includes("customer auth") &&
-        adminAppNotificationFeedState.boundary.includes("driver auth"),
+      adminAppNotificationFeedState.boundary.includes("Admin review only. No sends or changes."),
       true,
       "Expected admin notification feed boundary to stay internal and non-sending",
     );

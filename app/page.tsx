@@ -28932,9 +28932,9 @@ export default function Home() {
       data-new-customer-booking-requests-panel="true"
     >
       <div>
-        <h4 className="text-sm font-semibold text-emerald-950">Codex Prepared Job Cards</h4>
+        <h4 className="text-sm font-semibold text-emerald-950">Prepared job cards</h4>
         <p className="text-xs text-emerald-800">
-          Prepared from exact saved requests. Admin reviews every card before calendar action.
+          Review cards before adding to Calendar.
         </p>
       </div>
       <div
@@ -32138,7 +32138,7 @@ export default function Home() {
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-lime-950">Active Assigned Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
-            All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.
+            Driver updates refresh automatically.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -50791,7 +50791,7 @@ export default function Home() {
             <div>
               <h2 className="text-lg font-semibold">Operations Dashboard</h2>
               <p className="text-xs text-slate-500">
-                Command centre for urgent requests, admin notifications, calendar, and booking summaries.
+                Bookings, alerts and driver updates.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:min-w-[520px]">
@@ -50931,9 +50931,9 @@ export default function Home() {
           >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-slate-950">Codex Review &amp; Admin App Notifications</h3>
+                <h3 className="text-base font-semibold text-slate-950">Admin alerts</h3>
                 <p className="text-xs text-slate-600 sm:text-sm">
-                  Push ON registers this device for automatic alerts. This button does not send an alert.
+                  Turn on push alerts for this device.
                 </p>
               </div>
               <div
@@ -51086,8 +51086,7 @@ export default function Home() {
                   </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-600 sm:text-sm">
-                    New, urgent, Driver TBC, amendment, and cancellation work in one place. Each row states its job type.
-                    Confirmed bookings, amendments, cancellations, and exact verified GroundBooker order requests appear here.
+                    New bookings, changes and cancellations.
                   </p>
                 </div>
               </div>
@@ -51439,7 +51438,7 @@ export default function Home() {
               </div>
             ) : (
               <p className="mt-2 rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-slate-600 sm:text-sm">
-                No new, urgent, amendment, or cancellation requests.
+                No requests.
               </p>
             )}
             </section>
@@ -51691,8 +51690,7 @@ export default function Home() {
               className="mt-2 text-xs text-slate-500"
               data-admin-app-notification-feed-boundary="true"
             >
-              Admin-only read. No external delivery, invoice creation, payment, payout, customer auth,
-              or driver auth.
+              Admin review only. No sends or changes.
             </p>
           </section>
 

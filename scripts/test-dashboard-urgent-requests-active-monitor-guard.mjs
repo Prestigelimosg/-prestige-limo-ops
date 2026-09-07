@@ -189,8 +189,8 @@ assertExcludes(
 );
 
 for (const fragment of [
-  "Codex Prepared Job Cards",
-  "Prepared from exact saved requests. Admin reviews every card before calendar action.",
+  "Prepared job cards",
+  "Review cards before adding to Calendar.",
   'data-codex-prepared-job-card-list="true"',
   "customerBookingRequestDisplayItems.map",
   "const passengerText = getLoadBookingsOperationalPassengerDisplay(operationalCard, requestBooking);",
@@ -228,7 +228,7 @@ for (const fragment of [
   'data-dashboard-urgent-booking-requests-panel="true"',
   'data-dashboard-urgent-booking-requests-count={String(dashboardUrgentBookingRequestCount)}',
   'data-dashboard-change-cancel-requests-count={String(customerBookingChangeRequestCount)}',
-  "New, urgent, Driver TBC, amendment, and cancellation work in one place.",
+  "New bookings, changes and cancellations.",
   "standaloneUrgentBookingRequestDisplayItems.map",
   'data-dashboard-urgent-booking-request-kind=',
   '"customer-request"',
@@ -259,7 +259,7 @@ for (const fragment of [
   'handleAdminBookingChangeRequestCloseDecision(notification, "reject")',
   'data-dashboard-change-cancel-request-action="dismiss"',
   'handleAdminBookingChangeRequestCloseDecision(notification, "dismiss")',
-  "No new, urgent, amendment, or cancellation requests.",
+  "No requests.",
 ]) {
   assertIncludes(dashboardUrgentPanel, fragment, `dashboard urgent panel fragment ${fragment}`);
 }
@@ -639,7 +639,7 @@ for (const fragment of [
 
 for (const fragment of [
   "Active Assigned Jobs",
-  "All assigned active jobs, including advance and last-minute work. Driver reports refresh automatically.",
+  "Driver updates refresh automatically.",
   "{dayOfTripActiveJobBookings.length} active",
   "No assigned active jobs to monitor.",
   "Auto-refresh 10s {dashboardDriverJobAutoRefreshEnabled ? \"On\" : \"Off\"}",

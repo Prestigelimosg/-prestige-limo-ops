@@ -87,7 +87,7 @@ for (const [alert, loaded, expected] of [[false, false, "detail"], [true, false,
 // installed app's intentionally limited URL contract without trusting URL IDs.
 assert.ok(refreshHandler);
 includes(page, '? customerNotificationNavigationMessage || "Sign in to view bookings."', "Temporary alert failure uses the existing visible booking status");
-async function resolveAlert({ selected = null, candidates = [null], explicit = null, match = null, abort = false, checking = false, resetView = true, retryAfterFailure = false, lookupFailure = false } = {}) {
+async function resolveAlert({ selected = null, candidates = [null], explicit = null, match = null, abort = false, checking = false, resetView = true, retryAfterFailure = false, lookupFailure = false, authenticationFailure = false } = {}) {
   const calls = [];
   const resolved = { current: null };
   const pageRef = { current: resetView ? 1 : 2 };
@@ -116,6 +116,9 @@ async function resolveAlert({ selected = null, candidates = [null], explicit = n
     findCustomerPortalSavedBooking: async ({ travelerId, publicBookingReference }) => {
       calls.push(["find", travelerId, publicBookingReference]);
       if (abort) controller.abort();
+      if (authenticationFailure) {
+        const error = new Error("Access denied"); error.name = "CustomerPortalAuthenticationRequired"; throw error;
+      }
       if (lookupFailure && findCount++ === 0) throw new Error("Temporary read failure");
       return match?.travelerId === travelerId ? { page: match.page, booking: { publicBookingReference } } : null;
     },
@@ -161,7 +164,21 @@ assert.deepEqual(retry.calls.filter(([name]) => name === "load"), [["load", 5, n
 const lookupRetry = await resolveAlert({ match: { travelerId: null, page: 5 }, lookupFailure: true });
 assert.equal(lookupRetry.calls.some(([name]) => name === "clear"), false, "Temporary lookup failure must retain the requested booking URL");
 assert.equal(lookupRetry.calls.filter(([name]) => name === "find").length, 2);
+assert.equal(lookupRetry.calls.some(([name, value]) => name === "setPortalBookingsLoadState" && value === "blocked"), false, "Temporary lookup failure must not trigger native sign-in recovery");
+assert.ok(lookupRetry.calls.some(([name, value]) => name === "setPortalBookingsLoadState" && value === "retrying"));
 assert.equal(lookupRetry.resolved.savedPage, 5, "Existing refresh must recover the requested booking after a failed lookup");
+const deniedLookup = await resolveAlert({ authenticationFailure: true });
+assert.ok(deniedLookup.calls.some(([name, value]) => name === "setPortalBookingsLoadState" && value === "blocked"));
+assert.equal(deniedLookup.calls.some(([name, value]) => name === "setPortalBookingsLoadState" && value === "retrying"), false);
+let nativeBlockExpression;
+function findNativeBlock(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(pageAst) === "customerNativeSessionBlocked") nativeBlockExpression = node.initializer.getText(pageAst);
+  ts.forEachChild(node, findNativeBlock);
+}
+findNativeBlock(pageAst);
+for (const [state, expected] of [["retrying", false], ["loading", false], ["ready", false], ["blocked", true]]) {
+  assert.equal(evaluateTs(`return (${nativeBlockExpression});`, { customerNativeAlertsActive: true, portalBookingsLoadState: state }), expected);
+}
 const savedAst = ts.createSourceFile(savedBookingsAdapterPath, savedBookingsAdapter, ts.ScriptTarget.Latest, true);
 const findDeclaration = savedAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "findCustomerPortalSavedBooking");
 const findExact = evaluateTs(`${findDeclaration.getText(savedAst).replace("export ", "")}\nreturn findCustomerPortalSavedBooking;`, {
@@ -169,6 +186,13 @@ const findExact = evaluateTs(`${findDeclaration.getText(savedAst).replace("expor
   loadCustomerPortalSavedBookingsPage: async () => null,
 });
 await assert.rejects(findExact({ publicBookingReference: "99126" }), /unavailable/i, "A failed read is not verified absence");
+for (const status of [401, 403, 503]) {
+  const findWithStatus = evaluateTs(`${findDeclaration.getText(savedAst).replace("export ", "")}\nreturn findCustomerPortalSavedBooking;`, {
+    safeBookingReference: value => value,
+    loadCustomerPortalSavedBookingsPage: async ({ onReadFailure }) => { onReadFailure(status); return null; },
+  });
+  await assert.rejects(findWithStatus({ publicBookingReference: "99126" }), { name: status === 503 ? "CustomerPortalReadUnavailable" : "CustomerPortalAuthenticationRequired" });
+}
 const consumeStart = page.indexOf('    // Consume only the short-lived intent from an actual alert tap.');
 assert.notEqual(consumeStart, -1, "Receipt links require a distinct single-use alert intent");
 const consumeEnd = page.indexOf('    const controller = new AbortController();', consumeStart);

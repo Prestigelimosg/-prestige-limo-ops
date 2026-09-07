@@ -38,7 +38,7 @@ type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type InvoiceFolder = "Credit Notes" | "Paid Invoices" | "Quotations" | "Unpaid Invoices";
 type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
-type PortalBookingsLoadState = "blocked" | "loading" | "ready";
+type PortalBookingsLoadState = "blocked" | "loading" | "ready" | "retrying";
 type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
 type CustomerDevicePushStatus =
   | "blocked"
@@ -585,11 +585,15 @@ export default function CustomerPortalPage() {
             setCustomerNotificationCentreOpen(false);
             break;
           }
-        } catch {
+        } catch (error) {
           if (signal.aborted) return;
-          setPortalBookingsLoadState("blocked");
+          const authenticationRequired = error instanceof Error &&
+            error.name === "CustomerPortalAuthenticationRequired";
+          setPortalBookingsLoadState(authenticationRequired ? "blocked" : "retrying");
           setCustomerNotificationCentreOpen(true);
-          setCustomerNotificationNavigationMessage("Booking temporarily unavailable. Retrying...");
+          setCustomerNotificationNavigationMessage(authenticationRequired
+            ? ""
+            : "Booking temporarily unavailable. Retrying...");
           return;
         }
         if (!resolvedCustomerAlertTargetRef.current) {
@@ -599,7 +603,9 @@ export default function CustomerPortalPage() {
           setCustomerNotificationNavigationMessage("This booking is no longer available for this signed-in account.");
         }
       }
+      let failedStatus = 0;
       const loadedBookings = await loadCustomerPortalSavedBookings({
+        onReadFailure: (status) => { failedStatus = status; },
         page: requestedPage,
         signal,
         travelerId: selectedManagedBossId,
@@ -610,7 +616,18 @@ export default function CustomerPortalPage() {
       }
 
       setPortalBookings(loadedBookings || []);
-      setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
+      const retryingAlert = loadedBookings === null && resolvedCustomerAlertTargetRef.current &&
+        failedStatus !== 401 && failedStatus !== 403;
+      if (retryingAlert) {
+        setPortalBookingsLoadState("retrying");
+      } else {
+        setPortalBookingsLoadState(loadedBookings === null ? "blocked" : "ready");
+      }
+      if (retryingAlert) {
+        setCustomerNotificationNavigationMessage("Booking temporarily unavailable. Retrying...");
+      } else if (loadedBookings !== null || failedStatus === 401 || failedStatus === 403) {
+        setCustomerNotificationNavigationMessage("");
+      }
       if (loadedBookings !== null) {
         portalSavedBookingsServerPageRef.current = requestedPage;
         portalSavedBookingsTravelerIdRef.current = selectedManagedBossId;
@@ -1173,8 +1190,10 @@ export default function CustomerPortalPage() {
   })();
   const expandedBooking = visibleBookings.find((booking) => booking.id === expandedBookingId);
   const emptyBookingsMessage =
-    portalBookingsLoadState === "loading"
-      ? "Loading bookings."
+    portalBookingsLoadState === "retrying"
+      ? "Booking temporarily unavailable. Retrying..."
+      : portalBookingsLoadState === "loading"
+        ? "Loading bookings."
       : portalBookingsLoadState === "blocked"
         ? customerNotificationNavigationMessage || "Sign in to view bookings."
         : "No bookings match the current search.";

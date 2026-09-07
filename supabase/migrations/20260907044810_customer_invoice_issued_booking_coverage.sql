@@ -14,6 +14,12 @@ declare
   booking_aliases text[];
   previous_references text[];
 begin
+  -- Only the newly enabled account invoice path uses standard numbering.
+  -- Registered Traveller and legacy Hotel issuance keep their existing reservation contract.
+  if new.traveler_id is not null or new.booker_id is null then
+    return new;
+  end if;
+
   if coalesce(new.document_type, 'invoice') <> 'invoice'
      or coalesce(new.document_state, 'issued') <> 'issued' then
     return new;
@@ -32,6 +38,7 @@ begin
   -- Keep ordinary edits to an existing issued invoice working even if an old
   -- booking has since been deleted. Only changed coverage needs revalidation.
   if tg_op = 'UPDATE' and old.customer_id = new.customer_id
+     and old.traveler_id is null and old.booker_id is not null
      and coalesce(old.document_type, 'invoice') = 'invoice'
      and coalesce(old.document_state, 'issued') = 'issued' then
     select array_agg(distinct candidate order by candidate)
@@ -89,7 +96,7 @@ end;
 $$;
 revoke all on function public.enforce_customer_invoice_issued_booking_coverage() from public;
 create trigger customer_invoice_records_issued_booking_coverage
-before insert or update of customer_id, reference, line_items, document_type, document_state
+before insert or update of customer_id, booker_id, traveler_id, reference, line_items, document_type, document_state
 on public.customer_invoice_records
 for each row execute function public.enforce_customer_invoice_issued_booking_coverage();
 commit;

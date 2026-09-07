@@ -5,13 +5,15 @@ const migration = 'supabase/migrations/20260907044810_customer_invoice_issued_bo
 const sql = await readFile(migration, 'utf8');
 const writer = await readFile('lib/customer-invoice-record-persistence.ts', 'utf8');
 for (const fragment of [
+  'if new.traveler_id is not null or new.booker_id is null then',
+  'old.traveler_id is null and old.booker_id is not null',
   'security invoker', "set local lock_timeout = '5s'", 'pg_advisory_xact_lock',
   "current_setting('transaction_isolation')", 'booking.customer_id::text = new.customer_id',
   'booking.public_booking_reference::text', "item->>'bookingReference' = any(booking_aliases)",
   'existing.id is distinct from new.id', "coalesce(existing.document_state, 'issued') = 'issued'",
   "coalesce(existing.document_type, 'invoice') = 'invoice'", "errcode = '23505'",
   'previous_references is not distinct from requested_references',
-  'before insert or update of customer_id, reference, line_items, document_type, document_state',
+  'before insert or update of customer_id, booker_id, traveler_id, reference, line_items, document_type, document_state',
   'revoke all on function public.enforce_customer_invoice_issued_booking_coverage() from public',
 ]) assert.ok(sql.includes(fragment), `Missing database coverage contract: ${fragment}`);
 assert.ok(!/security definer|create table|add column|delete from|update public\.|grant .* to (anon|authenticated)/i.test(sql), 'The guard must not broaden privileges or rewrite data/schema fields');

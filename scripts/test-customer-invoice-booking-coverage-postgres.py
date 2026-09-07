@@ -20,7 +20,7 @@ def sql(text, ok=True):
 assert sql("select count(*) from pg_tables where schemaname='public';").stdout.strip()=='0', 'A fresh empty fixture database is required'
 sql("""
 create table bookings (booking_reference text primary key, public_booking_reference text, customer_id bigint);
-create table customer_invoice_records (id uuid primary key default gen_random_uuid(), invoice_number text unique, customer_id text, booker_id bigint, traveler_id bigint, reference text, line_items jsonb default '[]', document_type text default 'invoice', document_state text default 'issued', status text default 'Unpaid', amount_cents integer default 1000);
+create table customer_invoice_records (id uuid primary key default gen_random_uuid(), invoice_number text unique, customer_id text, booker_id bigint default 43, traveler_id bigint, reference text, line_items jsonb default '[]', document_type text default 'invoice', document_state text default 'issued', status text default 'Unpaid', amount_cents integer default 1000);
 insert into bookings values ('JOB-A','99001',41),('JOB-B','99002',41),('JOB-C','99003',41),('JOB-D','99004',42);
 """)
 
@@ -67,4 +67,14 @@ print('PASS: a fixed stale snapshot fails closed')
 sql("delete from bookings where booking_reference='JOB-A';")
 sql("update customer_invoice_records set line_items='[{\"bookingReference\":\"JOB-A\",\"description\":\"AMENDED DESCRIPTION\"}]'::jsonb where invoice_number='FIX-0003';")
 print('PASS: an unchanged issued-booking scope remains editable after the old booking is gone')
+sql("insert into customer_invoice_records(invoice_number,customer_id,booker_id,traveler_id,reference) values('TRAV-0001','41',43,44,'HISTORIC-TRAVELLER');")
+sql("insert into customer_invoice_records(invoice_number,customer_id,booker_id,traveler_id,reference) values('HOTEL-0001','41',null,null,'HISTORIC-HOTEL');")
+sql("insert into customer_invoice_records(invoice_number,customer_id,booker_id,traveler_id,reference) values('TRAV-0002','41',43,44,'JOB-B');")
+r=sql("update customer_invoice_records set traveler_id=null where invoice_number='TRAV-0002';",False)
+assert r.returncode!=0 and 'Invoice already contains one or more selected jobs.' in r.stderr
+sql("insert into customer_invoice_records(invoice_number,customer_id,booker_id,reference) values('HOTEL-0002','41',null,'JOB-B');")
+r=sql("update customer_invoice_records set booker_id=43 where invoice_number='HOTEL-0002';",False)
+assert r.returncode!=0 and 'Invoice already contains one or more selected jobs.' in r.stderr
+print('PASS: existing invoices entering the account-only path cannot bypass booking coverage')
+print('PASS: registered Traveller and legacy Hotel issuance do not enter the new account-only coverage guard')
 print('Local database tests complete. No network, host volume, Supabase migration or real data used.')

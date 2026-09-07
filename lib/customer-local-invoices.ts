@@ -638,7 +638,6 @@ export function createCustomerInvoicePdfBytes(
   const billToCommands = [
     pdfTextAt("Bill To", 50, billToY, 9, "0.35 g"),
     ...billToNameLines.map((line, index) => pdfTextAt(line, 50, billToY - 17 - index * 12, 9)),
-    pdfTextAt(invoice.customerId, 50, billToY - 30 - billToExtraLineOffset, 8, "0.25 g"),
     pdfTextAt(`Reference: ${invoice.reference}`, 50, billToY - 43 - billToExtraLineOffset, 8, "0.25 g"),
   ];
   const dateX = 390;

@@ -9191,7 +9191,7 @@ export default function MockCustomerDashboardPage() {
         <section
           className={
             plainInvoiceSelectedJobReviewActive
-              ? "bg-transparent"
+              ? "min-w-0 bg-transparent"
               : "rounded-lg border border-slate-200 bg-white shadow-sm"
           }
           data-customer-invoice-workspace="true"
@@ -9938,8 +9938,11 @@ export default function MockCustomerDashboardPage() {
                         </div>
                       </div>
 
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                        <div>
+                      <div
+                        className="mt-4 grid grid-cols-1 gap-x-3 gap-y-2 min-[360px]:grid-cols-[minmax(0,1fr)_auto]"
+                        data-selected-job-invoice-recipient-details="true"
+                      >
+                        <div className="min-w-0 break-words">
                           <p className="font-semibold text-slate-500">Bill To</p>
                           <p className="mt-1 font-bold text-sky-700" data-plain-invoice-preview-bill-to="true">
                             {plainInvoiceIssuedRecord?.customerName ||
@@ -9947,10 +9950,9 @@ export default function MockCustomerDashboardPage() {
                               plainInvoiceForm.crmCustomerName ||
                               plainInvoiceForm.billToName}
                           </p>
-                          <p className="mt-1 text-slate-600">CRM account {plainInvoiceForm.crmCustomerId}</p>
                           <p className="text-slate-600">Reference {plainInvoiceForm.reference}</p>
                         </div>
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 sm:justify-self-end">
+                        <dl className="grid grid-cols-[auto_auto] self-start justify-self-start gap-x-3 gap-y-1 min-[360px]:justify-self-end">
                           <dt className="font-semibold text-slate-500">Invoice Date:</dt>
                           <dd className="text-right font-semibold">
                             {plainInvoiceIssuedRecord?.issueDateLabel || "Not issued"}
@@ -9971,24 +9973,24 @@ export default function MockCustomerDashboardPage() {
                       </div>
 
                       <div className="mt-5 overflow-x-auto">
-                        <table className="w-full min-w-[560px] text-left">
+                        <table className="w-full text-left" data-selected-job-invoice-items="true">
                           <thead className="bg-slate-900 text-white">
                             <tr>
-                              <th className="px-2 py-2">#</th>
+                              <th className="w-px whitespace-nowrap px-1 py-2 sm:px-2">#</th>
                               <th className="px-2 py-2">Item &amp; Description</th>
-                              <th className="px-2 py-2 text-right">Qty</th>
-                              <th className="px-2 py-2 text-right">Rate</th>
-                              <th className="px-2 py-2 text-right">Amount</th>
+                              <th className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">Qty</th>
+                              <th className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">Rate</th>
+                              <th className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">Amount</th>
                             </tr>
                           </thead>
                           <tbody data-selected-job-invoice-lines="true">
                             {plainInvoiceSelectedJobReviewLines.map((item, index) => (
                               <tr className="border-b border-slate-200 align-top" key={`${item.description}-${index}`}>
-                                <td className="px-2 py-2">{index + 1}</td>
-                                <td className="whitespace-pre-wrap px-2 py-2 font-semibold text-slate-950">{item.description}</td>
-                                <td className="px-2 py-2 text-right">{plainInvoiceQuantityLabel(item.quantity)}</td>
-                                <td className="px-2 py-2 text-right">{plainInvoiceLineItemRateLabel(item)}</td>
-                                <td className="px-2 py-2 text-right font-bold">{item.amountLabel}</td>
+                                <td className="w-px whitespace-nowrap px-1 py-2 tabular-nums sm:px-2">{index + 1}</td>
+                                <td className="whitespace-pre-wrap break-words px-1 py-2 font-semibold text-slate-950 sm:px-2">{item.description}</td>
+                                <td className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">{plainInvoiceQuantityLabel(item.quantity)}</td>
+                                <td className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">{plainInvoiceLineItemRateLabel(item)}</td>
+                                <td className="w-px whitespace-nowrap px-1 py-2 text-right font-bold tabular-nums sm:px-2">{item.amountLabel}</td>
                               </tr>
                             ))}
                           </tbody>

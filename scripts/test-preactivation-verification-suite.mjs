@@ -1340,6 +1340,10 @@ const guardChecks = [
     script: "scripts/test-driver-companion-internal-ack-status-guard.mjs",
   },
   {
+    label: "Driver alert exact-message handoff guard",
+    script: "scripts/test-driver-alert-message-handoff-guard.mjs",
+  },
+  {
     label: "Driver Companion iOS Universal Link association guard",
     script: "scripts/test-driver-companion-ios-universal-link-association-guard.mjs",
   },

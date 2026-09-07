@@ -12,7 +12,7 @@ export type DriverTrackingBridgeMessage = {
 export type DriverBridgeMessage =
   | DriverTrackingBridgeMessage
   | { type: "native_biometrics_enable" }
-  | { jobKey: string; type: "native_job_open" }
+  | { jobKey: string; openTarget?: "messages"; type: "native_job_open" }
   | { jobKey: string; type: "native_job_remember" }
   | { jobKey?: string; type: "native_notifications_register" };
 
@@ -46,6 +46,16 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
   try {
     const parsed = asRecord(JSON.parse(value));
     const keys = Object.keys(parsed);
+
+    if (
+      parsed.type === "native_job_open" &&
+      parsed.open_target === "messages" &&
+      keys.length === 3 &&
+      keys.includes("job_key") && keys.includes("type") && keys.includes("open_target") &&
+      typeof parsed.job_key === "string" && /^[0-9a-f]{64}$/.test(parsed.job_key)
+    ) {
+      return { jobKey: parsed.job_key, openTarget: "messages", type: "native_job_open" };
+    }
 
     if (
       ["native_job_open", "native_job_remember", "native_notifications_register"].includes(
@@ -238,6 +248,12 @@ export function embeddedDriverBridgeBootstrap(
     configurable: false,
     enumerable: false,
     value: ${openTarget === "messages" ? '"messages"' : openTarget === "available_jobs" ? '"available_jobs"' : "null"},
+    writable: false
+  });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__", {
+    configurable: false,
+    enumerable: false,
+    value: true,
     writable: false
   });
   try {

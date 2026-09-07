@@ -520,7 +520,11 @@ export default function App() {
             sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
             return;
           }
-          await receiveDriverJobUrl(storedJob.jobUrl);
+          if (request.openTarget === "messages") {
+            await receiveDriverJobUrl(storedJob.jobUrl, "messages");
+          } else {
+            await receiveDriverJobUrl(storedJob.jobUrl);
+          }
           return;
         }
 

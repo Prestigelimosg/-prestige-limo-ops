@@ -486,7 +486,8 @@ export async function findCustomerPortalSavedBooking({
       travelerId,
     });
     if (!result) {
-      return null;
+      if (signal?.aborted) return null;
+      throw new Error("Saved bookings are temporarily unavailable.");
     }
     const booking = result.bookings.find(
       (candidate) => candidate.publicBookingReference === safeReference,

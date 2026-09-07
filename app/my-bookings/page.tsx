@@ -546,7 +546,9 @@ export default function CustomerPortalPage() {
   const refreshCustomerPortalSavedBookings = useCallback(
     async ({ resetView = false, signal }: { resetView?: boolean; signal: AbortSignal }) => {
       if (customerPrincipalAccess.status === "checking") return;
-      const deepLink = resetView ? readCustomerPortalBookingDeepLink() : null;
+      const deepLink = resetView || !resolvedCustomerAlertTargetRef.current
+        ? readCustomerPortalBookingDeepLink()
+        : null;
       const deepLinkMatchesScope =
         deepLink &&
         (deepLink.travelerId === null || deepLink.travelerId === selectedManagedBossId);
@@ -566,19 +568,29 @@ export default function CustomerPortalPage() {
               customerPrincipalAccess.managed_bosses.some((boss) => boss.traveler_id === deepLink.travelerId)
             ? [deepLink.travelerId]
             : [];
-        for (const travelerId of travelerIds) {
-          const target = await findCustomerPortalSavedBooking({
-            publicBookingReference: deepLink.bookingReference, signal, travelerId,
-          });
-          if (signal.aborted) return;
-          if (!target) continue;
-          if (travelerId !== selectedManagedBossId) {
-            setSelectedManagedBossId(travelerId);
-            return;
+        try {
+          for (const travelerId of travelerIds) {
+            const target = await findCustomerPortalSavedBooking({
+              publicBookingReference: deepLink.bookingReference, signal, travelerId,
+            });
+            if (signal.aborted) return;
+            if (!target) continue;
+            if (travelerId !== selectedManagedBossId) {
+              setSelectedManagedBossId(travelerId);
+              return;
+            }
+            requestedPage = target.page;
+            resolvedCustomerAlertTargetRef.current = { ...deepLink, savedPage: target.page, travelerId };
+            setCustomerNotificationNavigationMessage("");
+            setCustomerNotificationCentreOpen(false);
+            break;
           }
-          requestedPage = target.page;
-          resolvedCustomerAlertTargetRef.current = { ...deepLink, savedPage: target.page, travelerId };
-          break;
+        } catch {
+          if (signal.aborted) return;
+          setPortalBookingsLoadState("blocked");
+          setCustomerNotificationCentreOpen(true);
+          setCustomerNotificationNavigationMessage("Booking temporarily unavailable. Retrying...");
+          return;
         }
         if (!resolvedCustomerAlertTargetRef.current) {
           clearCustomerPortalBookingDeepLink();
@@ -624,6 +636,21 @@ export default function CustomerPortalPage() {
   );
 
   useEffect(() => {
+    // Consume only the short-lived intent from an actual alert tap.
+    // Receipt/access links retain their existing Booking Details destination.
+    try {
+      const rawIntent = window.sessionStorage.getItem("prestige-customer-alert-open");
+      window.sessionStorage.removeItem("prestige-customer-alert-open");
+      const intent = rawIntent ? JSON.parse(rawIntent) : null;
+      const bookingReference = readCustomerPortalBookingDeepLink()?.bookingReference;
+      if (bookingReference && intent?.bookingReference === bookingReference &&
+          typeof intent.expiresAt === "number" && intent.expiresAt > Date.now() &&
+          intent.expiresAt <= Date.now() + 60_000) {
+        pendingAlertMessageScrollRef.current = true;
+      }
+    } catch {
+      // Unavailable browser storage keeps the ordinary detail destination.
+    }
     const controller = new AbortController();
     void (async () => {
       try {
@@ -1149,7 +1176,7 @@ export default function CustomerPortalPage() {
     portalBookingsLoadState === "loading"
       ? "Loading bookings."
       : portalBookingsLoadState === "blocked"
-        ? "Sign in to view bookings."
+        ? customerNotificationNavigationMessage || "Sign in to view bookings."
         : "No bookings match the current search.";
   const customerNativeSessionBlocked =
     customerNativeAlertsActive && portalBookingsLoadState === "blocked";
@@ -1401,7 +1428,6 @@ export default function CustomerPortalPage() {
 
       setActiveSection(targetFilter);
       setSearchQuery("");
-      pendingAlertMessageScrollRef.current = true;
       pendingManualDetailScrollIdRef.current = targetBooking.id;
       setExpandedBookingId(targetBooking.id);
       setChangeFeedback({});
@@ -1887,6 +1913,13 @@ export default function CustomerPortalPage() {
       const nextUrl = new URL("/my-bookings", window.location.origin);
       nextUrl.searchParams.set("booking", publicBookingReference);
       nextUrl.searchParams.set("tracking", "1");
+      try {
+        window.sessionStorage.setItem("prestige-customer-alert-open", JSON.stringify({
+          bookingReference: publicBookingReference, expiresAt: Date.now() + 60_000,
+        }));
+      } catch {
+        // Navigation still opens this booking when browser storage is unavailable.
+      }
       window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
     } finally {
       setCustomerNotificationOpeningReference("");

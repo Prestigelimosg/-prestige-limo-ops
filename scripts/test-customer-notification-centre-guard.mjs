@@ -86,13 +86,15 @@ for (const [alert, loaded, expected] of [[false, false, "detail"], [true, false,
 // Execute the real reload callback: page/scope resolution must survive the
 // installed app's intentionally limited URL contract without trusting URL IDs.
 assert.ok(refreshHandler);
-async function resolveAlert({ selected = null, candidates = [null], explicit = null, match = null, abort = false, checking = false, resetView = true, retryAfterFailure = false } = {}) {
+includes(page, '? customerNotificationNavigationMessage || "Sign in to view bookings."', "Temporary alert failure uses the existing visible booking status");
+async function resolveAlert({ selected = null, candidates = [null], explicit = null, match = null, abort = false, checking = false, resetView = true, retryAfterFailure = false, lookupFailure = false } = {}) {
   const calls = [];
   const resolved = { current: null };
   const pageRef = { current: resetView ? 1 : 2 };
   const scopeRef = { current: selected };
   const controller = new AbortController();
   let loadCount = 0;
+  let findCount = 0;
   const setters = Object.fromEntries([
     "setPortalBookingsLoadState", "setSelectedManagedBossId", "setCustomerNotificationCentreOpen",
     "setCustomerNotificationNavigationMessage", "setPortalBookings", "setExpandedBookingId",
@@ -109,11 +111,12 @@ async function resolveAlert({ selected = null, candidates = [null], explicit = n
     portalSavedBookingsServerPageRef: pageRef,
     portalSavedBookingsTravelerIdRef: scopeRef,
     initialBookingPages: {}, initialSelectedBookingMonths: {},
-    readCustomerPortalBookingDeepLink: () => ({ bookingReference: "99126", savedPage: 1, travelerId: explicit, tracking: true }),
+    readCustomerPortalBookingDeepLink: () => !resetView && !lookupFailure ? null : ({ bookingReference: "99126", savedPage: 1, travelerId: explicit, tracking: true }),
     clearCustomerPortalBookingDeepLink: () => calls.push(["clear"]),
     findCustomerPortalSavedBooking: async ({ travelerId, publicBookingReference }) => {
       calls.push(["find", travelerId, publicBookingReference]);
       if (abort) controller.abort();
+      if (lookupFailure && findCount++ === 0) throw new Error("Temporary read failure");
       return match?.travelerId === travelerId ? { page: match.page, booking: { publicBookingReference } } : null;
     },
     loadCustomerPortalSavedBookings: async ({ page, travelerId }) => {
@@ -123,7 +126,7 @@ async function resolveAlert({ selected = null, candidates = [null], explicit = n
     },
   });
   await refresh({ resetView, signal: controller.signal });
-  if (retryAfterFailure) await refresh({ resetView: false, signal: controller.signal });
+  if (retryAfterFailure || lookupFailure) await refresh({ resetView: false, signal: controller.signal });
   return { calls, resolved: resolved.current, page: pageRef.current, scope: scopeRef.current };
 }
 for (const page of [1, 2, 5]) {
@@ -155,19 +158,54 @@ assert.equal(foreground.calls.some(([name]) => name === "find" || name === "clea
 assert.deepEqual(foreground.calls.filter(([name]) => name === "load"), [["load", 2, null]]);
 const retry = await resolveAlert({ match: { travelerId: null, page: 5 }, retryAfterFailure: true });
 assert.deepEqual(retry.calls.filter(([name]) => name === "load"), [["load", 5, null], ["load", 5, null]], "Transient page failure must retry the resolved page");
+const lookupRetry = await resolveAlert({ match: { travelerId: null, page: 5 }, lookupFailure: true });
+assert.equal(lookupRetry.calls.some(([name]) => name === "clear"), false, "Temporary lookup failure must retain the requested booking URL");
+assert.equal(lookupRetry.calls.filter(([name]) => name === "find").length, 2);
+assert.equal(lookupRetry.resolved.savedPage, 5, "Existing refresh must recover the requested booking after a failed lookup");
+const savedAst = ts.createSourceFile(savedBookingsAdapterPath, savedBookingsAdapter, ts.ScriptTarget.Latest, true);
+const findDeclaration = savedAst.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "findCustomerPortalSavedBooking");
+const findExact = evaluateTs(`${findDeclaration.getText(savedAst).replace("export ", "")}\nreturn findCustomerPortalSavedBooking;`, {
+  safeBookingReference: value => value,
+  loadCustomerPortalSavedBookingsPage: async () => null,
+});
+await assert.rejects(findExact({ publicBookingReference: "99126" }), /unavailable/i, "A failed read is not verified absence");
+const consumeStart = page.indexOf('    // Consume only the short-lived intent from an actual alert tap.');
+assert.notEqual(consumeStart, -1, "Receipt links require a distinct single-use alert intent");
+const consumeEnd = page.indexOf('    const controller = new AbortController();', consumeStart);
+const consumeCode = page.slice(consumeStart, consumeEnd);
+for (const [marker, expected] of [
+  [null, false],
+  [JSON.stringify({ bookingReference: "99126", expiresAt: Date.now() + 30000 }), true],
+  [JSON.stringify({ bookingReference: "99101", expiresAt: Date.now() + 30000 }), false],
+  [JSON.stringify({ bookingReference: "99126", expiresAt: Date.now() - 1 }), false],
+  ["malformed", false],
+]) {
+  const pending = { current: false };
+  const removed = [];
+  evaluateTs(consumeCode, {
+    pendingAlertMessageScrollRef: pending,
+    readCustomerPortalBookingDeepLink: () => ({ bookingReference: "99126" }),
+    window: { sessionStorage: { getItem: () => marker, removeItem: key => removed.push(key) } },
+  });
+  assert.equal(pending.current, expected, "Only a matching unexpired alert tap may change the receipt destination");
+  assert.equal(removed.length, 1, "Navigation intent must be consumed once");
+}
 assert.ok(openHandler);
 for (const [root, travelerId, targetPage] of [[true, null, 1], [true, null, 2], [false, 78, 2]]) {
   let destination = "";
   let lookups = 0;
+  const intent = [];
   const open = evaluateTs(`${openHandler}\nreturn openCustomerNotificationBooking;`, {
     customerPrincipalAccess: { status: "principal", booker_root: root, managed_bosses: [{ traveler_id: 78 }] },
     selectedManagedBossId: travelerId,
     customerNotificationTravelerIds: [travelerId],
     setCustomerNotificationOpeningReference() {}, setCustomerNotificationNavigationMessage() {}, setCustomerNotificationCentreOpen() {},
     findCustomerPortalSavedBooking: async () => { lookups++; return { booking: { publicBookingReference: "99126" }, page: targetPage }; },
-    window: { location: { origin: "https://app.prestigelimo.sg", assign(url) { destination = new URL(url, this.origin).toString(); } } },
+    window: { sessionStorage: { setItem: (key, value) => intent.push([key, JSON.parse(value)]) }, location: { origin: "https://app.prestigelimo.sg", assign(url) { destination = new URL(url, this.origin).toString(); } } },
   });
   await open("99126");
+  assert.equal(intent[0][1].bookingReference, "99126");
+  assert.deepEqual(Object.keys(intent[0][1]).sort(), ["bookingReference", "expiresAt"]);
   assert.equal(lookups, 0, "Resolve the booking once after navigation, not before and after");
   assert.equal(nativeExports.shouldAllowCustomerWebViewNavigation(destination), true,
     `Actual alert handler must produce a URL accepted by the unchanged installed Customer navigation policy (page ${targetPage})`);
@@ -230,6 +268,7 @@ assert.match(bossSelectorSource, /clearCustomerPortalBookingDeepLink\(\);[\s\S]*
 const alertDetailEffect = page.slice(page.indexOf("const requestedDeepLink = readCustomerPortalBookingDeepLink()"), page.indexOf("async function openCustomerNotificationBooking"));
 assert.match(alertDetailEffect, /pendingManualDetailScrollIdRef\.current = targetBooking\.id;\s*setExpandedBookingId\(targetBooking\.id\)/,
   "Alert detail must reuse the existing post-render detail scroll effect, not a timer before React commits the panel");
+assert.doesNotMatch(alertDetailEffect, /pendingAlertMessageScrollRef\.current = true/, "Ordinary receipt deep links keep Booking Details");
 excludes(notificationOpenSource, /nextUrl\.searchParams\.set\("(?:saved_page|traveler_id)"/, "Installed Customer navigation query contract");
 excludes(
   notificationOpenSource,

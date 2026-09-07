@@ -610,18 +610,19 @@ function customerFolderInvoiceHref(
     return "";
   }
 
-  const travelerId = Number(selectedBookings[0]?.traveler_id);
-  const bookerId = Number(selectedBookings[0]?.booker_id);
+  const travelerId = inlineEditIdentityId(selectedBookings[0]?.traveler_id);
+  const bookerId = inlineEditIdentityId(selectedBookings[0]?.booker_id);
+  const companyId = inlineEditIdentityId(selectedBookings[0]?.company_id);
 
   if (!guestAccountBillingEnabled && (
-    !Number.isInteger(travelerId) ||
-    travelerId <= 0 ||
-    !Number.isInteger(bookerId) ||
-    bookerId <= 0 ||
+    !bookerId || !companyId ||
     selectedBookings.some(
       (selectedBooking) =>
-        Number(selectedBooking.traveler_id) !== travelerId ||
-        Number(selectedBooking.booker_id) !== bookerId,
+        String(selectedBooking.customer_id ?? "").trim() !== customerId ||
+        inlineEditIdentityId(selectedBooking.company_id) !== companyId ||
+        inlineEditIdentityId(selectedBooking.booker_id) !== bookerId ||
+        inlineEditIdentityId(selectedBooking.traveler_id) !== travelerId ||
+        (selectedBooking.traveler_id != null && !inlineEditIdentityId(selectedBooking.traveler_id)),
     )
   )) {
     return "";
@@ -668,35 +669,33 @@ function customerFolderTravelerInvoiceGroups(
     };
   }
 
-  const groups = new Map<number, CustomerFolderTravelerInvoiceGroup>();
+  const groups = new Map<string, CustomerFolderTravelerInvoiceGroup>();
+  const companyId = inlineEditIdentityId(bookings[0]?.company_id);
+  const accountBookerId = inlineEditIdentityId(bookings[0]?.booker_id);
+  const customerId = String(bookings[0]?.customer_id ?? "").trim();
 
   for (const booking of bookings) {
-    const travelerId = Number(booking.traveler_id);
-    const bookerId = Number(booking.booker_id);
-    const passengerName = displayText(booking.passenger_name, "Verified traveller");
+    const travelerId = inlineEditIdentityId(booking.traveler_id);
+    const bookerId = inlineEditIdentityId(booking.booker_id);
+    const passengerName = travelerId ? displayText(booking.passenger_name, "Verified traveller") : "customer account";
 
     if (
-      !Number.isInteger(travelerId) ||
-      travelerId <= 0 ||
-      !Number.isInteger(bookerId) ||
-      bookerId <= 0
+      !companyId || !accountBookerId || !customerId ||
+      inlineEditIdentityId(booking.company_id) !== companyId ||
+      bookerId !== accountBookerId ||
+      String(booking.customer_id ?? "").trim() !== customerId ||
+      (booking.traveler_id != null && !travelerId)
     ) {
       return {
-        error: "Missing verified traveller identity. Invoice preparation is blocked.",
+        error: "Missing or mismatched verified Company + Booker account. Invoice preparation is blocked.",
         groups: [],
       };
     }
 
-    const current = groups.get(travelerId);
+    const groupKey = travelerId ? `traveller:${travelerId}` : `account:${companyId}:${bookerId}`;
+    const current = groups.get(groupKey);
 
-    if (current && current.bookerId !== bookerId) {
-      return {
-        error: "Verified traveller and PA ownership do not match. Invoice preparation is blocked.",
-        groups: [],
-      };
-    }
-
-    groups.set(travelerId, {
+    groups.set(groupKey, {
       bookings: [...(current?.bookings || []), booking],
       bookerId,
       guestAccountBillingEnabled: false,
@@ -724,15 +723,11 @@ function customerFolderLegacyIdentityResolution(
     const hasBooker = Boolean(bookerId);
     const hasTraveler = Boolean(travelerId);
 
-    if (hasBooker !== hasTraveler) {
+    if ((hasTraveler && !hasBooker) || (hasBooker && !companyId)) {
       return {
         error: `${publicBookingReferenceDisplay(booking)} has an incomplete saved Booker / Traveller pair. Reload and repair that exact booking before continuing.`,
         groups: [],
       };
-    }
-
-    if (hasBooker && hasTraveler) {
-      continue;
     }
 
     if (companyId && customerCompanyId && companyId !== customerCompanyId) {
@@ -740,6 +735,10 @@ function customerFolderLegacyIdentityResolution(
         error: `${publicBookingReferenceDisplay(booking)} belongs to a different saved customer. No identity was changed.`,
         groups: [],
       };
+    }
+
+    if (hasBooker && companyId) {
+      continue;
     }
 
     const resolvedCompanyId = companyId || customerCompanyId;
@@ -2524,7 +2523,7 @@ export function CustomerFolderSavedBookingsPanel({
                               className="inline-flex min-h-8 cursor-not-allowed items-center rounded-md border border-slate-200 bg-slate-100 px-2 text-xs font-bold text-slate-400"
                               data-customer-folder-saved-bookings-create-invoice-disabled={booking.booking_reference || ""}
                               disabled
-                              title="Review the customer price first"
+                              title={priceReviewed ? "Verify the saved Company + Booker account and booking reference" : "Review the customer price first"}
                               type="button"
                             >
                               Invoice
@@ -2807,7 +2806,7 @@ export function CustomerFolderSavedBookingsPanel({
                 </p>
                 <h3 className="mt-1 text-lg font-bold text-slate-950">Customer invoice layout</h3>
                 <p className="mt-0.5 text-xs font-semibold text-slate-600">
-                  Review invoice &amp; email. Selected jobs are automatically separated by verified traveller.
+                  Review invoice &amp; email for this Company + Booker account. Registered travellers keep their separate invoice groups.
                 </p>
               </div>
               {selectedTravelerInvoiceGroups.length > 0 &&
@@ -2821,7 +2820,7 @@ export function CustomerFolderSavedBookingsPanel({
                       data-customer-folder-create-invoice-selected="true"
                       data-customer-folder-traveler-invoice-group="true"
                       href={group.href}
-                      key={group.guestAccountBillingEnabled ? "guest-account" : group.travelerId}
+                      key={group.guestAccountBillingEnabled ? "guest-account" : group.travelerId ?? `booker:${group.bookerId}`}
                     >
                       Load {group.passengerName} invoice
                     </Link>

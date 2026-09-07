@@ -29,11 +29,11 @@ for (const fragment of [
   "travelerId: guestAccountBillingEnabled ? null : exactTravelerId",
   "bookingReference: firstInvoiceRow.bookingReference",
   "All ${invoiceRows.length} selected job",
-  "The selected jobs do not share the same verified customer and PA / booker.",
+  "mismatchedCompany || mismatchedBooker || mismatchedTraveler || !exactCompanyId || !exactBookerId",
   "bookerId: plainInvoiceForm.bookerId",
   "bookingReference: plainInvoiceForm.bookingReference",
-  "Select an exact saved booking with a verified traveller and PA / booker before issuing Create Invoice.",
-  "Select an exact saved booking with a verified traveller and PA / booker before emailing Create Invoice.",
+  "Select an exact saved booking with a verified Company + Booker account before issuing Create Invoice.",
+  "Select an exact saved booking with a verified Company + Booker account before emailing Create Invoice.",
 ]) assert.ok((read + page).includes(fragment), `Missing ${fragment}`);
 
 assert.ok(persistence.includes("bookerId?: unknown"));

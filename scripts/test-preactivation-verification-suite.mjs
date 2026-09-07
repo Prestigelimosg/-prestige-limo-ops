@@ -85,6 +85,11 @@ const guardChecks = [
     label: "customer traveller invoice separation guard",
     script: "scripts/test-customer-traveler-invoice-separation-guard.mjs",
   },
+
+  {
+    label: "Company + Booker invoice preparation",
+    script: "scripts/test-customer-company-booker-invoice-preparation-guard.mjs",
+  },
   {
     label: "customer guest-account invoice guard",
     script: "scripts/test-customer-guest-account-invoice-guard.mjs",

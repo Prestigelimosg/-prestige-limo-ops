@@ -636,9 +636,12 @@ async function verifyIssuedInvoiceBookingOwnership(
   }
 
   const hasVerifiedIdentity = Boolean(input.bookerId && input.travelerId);
-  const hasPartialVerifiedIdentity = Boolean(input.bookerId) !== Boolean(input.travelerId);
+  const hasAccountIdentity = Boolean(input.bookerId && !input.travelerId);
 
-  if (hasPartialVerifiedIdentity || (!hasVerifiedIdentity && !input.guestAccountBillingEnabled)) {
+  if (
+    (!input.bookerId && input.travelerId) ||
+    (!hasVerifiedIdentity && !hasAccountIdentity && !input.guestAccountBillingEnabled)
+  ) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -656,7 +659,27 @@ async function verifyIssuedInvoiceBookingOwnership(
     return safeFailure("Selected jobs are not ready for billing.", 409);
   }
 
-  if (!hasVerifiedIdentity) {
+  let verifiedAccountCompanyId: number | null = null;
+
+  if (hasAccountIdentity) {
+    const { data: accountBooker, error: accountBookerError } = await invoiceClient
+      .from("bookers")
+      .select("id, company_id, customer_id")
+      .eq("id", input.bookerId)
+      .eq("customer_id", input.customerId)
+      .single();
+    const booker = asRecord(accountBooker);
+    verifiedAccountCompanyId = positiveIdentityId(booker.company_id);
+
+    if (
+      accountBookerError ||
+      positiveIdentityId(booker.id) !== input.bookerId ||
+      safeText(booker.customer_id, 160) !== input.customerId ||
+      !verifiedAccountCompanyId
+    ) {
+      return safeFailure(safeValidationError, 403);
+    }
+  } else if (!hasVerifiedIdentity) {
     const { data: guestCustomer, error: guestCustomerError } = await invoiceClient
       .from("customers")
       .select("id, customer_type")
@@ -680,6 +703,11 @@ async function verifyIssuedInvoiceBookingOwnership(
     ownedBookingsQuery = ownedBookingsQuery
       .eq("booker_id", input.bookerId)
       .eq("traveler_id", input.travelerId);
+  } else if (hasAccountIdentity) {
+    ownedBookingsQuery = ownedBookingsQuery
+      .eq("booker_id", input.bookerId)
+      .eq("company_id", verifiedAccountCompanyId)
+      .is("traveler_id", null);
   }
 
   const { data: ownedBookings, error: ownedBookingsError } = await ownedBookingsQuery;

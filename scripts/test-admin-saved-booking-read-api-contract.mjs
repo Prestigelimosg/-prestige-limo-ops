@@ -261,10 +261,11 @@ class MockSupabaseClient {
       filters.every((filter) => {
         if (filter.type === "or") {
           const mixedStatusMatch = String(filter.expression).match(
-            /^and\(status\.not\.is\.null,status\.not\.in\.\(([^)]+)\)\),and\(status\.is\.null,or\(admin_internal_status\.is\.null,admin_internal_status\.not\.in\.\(\1\)\)\)$/,
+            /^and\(admin_internal_status\.not\.is\.null,admin_internal_status\.neq\.draft,admin_internal_status\.not\.in\.\(([^)]+)\)\),and\(or\(admin_internal_status\.is\.null,admin_internal_status\.eq\.draft\),or\(status\.is\.null,status\.not\.in\.\(\1\)\)\)$/,
           );
           if (mixedStatusMatch) {
-            const effectiveStatus = row.status ?? row.admin_internal_status;
+            const effectiveStatus = row.admin_internal_status && row.admin_internal_status !== "draft"
+              ? row.admin_internal_status : row.status ?? row.admin_internal_status;
             return effectiveStatus == null || !mixedStatusMatch[1].split(",").includes(String(effectiveStatus));
           }
           const match = String(filter.expression).match(
@@ -537,6 +538,9 @@ try {
     { ...seed.bookings[0], id: "mixed-active", booking_reference: "MIXED-ACTIVE", status: "assigned", admin_internal_status: "draft" },
     { ...seed.bookings[0], id: "newer-completed", status: null, admin_internal_status: "completed" },
     { ...seed.bookings[0], id: "newer-review", status: null, admin_internal_status: "admin_review_required" },
+    { ...seed.bookings[0], id: "newer-cancelled-stale-legacy", status: "assigned", admin_internal_status: "cancelled" },
+    { ...seed.bookings[0], id: "newer-completed-stale-legacy", status: "assigned", admin_internal_status: "completed" },
+    { ...seed.bookings[0], id: "reopened-current", status: "completed", admin_internal_status: "driver_assigned" },
   ] }, {
     projectSelectedColumns: true,
     failures: { "select:bookings": ({ selectedColumns }) =>
@@ -547,12 +551,19 @@ try {
     "http://localhost/api/admin-saved-bookings?scope=monitorable", { headers: sessionHeaders() },
   )));
   assert.equal(mixedMonitorResult.status, 200);
-  assert.deepEqual(mixedMonitorResult.body.bookings.map((row) => row.id), ["mixed-active", "newer-review"],
+  assert.deepEqual(mixedMonitorResult.body.bookings.map((row) => row.id), ["mixed-active", "newer-review", "reopened-current"],
     "Legacy completed rows must remain excluded when newer status defaults to draft");
   const mixedDetailResult = await routeJson(await route.GET(new Request(
     "http://localhost/api/admin-saved-bookings?id=save-read-1", { headers: sessionHeaders() },
   )));
   assert.equal(mixedMonitorResult.body.bookings[1].status, "admin_review_required");
+  assert.equal(mixedMonitorResult.body.bookings[2].status, "driver_assigned");
+  for (const [id, status] of [["newer-cancelled-stale-legacy", "cancelled"], ["newer-completed-stale-legacy", "completed"]]) {
+    const result = await routeJson(await route.GET(new Request(
+      `http://localhost/api/admin-saved-bookings?id=${id}`, { headers: sessionHeaders() },
+    )));
+    assert.equal(result.body.booking.status, status, "Newer terminal writes must survive a reload");
+  }
   assert.equal(mixedDetailResult.body.booking.status, "completed");
   assert.equal(mixedDetailResult.body.booking.booking_type, "MNG");
   assert.equal(mixedDetailResult.body.booking.pickup_address, "Changi Airport T3");
@@ -565,7 +576,7 @@ try {
   )));
   assert.deepEqual(mixedPageResult.body.bookings.map((row) => row.id), ["newer-review"],
     "Both terminal variants must be filtered before pagination");
-  assert.equal(mixedSchemaMock.client.selectHistory.length, 3,
+  assert.equal(mixedSchemaMock.client.selectHistory.length, 5,
     "Verified mixed schema must succeed once per read without vehicle_type probes");
   assertNoWrites(mixedSchemaMock, "mixed schema legacy semantics");
   assertNoUnsafeResponse(mixedDetailResult, "mixed schema legacy semantics");

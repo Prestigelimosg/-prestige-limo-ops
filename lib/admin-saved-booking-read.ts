@@ -633,8 +633,16 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     return null;
   }
 
+  const legacyStatus = textOrNull(row.status, 80);
+  const currentStatus = textOrNull(row.admin_internal_status, 80);
+  // A non-default newer status is written by the established current writer.
+  // The migration's draft default must not erase an existing legacy state.
+  const effectiveStatus = currentStatus && currentStatus !== "draft"
+    ? currentStatus
+    : legacyStatus || currentStatus || textOrNull(row.customer_facing_status, 80);
+
   return {
-    admin_internal_status: textOrNull(row.admin_internal_status, 80),
+    admin_internal_status: currentStatus,
     booking_reference: textOrNull(row.booking_reference, 160),
     public_booking_reference: textOrNull(row.public_booking_reference, 40),
     source_channel: textOrNull(row.source_channel, 120),
@@ -700,10 +708,7 @@ function toSavedBookingRecord(value: unknown): AdminSavedBookingRecord | null {
     route_summary: textOrNull(row.route_summary, 1000),
     route_type: textOrNull(row.route_type, 120),
     service_type: textOrNull(row.service_type, 120),
-    status:
-      textOrNull(row.status, 80) ||
-      textOrNull(row.admin_internal_status, 80) ||
-      textOrNull(row.customer_facing_status, 80),
+    status: effectiveStatus,
     traveler_id: integerOrNull(row.traveler_id),
     travelers: nestedTraveler(row.travelers),
     updated_at: textOrNull(row.updated_at, 80),
@@ -873,7 +878,7 @@ export async function loadAdminSavedBookingList(
         selectedColumns.includes("admin_internal_status");
       query = query.or(
         hasLegacyAndCurrentStatus
-          ? `and(status.not.is.null,status.not.in.${terminalSavedBookingStatuses}),and(status.is.null,or(admin_internal_status.is.null,admin_internal_status.not.in.${terminalSavedBookingStatuses}))`
+          ? `and(admin_internal_status.not.is.null,admin_internal_status.neq.draft,admin_internal_status.not.in.${terminalSavedBookingStatuses}),and(or(admin_internal_status.is.null,admin_internal_status.eq.draft),or(status.is.null,status.not.in.${terminalSavedBookingStatuses}))`
           : `${statusColumn}.is.null,${statusColumn}.not.in.${terminalSavedBookingStatuses}`,
       );
     }

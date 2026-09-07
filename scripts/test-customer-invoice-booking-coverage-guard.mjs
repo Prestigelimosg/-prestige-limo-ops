@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-const migration = 'supabase/migrations/20260907044810_customer_invoice_issued_booking_coverage.sql';
+const migration = 'supabase/migrations/20260907051318_customer_invoice_issued_booking_coverage.sql';
 const sql = await readFile(migration, 'utf8');
 const writer = await readFile('lib/customer-invoice-record-persistence.ts', 'utf8');
 for (const fragment of [

@@ -40,7 +40,7 @@ assert r.returncode==0
 assert sql('select count(*) from customer_invoice_records;').stdout.strip()=='2'
 print('REPRODUCED: existing schema permits two concurrent invoices for one booking')
 sql('truncate customer_invoice_records;')
-sql(Path('supabase/migrations/20260907044810_customer_invoice_issued_booking_coverage.sql').read_text())
+sql(Path('supabase/migrations/20260907051318_customer_invoice_issued_booking_coverage.sql').read_text())
 r=race(insert('FIX-0001'),insert('FIX-0002'))
 assert r.returncode!=0 and 'Invoice already contains one or more selected jobs.' in r.stderr,r.stderr
 assert sql('select count(*) from customer_invoice_records;').stdout.strip()=='1'

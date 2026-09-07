@@ -66,6 +66,7 @@ type DriverNativeWindow = Window & {
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
+  __PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__?: boolean;
 };
 
 type DriverAccountSignInState = "idle" | "signing_in" | "failed";
@@ -606,7 +607,7 @@ export default function DriverPortalPage() {
     });
   }
 
-  async function openJob(job: DriverPortalJob) {
+  async function openJob(job: DriverPortalJob, openMessages = false) {
     setOpeningJobKey(job.job_key);
     setOpenFeedback((current) => ({ ...current, [job.job_key]: "" }));
     try {
@@ -618,6 +619,9 @@ export default function DriverPortalPage() {
         nativeBridge.postMessage(JSON.stringify({
           job_key: job.job_key,
           type: "native_job_open",
+          ...(openMessages && (window as DriverNativeWindow).__PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__ === true
+            ? { open_target: "messages" }
+            : {}),
         }));
         return;
       }
@@ -709,7 +713,7 @@ export default function DriverPortalPage() {
                     data-driver-notification-job={alert.job_key}
                     data-driver-notification-purpose="job-update"
                     key={alert.job_key}
-                    onClick={() => void openJob(job)}
+                    onClick={() => void openJob(job, true)}
                     type="button"
                   >
                     <span className="min-w-0">

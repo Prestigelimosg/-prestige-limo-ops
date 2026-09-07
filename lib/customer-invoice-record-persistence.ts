@@ -636,9 +636,12 @@ async function verifyIssuedInvoiceBookingOwnership(
   }
 
   const hasVerifiedIdentity = Boolean(input.bookerId && input.travelerId);
-  const hasPartialVerifiedIdentity = Boolean(input.bookerId) !== Boolean(input.travelerId);
+  const hasAccountIdentity = Boolean(input.bookerId && !input.travelerId);
 
-  if (hasPartialVerifiedIdentity || (!hasVerifiedIdentity && !input.guestAccountBillingEnabled)) {
+  if (
+    (!input.bookerId && input.travelerId) ||
+    (!hasVerifiedIdentity && !hasAccountIdentity && !input.guestAccountBillingEnabled)
+  ) {
     return safeFailure(safeValidationError, 400);
   }
 
@@ -656,7 +659,27 @@ async function verifyIssuedInvoiceBookingOwnership(
     return safeFailure("Selected jobs are not ready for billing.", 409);
   }
 
-  if (!hasVerifiedIdentity) {
+  let verifiedAccountCompanyId: number | null = null;
+
+  if (hasAccountIdentity) {
+    const { data: accountBooker, error: accountBookerError } = await invoiceClient
+      .from("bookers")
+      .select("id, company_id, customer_id")
+      .eq("id", input.bookerId)
+      .eq("customer_id", input.customerId)
+      .single();
+    const booker = asRecord(accountBooker);
+    verifiedAccountCompanyId = positiveIdentityId(booker.company_id);
+
+    if (
+      accountBookerError ||
+      positiveIdentityId(booker.id) !== input.bookerId ||
+      safeText(booker.customer_id, 160) !== input.customerId ||
+      !verifiedAccountCompanyId
+    ) {
+      return safeFailure(safeValidationError, 403);
+    }
+  } else if (!hasVerifiedIdentity) {
     const { data: guestCustomer, error: guestCustomerError } = await invoiceClient
       .from("customers")
       .select("id, customer_type")
@@ -680,6 +703,11 @@ async function verifyIssuedInvoiceBookingOwnership(
     ownedBookingsQuery = ownedBookingsQuery
       .eq("booker_id", input.bookerId)
       .eq("traveler_id", input.travelerId);
+  } else if (hasAccountIdentity) {
+    ownedBookingsQuery = ownedBookingsQuery
+      .eq("booker_id", input.bookerId)
+      .eq("company_id", verifiedAccountCompanyId)
+      .is("traveler_id", null);
   }
 
   const { data: ownedBookings, error: ownedBookingsError } = await ownedBookingsQuery;
@@ -1010,8 +1038,15 @@ export async function createCustomerInvoiceRecord(
         : safeFailure(safeWriteError, 500);
     }
 
+    if (
+      asRecord(error).code === "23505" &&
+      asRecord(error).message === "Invoice already contains one or more selected jobs."
+    ) {
+      return safeFailure("Invoice already contains one or more selected jobs.", 409);
+    }
+
     if (lifecycleColumnUnavailableError(error)) {
-      if (travelerInvoiceNumber) {
+      if (sanitized.data.bookerId || travelerInvoiceNumber) {
         return safeFailure(safeWriteError, 503);
       }
 
@@ -1062,6 +1097,13 @@ export async function createCustomerInvoiceRecord(
               version: customerInvoiceRecordVersion,
             }
           : safeFailure(safeWriteError, 500);
+      }
+
+      if (
+        asRecord(legacyError).code === "23505" &&
+        asRecord(legacyError).message === "Invoice already contains one or more selected jobs."
+      ) {
+        return safeFailure("Invoice already contains one or more selected jobs.", 409);
       }
 
       if (!duplicateInvoiceError(legacyError)) {
@@ -2125,6 +2167,11 @@ export async function loadCustomerInvoiceRecordsForPortal(
   }
 
   const portalBookerId = activeAccount.data.booker_id;
+  const portalCustomerId = safeText(activeAccount.data.customer_account_reference, 160);
+
+  if (!portalCustomerId) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
 
   let invoiceQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
@@ -2134,9 +2181,9 @@ export async function loadCustomerInvoiceRecordsForPortal(
     .limit(100);
 
   if (portalBookerId) {
-    invoiceQuery = invoiceQuery.eq("booker_id", portalBookerId);
+    invoiceQuery = invoiceQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
   } else {
-    invoiceQuery = invoiceQuery.eq("customer_id", customerAccountReference);
+    invoiceQuery = invoiceQuery.eq("customer_id", portalCustomerId);
   }
 
   let { data, error } = await invoiceQuery;
@@ -2153,9 +2200,9 @@ export async function loadCustomerInvoiceRecordsForPortal(
       .limit(100);
 
     if (portalBookerId) {
-      legacyQuery = legacyQuery.eq("booker_id", portalBookerId);
+      legacyQuery = legacyQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
     } else {
-      legacyQuery = legacyQuery.eq("customer_id", customerAccountReference);
+      legacyQuery = legacyQuery.eq("customer_id", portalCustomerId);
     }
 
     const legacyResult = await legacyQuery;
@@ -2212,6 +2259,11 @@ export async function loadCustomerInvoicePdfForPortal(
   }
 
   const portalBookerId = activeAccount.data.booker_id;
+  const portalCustomerId = safeText(activeAccount.data.customer_account_reference, 160);
+
+  if (!portalCustomerId) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
 
   if (!invoiceNumber) {
     return safeFailure(safeValidationError, 400);
@@ -2223,9 +2275,9 @@ export async function loadCustomerInvoicePdfForPortal(
     .eq("invoice_number", invoiceNumber)
     .eq("document_state", "issued");
   if (portalBookerId) {
-    pdfQuery = pdfQuery.eq("booker_id", portalBookerId);
+    pdfQuery = pdfQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
   } else {
-    pdfQuery = pdfQuery.eq("customer_id", customerAccountReference);
+    pdfQuery = pdfQuery.eq("customer_id", portalCustomerId);
   }
   const pdfResult = await pdfQuery.maybeSingle();
   let data: unknown = pdfResult.data;
@@ -2242,9 +2294,9 @@ export async function loadCustomerInvoicePdfForPortal(
       .eq("invoice_number", invoiceNumber);
 
     if (portalBookerId) {
-      legacyPdfQuery = legacyPdfQuery.eq("booker_id", portalBookerId);
+      legacyPdfQuery = legacyPdfQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
     } else {
-      legacyPdfQuery = legacyPdfQuery.eq("customer_id", customerAccountReference);
+      legacyPdfQuery = legacyPdfQuery.eq("customer_id", portalCustomerId);
     }
 
     const legacyResult = await legacyPdfQuery.maybeSingle();

@@ -104,7 +104,7 @@ for (const fragment of [
   "booker_id?: number | null",
   "customerFolderTravelerInvoiceGroups",
   "customerFolderLegacyIdentityResolution",
-  "Missing verified traveller identity",
+  "Missing or mismatched verified Company + Booker account",
   "Jobs for the same passenger are saved together. Different passengers stay separate.",
   'data-customer-folder-selected-identity-group=',
   'data-customer-folder-selected-identity-pair="true"',

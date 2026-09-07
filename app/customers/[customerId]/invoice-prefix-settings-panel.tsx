@@ -466,7 +466,7 @@ export function CustomerInvoicePrefixSettingsPanel({
         setTravelers([]);
         setStatus("error");
         setMessage(
-          "No verified traveller identity is available in this customer folder. Invoice issue remains blocked.",
+          "No registered traveller is available for a traveller prefix. Company + Booker account invoices use standard invoice numbers.",
         );
         return;
       }
@@ -479,7 +479,7 @@ export function CustomerInvoicePrefixSettingsPanel({
     } catch {
       setTravelers([]);
       setStatus("error");
-      setMessage("Verified travellers could not be loaded. Invoice issue remains blocked.");
+      setMessage("Registered traveller prefixes could not be loaded. Try loading the travellers again.");
     }
   }
 

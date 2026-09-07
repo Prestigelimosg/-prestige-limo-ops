@@ -21,8 +21,8 @@ function includes(text, fragment, label) {
 }
 
 includes(source.migration, "'hotel'", "existing customer classification schema");
-includes(source.accounts, 'customer_type: enabled ? "hotel" : "corporate"', "exact classification write");
-includes(source.accounts, 'guest_account_billing_enabled: record.customer_type === "hotel"', "safe classification read");
+assert.equal(source.accounts.includes('customer_type: enabled ? "hotel" : "corporate"'), false, "Retired classification writer must remain absent");
+includes(source.accounts, 'const guestAccountBillingEnabled = record.customer_type === "hotel"', "safe classification read");
 includes(source.accountsRoute, 'allowServerSessionRoleMethodsWithoutRequestToken: ["PATCH"]', "admin PATCH boundary");
 
 const actionRowStart = source.profile.indexOf('className="flex flex-wrap items-center justify-end gap-2"');
@@ -32,7 +32,7 @@ assert.equal(
   actionRowStart !== -1 && fieldsStart > actionRowStart &&
     !actionRow.includes("Hotel / Tour Agency") &&
     actionRow.includes("CustomerAccountDangerZone") &&
-    actionRow.includes("Save profile"),
+    actionRow.includes("data-customer-company-profile-save"),
   true,
   "The legacy classification checkbox must be absent while the existing profile actions remain",
 );
@@ -47,7 +47,7 @@ assert.equal(
   false,
   "Profile save must not retain a hidden classification write",
 );
-includes(source.profile, "profile.guest_account_billing_enabled", "stored classification presentation");
+includes(source.savedBookings, "exactAccount.guest_account_billing_enabled === true", "stored classification read for invoice preparation");
 
 for (const fragment of [
   "customerFolderTravelerInvoiceGroups(",
@@ -78,8 +78,8 @@ for (const fragment of [
 ]) includes(source.customersPage, fragment, "existing invoice handoff");
 
 for (const fragment of [
-  "hasPartialVerifiedIdentity",
-  "(!hasVerifiedIdentity && !input.guestAccountBillingEnabled)",
+  "(!input.bookerId && input.travelerId)",
+  "(!hasVerifiedIdentity && !hasAccountIdentity && !input.guestAccountBillingEnabled)",
   '.from("customers")',
   '.eq("customer_type", "hotel")',
   '.eq("customer_id", input.customerId)',

@@ -5218,29 +5218,24 @@ export default function MockCustomerDashboardPage() {
             `Invoice handoff received for ${targetBookings.length} selected job${targetBookings.length === 1 ? "" : "s"}. Review every line before sending to the customer.`,
           );
           if (exactBooking) {
-            const exactCustomerId = String(exactBooking.customer_id ?? customerId).trim();
+            const exactCustomerId = String(exactBooking.customer_id ?? "").trim();
             const exactCustomerName =
               String(exactBooking.customer_display_name ?? customerName).trim() || customerName;
-            const exactBookerId = exactBooking.booker_id ?? targetBooking.booker_id ?? null;
-            const exactCompanyId = exactBooking.company_id ?? targetBooking.company_id ?? null;
-            const exactTravelerId = exactBooking.traveler_id ?? targetBooking.traveler_id ?? null;
+            const exactBookerId = exactBooking.booker_id ?? null;
+            const exactCompanyId = exactBooking.company_id ?? null;
+            const exactTravelerId = exactBooking.traveler_id ?? null;
             const mismatchedCustomer = exactBookings.some(
-              (booking, index) =>
-                String(booking.customer_id ?? targetBookings[index]?.customer_id ?? customerId).trim() !==
-                exactCustomerId,
+              (booking) =>
+                String(booking.customer_id ?? "").trim() !== exactCustomerId || exactCustomerId !== customerId,
             );
             const mismatchedBooker = exactBookings.some(
-              (booking, index) =>
-                (booking.booker_id ?? targetBookings[index]?.booker_id ?? null) !== exactBookerId,
+              (booking) => (booking.booker_id ?? null) !== exactBookerId,
             );
             const mismatchedCompany = exactBookings.some(
-              (booking, index) =>
-                (booking.company_id ?? targetBookings[index]?.company_id ?? null) !==
-                exactCompanyId,
+              (booking) => (booking.company_id ?? null) !== exactCompanyId,
             );
             const mismatchedTraveler = exactBookings.some(
-              (booking, index) =>
-                (booking.traveler_id ?? targetBookings[index]?.traveler_id ?? null) !== exactTravelerId,
+              (booking) => (booking.traveler_id ?? null) !== exactTravelerId,
             );
             const dspActualTimeSummaries = await Promise.all(
               exactBookings.map((booking, index) => {
@@ -5311,15 +5306,16 @@ export default function MockCustomerDashboardPage() {
             if (
               mismatchedCustomer ||
               (!guestAccountBillingEnabled &&
-                (mismatchedBooker || mismatchedTraveler || !exactBookerId || !exactTravelerId)) ||
+                (mismatchedBooker || mismatchedTraveler || !exactBookerId ||
+                  (!exactTravelerId && (mismatchedCompany || !exactCompanyId)))) ||
               missingPublicReference ||
               !firstInvoiceRow
             ) {
               const selectedJobBlockDetail = missingPublicReference
                 ? "Selected, but its saved five-digit public reference is missing. Repair that reference before billing."
-                : !guestAccountBillingEnabled && (mismatchedTraveler || !exactTravelerId)
+                : !guestAccountBillingEnabled && mismatchedTraveler
                   ? "Selected, but the selected jobs do not share one verified traveller."
-                  : "Selected, but the selected jobs do not share one verified customer and PA / booker.";
+                  : "Selected, but the selected jobs do not share one verified Company + Booker account.";
               setSelectedJobInvoiceHandoffLines((current) =>
                 current.map((line) => ({
                   ...line,
@@ -5330,9 +5326,9 @@ export default function MockCustomerDashboardPage() {
               setPlainInvoiceFeedback(
                 missingPublicReference
                   ? "A selected job has no saved public booking reference. Repair its five-digit reference before invoice preparation."
-                  : !guestAccountBillingEnabled && (mismatchedTraveler || !exactTravelerId)
+                  : !guestAccountBillingEnabled && mismatchedTraveler
                     ? "The selected jobs do not share one verified traveller. Issue and Email are blocked."
-                  : "The selected jobs do not share the same verified customer and PA / booker. Issue and Email are blocked.",
+                  : "The selected jobs do not share the same verified Company + Booker account. Issue and Email are blocked.",
               );
               setPlainInvoiceFeedbackTone("error");
               return;
@@ -6535,9 +6531,9 @@ export default function MockCustomerDashboardPage() {
     if (
       !plainInvoiceForm.bookingReference ||
       (!plainInvoiceForm.guestAccountBillingEnabled &&
-        (!plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId))
+        !plainInvoiceForm.bookerId)
     ) {
-      setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before issuing Create Invoice.");
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified Company + Booker account before issuing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
@@ -6629,9 +6625,9 @@ export default function MockCustomerDashboardPage() {
     if (
       !plainInvoiceForm.bookingReference ||
       (!plainInvoiceForm.guestAccountBillingEnabled &&
-        (!plainInvoiceForm.bookerId || !plainInvoiceForm.travelerId))
+        !plainInvoiceForm.bookerId)
     ) {
-      setPlainInvoiceFeedback("Select an exact saved booking with a verified traveller and PA / booker before emailing Create Invoice.");
+      setPlainInvoiceFeedback("Select an exact saved booking with a verified Company + Booker account before emailing Create Invoice.");
       setPlainInvoiceFeedbackTone("error");
       document.querySelector<HTMLElement>("[data-plain-invoice-booking-reference='true']")?.focus();
       return;
@@ -8567,7 +8563,7 @@ export default function MockCustomerDashboardPage() {
                         className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-500"
                         data-selected-customer-no-monthly-invoice-ready="true"
                       >
-                        No billing-ready jobs
+                        No monthly billing group available
                       </p>
                     )}
                     <p

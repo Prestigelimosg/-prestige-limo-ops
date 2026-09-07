@@ -387,7 +387,7 @@ export default function DriverPortalPage() {
   }, [availableJobsEnabled, driverPoolAccountSession]);
 
   useEffect(() => {
-    if (!driverPoolAccountSession || availableJobs.length === 0) return;
+    if (!driverPoolAccountSession) return;
     const refresh = () => {
       if (document.visibilityState === "visible" && !availableJobsBusy) {
         void loadAvailableJobs(1, { quiet: true });
@@ -404,7 +404,7 @@ export default function DriverPortalPage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [availableJobs.length, availableJobsBusy, driverPoolAccountSession, loadAvailableJobs]);
+  }, [availableJobsBusy, driverPoolAccountSession, loadAvailableJobs]);
 
   async function decideAvailableJob(job: DriverPoolAvailableJob, action: "accept" | "decline") {
     availableJobsReadRevisionRef.current += 1;
@@ -993,8 +993,10 @@ export default function DriverPortalPage() {
                 ) : null}
                 {availableJobs.length === 0 ? <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700">No open job offers.</p> : availableJobs.map((job) => (
                   <article className="rounded-md border border-emerald-200 bg-white p-3" data-driver-pool-offer={job.offer_key} key={job.offer_key}>
+                    <h3 className="mb-2 text-lg font-extrabold uppercase leading-snug text-slate-950" data-driver-pool-service-vehicle="true">
+                      {job.safe_trip_summary || "Transfer"} · {job.safe_vehicle_label?.trim().toUpperCase() === "ALPHARD" ? "AVF" : job.safe_vehicle_label || "Vehicle TBC"}
+                    </h3>
                     <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase text-slate-500">Job {job.public_booking_reference}</p><p className="font-bold text-slate-950">{new Date(job.pickup_at).toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" })}</p></div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-900">SGD {job.offer_payout_sgd.toFixed(2)}</span></div>
-                    <p className="mt-1 text-xs font-semibold text-slate-600">{job.safe_trip_summary || "Transfer"} · {job.safe_vehicle_label || "Vehicle TBC"}</p>
                     <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-3">
                       <div className="rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Pickup area</dt><dd className="mt-0.5 font-semibold text-slate-800">{job.safe_pickup_area}</dd></div>
                       <div className="rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Drop-off area</dt><dd className="mt-0.5 font-semibold text-slate-800">{job.safe_dropoff_area}</dd></div>

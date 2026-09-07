@@ -4364,7 +4364,7 @@ export async function loadDriverAppNotificationsForToken(
       ? `driver_job_link_id.is.null,driver_job_link_id.eq.${linkResult.data.id}`
       : "driver_job_link_id.is.null";
     const intendedDriverHistoryScope = [
-      "and(delivery_surface.eq.driver_app,notification_status.eq.queued)",
+      "and(delivery_surface.eq.driver_app,notification_status.in.(queued,read,dismissed))",
       "and(delivery_surface.eq.customer_app,actor_role.eq.driver,workflow_area.eq.customer_driver_quick_replies,notification_status.in.(queued,read,dismissed,archived))",
     ].join(",");
     const { count, data, error } = await clientResult.data

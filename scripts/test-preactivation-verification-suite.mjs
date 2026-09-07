@@ -1344,6 +1344,10 @@ const guardChecks = [
     script: "scripts/test-driver-alert-message-handoff-guard.mjs",
   },
   {
+    label: "Driver alert Clear scope and persistence",
+    script: "scripts/test-driver-alert-clear-guard.mjs",
+  },
+  {
     label: "Driver Companion iOS Universal Link association guard",
     script: "scripts/test-driver-companion-ios-universal-link-association-guard.mjs",
   },

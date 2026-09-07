@@ -2694,7 +2694,7 @@ try {
             {
               conditions: [
                 { column: "delivery_surface", type: "eq", value: "driver_app" },
-                { column: "notification_status", type: "eq", value: "queued" },
+                { column: "notification_status", type: "in", value: ["queued", "read", "dismissed"] },
               ],
               type: "and",
             },

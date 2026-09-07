@@ -22,6 +22,7 @@ export type DriverPortalJob = {
 };
 
 export type DriverPortalAlert = {
+  notificationIds: string[];
   createdAt: string;
   jobKey: string;
   jobReference: string;
@@ -250,6 +251,7 @@ async function loadCurrentDriverPortalAlerts(
     const existing = grouped.get(scope.jobKey);
     if (!existing) {
       grouped.set(scope.jobKey, {
+        notificationIds: [id],
         createdAt,
         jobKey: scope.jobKey,
         jobReference: scope.jobReference,
@@ -260,6 +262,7 @@ async function loadCurrentDriverPortalAlerts(
       });
     } else {
       existing.updateCount += 1;
+      existing.notificationIds.push(id);
     }
   }
 
@@ -451,4 +454,29 @@ export async function loadDriverPortalJobs({
     reason: "ok",
     version: driverPortalJobsVersion,
   };
+}
+
+// Clear only the exact visible snapshot, after re-reading this driver's current scope.
+export async function clearDriverPortalAlerts({ client, driverId, notificationIds }: {
+  client: DriverPortalJobsClient;
+  driverId: number;
+  notificationIds: unknown;
+}): Promise<{ ok: true; clearedCount: number } | { ok: false; status: number }> {
+  if (!Array.isArray(notificationIds) || !notificationIds.length || notificationIds.length > 100 ||
+      notificationIds.some((id) => typeof id !== "string" || !uuidPattern.test(id)) ||
+      new Set(notificationIds).size !== notificationIds.length) {
+    return { ok: false, status: 400 };
+  }
+  const current = await loadDriverPortalJobs({ client, driverId, includeAlerts: true });
+  if (!current.ok || !current.alertsAvailable) return { ok: false, status: 503 };
+  const authorized = new Set(current.alerts.flatMap((alert) => alert.notificationIds));
+  if (notificationIds.some((id) => !authorized.has(id))) return { ok: false, status: 409 };
+  const { data, error } = await client.from("customer_driver_app_notification_outbox")
+    .update({ notification_status: "dismissed", updated_at: new Date().toISOString() })
+    .eq("delivery_surface", "driver_app")
+    .eq("notification_status", "queued")
+    .in("id", notificationIds)
+    .select("id");
+  if (error || !Array.isArray(data)) return { ok: false, status: 503 };
+  return { ok: true, clearedCount: data.length };
 }

@@ -346,7 +346,9 @@ function currentSchemaStatusPayload(
         }
       : status === "completed"
         ? { customer_facing_status: "completed" }
-        : {}),
+        : status === "assigned" || status === "confirmed"
+          ? { customer_facing_status: currentSchemaAdminStatus(status) }
+          : {}),
     updated_at: updatedAt,
   };
 }

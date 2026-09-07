@@ -21,8 +21,8 @@ const driverPackage = JSON.parse(driverPackageSource);
 
 assert.deepEqual(
   [admin.ios.buildNumber, customer.ios.buildNumber],
-  ["7", "12"],
-  "Admin and Customer native builds must remain parked",
+  ["8", "12"],
+  "Preserve the separately approved Admin Build 8 and unchanged Customer Build 12",
 );
 assert.deepEqual(
   [
@@ -38,12 +38,12 @@ assert.deepEqual(
     "Prestige SG Driver",
     "Prestige Driver",
     "1.0.0",
-    "19",
+    "20",
     "sg.prestigelimo.drivercompanion",
     "2a797181-d09d-4384-8d01-583456e83c3e",
     "6800706103",
   ],
-  "Driver Build 19 must keep the exact existing Apple and Expo identities",
+  "Driver Build 20 must retain the Build 19 Apple, Expo and OTA identities",
 );
 assert.equal(driver.userInterfaceStyle, "light");
 assert.deepEqual(driver.runtimeVersion, { policy: "appVersion" });
@@ -79,4 +79,4 @@ assert.equal(
   "The Driver Build 19 release guard must run in preactivation verification",
 );
 
-console.log("Driver Build 19 OTA-foundation TestFlight release guard passed.");
+console.log("Driver Build 20 retained OTA-foundation release guard passed.");

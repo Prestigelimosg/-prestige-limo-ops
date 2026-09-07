@@ -262,4 +262,102 @@ for (const phrase of [
   assert.ok(ledger.includes(phrase), `${ledgerPath} must include ${phrase}`);
 }
 
+// Execute the real load callbacks and AppState effect with a controlled clock.
+const loadCallbacks = stripTypeScriptTypes(app.slice(
+  app.indexOf("const clearAdminWebViewLoadTimeout ="),
+  app.indexOf("const markAdminWebViewReady ="),
+), { mode: "transform" });
+const lifecycleEffect = app.slice(
+  app.lastIndexOf("useEffect(() => {", appStateStart),
+  app.indexOf("\n  useEffect(() => {", appStateEnd),
+);
+function createResumeFixture() {
+  const timers = new Map();
+  let nextTimer = 0;
+  let listener;
+  let cleanup;
+  const state = { load: "loading", navigationKey: 0, action: "reveal", unlocks: 0 };
+  const noop = () => {};
+  const context = {
+    useCallback: (fn) => fn,
+    useEffect: (fn) => { cleanup = fn(); },
+    setTimeout: (fn) => { const id = ++nextTimer; timers.set(id, fn); return id; },
+    clearTimeout: (id) => timers.delete(id),
+    webViewLoadTimeoutRef: { current: null },
+    webViewHasCompletedLoadRef: { current: false },
+    webViewLoadFailurePendingRef: { current: false },
+    webViewAutomaticRecoveryCountRef: { current: 0 },
+    adminWebViewInitialLoadTimeoutMs: 15000,
+    adminWebViewAutomaticRecoveryLimit: 1,
+    setWebViewLoadState: (value) => { state.load = value; },
+    setNavigationKey: (fn) => { state.navigationKey = fn(state.navigationKey); },
+    biometricLifecycleRef: { current: { appState: "active" } },
+    biometricEnabledRef: { current: true },
+    screenModeRef: { current: "web" },
+    readAdminBiometricMonotonicTimeMs: () => 1000,
+    transitionAdminBiometricAppState: (lifecycle, next) => {
+      lifecycle.appState = next;
+      return next === "active" ? state.action : "none";
+    },
+    setAdminScreenMode: (value) => { context.screenModeRef.current = value; },
+    unlockAdminApp: () => { state.unlocks += 1; },
+    Notifications: {
+      setBadgeCountAsync: async () => true,
+      getPermissionsAsync: async () => ({ granted: false, status: "undetermined" }),
+    },
+    readAdminNativeNotificationToken: async () => null,
+    setBadgeResetSequence: noop,
+    setNotificationPermission: noop,
+    setNotificationEnabled: noop,
+    adminNativeNotificationResultScript: () => "true;",
+    webViewRef: { current: { injectJavaScript: noop } },
+    AppState: {
+      currentState: "active",
+      addEventListener: (_event, fn) => { listener = fn; return { remove: () => { listener = null; } }; },
+    },
+  };
+  const callbacks = new Function("context", `with (context) { ${loadCallbacks}\n${lifecycleEffect}\nreturn { start: handleAdminWebViewLoadStart }; }`)(context);
+  return {
+    context, state, timers, start: callbacks.start,
+    emit(next) { context.AppState.currentState = next; listener(next); },
+    expire() { const [id, fn] = timers.entries().next().value; timers.delete(id); fn(); },
+    cleanup() { cleanup(); assert.equal(listener, null); },
+  };
+}
+const resume = createResumeFixture();
+resume.start();
+resume.emit("background");
+assert.equal(resume.timers.size, 0, "Background pauses the existing load timeout");
+resume.emit("active");
+assert.equal(resume.timers.size, 1, "Quick return during an incomplete load must resume its timeout even when screenMode stays web");
+assert.equal(resume.state.navigationKey, 0, "Returning must not immediately remount or reload");
+resume.expire();
+assert.equal(resume.state.navigationKey, 1, "Only the existing timeout may perform one automatic recovery");
+resume.start();
+resume.emit("background");
+resume.emit("active");
+resume.expire();
+assert.equal(resume.state.load, "failed", "Second failed load must expose the existing Reload action instead of spinning forever");
+assert.equal(resume.state.navigationKey, 1, "Automatic recovery remains capped at one");
+resume.emit("background");
+resume.emit("active");
+assert.equal(resume.timers.size, 0, "Failed state must not silently restart after a quick return");
+resume.cleanup();
+const ready = createResumeFixture();
+ready.context.webViewHasCompletedLoadRef.current = true;
+ready.state.load = "ready";
+ready.emit("background");
+ready.emit("active");
+assert.equal(ready.timers.size, 0, "Ready page and drafts remain mounted without a refresh timer");
+assert.equal(ready.state.navigationKey, 0);
+ready.cleanup();
+const locked = createResumeFixture();
+locked.start();
+locked.emit("background");
+locked.state.action = "unlock";
+locked.emit("active");
+assert.equal(locked.timers.size, 0, "A Face ID-required return must not start recovery before unlock");
+assert.equal(locked.state.unlocks, 1);
+locked.cleanup();
+
 console.log("Admin companion WebView recovery guard passed.");

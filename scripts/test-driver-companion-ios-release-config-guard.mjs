@@ -28,6 +28,11 @@ const easConfig = JSON.parse(easConfigSource);
 const packageConfig = JSON.parse(packageSource);
 const packageLock = JSON.parse(packageLockSource);
 const normalizedAppSource = appSource.replace(/\s+/g, " ");
+const driverWebViews = appSource.match(/<WebView\s[\s\S]*?\/>/g) || [];
+assert.equal(driverWebViews.length, 1, "Refresh must reuse the single existing Driver WebView");
+assert.match(driverWebViews[0], /\bpullToRefreshEnabled\s/, "The Driver WebView must enable its native pull-to-refresh control");
+assert.match(driverWebViews[0], /sharedCookiesEnabled/, "Pull-to-refresh must retain the existing cookie-backed session");
+assert.match(driverWebViews[0], /uri: currentWebViewUrlRef\.current \|\| screen\.jobUrl/, "Refresh must preserve the current approved Driver page");
 assert.equal(
   companionConfig.name,
   "Prestige SG Driver",
@@ -53,8 +58,8 @@ assert.equal(
 assert.equal(companionConfig.ios.icon, "./assets/icon.png", "iOS must use the bounded Prestige icon");
 assert.equal(
   companionConfig.ios.buildNumber,
-  "19",
-  "The approved nineteenth Driver OTA-foundation release checkpoint build number must be explicit",
+  "20",
+  "The approved Driver local pull-to-refresh release build number must be explicit",
 );
 assert.equal(
   easConfig.submit?.production?.ios?.ascAppId,

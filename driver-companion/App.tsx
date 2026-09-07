@@ -785,6 +785,7 @@ export default function App() {
                 ref={webViewRef}
                 allowFileAccess
                 allowsBackForwardNavigationGestures
+                pullToRefreshEnabled
                 geolocationEnabled={false}
                 injectedJavaScriptBeforeContentLoaded={embeddedDriverBridgeBootstrap(
                   installationId,

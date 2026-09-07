@@ -1,6 +1,6 @@
 import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
 import { verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock";
-import { loadDriverPortalJobs } from "../../../../lib/driver-portal-jobs";
+import { clearDriverPortalAlerts, loadDriverPortalJobs } from "../../../../lib/driver-portal-jobs";
 import {
   clearDriverPortalSessionCookie,
   resolveDriverPortalSession,
@@ -129,6 +129,7 @@ export async function GET(request: Request) {
       alert_count: jobsResult.alertCount,
       alerts: jobsResult.alerts.map((alert) => ({
         created_at: alert.createdAt,
+        notification_ids: alert.notificationIds,
         job_key: alert.jobKey,
         job_reference: alert.jobReference,
         latest_message: alert.latestMessage,
@@ -217,10 +218,34 @@ export async function PUT() {
   return methodNotAllowed();
 }
 
-export async function PATCH() {
+export async function DELETE() {
   return methodNotAllowed();
 }
 
-export async function DELETE() {
-  return methodNotAllowed();
+export async function PATCH(request: Request) {
+  if (!sameOriginDriverPortalRequest(request, "driver-portal-alerts-clear")) {
+    return response({ ok: false }, 401);
+  }
+  const session = resolveDriverPortalSession(request.headers.get("cookie"));
+  if (!session.ok || !session.claims.accountId || !session.claims.deviceIdHash) {
+    return response({ ok: false }, 401);
+  }
+  const clientResult = getDriverJobStatusPersistenceClientForProduction();
+  if (!clientResult.ok) return response({ ok: false }, 503);
+  const verified = await verifyDriverAccountSession({
+    accountId: session.claims.accountId, client: clientResult.client,
+    deviceIdHash: session.claims.deviceIdHash, driverId: session.claims.driverId,
+    installationId: request.headers.get("x-prestige-driver-installation-id"),
+  });
+  if (!verified) return inactiveDriverAccountResponse(false);
+  const body = await readJsonBody(request);
+  if (Object.keys(body).length !== 1 || !("notification_ids" in body)) {
+    return response({ ok: false }, 400);
+  }
+  const result = await clearDriverPortalAlerts({
+    client: clientResult.client, driverId: session.claims.driverId,
+    notificationIds: body.notification_ids,
+  });
+  if (!result.ok) return response({ ok: false }, result.status);
+  return response({ ok: true, cleared_count: result.clearedCount }, 200);
 }

@@ -410,11 +410,13 @@ function mapCustomerSavedBookingsPagePayload(
 
 async function loadCustomerPortalSavedBookingsPage({
   fetcher = fetch,
+  onReadFailure,
   page = 1,
   signal,
   travelerId,
 }: {
   fetcher?: CustomerPortalSavedBookingsFetch;
+  onReadFailure?: (status: number) => void;
   page?: number;
   signal?: AbortSignal;
   travelerId?: number | null;
@@ -436,6 +438,7 @@ async function loadCustomerPortalSavedBookingsPage({
     });
 
     if (!response.ok) {
+      onReadFailure?.(response.status);
       return null;
     }
 
@@ -448,16 +451,18 @@ async function loadCustomerPortalSavedBookingsPage({
 
 export async function loadCustomerPortalSavedBookings({
   fetcher = fetch,
+  onReadFailure,
   page = 1,
   signal,
   travelerId,
 }: {
   fetcher?: CustomerPortalSavedBookingsFetch;
+  onReadFailure?: (status: number) => void;
   page?: number;
   signal?: AbortSignal;
   travelerId?: number | null;
 } = {}): Promise<CustomerPortalBooking[] | null> {
-  const result = await loadCustomerPortalSavedBookingsPage({ fetcher, page, signal, travelerId });
+  const result = await loadCustomerPortalSavedBookingsPage({ fetcher, onReadFailure, page, signal, travelerId });
   return result?.bookings || null;
 }
 
@@ -479,14 +484,21 @@ export async function findCustomerPortalSavedBooking({
 
   let page = 1;
   while (!signal?.aborted) {
+    let failedStatus = 0;
     const result = await loadCustomerPortalSavedBookingsPage({
       fetcher,
+      onReadFailure: (status) => { failedStatus = status; },
       page,
       signal,
       travelerId,
     });
     if (!result) {
-      return null;
+      if (signal?.aborted) return null;
+      const error = new Error("Saved bookings are temporarily unavailable.");
+      error.name = failedStatus === 401 || failedStatus === 403
+        ? "CustomerPortalAuthenticationRequired"
+        : "CustomerPortalReadUnavailable";
+      throw error;
     }
     const booking = result.bookings.find(
       (candidate) => candidate.publicBookingReference === safeReference,

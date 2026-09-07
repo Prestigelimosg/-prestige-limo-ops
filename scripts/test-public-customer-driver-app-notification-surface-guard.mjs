@@ -562,7 +562,21 @@ for (const [label, source] of [
   ["my-bookings page", files[portalPagePath]],
   ["driver job page", files[driverPagePath]],
 ]) {
-  assertExcludes(source, forbiddenPublicClientPattern, `${label} app notification caller/secret exposure`);
+  // The Customer alert carries only a single-use public booking reference and
+  // expiry through its unchanged native-safe URL handoff. No identity/session
+  // credential or message data may be read from or written to browser storage.
+  let checkedSource = source;
+  if (label === "my-bookings page") {
+    for (const statement of [
+      'window.sessionStorage.getItem("prestige-customer-alert-open")',
+      'window.sessionStorage.removeItem("prestige-customer-alert-open")',
+      'window.sessionStorage.setItem("prestige-customer-alert-open", JSON.stringify({\n          bookingReference: publicBookingReference, expiresAt: Date.now() + 60_000,\n        }))',
+    ]) {
+      assert.equal(checkedSource.split(statement).length, 2, "One exact safe alert intent access only");
+      checkedSource = checkedSource.replace(statement, "approvedSingleUseAlertIntent");
+    }
+  }
+  assertExcludes(checkedSource, forbiddenPublicClientPattern, `${label} app notification caller/secret exposure`);
 }
 for (const fragment of [
   'customerPortalTripUpdatesApiPath = "/api/customer-app-notifications"',

@@ -760,6 +760,9 @@ async function main() {
             const params = new URLSearchParams(window.location.search);
             const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-026"]');
             if (!detail) return false;
+            const messages = detail.querySelector('[data-customer-portal-trip-updates]');
+            const messageTop = messages?.getBoundingClientRect().top;
+            if (window.scrollY <= 0 || messageTop === undefined || messageTop < 0 || messageTop >= window.innerHeight) return false;
             return {
               booking: params.get("booking"),
               detailText: detail.innerText,
@@ -786,8 +789,8 @@ async function main() {
     }
     assert.equal(notificationHandoffState.booking, "99126");
     assert.equal(notificationHandoffState.tracking, "1");
-    assert.equal(notificationHandoffState.savedPage, "2");
-    assert.equal(notificationHandoffState.travelerId, "78");
+    assert.equal(notificationHandoffState.savedPage, null, "Native-safe handoff must not expose pagination in its URL");
+    assert.equal(notificationHandoffState.travelerId, null, "Verified membership is resolved after navigation, not sent in its URL");
     assert.match(notificationHandoffState.detailText, /Booking Details/);
     assert.equal(notificationHandoffState.documentWidth, notificationHandoffState.viewportWidth);
     assert.equal(

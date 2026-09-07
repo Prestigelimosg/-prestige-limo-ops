@@ -319,7 +319,19 @@ for (const [label, source] of [
   ["public company profile adapter", publicProfileAdapter],
 ]) {
   assertExcludes(source, forbiddenClientAuthPattern, `${label} manual auth/header/env-token plumbing`);
-  assertExcludes(source, /localStorage|sessionStorage|document\.cookie|navigator\.credentials/i, `${label} browser credential storage`);
+  let credentialCheckedSource = source;
+  if (label === "/my-bookings page") {
+    // Exact public-reference/expiry navigation intent only, never credentials.
+    for (const statement of [
+      'window.sessionStorage.getItem("prestige-customer-alert-open")',
+      'window.sessionStorage.removeItem("prestige-customer-alert-open")',
+      'window.sessionStorage.setItem("prestige-customer-alert-open", JSON.stringify({\n          bookingReference: publicBookingReference, expiresAt: Date.now() + 60_000,\n        }))',
+    ]) {
+      assert.equal(credentialCheckedSource.split(statement).length, 2);
+      credentialCheckedSource = credentialCheckedSource.replace(statement, "approvedSingleUseAlertIntent");
+    }
+  }
+  assertExcludes(credentialCheckedSource, /localStorage|sessionStorage|document\.cookie|navigator\.credentials/i, `${label} browser credential storage`);
   assertExcludes(source, /\.(?:insert|upsert|delete|update|rpc)\s*\(/, `${label} direct write/query call`);
 }
 

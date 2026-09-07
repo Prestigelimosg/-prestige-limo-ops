@@ -760,8 +760,9 @@ async function main() {
             const params = new URLSearchParams(window.location.search);
             const detail = document.querySelector('[data-customer-portal-detail="saved-VIEW-026"]');
             if (!detail) return false;
-            const detailTop = detail.getBoundingClientRect().top;
-            if (window.scrollY <= 0 || detailTop >= window.innerHeight) return false;
+            const messages = detail.querySelector('[data-customer-portal-trip-updates]');
+            const messageTop = messages?.getBoundingClientRect().top;
+            if (window.scrollY <= 0 || messageTop === undefined || messageTop < 0 || messageTop >= window.innerHeight) return false;
             return {
               booking: params.get("booking"),
               detailText: detail.innerText,

@@ -457,6 +457,7 @@ export default function CustomerPortalPage() {
     useState<PublicCompanyProfile>(defaultCompanyProfile);
   const [expandedBookingId, setExpandedBookingId] = useState("");
   const pendingManualDetailScrollIdRef = useRef("");
+  const pendingAlertMessageScrollRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [changeFeedback, setChangeFeedback] = useState<Record<string, BookingRequestFeedback>>({});
   const [changeRequestDraft, setChangeRequestDraft] = useState<BookingChangeRequestDraft | null>(null);
@@ -551,7 +552,9 @@ export default function CustomerPortalPage() {
         (deepLink.travelerId === null || deepLink.travelerId === selectedManagedBossId);
       let requestedPage = deepLinkMatchesScope
         ? deepLink.savedPage
-        : portalSavedBookingsServerPageRef.current;
+        : resolvedCustomerAlertTargetRef.current?.travelerId === selectedManagedBossId
+          ? resolvedCustomerAlertTargetRef.current.savedPage
+          : portalSavedBookingsServerPageRef.current;
       if (deepLink) {
         setPortalBookingsLoadState("loading");
         resolvedCustomerAlertTargetRef.current = null;
@@ -1264,17 +1267,22 @@ export default function CustomerPortalPage() {
       return;
     }
 
-    pendingManualDetailScrollIdRef.current = "";
+    if (pendingAlertMessageScrollRef.current && !tripUpdatesByBookingId[expandedBookingId]) {
+      return;
+    }
     const animationFrameId = window.requestAnimationFrame(() => {
+      const target = pendingAlertMessageScrollRef.current ? "trip-updates" : "detail";
       document
-        .querySelector(`[data-customer-portal-detail="${expandedBookingId}"]`)
+        .querySelector(`[data-customer-portal-${target}="${expandedBookingId}"]`)
         ?.scrollIntoView({ block: "start" });
+      pendingManualDetailScrollIdRef.current = "";
+      pendingAlertMessageScrollRef.current = false;
     });
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [expandedBookingId]);
+  }, [expandedBookingId, tripUpdatesByBookingId]);
 
   const refreshCustomerTrackingForBooking = useCallback(
     async (booking: CustomerPortalBooking, options: { silent?: boolean } = {}) => {
@@ -1393,6 +1401,7 @@ export default function CustomerPortalPage() {
 
       setActiveSection(targetFilter);
       setSearchQuery("");
+      pendingAlertMessageScrollRef.current = true;
       pendingManualDetailScrollIdRef.current = targetBooking.id;
       setExpandedBookingId(targetBooking.id);
       setChangeFeedback({});
@@ -1874,24 +1883,11 @@ export default function CustomerPortalPage() {
     setCustomerNotificationOpeningReference(publicBookingReference);
     setCustomerNotificationNavigationMessage("");
     try {
-      for (const travelerId of customerNotificationTravelerIds) {
-        const target = await findCustomerPortalSavedBooking({
-          publicBookingReference,
-          travelerId,
-        });
-        if (!target) {
-          continue;
-        }
-        setCustomerNotificationCentreOpen(false);
-        const nextUrl = new URL("/my-bookings", window.location.origin);
-        nextUrl.searchParams.set("booking", publicBookingReference);
-        nextUrl.searchParams.set("tracking", "1");
-        window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
-        return;
-      }
-      setCustomerNotificationNavigationMessage(
-        "This booking is no longer available for this signed-in account.",
-      );
+      setCustomerNotificationCentreOpen(false);
+      const nextUrl = new URL("/my-bookings", window.location.origin);
+      nextUrl.searchParams.set("booking", publicBookingReference);
+      nextUrl.searchParams.set("tracking", "1");
+      window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
     } finally {
       setCustomerNotificationOpeningReference("");
     }
@@ -2144,6 +2140,10 @@ export default function CustomerPortalPage() {
             <select
               className="mt-1 w-full rounded-lg border border-sky-300 bg-white px-3 py-2 text-slate-950"
               onChange={(event) => {
+                clearCustomerPortalBookingDeepLink();
+                resolvedCustomerAlertTargetRef.current = null;
+                pendingManualDetailScrollIdRef.current = "";
+                pendingAlertMessageScrollRef.current = false;
                 portalSavedBookingsServerPageRef.current = 1;
                 setSelectedManagedBossId(Number(event.target.value));
               }}
@@ -2572,6 +2572,7 @@ export default function CustomerPortalPage() {
                               onClick={() => {
                                 const nextExpandedBookingId = isExpanded ? "" : booking.id;
 
+                                pendingAlertMessageScrollRef.current = false;
                                 setExpandedBookingId(nextExpandedBookingId);
 
                                 if (!isExpanded) {

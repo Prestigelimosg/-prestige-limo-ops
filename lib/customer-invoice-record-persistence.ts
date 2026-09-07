@@ -1038,8 +1038,15 @@ export async function createCustomerInvoiceRecord(
         : safeFailure(safeWriteError, 500);
     }
 
+    if (
+      asRecord(error).code === "23505" &&
+      asRecord(error).message === "Invoice already contains one or more selected jobs."
+    ) {
+      return safeFailure("Invoice already contains one or more selected jobs.", 409);
+    }
+
     if (lifecycleColumnUnavailableError(error)) {
-      if (travelerInvoiceNumber) {
+      if (sanitized.data.bookerId || travelerInvoiceNumber) {
         return safeFailure(safeWriteError, 503);
       }
 
@@ -1090,6 +1097,13 @@ export async function createCustomerInvoiceRecord(
               version: customerInvoiceRecordVersion,
             }
           : safeFailure(safeWriteError, 500);
+      }
+
+      if (
+        asRecord(legacyError).code === "23505" &&
+        asRecord(legacyError).message === "Invoice already contains one or more selected jobs."
+      ) {
+        return safeFailure("Invoice already contains one or more selected jobs.", 409);
       }
 
       if (!duplicateInvoiceError(legacyError)) {
@@ -2153,6 +2167,11 @@ export async function loadCustomerInvoiceRecordsForPortal(
   }
 
   const portalBookerId = activeAccount.data.booker_id;
+  const portalCustomerId = safeText(activeAccount.data.customer_account_reference, 160);
+
+  if (!portalCustomerId) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
 
   let invoiceQuery = invoiceClient
     .from(customerInvoiceRecordTableName)
@@ -2162,9 +2181,9 @@ export async function loadCustomerInvoiceRecordsForPortal(
     .limit(100);
 
   if (portalBookerId) {
-    invoiceQuery = invoiceQuery.eq("booker_id", portalBookerId);
+    invoiceQuery = invoiceQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
   } else {
-    invoiceQuery = invoiceQuery.eq("customer_id", customerAccountReference);
+    invoiceQuery = invoiceQuery.eq("customer_id", portalCustomerId);
   }
 
   let { data, error } = await invoiceQuery;
@@ -2181,9 +2200,9 @@ export async function loadCustomerInvoiceRecordsForPortal(
       .limit(100);
 
     if (portalBookerId) {
-      legacyQuery = legacyQuery.eq("booker_id", portalBookerId);
+      legacyQuery = legacyQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
     } else {
-      legacyQuery = legacyQuery.eq("customer_id", customerAccountReference);
+      legacyQuery = legacyQuery.eq("customer_id", portalCustomerId);
     }
 
     const legacyResult = await legacyQuery;
@@ -2240,6 +2259,11 @@ export async function loadCustomerInvoicePdfForPortal(
   }
 
   const portalBookerId = activeAccount.data.booker_id;
+  const portalCustomerId = safeText(activeAccount.data.customer_account_reference, 160);
+
+  if (!portalCustomerId) {
+    return safeFailure(safeCustomerAuthError, 403);
+  }
 
   if (!invoiceNumber) {
     return safeFailure(safeValidationError, 400);
@@ -2251,9 +2275,9 @@ export async function loadCustomerInvoicePdfForPortal(
     .eq("invoice_number", invoiceNumber)
     .eq("document_state", "issued");
   if (portalBookerId) {
-    pdfQuery = pdfQuery.eq("booker_id", portalBookerId);
+    pdfQuery = pdfQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
   } else {
-    pdfQuery = pdfQuery.eq("customer_id", customerAccountReference);
+    pdfQuery = pdfQuery.eq("customer_id", portalCustomerId);
   }
   const pdfResult = await pdfQuery.maybeSingle();
   let data: unknown = pdfResult.data;
@@ -2270,9 +2294,9 @@ export async function loadCustomerInvoicePdfForPortal(
       .eq("invoice_number", invoiceNumber);
 
     if (portalBookerId) {
-      legacyPdfQuery = legacyPdfQuery.eq("booker_id", portalBookerId);
+      legacyPdfQuery = legacyPdfQuery.eq("customer_id", portalCustomerId).eq("booker_id", portalBookerId);
     } else {
-      legacyPdfQuery = legacyPdfQuery.eq("customer_id", customerAccountReference);
+      legacyPdfQuery = legacyPdfQuery.eq("customer_id", portalCustomerId);
     }
 
     const legacyResult = await legacyPdfQuery.maybeSingle();

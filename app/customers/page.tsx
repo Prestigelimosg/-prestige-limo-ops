@@ -5306,7 +5306,8 @@ export default function MockCustomerDashboardPage() {
             if (
               mismatchedCustomer ||
               (!guestAccountBillingEnabled &&
-                (mismatchedCompany || mismatchedBooker || mismatchedTraveler || !exactCompanyId || !exactBookerId)) ||
+                (mismatchedBooker || mismatchedTraveler || !exactBookerId ||
+                  (!exactTravelerId && (mismatchedCompany || !exactCompanyId)))) ||
               missingPublicReference ||
               !firstInvoiceRow
             ) {

@@ -57,6 +57,10 @@ const registeredGroups = folder.customerFolderTravelerInvoiceGroups([
 ]);
 assert.equal(registeredGroups.error, "");
 assert.equal(registeredGroups.groups.length, 3, "Existing registered Traveller invoice groups must stay separate");
+const legacyRegisteredJob = { ...job, traveler_id: 70, company_id: null };
+assert.equal(folder.customerFolderTravelerInvoiceGroups([legacyRegisteredJob]).error, "", "Registered Traveller bookings keep their existing nullable Company support");
+assert.ok(folder.customerFolderInvoiceHref(legacyRegisteredJob, "164", "Account", [legacyRegisteredJob], reviews));
+assert.equal(folder.customerFolderLegacyIdentityResolution([legacyRegisteredJob], 60).error, "");
 assert.ok(folder.customerFolderTravelerInvoiceGroups([{ ...job, booker_id: null }]).error);
 assert.ok(folder.customerFolderLegacyIdentityResolution([{ ...job, traveler_id: 70, booker_id: null }], 60).error);
 assert.equal(folder.customerFolderTravelerInvoiceGroups([{ ...job, company_id: null, booker_id: null }], true).error, "", "Existing Hotel account lane remains separate");
@@ -77,12 +81,13 @@ const persistence = loadFunctions(persistenceSource, [
 ], constants);
 const lineItem = { bookingReference: job.booking_reference, description: "HOURLY | SAMPLE PASSENGER | 99001", amountLabel: "$260.00", quantity: 1 };
 const input = { bookerId: 38, travelerId: null, customerId: "164", bookingReference: job.booking_reference, guestAccountBillingEnabled: false, lineItems: [lineItem] };
-function clientFor({ bookings = [job], bookers = [{ id: 38, company_id: 60, customer_id: 164 }], invoices = [], customers = [], failTable = "", writes = null } = {}) {
+function clientFor({ bookings = [job], bookers = [{ id: 38, company_id: 60, customer_id: 164 }], invoices = [], customers = [], failTable = "", writes = null, insertError = null, insertAttempts = [] } = {}) {
   const tables = { bookings, bookers, customers, customer_invoice_records: invoices };
   return { from(table) {
     assert.ok(Object.hasOwn(tables, table), `Unexpected table ${table}`);
     let rows = tables[table];
     let single = false;
+    let error = null;
     const query = {
       select() { return query; },
       eq(key, value) { rows = rows.filter((row) => String(row[key]) === String(value)); return query; },
@@ -93,6 +98,8 @@ function clientFor({ bookings = [job], bookers = [{ id: 38, company_id: 60, cust
       limit(count) { rows = rows.slice(0, count); return query; },
       insert(payload) {
         assert.equal(table, "customer_invoice_records");
+        insertAttempts.push(payload);
+        if (insertError) { error = insertError; rows = []; return query; }
         assert.ok(writes, "Ownership-only tests must never write");
         writes.push(payload);
         const row = { ...payload, id: "isolated-invoice", created_at: new Date().toISOString() };
@@ -102,7 +109,7 @@ function clientFor({ bookings = [job], bookers = [{ id: 38, company_id: 60, cust
       },
       single() { single = true; return query; },
       maybeSingle() { single = true; return query; },
-      then(resolve, reject) { return Promise.resolve({ data: single ? rows[0] ?? null : rows, count: rows.length, error: failTable === table ? { message: "fixture read failed" } : null }).then(resolve, reject); },
+      then(resolve, reject) { return Promise.resolve({ data: single ? rows[0] ?? null : rows, count: rows.length, error: error || (failTable === table ? { message: "fixture read failed" } : null) }).then(resolve, reject); },
     };
     return query;
   } };
@@ -150,7 +157,7 @@ const recordModule = loadModule(persistenceSource, {
   "./customer-local-invoices": pdf,
   "./admin-driver-job-dsp-actual-time-read": {}, "./customer-invoice-line-description": {},
   "./customer-portal-access-account": {
-    assertActiveCustomerPortalAccessAccount: async (reference) => ({ ok: true, data: { booker_id: reference === "verified-pa" ? 38 : 39 } }),
+    assertActiveCustomerPortalAccessAccount: async (reference) => ({ ok: true, data: { customer_account_reference: "164", booker_id: reference === "verified-pa" ? 38 : 39 } }),
   },
 });
 const writes = [];
@@ -172,6 +179,9 @@ assert.equal((await recordModule.createCustomerInvoiceRecord(issueInput, actor, 
 assert.equal(writes.length, 1, "Duplicate issue must not add another record");
 assert.equal((await recordModule.loadCustomerInvoiceRecordsForPortal({ customer_account_reference: "verified-pa" }, client)).data.length, 1);
 assert.equal((await recordModule.loadCustomerInvoiceRecordsForPortal({ customer_account_reference: "other-pa" }, client)).data.length, 0, "Account-only invoices remain private to the verified Booker");
+invoices.push({ ...invoices[0], customer_id: "165", invoice_number: "INV-20990101-0002" });
+assert.equal((await recordModule.loadCustomerInvoiceRecordsForPortal({ customer_account_reference: "verified-pa" }, client)).data.length, 1, "A different customer's invoice is excluded even if its Booker ID matches");
+assert.equal((await recordModule.loadCustomerInvoicePdfForPortal("INV-20990101-0002", { customer_account_reference: "verified-pa" }, client)).status, 404, "Cross-customer PDF access must also fail closed");
 const travelerWrites = [];
 const travelerClient = clientFor({ bookings: [{ ...job, traveler_id: 70 }], writes: travelerWrites });
 let reservations = 0;
@@ -187,4 +197,13 @@ assert.equal(travelerIssued.ok, true);
 assert.equal(reservations, 1, "Registered Traveller invoices must retain their existing prefix reservation");
 assert.equal(travelerWrites[0].invoice_number, "LOCAL-0001");
 assert.equal(travelerWrites[0].traveler_id, 70);
+for (const [insertError, expectedStatus] of [
+  [{ code: "23505", message: "Invoice already contains one or more selected jobs." }, 409],
+  [{ code: "42703", message: "booker_id does not exist" }, 503],
+]) {
+  const insertAttempts = [];
+  const rejected = await recordModule.createCustomerInvoiceRecord(issueInput, actor, clientFor({ insertError, insertAttempts }));
+  assert.equal(rejected.status, expectedStatus);
+  assert.equal(insertAttempts.length, 1, "Never retry a booking-coverage conflict or drop Booker identity in a legacy insert");
+}
 console.log("Company + Booker invoice preparation guard passed.");

@@ -615,11 +615,11 @@ function customerFolderInvoiceHref(
   const companyId = inlineEditIdentityId(selectedBookings[0]?.company_id);
 
   if (!guestAccountBillingEnabled && (
-    !bookerId || !companyId ||
+    !bookerId || (!travelerId && !companyId) ||
     selectedBookings.some(
       (selectedBooking) =>
         String(selectedBooking.customer_id ?? "").trim() !== customerId ||
-        inlineEditIdentityId(selectedBooking.company_id) !== companyId ||
+        (!travelerId && inlineEditIdentityId(selectedBooking.company_id) !== companyId) ||
         inlineEditIdentityId(selectedBooking.booker_id) !== bookerId ||
         inlineEditIdentityId(selectedBooking.traveler_id) !== travelerId ||
         (selectedBooking.traveler_id != null && !inlineEditIdentityId(selectedBooking.traveler_id)),
@@ -670,7 +670,7 @@ function customerFolderTravelerInvoiceGroups(
   }
 
   const groups = new Map<string, CustomerFolderTravelerInvoiceGroup>();
-  const companyId = inlineEditIdentityId(bookings[0]?.company_id);
+  const companyId = inlineEditIdentityId(bookings.find((booking) => !inlineEditIdentityId(booking.traveler_id))?.company_id);
   const accountBookerId = inlineEditIdentityId(bookings[0]?.booker_id);
   const customerId = String(bookings[0]?.customer_id ?? "").trim();
 
@@ -680,8 +680,8 @@ function customerFolderTravelerInvoiceGroups(
     const passengerName = travelerId ? displayText(booking.passenger_name, "Verified traveller") : "customer account";
 
     if (
-      !companyId || !accountBookerId || !customerId ||
-      inlineEditIdentityId(booking.company_id) !== companyId ||
+      !accountBookerId || !customerId ||
+      (!travelerId && (!companyId || inlineEditIdentityId(booking.company_id) !== companyId)) ||
       bookerId !== accountBookerId ||
       String(booking.customer_id ?? "").trim() !== customerId ||
       (booking.traveler_id != null && !travelerId)
@@ -723,7 +723,7 @@ function customerFolderLegacyIdentityResolution(
     const hasBooker = Boolean(bookerId);
     const hasTraveler = Boolean(travelerId);
 
-    if ((hasTraveler && !hasBooker) || (hasBooker && !companyId)) {
+    if ((hasTraveler && !hasBooker) || (hasBooker && !hasTraveler && !companyId)) {
       return {
         error: `${publicBookingReferenceDisplay(booking)} has an incomplete saved Booker / Traveller pair. Reload and repair that exact booking before continuing.`,
         groups: [],
@@ -737,7 +737,7 @@ function customerFolderLegacyIdentityResolution(
       };
     }
 
-    if (hasBooker && companyId) {
+    if (hasBooker && (hasTraveler || companyId)) {
       continue;
     }
 

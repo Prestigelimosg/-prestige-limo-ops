@@ -29,7 +29,7 @@ for (const fragment of [
   "travelerId: guestAccountBillingEnabled ? null : exactTravelerId",
   "bookingReference: firstInvoiceRow.bookingReference",
   "All ${invoiceRows.length} selected job",
-  "mismatchedCompany || mismatchedBooker || mismatchedTraveler || !exactCompanyId || !exactBookerId",
+  "(!exactTravelerId && (mismatchedCompany || !exactCompanyId))",
   "bookerId: plainInvoiceForm.bookerId",
   "bookingReference: plainInvoiceForm.bookingReference",
   "Select an exact saved booking with a verified Company + Booker account before issuing Create Invoice.",

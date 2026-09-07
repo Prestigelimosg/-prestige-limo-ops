@@ -91,6 +91,10 @@ const guardChecks = [
     script: "scripts/test-customer-company-booker-invoice-preparation-guard.mjs",
   },
   {
+    label: "Atomic issued-booking coverage SQL contract",
+    script: "scripts/test-customer-invoice-booking-coverage-guard.mjs",
+  },
+  {
     label: "customer guest-account invoice guard",
     script: "scripts/test-customer-guest-account-invoice-guard.mjs",
   },

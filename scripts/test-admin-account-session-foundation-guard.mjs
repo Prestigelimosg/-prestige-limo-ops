@@ -722,6 +722,13 @@ const resolveAdminAccountSession = (cookie) => globalThis.__prestigeAdminResolve
   }
   assert.equal(revalidationCalls, 2, "Both current Admin API namespaces must revalidate");
 
+  const missingCookieResponse = await proxyRuntime.proxy(new NextRequest(
+    "https://app.prestigelimo.sg/api/admin-saved-bookings",
+  ));
+  assert.equal(missingCookieResponse.status, 200, "Keep no-cookie route-level authorization unchanged");
+  assert.equal(missingCookieResponse.headers.get("x-prestige-admin-session"), "required", "Expired browser cookies must signal recovery without weakening route authorization");
+  assert.equal(revalidationCalls, 2, "Missing cookies must not cause an account lookup");
+
   globalThis.__prestigeAdminRevalidate = async () => {
     revalidationCalls += 1;
     return { ok: false, reason: "invalid_session" };
@@ -731,6 +738,7 @@ const resolveAdminAccountSession = (cookie) => globalThis.__prestigeAdminResolve
     { headers: { cookie: "prestige_admin_account_session=valid-cookie" } },
   ));
   assert.equal(revokedApiResponse.status, 403);
+  assert.equal(revokedApiResponse.headers.get("x-prestige-admin-session"), "required");
   assert.match(revokedApiResponse.headers.get("set-cookie") || "", /Max-Age=0/);
   const revokedPageResponse = await proxyRuntime.proxy(new NextRequest(
     "https://app.prestigelimo.sg/customers/1",
@@ -748,4 +756,47 @@ const resolveAdminAccountSession = (cookie) => globalThis.__prestigeAdminResolve
   await rm(tempDir, { force: true, recursive: true });
 }
 
-console.log("Admin account session foundation guard passed.");
+const homeSource = await readFile("app/page.tsx", "utf8");
+const recoveryStart = homeSource.indexOf("  // Recover the existing mounted Admin page only after authoritative session rejection.");
+const recoveryEnd = homeSource.indexOf("  // End mounted Admin session recovery.", recoveryStart);
+assert.ok(recoveryStart > 0 && recoveryEnd > recoveryStart);
+const recoveryCode = ts.transpileModule(homeSource.slice(recoveryStart, recoveryEnd), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText;
+for (const scenario of [
+  { path: "/api/admin-saved-bookings", status: 403, marker: "required", redirects: 1 },
+  { path: "/api/admin-app-notifications", status: 401, marker: "required", redirects: 1 },
+  { path: "/api/admin-saved-bookings", status: 403, marker: null, redirects: 0 },
+  { path: "/api/admin-saved-bookings", status: 500, marker: "required", redirects: 0 },
+  { path: "/api/admin-saved-bookings", status: 200, marker: "required", redirects: 0 },
+  { path: "/api/driver-portal/jobs", status: 403, marker: "required", redirects: 0 },
+  { path: "/api/customer-saved-bookings", status: 403, marker: "required", redirects: 0 },
+  { path: "https://unrelated.example/api/admin-test", status: 403, marker: "required", redirects: 0 },
+  { path: "/api/admin-auth/session", status: 401, marker: "required", redirects: 0 },
+]) {
+  const destinations = []; let cleanup; let requests = 0;
+  const response = new Response("{}", { status: scenario.status, headers: scenario.marker ? { "x-prestige-admin-session": scenario.marker } : {} });
+  const originalFetch = async () => { requests++; return response; };
+  const window = { fetch: originalFetch, location: { href: "https://app.prestigelimo.sg/", origin: "https://app.prestigelimo.sg", pathname: "/", search: "", hash: "", replace: (url) => destinations.push(url) } };
+  new Function("useEffect", "window", recoveryCode)((effect) => { cleanup = effect(); }, window);
+  assert.equal(await window.fetch(scenario.path), response, "Do not rewrite API responses");
+  assert.equal(destinations.length, scenario.redirects, JSON.stringify(scenario));
+  if (scenario.redirects) {
+    assert.equal(destinations[0], "/admin-sign-in?return_to=%2F");
+    await assert.rejects(window.fetch("/api/admin-saved-bookings", { method: "POST" }), /Admin sign-in required/);
+    assert.equal(requests, 1, "No subsequent Admin write may leave while redirecting");
+  }
+  cleanup(); assert.equal(window.fetch, originalFetch);
+}
+// A response from a page already unmounted must not redirect its next consumer.
+{
+  let finish; let cleanup; let redirected = false;
+  const originalFetch = () => new Promise((resolve) => { finish = resolve; });
+  const window = { fetch: originalFetch, location: { href: "https://app.prestigelimo.sg/", origin: "https://app.prestigelimo.sg", replace: () => { redirected = true; } } };
+  new Function("useEffect", "window", recoveryCode)((effect) => { cleanup = effect(); }, window);
+  const pending = window.fetch("/api/admin-saved-bookings");
+  cleanup();
+  finish(new Response("{}", { status: 403, headers: { "x-prestige-admin-session": "required" } }));
+  await pending; assert.equal(redirected, false);
+}
+console.log("Admin account session foundation and mounted-page recovery guard passed.");

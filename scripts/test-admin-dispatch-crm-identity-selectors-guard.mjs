@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const [app, adapter, appSmokeBrowser, bookingUiBrowser, rateSetupRead, adminBookers, customerProfileEditor, customerAccountBrowser, packageJson] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
@@ -367,3 +368,74 @@ for (const fragment of [
 );
 
 console.log("Admin Dispatch CRM identity selectors guard passed.");
+
+// Execute the existing Passenger field handler: selection is by saved ID, never by name.
+const passengerHandlerStart = app.indexOf("  function selectAdminDispatchSavedPassenger(");
+const passengerHandlerEnd = app.indexOf("  const renderDispatchBookingField", passengerHandlerStart);
+assert.ok(passengerHandlerStart >= 0 && passengerHandlerEnd > passengerHandlerStart,
+  "Passenger field must offer exact saved Boss selection in the established booking lane");
+const handlerJs = ts.transpileModule(app.slice(passengerHandlerStart, passengerHandlerEnd), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText;
+let draft = { companyId: "11", bookerId: "22", customerId: "33", travelerId: "", name: "Typed passenger" };
+const originalScope = { companyId: "11", bookerId: "22", customerId: "33" };
+const safeId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+const clean = value => String(value ?? "").trim();
+const savedPassengers = [
+  { id: 101, company_id: 11, booker_id: 22, traveler_name: "Boss A" },
+  { id: 102, company_id: 11, booker_id: 22, traveler_name: "Boss B" },
+  { id: 103, company_id: 11, booker_id: 23, traveler_name: "Boss A" },
+  { id: 104, company_id: 12, booker_id: 22, traveler_name: "Boss A" },
+];
+const selectPassenger = new Function("setBooking", "rateTravelers", "adminDispatchVerifiedIdentityId", "clean",
+  handlerJs + "; return selectAdminDispatchSavedPassenger;")(
+  updater => { draft = updater(draft); }, savedPassengers, safeId, clean,
+);
+selectPassenger("101");
+assert.deepEqual(draft, { ...originalScope, travelerId: "101", name: "Boss A" });
+selectPassenger("102");
+assert.deepEqual(draft, { ...originalScope, travelerId: "102", name: "Boss B" });
+for (const rejected of ["103", "104", "999", "Boss A", "102x"]) {
+  selectPassenger(rejected);
+  assert.deepEqual(draft, { ...originalScope, travelerId: "102", name: "Boss B" },
+    "Forged, missing and cross-account selections must not alter booking identity");
+}
+selectPassenger("");
+assert.deepEqual(draft, { ...originalScope, travelerId: "", name: "Boss B" });
+const updateStart = app.indexOf("  function update(field:");
+const updateEnd = app.indexOf("\n  useEffect", updateStart);
+const updateJs = ts.transpileModule(app.slice(updateStart, updateEnd), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const updateField = new Function("setBooking", "adminEmailAiCustomerRecommendationRevisionRef", "setAdminEmailAiCustomerProfileSuggestion",
+  updateJs + "; return update;")(updater => { draft = updater(draft); }, {current:0}, () => {});
+for (const field of ["name", "booker", "company"]) {
+  draft = { ...originalScope, travelerId: "102", name: "Boss B" };
+  updateField(field, "Changed text");
+  assert.equal(draft.travelerId, "", "Manual identity text edits must clear a stale Boss binding");
+}
+assert.ok(app.includes('data-admin-dispatch-saved-passenger="true"'));
+assert.ok(app.includes('String(traveler.company_id) === booking.companyId'));
+assert.ok(app.includes('String(traveler.booker_id) === booking.bookerId'));
+console.log("Saved Boss selection, optional free text and stale/cross-account identity guards passed.");
+
+const saveIdentityStart = app.indexOf("async function resolveSaveCrmCorporateIdentityForSave(");
+const saveIdentityEnd = app.indexOf("\nfunction isCustomerRatesRuntimeWriteBlockedNoOp",saveIdentityStart);
+const saveIdentityJs = ts.transpileModule(app.slice(saveIdentityStart,saveIdentityEnd),{
+  compilerOptions:{target:ts.ScriptTarget.ES2022},
+}).outputText;
+const saveIdentity = new Function("adminDispatchVerifiedIdentityId","clean","loadSaveCrmBookerById","loadSaveCrmCorporateIdentityRows","saveCrmComparableIdentityValue",
+ saveIdentityJs + "; return resolveSaveCrmCorporateIdentityForSave;")(
+ safeId,clean,async()=>({id:22}),async()=>savedPassengers.map(row=>({...row,booker_name:"PA"})),value=>clean(value).toLowerCase(),
+);
+for(const id of ["101","102"]){
+ draft={...originalScope,booker:"PA",name:"",travelerId:""};
+ selectPassenger(id);
+ const saved=await saveIdentity(draft,11,"Fixture Company");
+ assert.equal(saved.ok,true);
+ assert.equal(saved.travelerId,Number(id),"Selected Boss must survive the actual Save + CRM resolver");
+ assert.equal(saved.bookerId,22);
+}
+draft={...originalScope,booker:"PA",name:"Ordinary passenger",travelerId:""};
+assert.equal((await saveIdentity(draft,11,"Fixture Company")).travelerId,null);
+console.log("Saved Boss A/B survive the existing Save + CRM resolver; unregistered passenger remains optional.");

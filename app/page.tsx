@@ -20007,6 +20007,9 @@ export default function Home() {
     setBooking((current) => ({
       ...current,
       [field]: value,
+      ...(field === "name" || field === "booker" || field === "company"
+        ? { travelerId: "" }
+        : {}),
     }));
   }
 
@@ -28502,6 +28505,20 @@ export default function Home() {
       {message.text}
     </div>
   );
+  function selectAdminDispatchSavedPassenger(value: string) {
+    setBooking((current) => {
+      if (!value) return { ...current, travelerId: "" };
+      const travelerId = adminDispatchVerifiedIdentityId(value);
+      const traveler = rateTravelers.find((candidate) =>
+        travelerId && candidate.id === travelerId &&
+        String(candidate.company_id) === current.companyId &&
+        String(candidate.booker_id) === current.bookerId,
+      );
+      if (!traveler || !clean(traveler.traveler_name)) return current;
+      return { ...current, travelerId: String(traveler.id), name: clean(traveler.traveler_name) };
+    });
+  }
+
   const renderDispatchBookingField = (field: keyof BookingForm) => {
     if (
       (field === "dspEndDate" || field === "dspEndTime") &&
@@ -28519,6 +28536,13 @@ export default function Home() {
         : "";
     const isServiceTypeField = field === "bookingType";
     const isVehicleTypeField = field === "vehicle";
+    const savedPassengers = field === "name" && booking.companyId && booking.bookerId
+      ? rateTravelers.filter((traveler) =>
+          String(traveler.company_id) === booking.companyId &&
+          String(traveler.booker_id) === booking.bookerId &&
+          adminDispatchVerifiedIdentityId(traveler.id) && clean(traveler.traveler_name),
+        )
+      : [];
     const displayFieldLabel =
       field === "dropoff" && normalizeBookingType(booking.bookingType) === "DSP"
         ? `${fieldLabels[field]} (optional for DSP)`
@@ -28593,6 +28617,22 @@ export default function Home() {
             </>
           )}
         </label>
+        {field === "name" && savedPassengers.length > 0 ? (
+          <select
+            aria-label="Saved Boss / passenger"
+            className="mt-1 h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+            data-admin-dispatch-saved-passenger="true"
+            onChange={(event) => selectAdminDispatchSavedPassenger(event.target.value)}
+            value={savedPassengers.some((traveler) => String(traveler.id) === booking.travelerId) ? booking.travelerId : ""}
+          >
+            <option value="">Choose saved Boss (optional)</option>
+            {savedPassengers.map((traveler) => (
+              <option key={traveler.id} value={String(traveler.id)}>
+                {clean(traveler.traveler_name)}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
     );
   };

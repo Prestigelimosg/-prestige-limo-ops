@@ -232,6 +232,65 @@ async function main() {
       '[data-admin-dispatch-customer-account-select="true"]',
       "unified Customer Account chooser",
     );
+    if (process.env.PRESTIGE_SAVED_BOSS_FIELD_ONLY === "1") {
+      reporter.step("checking the bounded saved Boss field in visible Chrome");
+      await waitForSelector(evaluate, '[data-admin-dispatch-customer-account-option="corporate:55:5501"]', "fixture account");
+      await evaluate(`(() => {
+        document.querySelector('[data-admin-dispatch-customer-account-select="true"]').open = true;
+        document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]').click();
+      })()`);
+      await waitForCondition(async () => evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]')?.dataset.bookerId === "5501"`), 10000, "exact Booker selected");
+      const choose = async id => {
+        await evaluate(`(() => {
+          const select = document.querySelector('[data-admin-dispatch-saved-passenger="true"]');
+          select.value = ${JSON.stringify(id)};
+          select.dispatchEvent(new Event("change", {bubbles:true}));
+        })()`);
+        await waitForCondition(async () => evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]')?.dataset.travelerId === ${JSON.stringify(id)}`), 10000, "saved Boss ID applied");
+      };
+      assert.deepEqual(await evaluate(`[...document.querySelector('[data-admin-dispatch-saved-passenger="true"]').options].map(option => option.value)`), ["", "55001", "55002", "55003"]);
+      for (const width of [1440, 390, 320]) {
+        await client.send("Emulation.setDeviceMetricsOverride", {width,height:900,deviceScaleFactor:1,mobile:width<500});
+        if (width < 500) {
+          await waitForCondition(async () => evaluate(`(() => {
+            const step = document.querySelector('[data-mobile-dispatch-quick-step="details"]');
+            if (!step) return false;
+            step.click();
+            return document.querySelector('[data-admin-dispatch-saved-passenger="true"]')?.getBoundingClientRect().width > 0;
+          })()`), 10000, "existing mobile Details step");
+        }
+        await choose("55001");
+        const state = await evaluate(`(() => {
+          const field = document.querySelector('[data-admin-dispatch-saved-passenger="true"]');
+          field.scrollIntoView({block:"center"});
+          const rect = field.getBoundingClientRect();
+          const account = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+          return {name:document.querySelector('input[placeholder="Passenger name"]').value, company:account.dataset.companyId, booker:account.dataset.bookerId,
+            fits:rect.left >= 0 && rect.right <= innerWidth && rect.width >= 140};
+        })()`);
+        console.log("Saved Boss field width", width, await evaluate(`(() => { const r=document.querySelector('[data-admin-dispatch-saved-passenger="true"]').getBoundingClientRect(); return {left:r.left,right:r.right,width:r.width,viewport:innerWidth}; })()`));
+        assert.deepEqual(state,{name:"Mr Jwalant Nanavati",company:"55",booker:"5501",fits:true});
+        await choose("55002");
+        assert.equal(await evaluate(`document.querySelector('input[placeholder="Passenger name"]').value`), "Alex Tan");
+        await evaluate(`(() => {
+          const input = document.querySelector('input[placeholder="Passenger name"]');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(input,"Ordinary passenger");
+          input.dispatchEvent(new Event("input",{bubbles:true}));
+        })()`);
+        await waitForCondition(async () => evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]').dataset.travelerId === ""`),10000,"manual name clears saved Boss");
+      }
+      await choose("55001");
+      await evaluate(`(() => {
+        document.querySelector('[data-admin-dispatch-customer-account-select="true"]').open = true;
+        document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5502"]').click();
+      })()`);
+      await waitForCondition(async () => evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]').dataset.bookerId === "5502"`),10000,"different Booker selected");
+      assert.equal(await evaluate(`document.querySelector('[data-admin-dispatch-saved-passenger="true"]') === null`),true);
+      assert.equal(await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]').dataset.travelerId`),"");
+      assert.equal(bookingPosts.length,0);
+      console.log(JSON.stringify(reporter.summary({ok:true,widths:[1440,390,320],bookingPostCount:0,savedBossSelection:true,manualNameClearsIdentity:true,crossBookerIsolation:true}),null,2));
+      return;
+    }
     reporter.step("checking unified light-mode account list");
 
     const initialState = await waitForCondition(

@@ -489,6 +489,7 @@ const guardChecks = [
   {
     label: "Customer principal access and native alert guard",
     script: "scripts/test-customer-principal-native-alert-guard.mjs",
+  "scripts/test-customer-invited-pin-access-guard.mjs",
   },
   {
     label: "Customer principal sign-in email-first AutoFill guard",

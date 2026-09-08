@@ -87,14 +87,14 @@ async function main() {
         try {
           body = JSON.parse(request.postData || "");
         } catch {}
-        if (request.method === "POST" && body?.action === "start_activation") {
+        if (request.method === "POST" && body?.action === "complete_activation") {
           await client.send("Fetch.fulfillRequest", {
             body: Buffer.from(JSON.stringify({
-              data: { challenge_id: "00000000-0000-4000-8000-000000000001" },
-              ok: true,
+              error: "Customer invitation is invalid or has already been used.",
+              ok: false,
             })).toString("base64"),
             requestId,
-            responseCode: 200,
+            responseCode: 409,
             responseHeaders: [{ name: "content-type", value: "application/json; charset=utf-8" }],
           });
           return;
@@ -106,132 +106,42 @@ async function main() {
     const activationUrl = new URL("/customer-access/activate", appUrl);
     activationUrl.searchParams.set("invite", diagnosticInvitation);
     await navigateWithLoadEvent(client, activationUrl.toString());
-    reporter.step("waiting for the established activation control to hydrate");
-    await waitForSelector(
-      evaluate,
-      "button",
-      "Customer principal invitation verification button",
-    );
+    reporter.step("checking direct PIN setup without an email step");
     await waitForCondition(
-      () => evaluate(`(() => {
-        const button = [...document.querySelectorAll("button")]
-          .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
-        if (!button) return false;
-        const reactPropsKey = Object.keys(button).find((key) => key.startsWith("__reactProps$"));
-        return Boolean(reactPropsKey && typeof button[reactPropsKey]?.onClick === "function");
-      })()`),
-      10000,
-      "Customer principal activation React handler",
+      () => evaluate(`document.querySelector('button[type="submit"]')?.disabled === false`),
+      10000, "hydrated PIN setup",
     );
-
-    const validInviteState = await evaluate(`(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
-      const reactPropsKey = Object.keys(button).find((key) => key.startsWith("__reactProps$"));
-      return {
-        domDisabled: button.disabled,
-        hasInvite: new URLSearchParams(window.location.search).has("invite"),
-        reactDisabled: button[reactPropsKey].disabled,
-      };
-    })()`);
-
-    assert.deepEqual(validInviteState, {
-      domDisabled: false,
-      hasInvite: true,
-      reactDisabled: false,
-    });
-    assert.deepEqual(principalRequests, [], "Hydration must not request or send an OTP.");
-
-    const missingInviteUrl = new URL("/customer-access/activate", appUrl);
-    await navigateWithLoadEvent(client, missingInviteUrl.toString());
-    await waitForCondition(
-      () => evaluate(`document.body.innerText.includes("This Customer access invitation is missing or invalid.")`),
-      10000,
-      "missing invitation fail-closed message",
-    );
-    const missingInviteDisabled = await evaluate(`(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
-      return button?.disabled === true;
-    })()`);
-    assert.equal(missingInviteDisabled, true);
-    assert.deepEqual(principalRequests, [], "Missing invitation rendering must not call the principal API.");
-
-    reporter.step("reproducing the Customer app foreground reload after the email challenge starts");
-    await navigateWithLoadEvent(client, activationUrl.toString());
-    await waitForCondition(
-      () => evaluate(`(() => {
-        const button = [...document.querySelectorAll("button")]
-          .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
-        return button?.disabled === false;
-      })()`),
-      10000,
-      "enabled invitation verification button before challenge",
-    );
-    await evaluate(`(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((candidate) => candidate.textContent?.trim() === "Verify invited email");
-      button.click();
-    })()`);
-    await waitForCondition(
-      () => evaluate(`document.body.innerText.includes("One-time email code")`),
-      10000,
-      "activation code and PIN step",
-    );
-    assert.deepEqual(principalRequests, ["POST"], "The safe diagnostic must start exactly one local challenge.");
-
+    assert.equal(await evaluate(`document.querySelectorAll('input[type="password"]').length`), 2);
+    assert.equal(await evaluate(`/Verify invited email|One-time email code/.test(document.body.innerText)`), false);
+    assert.deepEqual(principalRequests, [], "Opening an invitation sends no OTP and performs no activation");
+    await evaluate(`document.querySelector('button[type="submit"]').click()`);
+    await waitForCondition(() => evaluate(`document.body.innerText.includes("Enter the same 6-digit PIN twice.")`), 10000, "PIN validation");
+    assert.deepEqual(principalRequests, [], "Invalid PIN sends no request");
     await evaluate(`(() => {
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-      const values = ["244430", "123456", "123456"];
-      [...document.querySelectorAll("input")].forEach((input, index) => {
-        setValue.call(input, values[index]);
+      [...document.querySelectorAll("input")].forEach((input) => {
+        setValue.call(input, "123456");
         input.dispatchEvent(new Event("input", { bubbles: true }));
       });
     })()`);
-
     await navigateWithLoadEvent(client, activationUrl.toString());
-    await waitForCondition(
-      () => evaluate(`document.body.innerText.includes("One-time email code")`),
-      10000,
-      "resumed activation code and PIN step after foreground reload",
-    );
-    const resumedState = await evaluate(`(() => {
-      const storage = window.localStorage.getItem("prestige-customer-activation-resume-v1") || "";
-      return {
-        fieldValues: [...document.querySelectorAll("input")].map((input) => input.value),
-        hasCreateAccess: document.body.innerText.includes("Create secure access"),
-        hasVerifyInvite: document.body.innerText.includes("Verify invited email"),
-        storageContainsInvitation: storage.includes(${JSON.stringify(diagnosticInvitation)}),
-        storageContainsOtpOrPin: storage.includes("244430") || storage.includes("123456"),
-      };
-    })()`);
-    assert.deepEqual(resumedState, {
-      fieldValues: ["", "", ""],
-      hasCreateAccess: true,
-      hasVerifyInvite: false,
-      storageContainsInvitation: false,
-      storageContainsOtpOrPin: false,
-    });
-    assert.deepEqual(principalRequests, ["POST"], "Foreground resume must not send another email challenge.");
-
+    await waitForCondition(() => evaluate(`document.querySelector('button[type="submit"]')?.disabled === false`), 10000, "PIN setup after reload");
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll("input")].map(input => input.value)`), ["", ""], "PIN must not survive reload in storage");
+    assert.deepEqual(principalRequests, [], "Foreground reload never sends an email");
     await evaluate(`(() => {
-      const key = "prestige-customer-activation-resume-v1";
-      const stored = JSON.parse(window.localStorage.getItem(key));
-      window.localStorage.setItem(key, JSON.stringify({ ...stored, expiresAt: Date.now() - 1 }));
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      [...document.querySelectorAll("input")].forEach((input) => {
+        setValue.call(input, "123456");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
     })()`);
-    await navigateWithLoadEvent(client, activationUrl.toString());
-    await waitForCondition(
-      () => evaluate(`document.body.innerText.includes("Your email code expired. Verify invited email to request a new one.")`),
-      10000,
-      "expired activation challenge recovery",
-    );
-    const expiredState = await evaluate(`(() => ({
-      resumeCleared: window.localStorage.getItem("prestige-customer-activation-resume-v1") === null,
-      verifyInviteEnabled: [...document.querySelectorAll("button")]
-        .some((candidate) => candidate.textContent?.trim() === "Verify invited email" && !candidate.disabled),
-    }))()`);
-    assert.deepEqual(expiredState, { resumeCleared: true, verifyInviteEnabled: true });
-    assert.deepEqual(principalRequests, ["POST"], "Expiry recovery must not send another email challenge.");
+    await evaluate(`document.querySelector('button[type="submit"]').click()`);
+    await waitForCondition(() => evaluate(`document.body.innerText.includes("Customer invitation is invalid or has already been used.")`), 10000, "invalid or reused invitation feedback");
+    assert.deepEqual(principalRequests, ["POST"], "One explicit submit uses the existing activation endpoint once");
+    await navigateWithLoadEvent(client, new URL("/customer-access/activate", appUrl).toString());
+    await waitForCondition(() => evaluate(`document.body.innerText.includes("This Customer access invitation is missing or invalid.")`), 10000, "missing invitation");
+    assert.equal(await evaluate(`document.querySelector('button[type="submit"]').disabled`), true);
+    assert.deepEqual(principalRequests, ["POST"], "Missing invitation performs no write");
     console.log(JSON.stringify(reporter.summary({ ok: true }), null, 2));
     console.log("Customer principal activation hydration browser guard passed.");
   } finally {

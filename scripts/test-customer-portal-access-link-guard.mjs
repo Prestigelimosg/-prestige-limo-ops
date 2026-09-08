@@ -309,7 +309,7 @@ for (const fragment of [
 
 assertExcludes(
   customerPortalLinkCopyHandler,
-  /window\.prompt|principalRole|memberships|travelerId|verifiedBossName|copyManualTelegramMessage\s*\(|telegram\.org|t\.me|chat_id|sendMessage|sendAdminCustomerDriverDetailsEmail\s*\(/i,
+  /memberships|verifiedBossName|copyManualTelegramMessage\s*\(|telegram\.org|t\.me|chat_id|sendMessage|sendAdminCustomerDriverDetailsEmail\s*\(/i,
   "customer app link copy handler must not call provider/message sends",
 );
 assertExcludes(

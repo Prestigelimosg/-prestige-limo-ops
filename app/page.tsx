@@ -27110,48 +27110,54 @@ export default function Home() {
     if (recipient === undefined) return null;
     if (recipient !== "pa" && recipient !== "boss") throw new Error("Choose PA or BOSS.");
     const bossTravelerId = customerDriverDetailsPortalTravelerId;
-    let bossEmail: string | undefined;
     if (recipient === "boss") {
       if (!bossTravelerId) throw new Error("Select and save this booking's traveller before inviting the Boss.");
-      const enteredEmail = window.prompt("Boss email for sign-in and recovery (not the PA email):");
-      if (enteredEmail === null) return null;
-      bossEmail = enteredEmail.trim();
-      if (!bossEmail) throw new Error("Enter the Boss email.");
     }
 
-    const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
-      body: JSON.stringify({
-        bookerId,
-        companyId,
-        ...(recipient === "boss" ? { accessRecipient: "boss", bossEmail, bossTravelerId } : {}),
-        customerAccountReference,
-        safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
-      }),
-      cache: "no-store",
-      headers: {
-        "Content-Type": "application/json",
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "POST",
-    });
-    const result = (await response.json().catch(() => null)) as {
-      accessStatus?: "access_updated" | "invitation_created";
-      ok?: boolean;
-      url?: string;
-    } | null;
-    const portalUrl = typeof result?.url === "string" ? result.url.trim() : "";
+    let bossReviewKey: string | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
+        body: JSON.stringify({
+          bookerId,
+          companyId,
+          ...(recipient === "boss" ? { accessRecipient: "boss", bossTravelerId, bossReviewKey } : {}),
+          customerAccountReference,
+          safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
+        }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as {
+        accessStatus?: "access_updated" | "invitation_created";
+        ok?: boolean;
+        url?: string;
+        bossReview?: { key: string; name: string; selectedTravelerId: number };
+      } | null;
+      const portalUrl = typeof result?.url === "string" ? result.url.trim() : "";
 
-    if (!response.ok || result?.ok !== true) {
-      throw new Error("Customer access invitation could not be created for this saved customer account.");
-    }
-    if (result.accessStatus === "access_updated") {
-      return { accessUpdated: true, portalUrl: "" };
-    }
-    if (result.accessStatus !== "invitation_created" || !portalUrl) {
-      throw new Error("Customer access invitation could not be created for this saved customer account.");
-    }
+      if (!response.ok && recipient === "boss" && !bossReviewKey && result?.bossReview?.selectedTravelerId === bossTravelerId) {
+        if (!window.confirm(`More than one Boss is named ${result.bossReview.name} in this Company + Booker. Have you reviewed the saved Boss selected for booking ${bookingReference}?`)) return null;
+        bossReviewKey = result.bossReview.key;
+        continue;
+      }
+      if (!response.ok || result?.ok !== true) {
+        throw new Error("Customer access invitation could not be created for this saved customer account.");
+      }
+      if (result.accessStatus === "access_updated") {
+        if (!portalUrl) throw new Error("Customer app link is unavailable.");
+        return { accessUpdated: true, portalUrl };
+      }
+      if (result.accessStatus !== "invitation_created" || !portalUrl) {
+        throw new Error("Customer access invitation could not be created for this saved customer account.");
+      }
 
-    return { accessUpdated: false, portalUrl };
+      return { accessUpdated: false, portalUrl };
+    }
+    throw new Error("The saved Boss selection changed. Review it and try again.");
   }
 
   async function createCustomerBookingInvitationLink() {
@@ -27235,19 +27241,20 @@ export default function Home() {
         return;
       }
       if (accessResult.accessUpdated) {
+        await navigator.clipboard.writeText(accessResult.portalUrl);
         setCustomerDriverDetailsPortalLinkCopyState({
           external_send: false,
           loadedReference: copyStateReference,
           noProviderSend: true,
-          portalLinkCopied: false,
-          portalUrl: "",
+          portalLinkCopied: true,
+          portalUrl: accessResult.portalUrl,
           tone: "success",
-          text: "Customer app access is already active for this Booker. No new invitation or PIN reset was created.",
+          text: "App link copied. Access is already set up; use the existing sign-in.",
         });
         setCopyFeedback({
           target: "customerCopy",
           tone: "success",
-          text: "Customer app access already active.",
+          text: "App link copied.",
         });
         return;
       }

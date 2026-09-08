@@ -73,6 +73,37 @@ export async function POST(request: Request) {
       });
     }
 
+    // The existing Admin action may invite only the saved Booker or one exact
+    // CRM traveller. Membership scope is rebuilt and verified by the server.
+    if (body.accessRecipient !== undefined && body.accessRecipient !== "pa" && body.accessRecipient !== "boss") {
+      return safeErrorResponse({ error: "Choose PA or Boss.", status: 400 });
+    }
+    if (body.accessRecipient === "boss") {
+      const result = await issueCustomerPrincipalInvitation({
+        email: body.bossEmail,
+        principalRole: "boss",
+        memberships: [{
+          companyId: booker.data.company_id,
+          bookerId: booker.data.id,
+          customerAccountReference: String(booker.data.customer_id),
+          travelerId: body.bossTravelerId,
+          verifiedBossName: "Verified by server",
+        }],
+      }, boundary.actor);
+      if (!result.ok) return safeErrorResponse(result);
+      return Response.json({
+        accessStatus: result.data.access_status,
+        accessAction: "Copy + App Link",
+        expiresAt: result.data.expires_at,
+        ok: true,
+        principalId: result.data.principal_id,
+        url: result.data.invitation_url_path
+          ? new URL(result.data.invitation_url_path, request.url).toString()
+          : null,
+        version: "customer-principal-invitation-v1",
+      });
+    }
+
     const account = await ensureAdminCustomerPortalAccessAccount(
       {
         agencyCustomerAccount: false,

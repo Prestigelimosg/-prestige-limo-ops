@@ -502,6 +502,25 @@ export async function issueCustomerPrincipalInvitation(
   if (principalId && existingPrincipal.principal_role !== parsed.principalRole) {
     return principalFailure("That email is already bound to another Customer role.", 409);
   }
+  if (principalId && existingPrincipal.principal_status === "invited") {
+    const { data: pendingInvitations, error: pendingError } = await client
+      .from(invitationTable)
+      .select("membership_scope")
+      .eq("principal_id", principalId)
+      .is("used_at", null)
+      .is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString());
+    const scopeKey = (entry: unknown) => {
+      const row = asRecord(entry);
+      return `${row.company_id}:${row.booker_id}:${row.customer_account_reference}:${row.traveler_id ?? "root"}`;
+    };
+    const requestedScope = verifiedMemberships.map(scopeKey).sort().join("|");
+    if (pendingError || asArray(pendingInvitations).some((entry) =>
+      asArray(asRecord(entry).membership_scope).map(scopeKey).sort().join("|") !== requestedScope
+    )) {
+      return principalFailure("That email already has an invitation for another Customer scope.", 409);
+    }
+  }
   if (
     principalId &&
     existingPrincipal.principal_status === "active" &&
@@ -893,57 +912,50 @@ export async function completeCustomerPrincipalActivation(
 ): Promise<AdminBookingResult<CustomerPrincipalDeviceSessionResult>> {
   const body = asRecord(input);
   const invite = parseInvitation(body.invitation);
-  const challengeId = uuid(body.challengeId);
-  const code = text(body.code, 6);
   const pin = text(body.pin, 6);
   const rawInstallationId = installationId(body.installationId);
   const faceIdEnrolled = body.faceIdEnrolled === true;
-  if (!invite || !challengeId || !code || !pin || !rawInstallationId || !customerPinPattern.test(code) || !customerPinPattern.test(pin)) {
-    return principalFailure<{ cookie: string; device_id: string }>("Customer activation details are invalid.", 400);
+  if (!invite || !pin || !rawInstallationId || !customerPinPattern.test(pin)) {
+    return principalFailure<CustomerPrincipalDeviceSessionResult>("Customer activation details are invalid.", 400);
   }
   const clientResult = principalClient();
   if (!clientResult.ok) return clientResult;
+  if (!principalSessionSecret()) return principalFailure("Customer access configuration is not ready.", 503);
   const client = clientResult.data;
-  const { data: challengeRows } = await client
-    .from(challengeTable)
-    .select("id, principal_id, challenge_hash, challenge_purpose, expires_at, used_at, attempt_count")
-    .eq("id", challengeId)
-    .eq("principal_id", invite.principalId)
+  const { data: principalRows, error: principalReadError } = await client
+    .from(principalAccessTable)
+    .select("id, principal_status, revoked_at")
+    .eq("id", invite.principalId)
     .limit(1);
-  const challenge = asRecord(asArray(challengeRows)[0]);
-  if (
-    challenge.challenge_purpose !== "activation" || challenge.used_at ||
-    Date.parse(String(challenge.expires_at)) <= Date.now() ||
-    Number(challenge.attempt_count) >= maxPinFailuresPerDeviceWindow ||
-    challenge.challenge_hash !== hashSecret(`${invite.principalId}:activation:${code}`)
-  ) {
-    await client.from(challengeTable).update({ attempt_count: Math.min(5, Number(challenge.attempt_count || 0) + 1) }).eq("id", challengeId);
-    return principalFailure<{ cookie: string; device_id: string }>("Customer verification code is invalid or expired.", 403);
+  const invitedPrincipal = asRecord(asArray(principalRows)[0]);
+  const reissuedAfterRevoke = invitedPrincipal.principal_status === "revoked" &&
+    Number.isFinite(Date.parse(String(invitedPrincipal.revoked_at)));
+  if (principalReadError || (invitedPrincipal.principal_status !== "invited" && !reissuedAfterRevoke)) {
+    return principalFailure<CustomerPrincipalDeviceSessionResult>("Customer access is already set up or unavailable. Use Sign in.", 409);
+  }
+  const { data: deviceRows, error: deviceReadError } = await client
+    .from(deviceTable)
+    .select("id, principal_id")
+    .eq("installation_id_hash", hashSecret(rawInstallationId))
+    .limit(1);
+  const boundDevice = asRecord(asArray(deviceRows)[0]);
+  if (deviceReadError || (boundDevice.id && boundDevice.principal_id !== invite.principalId)) {
+    return principalFailure<CustomerPrincipalDeviceSessionResult>("This app installation is already bound to another account.", 409);
   }
   const pinHash = await hashCustomerPin(pin);
   const now = new Date().toISOString();
-  const { data: claimedChallenge, error: challengeClaimError } = await client
-    .from(challengeTable)
-    .update({ used_at: now })
-    .eq("id", challengeId)
-    .eq("principal_id", invite.principalId)
-    .is("used_at", null)
-    .select("id")
-    .maybeSingle();
-  if (challengeClaimError || uuid(asRecord(claimedChallenge).id) !== challengeId) {
-    return principalFailure<CustomerPrincipalDeviceSessionResult>(
-      "Customer verification code is invalid or has already been used.",
-      409,
-    );
-  }
-  const { data: claimedInvitation, error: invitationClaimError } = await client
+  let invitationClaim = client
     .from(invitationTable)
     .update({ used_at: now })
     .eq("invitation_token_hash", hashSecret(invite.token))
     .eq("principal_id", invite.principalId)
     .is("used_at", null)
     .is("revoked_at", null)
-    .gt("expires_at", now)
+    .gt("expires_at", now);
+  if (reissuedAfterRevoke) {
+    invitationClaim = invitationClaim.gt("created_at", String(invitedPrincipal.revoked_at));
+  }
+  const { data: claimedInvitation, error: invitationClaimError } = await invitationClaim
     .select("id, membership_scope")
     .maybeSingle();
   if (invitationClaimError || !uuid(asRecord(claimedInvitation).id)) {
@@ -991,6 +1003,21 @@ export async function completeCustomerPrincipalActivation(
       409,
     );
   }
+  let principalActivation = client.from(principalAccessTable).update({
+    invitation_verified_at: now,
+    pin_hash: pinHash,
+    pin_updated_at: now,
+    principal_status: "active",
+    updated_at: now,
+  }).eq("id", invite.principalId).eq("principal_status", String(invitedPrincipal.principal_status));
+  if (reissuedAfterRevoke) {
+    principalActivation = principalActivation.eq("revoked_at", String(invitedPrincipal.revoked_at));
+  }
+  const { data: activatedPrincipal, error: principalError } = await principalActivation.select("id").maybeSingle();
+  if (principalError || uuid(asRecord(activatedPrincipal).id) !== invite.principalId) {
+    return principalFailure<CustomerPrincipalDeviceSessionResult>("Customer activation failed safely. Use Sign in if already set up.", 409);
+  }
+
   const rootMembership = scopedMemberships.length === 1 && scopedMemberships[0].traveler_id === null
     ? scopedMemberships[0]
     : null;
@@ -1013,14 +1040,6 @@ export async function completeCustomerPrincipalActivation(
       500,
     );
   }
-  const { error: principalError } = await client.from(principalAccessTable).update({
-    email_verified_at: now,
-    pin_hash: pinHash,
-    pin_updated_at: now,
-    principal_status: "active",
-    updated_at: now,
-  }).eq("id", invite.principalId);
-  if (principalError) return principalFailure<{ cookie: string; device_id: string }>("Customer activation failed safely.", 500);
 
   const { data: memberships } = await client.from(membershipTable).select("customer_account_reference").eq("principal_id", invite.principalId).eq("membership_status", "active");
   for (const row of asArray(memberships).map(asRecord)) {

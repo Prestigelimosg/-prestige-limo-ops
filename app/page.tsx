@@ -27106,10 +27106,24 @@ export default function Home() {
       throw new Error("Customer app link requires a verified Company and Booker. Save the customer account first.");
     }
 
+    const recipient = window.prompt("Invite PA or Boss? Enter PA or BOSS.", "PA")?.trim().toLowerCase();
+    if (recipient === undefined) return null;
+    if (recipient !== "pa" && recipient !== "boss") throw new Error("Choose PA or BOSS.");
+    const bossTravelerId = customerDriverDetailsPortalTravelerId;
+    let bossEmail: string | undefined;
+    if (recipient === "boss") {
+      if (!bossTravelerId) throw new Error("Select and save this booking's traveller before inviting the Boss.");
+      const enteredEmail = window.prompt("Boss email for sign-in and recovery (not the PA email):");
+      if (enteredEmail === null) return null;
+      bossEmail = enteredEmail.trim();
+      if (!bossEmail) throw new Error("Enter the Boss email.");
+    }
+
     const response = await fetch(adminCustomerPortalAccessLinksApiPath, {
       body: JSON.stringify({
         bookerId,
         companyId,
+        ...(recipient === "boss" ? { accessRecipient: "boss", bossEmail, bossTravelerId } : {}),
         customerAccountReference,
         safeDisplayLabel: customerDriverDetailsPortalSafeDisplayLabel || customerAccountReference,
       }),
@@ -27216,6 +27230,10 @@ export default function Home() {
       }
 
       const accessResult = await createCustomerDriverDetailsPortalLink();
+      if (!accessResult) {
+        setCustomerDriverDetailsPortalLinkCopyState(null);
+        return;
+      }
       if (accessResult.accessUpdated) {
         setCustomerDriverDetailsPortalLinkCopyState({
           external_send: false,
@@ -27237,7 +27255,7 @@ export default function Home() {
       await navigator.clipboard.writeText(
         [
           "PRESTIGE SG ACCESS INVITATION",
-          "Use this private invitation once to verify your email and create your 6-digit PIN:",
+          "Use this private invitation once to create your 6-digit PIN, then enable Face ID:",
           portalUrl,
           "This invitation expires in 30 minutes.",
         ].join("\n"),
@@ -30002,6 +30020,10 @@ export default function Home() {
     adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.booker_id) ||
     adminDispatchVerifiedIdentityId(dispatchReleaseLoadedBookingRecord?.booker_id) ||
     adminDispatchVerifiedIdentityId(customerDriverDetailsPortalLastSavedRecord?.booker_id);
+  const customerDriverDetailsPortalTravelerId =
+    adminDispatchVerifiedIdentityId(appliedAdminBookingSnapshot?.traveler_id) ||
+    adminDispatchVerifiedIdentityId(dispatchReleaseLoadedBookingRecord?.traveler_id) ||
+    adminDispatchVerifiedIdentityId(customerDriverDetailsPortalLastSavedRecord?.traveler_id);
   const customerLiveLocationHelperText = customerDriverDetailsPortalAccountReference
     ? customerLiveLocation.helperText
     : "Save + CRM or load the saved booking first.";

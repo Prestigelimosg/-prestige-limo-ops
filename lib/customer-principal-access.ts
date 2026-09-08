@@ -1266,23 +1266,36 @@ export async function customerPrincipalPinLogin(
   const rawInstallationId = installationId(body.installationId);
   const otpChallengeId = uuid(body.challengeId);
   const otpCode = text(body.code, 6);
-  if (!email || !pin || !rawInstallationId || !customerPinPattern.test(pin)) {
+  const boundDevicePinLogin = body.email === undefined || body.email === null || body.email === "";
+  if ((!boundDevicePinLogin && !email) || !pin || !rawInstallationId || !customerPinPattern.test(pin)) {
     return principalFailure<{ cookie: string; device_id: string }>("Customer sign in details are invalid.", 400);
   }
   const clientResult = principalClient();
   if (!clientResult.ok) return clientResult;
   const client = clientResult.data;
-  const { data: principalRows } = await client.from(principalAccessTable)
-    .select("id, pin_hash, principal_status").eq("normalized_email", email).limit(1);
+  const installationHash = hashSecret(rawInstallationId);
+  const { data: deviceRows, error: deviceReadError } = await client.from(deviceTable)
+    .select("id, principal_id, device_status").eq("installation_id_hash", installationHash).limit(2);
+  if (deviceReadError || asArray(deviceRows).length > 1) {
+    return principalFailure("Customer sign in failed safely.", 503);
+  }
+  const device = asRecord(asArray(deviceRows)[0]);
+  if (boundDevicePinLogin && (!uuid(device.id) || !uuid(device.principal_id) || device.device_status !== "active")) {
+    return principalFailure("This device is not set up for PIN sign in. Use your private Customer app invitation or contact your administrator.", 403);
+  }
+  const principalQuery = client.from(principalAccessTable)
+    .select("id, pin_hash, principal_status");
+  const { data: principalRows, error: principalReadError } = await (boundDevicePinLogin
+    ? principalQuery.eq("id", device.principal_id)
+    : principalQuery.eq("normalized_email", email)).limit(2);
+  if (principalReadError || asArray(principalRows).length !== 1) {
+    return principalFailure("Customer sign in failed safely.", 403);
+  }
   const principal = asRecord(asArray(principalRows)[0]);
   const principalId = uuid(principal.id);
   if (!principalId || principal.principal_status !== "active" || typeof principal.pin_hash !== "string") {
     return principalFailure("Customer sign in failed safely.", 403);
   }
-  const installationHash = hashSecret(rawInstallationId);
-  const { data: deviceRows } = await client.from(deviceTable)
-    .select("id, principal_id, device_status").eq("installation_id_hash", installationHash).limit(1);
-  const device = asRecord(asArray(deviceRows)[0]);
   const genuinelyNewDevice = !device.id || device.device_status !== "active";
   if (device.id && device.principal_id !== principalId) {
     return principalFailure("This app installation is already bound to another account.", 409);
@@ -1304,10 +1317,11 @@ export async function customerPrincipalPinLogin(
 
   const ipHash = hashSecret(text(body.ipKey, 256) || "unavailable");
   const deviceId = uuid(device.id);
-  const { data: attemptRows } = await client.from(attemptTable)
+  const { data: attemptRows, error: attemptReadError } = await client.from(attemptTable)
     .select("id, installation_id_hash, failure_count, window_started_at, locked_until")
     .eq("principal_id", principalId).eq("ip_hash", ipHash)
     .limit(100);
+  if (attemptReadError) return principalFailure("Customer sign in failed safely.", 503);
   const attempts = asArray(attemptRows).map(asRecord);
   const attempt = attempts.find((row) => row.installation_id_hash === installationHash) || {};
   const accountIpFailures = attempts.reduce((total, row) => {
@@ -1337,8 +1351,10 @@ export async function customerPrincipalPinLogin(
       window_started_at: withinWindow ? attempt.window_started_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    if (attempt.id) await client.from(attemptTable).update(update).eq("id", attempt.id);
-    else await client.from(attemptTable).insert(update);
+    const { error: attemptWriteError } = attempt.id
+      ? await client.from(attemptTable).update(update).eq("id", attempt.id)
+      : await client.from(attemptTable).insert(update);
+    if (attemptWriteError) return principalFailure("Customer sign in failed safely.", 503);
     return principalFailure("Customer sign in failed safely.", failures >= maxPinFailuresPerDeviceWindow ? 429 : 403);
   }
   if (validatedNewDeviceChallengeId) {
@@ -1357,7 +1373,12 @@ export async function customerPrincipalPinLogin(
       return principalFailure("One-time email verification has already been used.", 409);
     }
   }
-  if (attempt.id) await client.from(attemptTable).update({ failure_count: 0, locked_until: null, window_started_at: new Date().toISOString() }).eq("id", attempt.id);
+  if (attempt.id) {
+    const { error: attemptResetError } = await client.from(attemptTable).update({ failure_count: 0, locked_until: null, window_started_at: new Date().toISOString() }).eq("id", attempt.id);
+    if (attemptResetError) return principalFailure("Customer sign in failed safely.", 503);
+  }
+  // PIN-only return unlocks this existing binding; it cannot enroll or revive a device.
+  if (boundDevicePinLogin && deviceId) return createSessionForExistingDevice(client, principalId, deviceId);
   return createPrincipalDeviceSession(client, principalId, rawInstallationId, body.faceIdEnrolled === true);
 }
 

@@ -11,6 +11,7 @@ import { createClient as createRealClient } from "@supabase/supabase-js";
 const require = createRequire(import.meta.url);
 const tables = new Map();
 const accesses = [];
+let forcedQueryError = null;
 const rows = (name) => {
   if (!tables.has(name)) tables.set(name, []);
   return tables.get(name);
@@ -43,6 +44,9 @@ const client = {
       then(resolve, reject) {
         try {
           accesses.push({ name, operation });
+          if (forcedQueryError?.name === name && forcedQueryError.operation === operation) {
+            return Promise.resolve({ data: null, error: { message: "Simulated query failure" } }).then(resolve, reject);
+          }
           let result = rows(name).filter((row) => filters.every((filter) => filter(row))).slice(0, maximum);
           if (operation === "insert" || operation === "upsert") {
             result = (Array.isArray(payload) ? payload : [payload]).map((value) => {
@@ -133,6 +137,16 @@ for (const [index, invitation] of [pa, bossA, bossB].entries()) {
   assert.equal(principal.email_verified_at ?? null, null);
   assert.ok(principal.invitation_verified_at);
   assert.ok(await api.verifyCustomerPin("123456", principal.pin_hash));
+  const devicesBeforeLogin = JSON.stringify(rows("customer_access_devices"));
+  const pinOnlyResult = await api.customerPrincipalPinLogin({ pin: "123456", installationId: `local-installation-${index}`, ipKey: "bound-pin-fixture" });
+  assert.equal(pinOnlyResult.ok, true, `Existing bound invited customer PIN login must not require email: ${pinOnlyResult.error}`);
+  assert.equal(pinOnlyResult.data.device_id, result.data.device_id);
+  assert.equal(JSON.stringify(rows("customer_access_devices")), devicesBeforeLogin, "Returning PIN login must not enroll, reactivate or change a device");
+  const pinToken = decodeURIComponent(pinOnlyResult.data.cookie.split(";")[0].split("=").slice(1).join("="));
+  const pinAccess = await api.assertActiveCustomerPrincipalSession(pinToken);
+  assert.equal(pinAccess.ok, true);
+  assert.equal(pinAccess.data.principal_id, invitation.principal_id);
+  assert.equal(pinAccess.data.memberships[0].traveler_id, index === 0 ? null : index === 1 ? 31 : 32);
   const beforeReplay = JSON.stringify([...tables]);
   const replay = await api.completeCustomerPrincipalActivation({ invitation: invitation.token, pin: "654321", installationId: "different-installation" });
   assert.equal(replay.ok, false);
@@ -160,6 +174,61 @@ aPrincipal.invitation_identity_key = "boss:11:21:32";
 assert.equal((await api.assertActiveCustomerPrincipalSession(cookies[1])).ok, false);
 aPrincipal.invitation_identity_key = "boss:11:21:31";
 console.log("No-email PA/Boss A/Boss B issuance, PIN setup, session reads and exact identity guards passed.");
+
+// Returning native PIN login uses only the persisted device binding, never supplied identity.
+const pinLogin = (extra = {}) => api.customerPrincipalPinLogin({ pin: "123456", installationId: "local-installation-0", ipKey: "pin-negative-fixture", ...extra });
+const paDevice = rows("customer_access_devices").find((row) => row.principal_id === pa.principal_id);
+const paPrincipal = rows("customer_access_principals").find((row) => row.id === pa.principal_id);
+const sessionCount = () => rows("customer_access_device_sessions").length;
+const assertRejectedWithoutWrites = async (input) => {
+  const before = JSON.stringify([...tables]);
+  assert.equal((await pinLogin(input)).ok, false);
+  assert.equal(JSON.stringify([...tables]), before);
+};
+await assertRejectedWithoutWrites({ installationId: "unknown-installation-1234" });
+await assertRejectedWithoutWrites({ installationId: "short" });
+await assertRejectedWithoutWrites({ email: "not-an-email" });
+paDevice.device_status = "revoked";
+await assertRejectedWithoutWrites({});
+paDevice.device_status = "active";
+paPrincipal.principal_status = "revoked";
+await assertRejectedWithoutWrites({});
+paPrincipal.principal_status = "active";
+rows("customer_access_devices").push({ ...paDevice, id: randomUUID() });
+await assertRejectedWithoutWrites({});
+rows("customer_access_devices").pop();
+const injected = await pinLogin({ principalId: bossA.principal_id, companyId: 999, bookerId: 999, travelerId: 32 });
+assert.equal(injected.ok, true);
+const injectedToken = decodeURIComponent(injected.data.cookie.split(";")[0].split("=").slice(1).join("="));
+const injectedSession = await api.assertActiveCustomerPrincipalSession(injectedToken);
+assert.equal(injectedSession.data.principal_id, pa.principal_id);
+assert.equal(injectedSession.data.memberships[0].traveler_id, null);
+assert.equal(injectedSession.data.memberships[0].booker_id, 21);
+const sessionsBeforeWrongPin = sessionCount();
+for (let attempt = 1; attempt <= 5; attempt += 1) {
+  const result = await pinLogin({ pin: "654321", principalId: bossA.principal_id });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, attempt < 5 ? 403 : 429);
+}
+assert.equal((await pinLogin()).status, 429, "Correct PIN cannot bypass the existing active lockout");
+assert.equal(sessionCount(), sessionsBeforeWrongPin);
+rows("customer_access_pin_attempts").length = 0;
+for (const name of ["customer_access_devices", "customer_access_principals", "customer_access_pin_attempts"]) {
+  forcedQueryError = { name, operation: "read" };
+  await assertRejectedWithoutWrites({});
+}
+forcedQueryError = { name: "customer_access_pin_attempts", operation: "insert" };
+await assertRejectedWithoutWrites({ pin: "654321" });
+forcedQueryError = { name: "customer_access_device_sessions", operation: "insert" };
+await assertRejectedWithoutWrites({});
+forcedQueryError = null;
+assert.equal((await pinLogin({ pin: "654321" })).status, 403);
+forcedQueryError = { name: "customer_access_pin_attempts", operation: "update" };
+await assertRejectedWithoutWrites({});
+forcedQueryError = null;
+assert.equal((await pinLogin()).ok, true, "A valid unlocked PIN can return after database recovery");
+assert.equal(rows("customer_access_pin_attempts")[0].failure_count, 0);
+console.log("Bound-device PIN-only login, exact PA/Boss scope, unknown/revoked devices, lockout and database failures passed.");
 
 // Invalid CRM relationships and browser-supplied scope cannot grant access.
 const beforeInvalid = JSON.stringify([...tables]);
@@ -316,6 +385,28 @@ assert.equal((await api.completeCustomerPrincipalActivation({ invitation: revoke
 assert.equal(JSON.stringify([...tables]), beforeRevoked, "Pre-revocation invitation cannot reactivate access");
 const reissued = await invite("boss", 44);
 assert.equal((await api.completeCustomerPrincipalActivation({ invitation: reissued.token, pin: "123456", installationId: "reissued-local-installation" })).ok, true, "Explicit new invitation after revocation retains the existing reissue lane");
+const beforeAdminRecovery = await api.customerPrincipalPinLogin({ pin: "123456", installationId: "reissued-local-installation", ipKey: "admin-recovery-fixture" });
+assert.equal(beforeAdminRecovery.ok, true);
+const oldRecoverySessionToken = decodeURIComponent(beforeAdminRecovery.data.cookie.split(";")[0].split("=").slice(1).join("="));
+const accountCountBeforeRecovery = rows("customer_access_accounts").length;
+assert.equal((await api.revokeCustomerPrincipalAccess({ principalId: reissued.principal_id }, actor)).ok, true);
+assert.equal((await api.assertActiveCustomerPrincipalSession(oldRecoverySessionToken)).ok, false);
+assert.equal((await api.customerPrincipalPinLogin({ pin: "123456", installationId: "reissued-local-installation" })).ok, false);
+// A fresh invitation must be strictly later than the explicit revocation.
+await new Promise((resolve) => setTimeout(resolve, 5));
+const recoveryInvitation = await invite("boss", 44);
+assert.equal(recoveryInvitation.principal_id, reissued.principal_id);
+assert.equal((await api.completeCustomerPrincipalActivation({ invitation: recoveryInvitation.token, pin: "654321", installationId: "reissued-local-installation" })).ok, true);
+assert.equal((await api.customerPrincipalPinLogin({ pin: "123456", installationId: "reissued-local-installation", ipKey: "admin-recovery-fixture" })).ok, false, "Old PIN must stop working after the customer chooses a new PIN");
+const recovered = await api.customerPrincipalPinLogin({ pin: "654321", installationId: "reissued-local-installation", ipKey: "admin-recovery-fixture" });
+assert.equal(recovered.ok, true);
+const recoveredToken = decodeURIComponent(recovered.data.cookie.split(";")[0].split("=").slice(1).join("="));
+const recoveredAccess = await api.assertActiveCustomerPrincipalSession(recoveredToken);
+assert.equal(recoveredAccess.data.principal_id, reissued.principal_id);
+assert.equal(recoveredAccess.data.memberships[0].company_id, 11);
+assert.equal(recoveredAccess.data.memberships[0].booker_id, 21);
+assert.equal(recoveredAccess.data.memberships[0].traveler_id, 44);
+assert.equal(rows("customer_access_accounts").length, accountCountBeforeRecovery);
 console.log("Explicit reissue after revocation retains its existing guarded activation lane.");
 
 // Earlier email-based principals remain the same people, found by saved membership.

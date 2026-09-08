@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
 type Mode = "login" | "new_device" | "recovery";
 
@@ -13,6 +13,11 @@ export default function CustomerAccessSignInPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const nativePinLogin = useSyncExternalStore(
+    () => () => {},
+    () => Boolean((window as Window & { __prestigeCustomerInstallationId?: string }).__prestigeCustomerInstallationId || new URLSearchParams(window.location.search).get("installation")),
+    () => null,
+  );
   const installationId = useMemo(() => {
     if (typeof window === "undefined") return "";
     const nativeInstallationId = (
@@ -40,8 +45,8 @@ export default function CustomerAccessSignInPage() {
   }
 
   async function submit() {
-    if (!email.trim() || !/^\d{6}$/.test(pin) || !installationId) {
-      setMessage("Enter your email and 6-digit PIN.");
+    if ((!nativePinLogin && !email.trim()) || !/^\d{6}$/.test(pin) || !installationId) {
+      setMessage(nativePinLogin ? "Enter your 6-digit PIN." : "Enter your email and 6-digit PIN.");
       return;
     }
     setBusy(true);
@@ -52,10 +57,10 @@ export default function CustomerAccessSignInPage() {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, challengeId, code, email, installationId, pin }),
+        body: JSON.stringify({ action, challengeId, code, ...(!nativePinLogin ? { email } : {}), installationId, pin }),
       });
       const payload = await response.json().catch(() => null);
-      if (response.status === 428 && mode === "login") {
+      if (response.status === 428 && mode === "login" && !nativePinLogin) {
         await startCode("start_new_device");
         return;
       }
@@ -69,6 +74,10 @@ export default function CustomerAccessSignInPage() {
   }
 
   async function recover() {
+    if (nativePinLogin) {
+      setMessage("Contact Prestige Admin for help with your PIN.");
+      return;
+    }
     if (!email.trim()) {
       setMessage("Enter your verified email first.");
       return;
@@ -109,7 +118,9 @@ export default function CustomerAccessSignInPage() {
       <h1 className="mt-3 text-3xl font-bold">Customer sign in</h1>
       <p className="mt-2 text-slate-600">Face ID is the normal app unlock. Use your 6-digit PIN only when needed.</p>
       <section className="mt-8 space-y-4 rounded-2xl border border-slate-200 p-5 shadow-sm">
-        {!emailConfirmed ? (
+        {nativePinLogin === null ? (
+          <p role="status">Preparing sign in…</p>
+        ) : !emailConfirmed && !nativePinLogin ? (
           <div className="space-y-4" data-customer-sign-in-email-step="true">
             <label className="block text-sm font-semibold">Verified email
               <input
@@ -127,13 +138,13 @@ export default function CustomerAccessSignInPage() {
           </div>
         ) : (
           <div className="space-y-4" data-customer-sign-in-credentials-step="true">
-            <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
+            {!nativePinLogin ? <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Verified email</p>
                 <p className="break-all text-sm font-semibold">{email}</p>
               </div>
               <button className="shrink-0 text-sm font-semibold text-sky-700" disabled={busy} onClick={changeEmail} type="button">Change email</button>
-            </div>
+            </div> : null}
             {mode !== "login" ? (
               <label className="block text-sm font-semibold">One-time email code
                 <input className="mt-1 w-full rounded-xl border border-slate-300 px-4 py-3" inputMode="numeric" maxLength={6} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} value={code} />

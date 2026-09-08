@@ -81,6 +81,46 @@ async function main() {
     signInUrl.searchParams.set("installation", "11111111-1111-4111-8111-111111111111");
     await navigateWithLoadEvent(client, signInUrl.toString());
     await waitForCondition(
+      () => evaluate(`document.querySelector('[data-customer-sign-in-credentials-step="true"]') !== null`),
+      10000,
+      "Bound native device PIN-only sign-in step",
+    );
+    const nativeControls = await evaluate(`(() => ({
+      emailCount: document.querySelectorAll('input[type="email"]').length,
+      passwordCount: document.querySelectorAll('input[type="password"]').length,
+      pinInputMode: document.querySelector('input[type="password"]')?.inputMode,
+      changeEmailVisible: document.body.innerText.includes("Change email"),
+    }))()`);
+    assert.deepEqual(nativeControls, { emailCount: 0, passwordCount: 1, pinInputMode: "numeric", changeEmailVisible: false });
+    assert.deepEqual(principalRequests, [], "Opening PIN-only sign-in must not send email or attempt a login");
+    await evaluate(`(() => {
+      window.__nativePinRequests = [];
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = async (url, options) => {
+        if (new URL(url, location.href).pathname === "/api/customer-principal-access") {
+          window.__nativePinRequests.push(JSON.parse(options.body));
+          return new Response(JSON.stringify({ ok: false, error: "Local fixture: PIN checked safely." }), { status: 403, headers: { "Content-Type": "application/json" } });
+        }
+        return originalFetch(url, options);
+      };
+      const pin = document.querySelector('input[type="password"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(pin, "246802");
+      pin.dispatchEvent(new Event("input", { bubbles: true }));
+    })()`);
+    await evaluate(`new Promise((resolve) => requestAnimationFrame(() => resolve(true)))`);
+    await evaluate(`(() => [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Sign in").click())()`);
+    await waitForCondition(() => evaluate(`document.body.innerText.includes("Local fixture: PIN checked safely.")`), 10000, "Native PIN-only fixture response");
+    const nativeRequests = await evaluate(`window.__nativePinRequests`);
+    assert.deepEqual(nativeRequests, [{ action: "pin_login", challengeId: "", code: "", installationId: "11111111-1111-4111-8111-111111111111", pin: "246802" }]);
+    await evaluate(`(() => [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Forgot PIN").click())()`);
+    await waitForCondition(() => evaluate(`document.body.innerText.includes("Contact Prestige Admin for help with your PIN.")`), 10000, "Native PIN recovery contact message");
+    assert.equal((await evaluate(`window.__nativePinRequests.length`)), 1, "Forgot PIN must not send email, reset credentials or create another request");
+    assert.deepEqual(principalRequests, [], "Native fixture must not reach a live Customer API");
+
+    // The ordinary web/email entry remains the existing separate presentation.
+    signInUrl.searchParams.delete("installation");
+    await navigateWithLoadEvent(client, signInUrl.toString());
+    await waitForCondition(
       () => evaluate(`document.querySelector('[data-customer-sign-in-email-step="true"]') !== null`),
       10000,
       "Customer email-only sign-in step",

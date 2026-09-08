@@ -13,6 +13,12 @@ assert.match(
   "The Customer sign-in AutoFill guard must stay in the preactivation suite.",
 );
 assert.match(signInSource, /const \[emailConfirmed, setEmailConfirmed\] = useState\(false\)/);
+assert.match(signInSource, /const nativePinLogin = useSyncExternalStore\(/);
+assert.match(signInSource, /if \(nativePinLogin\) \{\s*setMessage\("Contact Prestige Admin for help with your PIN\."\);\s*return;/);
+assert.match(signInSource, /!emailConfirmed && !nativePinLogin/);
+assert.match(signInSource, /\.\.\.\(!nativePinLogin \? \{ email \} : \{\}\)/);
+assert.match(signInSource, /response\.status === 428 && mode === "login" && !nativePinLogin/);
+assert.match(signInSource, /nativePinLogin === null/);
 assert.match(signInSource, /data-customer-sign-in-email-step="true"/);
 assert.match(signInSource, /autoComplete="email"/);
 assert.match(signInSource, /autoCapitalize="none"/);

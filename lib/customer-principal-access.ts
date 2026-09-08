@@ -75,7 +75,7 @@ export type CustomerPrincipalMembership = {
 
 export type CustomerPrincipalAccessContext = CustomerPrincipalSession & {
   memberships: CustomerPrincipalMembership[];
-  normalized_email: string;
+  normalized_email: string | null;
   principal_role: PrincipalRole;
   renewed_cookie?: string;
 };
@@ -99,7 +99,6 @@ type InviteMembershipInput = {
 };
 
 type InviteInput = {
-  email: unknown;
   memberships: unknown;
   principalRole: unknown;
 };
@@ -271,7 +270,6 @@ function bookerRootMembership(value: unknown): CustomerPrincipalMembership | nul
 
 function parseInviteInput(input: unknown) {
   const body = asRecord(input) as InviteInput;
-  const email = normalizedEmail(body.email);
   const principalRole = body.principalRole === "pa" || body.principalRole === "boss"
     ? body.principalRole
     : null;
@@ -280,22 +278,21 @@ function parseInviteInput(input: unknown) {
         .map((value) => inviteMembership(value, principalRole))
         .filter((value): value is CustomerPrincipalMembership => Boolean(value))
     : [];
-  if (!email || !principalRole || memberships.length === 0 || memberships.length !== asArray(body.memberships).length) {
+  if (!principalRole || memberships.length === 0 || memberships.length !== asArray(body.memberships).length) {
     return null;
   }
   if (principalRole === "boss" && memberships.length !== 1) return null;
-  return { email, memberships, principalRole };
+  return { memberships, principalRole };
 }
 
 function parseBookerRootInviteInput(input: unknown) {
   const body = asRecord(input) as InviteInput;
-  const email = normalizedEmail(body.email);
   const rawMemberships = asArray(body.memberships);
   const membership = rawMemberships.length === 1
     ? bookerRootMembership(rawMemberships[0])
     : null;
-  return email && body.principalRole === "pa" && membership
-    ? { email, memberships: [membership], principalRole: "pa" as const }
+  return body.principalRole === "pa" && membership
+    ? { memberships: [membership], principalRole: "pa" as const }
     : null;
 }
 
@@ -357,7 +354,7 @@ export async function issueCustomerPrincipalInvitation(
   expires_at: string | null;
   invitation_url_path: string | null;
   principal_id: string;
-}>> {
+}> | { ok: false; status: 409; error: string; bossReview: { key: string; name: string; selectedTravelerId: number } }> {
   if (!adminMayIssue(actor)) {
     return principalFailure("Only Owner Admin may manage Customer app access.", 403);
   }
@@ -443,6 +440,24 @@ export async function issueCustomerPrincipalInvitation(
     }
     verifiedMemberships.push({ ...membership, verified_boss_name: verifiedBossName });
   }
+  if (parsed.principalRole === "boss") {
+    const selected = verifiedMemberships[0];
+    const { data: siblings, error } = await client.from("travelers")
+      .select("id, traveler_name")
+      .eq("company_id", selected.company_id).eq("booker_id", selected.booker_id);
+    if (error) return principalFailure("Saved Boss review could not be checked.", 503);
+    const sameNameIds = asArray(siblings).filter((entry) =>
+      text(asRecord(entry).traveler_name, 160)?.toLowerCase() === selected.verified_boss_name.toLowerCase()
+    ).map((entry) => positiveId(asRecord(entry).id)).filter((id): id is number => id !== null).sort((a, b) => a - b);
+    if (sameNameIds.length > 1) {
+      // Name equality only requests review; access still uses the exact selected ID.
+      const key = hashSecret(JSON.stringify([selected.company_id, selected.booker_id, selected.traveler_id, selected.verified_boss_name, sameNameIds]));
+      if (asRecord(input).bossReviewKey !== key) return {
+        ok: false, status: 409, error: "More than one saved Boss has this name. Review the selected Boss.",
+        bossReview: { key, name: selected.verified_boss_name, selectedTravelerId: selected.traveler_id! },
+      };
+    }
+  }
   if (parsed.principalRole === "pa") {
     const roots = new Map<string, CustomerPrincipalMembership>();
     for (const membership of verifiedMemberships) {
@@ -490,17 +505,52 @@ export async function issueCustomerPrincipalInvitation(
     verifiedMemberships.splice(0, verifiedMemberships.length, ...allVerifiedBosses);
     }
   }
-  const { data: existingRows, error: existingError } = await client
+  // One saved CRM identity per invited person. Names and email never identify access.
+  const root = verifiedMemberships[0];
+  const identityKey = `${parsed.principalRole}:${root.company_id}:${root.booker_id}:${parsed.principalRole === "boss" ? root.traveler_id : "root"}`;
+  const { data: keyedRows, error: keyedError } = await client
     .from(principalAccessTable)
-    .select("id, principal_role, principal_status")
-    .eq("normalized_email", parsed.email)
-    .limit(1);
-  if (existingError) return principalFailure("Customer access invitation failed safely.", 500);
-
-  const existingPrincipal = asRecord(asArray(existingRows)[0]);
+    .select("id, principal_role, principal_status, invitation_identity_key")
+    .eq("invitation_identity_key", identityKey).limit(2);
+  if (keyedError || asArray(keyedRows).length > 1) return principalFailure("Customer access invitation failed safely.", 500);
+  let existingPrincipal = asRecord(asArray(keyedRows)[0]);
+  if (!existingPrincipal.id) {
+    // Reuse earlier access by its saved membership/invitation, without an email lookup
+    // or a migration that rewrites existing credentials. Ambiguous identities stop here.
+    let membershipQuery = client.from(membershipTable).select("principal_id")
+      .eq("company_id", root.company_id).eq("booker_id", root.booker_id)
+      .eq("customer_account_reference", root.customer_account_reference)
+      .eq("membership_role", parsed.principalRole === "pa" ? "managing_pa" : "boss");
+    if (parsed.principalRole === "boss") membershipQuery = membershipQuery.eq("traveler_id", root.traveler_id);
+    const scope = {
+      company_id: root.company_id, booker_id: root.booker_id,
+      customer_account_reference: root.customer_account_reference,
+      membership_role: parsed.principalRole === "pa" ? "managing_pa" : "boss",
+      ...(parsed.principalRole === "boss" ? { traveler_id: root.traveler_id } : {}),
+    };
+    const [memberships, invitations] = await Promise.all([
+      membershipQuery,
+      client.from(invitationTable).select("principal_id").contains("membership_scope", JSON.stringify([scope])),
+    ]);
+    if (memberships.error || invitations.error) return principalFailure("Customer access invitation failed safely.", 500);
+    const ids = [...new Set([...asArray(memberships.data), ...asArray(invitations.data)]
+      .map((row) => uuid(asRecord(row).principal_id)).filter((id): id is string => Boolean(id)))];
+    if (ids.length) {
+      const { data: legacyRows, error: legacyError } = await client.from(principalAccessTable)
+        .select("id, principal_role, principal_status, invitation_identity_key")
+        .in("id", ids).eq("principal_role", parsed.principalRole).limit(2);
+      if (legacyError || asArray(legacyRows).length > 1) {
+        return principalFailure("More than one saved access identity matches. Review existing access before inviting.", 409);
+      }
+      existingPrincipal = asRecord(asArray(legacyRows)[0]);
+      if (existingPrincipal.invitation_identity_key && existingPrincipal.invitation_identity_key !== identityKey) {
+        return principalFailure("Saved access belongs to another CRM identity.", 409);
+      }
+    }
+  }
   let principalId = uuid(existingPrincipal.id);
   if (principalId && existingPrincipal.principal_role !== parsed.principalRole) {
-    return principalFailure("That email is already bound to another Customer role.", 409);
+    return principalFailure("That saved identity is already bound to another Customer role.", 409);
   }
   if (principalId && existingPrincipal.principal_status === "invited") {
     const { data: pendingInvitations, error: pendingError } = await client
@@ -518,7 +568,7 @@ export async function issueCustomerPrincipalInvitation(
     if (pendingError || asArray(pendingInvitations).some((entry) =>
       asArray(asRecord(entry).membership_scope).map(scopeKey).sort().join("|") !== requestedScope
     )) {
-      return principalFailure("That email already has an invitation for another Customer scope.", 409);
+      return principalFailure("That saved identity already has an invitation for another Customer scope.", 409);
     }
   }
   if (
@@ -568,20 +618,34 @@ export async function issueCustomerPrincipalInvitation(
       data: {
         access_status: "access_updated",
         expires_at: null,
-        invitation_url_path: null,
+        invitation_url_path: "/my-bookings",
         principal_id: principalId,
       },
       ok: true,
     };
   }
   if (principalId && existingPrincipal.principal_status === "active") {
-    return principalFailure("That Boss account is already active. Revoke it before issuing replacement access.", 409);
+    const { data: memberships, error } = await client.from(membershipTable)
+      .select("company_id, booker_id, traveler_id, customer_account_reference")
+      .eq("principal_id", principalId).eq("membership_role", "boss")
+      .eq("membership_status", "active");
+    const saved = asRecord(asArray(memberships)[0]);
+    if (error || asArray(memberships).length !== 1 ||
+      positiveId(saved.company_id) !== root.company_id ||
+      positiveId(saved.booker_id) !== root.booker_id ||
+      positiveId(saved.traveler_id) !== root.traveler_id ||
+      safeAccountReference(saved.customer_account_reference) !== root.customer_account_reference) {
+      return principalFailure("Saved Boss access does not match this traveller.", 409);
+    }
+    return { ok: true, data: { access_status: "access_updated", expires_at: null,
+      invitation_url_path: "/my-bookings", principal_id: principalId } };
   }
   if (!principalId) {
     const { data, error } = await client
       .from(principalAccessTable)
       .insert({
-        normalized_email: parsed.email,
+        normalized_email: null,
+        invitation_identity_key: identityKey,
         principal_role: parsed.principalRole,
         principal_status: "invited",
       })
@@ -1098,13 +1162,15 @@ export async function assertActiveCustomerPrincipalSession(
     return principalFailure("Customer app access is required.", 403);
   }
   const { data: principalRows } = await client.from(principalAccessTable)
-    .select("id, normalized_email, principal_role, principal_status")
+    .select("id, normalized_email, principal_role, principal_status, invitation_identity_key, invitation_verified_at")
     .eq("id", session.principal_id).limit(1);
   const principal = asRecord(asArray(principalRows)[0]);
   if (principal.principal_status !== "active") return principalFailure("Customer app access is required.", 403);
   const role = principal.principal_role === "pa" || principal.principal_role === "boss" ? principal.principal_role : null;
   const email = normalizedEmail(principal.normalized_email);
-  if (!role || !email) return principalFailure("Customer app access is required.", 403);
+  if (!role || (!email && (!principal.invitation_verified_at || !principal.invitation_identity_key))) {
+    return principalFailure("Customer app access is required.", 403);
+  }
   const { data: membershipRows } = await client.from(membershipTable)
     .select("company_id, booker_id, traveler_id, customer_account_reference, membership_role, membership_status, verified_boss_name")
     .eq("principal_id", session.principal_id).eq("membership_status", "active");
@@ -1124,6 +1190,9 @@ export async function assertActiveCustomerPrincipalSession(
     })
     .filter((value): value is CustomerPrincipalMembership => Boolean(value));
   if (memberships.length === 0) return principalFailure("Customer app access is required.", 403);
+  if (!email && memberships.some((membership) =>
+    principal.invitation_identity_key !== `${role}:${membership.company_id}:${membership.booker_id}:${role === "boss" ? membership.traveler_id : "root"}`
+  )) return principalFailure("Customer app access is required.", 403);
   let effectiveMemberships = memberships;
   const bookerRoot = role === "pa"
     ? memberships.find((membership) => membership.traveler_id === null)

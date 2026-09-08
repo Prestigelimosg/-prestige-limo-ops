@@ -64,11 +64,10 @@ export async function POST(request: Request) {
       !booker.ok ||
       !booker.data ||
       booker.data.customer_id !== Number(body.customerAccountReference) ||
-      !booker.data.booker_name ||
-      !booker.data.email
+      !booker.data.booker_name
     ) {
       return safeErrorResponse({
-        error: "Customer app link requires one exact verified Booker account with a saved email.",
+        error: "Customer app link requires one exact verified Booker account.",
         status: 409,
       });
     }
@@ -80,8 +79,8 @@ export async function POST(request: Request) {
     }
     if (body.accessRecipient === "boss") {
       const result = await issueCustomerPrincipalInvitation({
-        email: body.bossEmail,
         principalRole: "boss",
+        bossReviewKey: body.bossReviewKey,
         memberships: [{
           companyId: booker.data.company_id,
           bookerId: booker.data.id,
@@ -90,7 +89,9 @@ export async function POST(request: Request) {
           verifiedBossName: "Verified by server",
         }],
       }, boundary.actor);
-      if (!result.ok) return safeErrorResponse(result);
+      if (!result.ok) return Response.json({ ok: false, error: result.error,
+        ...("bossReview" in result ? { bossReview: result.bossReview } : {}),
+      }, { status: result.status });
       return Response.json({
         accessStatus: result.data.access_status,
         accessAction: "Copy + App Link",
@@ -121,7 +122,6 @@ export async function POST(request: Request) {
 
     const result = await issueCustomerPrincipalInvitation(
       {
-        email: booker.data.email,
         memberships: [{
           bookerId: booker.data.id,
           companyId: booker.data.company_id,

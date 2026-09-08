@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -114,6 +116,49 @@ async function main() {
     assert.equal(await evaluate(`document.querySelectorAll('input[type="password"]').length`), 2);
     assert.equal(await evaluate(`/Verify invited email|One-time email code/.test(document.body.innerText)`), false);
     assert.deepEqual(principalRequests, [], "Opening an invitation sends no OTP and performs no activation");
+    // Run the exact Admin Copy handler in visible Chrome with saved-record fixtures.
+    // Its fetch is intercepted locally: no real invitation or account is created.
+    const adminSource = readFileSync("app/page.tsx", "utf8");
+    const copySource = adminSource.slice(adminSource.indexOf("  async function createCustomerDriverDetailsPortalLink()"), adminSource.indexOf("  async function createCustomerBookingInvitationLink()"));
+    const fixtureScript = ts.transpileModule(`(() => {
+      const customerDriverDetailsPortalBookingReference = "LOCAL-ONLY";
+      const customerDriverDetailsPortalAccountReference = "101";
+      const customerDriverDetailsPortalCompanyId = 11, customerDriverDetailsPortalBookerId = 21;
+      const customerDriverDetailsPortalTravelerId = 31, customerDriverDetailsPortalLinkCopyReady = true;
+      const customerDriverDetailsPortalSafeDisplayLabel = "Local fixture";
+      const adminCustomerPortalAccessLinksApiPath = "/api/admin-customer-portal-access-links", adminLegacyDataPurpose = "local-test";
+      globalThis.__copyRequests = [];
+      const fetch = async (_url, options) => {
+        const body = JSON.parse(options.body);
+        globalThis.__copyRequests.push(body);
+        if (globalThis.__reviewDuplicate && !body.bossReviewKey) return { ok: false, json: async () => ({ ok: false, bossReview: { key: "local-review", name: "Same Boss", selectedTravelerId: 31 } }) };
+        return { ok: true, json: async () => ({ ok: true, accessStatus: "invitation_created", url: "https://example.test/local-only" }) };
+      };
+      ${copySource}
+      globalThis.__copyAccess = createCustomerDriverDetailsPortalLink;
+    })()`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    await evaluate(fixtureScript);
+    const dialogs = [];
+    let recipient = "PA";
+    client.on("Page.javascriptDialogOpening", (dialog) => {
+      dialogs.push(dialog.message);
+      void client.send("Page.handleJavaScriptDialog", { accept: true, promptText: recipient });
+    });
+    await evaluate("globalThis.__copyAccess()");
+    recipient = "BOSS";
+    await evaluate("globalThis.__copyAccess()");
+    assert.deepEqual(dialogs, ["Invite PA or Boss? Enter PA or BOSS.", "Invite PA or Boss? Enter PA or BOSS."]);
+    const copied = await evaluate("globalThis.__copyRequests");
+    assert.equal(copied.length, 2);
+    assert.equal(copied[1].bossTravelerId, 31);
+    assert.equal(copied.some((entry) => Object.keys(entry).some((key) => /email/i.test(key))), false);
+    reporter.step("PA and Boss each require one choice only; no email prompt or payload");
+    await evaluate("globalThis.__reviewDuplicate = true; globalThis.__copyAccess()");
+    assert.equal(dialogs.length, 4);
+    assert.match(dialogs.at(-1), /More than one Boss is named Same Boss in this Company \+ Booker/);
+    assert.equal((await evaluate("globalThis.__copyRequests.at(-1)")).bossReviewKey, "local-review");
+    reporter.step("Duplicate name requests Admin review and continues only the selected Boss");
+
     await evaluate(`document.querySelector('button[type="submit"]').click()`);
     await waitForCondition(() => evaluate(`document.body.innerText.includes("Enter the same 6-digit PIN twice.")`), 10000, "PIN validation");
     assert.deepEqual(principalRequests, [], "Invalid PIN sends no request");

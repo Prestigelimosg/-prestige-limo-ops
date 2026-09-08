@@ -4,6 +4,12 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# Owner-locked Company + Booker account identity (2026-09-08)
+
+One exact Company + one exact Booker is one Customer account/profile. The same Company with a different Booker is a separate account/profile, even when Boss/traveller names are identical or similar. Never merge, reuse or grant cross-Booker access based on names, emails, contacts or similarity. Boss identities remain exact saved traveller IDs within their own Company+Booker.
+
+Copy + App Link uses the exact saved PA/Boss identity and requires no Boss email entry or email verification. Non-invitation email verification remains in its existing lane. Duplicate-name Admin review applies only when multiple saved Boss records share the same normalized name inside the same Company+Booker; another Booker or Company must never trigger that review or affect selection. Names are a review cue only. Preserve the focused invited-PIN access guard, Company+Booker account/profile contract, separate PA/Boss scopes and nullable-traveller invoice preparation.
+
 # Mandatory startup and no-duplicate workflow
 
 Before proposing, testing, or editing a feature:

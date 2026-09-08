@@ -221,7 +221,7 @@ assertIncludes(adminRoute, "findAdminBooker", "admin portal access route exact s
 assertIncludes(adminRoute, "id: body.bookerId", "admin portal access route exact Booker id lookup");
 assertIncludes(adminRoute, "company_id: body.companyId", "admin portal access route exact Company id lookup");
 assertIncludes(adminRoute, "booker.data.customer_id !== Number(body.customerAccountReference)", "admin portal access route validates exact Customer account binding before the access-account write");
-assertIncludes(adminRoute, "email: booker.data.email", "admin portal access route server-verified Booker email");
+assertExcludes(adminRoute, "booker.data.email", "saved Booker identity must not require email");
 assertIncludes(adminRoute, "principalRole: \"pa\"", "admin portal access route Booker principal role");
 assertIncludes(adminRoute, "revokeAdminCustomerPortalAccessAccount", "admin portal access route revoke action");
 assertIncludes(adminRoute, "issueCustomerPrincipalInvitation", "admin portal access route one-use invitation creation");
@@ -395,7 +395,7 @@ try {
       booker_name: "Verified Booker",
       company_id: 53,
       customer_id: 194,
-      email: "booker@example.test",
+      email: null,
       id: 26,
       phone: null,
     },
@@ -421,7 +421,6 @@ try {
   assert.deepEqual(state.calls, ["booker", "account", "invitation"]);
   assert.deepEqual(state.bookerInput, { company_id: 53, id: 26 });
   assert.deepEqual(state.invitationInput, {
-    email: "booker@example.test",
     memberships: [{
       bookerId: 26,
       companyId: 53,

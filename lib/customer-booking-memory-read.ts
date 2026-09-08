@@ -811,6 +811,7 @@ export async function loadCustomerBookingMemory(
   }
 
   let accountRow: UnknownRecord;
+  let principalScope: { companyId: number; bookerId: number; travelerId: number | null } | null = null;
 
   if (context.mode === "principal-device-session") {
     const principalId = safeUuid(context.principal_id);
@@ -855,6 +856,16 @@ export async function loadCustomerBookingMemory(
     }
 
     const [accountRoot] = accountRoots.values();
+    const role = principalAccess.data.principal_role;
+    const memberships = principalAccess.data.memberships;
+    const bossTravelerId = role === "boss" && memberships.length === 1
+      ? positiveInteger(memberships[0].traveler_id)
+      : null;
+    if ((role !== "pa" && role !== "boss") || (role === "boss" && !bossTravelerId)) {
+      return customerBookingMemoryAuthRequiredResult();
+    }
+    principalScope = { companyId: accountRoot.companyId, bookerId: accountRoot.bookerId, travelerId: bossTravelerId };
+
     const activeAccount = await assertActiveCustomerPortalAccessAccount(
       accountRoot.customerAccountReference,
       clientResult.data,
@@ -921,10 +932,13 @@ export async function loadCustomerBookingMemory(
     };
   }
 
-  const { data: bookingRows, error: bookingError } = await clientResult.data
-    .from("bookings")
-    .select(customerBookingMemorySelect)
-    .eq("customer_id", customerAccountReference)
+  let bookingQuery = clientResult.data.from("bookings")
+    .select(customerBookingMemorySelect).eq("customer_id", customerAccountReference);
+  if (principalScope) {
+    bookingQuery = bookingQuery.eq("company_id", principalScope.companyId).eq("booker_id", principalScope.bookerId);
+    if (principalScope.travelerId) bookingQuery = bookingQuery.eq("traveler_id", principalScope.travelerId);
+  }
+  const { data: bookingRows, error: bookingError } = await bookingQuery
     .order("updated_at", { ascending: false })
     .limit(parsed.data.limit * 5);
 
@@ -936,6 +950,9 @@ export async function loadCustomerBookingMemory(
   let travelers: CustomerBookingMemoryTraveler[] = [];
 
   if (companyId && bookerId) {
+    let travelerQuery = clientResult.data.from("travelers")
+      .select(customerTravelerSelect).eq("company_id", companyId).eq("booker_id", bookerId);
+    if (principalScope?.travelerId) travelerQuery = travelerQuery.eq("id", principalScope.travelerId);
     const [bookerResult, travelerResult] = await Promise.all([
       clientResult.data
         .from("bookers")
@@ -943,11 +960,7 @@ export async function loadCustomerBookingMemory(
         .eq("id", bookerId)
         .eq("company_id", companyId)
         .limit(1),
-      clientResult.data
-        .from("travelers")
-        .select(customerTravelerSelect)
-        .eq("company_id", companyId)
-        .eq("booker_id", bookerId)
+      travelerQuery
         .order("traveler_name", { ascending: true })
         .limit(50),
     ]);

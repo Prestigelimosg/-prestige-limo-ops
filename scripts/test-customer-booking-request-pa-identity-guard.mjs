@@ -92,3 +92,47 @@ for (const forbidden of ["company_id", "booker_id", "traveler_id", "customer_id"
 }
 
 console.log("Customer booking request PA identity guard passed.");
+
+// Execute the existing resolver, including the PA root handoff omitted by source guards.
+const ts = (await import("typescript")).default;
+const ast = ts.createSourceFile("identity.ts", readHelper, ts.ScriptTarget.Latest, true);
+const resolverText = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "resolveCustomerSavedBookingsVerifiedIdentity").getText(ast).replace(/^export /, "");
+const rootMembership = { company_id: 11, booker_id: 21, customer_account_reference: "101", traveler_id: null, membership_role: "managing_pa" };
+let principal = { ok: true, data: { principal_role: "pa", normalized_email: "pa@example.test", memberships: [rootMembership] } };
+let failRead = false;
+const travelerRows = [
+  { id: 31, company_id: 11, booker_id: 21, traveler_name: "Boss A" },
+  { id: 32, company_id: 11, booker_id: 21, traveler_name: "Boss B" },
+  { id: 33, company_id: 11, booker_id: 22, traveler_name: "Boss A" },
+  { id: 34, company_id: 12, booker_id: 21, traveler_name: "Boss A" },
+];
+const client = { from(table) {
+  assert.equal(table, "travelers");
+  let rows = travelerRows;
+  const query = { select() { return query; }, eq(k,v) { rows = rows.filter((row) => row[k] === v); return query; }, limit(n) { rows = rows.slice(0,n); return query; }, then(resolve,reject) { return Promise.resolve({ data: rows, error: failRead ? { message: "fixture failure" } : null }).then(resolve,reject); } };
+  return query;
+} };
+const resolver = new Function("getServerOnlyCustomerSavedBookingsSupabaseClient", "assertActiveCustomerPrincipalSession", "customerSavedBookingsAuthRequiredResult", "verifiedIdentityId", "asRecord", "asArray", "safeTextFromDb", ts.transpileModule(resolverText + "\nreturn resolveCustomerSavedBookingsVerifiedIdentity;", {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText)(
+  () => ({ok:true,data:client}), async () => principal, () => ({ok:false,status:403}),
+  (value) => Number.isSafeInteger(Number(value)) && Number(value)>0 ? Number(value) : null,
+  (value) => value || {}, (value) => Array.isArray(value) ? value : [], (value) => typeof value === "string" ? value.trim() || null : null,
+);
+const ctx = { mode: "principal-device-session", principal_session_token: "fixture" };
+for (const id of [31,32]) {
+  const result = await resolver(ctx, id);
+  assert.equal(result.ok, true);
+  assert.equal(result.data.traveler_id, id, "PA's explicitly selected Boss must reach booking persistence");
+  assert.equal(result.data.booker_id, 21);
+  assert.equal(result.data.customer_account_reference, "101");
+  assert.equal(result.data.traveler_name, id === 31 ? "Boss A" : "Boss B");
+}
+assert.equal((await resolver(ctx, "")).data.traveler_id, null, "Free-typed passenger stays optional, without creating or guessing a traveller");
+for (const invalid of [33,34,999,"wrong",0,-1]) assert.equal((await resolver(ctx, invalid)).ok, false, "Invalid or another account's traveller must fail closed");
+failRead = true;
+assert.equal((await resolver(ctx, 31)).ok, false);
+failRead = false;
+principal.data = { ...principal.data, principal_role:"boss", memberships:[{...rootMembership,traveler_id:31,membership_role:"boss",verified_boss_name:"Boss A"}] };
+assert.equal((await resolver(ctx)).data.traveler_id, 31, "Boss keeps own identity without another selection");
+assert.equal((await resolver(ctx, 32)).ok, false);
+assert.equal((await resolver(ctx, "wrong")).ok, false);
+console.log("PA selected Boss, optional passenger, cross-account and Boss self-only resolver execution passed.");

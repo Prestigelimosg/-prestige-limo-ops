@@ -903,6 +903,44 @@ try {
   assert.deepEqual(principalBody.travelers.map((traveler) => traveler.id), [901]);
   assert.equal(principalMock.client.operations.length, 0);
 
+  // Exact same-account PA/Boss privacy is enforced before suggestions leave the server.
+  const scopedSeed = structuredClone(trustedProfileSeed);
+  scopedSeed.travelers = [
+    { ...profileSeed.travelers[0], id: 901, traveler_name: "Boss A" },
+    { ...profileSeed.travelers[0], id: 902, traveler_name: "Boss B" },
+    { ...profileSeed.travelers[0], id: 903, booker_id: 88, traveler_name: "Other Booker" },
+  ];
+  scopedSeed.bookings = [901,902,903].map((id) => ({
+    ...trustedProfileSeed.bookings[0], customer_id: customerAccountReference,
+    company_id: 7, booker_id: id === 903 ? 88 : 55, traveler_id: id,
+    passenger_name: id === 901 ? "Boss A" : id === 902 ? "Boss B" : "Other Booker",
+    pickup_location: `Private address ${id}`,
+  }));
+  for (const role of ["pa", "boss"]) {
+    const scoped = installMockClient(scopedSeed, {
+      portalBoundary: principalMock.portalBoundary,
+      principalAccessResult: { ok:true, data:{
+        principal_id:principalId, principal_role:role, normalized_email:`${role}@example.com`,
+        memberships:[{company_id:7,booker_id:55,customer_account_reference:customerAccountReference,
+          traveler_id:role === "pa" ? null : 901, membership_role:role === "pa" ? "managing_pa" : "boss", verified_boss_name:"Boss A"}],
+      }},
+    });
+    const response = await harness.route.GET(new Request("http://localhost/api/customer-booking-memory?limit=10", {
+      headers:{cookie:`${sessionCookieName}=${principalSessionToken}`,referer:"http://localhost/book","x-prestige-customer-purpose":"customer-booking-memory-read"},
+    }));
+    const body = await json(response);
+    assert.equal(response.status,200);
+    assert.deepEqual(body.travelers.map((row)=>row.id), role === "pa" ? [901,902] : [901]);
+    assert.deepEqual(body.memories.map((row)=>row.passenger_name).sort(), role === "pa" ? ["Boss A","Boss B"] : ["Boss A"]);
+    assert.equal(scoped.client.operations.length,0);
+    assertSafeApiBody(body,`${role} exact booking-form profile`);
+    if (process.env.PRESTIGE_BOOKING_SCOPE_FIXTURE_DIR) {
+      await mkdir(process.env.PRESTIGE_BOOKING_SCOPE_FIXTURE_DIR, { recursive: true });
+      await writeFile(path.join(process.env.PRESTIGE_BOOKING_SCOPE_FIXTURE_DIR, `${role}.json`), JSON.stringify(body));
+    }
+  }
+
+
   setEnv({
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
     SUPABASE_URL: supabaseUrlSentinel,

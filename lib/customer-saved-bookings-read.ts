@@ -1166,23 +1166,43 @@ export async function resolveCustomerSavedBookingsVerifiedIdentity(
       : customerSavedBookingsAuthRequiredResult<never>();
     if (!principalAccess.ok) return customerSavedBookingsAuthRequiredResult();
 
+    const requestedTravelerId = verifiedIdentityId(travelerIdInput);
+    if (travelerIdInput !== undefined && travelerIdInput !== null && travelerIdInput !== "" && !requestedTravelerId) {
+      return customerSavedBookingsAuthRequiredResult();
+    }
     const bookerRoot = principalAccess.data.memberships.find(
       (entry) => entry.traveler_id === null,
     );
     if (bookerRoot) {
+      let travelerName: string | null = null;
+      if (requestedTravelerId) {
+        const { data: travelerRows, error: travelerError } = await clientResult.data
+          .from("travelers")
+          .select("id, company_id, booker_id, traveler_name")
+          .eq("id", requestedTravelerId)
+          .eq("company_id", bookerRoot.company_id)
+          .eq("booker_id", bookerRoot.booker_id)
+          .limit(1);
+        const traveler = asRecord(asArray(travelerRows)[0]);
+        travelerName = safeTextFromDb(traveler.traveler_name, 160);
+        if (travelerError || verifiedIdentityId(traveler.id) !== requestedTravelerId ||
+          verifiedIdentityId(traveler.company_id) !== bookerRoot.company_id ||
+          verifiedIdentityId(traveler.booker_id) !== bookerRoot.booker_id || !travelerName) {
+          return customerSavedBookingsAuthRequiredResult();
+        }
+      }
       return {
         data: {
           booker_email: principalAccess.data.normalized_email,
           booker_id: bookerRoot.booker_id,
           company_id: bookerRoot.company_id,
           customer_account_reference: bookerRoot.customer_account_reference,
-          traveler_id: null,
-          traveler_name: null,
+          traveler_id: requestedTravelerId,
+          traveler_name: travelerName,
         },
         ok: true,
       };
     }
-    const requestedTravelerId = verifiedIdentityId(travelerIdInput);
     const selectedTravelerId = requestedTravelerId ||
       (principalAccess.data.memberships.length === 1
         ? principalAccess.data.memberships[0].traveler_id

@@ -218,8 +218,8 @@ assertIncludes(
   customerDriverNotificationPersistenceSource,
   [
     'sendAdminDevicePushAlert("customer_driver_details_acknowledged")',
-    'sendAdminDevicePushAlert("customer_to_driver_reply")',
-    'sendAdminDevicePushAlert("driver_to_customer_reply")',
+    'sendAdminDevicePushAlert("customer_to_driver_reply", { safeMessage: created.data.safe_message })',
+    'sendAdminDevicePushAlert("driver_to_customer_reply", { safeMessage: created.data.safe_message })',
   ],
   "existing customer and driver quick-reply success paths",
 );
@@ -572,6 +572,54 @@ try {
       ["payout", "paynow", "billing", "payment", "invoice", "price", "internal note"],
       `${eventType} admin push payload`,
     );
+  }
+
+  for (const eventType of ["customer_to_driver_reply", "driver_to_customer_reply"]) {
+    let webPayload, nativePayload;
+    const result = await helper.sendAdminDevicePushAlert(eventType, {
+      env: configuredEnv,
+      safeMessage: "I am waiting at the lobby.",
+      loadedSubscriptionLoader: async () => [
+        { channel: "web", endpoint: "https://push.example.test/message", webSubscription: {
+          endpoint: "https://push.example.test/message", keys: {auth: "fake-auth", p256dh: "fake-key"},
+        } },
+        { channel: "native_ios", endpoint: "ExponentPushToken[message-preview]", webSubscription: null },
+      ],
+      nativePushSender: async (_token, payload) => { nativePayload = payload; },
+      pushSender: async (_subscription, payload) => { webPayload = payload; },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(webPayload.body, "I am waiting at the lobby.");
+    assert.equal(nativePayload.body, "I am waiting at the lobby.");
+    assert.equal(webPayload.url, "/");
+  }
+
+  for (const [eventType, safeMessage, allowed] of [
+    ["driver_to_customer_reply", "a".repeat(500), true],
+    ["customer_to_driver_reply", "a".repeat(501), false],
+    ["driver_to_customer_reply", "   ", false],
+    ["driver_otw", "Please meet at door 2.", false],
+    ...["customer price", "driver payout", "PayNow", "internal_admin_notes", "admin_finance",
+      "parser debug", "mock_qa", "invoice payment", "secret token", "password", "api_key"]
+      .map((text) => ["customer_to_driver_reply", text, false]),
+  ]) {
+    let webPayload, nativePayload;
+    const result = await helper.sendAdminDevicePushAlert(eventType, {
+      env: configuredEnv, safeMessage,
+      loadedSubscriptionLoader: async () => [
+        {channel: "web", endpoint: "https://push.example.test/message", webSubscription: {
+          endpoint: "https://push.example.test/message", keys: {auth: "fake-auth", p256dh: "fake-key"},
+        }},
+        {channel: "native_ios", endpoint: "ExponentPushToken[message-preview]", webSubscription: null},
+      ],
+      nativePushSender: async (_token, payload) => {nativePayload = payload;},
+      pushSender: async (_subscription, payload) => {webPayload = payload;},
+    });
+    assert.equal(result.ok, true);
+    const expected = allowed ? safeMessage : approvedOperationalEvents[eventType][1];
+    assert.equal(webPayload.body, expected);
+    assert.equal(nativePayload.body, expected);
+    assert.deepEqual(nativePayload.data, {open_target: "/", type: eventType});
   }
 
   for (const [shortNoticeStatus, expectedEventType] of [

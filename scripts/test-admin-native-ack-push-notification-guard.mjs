@@ -157,8 +157,8 @@ includes(
 );
 assert.match(
   source.helper,
-  /safeNativePayload\(\s*nativeEventType,\s*options\.vehiclePlate,\s*options\.bookingReference,?\s*\)/,
-  "Admin native payload must receive the exact event, vehicle plate and public booking reference",
+  /safeNativePayload\(\s*nativeEventType,\s*options\.vehiclePlate,\s*options\.bookingReference,\s*payload\.body,?\s*\)/,
+  "Admin native payload must retain the exact event, vehicle plate and public booking reference plus the validated message body",
 );
 includes(
   "ledger",

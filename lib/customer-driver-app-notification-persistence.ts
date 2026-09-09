@@ -3689,7 +3689,7 @@ export async function sendCustomerQuickReplyToDriver(
     if (isDriverDetailsAcknowledgement) {
       await sendAdminDevicePushAlert("customer_driver_details_acknowledged");
     } else {
-      await sendAdminDevicePushAlert("customer_to_driver_reply");
+      await sendAdminDevicePushAlert("customer_to_driver_reply", { safeMessage: created.data.safe_message });
     }
   } catch {
     // A saved customer action must not fail because Admin device push is unavailable.
@@ -3792,7 +3792,7 @@ export async function sendDriverQuickReplyToCustomer(
 
   try {
     const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
-    await sendAdminDevicePushAlert("driver_to_customer_reply");
+    await sendAdminDevicePushAlert("driver_to_customer_reply", { safeMessage: created.data.safe_message });
   } catch {
     // A saved driver reply must not fail because Admin device push is unavailable.
   }

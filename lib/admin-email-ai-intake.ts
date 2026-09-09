@@ -44,6 +44,72 @@ const intakeReadPageSize = 500;
 const intakeReadMaximumPages = 100;
 const tokenUsagePageSize = 1_000;
 const tokenUsageMaximumPages = 100;
+const correctionMemoryVersion = "source-validated-corrections-v1";
+const correctionMemoryTemplate = "prestige-transport-form-v1";
+const correctionLessonInstructions = {
+  explicit_route_label: "Recheck the explicit Route name before choosing service: Airport Departure means DEP, Airport Arrival means MNG, Transfer means TRF, and Disposal, Hourly or Standby means DSP. Generic Airport transfer or One Way must not override that label.",
+  booked_pax_not_vehicle_capacity: "Recheck booked pax against CLIENT DETAILS Passangers/Passengers. VEHICLE Passengers count is capacity, not the number booked; never substitute it for booked pax.",
+  location_roles: "Recheck location roles: PICK UP LOCATION is primary pickup; ROUTE LOCATIONS and numbered waypoints are intermediate stops; DROP OFF LOCATION is the destination. For an arrival, a ground destination or waypoint must never become the airport pickup. Leave an unspecified airport pickup empty for review.",
+} as const;
+type CorrectionLessonCode = keyof typeof correctionLessonInstructions;
+
+function safeCorrectionLessonCodes(value: unknown): CorrectionLessonCode[] {
+  if (!Array.isArray(value)) return [];
+  return (Object.keys(correctionLessonInstructions) as CorrectionLessonCode[])
+    .filter((code) => value.includes(code));
+}
+
+function isCorrectionMemoryTemplate(input: { senderAddress: string; subject: string }) {
+  return input.senderAddress === "info@prestigelimo.sg" &&
+    prestigeTransportBookingSubjectPattern.test(cleanText(input.subject, 240));
+}
+
+function relevantCorrectionLessonCodes(input: { body: string; senderAddress: string; subject: string }, value: unknown) {
+  if (!isCorrectionMemoryTemplate(input)) return [];
+  const source = explicitSourceBookingFacts(input.body);
+  if (source.ambiguous) return [];
+  const facts = source.facts;
+  return safeCorrectionLessonCodes(value).filter((code) => {
+    if (code === "explicit_route_label") return Boolean(facts.bookingType);
+    if (code === "booked_pax_not_vehicle_capacity") return Boolean(facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity);
+    return Boolean((facts.pickup && facts.extraStopLocation) || (facts.bookingType === "MNG" && (facts.dropoff || facts.extraStopLocation)));
+  });
+}
+
+async function loadCorrectionLessonCodes(
+  client: SupabaseClient,
+  input: { body: string; senderAddress: string; subject: string },
+): Promise<CorrectionLessonCode[]> {
+  const relevantCodes = relevantCorrectionLessonCodes(input, Object.keys(correctionLessonInstructions));
+  if (!relevantCodes.length) return [];
+  try {
+    // Only versioned lesson metadata is read: never historical email bodies or booking facts.
+    // One existence check per permitted lesson prevents frequent errors crowding out rarer ones.
+    // Closing a review card does not revoke a proven generic lesson or reopen its booking.
+    const signal = AbortSignal.timeout(1_500);
+    const matches = await Promise.all(relevantCodes.map(async (code) => {
+      const result = await client.from(intakeTable)
+        .select("correction_memory:booking_parse_result->correction_memory")
+        .eq("mailbox_address", adminEmailAiMailboxAddress)
+        .eq("sender_address", input.senderAddress)
+        .contains("booking_parse_result", { correction_memory: {
+          version: correctionMemoryVersion, template: correctionMemoryTemplate, lesson_codes: [code],
+        } })
+        .limit(1)
+        .abortSignal(signal);
+      if (result.error || !Array.isArray(result.data)) throw new Error("correction_memory_read_failed");
+      const memory = result.data[0]?.correction_memory;
+      return memory && typeof memory === "object" && !Array.isArray(memory) &&
+        memory.version === correctionMemoryVersion && memory.template === correctionMemoryTemplate &&
+        safeCorrectionLessonCodes(memory.lesson_codes).includes(code) ? code : null;
+    }));
+    return safeCorrectionLessonCodes(matches);
+  } catch {
+    // Optional reminders must never prevent the already-durable receipt from being analysed.
+    console.warn("Email AI correction memory unavailable; using fixed instructions.");
+    return [];
+  }
+}
 
 const emailAnalysisInstructions = `You are the private email intake reviewer for Prestige Limo Ops admin.
 
@@ -212,6 +278,7 @@ type AdminEmailAiProviderResult =
       model: string;
       ok: true;
       outputTokens: number;
+      appliedCorrectionLessonCodes?: CorrectionLessonCode[];
     }
   | {
       error: string;
@@ -222,6 +289,8 @@ type AdminEmailAiProviderResult =
       inputTokens?: number;
       outputTokens?: number;
       model?: string;
+      correctionLessonCodes?: CorrectionLessonCode[];
+      appliedCorrectionLessonCodes?: CorrectionLessonCode[];
     };
 
 function cleanText(value: unknown, maximumLength: number) {
@@ -1279,7 +1348,15 @@ function validateExplicitSourceFactsCompleteness(
   ] as const;
   const mismatchFields = mismatches.filter(([, mismatch]) => mismatch).map(([field]) => field);
   if (mismatchFields.length > 0) {
+    const correctionLessonCodes: CorrectionLessonCode[] = [];
+    // These are interpretation reminders, never replacement values or identity decisions.
+    if (!sourceEvidence.ambiguous && hasOneStructuredBooking) {
+      if (mismatchFields.includes("service")) correctionLessonCodes.push("explicit_route_label");
+      if (mismatchFields.includes("passenger count / capacity")) correctionLessonCodes.push("booked_pax_not_vehicle_capacity");
+      if (mismatchFields.includes("arrival pickup") || mismatchFields.includes("pickup / extraStopLocation")) correctionLessonCodes.push("location_roles");
+    }
     return {
+      correctionLessonCodes,
       error: `${explicitSourceFactsValidationReviewReason} Check: ${mismatchFields.join(", ")}.`,
       ok: false as const,
     };
@@ -1674,16 +1751,21 @@ async function analyseAllowedEmail(input: {
   body: string;
   senderAddress: AdminEmailAiAllowedSenderAddress;
   subject: string;
+  correctionLessonCodes?: CorrectionLessonCode[];
 }): Promise<AdminEmailAiProviderResult> {
   const model = cleanModel(process.env[adminEmailAiModelEnvName]);
-  let evidence = { failureStage: "provider", model, inputTokens: 0, outputTokens: 0, responseId: "" };
+  const lessonCodes = relevantCorrectionLessonCodes(input, input.correctionLessonCodes);
+  let evidence = { failureStage: "provider", model, inputTokens: 0, outputTokens: 0, responseId: "", appliedCorrectionLessonCodes: lessonCodes };
+  const correctionInstructions = lessonCodes.length
+    ? `\n\nApp-validated correction reminders (${correctionMemoryTemplate}):\nThese generic checks come from earlier source-validation failures. Use only the current email for facts; they do not approve a booking or identify a CRM account.\n${lessonCodes.map(code => `- ${correctionLessonInstructions[code]}`).join("\n")}`
+    : "";
 
   try {
     const response = await new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     }).responses.create({
       input: `Subject:\n${input.subject || "(no subject)"}\n\nEmail body:\n${input.body}`,
-      instructions: emailAnalysisInstructions,
+      instructions: emailAnalysisInstructions + correctionInstructions,
       max_output_tokens: 2_000,
       model,
       parallel_tool_calls: false,
@@ -1706,6 +1788,7 @@ async function analyseAllowedEmail(input: {
       inputTokens: cleanPositiveInteger(response.usage?.input_tokens),
       outputTokens: cleanPositiveInteger(response.usage?.output_tokens),
       responseId: cleanText(response.id, 120),
+      appliedCorrectionLessonCodes: lessonCodes,
     };
     const outputText = cleanMultilineText(response.output_text, 60_000);
     const parsed = outputText ? JSON.parse(outputText) : null;
@@ -1719,6 +1802,7 @@ async function analyseAllowedEmail(input: {
     }
 
     evidence.failureStage = "normalization";
+    const originalAnalysis = sanitizeAdminEmailAiAnalysis(parsed);
     const analysis = enforceAllowedSenderCompanyAccount(
       input.senderAddress,
       enforceResolvedStructuredReviewReasons(
@@ -1727,7 +1811,7 @@ async function analyseAllowedEmail(input: {
             input,
             enforcePrestigeTransportIdentityConsistency(
               input,
-              sanitizeAdminEmailAiAnalysis(parsed),
+              originalAnalysis,
             ),
           ),
         ),
@@ -1746,8 +1830,15 @@ async function analyseAllowedEmail(input: {
     );
 
     if (!sourceFactsValidation.ok) {
+      // A downstream normalizer defect must not teach the model that its correct output was wrong.
+      const originalValidation = validateExplicitSourceFactsCompleteness(input, originalAnalysis);
+      const correctionLessonCodes = isCorrectionMemoryTemplate(input) &&
+        originalAnalysis.classification === "confirmed_booking" && analysis.classification === "confirmed_booking" && !originalValidation.ok
+        ? sourceFactsValidation.correctionLessonCodes.filter(code => originalValidation.correctionLessonCodes.includes(code))
+        : [];
       return {
         ...evidence,
+        correctionLessonCodes,
         error: sourceFactsValidation.error,
         ok: false,
         reviewReason: sourceFactsValidation.error,
@@ -1763,6 +1854,7 @@ async function analyseAllowedEmail(input: {
       model: cleanModel(response.model || model),
       ok: true,
       outputTokens: cleanPositiveInteger(response.usage?.output_tokens),
+      appliedCorrectionLessonCodes: lessonCodes,
     };
   } catch {
     return {
@@ -1895,6 +1987,14 @@ async function updateProcessedIntake(
     subject: string;
   },
 ) {
+  const appliedCodes = safeCorrectionLessonCodes(providerResult.appliedCorrectionLessonCodes);
+  const appliedMemory = appliedCodes.length ? {
+    correction_memory_applied: {
+      version: correctionMemoryVersion,
+      template: correctionMemoryTemplate,
+      lesson_codes: appliedCodes,
+    },
+  } : {};
   if (!providerResult.ok) {
     const failedResult = await client
       .from(intakeTable)
@@ -1902,11 +2002,19 @@ async function updateProcessedIntake(
         processing_status: "failed",
         booking_parse_result: {
           bookings: [], multipleBookingsDetected: false, rawWarnings: [],
+          ...appliedMemory,
           failure_evidence: {
             stage: providerResult.failureStage || "provider",
             response_id: providerResult.responseId || null,
             reason: providerResult.reviewReason || providerResult.error,
           },
+          ...(providerResult.failureStage === "source_validation" && isCorrectionMemoryTemplate(source) && safeCorrectionLessonCodes(providerResult.correctionLessonCodes).length
+            ? { correction_memory: {
+                version: correctionMemoryVersion,
+                template: correctionMemoryTemplate,
+                lesson_codes: safeCorrectionLessonCodes(providerResult.correctionLessonCodes),
+              } }
+            : {}),
         },
         canonical_booking_text: "",
         model: providerResult.model || null,
@@ -1932,7 +2040,7 @@ async function updateProcessedIntake(
   const result = await client
     .from(intakeTable)
     .update({
-      booking_parse_result: analysis.bookingResult,
+      booking_parse_result: { ...analysis.bookingResult, ...appliedMemory },
       canonical_booking_text: adminEmailAiCanonicalBookingText(analysis),
       classification: analysis.classification,
       confidence: analysis.confidence,
@@ -2223,10 +2331,15 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
         continue;
       }
 
-      const providerResult = await analyseAllowedEmail({
+      const analysisInput = {
         body,
         senderAddress,
         subject: cleanText(parsedMail.subject, 240),
+      };
+      const correctionLessonCodes = await loadCorrectionLessonCodes(database, analysisInput);
+      const providerResult = await analyseAllowedEmail({
+        ...analysisInput,
+        correctionLessonCodes,
       });
       const completed = await updateProcessedIntake(
         database,

@@ -9093,6 +9093,7 @@ async function runChromeTest() {
                 companyId: selector.dataset.companyId || "",
                 customerId: selector.dataset.customerId || "",
                 customerStatusCount: document.querySelectorAll('[data-admin-email-ai-customer-status="true"]').length,
+                legacyBillingPromptCount: document.querySelectorAll('[data-save-crm-billing-identity-review="true"]').length,
                 nonGetMethods: (window.__prestigeEmailAiCustomerRecommendationRequests || [])
                   .map((request) => request.method)
                   .filter((method) => method !== "GET"),
@@ -9111,6 +9112,7 @@ async function runChromeTest() {
       0,
       "Expected suggestion-only matching to avoid a contradictory customer banner",
     );
+    assert.equal(emailAiAgencyIdentityState.legacyBillingPromptCount, 0, "An exact Email AI Company + Booker suggestion must not also ask to create a passenger account");
     assert.deepEqual(
       {
         bookerId: emailAiAgencyIdentityState.bookerId,

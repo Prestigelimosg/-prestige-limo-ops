@@ -122,6 +122,9 @@ async function main() {
   let holdNextCustomerNotificationCentreRead = false;
   const customerNotificationCentreDismissRequests = [];
   const savedBookingReadQueries = [];
+  const trackingReadReferences = [];
+  let trackingMarkerVisible = true;
+  let trackingAccuracy = 18;
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -294,15 +297,17 @@ async function main() {
           version: "customer-view-details-browser-fixture",
         };
       } else if (requestUrl.pathname === "/api/customer-live-location-map" && method === "GET") {
+        trackingReadReferences.push(requestUrl.searchParams.get("booking_reference"));
         responseBody = {
-          active_driver_marker: {
-            accuracy_meters: 18,
+          active_driver_marker: trackingMarkerVisible ? {
+            accuracy_meters: trackingAccuracy,
             latitude: 1.3521,
             longitude: 103.8198,
             updated_at: "2026-08-24T12:00:00.000Z",
-          },
+          } : null,
           customerVisible: true,
-          marker_count: 1,
+          marker_count: trackingMarkerVisible ? 1 : 0,
+          reason: trackingMarkerVisible ? null : "customer_live_location_map_no_active_position",
           ok: true,
         };
       } else if (requestUrl.pathname === "/api/customer-invoices" && method === "GET") {
@@ -623,6 +628,44 @@ async function main() {
       tabIndex: -1,
     });
     assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
+
+    reporter.step("checking map polling survives five-second booking refreshes");
+    const readsBeforePolling = trackingReadReferences.length;
+    const bookingsBeforePolling = savedBookingReadQueries.length;
+    trackingAccuracy = 9;
+    await waitForCondition(
+      () => evaluate(`(() => {
+        const panel = document.querySelector('[data-customer-portal-driver-tracking-panel]');
+        return Boolean(panel?.innerText.includes("Accuracy 9m"));
+      })()`),
+      12000,
+      "automatic live marker update despite intervening booking renders",
+    );
+    assert.equal(trackingReadReferences.length, readsBeforePolling + 1,
+      "One existing eight-second timer must produce one tracking read");
+    assert.ok(savedBookingReadQueries.length > bookingsBeforePolling,
+      "The faster saved-bookings refresh must run during the tracking interval");
+    assert.equal(trackingReadReferences.at(-1), "VIEW-001");
+
+    trackingMarkerVisible = false;
+    await waitForCondition(
+      () => evaluate(`(() => {
+        const panel = document.querySelector('[data-customer-portal-driver-tracking-panel]');
+        return Boolean(panel?.innerText.includes("Waiting") &&
+          !panel.querySelector('[data-customer-portal-driver-tracking-map]'));
+      })()`),
+      12000,
+      "Stop Sharing removes the Customer pin without reopening tracking",
+    );
+    assert.equal(trackingReadReferences.length, readsBeforePolling + 2);
+    assert.ok(savedBookingReadQueries.length >= bookingsBeforePolling + 2);
+    await evaluate(`document.querySelector(
+      '[data-customer-portal-driver-tracking-toggle="saved-VIEW-001"]')?.click()`);
+    const readsAfterClose = trackingReadReferences.length;
+    await new Promise((resolve) => setTimeout(resolve, 8500));
+    assert.equal(trackingReadReferences.length, readsAfterClose,
+      "Closing tracking must cancel its timer while booking refresh continues");
+    trackingMarkerVisible = true;
 
     const visibleHoldMs = Math.min(
       Math.max(Number(process.env.PRESTIGE_BROWSER_VISIBLE_HOLD_MS || 0), 0),

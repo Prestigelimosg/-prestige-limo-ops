@@ -1331,7 +1331,7 @@ export default function CustomerPortalPage() {
   }, [expandedBookingId, tripUpdatesByBookingId]);
 
   const refreshCustomerTrackingForBooking = useCallback(
-    async (booking: CustomerPortalBooking, options: { silent?: boolean } = {}) => {
+    async (booking: Pick<CustomerPortalBooking, "id">, options: { silent?: boolean } = {}) => {
       const bookingReference = bookingReferenceFromPortalId(booking.id);
 
       if (!bookingReference) {
@@ -1526,25 +1526,24 @@ export default function CustomerPortalPage() {
     };
   }, [expandedBookingId, loadTripUpdatesForBooking]);
 
+  // Booking-list refreshes must not restart the selected booking's tracking timer.
+  const visibleTrackingBookingId = visibleBookings.some(
+    (booking) => booking.id === activeTrackingBookingId,
+  ) ? activeTrackingBookingId : "";
+
   useEffect(() => {
-    if (!activeTrackingBookingId) {
-      return;
-    }
-
-    const trackingBooking = visibleBookings.find((booking) => booking.id === activeTrackingBookingId);
-
-    if (!trackingBooking) {
+    if (!visibleTrackingBookingId) {
       return;
     }
 
     const intervalId = window.setInterval(() => {
-      void refreshCustomerTrackingForBooking(trackingBooking, { silent: true });
+      void refreshCustomerTrackingForBooking({ id: visibleTrackingBookingId }, { silent: true });
     }, 8000);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeTrackingBookingId, refreshCustomerTrackingForBooking, visibleBookings]);
+  }, [refreshCustomerTrackingForBooking, visibleTrackingBookingId]);
 
   function handleTrackDriver(booking: CustomerPortalBooking) {
     const nextTrackingBookingId = activeTrackingBookingId === booking.id ? "" : booking.id;

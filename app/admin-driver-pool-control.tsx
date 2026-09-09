@@ -11,6 +11,7 @@ export type DriverPoolAdminOffer = {
   provider_attempted_driver_count?: number;
   push_target_count: number;
   recipient_count: number;
+  safe_vehicle_label?: string | null;
   updated_at: string;
 };
 
@@ -58,6 +59,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
   const [serverEligible, setServerEligible] = useState(false);
   const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
   const [payout, setPayout] = useState(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
+  const [vehicleRequirement, setVehicleRequirement] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [attentionEnabled, setAttentionEnabled] = useState(false);
@@ -154,11 +156,12 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
   if (!showExactControl && !attentionEnabled && !attentionFeedback) return null;
 
   async function publish() {
+    if (!vehicleRequirement) { setFeedback("Choose the Pool vehicle type."); return; }
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
         body: JSON.stringify({ booking_reference: bookingReference, expected_updated_at: expectedUpdatedAt,
-          idempotency_key: crypto.randomUUID(), offer_payout_sgd: Number(payout) }), headers, method: "POST",
+          idempotency_key: crypto.randomUUID(), offer_payout_sgd: Number(payout), vehicle_requirement: vehicleRequirement }), headers, method: "POST",
       });
       const result = await response.json() as { error?: string; offer?: DriverPoolAdminOffer; ok?: boolean };
       if (!response.ok || result.ok !== true || !result.offer) throw new Error(result.error || "Offer was not sent.");
@@ -230,17 +233,27 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
         <div className="flex flex-wrap items-end gap-2" data-driver-pool-control={offer?.offer_status || "ready"}>
           {offer?.offer_status === "open" ? (
             <>
-              <span className="text-xs font-semibold text-sky-950">Pool open · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
+              <span className="text-xs font-semibold text-sky-950">Pool open · {offer.safe_vehicle_label || "Vehicle TBC"} · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
               <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy} onClick={() => void cancel()} type="button">{busy ? "Cancelling…" : "Cancel Offer"}</button>
             </>
           ) : offer?.offer_status === "assigned" ? (
             <span className="text-xs font-semibold text-emerald-800">Accepted · Driver assigned. Create the Driver Job Link when ready.</span>
           ) : (
             <>
+              <label className="text-xs font-semibold text-slate-700">Pool vehicle
+                <select aria-label="Driver Pool vehicle type" className="ml-2 h-8 rounded-md border border-sky-300 bg-white px-2 text-sm" disabled={busy || disabled} onChange={(event) => setVehicleRequirement(event.target.value)} value={vehicleRequirement}>
+                  <option value="">Choose vehicle</option>
+                  <option value="E / AVF">E / AVF</option>
+                  <option value="AVF">AVF</option>
+                  <option value="S">S</option>
+                  <option value="VVV">VVV</option>
+                  <option value="COMBI">Combi</option>
+                </select>
+              </label>
               <label className="text-xs font-semibold text-slate-700">Pool offer total SGD
                 <input aria-label="Driver Pool offer payout in SGD" className="ml-2 h-8 w-28 rounded-md border border-sky-300 bg-white px-2 text-sm" min="0.01" onChange={(event) => setPayout(event.target.value)} step="0.01" type="number" value={payout} />
               </label>
-              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to Driver Pool"}</button>
+              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to Driver Pool"}</button>
               {showPleaseAssignDriver ? (
                 <span className="text-xs font-semibold text-emerald-800">Please assign driver.</span>
               ) : null}

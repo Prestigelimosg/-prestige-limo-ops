@@ -38,6 +38,7 @@ export type DriverPoolOfferState = {
   provider_attempted_driver_count: number;
   push_target_count: number;
   recipient_count: number;
+  safe_vehicle_label: string | null;
   updated_at: string;
 };
 
@@ -151,17 +152,20 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
   expected_updated_at: string;
   idempotency_key: string;
   offer_payout_sgd: number;
+  vehicle_requirement: string;
 }> {
   const record = asRecord(value);
   const reference = bookingReference(record.booking_reference);
   const expected = exactConcurrencyTimestamp(record.expected_updated_at);
   const payout = positiveMoney(record.offer_payout_sgd);
   const key = idempotencyKey(record.idempotency_key);
-  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key"]) ||
-      !reference || !expected || !payout || !key) {
+  const vehicle = record.vehicle_requirement;
+  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement"]) ||
+      !reference || !expected || !payout || !key ||
+      typeof vehicle !== "string" || !["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(vehicle)) {
     return { error: "Malformed Driver Pool offer rejected.", ok: false, status: 400 };
   }
-  return { data: { booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout }, ok: true };
+  return { data: { booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout, vehicle_requirement: vehicle }, ok: true };
 }
 
 export function parseDriverPoolCancelPayload(value: unknown): AdminBookingResult<{
@@ -236,6 +240,7 @@ function mapOffer(row: UnknownRecord): DriverPoolOfferState | null {
     provider_attempted_driver_count: 0,
     push_target_count: targets,
     recipient_count: recipients,
+    safe_vehicle_label: text(row.safe_vehicle_label, 40),
     updated_at: updatedAt,
   };
 }
@@ -307,6 +312,7 @@ export async function publishDriverPoolOffer(
       p_expected_updated_at: input.expected_updated_at,
       p_idempotency_key: input.idempotency_key,
       p_offer_payout_sgd: input.offer_payout_sgd,
+      p_vehicle_requirement: input.vehicle_requirement,
     }).abortSignal(controller.signal));
   } catch (caught) {
     error = caught;
@@ -348,7 +354,7 @@ export async function loadAdminDriverPoolOffer(client: DriverPoolClient, referen
   if (!exact) return { error: "Malformed booking reference.", ok: false, status: 400 } as const;
   const [{ data, error }, { data: bookingData, error: bookingError }] = await Promise.all([
     client.from("driver_job_bid_offers")
-      .select("offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,closes_at,updated_at")
+      .select("offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,closes_at,updated_at,safe_vehicle_label")
       .eq("booking_reference", exact).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("bookings")
       .select("driver_id,public_booking_reference,pickup_at,admin_internal_status,customer_facing_status")

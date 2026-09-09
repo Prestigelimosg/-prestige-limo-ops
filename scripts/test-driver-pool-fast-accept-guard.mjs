@@ -167,6 +167,7 @@ const exactPublishPayload = timeoutHarness.helper.parseDriverPoolPublishPayload(
   expected_updated_at: exactConcurrencyTimestamp,
   idempotency_key: "12345678-1234-1234-1234-123456789abc",
   offer_payout_sgd: 55,
+  vehicle_requirement: "AVF",
 });
 assert.equal(exactPublishPayload.ok, true, "microsecond booking timestamp must be accepted");
 assert.equal(
@@ -174,6 +175,34 @@ assert.equal(
   exactConcurrencyTimestamp,
   "publish must preserve the exact database concurrency token instead of truncating it to milliseconds",
 );
+// Only the Admin-posted, explicit vehicle requirement may reach the publisher.
+for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
+  const parsed = timeoutHarness.helper.parseDriverPoolPublishPayload({ ...exactPublishPayload.data, vehicle_requirement: vehicle });
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.vehicle_requirement, vehicle);
+}
+for (const vehicle of [undefined, null, "", "E/AVF", "avf", "Van", "Unknown", ["AVF"]]) {
+  assert.equal(timeoutHarness.helper.parseDriverPoolPublishPayload({ ...exactPublishPayload.data, vehicle_requirement: vehicle }).ok, false);
+}
+assert.equal(timeoutHarness.helper.parseDriverPoolDecisionPayload({
+  offer_key: "a".repeat(64), expected_updated_at: exactOfferTimestamp,
+  idempotency_key: "abcdefab-cdef-abcd-efab-cdefabcdefab", vehicle_requirement: "AVF",
+}).ok, false, "Driver must never supply or override the required vehicle");
+const vehicleMigration = await readFile("supabase/migrations/20260909171426_driver_pool_vehicle_requirement.sql", "utf8");
+assert.match(vehicleMigration, /vehicle_requirement_version/);
+assert.match(vehicleMigration, /public\.driver_pool_vehicle_matches\(p_vehicle_requirement, d\.vehicle_type\)/);
+assert.match(vehicleMigration, /public\.driver_pool_vehicle_matches\(o\.safe_vehicle_label, d\.vehicle_type\)/);
+assert.match(vehicleMigration, /public\.driver_pool_vehicle_matches\(v_offer\.safe_vehicle_label, v_driver\.vehicle_type\)/);
+assert.ok(vehicleMigration.indexOf("'vehicle_mismatch'") < vehicleMigration.indexOf("set bid_status = case"), "vehicle check must precede winner writes");
+assert.doesNotMatch(vehicleMigration, /security definer|create table|alter table/i);
+assert.match(files["app/admin-driver-pool-control.tsx"], /useState\(""\)/);
+assert.match(files["app/admin-driver-pool-control.tsx"], /vehicle_requirement: vehicleRequirement/);
+assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| !vehicleRequirement/);
+for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
+  assert.ok(files["app/admin-driver-pool-control.tsx"].includes(`<option value="${vehicle}">`));
+}
+assert.match(portalSource, /result\.reason === "vehicle_mismatch"[\s\S]*?This job requires a different vehicle type\./);
+
 const exactCancelPayload = timeoutHarness.helper.parseDriverPoolCancelPayload({
   offer_key: "a".repeat(64),
   expected_updated_at: exactOfferTimestamp,
@@ -350,6 +379,7 @@ try {
     booking_reference: "ADM-DRIVER-POOL-TIMEOUT",
     expected_updated_at: "2026-09-05T00:00:00.000Z",
     idempotency_key: exactIdempotencyKey,
+    vehicle_requirement: "AVF",
     offer_payout_sgd: 55,
   }, {
     actor_label: "bounded-admin",
@@ -385,6 +415,7 @@ try {
   const successResult = await timeoutHarness.helper.publishDriverPoolOffer({
     rpc(name, payload) {
       rpcCalls.push({ name, payload });
+      assert.equal(payload.p_vehicle_requirement, "E / AVF");
       return {
         abortSignal(signal) {
           rpcCalls.push({ operation: "successAbortSignal", signal });
@@ -412,6 +443,7 @@ try {
     booking_reference: "ADM-DRIVER-POOL-SUCCESS",
     expected_updated_at: "2026-09-05T00:00:00.000Z",
     idempotency_key: successIdempotencyKey,
+    vehicle_requirement: "E / AVF",
     offer_payout_sgd: 55,
   }, {
     actor_label: "bounded-admin",

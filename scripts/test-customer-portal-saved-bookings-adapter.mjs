@@ -190,7 +190,7 @@ try {
       publicBookingReference: "SAFE-00001",
       serviceType: "Arrival",
       status: "Confirmed",
-      vehicleType: "To confirm",
+      vehicleType: "Mercedes E-Class",
     },
   ]);
   assertNoVisibleLeak(mapped, "safe mapped booking");
@@ -238,6 +238,22 @@ try {
     "Customer vehicle labels should expand only the stored AVF and VVV codes for display.",
   );
   assertNoVisibleLeak(codedVehicleLabels, "coded Customer vehicle labels");
+  assert.deepEqual(
+    codedVehicleLabels?.map((booking) => booking.vehicleType),
+    ["Alphard", "Viano"],
+    "The main booking vehicle label must reuse the validated Driver Details vehicle label.",
+  );
+
+  for (const details of [null, {}, { car_type: "" }, { car_type: "internal_admin_note" },
+    { car_type: "AVF", internal_admin_note: "private" }]) {
+    const fallback = mapCustomerSavedBookingsPayload({
+      ok: true,
+      saved_bookings: [{ booking_reference: "SAFE-VEHICLE-FALLBACK", customer_driver_details: details }],
+    });
+    assert.equal(fallback?.[0].vehicleType, "To confirm",
+      "Missing or rejected vehicle details must retain the existing safe placeholder.");
+    assertNoVisibleLeak(fallback, "missing or rejected Customer vehicle");
+  }
 
   assert.deepEqual(
     mapCustomerSavedBookingsPayload({

@@ -1,5 +1,12 @@
 # Prestige Limo Ops — Current Implementation Ledger
 
+### Customer Saved Vehicle Label (2026-09-10; local repair, release pending)
+
+- Physical Customer app inspection reproduced a main Vehicle type label of To confirm while the same booking's Driver Details correctly showed Alphard. Read-only tracing found the existing saved-booking API already provides the saved vehicle through its safe customer_driver_details.car_type field. The Customer adapter validated and formatted that value for Driver Details but hardcoded its main vehicleType to To confirm.
+- The owner-approved repair reuses the existing validated driverDetails.carType for the main vehicle label. Missing, blank or rejected details retain To confirm. Existing AVF-to-Alphard and VVV-to-Viano display mappings remain the only code expansion; the API, selected booking identity, authorization, persistence and Driver Details remain unchanged.
+- The focused adapter regression failed first on the hardcoded placeholder and passed after the one-line repair. It covers a saved full vehicle name, AVF and VVV, plus missing, blank and unsafe details. The existing Customer Details browser guard passed against the local Production build with synthetic intercepted records, checking Alphard in both existing vehicle locations, To confirm when no safe vehicle is supplied, and its existing detail, notification-navigation and map-refresh scenarios. The saved-booking API contract, public Customer/Driver visibility guard, bounded lint, TypeScript and webpack Production build passed. The loopback test server was stopped after verification. Production phone verification remains pending release.
+- No native iOS/Android source or rebuild, booking/data write, message/push, map timer, Calendar, invoice, payment, payout, schema or provider change is included. Publication and Production release remain separate from the approved repair/testing.
+
 ### Actual-Message Lock-Screen Push Previews (2026-09-10; local verification, release pending)
 
 - Owner requested actual message text on recipient lock screens after physically receiving only a generic Driver job update for a successfully saved Admin message. Complete-path inspection found generic substitution in the Driver, Customer and Admin senders, the separate Admin native formatter, and the Driver browser service worker. Native wrappers display provider content without rewriting the body.

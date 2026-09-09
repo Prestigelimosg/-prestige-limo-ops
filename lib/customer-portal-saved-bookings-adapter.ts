@@ -358,7 +358,7 @@ function toCustomerPortalBooking(value: unknown): CustomerPortalBooking | null {
     publicBookingReference,
     serviceType: customerServiceType,
     status: safeStatus(record.customer_facing_status),
-    vehicleType: "To confirm",
+    vehicleType: driverDetails?.carType || "To confirm",
   };
 }
 

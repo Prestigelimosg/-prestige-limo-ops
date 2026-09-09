@@ -500,6 +500,7 @@ async function main() {
     assert.equal(expandedState.detailText.includes("Departure"), true);
     assert.equal(/\bDEP\b/.test(expandedState.detailText), false);
     assert.equal(expandedState.detailHasDriverDetails, false);
+    assert.match(expandedState.detailText, /Vehicle type\s+To confirm/);
     assert.equal(expandedState.detailHasTracking, true);
     assert.equal(expandedState.documentWidth, expandedState.viewportWidth);
     assert.equal(apiCalls.some((call) => !call.startsWith("GET ")), false);
@@ -560,6 +561,9 @@ async function main() {
           return card
             ? {
                 cardText: card.innerText.replace(/\\s+/g, " ").trim(),
+                vehicleText: Array.from(detail.querySelectorAll('dt'))
+                  .find((label) => label.textContent.trim() === 'Vehicle type')
+                  ?.nextElementSibling?.textContent.trim(),
                 documentWidth: document.documentElement.scrollWidth,
                 viewportWidth: document.documentElement.clientWidth,
               }
@@ -569,6 +573,7 @@ async function main() {
       "Customer vehicle display label",
     );
     assert.match(vehicleLabelState.cardText, /Car type Alphard/);
+    assert.equal(vehicleLabelState.vehicleText, "Alphard");
     assert.doesNotMatch(vehicleLabelState.cardText, /\\bAVF\\b/);
     assert.equal(vehicleLabelState.documentWidth, vehicleLabelState.viewportWidth);
 

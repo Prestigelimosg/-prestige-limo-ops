@@ -45,4 +45,5 @@ assert.ok(!alreadyLinked.reads.some(v=>v.includes('booker_name=')),'A linked ema
 const otherBooker=await run({emailBooker:{...linked,id:34,customer_id:175,email:'booker@example.test'},accounts:[{...account,customer_id:'175'}]});
 assert.equal(otherBooker.result.customerId,'175','Same Company with another linked Booker remains another account');
 assert.ok(source.includes('data-bookings-service={bookingId}'),'Expanded booking card must show saved service');
+assert.match(source, /saveCrmBillingIdentityReview && !\(activeAdminEmailAiIntakeId && adminEmailAiCustomerProfileSuggestion\?\.status === "matched"\)/, 'An exact Email AI account suggestion must not also show the legacy passenger-based new-customer prompt');
 console.log('Email AI existing Company + Booker recovery and booking service guard passed.');

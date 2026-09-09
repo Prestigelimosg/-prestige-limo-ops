@@ -382,10 +382,10 @@ assert.match(
 );
 assert.doesNotMatch(contractSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.doesNotMatch(bookingParserSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
-assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
+assert.match(runtimeSource, /\.in\("processing_status", \["queued", "failed"\]\)/);
 assert.match(
   runtimeSource,
-  /\.in\("classification", \[\s*\.\.\.adminEmailAiAppReviewClassifications,\s*"enquiry",\s*\]\)/,
+  /\.in\("classification", \[\s*\.\.\.adminEmailAiAppReviewClassifications,\s*"enquiry",\s*"uncertain",\s*\]\)/,
 );
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
 assert.match(runtimeSource, /currentSingaporeMonthWindow/);
@@ -555,3 +555,9 @@ assert.match(
 );
 
 console.log("Private semantic email AI intake guard passed.");
+
+assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"failed",classification:"uncertain",senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99990" has been received'}),true);
+assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"failed",classification:"uncertain",senderAddress:"untrusted@example.test",subject:'New booking "Prestige Transport 99990" has been received'}),false);
+assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"reviewed",classification:"confirmed_booking",senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99990" has been received'}),false);
+assert.match(pageSource,/data-email-ai-failed-source/);
+assert.match(pageSource,/clean\(record.processing_status\) !== "queued"/);

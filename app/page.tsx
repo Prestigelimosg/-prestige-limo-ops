@@ -12415,6 +12415,7 @@ async function loadAdminEmailAiIntakeRead() {
       ? (result.records as AdminEmailAiIntakeRecord[]).filter((record) =>
           adminEmailAiIntakeAppearsInApp({
             classification: record.classification,
+            processingStatus: record.processing_status,
             senderAddress: record.sender_address,
             subject: record.subject,
           }),
@@ -21098,7 +21099,7 @@ export default function Home() {
       text: `Parsed ${detectedFields} field${detectedFields === 1 ? "" : "s"}. Review before saving.`,
     });
 
-    if (getNeedsReviewWarnings(finalForm).length > 0) {
+    if (getNeedsReviewWarnings(finalForm).length > 0 && !activeAdminEmailAiIntakeId) {
       return true;
     }
 
@@ -21106,6 +21107,7 @@ export default function Home() {
       const recommendationIntakeId = activeAdminEmailAiIntakeId;
       const recommendationEmail = adminEmailAiRecommendationEmail(finalForm);
       const recommendationCompanyName = adminEmailAiRecommendationCompanyName(finalForm);
+      const recommendationBookerName = adminEmailAiRecommendationBookerName(finalForm);
       const recommendationRevision =
         adminEmailAiCustomerRecommendationRevisionRef.current + 1;
       adminEmailAiCustomerRecommendationRevisionRef.current = recommendationRevision;
@@ -21130,6 +21132,7 @@ export default function Home() {
         activeAdminEmailAiIntakeIdRef.current === recommendationIntakeId &&
         adminEmailAiRecommendationEmail(currentBooking) === recommendationEmail &&
         adminEmailAiRecommendationCompanyName(currentBooking) === recommendationCompanyName &&
+        adminEmailAiRecommendationBookerName(currentBooking) === recommendationBookerName &&
         !clean(currentBooking.customerId) &&
         !clean(currentBooking.companyId);
 
@@ -21876,7 +21879,7 @@ export default function Home() {
   ) {
     const classification = clean(record.classification).toLowerCase();
 
-    if (
+    if (clean(record.processing_status) !== "queued" ||
       !adminEmailAiIntakeAppearsInApp({
         classification,
         senderAddress: record.sender_address,
@@ -22039,7 +22042,7 @@ export default function Home() {
         }
       }
 
-      if (!matchedBooker && matchedCompanyId && recommendationBookerName) {
+      if ((!matchedBooker || !adminDispatchVerifiedIdentityId(matchedBooker.customer_id)) && matchedCompanyId && recommendationBookerName) {
         const bookerBody = await readBooker(new URLSearchParams({
           booker_name: recommendationBookerName,
           company_id: String(matchedCompanyId),
@@ -22187,7 +22190,7 @@ export default function Home() {
         status: recommendation.status,
         tone: "info",
         text:
-          "No exact Company + Booker Customer Account match was found. This does not prove a new customer. " +
+          `${recommendation.message} This does not prove a new customer. ` +
           "Choose the exact existing account or the explicit new-account path before Save + CRM. " +
           "Passenger stays on this booking only.",
       });
@@ -29406,6 +29409,7 @@ export default function Home() {
                         <p>
                           Ref: {operationalCard.public_booking_reference || bookingPublicReference(savedBooking)}
                         </p>
+                        <p data-bookings-service={bookingId}>Service: {operationalCard.service_display || "Not set"}</p>
                         {operationalCard.job_card_display ? (
                           <p>Flight: <AdminOperationalUppercaseValue field="flight">{operationalCard.job_card_display.replace(/^Flight\s*/i, "")}</AdminOperationalUppercaseValue></p>
                         ) : null}
@@ -51164,8 +51168,10 @@ export default function Home() {
                 {adminEmailAiIntakeRecords.map((record) => {
                   const intakeId = clean(record.id);
                   const classification = clean(record.classification).toLowerCase();
-                  const classificationLabel =
-                    classification === "confirmed_booking"
+                  const failedReview = clean(record.processing_status) === "failed";
+                  const classificationLabel = failedReview
+                    ? "AI review failed"
+                    : classification === "confirmed_booking"
                       ? "Confirmed booking"
                       : classification === "amendment"
                           ? "Amendment"
@@ -51196,7 +51202,7 @@ export default function Home() {
                             {clean(record.subject) || "No subject"}
                           </p>
                           <p className="truncate text-xs text-slate-500">
-                            From {clean(record.sender_address)} · {confidence}% confidence
+                            From {clean(record.sender_address)}{failedReview ? "" : ` · ${confidence}% confidence`}
                           </p>
                         </div>
                         <div className="min-w-0">
@@ -51208,15 +51214,24 @@ export default function Home() {
                           </p>
                         </div>
                         <div className="flex md:justify-end">
-                          <button
+                          {failedReview ? (
+                            <span className="text-xs font-semibold text-amber-800">Source review required</span>
+                          ) : <button
                             className="h-8 rounded-md border border-indigo-300 bg-indigo-800 px-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
                             onClick={() => openAdminEmailAiIntakeReview(record)}
                             type="button"
                           >
                             Review in Dispatch
-                          </button>
+                          </button>}
                         </div>
                       </div>
+                      {failedReview ? (
+                        <details className="mt-2 border-t border-amber-100 pt-2" data-email-ai-failed-source={intakeId}>
+                          <summary className="cursor-pointer font-medium text-amber-900">Review source email</summary>
+                          <p className="my-2 text-xs text-amber-900">AI could not validate this booking. Review the original email before preparing the booking in Dispatch. Nothing has been saved or sent.</p>
+                          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-800">{record.normalized_text || "Source email unavailable; check the booking mailbox."}</pre>
+                        </details>
+                      ) : null}
                     </article>
                   );
                 })}

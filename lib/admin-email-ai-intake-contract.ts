@@ -44,9 +44,19 @@ export function adminEmailAiClassificationAppearsInApp(value: unknown) {
 
 export function adminEmailAiIntakeAppearsInApp(input: {
   classification?: unknown;
+  processingStatus?: unknown;
   senderAddress?: unknown;
   subject?: unknown;
 }) {
+  if (input.processingStatus === "failed") {
+    return adminEmailAiSenderAddressIsAllowed(input.senderAddress) && (
+      /^New booking ["“]Prestige Transport \d+["”] has been received$/i.test(String(input.subject ?? "").trim()) ||
+      (normalizeAdminEmailAiAddress(input.senderAddress) === adminEmailAiGroundBookerSenderAddress &&
+        /\border from groundbooker transzend\s*\[inq#\d+\]\s*$/i.test(String(input.subject ?? "").trim()))
+    );
+  }
+  if (input.processingStatus && input.processingStatus !== "queued") return false;
+
   if (adminEmailAiClassificationAppearsInApp(input.classification)) {
     return true;
   }

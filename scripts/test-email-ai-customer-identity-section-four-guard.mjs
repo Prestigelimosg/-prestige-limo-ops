@@ -109,7 +109,7 @@ assert.doesNotMatch(
 );
 assert.match(
   recommendationBlock,
-  /if \(recommendationEmail\)[\s\S]+if \(!matchedCompanyId && recommendationCompanyName\)[\s\S]+if \(!matchedBooker && matchedCompanyId && recommendationBookerName\)/,
+  /if \(recommendationEmail\)[\s\S]+if \(!matchedCompanyId && recommendationCompanyName\)[\s\S]+if \(\(!matchedBooker \|\| !adminDispatchVerifiedIdentityId\(matchedBooker\.customer_id\)\) && matchedCompanyId && recommendationBookerName\)/,
   "An exact Booker email may identify the Booker first; otherwise exact Company plus exact Booker name is required",
 );
 assert.match(
@@ -147,7 +147,7 @@ for (const fragment of [
   'recommendation.status === "matched"',
   'recommendation.status === "unmatched"',
   'status: recommendation.status',
-  "No exact Company + Booker Customer Account match was found.",
+  "${recommendation.message}",
   "This does not prove a new customer.",
   "Passenger stays on this booking only.",
 ]) {

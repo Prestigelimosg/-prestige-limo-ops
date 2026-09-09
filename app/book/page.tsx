@@ -681,6 +681,18 @@ export default function CustomerBookingPage() {
       });
 
       if (!result.ok) {
+        if (result.reason === "public_request_pending" || result.reason === "public_request_in_progress" || result.reason === "booking_admission_unavailable") {
+          setFeedback({
+            tone: "error",
+            text: result.reason === "public_request_pending"
+              ? "You already have a booking request awaiting review. Please wait for Prestige Admin or contact us if you need to change it."
+              : result.reason === "public_request_in_progress"
+              ? "Your previous request is still being processed. Please wait a few minutes before trying again."
+              : "Booking requests are temporarily unavailable. Please try again later or contact Prestige Admin.",
+          });
+          return;
+        }
+
         if (
           result.reason === "invitation_required" ||
           result.reason === "invitation_invalid" ||

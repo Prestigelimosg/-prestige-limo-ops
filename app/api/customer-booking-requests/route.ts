@@ -16,7 +16,11 @@ import {
 import { prepareCodexJobCardForAdminReview } from "../../../lib/codex-job-card-auto-preparation";
 import { sendCustomerBookingReceiptEmail } from "../../../lib/customer-booking-receipt-email";
 import { verifyCustomerBookingInvitationToken } from "../../../lib/customer-booking-invitation";
-import { verifyCustomerBookingPhoneOtpProof } from "../../../lib/customer-booking-phone-otp";
+import {
+  reserveCustomerPublicBookingRequest,
+  verifyCustomerBookingPhoneOtpProof,
+  type VerifiedCustomerBookingPhoneOtpProof,
+} from "../../../lib/customer-booking-phone-otp";
 import {
   createCustomerPortalAccessLinkToken,
   safeCustomerPortalPublicBookingReference,
@@ -334,6 +338,7 @@ export async function POST(request: Request) {
 
     let invitationGroupReference: string | undefined;
     let phoneOtpGroupReference: string | undefined;
+    let publicPhoneProof: VerifiedCustomerBookingPhoneOtpProof | undefined;
 
     if (!verifiedIdentity?.ok) {
       const invitationToken = request.headers.get(customerBookingInvitationHeader)?.trim() || "";
@@ -400,6 +405,7 @@ export async function POST(request: Request) {
 
         phoneOtpGroupReference =
           phoneVerification.data.booking_reference;
+        publicPhoneProof = phoneVerification.data;
       }
     }
 
@@ -416,6 +422,29 @@ export async function POST(request: Request) {
         },
         { status: parsed.status },
       );
+    }
+
+    // Validate both legs first, then reserve before the existing CRM/booking writer.
+    // Only the verified public SMS branch can populate publicPhoneProof.
+    if (publicPhoneProof) {
+      const admission = await reserveCustomerPublicBookingRequest(
+        publicPhoneProof,
+        parsed.data.requests.map((payload) => payload.booking.booking_reference || ""),
+      );
+      if (!admission.ok) {
+        if (admission.reason === "phone_verification_invalid" || admission.reason === "phone_verification_used") {
+          return phoneVerificationFailureResponse(admission.reason, admission.reason === "phone_verification_used" ? 409 : 403);
+        }
+        return Response.json(
+          { ok: false, error: admission.reason === "public_request_pending"
+            ? "You already have a booking request awaiting review. Please wait for Prestige Admin or contact us if you need to change it."
+            : admission.reason === "public_request_in_progress"
+            ? "Your previous request is still being processed. Please wait a few minutes before trying again."
+            : "Booking requests are temporarily unavailable. Please try again later or contact Prestige Admin." },
+          { status: admission.reason === "booking_admission_unavailable" ? 503 : 429,
+            headers: { "Cache-Control": "no-store", [customerBookingResultHeader]: admission.reason } },
+        );
+      }
     }
 
     const savedRequests: AdminBookingPersistenceRecord[] = [];

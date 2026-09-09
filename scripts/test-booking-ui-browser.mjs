@@ -21627,7 +21627,24 @@ async function runChromeTest() {
       "Driver Pool cancellation in-place ready state",
     );
     assert.equal(cancelledDriverPoolUi.sendText, "Send to Driver Pool");
-    assert.equal(cancelledDriverPoolUi.sendDisabled, false);
+    assert.equal(cancelledDriverPoolUi.sendDisabled, true, "posting requires an explicit Pool vehicle choice");
+    const poolVehicleChoices = await evaluate(`(() => {
+      const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
+      return select ? { value: select.value, choices: [...select.options].map((option) => option.value) } : null;
+    })()`);
+    assert.deepEqual(poolVehicleChoices, { value: "", choices: ["", "E / AVF", "AVF", "S", "VVV", "COMBI"] });
+    for (const vehicle of ["E / AVF", "AVF", "VVV", "COMBI"]) {
+      await evaluate(`(() => {
+        const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
+        select.value = ${JSON.stringify(vehicle)};
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`);
+      await waitForCondition(async () => evaluate(`(() => {
+        const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
+        const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === "Send to Driver Pool");
+        return select?.value === ${JSON.stringify(vehicle)} && button && !button.disabled;
+      })()`), 3000, "explicit Pool vehicle choice enables the established send action");
+    }
     assert.equal(cancelledDriverPoolUi.oldReloadWordingVisible, false);
     assert.equal(
       cancelledDriverPoolUi.pleaseAssignDriverVisible,

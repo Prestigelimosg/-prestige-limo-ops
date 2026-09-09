@@ -420,6 +420,9 @@ export default function DriverPortalPage() {
         method: action === "accept" ? "POST" : "PATCH",
       });
       const result = await response.json() as { accepted?: boolean; ok?: boolean; reason?: string };
+      if (action === "accept" && result.reason === "vehicle_mismatch") {
+        throw new Error("This job requires a different vehicle type.");
+      }
       if (!response.ok || result.ok !== true) throw new Error(result.reason || "This offer is no longer available.");
       setAvailableJobs((current) => current.filter((item) => item.offer_key !== job.offer_key));
       if (result.accepted) {

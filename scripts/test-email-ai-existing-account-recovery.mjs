@@ -41,7 +41,29 @@ assert.equal((await run({nameBooker:{...linked,company_id:99}})).result.status,'
 assert.equal((await run({draft:{company:'Different Company'}})).result.status,'ambiguous');
 const alreadyLinked=await run({emailBooker:{...linked,email:'booker@example.test'}});
 assert.equal(alreadyLinked.result.status,'matched');
+assert.equal(alreadyLinked.result.bookerId,33,'The consolidated Booker remains the exact recommendation identity');
+assert.equal(alreadyLinked.result.customerId,'174','Consolidation must retain the existing Customer account');
 assert.ok(!alreadyLinked.reads.some(v=>v.includes('booker_name=')),'A linked email match must not be replaced by a same-name Booker');
+
+// Execute the established chooser builder with an explicit before/after data fixture.
+// Repairing a duplicate must preserve its saved passenger under the retained account.
+const chooserStart=source.indexOf('const adminDispatchCorporateAccountGroups = new Map<');
+const chooserEnd=source.indexOf('  for (const traveler of rateTravelers)',chooserStart);
+assert.ok(chooserStart>=0 && chooserEnd>chooserStart);
+const titleSource=(await readFile('lib/admin-customer-account-title.ts','utf8')).replace('export function','function');
+const chooserCode=ts.transpileModule(titleSource+'\n'+extracted.filter(text=>text.startsWith('function adminDispatchVerifiedIdentityId')).join('\n')+'\n'+source.slice(chooserStart,chooserEnd)+'\nglobalThis.options=Array.from(adminDispatchCorporateAccountGroups.values());',{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+function chooser(bookers,travelerBookerId) {
+  const context={clean:v=>String(v??'').trim(),rateCompanies:[company],rateBookers:bookers,rateTravelers:[{id:28,company_id:71,booker_id:travelerBookerId,traveler_name:'Saved Passenger'}]};
+  vm.createContext(context);vm.runInContext(chooserCode,context);
+  return context.options;
+}
+assert.equal(chooser([legacy,linked],15).length,2,'Reproduce the original duplicate data in the real chooser builder');
+const consolidatedOptions=chooser([{...linked,email:legacy.email}],33);
+assert.equal(consolidatedOptions.length,1);
+assert.equal(consolidatedOptions[0].customerId,'174');
+assert.equal(consolidatedOptions[0].bookerId,'33');
+assert.equal(consolidatedOptions[0].label,'Example Company (Jordan Lee)');
+assert.equal(consolidatedOptions[0].travelers[0].id,28,'Saved passenger stays available in the same account');
 const otherBooker=await run({emailBooker:{...linked,id:34,customer_id:175,email:'booker@example.test'},accounts:[{...account,customer_id:'175'}]});
 assert.equal(otherBooker.result.customerId,'175','Same Company with another linked Booker remains another account');
 assert.ok(source.includes('data-bookings-service={bookingId}'),'Expanded booking card must show saved service');

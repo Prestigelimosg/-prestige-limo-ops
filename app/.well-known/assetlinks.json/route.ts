@@ -9,6 +9,16 @@ const androidAppLinksAssociation = [
       ],
     },
   },
+  {
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "sg.prestigelimo.customer",
+      sha256_cert_fingerprints: [
+        "A5:CE:3F:8D:E4:9D:46:C3:2B:9C:2C:19:A7:86:9B:30:87:EE:A6:88:02:2E:01:4F:4D:94:98:A3:96:11:D7:3A",
+      ],
+    },
+  },
 ] as const;
 
 export const dynamic = "force-static";

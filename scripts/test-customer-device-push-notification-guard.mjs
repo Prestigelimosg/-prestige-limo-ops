@@ -319,7 +319,7 @@ await writeFile(
 await writeFile(
   tempHelperPath,
   transpileTypescript(
-    `${helperSource}\nexport { sendNativeExpoAlert as __testSendNativeExpoAlert, recordNativeDeliveryHealth as __testRecordNativeDeliveryHealth };\n`,
+    `${helperSource}\nexport { safePayload as __testSafePayload, sendNativeExpoAlert as __testSendNativeExpoAlert, recordNativeDeliveryHealth as __testRecordNativeDeliveryHealth };\n`,
     path.join(process.cwd(), helperPath),
   ),
 );
@@ -405,6 +405,46 @@ try {
         },
       };
     };
+    for (const [actor_role, workflow_area, safe_message, allowed] of [
+      ["driver", "customer_driver_quick_replies", "Please meet at door 2.", true],
+      ["admin", "admin_customer_job_messages", "a".repeat(500), true],
+      ["admin", "admin_customer_job_messages", "a".repeat(501), false],
+      ["admin", "admin_customer_job_messages", "   ", false],
+      ["customer", "customer_driver_quick_replies", "Please meet at door 2.", false],
+      ["driver", "admin_customer_job_messages", "Please meet at door 2.", false],
+      ["admin", "admin_driver_job_messages", "Private other audience.", false],
+      ["system", "other_update", "Private other workflow.", false],
+      ...["customer price", "driver payout", "PayNow", "internal_admin_notes", "admin_finance",
+        "parser debug", "mock_qa", "invoice payment", "secret token", "password", "api_key"]
+        .map((text) => ["driver", "customer_driver_quick_replies", text, false]),
+    ]) {
+      const notification = {actor_role, workflow_area, safe_message,
+        delivery_surface: "customer_app", booking_reference: "ADM-20260823123045"};
+      await helper.__testSendNativeExpoAlert("ExpoPushToken[customer_native_guard_1]", "10899", notification);
+      assert.equal(exactExpoBody.body, allowed ? safe_message :
+        "A booking update is ready. Open Prestige SG to review.");
+      const webPayload = helper.__testSafePayload(notification);
+      assert.equal(webPayload.body, allowed ? safe_message :
+        "A Prestige Limo booking update is ready. Open My Bookings to review.");
+      assert.equal(webPayload.url, "/my-bookings");
+      assert.deepEqual(exactExpoBody.data, {booking_reference: "10899"});
+    }
+    for (const [actor_role, workflow_area] of [
+      ["admin", "admin_customer_job_messages"],
+      ["dispatcher", "admin_customer_job_messages"],
+      ["driver", "customer_driver_quick_replies"],
+    ]) {
+      await helper.__testSendNativeExpoAlert(
+        "ExpoPushToken[customer_native_guard_1]", "10899", {
+          actor_role, workflow_area, delivery_surface: "customer_app",
+          booking_reference: "ADM-20260823123045",
+          safe_message: "I am waiting at the lobby.", safe_title: "Message",
+        }, null, 2,
+      );
+      assert.equal(exactExpoBody.body, "I am waiting at the lobby.");
+      assert.equal(exactExpoBody.badge, 2);
+      assert.deepEqual(exactExpoBody.data, { booking_reference: "10899" });
+    }
     await helper.__testSendNativeExpoAlert(
       "ExpoPushToken[customer_native_guard_1]",
       "10899",

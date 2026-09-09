@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { runInNewContext } from "node:vm";
 
 const helperPath = "lib/driver-device-push-notification.ts";
 const productionPath = "lib/driver-job-link-production.ts";
@@ -487,9 +488,33 @@ assertIncludes(
 );
 assertExcludes(
   serviceWorkerSource,
-  ["customer price", "billing", "invoice", "payment", "payout", "paynow", "passenger"],
-  "service worker privacy",
+  ["payload.customer_price", "payload.billing", "payload.invoice", "payload.payment", "payload.payout", "payload.paynow", "payload.passenger"],
+  "service worker must not read private payload fields",
 );
+
+const workerHandlers = new Map();
+let displayedWorkerNotification;
+runInNewContext(serviceWorkerSource, {self: {
+  addEventListener: (event, callback) => workerHandlers.set(event, callback),
+  registration: {showNotification: async (title, options) => {displayedWorkerNotification = {title, ...options};}},
+}});
+for (const [body, marker, allowed] of [
+  ["I am waiting at the lobby.", true, true],
+  ["a".repeat(500), true, true],
+  ["I am waiting at the lobby.", false, false],
+  ["a".repeat(501), true, false], ["   ", true, false],
+  ...["customer price", "billing", "invoice", "payment", "payout", "paynow", "internal_admin_notes",
+    "admin_finance", "parser debug", "secret token", "mock_qa"].map((text) => [text, true, false]),
+]) {
+  let completion;
+  workerHandlers.get("push")({
+    data: {json: () => ({body, message_preview: marker, job_key: "a".repeat(64)})},
+    waitUntil: (promise) => {completion = promise;},
+  });
+  await completion;
+  assert.equal(displayedWorkerNotification.body, allowed ? body : "New Driver Job app update. Tap to review.");
+  assert.equal(displayedWorkerNotification.data.jobKey, "a".repeat(64));
+}
 
 assertIncludes(
   migrationSource,
@@ -1272,6 +1297,8 @@ try {
       booking_reference: "PRIVATE-BOOKING-REFERENCE",
       delivery_surface: "driver_app",
       driver_job_link_id: "11111111-1111-4111-8111-111111111111",
+      actor_role: "admin",
+      safe_message: "I am waiting at the lobby.",
       workflow_area: "admin_driver_job_messages",
     },
     {
@@ -1300,7 +1327,7 @@ try {
     "to",
   ]);
   assert.equal(nativeProviderRequest.body.title, "Prestige Driver");
-  assert.equal(nativeProviderRequest.body.body, "Job update available");
+  assert.equal(nativeProviderRequest.body.body, "I am waiting at the lobby.");
   assert.equal(nativeProviderRequest.body.to, nativeExpoPushToken);
   assert.match(nativeProviderRequest.body.data.job_key, /^[0-9a-f]{64}$/);
   assert.equal(nativeProviderRequest.body.data.open_target, "messages");
@@ -1323,6 +1350,44 @@ try {
     ],
     "native push provider-visible payload privacy",
   );
+
+  for (const [actor_role, workflow_area, safe_message, allowed] of [
+    ["customer", "customer_driver_quick_replies", "Please meet at door 2.", true],
+    ["dispatcher", "admin_driver_job_messages", "a".repeat(500), true],
+    ["admin", "admin_driver_job_messages", "a".repeat(501), false],
+    ["admin", "admin_driver_job_messages", "   ", false],
+    ["driver", "customer_driver_quick_replies", "Private wrong direction.", false],
+    ["customer", "admin_driver_job_messages", "Private wrong role.", false],
+    ["admin", "admin_customer_job_messages", "Private other audience.", false],
+    ["system", "driver_job_update", "Private other workflow.", false],
+    ...["customer price", "driver payout", "PayNow", "internal_admin_notes", "admin_finance",
+      "parser debug", "mock_qa", "invoice payment", "secret token", "password", "api_key"]
+      .map((text) => ["admin", "admin_driver_job_messages", text, false]),
+  ]) {
+    let nativeBody, webBody;
+    const input = {actor_role, workflow_area, safe_message,
+      booking_reference: "PRIVATE-BOOKING-REFERENCE", delivery_surface: "driver_app",
+      driver_job_link_id: "11111111-1111-4111-8111-111111111111"};
+    await helper.sendDriverDevicePushAlertForAppUpdate(nativeAlertClient, input, {
+      env: configuredEnv,
+      nativeFetch: async (_url, init) => {
+        nativeBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({data: {status: "ok"}}), {status: 200});
+      },
+    });
+    await helper.sendDriverDevicePushAlertForAppUpdate(createMockClient({subscriptions: [{
+      auth: "web-auth", endpoint: "https://push.example.test/message",
+      p256dh: "web-p256dh", source_surface: "driver_portal",
+    }]}), input, {
+      env: configuredEnv, pushSender: async (_subscription, payload) => { webBody = payload; },
+    });
+    assert.equal(nativeBody.body, allowed ? safe_message : "Job update available");
+    assert.equal(webBody.body, allowed ? safe_message : "New Driver Job app update. Tap to review.");
+    assert.equal(webBody.message_preview === true, allowed);
+    assert.match(nativeBody.data.job_key, /^[0-9a-f]{64}$/);
+    assert.equal(Object.hasOwn(nativeBody.data, "safe_message"), false);
+    assert.equal(Object.hasOwn(nativeBody.data, "booking_reference"), false);
+  }
 
   let genericNativeProviderRequest = null;
   const genericNativeAlertResult = await helper.sendDriverDevicePushAlertForAppUpdate(

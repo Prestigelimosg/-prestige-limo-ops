@@ -72,6 +72,7 @@ type CustomerDevicePushNotificationRecord = {
   booking_reference: string | null;
   delivery_surface: "customer_app" | "driver_app";
   safe_title?: string | null;
+  safe_message?: string | null;
   workflow_area?: string | null;
 };
 
@@ -594,7 +595,10 @@ export async function revokeCustomerDevicePushSubscription(
   };
 }
 
-function safePayload(notification: CustomerDevicePushNotificationRecord): CustomerDevicePushPayload {
+function safePayload(
+  notification: CustomerDevicePushNotificationRecord,
+  defaultBody = "A Prestige Limo booking update is ready. Open My Bookings to review.",
+): CustomerDevicePushPayload {
   if (
     notification.actor_role === "system" &&
     notification.delivery_surface === "customer_app" &&
@@ -609,8 +613,18 @@ function safePayload(notification: CustomerDevicePushNotificationRecord): Custom
     };
   }
 
+  const message = safeText(notification.safe_message, 500);
+  const messageWorkflow = notification.delivery_surface === "customer_app" && (
+    (notification.workflow_area === "admin_customer_job_messages" &&
+      (notification.actor_role === "admin" || notification.actor_role === "dispatcher")) ||
+    (notification.workflow_area === "customer_driver_quick_replies" && notification.actor_role === "driver")
+  );
+  const messagePreview = messageWorkflow && message &&
+    !forbiddenPayloadFragments.some((fragment) => message.toLowerCase().includes(fragment)) &&
+    !/(internal_note|internal_admin|admin_finance|mock_qa|mock_archive|password|api_key|authorization|cookie)/i.test(message)
+    ? message : null;
   return {
-    body: "A Prestige Limo booking update is ready. Open My Bookings to review.",
+    body: messagePreview || defaultBody,
     tag: "prestige-customer-booking-update",
     title: "Prestige Limo booking update",
     url: "/my-bookings",
@@ -753,6 +767,10 @@ async function sendNativeExpoAlert(
   driverPlateNumberInput?: unknown,
   badgeCount?: number,
 ) {
+  const defaultBody = "A booking update is ready. Open Prestige SG to review.";
+  const messageBody = notification.workflow_area === "admin_customer_job_messages" ||
+    notification.workflow_area === "customer_driver_quick_replies"
+    ? safePayload(notification, defaultBody).body : defaultBody;
   const driverDetailsReady = notification.safe_title === "Driver details ready";
   const driverPlateNumber = safeDriverPlateNumber(driverPlateNumberInput);
   const safeNotificationTitle = safeText(notification.safe_title, 80);
@@ -784,7 +802,7 @@ async function sendNativeExpoAlert(
           : "Driver details are ready. Open Prestige SG to review."
         : driverStatusPlateReady
           ? `Car plate ${driverPlateNumber}. Open Prestige SG to review.`
-          : "A booking update is ready. Open Prestige SG to review.",
+          : messageBody,
       data: { booking_reference: bookingReference },
     }),
   });

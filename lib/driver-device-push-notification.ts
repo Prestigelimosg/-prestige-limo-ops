@@ -122,6 +122,7 @@ type DriverDevicePushSubscriptionInput = {
 };
 
 type DriverDevicePushAlertInput = {
+  actor_role?: string | null;
   booking_reference: string | null;
   delivery_surface: string | null;
   driver_job_link_id: string | null;
@@ -136,7 +137,9 @@ type DriverPoolWinnerVisibleBody =
   "Accepted! Pls ack when admin send job link";
 type DriverPoolAssignmentCancelledVisibleBody =
   "Job assignment cancelled, do not proceed.";
+type DriverMessagePreview = string & { readonly __driverMessagePreview: unique symbol };
 type DriverNativePushVisibleBody =
+  | DriverMessagePreview
   | "A driver-pool job is available. Open the app to review."
   | DriverPoolWinnerVisibleBody
   | DriverPoolAssignmentCancelledVisibleBody
@@ -148,7 +151,9 @@ type DriverNativePushVisibleBody =
   | "Pickup is in 1 hour. Open Driver Portal to review.";
 
 type DriverDevicePushPayload = {
+  message_preview?: true;
   body:
+    | DriverMessagePreview
     | "A driver-pool job is available. Open the app to review."
     | DriverPoolWinnerVisibleBody
     | DriverPoolAssignmentCancelledVisibleBody
@@ -806,10 +811,11 @@ function toLoadedDriverSubscription(row: UnknownRecord): LoadedDriverSubscriptio
     : null;
 }
 
-function safePayload(linkId: string): DriverDevicePushPayload {
+function safePayload(linkId: string, messagePreview: DriverMessagePreview | null = null): DriverDevicePushPayload {
   const jobKey = opaqueDriverJobLinkKey(linkId);
   return {
-    body: "New Driver Job app update. Tap to review.",
+    body: messagePreview || "New Driver Job app update. Tap to review.",
+    ...(messagePreview ? { message_preview: true as const } : {}),
     job_key: jobKey,
     tag: `prestige-driver-update-${jobKey.slice(0, 24)}`,
     title: "Prestige Limo Ops",
@@ -1361,7 +1367,17 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     return alertResult("invalid_driver_link", { enabled: true });
   }
 
-  const payload = safePayload(linkId);
+  const messageText = safeText(input.safe_message, 500);
+  const messageWorkflow =
+    (input.workflow_area === "admin_driver_job_messages" &&
+      (input.actor_role === "admin" || input.actor_role === "dispatcher")) ||
+    (input.workflow_area === "customer_driver_quick_replies" && input.actor_role === "customer");
+  // Only the already-validated recipient message may replace generic alert copy.
+  const messagePreview = messageWorkflow && messageText &&
+    !/(price|billing|invoice|payment|payout|pay[_ ]?now|internal[_ ]?(?:admin[_ ]?)?notes?|admin[_ ]?finance|parser|debug|secret|token|service_role|provider|gps|live location|driver location|password|api_key|authorization|cookie|mock_qa|mock_archive)/i.test(messageText)
+    ? messageText as DriverMessagePreview
+    : null;
+  const payload = safePayload(linkId, messagePreview);
   const nativeOpenTarget = input.workflow_area === "admin_driver_job_messages"
     ? "messages"
     : null;
@@ -1372,6 +1388,7 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     config,
     options,
     nativeOpenTarget,
+    messagePreview || "Job update available",
   );
 }
 

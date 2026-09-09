@@ -195,6 +195,7 @@ export type AdminDevicePushSender = (
 type AdminDevicePushAlertOptions = {
   badgeClient?: Pick<SupabaseClient, "from">;
   bookingReference?: unknown;
+  safeMessage?: unknown;
   env?: EnvInput;
   loadedSubscriptionLoader?: () => Promise<LoadedAdminDevicePushSubscription[]>;
   nativePushSender?: (
@@ -806,6 +807,7 @@ function safeAlertPayload(
   eventType: AdminDevicePushEventType,
   vehiclePlate?: unknown,
   bookingReference?: unknown,
+  safeMessage?: unknown,
 ): AdminDevicePushPayload {
   const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
   const publicReference =
@@ -834,8 +836,15 @@ function safeAlertPayload(
           }
       : adminDevicePushEventCopy[eventType];
 
+  const message = safeText(safeMessage, 500);
+  const messagePreview =
+    (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply") &&
+    message && !forbiddenPayloadFragments.some((fragment) => message.toLowerCase().includes(fragment)) &&
+    !/(internal_note|internal_admin|admin_finance|mock_qa|mock_archive|password|api_key|authorization|cookie)/i.test(message)
+      ? message : null;
   return {
     ...copy,
+    ...(messagePreview ? { body: messagePreview } : {}),
     url: "/",
     tag:
       eventType === "new_booking_request"
@@ -940,6 +949,7 @@ function safeNativePayload(
   eventType: AdminDevicePushEventType,
   vehiclePlate?: unknown,
   bookingReference?: unknown,
+  messageBody?: string,
 ): AdminNativeDevicePushPayload {
   const plate = safeVehiclePlate(vehiclePlate);
   const publicReference = safePublicBookingReference(bookingReference);
@@ -956,7 +966,8 @@ function safeNativePayload(
           : adminDevicePushEventCopy[eventType].body;
 
   return {
-    body,
+    body: (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply") && messageBody
+      ? messageBody : body,
     data: {
       open_target: "/",
       type: eventType === "driver_pool_accepted" ? "driver_acknowledged" : eventType,
@@ -1300,6 +1311,7 @@ export async function sendAdminDevicePushAlert(
     eventType,
     options.vehiclePlate,
     options.bookingReference,
+    options.safeMessage,
   );
   if (payloadHasForbiddenFragments(payload)) {
     return blockedAlertResult("provider_failure", true);
@@ -1342,6 +1354,7 @@ export async function sendAdminDevicePushAlert(
     nativeEventType,
     options.vehiclePlate,
     options.bookingReference,
+    payload.body,
   );
   const shouldRecordSubscriptionHealth =
     !options.loadedSubscriptionLoader &&

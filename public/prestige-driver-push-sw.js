@@ -88,6 +88,11 @@ self.addEventListener("push", (event) => {
         payload.target_path === "/driver-portal?view=available-jobs")
       ? payload.target_path
       : "";
+  const messagePreview = payload.message_preview === true && jobKey &&
+    typeof payload.body === "string" && payload.body.trim().length > 0 &&
+    payload.body.trim().length <= 500 &&
+    !/(price|billing|invoice|payment|payout|pay[_ ]?now|internal[_ ]?(?:admin[_ ]?)?notes?|admin[_ ]?finance|parser|debug|secret|token|service_role|provider|gps|live location|driver location|password|api_key|authorization|cookie|mock_qa|mock_archive)/i.test(payload.body)
+    ? payload.body.trim() : null;
   const body =
     payload.body === "New Driver Job issued. Tap to review."
       ? "New Driver Job issued. Tap to review."
@@ -99,7 +104,7 @@ self.addEventListener("push", (event) => {
           ? "Accepted! Pls ack when admin send job link"
           : payload.body === "A driver-pool job is available. Open the app to review."
           ? "A driver-pool job is available. Open the app to review."
-          : "New Driver Job app update. Tap to review.";
+          : messagePreview || "New Driver Job app update. Tap to review.";
 
   event.waitUntil(
     self.registration.showNotification("Prestige Limo Ops", {

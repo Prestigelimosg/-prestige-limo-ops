@@ -1008,6 +1008,29 @@ try {
   const emailAiSchema = createRequire(import.meta.url)(targetPaths.schema);
   const bookingParser = createRequire(import.meta.url)(targetPaths.bookingParser);
 
+  const arrivalSource = `Route name Airport arrival
+Comment 1st Drop-off: First Guest (10 Example Walk), 2nd Drop-off: Second Guest (20 Example Road).
+Route locations
+ 1. 10 Example Walk, Singapore 123456
+Drop off Location
+ 1. 20 Example Road, Singapore 654321
+Extra
+ 1. 1 x Waypoint 1 - S$25.00`;
+  const arrivalAnalysis = {
+    classification: "confirmed_booking", confidence: 0.9, reviewReasons: [], suggestedReply: "", summary: "Arrival review",
+    bookingResult: { multipleBookingsDetected: false, rawWarnings: [], bookings: [{
+      bookingType: "MNG", pickup: "10 Example Walk, Singapore 123456", dropoff: "20 Example Road, Singapore 654321",
+      extraStopCount: "1", extraStopLocation: "20 Example Road, Singapore 654321", extraStops: "20 Example Road, Singapore 654321", needsReviewReasons: [],
+    }] },
+  };
+  const wrongArrival = runtime.testValidateExplicitSourceFactsCompleteness({body: arrivalSource}, arrivalAnalysis);
+  assert.equal(wrongArrival.ok, false, "An arrival ground drop-off must never pass as airport pickup");
+  assert.match(wrongArrival.error, /pickup|extraStopLocation/);
+  const correctArrival = {...arrivalAnalysis, bookingResult: {...arrivalAnalysis.bookingResult, bookings: [{...arrivalAnalysis.bookingResult.bookings[0], pickup: "", extraStopLocation: "10 Example Walk, Singapore 123456", extraStops: "10 Example Walk, Singapore 123456", needsReviewReasons: ["Confirm arrival airport pickup."]}]}};
+  assert.equal(runtime.testValidateExplicitSourceFactsCompleteness({body: arrivalSource}, correctArrival).ok, true, "Unknown airport remains blank for review; exact ordered ground stops remain separate");
+  const wrongDropoff = {...correctArrival, bookingResult: {...correctArrival.bookingResult, bookings: [{...correctArrival.bookingResult.bookings[0], dropoff: "Another place"}]}};
+  assert.equal(runtime.testValidateExplicitSourceFactsCompleteness({body: arrivalSource}, wrongDropoff).ok, false, "Explicit destination must not be substituted");
+
   const unsafeCombinedPickup = runtime.testEnforceStructuredPickupSeparation({
     bookingResult: {
       bookings: [
@@ -1932,6 +1955,18 @@ try {
   assert.equal(providerRequestBodies.length, 9);
   assert.equal(downloadCalls, 9, "blocked sender body must not be fetched");
   assert.equal(intakeRows.length, 9);
+
+  const failedBooking = {...intakeRows[0], id: "failed-source-fixture", subject: 'New booking "Prestige Transport 99990" has been received', processing_status: "failed", classification: "uncertain", canonical_booking_text: "Unsafe stale canonical", normalized_text: "Original private booking source", review_reasons: ["Source field mismatch"]};
+  intakeRows.push(failedBooking, {...failedBooking,id: "failed-unrelated-fixture",subject:"Unrelated mail"});
+  const failuresRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+  const visibleFailed = failuresRead.data.records.find(row=>row.id===failedBooking.id);
+  assert.ok(visibleFailed, "Failed booking email must remain visible for source review");
+  assert.equal(visibleFailed.canonical_booking_text, "");
+  assert.equal(visibleFailed.booking_parse_result.bookings.length, 0);
+  assert.equal(visibleFailed.normalized_text, failedBooking.normalized_text);
+  assert.equal(failuresRead.data.records.some(row=>row.id==="failed-unrelated-fixture"),false);
+  assert.equal((await runtime.markAdminEmailAiIntakeReviewed(failedBooking.id, fakeDatabase)).ok,false,"Failed source cannot be marked reviewed as a validated booking");
+  intakeRows.splice(-2);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);

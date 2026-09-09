@@ -72,6 +72,8 @@ Read the complete email before producing the structured booking result. Preserve
 
 Return one coherent, complete structured booking whose supported facts agree with the whole source email. Every clearly labelled operational fact must appear in its correct structured field; never omit it, contradict it, combine separate location roles, or substitute a vehicle capacity, organizer, or other nearby value.
 
+For Airport arrival, DROP OFF LOCATION is the final ground destination. A Comment-labelled first drop-off or ROUTE LOCATIONS waypoint is an intermediate ground stop, never the airport pickup and never a duplicate of the final destination. Keep these in extraStopLocation and extraStops in source order. If no airport pickup is named, leave pickup empty and add an airport-pickup review reason; never use a street destination as pickup.
+
 PICK UP LOCATION is the primary pickup only. ROUTE LOCATIONS and a Comment-labelled second pickup or waypoint belong only in extraStopLocation and extraStops. Never concatenate, append, or repeat a waypoint or second pickup inside pickup. Keep the source order in notes when it is operationally useful, but keep each structured location in exactly one role.
 
 For companyAccount, preserve only the complete explicitly labelled external organisation name in its original word order. This is source/display text only: never classify customer type, choose a customer folder, or infer a CRM ID. Never shorten or reorder the name, append a passenger name, or replace it with an email domain. Prestige Transport is a legacy internal company name, not an external customer organisation; ignore it when it appears in a title, reference, sender branding, or labelled company value. Leave companyAccount empty when a separate explicit external organisation name is absent.
@@ -430,8 +432,10 @@ function sanitizePersistenceRecord(
   });
 
   return {
-    booking_parse_result: analysis.bookingResult,
-    canonical_booking_text: cleanMultilineText(
+    booking_parse_result: value.processing_status === "failed"
+      ? { bookings: [], multipleBookingsDetected: false, rawWarnings: [] }
+      : analysis.bookingResult,
+    canonical_booking_text: value.processing_status === "failed" ? "" : cleanMultilineText(
       value.canonical_booking_text,
       maximumAiInputCharacters,
     ),
@@ -631,10 +635,11 @@ export async function loadAdminEmailAiIntake(
     .select(
       "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
     )
-    .eq("processing_status", "queued")
+    .in("processing_status", ["queued", "failed"])
     .in("classification", [
       ...adminEmailAiAppReviewClassifications,
       "enquiry",
+      "uncertain",
     ])
     .order("created_at", { ascending: false })
     .limit(25);
@@ -659,6 +664,7 @@ export async function loadAdminEmailAiIntake(
             record !== null &&
             adminEmailAiIntakeAppearsInApp({
               classification: record.classification,
+              processingStatus: record.processing_status,
               senderAddress: record.sender_address,
               subject: record.subject,
             }),
@@ -893,6 +899,7 @@ type ExplicitSourceBookingFacts = {
   bagCount?: string;
   bookingType?: "MNG" | "DEP" | "TRF" | "DSP";
   companyAccount?: string;
+  dropoff?: string;
   extraStopCount?: string;
   extraStopLocation?: string;
   flightNumber?: string;
@@ -1104,10 +1111,13 @@ function explicitSourceBookingFacts(body: string) {
       /\bPick Up Location\s+(?:\d+\.\s*)?([^\n]+)/gi,
     ),
   );
+  const dropoff = singleExplicitEvidence(
+    matchedSourceValues(source, /\bDrop off Location\s+\d+\.\s*([^\n]+)/gi),
+  );
   const waypointCount = singleExplicitEvidence(
     matchedSourceValues(
       source,
-      /(?:^|\n)\s*(\d{1,2})\s*x\s*Waypoint\b/gi,
+      /(?:^|\n)\s*(?:\d+\.\s*)?(\d{1,2})\s*x\s*Waypoint\b/gi,
       normalizedEvidenceCount,
     ),
   );
@@ -1171,6 +1181,7 @@ function explicitSourceBookingFacts(body: string) {
     pickupDate,
     pickupTime,
     pickup,
+    dropoff,
     waypointCount,
     routeLocation,
     passengerName,
@@ -1194,6 +1205,7 @@ function explicitSourceBookingFacts(body: string) {
     ...(passengerName.value ? { passengerName: passengerName.value } : {}),
     ...(pax.value ? { pax: pax.value } : {}),
     ...(pickup.value ? { pickup: pickup.value } : {}),
+    ...(dropoff.value ? { dropoff: dropoff.value } : {}),
     ...(pickupDate.value ? { pickupDate: pickupDate.value } : {}),
     ...(pickupTime.value ? { pickupTime: pickupTime.value } : {}),
     ...(vehicle.value ? { vehicle: vehicle.value } : {}),
@@ -1230,30 +1242,34 @@ function validateExplicitSourceFactsCompleteness(
       Boolean(cleanText(candidate.customerPriceOverride, 80)),
     );
 
-  if (
-    invalidStructuredResult ||
-    sourceEvidence.ambiguous ||
-    (sourceEvidence.hasEvidence && !hasOneStructuredBooking) ||
-    (facts.bookingType && booking?.bookingType !== facts.bookingType) ||
-    (facts.companyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(facts.companyAccount)) ||
-    (!facts.companyAccount && structuredCompanyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(verifiedSenderCompanyAccount)) ||
-    (facts.pickupDate && normalizedEvidenceDate(booking?.pickupDate) !== facts.pickupDate) ||
-    (facts.pickupTime && normalizedEvidenceTime(booking?.pickupTime) !== facts.pickupTime) ||
-    (facts.pickup && !locationContainsExplicitEvidence(booking?.pickup, facts.pickup)) ||
-    (facts.extraStopCount && normalizedEvidenceCount(booking?.extraStopCount) !== facts.extraStopCount) ||
-    (facts.extraStopLocation && !locationContainsExplicitEvidence(booking?.extraStopLocation, facts.extraStopLocation)) ||
-    (facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation)) ||
-    (facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.extraStopLocation, facts.pickup)) ||
-    (facts.passengerName && !samePersonIdentity(booking?.passengerName, facts.passengerName)) ||
-    (facts.passengerContact && normalizedExplicitPassengerPhone(booking?.passengerContact) !== facts.passengerContact) ||
-    (facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax) ||
-    (facts.bagCount && normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount) ||
-    (facts.vehicle && normalizedEvidenceText(booking?.vehicle) !== normalizedEvidenceText(facts.vehicle)) ||
-    (facts.flightNumber && normalizedEvidenceFlight(booking?.flightNumber) !== facts.flightNumber) ||
-    (facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity && normalizedEvidenceCount(booking?.pax) === facts.vehicleCapacity)
-  ) {
+  const mismatches = [
+    ["pricing", Boolean(invalidStructuredResult)],
+    ["ambiguous source", Boolean(sourceEvidence.ambiguous)],
+    ["booking count", Boolean(sourceEvidence.hasEvidence && !hasOneStructuredBooking)],
+    ["service", Boolean(facts.bookingType && booking?.bookingType !== facts.bookingType)],
+    ["company", Boolean(facts.companyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(facts.companyAccount))],
+    ["company", Boolean(!facts.companyAccount && structuredCompanyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(verifiedSenderCompanyAccount))],
+    ["pickup date", Boolean(facts.pickupDate && normalizedEvidenceDate(booking?.pickupDate) !== facts.pickupDate)],
+    ["pickup time", Boolean(facts.pickupTime && normalizedEvidenceTime(booking?.pickupTime) !== facts.pickupTime)],
+    ["pickup", Boolean(facts.pickup && !locationContainsExplicitEvidence(booking?.pickup, facts.pickup))],
+    ["dropoff", Boolean(facts.dropoff && !locationContainsExplicitEvidence(booking?.dropoff, facts.dropoff))],
+    ["extraStopCount", Boolean(facts.extraStopCount && normalizedEvidenceCount(booking?.extraStopCount) !== facts.extraStopCount)],
+    ["extraStopLocation", Boolean(facts.extraStopLocation && !locationContainsExplicitEvidence(booking?.extraStopLocation, facts.extraStopLocation))],
+    ["pickup / extraStopLocation", Boolean(facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))],
+    ["pickup / extraStopLocation", Boolean(facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.extraStopLocation, facts.pickup))],
+    ["arrival pickup", Boolean(facts.bookingType === "MNG" && ((facts.dropoff && locationContainsExplicitEvidence(booking?.pickup, facts.dropoff)) || (facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))))],
+    ["passenger name", Boolean(facts.passengerName && !samePersonIdentity(booking?.passengerName, facts.passengerName))],
+    ["passenger contact", Boolean(facts.passengerContact && normalizedExplicitPassengerPhone(booking?.passengerContact) !== facts.passengerContact)],
+    ["passenger count", Boolean(facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax)],
+    ["bags", Boolean(facts.bagCount && normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount)],
+    ["vehicle", Boolean(facts.vehicle && normalizedEvidenceText(booking?.vehicle) !== normalizedEvidenceText(facts.vehicle))],
+    ["flight", Boolean(facts.flightNumber && normalizedEvidenceFlight(booking?.flightNumber) !== facts.flightNumber)],
+    ["passenger count / capacity", Boolean(facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity && normalizedEvidenceCount(booking?.pax) === facts.vehicleCapacity)],
+  ] as const;
+  const mismatchFields = mismatches.filter(([, mismatch]) => mismatch).map(([field]) => field);
+  if (mismatchFields.length > 0) {
     return {
-      error: explicitSourceFactsValidationReviewReason,
+      error: `${explicitSourceFactsValidationReviewReason} Check: ${mismatchFields.join(", ")}.`,
       ok: false as const,
     };
   }

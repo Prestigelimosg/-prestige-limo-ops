@@ -6833,7 +6833,7 @@ async function runChromeTest() {
                 external_send: false,
                 ok: true,
                 records: (window.__prestigeAdminEmailAiIntake || []).filter(
-                  (record) => record.processing_status === "queued",
+                  (record) => ["queued", "failed"].includes(record.processing_status),
                 ),
                 token_usage: window.__prestigeAdminEmailAiTokenUsage,
                 version: "browser-private-email-ai-intake-mock",
@@ -8913,6 +8913,32 @@ async function runChromeTest() {
       /AI review only · no reply sent · no booking saved/,
     );
 
+    await evaluate(`(() => {
+      window.__prestigeAdminEmailAiIntake.push({
+        id: "failed-booking-source-fixture", mailbox_address: "booking@prestigelimo.sg",
+        sender_address: "info@prestigelimo.sg", subject: 'New booking "Prestige Transport 99990" has been received',
+        processing_status: "failed", classification: "uncertain", normalized_text: "Private original source for review only.",
+        canonical_booking_text: "", booking_parse_result: {bookings: [], multipleBookingsDetected: false, rawWarnings: []},
+        summary: "AI booking fields could not be validated.", confidence: 0,
+      });
+      [...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Refresh Dashboard")?.click();
+    })()`);
+    await waitForCondition(() => evaluate(`(() => {
+      const row=document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]');
+      return row && row.textContent.includes("AI review failed") && row.querySelector('[data-email-ai-failed-source]') ? true : false;
+    })()`),10000,"failed booking source remains visible");
+    const failedEmailRead = await evaluate(`(() => {
+      const row=document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]');
+      row.querySelector('summary')?.click();
+      return { sourceVisible: row.querySelector('details')?.open, source:row.querySelector('pre')?.textContent, buttonCount:row.querySelectorAll('button').length };
+    })()`);
+    assert.deepEqual(failedEmailRead,{sourceVisible:true,source:"Private original source for review only.",buttonCount:0},"Failed AI output cannot enter Create Job Card or save through a button");
+    await evaluate(`(() => {
+      window.__prestigeAdminEmailAiIntake=window.__prestigeAdminEmailAiIntake.filter(row=>row.id!=="failed-booking-source-fixture");
+      [...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Refresh Dashboard")?.click();
+    })()`);
+    await waitForCondition(()=>evaluate(`!document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]')`),10000,"restore bounded email fixture");
+
     const openedEmailBookingReview = await evaluate(`(() => {
       const row = document.querySelector(
         '[data-dashboard-email-ai-intake-row="00000000-0000-4000-8000-000000000101"]',
@@ -9842,6 +9868,14 @@ async function runChromeTest() {
       10000,
       "configured Google Calendar pill and admin uppercase values on active Bookings row",
     );
+    const serviceDisplayState = await evaluate(`(() => {
+      const card=document.querySelector('[data-recent-operational-card="${codexCalendarConflictExistingBookingFixture.booking_reference}"]');
+      const details=card?.querySelector('details');
+      if (details && !details.open) details.querySelector('summary')?.click();
+      const service=card?.querySelector('[data-bookings-service]');
+      return {text:service?.textContent?.trim(),visible:!!service?.getClientRects().length};
+    })()`);
+    assert.deepEqual(serviceDisplayState,{text:`Service: ${codexCalendarConflictExistingBookingFixture.booking_type}`,visible:true},"Expanded Booking section displays persisted service without changing the booking");
     assert.deepEqual(
       bookingsCalendarStatusRuntimeState.calendarStatus,
       { tagName: "SPAN", text: "Cal saved" },

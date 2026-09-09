@@ -109,11 +109,12 @@ assertIncludes(
   "formatTravelerBillingAccountLabel(companyAccount, travelerName)",
   "Save + CRM persisted customer account must be scoped by passenger/traveler when company is present",
 );
-assertIncludes(
+assertExcludes(
   appSource,
   "display_name: clean(bookingValue.name) || customerDisplayName",
-  "explicit personal customer creation must use the canonical passenger name once",
+  "retired personal creation must not derive a Customer Account from Passenger",
 );
+assertIncludes(adminBookingAdapterSource, "resolveExactBookerCustomerAccount", "Save + CRM reuses the exact Company + Booker account");
 assertExcludes(
   appSource,
   'const safeCompany = clean(companyAccount) || "Customer Account";',

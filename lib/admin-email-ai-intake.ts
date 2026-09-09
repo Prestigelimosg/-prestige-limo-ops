@@ -40,6 +40,8 @@ const mailboxStateTable = "admin_email_ai_mailbox_state";
 const maximumEmailSourceBytes = 256_000;
 const maximumAiInputCharacters = 12_000;
 const maximumMessagesPerRun = 20;
+const intakeReadPageSize = 500;
+const intakeReadMaximumPages = 100;
 const tokenUsagePageSize = 1_000;
 const tokenUsageMaximumPages = 100;
 
@@ -188,6 +190,7 @@ export type AdminEmailAiIntakeReviewResult =
 
 export type AdminEmailAiRunResult =
   | {
+      failed: number;
       initialized: boolean;
       inspected: number;
       ok: true;
@@ -214,6 +217,11 @@ type AdminEmailAiProviderResult =
       error: string;
       ok: false;
       reviewReason?: string;
+      failureStage?: string;
+      responseId?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      model?: string;
     };
 
 function cleanText(value: unknown, maximumLength: number) {
@@ -432,10 +440,10 @@ function sanitizePersistenceRecord(
   });
 
   return {
-    booking_parse_result: value.processing_status === "failed"
+    booking_parse_result: value.processing_status === "failed" || value.processing_status === "processing"
       ? { bookings: [], multipleBookingsDetected: false, rawWarnings: [] }
       : analysis.bookingResult,
-    canonical_booking_text: value.processing_status === "failed" ? "" : cleanMultilineText(
+    canonical_booking_text: value.processing_status === "failed" || value.processing_status === "processing" ? "" : cleanMultilineText(
       value.canonical_booking_text,
       maximumAiInputCharacters,
     ),
@@ -454,7 +462,11 @@ function sanitizePersistenceRecord(
     sender_address: senderAddress,
     subject: cleanText(value.subject, 240),
     suggested_reply: analysis.suggestedReply,
-    summary: analysis.summary,
+    summary: value.processing_status === "processing"
+      ? Date.now() - new Date(String(value.created_at || "")).getTime() < 5 * 60_000
+        ? "Email received. AI review is processing."
+        : "Email received, but AI review has not completed. Source review required."
+      : analysis.summary,
   };
 }
 
@@ -630,46 +642,45 @@ export async function loadAdminEmailAiIntake(
   }
 
   const database = client || createServerClient();
-  const result = await database
-    .from(intakeTable)
-    .select(
-      "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
-    )
-    .in("processing_status", ["queued", "failed"])
-    .in("classification", [
-      ...adminEmailAiAppReviewClassifications,
-      "enquiry",
-      "uncertain",
-    ])
-    .order("created_at", { ascending: false })
-    .limit(25);
+  const recordsById = new Map<string, AdminEmailAiIntakeRecord>();
+  let afterId = "";
+  for (let pageIndex = 0; pageIndex < intakeReadMaximumPages; pageIndex += 1) {
+    let query = database
+      .from(intakeTable)
+      .select(
+        "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
+      )
+      .in("processing_status", ["queued", "failed", "processing"])
+      .order("id", { ascending: true })
+      .limit(intakeReadPageSize);
+    if (afterId) query = query.gt("id", afterId);
+    const result = await query;
 
-  if (result.error) {
-    return {
-      error: "Private email AI intake could not be loaded safely.",
-      ok: false,
-      status: 500,
-    };
+    if (result.error || !Array.isArray(result.data)) {
+      return { error: "Email AI review list could not be loaded completely. Refresh to try again.", ok: false, status: 500 };
+    }
+    for (const value of result.data) {
+      const record = sanitizePersistenceRecord(value as AdminEmailAiPersistenceRecord);
+      if (record && adminEmailAiIntakeAppearsInApp({
+        classification: record.classification,
+        processingStatus: record.processing_status,
+        senderAddress: record.sender_address,
+        subject: record.subject,
+      })) recordsById.set(record.id, record);
+    }
+    if (result.data.length < intakeReadPageSize) break;
+    const nextId = cleanText(result.data[result.data.length - 1]?.id, 120);
+    if (!nextId || nextId <= afterId) {
+      return { error: "Email AI review list could not be loaded completely. Refresh to try again.", ok: false, status: 500 };
+    }
+    afterId = nextId;
+    if (pageIndex === intakeReadMaximumPages - 1) {
+      return { error: "Email AI review list could not be loaded completely. Too many unresolved records; administrator attention is required.", ok: false, status: 500 };
+    }
   }
-
-  const records = Array.isArray(result.data)
-    ? result.data
-        .map((record) =>
-          sanitizePersistenceRecord(
-            record as AdminEmailAiPersistenceRecord,
-          ),
-        )
-        .filter(
-          (record): record is AdminEmailAiIntakeRecord =>
-            record !== null &&
-            adminEmailAiIntakeAppearsInApp({
-              classification: record.classification,
-              processingStatus: record.processing_status,
-              senderAddress: record.sender_address,
-              subject: record.subject,
-            }),
-        )
-    : [];
+  const records = Array.from(recordsById.values()).sort((left, right) =>
+    String(right.created_at || "").localeCompare(String(left.created_at || "")) || left.id.localeCompare(right.id),
+  );
   let inputTokens = 0;
   let outputTokens = 0;
   let tokenUsageAvailable = true;
@@ -1665,6 +1676,7 @@ async function analyseAllowedEmail(input: {
   subject: string;
 }): Promise<AdminEmailAiProviderResult> {
   const model = cleanModel(process.env[adminEmailAiModelEnvName]);
+  let evidence = { failureStage: "provider", model, inputTokens: 0, outputTokens: 0, responseId: "" };
 
   try {
     const response = await new OpenAI({
@@ -1688,16 +1700,25 @@ async function analyseAllowedEmail(input: {
       },
       tools: [],
     });
+    evidence = {
+      failureStage: "response_json",
+      model: cleanModel(response.model || model),
+      inputTokens: cleanPositiveInteger(response.usage?.input_tokens),
+      outputTokens: cleanPositiveInteger(response.usage?.output_tokens),
+      responseId: cleanText(response.id, 120),
+    };
     const outputText = cleanMultilineText(response.output_text, 60_000);
     const parsed = outputText ? JSON.parse(outputText) : null;
 
     if (!parsed) {
       return {
+        ...evidence,
         error: "OpenAI did not return a usable email review.",
         ok: false,
       };
     }
 
+    evidence.failureStage = "normalization";
     const analysis = enforceAllowedSenderCompanyAccount(
       input.senderAddress,
       enforceResolvedStructuredReviewReasons(
@@ -1712,6 +1733,13 @@ async function analyseAllowedEmail(input: {
         ),
       ),
     );
+    const recognizedBooking = adminEmailAiIntakeAppearsInApp({ senderAddress: input.senderAddress, subject: input.subject });
+    const supportedClassification = adminEmailAiAppReviewClassifications.some(value => value === analysis.classification) ||
+      (analysis.classification === "enquiry" && adminEmailAiCanonicalCompanyAccountForSender(input.senderAddress) !== null);
+    if (recognizedBooking && !supportedClassification) {
+      return { ...evidence, failureStage: "classification", error: "Booking email received, but AI could not identify its booking intent. Source review required.", ok: false };
+    }
+    evidence.failureStage = "source_validation";
     const sourceFactsValidation = validateExplicitSourceFactsCompleteness(
       input,
       analysis,
@@ -1719,6 +1747,7 @@ async function analyseAllowedEmail(input: {
 
     if (!sourceFactsValidation.ok) {
       return {
+        ...evidence,
         error: sourceFactsValidation.error,
         ok: false,
         reviewReason: sourceFactsValidation.error,
@@ -1737,6 +1766,8 @@ async function analyseAllowedEmail(input: {
     };
   } catch {
     return {
+      ...evidence,
+      reviewReason: `AI review failed during ${evidence.failureStage}; source review required.`,
       error: "OpenAI did not return a usable email review.",
       ok: false,
     };
@@ -1869,6 +1900,18 @@ async function updateProcessedIntake(
       .from(intakeTable)
       .update({
         processing_status: "failed",
+        booking_parse_result: {
+          bookings: [], multipleBookingsDetected: false, rawWarnings: [],
+          failure_evidence: {
+            stage: providerResult.failureStage || "provider",
+            response_id: providerResult.responseId || null,
+            reason: providerResult.reviewReason || providerResult.error,
+          },
+        },
+        canonical_booking_text: "",
+        model: providerResult.model || null,
+        openai_input_tokens: providerResult.inputTokens || 0,
+        openai_output_tokens: providerResult.outputTokens || 0,
         review_reasons: [
           providerResult.reviewReason ||
             "AI review was unavailable; manual review required.",
@@ -2023,6 +2066,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
   let inspected = 0;
   let parsed = 0;
   let skipped = 0;
+  let failed = 0;
 
   try {
     await imap.connect();
@@ -2038,6 +2082,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
       await saveMailboxState(database, uidValidity, currentLastUid);
 
       return {
+        failed,
         initialized: true,
         inspected: 0,
         ok: true,
@@ -2051,6 +2096,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
 
     if (lastSeenUid >= currentLastUid) {
       return {
+        failed,
         initialized: false,
         inspected,
         ok: true,
@@ -2200,6 +2246,8 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
             providerResult.analysis.classification,
           );
         }
+      } else {
+        failed += 1;
       }
 
       lastSeenUid = message.uid;
@@ -2207,6 +2255,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
     }
 
     return {
+      failed,
       initialized: false,
       inspected,
       ok: true,

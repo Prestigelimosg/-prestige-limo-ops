@@ -73,6 +73,7 @@ function transpile(source, filename) {
 
 const mailboxState = new Map();
 const intakeRows = [];
+let intakeReadInterceptor = null;
 
 class FakeQuery {
   constructor(table) {
@@ -84,6 +85,8 @@ class FakeQuery {
     this.orExpression = "";
     this.rangeEnd = null;
     this.rangeStart = null;
+    this.sortOrders = [];
+    this.rowLimit = null;
   }
 
   select() {
@@ -118,6 +121,11 @@ class FakeQuery {
     return this;
   }
 
+  gt(field, value) {
+    this.filters.push([field, value, "gt"]);
+    return this;
+  }
+
   gte(field, value) {
     this.filters.push([field, value, "gte"]);
     return this;
@@ -134,11 +142,13 @@ class FakeQuery {
     return this;
   }
 
-  order() {
+  order(field, options = {}) {
+    this.sortOrders.push([field, options.ascending !== false]);
     return this;
   }
 
-  limit() {
+  limit(count) {
+    this.rowLimit = count;
     return this;
   }
 
@@ -234,7 +244,9 @@ class FakeQuery {
     const selectedRows = intakeRows.filter((row) => {
       const exactFiltersPass = this.filters.every(
         ([field, value, operator]) =>
-          operator === "gte"
+          operator === "gt"
+            ? row[field] > value
+            : operator === "gte"
             ? row[field] >= value
             : operator === "lt"
               ? row[field] < value
@@ -246,14 +258,25 @@ class FakeQuery {
 
       return exactFiltersPass && inFiltersPass;
     });
+    selectedRows.sort((left, right) => {
+      for (const [field, ascending] of this.sortOrders) {
+        if (left[field] === right[field]) continue;
+        const order = left[field] < right[field] ? -1 : 1;
+        return ascending ? order : -order;
+      }
+      return 0;
+    });
+    const limitedRows = this.rowLimit === null
+      ? selectedRows : selectedRows.slice(0, this.rowLimit);
     const rangedRows =
       this.rangeStart === null || this.rangeEnd === null
-        ? selectedRows
-        : selectedRows.slice(this.rangeStart, this.rangeEnd + 1);
-    return {
+        ? limitedRows
+        : limitedRows.slice(this.rangeStart, this.rangeEnd + 1);
+    const result = {
       data: single ? rangedRows[0] || null : rangedRows,
       error: null,
     };
+    return intakeReadInterceptor ? intakeReadInterceptor(this, result) : result;
   }
 }
 
@@ -464,6 +487,7 @@ const fakeMailbox = {
 let downloadCalls = 0;
 let downloadOptions = [];
 let providerRequestBodies = [];
+const reliabilityProviderOverrides = new Map();
 let supabaseCreateClientCalls = 0;
 const adminDevicePushEvents = [];
 
@@ -939,9 +963,12 @@ class FakeOpenAI {
             summary: "Confirmed airport booking requires flight-number review.",
           };
 
+      const override = [...reliabilityProviderOverrides].find(([subject]) => body.input.includes(subject))?.[1];
+      if (override && override !== "corrupt_json") analysis.classification = override;
       return {
+        id: "resp_synthetic_email_ai",
         model: "gpt-5.6-luna",
-        output_text: JSON.stringify(analysis),
+        output_text: override === "corrupt_json" ? "{broken-json" : JSON.stringify(analysis),
         usage: {
           input_tokens: 100,
           output_tokens: 80,
@@ -2188,6 +2215,169 @@ Extra
   assert.equal(wrongMailbox.ok, false);
   assert.equal(wrongMailbox.status, 503);
   assert.equal(providerRequestBodies.length, 9);
+
+  // Four accepted emails must remain four durable, visible receipts when one AI
+  // response is unusable; polling again must not create or process them twice.
+  process.env.PRESTIGE_EMAIL_AI_IMAP_USER = "booking@prestigelimo.sg";
+  const reliabilityTemplate = structuredClone(intakeRows[0]);
+  const makeReliabilityMessage = (uid, number) => {
+    const subject = `New booking "Prestige Transport ${number}" has been received`;
+    const source = Buffer.from(syntheticAllowedSource.toString()
+      .replace("Subject: Synthetic confirmed booking", `Subject: ${subject}`)
+      .replace("synthetic-booking-1@example.test", `reliability-${number}@example.test`));
+    return {uid, source, size: source.length, envelope: {
+      from: [{address: "info@prestigelimo.sg"}],
+      to: [{address: "booking@prestigelimo.sg"}],
+    }};
+  };
+  const fourMessages = [0, 1, 2, 3].map(index => makeReliabilityMessage(111 + index, 99001 + index));
+  reliabilityProviderOverrides.set('New booking "Prestige Transport 99002" has been received', "corrupt_json");
+  const beforeFourCalls = providerRequestBodies.length;
+  const beforeFourRows = intakeRows.length;
+  fakeMailbox.messages.push(...fourMessages);
+  fakeMailbox.uidNext = 115;
+  const fourResult = await runtime.runAdminEmailAiIntake();
+  assert.equal(fourResult.ok, true);
+  assert.equal(fourResult.inspected, 4);
+  assert.equal(fourResult.parsed, 3);
+  assert.equal(fourResult.failed, 1, "Runner must account for the fourth email as a failed review");
+  assert.equal(providerRequestBodies.length, beforeFourCalls + 4);
+  const fourRows = intakeRows.slice(beforeFourRows);
+  assert.equal(fourRows.length, 4);
+  assert.equal(fourRows.filter(row => row.processing_status === "queued").length, 3);
+  const failedReceipt = fourRows.find(row => row.processing_status === "failed");
+  assert.ok(failedReceipt);
+  assert.equal(failedReceipt.model, "gpt-5.6-luna", "Failure must retain the actual response model");
+  assert.equal(failedReceipt.openai_input_tokens, 100);
+  assert.equal(failedReceipt.openai_output_tokens, 80);
+  assert.equal(failedReceipt.booking_parse_result.failure_evidence.stage, "response_json");
+  assert.equal(failedReceipt.booking_parse_result.failure_evidence.response_id, "resp_synthetic_email_ai");
+  const fourRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+  assert.equal(fourRead.ok, true);
+  const visibleFailedReceipt = fourRead.data.records.find(row => row.id === failedReceipt.id);
+  assert.ok(visibleFailedReceipt);
+  assert.equal(visibleFailedReceipt.booking_parse_result.failure_evidence, undefined, "Private failure metadata must not enter the review projection");
+  assert.equal(visibleFailedReceipt.booking_parse_result.bookings.length, 0);
+  assert.equal(visibleFailedReceipt.canonical_booking_text, "");
+  assert.equal(fourRead.data.records.filter(row => fourRows.some(receipt => receipt.id === row.id)).length, 4);
+  const repeatedFour = await runtime.runAdminEmailAiIntake();
+  assert.equal(repeatedFour.ok, true);
+  assert.equal(repeatedFour.inspected, 0);
+  assert.equal(providerRequestBodies.length, beforeFourCalls + 4);
+  assert.equal(intakeRows.length, beforeFourRows + 4);
+  assert.equal(mailboxState.get("booking@prestigelimo.sg").last_seen_uid, 114);
+
+  // An exact trusted booking subject cannot be silently dismissed because the
+  // AI classifier disagrees. Conflicting responses remain source-only failures.
+  const conflictMessages = ["uncertain", "enquiry", "unrelated"].map((classification, index) => {
+    const number = 99005 + index;
+    reliabilityProviderOverrides.set(`New booking "Prestige Transport ${number}" has been received`, classification);
+    return makeReliabilityMessage(115 + index, number);
+  });
+  const beforeConflicts = intakeRows.length;
+  const beforeConflictPushes = adminDevicePushEvents.length;
+  fakeMailbox.messages.push(...conflictMessages);
+  fakeMailbox.uidNext = 118;
+  const conflictResult = await runtime.runAdminEmailAiIntake();
+  assert.equal(conflictResult.ok, true);
+  assert.equal(conflictResult.failed, 3);
+  const conflictRows = intakeRows.slice(beforeConflicts);
+  assert.equal(conflictRows.length, 3);
+  for (const row of conflictRows) {
+    assert.equal(row.processing_status, "failed");
+    assert.equal(row.booking_parse_result.failure_evidence.stage, "classification");
+    assert.equal(row.canonical_booking_text, "");
+    assert.equal(row.booking_parse_result.bookings.length, 0);
+  }
+  assert.equal(adminDevicePushEvents.length, beforeConflictPushes, "Classification conflicts must not send a booking push");
+  const conflictsRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+  assert.equal(conflictsRead.data.records.filter(row => conflictRows.some(receipt => receipt.id === row.id)).length, 3);
+
+  // Exercise a complete database page of filtered rows before eligible rows.
+  // All timestamps intentionally tie, requiring deterministic ID ordering.
+  const savedRows = intakeRows.splice(0);
+  const pageTimestamp = currentSingaporeMonthCreatedAt;
+  const pageRow = (id, changes = {}) => ({...structuredClone(reliabilityTemplate),
+    id, created_at: pageTimestamp, updated_at: pageTimestamp, processing_status: "queued",
+    openai_input_tokens: 0, openai_output_tokens: 0, ...changes});
+  try {
+    const filteredRows = Array.from({length: 505}, (_, index) => pageRow(
+      `a-filtered-${String(index).padStart(4, "0")}`,
+      {subject: "Ordinary unrelated enquiry", classification: "enquiry"},
+    ));
+    const pendingRows = Array.from({length: 31}, (_, index) => pageRow(
+      `b-pending-${String(index).padStart(4, "0")}`,
+      {subject: `New booking "Prestige Transport ${99100 + index}" has been received`},
+    ));
+    const processingRow = pageRow("c-processing", {
+      subject: 'New booking "Prestige Transport 99200" has been received',
+      processing_status: "processing", classification: "uncertain",
+      canonical_booking_text: "Unsafe stale canonical", summary: "Email AI review is processing.",
+    });
+    intakeRows.push(...filteredRows, ...pendingRows, processingRow,
+      pageRow("d-dismissed", {processing_status: "dismissed"}),
+      pageRow("e-reviewed", {processing_status: "reviewed"}));
+    const callsBeforeRead = providerRequestBodies.length;
+    const beforeReadSnapshot = structuredClone(intakeRows);
+    const pagedRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+    assert.equal(pagedRead.ok, true);
+    assert.equal(pagedRead.data.records.length, 32, "Every pending booking must survive both the 25-row limit and prefilter page boundaries");
+    assert.deepEqual(pagedRead.data.records.map(row => row.id), [...pendingRows, processingRow].map(row => row.id));
+    const visibleProcessing = pagedRead.data.records.find(row => row.id === processingRow.id);
+    assert.ok(visibleProcessing);
+    assert.equal(visibleProcessing.processing_status, "processing");
+    assert.equal(visibleProcessing.canonical_booking_text, "");
+    assert.equal(visibleProcessing.booking_parse_result.bookings.length, 0);
+    assert.equal(visibleProcessing.normalized_text, processingRow.normalized_text);
+    assert.equal((await runtime.markAdminEmailAiIntakeReviewed(processingRow.id, fakeDatabase)).ok, false);
+    assert.equal(providerRequestBodies.length, callsBeforeRead);
+    assert.deepEqual(intakeRows, beforeReadSnapshot, "Queue reads must neither retry AI nor mutate processing/history rows");
+
+    // Removing a previously read row shifts offset pages. The following still-
+    // pending boundary receipt must remain reachable through the stable cursor.
+    const concurrentRows = Array.from({length: 503}, (_, index) => pageRow(
+      `f-concurrent-${String(index).padStart(4, "0")}`,
+      {subject: `New booking "Prestige Transport ${99300 + index}" has been received`},
+    ));
+    intakeRows.splice(0, intakeRows.length, ...concurrentRows);
+    let queueReads = 0;
+    intakeReadInterceptor = (query, result) => {
+      if (query.inFilters.some(([field]) => field === "processing_status")) {
+        queueReads += 1;
+        if (queueReads === 1) concurrentRows[0].processing_status = "reviewed";
+      }
+      return result;
+    };
+    const concurrentRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+    assert.equal(concurrentRead.ok, true);
+    assert.ok(queueReads >= 2);
+    const concurrentIds = new Set(concurrentRead.data.records.map(row => row.id));
+    for (const row of concurrentRows.slice(1)) {
+      assert.ok(concurrentIds.has(row.id), `Concurrent review must not skip pending receipt ${row.id}`);
+    }
+    assert.equal(providerRequestBodies.length, callsBeforeRead);
+
+    // A database failure on a later page must report incomplete loading, never
+    // present the first page as the complete inbox or silently show an empty list.
+    queueReads = 0;
+    intakeReadInterceptor = (query, result) => {
+      if (query.inFilters.some(([field]) => field === "processing_status")) {
+        queueReads += 1;
+        if (queueReads === 2) return {data: null, error: {message: "Synthetic page read failure"}};
+      }
+      return result;
+    };
+    const interruptedRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+    assert.equal(interruptedRead.ok, false);
+    assert.equal(interruptedRead.status, 500);
+    assert.match(interruptedRead.error, /could not be loaded completely/i);
+    assert.equal(interruptedRead.data, undefined);
+    assert.equal(providerRequestBodies.length, callsBeforeRead);
+  } finally {
+    intakeReadInterceptor = null;
+    intakeRows.splice(0, intakeRows.length, ...savedRows);
+    reliabilityProviderOverrides.clear();
+  }
 } finally {
   Module._load = originalLoad;
   await rm(tempDir, { force: true, recursive: true });

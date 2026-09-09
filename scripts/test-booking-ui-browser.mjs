@@ -6833,7 +6833,7 @@ async function runChromeTest() {
                 external_send: false,
                 ok: true,
                 records: (window.__prestigeAdminEmailAiIntake || []).filter(
-                  (record) => ["queued", "failed"].includes(record.processing_status),
+                  (record) => ["queued", "failed", "processing"].includes(record.processing_status),
                 ),
                 token_usage: window.__prestigeAdminEmailAiTokenUsage,
                 version: "browser-private-email-ai-intake-mock",
@@ -8934,7 +8934,25 @@ async function runChromeTest() {
     })()`);
     assert.deepEqual(failedEmailRead,{sourceVisible:true,source:"Private original source for review only.",buttonCount:0},"Failed AI output cannot enter Create Job Card or save through a button");
     await evaluate(`(() => {
-      window.__prestigeAdminEmailAiIntake=window.__prestigeAdminEmailAiIntake.filter(row=>row.id!=="failed-booking-source-fixture");
+      const source=window.__prestigeAdminEmailAiIntake.find(row=>row.id==="failed-booking-source-fixture");
+      window.__prestigeAdminEmailAiIntake.push(
+        {...source,id:"processing-email-fixture",processing_status:"processing",created_at:new Date().toISOString(),summary:"Email received. AI review is processing."},
+        {...source,id:"stalled-email-fixture",processing_status:"processing",created_at:"2020-01-01T00:00:00Z",summary:"Email received, but AI review has not completed."},
+        {...source,id:"empty-email-fixture",processing_status:"queued",classification:"uncertain"}
+      );
+      [...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Refresh Dashboard")?.click();
+    })()`);
+    await waitForCondition(()=>evaluate(`Boolean(document.querySelector('[data-dashboard-email-ai-intake-row="stalled-email-fixture"]'))`),10000,"processing and stalled receipts remain visible");
+    const unresolvedEmailStates=await evaluate(`["processing-email-fixture","stalled-email-fixture","empty-email-fixture"].map(id=>{
+      const row=document.querySelector('[data-dashboard-email-ai-intake-row="'+id+'"]');
+      return {id,buttons:row.querySelectorAll("button").length,source:Boolean(row.querySelector("pre")),processing:row.textContent.includes("AI review processing"),delayed:row.textContent.includes("AI review delayed"),confidence:row.textContent.includes("% confidence")};
+    })`);
+    assert.equal(unresolvedEmailStates.length,3);
+    for(const state of unresolvedEmailStates){assert.equal(state.buttons,0);assert.equal(state.source,true);assert.equal(state.confidence,false);}
+    assert.equal(unresolvedEmailStates[0].processing,true);
+    assert.equal(unresolvedEmailStates[1].delayed,true);
+    await evaluate(`(() => {
+      window.__prestigeAdminEmailAiIntake=window.__prestigeAdminEmailAiIntake.filter(row=>!["failed-booking-source-fixture","processing-email-fixture","stalled-email-fixture","empty-email-fixture"].includes(row.id));
       [...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Refresh Dashboard")?.click();
     })()`);
     await waitForCondition(()=>evaluate(`!document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]')`),10000,"restore bounded email fixture");

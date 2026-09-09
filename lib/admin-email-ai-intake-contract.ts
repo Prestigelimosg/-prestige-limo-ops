@@ -48,14 +48,15 @@ export function adminEmailAiIntakeAppearsInApp(input: {
   senderAddress?: unknown;
   subject?: unknown;
 }) {
-  if (input.processingStatus === "failed") {
-    return adminEmailAiSenderAddressIsAllowed(input.senderAddress) && (
+  if (input.processingStatus && !["queued", "failed", "processing"].includes(String(input.processingStatus))) return false;
+  // A known booking subject is receipt evidence independent of the AI classification.
+  const recognizedBooking = adminEmailAiSenderAddressIsAllowed(input.senderAddress) && (
       /^New booking ["“]Prestige Transport \d+["”] has been received$/i.test(String(input.subject ?? "").trim()) ||
       (normalizeAdminEmailAiAddress(input.senderAddress) === adminEmailAiGroundBookerSenderAddress &&
         /\border from groundbooker transzend\s*\[inq#\d+\]\s*$/i.test(String(input.subject ?? "").trim()))
     );
-  }
-  if (input.processingStatus && input.processingStatus !== "queued") return false;
+  if (recognizedBooking) return true;
+  if (input.processingStatus === "failed" || input.processingStatus === "processing") return false;
 
   if (adminEmailAiClassificationAppearsInApp(input.classification)) {
     return true;

@@ -51169,7 +51169,13 @@ export default function Home() {
                   const intakeId = clean(record.id);
                   const classification = clean(record.classification).toLowerCase();
                   const failedReview = clean(record.processing_status) === "failed";
-                  const classificationLabel = failedReview
+                  const processingReview = clean(record.processing_status) === "processing";
+                  const sourceOnlyReview = failedReview || processingReview || !clean(record.canonical_booking_text);
+                  const classificationLabel = processingReview
+                    ? Date.now() - new Date(String(record.created_at || "")).getTime() < 5 * 60_000
+                      ? "AI review processing"
+                      : "AI review delayed"
+                    : failedReview
                     ? "AI review failed"
                     : classification === "confirmed_booking"
                       ? "Confirmed booking"
@@ -51202,7 +51208,7 @@ export default function Home() {
                             {clean(record.subject) || "No subject"}
                           </p>
                           <p className="truncate text-xs text-slate-500">
-                            From {clean(record.sender_address)}{failedReview ? "" : ` · ${confidence}% confidence`}
+                            From {clean(record.sender_address)}{sourceOnlyReview ? "" : ` · ${confidence}% confidence`}
                           </p>
                         </div>
                         <div className="min-w-0">
@@ -51214,7 +51220,7 @@ export default function Home() {
                           </p>
                         </div>
                         <div className="flex md:justify-end">
-                          {failedReview ? (
+                          {sourceOnlyReview ? (
                             <span className="text-xs font-semibold text-amber-800">Source review required</span>
                           ) : <button
                             className="h-8 rounded-md border border-indigo-300 bg-indigo-800 px-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
@@ -51225,10 +51231,10 @@ export default function Home() {
                           </button>}
                         </div>
                       </div>
-                      {failedReview ? (
+                      {sourceOnlyReview ? (
                         <details className="mt-2 border-t border-amber-100 pt-2" data-email-ai-failed-source={intakeId}>
                           <summary className="cursor-pointer font-medium text-amber-900">Review source email</summary>
-                          <p className="my-2 text-xs text-amber-900">AI could not validate this booking. Review the original email before preparing the booking in Dispatch. Nothing has been saved or sent.</p>
+                          <p className="my-2 text-xs text-amber-900">This email has no validated booking draft yet. Its source is retained here for review. Nothing has been saved or sent.</p>
                           <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-800">{record.normalized_text || "Source email unavailable; check the booking mailbox."}</pre>
                         </details>
                       ) : null}

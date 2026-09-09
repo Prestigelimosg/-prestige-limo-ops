@@ -40,8 +40,76 @@ const mailboxStateTable = "admin_email_ai_mailbox_state";
 const maximumEmailSourceBytes = 256_000;
 const maximumAiInputCharacters = 12_000;
 const maximumMessagesPerRun = 20;
+const intakeReadPageSize = 500;
+const intakeReadMaximumPages = 100;
 const tokenUsagePageSize = 1_000;
 const tokenUsageMaximumPages = 100;
+const correctionMemoryVersion = "source-validated-corrections-v1";
+const correctionMemoryTemplate = "prestige-transport-form-v1";
+const correctionLessonInstructions = {
+  explicit_route_label: "Recheck the explicit Route name before choosing service: Airport Departure means DEP, Airport Arrival means MNG, Transfer means TRF, and Disposal, Hourly or Standby means DSP. Generic Airport transfer or One Way must not override that label.",
+  booked_pax_not_vehicle_capacity: "Recheck booked pax against CLIENT DETAILS Passangers/Passengers. VEHICLE Passengers count is capacity, not the number booked; never substitute it for booked pax.",
+  location_roles: "Recheck location roles: PICK UP LOCATION is primary pickup; ROUTE LOCATIONS and numbered waypoints are intermediate stops; DROP OFF LOCATION is the destination. For an arrival, a ground destination or waypoint must never become the airport pickup. Leave an unspecified airport pickup empty for review.",
+} as const;
+type CorrectionLessonCode = keyof typeof correctionLessonInstructions;
+
+function safeCorrectionLessonCodes(value: unknown): CorrectionLessonCode[] {
+  if (!Array.isArray(value)) return [];
+  return (Object.keys(correctionLessonInstructions) as CorrectionLessonCode[])
+    .filter((code) => value.includes(code));
+}
+
+function isCorrectionMemoryTemplate(input: { senderAddress: string; subject: string }) {
+  return input.senderAddress === "info@prestigelimo.sg" &&
+    prestigeTransportBookingSubjectPattern.test(cleanText(input.subject, 240));
+}
+
+function relevantCorrectionLessonCodes(input: { body: string; senderAddress: string; subject: string }, value: unknown) {
+  if (!isCorrectionMemoryTemplate(input)) return [];
+  const source = explicitSourceBookingFacts(input.body);
+  if (source.ambiguous) return [];
+  const facts = source.facts;
+  return safeCorrectionLessonCodes(value).filter((code) => {
+    if (code === "explicit_route_label") return Boolean(facts.bookingType);
+    if (code === "booked_pax_not_vehicle_capacity") return Boolean(facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity);
+    return Boolean((facts.pickup && facts.extraStopLocation) || (facts.bookingType === "MNG" && (facts.dropoff || facts.extraStopLocation)));
+  });
+}
+
+async function loadCorrectionLessonCodes(
+  client: SupabaseClient,
+  input: { body: string; senderAddress: string; subject: string },
+): Promise<CorrectionLessonCode[]> {
+  const relevantCodes = relevantCorrectionLessonCodes(input, Object.keys(correctionLessonInstructions));
+  if (!relevantCodes.length) return [];
+  try {
+    // Only versioned lesson metadata is read: never historical email bodies or booking facts.
+    // One existence check per permitted lesson prevents frequent errors crowding out rarer ones.
+    // Closing a review card does not revoke a proven generic lesson or reopen its booking.
+    const signal = AbortSignal.timeout(1_500);
+    const matches = await Promise.all(relevantCodes.map(async (code) => {
+      const result = await client.from(intakeTable)
+        .select("correction_memory:booking_parse_result->correction_memory")
+        .eq("mailbox_address", adminEmailAiMailboxAddress)
+        .eq("sender_address", input.senderAddress)
+        .contains("booking_parse_result", { correction_memory: {
+          version: correctionMemoryVersion, template: correctionMemoryTemplate, lesson_codes: [code],
+        } })
+        .limit(1)
+        .abortSignal(signal);
+      if (result.error || !Array.isArray(result.data)) throw new Error("correction_memory_read_failed");
+      const memory = result.data[0]?.correction_memory;
+      return memory && typeof memory === "object" && !Array.isArray(memory) &&
+        memory.version === correctionMemoryVersion && memory.template === correctionMemoryTemplate &&
+        safeCorrectionLessonCodes(memory.lesson_codes).includes(code) ? code : null;
+    }));
+    return safeCorrectionLessonCodes(matches);
+  } catch {
+    // Optional reminders must never prevent the already-durable receipt from being analysed.
+    console.warn("Email AI correction memory unavailable; using fixed instructions.");
+    return [];
+  }
+}
 
 const emailAnalysisInstructions = `You are the private email intake reviewer for Prestige Limo Ops admin.
 
@@ -188,6 +256,7 @@ export type AdminEmailAiIntakeReviewResult =
 
 export type AdminEmailAiRunResult =
   | {
+      failed: number;
       initialized: boolean;
       inspected: number;
       ok: true;
@@ -209,11 +278,19 @@ type AdminEmailAiProviderResult =
       model: string;
       ok: true;
       outputTokens: number;
+      appliedCorrectionLessonCodes?: CorrectionLessonCode[];
     }
   | {
       error: string;
       ok: false;
       reviewReason?: string;
+      failureStage?: string;
+      responseId?: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      model?: string;
+      correctionLessonCodes?: CorrectionLessonCode[];
+      appliedCorrectionLessonCodes?: CorrectionLessonCode[];
     };
 
 function cleanText(value: unknown, maximumLength: number) {
@@ -432,10 +509,10 @@ function sanitizePersistenceRecord(
   });
 
   return {
-    booking_parse_result: value.processing_status === "failed"
+    booking_parse_result: value.processing_status === "failed" || value.processing_status === "processing"
       ? { bookings: [], multipleBookingsDetected: false, rawWarnings: [] }
       : analysis.bookingResult,
-    canonical_booking_text: value.processing_status === "failed" ? "" : cleanMultilineText(
+    canonical_booking_text: value.processing_status === "failed" || value.processing_status === "processing" ? "" : cleanMultilineText(
       value.canonical_booking_text,
       maximumAiInputCharacters,
     ),
@@ -454,7 +531,11 @@ function sanitizePersistenceRecord(
     sender_address: senderAddress,
     subject: cleanText(value.subject, 240),
     suggested_reply: analysis.suggestedReply,
-    summary: analysis.summary,
+    summary: value.processing_status === "processing"
+      ? Date.now() - new Date(String(value.created_at || "")).getTime() < 5 * 60_000
+        ? "Email received. AI review is processing."
+        : "Email received, but AI review has not completed. Source review required."
+      : analysis.summary,
   };
 }
 
@@ -630,46 +711,45 @@ export async function loadAdminEmailAiIntake(
   }
 
   const database = client || createServerClient();
-  const result = await database
-    .from(intakeTable)
-    .select(
-      "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
-    )
-    .in("processing_status", ["queued", "failed"])
-    .in("classification", [
-      ...adminEmailAiAppReviewClassifications,
-      "enquiry",
-      "uncertain",
-    ])
-    .order("created_at", { ascending: false })
-    .limit(25);
+  const recordsById = new Map<string, AdminEmailAiIntakeRecord>();
+  let afterId = "";
+  for (let pageIndex = 0; pageIndex < intakeReadMaximumPages; pageIndex += 1) {
+    let query = database
+      .from(intakeTable)
+      .select(
+        "id, mailbox_address, sender_address, subject, normalized_text, classification, confidence, summary, suggested_reply, booking_parse_result, canonical_booking_text, review_reasons, processing_status, received_at, created_at",
+      )
+      .in("processing_status", ["queued", "failed", "processing"])
+      .order("id", { ascending: true })
+      .limit(intakeReadPageSize);
+    if (afterId) query = query.gt("id", afterId);
+    const result = await query;
 
-  if (result.error) {
-    return {
-      error: "Private email AI intake could not be loaded safely.",
-      ok: false,
-      status: 500,
-    };
+    if (result.error || !Array.isArray(result.data)) {
+      return { error: "Email AI review list could not be loaded completely. Refresh to try again.", ok: false, status: 500 };
+    }
+    for (const value of result.data) {
+      const record = sanitizePersistenceRecord(value as AdminEmailAiPersistenceRecord);
+      if (record && adminEmailAiIntakeAppearsInApp({
+        classification: record.classification,
+        processingStatus: record.processing_status,
+        senderAddress: record.sender_address,
+        subject: record.subject,
+      })) recordsById.set(record.id, record);
+    }
+    if (result.data.length < intakeReadPageSize) break;
+    const nextId = cleanText(result.data[result.data.length - 1]?.id, 120);
+    if (!nextId || nextId <= afterId) {
+      return { error: "Email AI review list could not be loaded completely. Refresh to try again.", ok: false, status: 500 };
+    }
+    afterId = nextId;
+    if (pageIndex === intakeReadMaximumPages - 1) {
+      return { error: "Email AI review list could not be loaded completely. Too many unresolved records; administrator attention is required.", ok: false, status: 500 };
+    }
   }
-
-  const records = Array.isArray(result.data)
-    ? result.data
-        .map((record) =>
-          sanitizePersistenceRecord(
-            record as AdminEmailAiPersistenceRecord,
-          ),
-        )
-        .filter(
-          (record): record is AdminEmailAiIntakeRecord =>
-            record !== null &&
-            adminEmailAiIntakeAppearsInApp({
-              classification: record.classification,
-              processingStatus: record.processing_status,
-              senderAddress: record.sender_address,
-              subject: record.subject,
-            }),
-        )
-    : [];
+  const records = Array.from(recordsById.values()).sort((left, right) =>
+    String(right.created_at || "").localeCompare(String(left.created_at || "")) || left.id.localeCompare(right.id),
+  );
   let inputTokens = 0;
   let outputTokens = 0;
   let tokenUsageAvailable = true;
@@ -1268,7 +1348,15 @@ function validateExplicitSourceFactsCompleteness(
   ] as const;
   const mismatchFields = mismatches.filter(([, mismatch]) => mismatch).map(([field]) => field);
   if (mismatchFields.length > 0) {
+    const correctionLessonCodes: CorrectionLessonCode[] = [];
+    // These are interpretation reminders, never replacement values or identity decisions.
+    if (!sourceEvidence.ambiguous && hasOneStructuredBooking) {
+      if (mismatchFields.includes("service")) correctionLessonCodes.push("explicit_route_label");
+      if (mismatchFields.includes("passenger count / capacity")) correctionLessonCodes.push("booked_pax_not_vehicle_capacity");
+      if (mismatchFields.includes("arrival pickup") || mismatchFields.includes("pickup / extraStopLocation")) correctionLessonCodes.push("location_roles");
+    }
     return {
+      correctionLessonCodes,
       error: `${explicitSourceFactsValidationReviewReason} Check: ${mismatchFields.join(", ")}.`,
       ok: false as const,
     };
@@ -1663,15 +1751,21 @@ async function analyseAllowedEmail(input: {
   body: string;
   senderAddress: AdminEmailAiAllowedSenderAddress;
   subject: string;
+  correctionLessonCodes?: CorrectionLessonCode[];
 }): Promise<AdminEmailAiProviderResult> {
   const model = cleanModel(process.env[adminEmailAiModelEnvName]);
+  const lessonCodes = relevantCorrectionLessonCodes(input, input.correctionLessonCodes);
+  let evidence = { failureStage: "provider", model, inputTokens: 0, outputTokens: 0, responseId: "", appliedCorrectionLessonCodes: lessonCodes };
+  const correctionInstructions = lessonCodes.length
+    ? `\n\nApp-validated correction reminders (${correctionMemoryTemplate}):\nThese generic checks come from earlier source-validation failures. Use only the current email for facts; they do not approve a booking or identify a CRM account.\n${lessonCodes.map(code => `- ${correctionLessonInstructions[code]}`).join("\n")}`
+    : "";
 
   try {
     const response = await new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     }).responses.create({
       input: `Subject:\n${input.subject || "(no subject)"}\n\nEmail body:\n${input.body}`,
-      instructions: emailAnalysisInstructions,
+      instructions: emailAnalysisInstructions + correctionInstructions,
       max_output_tokens: 2_000,
       model,
       parallel_tool_calls: false,
@@ -1688,16 +1782,27 @@ async function analyseAllowedEmail(input: {
       },
       tools: [],
     });
+    evidence = {
+      failureStage: "response_json",
+      model: cleanModel(response.model || model),
+      inputTokens: cleanPositiveInteger(response.usage?.input_tokens),
+      outputTokens: cleanPositiveInteger(response.usage?.output_tokens),
+      responseId: cleanText(response.id, 120),
+      appliedCorrectionLessonCodes: lessonCodes,
+    };
     const outputText = cleanMultilineText(response.output_text, 60_000);
     const parsed = outputText ? JSON.parse(outputText) : null;
 
     if (!parsed) {
       return {
+        ...evidence,
         error: "OpenAI did not return a usable email review.",
         ok: false,
       };
     }
 
+    evidence.failureStage = "normalization";
+    const originalAnalysis = sanitizeAdminEmailAiAnalysis(parsed);
     const analysis = enforceAllowedSenderCompanyAccount(
       input.senderAddress,
       enforceResolvedStructuredReviewReasons(
@@ -1706,19 +1811,34 @@ async function analyseAllowedEmail(input: {
             input,
             enforcePrestigeTransportIdentityConsistency(
               input,
-              sanitizeAdminEmailAiAnalysis(parsed),
+              originalAnalysis,
             ),
           ),
         ),
       ),
     );
+    const recognizedBooking = adminEmailAiIntakeAppearsInApp({ senderAddress: input.senderAddress, subject: input.subject });
+    const supportedClassification = adminEmailAiAppReviewClassifications.some(value => value === analysis.classification) ||
+      (analysis.classification === "enquiry" && adminEmailAiCanonicalCompanyAccountForSender(input.senderAddress) !== null);
+    if (recognizedBooking && !supportedClassification) {
+      return { ...evidence, failureStage: "classification", error: "Booking email received, but AI could not identify its booking intent. Source review required.", ok: false };
+    }
+    evidence.failureStage = "source_validation";
     const sourceFactsValidation = validateExplicitSourceFactsCompleteness(
       input,
       analysis,
     );
 
     if (!sourceFactsValidation.ok) {
+      // A downstream normalizer defect must not teach the model that its correct output was wrong.
+      const originalValidation = validateExplicitSourceFactsCompleteness(input, originalAnalysis);
+      const correctionLessonCodes = isCorrectionMemoryTemplate(input) &&
+        originalAnalysis.classification === "confirmed_booking" && analysis.classification === "confirmed_booking" && !originalValidation.ok
+        ? sourceFactsValidation.correctionLessonCodes.filter(code => originalValidation.correctionLessonCodes.includes(code))
+        : [];
       return {
+        ...evidence,
+        correctionLessonCodes,
         error: sourceFactsValidation.error,
         ok: false,
         reviewReason: sourceFactsValidation.error,
@@ -1734,9 +1854,12 @@ async function analyseAllowedEmail(input: {
       model: cleanModel(response.model || model),
       ok: true,
       outputTokens: cleanPositiveInteger(response.usage?.output_tokens),
+      appliedCorrectionLessonCodes: lessonCodes,
     };
   } catch {
     return {
+      ...evidence,
+      reviewReason: `AI review failed during ${evidence.failureStage}; source review required.`,
       error: "OpenAI did not return a usable email review.",
       ok: false,
     };
@@ -1864,11 +1987,39 @@ async function updateProcessedIntake(
     subject: string;
   },
 ) {
+  const appliedCodes = safeCorrectionLessonCodes(providerResult.appliedCorrectionLessonCodes);
+  const appliedMemory = appliedCodes.length ? {
+    correction_memory_applied: {
+      version: correctionMemoryVersion,
+      template: correctionMemoryTemplate,
+      lesson_codes: appliedCodes,
+    },
+  } : {};
   if (!providerResult.ok) {
     const failedResult = await client
       .from(intakeTable)
       .update({
         processing_status: "failed",
+        booking_parse_result: {
+          bookings: [], multipleBookingsDetected: false, rawWarnings: [],
+          ...appliedMemory,
+          failure_evidence: {
+            stage: providerResult.failureStage || "provider",
+            response_id: providerResult.responseId || null,
+            reason: providerResult.reviewReason || providerResult.error,
+          },
+          ...(providerResult.failureStage === "source_validation" && isCorrectionMemoryTemplate(source) && safeCorrectionLessonCodes(providerResult.correctionLessonCodes).length
+            ? { correction_memory: {
+                version: correctionMemoryVersion,
+                template: correctionMemoryTemplate,
+                lesson_codes: safeCorrectionLessonCodes(providerResult.correctionLessonCodes),
+              } }
+            : {}),
+        },
+        canonical_booking_text: "",
+        model: providerResult.model || null,
+        openai_input_tokens: providerResult.inputTokens || 0,
+        openai_output_tokens: providerResult.outputTokens || 0,
         review_reasons: [
           providerResult.reviewReason ||
             "AI review was unavailable; manual review required.",
@@ -1889,7 +2040,7 @@ async function updateProcessedIntake(
   const result = await client
     .from(intakeTable)
     .update({
-      booking_parse_result: analysis.bookingResult,
+      booking_parse_result: { ...analysis.bookingResult, ...appliedMemory },
       canonical_booking_text: adminEmailAiCanonicalBookingText(analysis),
       classification: analysis.classification,
       confidence: analysis.confidence,
@@ -2023,6 +2174,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
   let inspected = 0;
   let parsed = 0;
   let skipped = 0;
+  let failed = 0;
 
   try {
     await imap.connect();
@@ -2038,6 +2190,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
       await saveMailboxState(database, uidValidity, currentLastUid);
 
       return {
+        failed,
         initialized: true,
         inspected: 0,
         ok: true,
@@ -2051,6 +2204,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
 
     if (lastSeenUid >= currentLastUid) {
       return {
+        failed,
         initialized: false,
         inspected,
         ok: true,
@@ -2177,10 +2331,15 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
         continue;
       }
 
-      const providerResult = await analyseAllowedEmail({
+      const analysisInput = {
         body,
         senderAddress,
         subject: cleanText(parsedMail.subject, 240),
+      };
+      const correctionLessonCodes = await loadCorrectionLessonCodes(database, analysisInput);
+      const providerResult = await analyseAllowedEmail({
+        ...analysisInput,
+        correctionLessonCodes,
       });
       const completed = await updateProcessedIntake(
         database,
@@ -2200,6 +2359,8 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
             providerResult.analysis.classification,
           );
         }
+      } else {
+        failed += 1;
       }
 
       lastSeenUid = message.uid;
@@ -2207,6 +2368,7 @@ export async function runAdminEmailAiIntake(): Promise<AdminEmailAiRunResult> {
     }
 
     return {
+      failed,
       initialized: false,
       inspected,
       ok: true,

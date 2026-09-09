@@ -113,12 +113,6 @@ for (const blockedGroundBookerReviewInput of [
     senderAddress: "transzend@groundbooker.com",
     subject: "Can you quote an airport transfer?",
   },
-  {
-    classification: "unrelated",
-    senderAddress: "transzend@groundbooker.com",
-    subject:
-      "AUG 16th | Departure Transfer to Main Terminal - order from Groundbooker Transzend [INQ#817905]",
-  },
 ]) {
   assert.equal(
     contract.adminEmailAiIntakeAppearsInApp(
@@ -382,11 +376,9 @@ assert.match(
 );
 assert.doesNotMatch(contractSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
 assert.doesNotMatch(bookingParserSource, /hyunsoostar@hotmail\.com|Kim Hyun Soo/);
-assert.match(runtimeSource, /\.in\("processing_status", \["queued", "failed"\]\)/);
-assert.match(
-  runtimeSource,
-  /\.in\("classification", \[\s*\.\.\.adminEmailAiAppReviewClassifications,\s*"enquiry",\s*"uncertain",\s*\]\)/,
-);
+assert.match(runtimeSource, /\.in\("processing_status", \["queued", "failed", "processing"\]\)/);
+assert.match(runtimeSource, /intakeReadPageSize/);
+assert.doesNotMatch(runtimeSource.slice(runtimeSource.indexOf("export async function loadAdminEmailAiIntake"),runtimeSource.indexOf("let inputTokens = 0",runtimeSource.indexOf("export async function loadAdminEmailAiIntake"))), /\.in\("classification"/, "AI classification cannot exclude a recognized booking receipt before review filtering");
 assert.match(runtimeSource, /\? "queued"\s*:\s*"dismissed"/);
 assert.match(runtimeSource, /currentSingaporeMonthWindow/);
 assert.match(runtimeSource, /tokenUsageMaximumPages/);
@@ -561,3 +553,13 @@ assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"failed",
 assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"reviewed",classification:"confirmed_booking",senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99990" has been received'}),false);
 assert.match(pageSource,/data-email-ai-failed-source/);
 assert.match(pageSource,/clean\(record.processing_status\) !== "queued"/);
+
+for (const classification of ["uncertain", "enquiry", "unrelated"]) {
+  for (const processingStatus of ["queued", "failed", "processing"]) {
+    assert.equal(contract.adminEmailAiIntakeAppearsInApp({classification,processingStatus,senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99991" has been received'}),true);
+  }
+  for (const processingStatus of ["dismissed", "reviewed"]) {
+    assert.equal(contract.adminEmailAiIntakeAppearsInApp({classification,processingStatus,senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99991" has been received'}),false,"Never reopen completed intake history");
+  }
+}
+assert.match(pageSource,/const sourceOnlyReview = failedReview \|\| processingReview \|\| !clean\(record.canonical_booking_text\)/);

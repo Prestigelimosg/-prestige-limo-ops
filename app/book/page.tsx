@@ -368,6 +368,10 @@ export default function CustomerBookingPage() {
       return "That verification expired. Request a new code.";
     }
 
+    if (reason === "public_request_pending") {
+      return "You already have a booking awaiting review. Please wait for Prestige Admin or contact us to change it. No SMS code was sent.";
+    }
+
     if (reason === "rate_limited") {
       return retryAfterSeconds
         ? `Too many requests. Try again in about ${retryAfterSeconds} seconds.`

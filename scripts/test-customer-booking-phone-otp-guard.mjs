@@ -43,6 +43,17 @@ const [
   ),
 );
 
+const preSmsMigration = await readFile("supabase/migrations/20260909143500_customer_public_pending_before_sms.sql", "utf8");
+const originalSendFunction = migrationSource.slice(migrationSource.indexOf("create or replace function public.reserve_customer_booking_phone_otp_send("));
+const addedPendingCheck = preSmsMigration.slice(preSmsMigration.indexOf("  -- Share the exact phone lock"), preSmsMigration.indexOf("  select max(challenge.created_at)"));
+assert.match(addedPendingCheck, /hashtextextended\(p_phone_hash, 1703\)/);
+assert.match(addedPendingCheck, /booking\.booking_reference = any\(challenge\.booking_leg_references\)/);
+assert.match(addedPendingCheck, /customer_public_booking_pending\(booking\.status, booking\.request_review_status\)/);
+assert.match(addedPendingCheck, /select false, 'public_request_pending'::text, null::integer/);
+const unchangedSend = preSmsMigration.slice(preSmsMigration.indexOf("create or replace function")).replace(addedPendingCheck, "").trim();
+assert.equal(originalSendFunction.startsWith(unchangedSend), true,
+  "Preserve the existing reservation, cooldowns, rate limits and service-only privileges verbatim outside the pending check.");
+
 assert.equal(
   helperSource.includes('import "server-only"') &&
     helperSource.includes("PRESTIGE_TWILIO_VERIFY_SERVICE_SID") &&
@@ -444,7 +455,28 @@ try {
     "An app rate limit must reject before Twilio can send another SMS.",
   );
 
+  state.rpcResponses.reserve_customer_booking_phone_otp_send = {
+    data: [{ allowed: false, reason: "public_request_pending", retry_after_seconds: null }],
+    error: null,
+  };
+  const fetchCountBeforePending = state.fetchCalls.length;
+  const pendingStart = await helper.startCustomerBookingPhoneOtp({
+    fetcher: providerFetch,
+    phone: "+65 9000 1111",
+    requestIp: "203.0.113.9",
+  });
+  assert.deepEqual(pendingStart, { error: "public_request_pending", ok: false, status: 429 });
+  assert.equal(state.fetchCalls.length, fetchCountBeforePending,
+    "An existing pending request must stop before any SMS provider call.");
+
   const adapter = createRequire(import.meta.url)(adapterOutputPath);
+  const pendingClient = await adapter.startCustomerBookingPhoneOtpVerification("+65 9000 1111", {
+    fetcher: async () => Response.json({ ok: false, reason: "public_request_pending" }, { status: 429 }),
+  });
+  assert.deepEqual(pendingClient, { ok: false, reason: "public_request_pending", retryAfterSeconds: null });
+  assert.match(phoneRouteSource, /case "public_request_pending":/);
+  assert.match(bookingPageSource, /reason === "public_request_pending"/);
+
   const adapterCalls = [];
   const adapterStart =
     await adapter.startCustomerBookingPhoneOtpVerification(

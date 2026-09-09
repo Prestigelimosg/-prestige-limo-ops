@@ -7,6 +7,7 @@ export type CustomerBookingPhoneOtpClientReason =
   | "code_invalid"
   | "configuration_unavailable"
   | "phone_invalid"
+  | "public_request_pending"
   | "provider_unavailable"
   | "rate_limited"
   | "request_blocked"
@@ -46,6 +47,7 @@ const allowedReasons = new Set<CustomerBookingPhoneOtpClientReason>([
   "code_invalid",
   "configuration_unavailable",
   "phone_invalid",
+  "public_request_pending",
   "provider_unavailable",
   "rate_limited",
   "request_blocked",

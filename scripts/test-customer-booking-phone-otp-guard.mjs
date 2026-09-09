@@ -380,6 +380,29 @@ try {
     "9000 1111",
   );
   assert.equal(verifiedProof.ok, true);
+  const admissionRpc = "reserve_customer_public_booking_request";
+  const admissionFetchCount = state.fetchCalls.length;
+  for (const [row, expected] of [
+    [{ allowed: true, reason: "allowed" }, { ok: true }],
+    [{ allowed: false, reason: "public_request_pending" }, { ok: false, reason: "public_request_pending" }],
+    [{ allowed: false, reason: "public_request_in_progress" }, { ok: false, reason: "public_request_in_progress" }],
+    [{ allowed: false, reason: "used" }, { ok: false, reason: "phone_verification_used" }],
+    [{ allowed: false, reason: "invalid" }, { ok: false, reason: "phone_verification_invalid" }],
+    [{ allowed: false, reason: "unavailable" }, { ok: false, reason: "booking_admission_unavailable" }],
+    [{ allowed: true, reason: "unexpected" }, { ok: false, reason: "booking_admission_unavailable" }],
+  ]) {
+    state.rpcResponses[admissionRpc] = { data: [row], error: null };
+    assert.deepEqual(await helper.reserveCustomerPublicBookingRequest(verifiedProof.data, [verifiedProof.data.booking_reference]), expected);
+  }
+  state.rpcResponses[admissionRpc] = { data: null, error: { message: "private database detail" } };
+  assert.deepEqual(await helper.reserveCustomerPublicBookingRequest(verifiedProof.data, [verifiedProof.data.booking_reference]), { ok: false, reason: "booking_admission_unavailable" });
+  assert.deepEqual(state.rpcCalls.at(-1).args, {
+    p_challenge_id: verifiedProof.data.challenge_id,
+    p_phone_hash: verifiedProof.data.phone_hash,
+    p_group_reference: verifiedProof.data.booking_reference,
+    p_leg_references: [verifiedProof.data.booking_reference],
+  });
+  assert.equal(state.fetchCalls.length, admissionFetchCount, "Admission must not send SMS");
   assert.match(
     verifiedProof.data.booking_reference,
     /^CBOTP-[A-F0-9]{24}$/,

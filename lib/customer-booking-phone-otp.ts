@@ -96,6 +96,38 @@ export type VerifiedCustomerBookingPhoneOtpProof = {
   phone_hash: string;
 };
 
+export async function reserveCustomerPublicBookingRequest(
+  proof: VerifiedCustomerBookingPhoneOtpProof,
+  legReferences: string[],
+): Promise<
+  | { ok: true }
+  | { ok: false; reason: "public_request_pending" | "public_request_in_progress" | "phone_verification_invalid" | "phone_verification_used" | "booking_admission_unavailable" }
+> {
+  const config = configuredCustomerBookingPhoneOtp();
+  const client = config ? createServerOnlySupabaseClient(config) : null;
+  if (!client) return { ok: false, reason: "booking_admission_unavailable" };
+  try {
+    const result = await client.rpc("reserve_customer_public_booking_request", {
+      p_challenge_id: proof.challenge_id,
+      p_phone_hash: proof.phone_hash,
+      p_group_reference: proof.booking_reference,
+      p_leg_references: legReferences,
+    });
+    const row = reservationRow(result.data);
+    if (result.error || !row) return { ok: false, reason: "booking_admission_unavailable" };
+    if (row.allowed === true && row.reason === "allowed") return { ok: true };
+    if (row.allowed === false) {
+      if (row.reason === "public_request_pending") return { ok: false, reason: "public_request_pending" };
+      if (row.reason === "public_request_in_progress") return { ok: false, reason: "public_request_in_progress" };
+      if (row.reason === "used") return { ok: false, reason: "phone_verification_used" };
+      if (row.reason === "invalid") return { ok: false, reason: "phone_verification_invalid" };
+    }
+  } catch {
+    // Provider/database details never cross the public booking boundary.
+  }
+  return { ok: false, reason: "booking_admission_unavailable" };
+}
+
 function asRecord(value: unknown) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as UnknownRecord)

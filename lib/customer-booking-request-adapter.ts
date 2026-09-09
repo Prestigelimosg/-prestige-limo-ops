@@ -44,6 +44,9 @@ export type CustomerBookingRequestSubmitResult =
         | "phone_verification_invalid"
         | "phone_verification_required"
         | "phone_verification_used"
+        | "public_request_pending"
+        | "public_request_in_progress"
+        | "booking_admission_unavailable"
         | "portal_access_cleared";
     };
 
@@ -271,7 +274,10 @@ export async function submitCustomerBookingRequest(
         resultReason === "invitation_used" ||
         resultReason === "phone_verification_required" ||
         resultReason === "phone_verification_invalid" ||
-        resultReason === "phone_verification_used"
+        resultReason === "phone_verification_used" ||
+        resultReason === "public_request_pending" ||
+        resultReason === "public_request_in_progress" ||
+        resultReason === "booking_admission_unavailable"
       ) {
         return { ok: false, reason: resultReason };
       }

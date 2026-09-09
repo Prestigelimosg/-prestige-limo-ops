@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 
 const guardChecks = [
   {
+    label: "public customer pending request admission guard",
+    script: "scripts/test-customer-public-pending-admission-guard.mjs",
+  },
+  {
     label: "customer booking phone OTP guard",
     script: "scripts/test-customer-booking-phone-otp-guard.mjs",
   },

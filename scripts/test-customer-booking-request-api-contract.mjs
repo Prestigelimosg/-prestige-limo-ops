@@ -59,6 +59,8 @@ async function loadRouteHarness() {
       "async function createAdminBooking(data, actor, audit) {",
       "  const state = mock();",
       "  state.createCalls.push({ actor, audit, data });",
+      "  if (state.phoneProofCalls.length && state.admissionCalls.length !== 1) throw new Error('Public writer requires one admission');",
+      "  if (!state.phoneProofCalls.length && state.admissionCalls.length) throw new Error('Invitation/session must bypass admission');",
       "  return Array.isArray(state.createResults) && state.createResults.length > 0 ? state.createResults.shift() : state.createResult;",
       "}",
       "async function loadAdminBookingByReference(actor, bookingReference) {",
@@ -205,7 +207,12 @@ async function loadRouteHarness() {
       "  state.phoneProofCalls.push({ phone, proof });",
       "  return state.phoneProofResult;",
       "}",
-      "module.exports = { verifyCustomerBookingPhoneOtpProof };",
+      "async function reserveCustomerPublicBookingRequest(proof, references) {",
+      "  const state = globalThis.__prestigeCustomerBookingRequestApiMock;",
+      "  state.admissionCalls.push({ proof, references, createsBeforeAdmission: state.createCalls.length });",
+      "  return state.admissionResult;",
+      "}",
+      "module.exports = { verifyCustomerBookingPhoneOtpProof, reserveCustomerPublicBookingRequest };",
     ].join("\n"),
   );
   await writeFile(
@@ -260,6 +267,8 @@ function installMock(overrides = {}) {
       ok: true,
     },
     phoneProofCalls: [],
+    admissionCalls: [],
+    admissionResult: { ok: true },
     phoneProofResult: {
       data: {
         booking_reference: "CBOTP-SAFE-001",
@@ -539,10 +548,36 @@ try {
   assert.equal(verifiedPhoneProofMock.phoneProofCalls.length, 1);
   assert.equal(verifiedPhoneProofMock.invitationCalls.length, 0);
   assert.equal(verifiedPhoneProofMock.lookupCalls.length, 1);
+  assert.equal(verifiedPhoneProofMock.admissionCalls.length, 1);
+  assert.equal(verifiedPhoneProofMock.admissionCalls[0].createsBeforeAdmission, 0);
   assertSafeCustomerBody(
     verifiedPhoneProofSuccess.body,
     "verified phone proof success body",
   );
+
+  for (const [reason, status] of [["public_request_pending", 429], ["public_request_in_progress", 429], ["booking_admission_unavailable", 503], ["phone_verification_invalid", 403], ["phone_verification_used", 409]]) {
+    const state = installMock({ admissionResult: { ok: false, reason } });
+    const response = await harness.route.POST(postRequest({ contactNo: "+6590000000" }, validHeadersWithPhoneProof()));
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get("x-prestige-customer-booking-result"), reason);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.equal(response.headers.has("set-cookie"), false, "Admission must not revoke a portal session");
+    for (const name of ["createCalls", "codexPreparationCalls", "adminAppNotificationCalls", "alertCalls", "devicePushAlertCalls", "receiptCalls"]) {
+      assert.equal((state[name] || []).length, 0, `${reason} must stop before ${name}`);
+    }
+    assertSafeCustomerBody(await response.json(), reason);
+  }
+  const invalidPublicPayload = installMock({ parseResult: { ok: false, status: 400, error: "Invalid booking details." } });
+  assert.equal((await harness.route.POST(postRequest({}, validHeadersWithPhoneProof()))).status, 400);
+  assert.equal(invalidPublicPayload.admissionCalls.length, 0, "Invalid payload must not occupy a phone slot");
+  const publicReturn = installMock({ parsePayloadsResult: { ok: true, data: {
+    groupReference: "CBOTP-SAFE-001", returnTripRequested: true,
+    requests: [{ booking: { booking_reference: "CBOTP-SAFE-001-OUT" } }, { booking: { booking_reference: "CBOTP-SAFE-001-RET" } }],
+  } } });
+  assert.equal((await harness.route.POST(postRequest({}, validHeadersWithPhoneProof()))).status, 200);
+  assert.deepEqual(publicReturn.admissionCalls[0].references, ["CBOTP-SAFE-001-OUT", "CBOTP-SAFE-001-RET"]);
+  assert.equal(publicReturn.admissionCalls.length, 1);
+  assert.equal(publicReturn.createCalls.length, 2);
 
   const invalidInvitationMock = installMock({
     invitationResult: {

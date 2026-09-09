@@ -325,6 +325,9 @@ try {
     "phone_verification_required",
     "phone_verification_invalid",
     "phone_verification_used",
+    "public_request_pending",
+    "public_request_in_progress",
+    "booking_admission_unavailable",
   ]) {
     let invitationFailureJsonWasRead = false;
     const invitationFailure = await submitCustomerBookingRequest(safeInput, {
@@ -338,7 +341,7 @@ try {
           return { error: "must not be parsed", ok: false };
         },
         ok: false,
-        status: invitationReason === "invitation_used" ? 409 : 403,
+        status: ["public_request_pending", "public_request_in_progress"].includes(invitationReason) ? 429 : invitationReason === "invitation_used" ? 409 : invitationReason === "booking_admission_unavailable" ? 503 : 403,
       }),
     });
 
@@ -351,6 +354,9 @@ try {
   }
 
   let stalePortalJsonWasRead = false;
+  assert.deepEqual(await submitCustomerBookingRequest(safeInput, {
+    fetcher: async () => ({ ok: false, status: 429 }),
+  }), { ok: false }, "A client without the new result reason must not mistake a pending limit for portal expiry");
   const stalePortal = await submitCustomerBookingRequest(safeInput, {
     fetcher: async () => ({
       json: async () => {

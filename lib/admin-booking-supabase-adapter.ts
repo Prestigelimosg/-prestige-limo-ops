@@ -1498,6 +1498,11 @@ async function insertRowAndSelectIdWithFallback(
     return currentResult;
   }
 
+  // An admission fence rejection is final, never a schema-fallback opportunity.
+  if (table === "bookings" && ["PBL01", "PBL02"].includes(currentResult.error?.code || "")) {
+    return currentResult;
+  }
+
   const cumulativeResult = await client.from(table).insert(cumulativePayload).select("id").single();
 
   if (

@@ -86,6 +86,8 @@ function safeErrorMessage(reason: CustomerBookingPhoneOtpFailureReason) {
       return "The verification code is incorrect.";
     case "challenge_expired":
       return "The verification code expired. Request a new code.";
+    case "public_request_pending":
+      return "You already have a booking awaiting review. Please wait for Prestige Admin or contact us to change it. No SMS code was sent.";
     case "rate_limited":
       return "Too many verification requests. Please wait before trying again.";
     case "configuration_unavailable":

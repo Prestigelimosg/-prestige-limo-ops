@@ -57,6 +57,7 @@ export type CustomerBookingPhoneOtpFailureReason =
   | "code_invalid"
   | "configuration_unavailable"
   | "phone_invalid"
+  | "public_request_pending"
   | "provider_unavailable"
   | "rate_limited"
   | "request_blocked"
@@ -690,6 +691,9 @@ export async function startCustomerBookingPhoneOtp({
   }
 
   if (!reservation.allowed) {
+    if (reservation.reason === "public_request_pending") {
+      return { error: "public_request_pending", ok: false, status: 429 };
+    }
     return {
       error: "rate_limited",
       ok: false,

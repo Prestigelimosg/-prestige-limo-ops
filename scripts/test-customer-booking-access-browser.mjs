@@ -108,6 +108,12 @@ async function main() {
 
           if (url.includes("/api/customer-booking-phone-verification")) {
             const body = JSON.parse(String(options.body || "{}"));
+            if (scenario === "pending-before-sms" && body.action === "start") {
+              return new Response(JSON.stringify({
+                ok: false,
+                reason: "public_request_pending",
+              }), { headers: { "Content-Type": "application/json" }, status: 429 });
+            }
             if (scenario === "rate-limit" && body.action === "start") {
               return new Response(JSON.stringify({
                 error: "Too many verification requests. Please wait before trying again.",
@@ -316,6 +322,20 @@ async function main() {
     assert.equal(rateLimited.phoneSectors, 1);
     assert.equal(rateLimited.submitLabel, "Phone verification required");
     assert.equal(rateLimited.bookingPosts, 0);
+
+    reporter.step("pending booking blocks before requesting an OTP code");
+    await navigateWithLoadEvent(client, bookingUrl("pending-before-sms"));
+    await waitForCondition(async () => (await state()).submitLabel === "Phone verification required", 10000, "pending public boundary");
+    assert.equal(await setInput('[data-customer-booking-field="contactNo"]', "+65 9000 1234"), true);
+    assert.equal(await click('[data-customer-booking-phone-otp-send="true"]'), true);
+    const pending = await waitForCondition(async () => {
+      const current = await state();
+      return current.feedback.includes("No SMS code was sent.") ? current : false;
+    }, 10000, "pending before SMS feedback");
+    assert.equal(pending.feedback, "You already have a booking awaiting review. Please wait for Prestige Admin or contact us to change it. No SMS code was sent.");
+    assert.equal(pending.submitLabel, "Phone verification required");
+    assert.equal(pending.bookingPosts, 0);
+    assert.equal(await evaluate(`document.querySelector('[data-customer-booking-phone-otp-code]') !== null`), false);
 
     console.log(JSON.stringify(reporter.summary({ ok: true }), null, 2));
     console.log("Customer booking access browser guard passed.");

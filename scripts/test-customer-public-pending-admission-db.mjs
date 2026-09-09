@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { spawn } from "node:child_process";
 
 // Deliberately no connection URL: this test can only use the isolated, offline container.
-const container = "prestige-pending-limit-test-20260909";
+const container = process.env.PRESTIGE_OFFLINE_TEST_CONTAINER || "prestige-pending-limit-test-20260909";
 const database = `pending_admission_test_${process.pid}`;
 function docker(args, input = "") {
   return new Promise((resolve, reject) => {
@@ -31,6 +31,16 @@ const phone = (n) => n.toString(16).padStart(64, "0");
 const group = (n) => `CBOTP-${n.toString(16).padStart(24, "0").toUpperCase()}`;
 const refs = (n, pair = false) => pair ? `array['${group(n)}-OUT','${group(n)}-RET']` : `array['${group(n)}']`;
 const claim = (n, mobile = n, pair = false) => `select reason from public.reserve_customer_public_booking_request('${id(n)}','${phone(mobile)}','${group(n)}',${refs(n, pair)});`;
+const send = (n, mobile) => `select reason from public.reserve_customer_booking_phone_otp_send('${id(n)}','${phone(mobile)}','${phone(n + 10000)}');`;
+async function sendReasonWithAgedOtp(n, mobile, expected) {
+  // Roll back simulated time and reservation writes; no provider or production access.
+  const result = await sql(`begin;
+    update public.customer_booking_phone_otp_challenges set created_at=now()-interval '1 hour' where phone_hash='${phone(mobile)}';
+    ${send(n, mobile)}
+    select count(*) from public.customer_booking_phone_otp_challenges where challenge_id='${id(n)}';
+    rollback;`);
+  assert.match(result, new RegExp(`\\n${expected}\\n${expected === "reserved" ? 1 : 0}\\nROLLBACK$`));
+}
 const insert = (n, suffix = "") => `insert into public.bookings(booking_reference) values ('${group(n)}${suffix}');`;
 async function challenge(n, mobile = n) {
   await sql(`insert into public.customer_booking_phone_otp_challenges(challenge_id,phone_hash,ip_hash,status,verified_at) values ('${id(n)}','${phone(mobile)}','${phone(999)}','verified',now());`);
@@ -74,26 +84,35 @@ try {
   const first = winner === group(1) ? 1 : 2;
   const second = first === 1 ? 2 : 1;
   await sql(insert(first));
+  await sendReasonWithAgedOtp(900, 1, "reserved");
+  console.log("Baseline reproduced: a saved pending booking still permits a second SMS reservation.");
+  await sql(await readFile("supabase/migrations/20260909143500_customer_public_pending_before_sms.sql", "utf8"));
+  await sendReasonWithAgedOtp(900, 1, "public_request_pending");
   assert.equal(await sql(claim(second, 1)), "public_request_pending");
   assert.equal(await sql(claim(first, 1)), "public_request_pending", "Retry must not run downstream sends");
   await sql(`update public.customer_booking_phone_otp_challenges set booking_admission_until=now()-interval '1 second' where booking_group_reference is not null;`);
   assert.equal(await sql(claim(second, 1)), "public_request_pending", "Saved pending group outlives reservation/OTP");
   await sql(`update public.bookings set contact_phone='edited display', admin_internal_status='Job Completed';`);
   assert.equal(await sql(claim(second, 1)), "public_request_pending", "Phone edit and Driver JC wording do not release");
+  await sendReasonWithAgedOtp(901, 1, "public_request_pending");
   await sql("update public.bookings set request_review_status='approved';");
+  await sendReasonWithAgedOtp(902, 1, "reserved");
   assert.equal(await sql(claim(second, 1)), "allowed");
   await sql(insert(second));
   await sql(`update public.bookings set request_review_status=null where booking_reference='${group(first)}';`, { failure: /public_request_pending/ });
   await sql(`update public.bookings set booking_reference='RENAMED' where booking_reference='${group(second)}';`, { failure: /public_admission_invalid/ });
   await sql(`update public.bookings set status='cancelled' where booking_reference='${group(second)}';`);
+  await sendReasonWithAgedOtp(903, 1, "reserved");
   await challenge(3, 1);
   assert.equal(await sql(claim(3, 1, true)), "allowed");
   await sql(insert(3, "-OUT")); await sql(insert(3, "-RET"));
   await challenge(4, 1);
   await sql(`update public.bookings set request_review_status='approved' where booking_reference='${group(3)}-OUT';`);
   assert.equal(await sql(claim(4, 1)), "public_request_pending");
+  await sendReasonWithAgedOtp(904, 1, "public_request_pending");
   await sql(`update public.bookings set status='cancelled' where booking_reference='${group(3)}-RET';`);
   assert.equal(await sql(claim(4, 1)), "allowed");
+  await sendReasonWithAgedOtp(905, 1, "reserved");
 
   await challenge(10, 10); await challenge(11, 10);
   assert.equal(await sql(claim(10)), "allowed");
@@ -153,7 +172,7 @@ try {
   assert.equal(await sql("select count(*) from pg_proc where proname in ('reserve_customer_public_booking_request','customer_public_booking_pending','enforce_customer_public_pending_admission') and (prosecdef or not ('search_path=\"\"'=any(proconfig)));"), "0");
   await sql("alter table public.bookings disable trigger customer_public_pending_admission;");
   await challenge(60); assert.equal(await sql(claim(60)), "unavailable");
-  console.log("Public pending admission database tests passed: concurrency, return groups, crash fencing, release, replay, privacy and fail-closed rollout.");
+  console.log("Public pending admission database tests passed: pre-SMS blocking without a challenge write, cancellation/approval/return release, concurrency, return groups, crash fencing, release, replay, privacy and fail-closed rollout.");
 } finally {
   await sql(`drop database ${database} with (force);`, { db: "postgres" });
 }

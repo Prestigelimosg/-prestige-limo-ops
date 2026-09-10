@@ -84,6 +84,7 @@ function fresh(f, reference=ref, linkId=link) {
   const result = await run(f.db,f.options);
   assert.equal(result.notification_count,1);assert.equal(result.admin_warning_count,1);
   assert.equal(f.sends.length,2,'missing GPS five minutes after reminder must notify Driver and Admin');
+  assert.equal(f.db.tables.customer_driver_app_notification_outbox.find(row=>row.event_key.startsWith('driver_gps_followup:')).safe_message,'Please share location');
   await run(f.db,f.options);
   assert.equal(f.sends.length,2,'repeat scheduler run must not resend');
   fresh(f); await run(f.db,f.options);

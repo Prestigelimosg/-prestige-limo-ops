@@ -140,7 +140,7 @@ type DriverPoolAssignmentCancelledVisibleBody =
 type DriverMessagePreview = string & { readonly __driverMessagePreview: unique symbol };
 type DriverNativePushVisibleBody =
   | DriverMessagePreview
-  | "Please open your job and share location before pickup."
+  | "Please share location"
   | "A driver-pool job is available. Open the app to review."
   | DriverPoolWinnerVisibleBody
   | DriverPoolAssignmentCancelledVisibleBody
@@ -155,7 +155,7 @@ type DriverDevicePushPayload = {
   message_preview?: true;
   body:
     | DriverMessagePreview
-    | "Please open your job and share location before pickup."
+    | "Please share location"
     | "A driver-pool job is available. Open the app to review."
     | DriverPoolWinnerVisibleBody
     | DriverPoolAssignmentCancelledVisibleBody
@@ -1523,7 +1523,7 @@ export async function sendDriverDevicePushAlertForPickupReminder(
   }
 
   const visibleBody = input.reminder_kind === "location_followup"
-    ? "Please open your job and share location before pickup."
+    ? "Please share location"
     : "Pickup is in 1 hour. Open Driver Portal to review.";
   return sendPayloadToDriverSubscriptions(
     client,

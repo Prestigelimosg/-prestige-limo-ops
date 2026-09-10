@@ -499,7 +499,7 @@ runInNewContext(serviceWorkerSource, {self: {
   registration: {showNotification: async (title, options) => {displayedWorkerNotification = {title, ...options};}},
 }});
 for (const [body, marker, allowed] of [
-  ["Please open your job and share location before pickup.", false, true],
+  ["Please share location", false, true],
   ["I am waiting at the lobby.", true, true],
   ["a".repeat(500), true, true],
   ["I am waiting at the lobby.", false, false],
@@ -1757,7 +1757,7 @@ try {
         nativeFetch:async(_url,init)=>{visible=JSON.parse(init.body);return new Response(JSON.stringify({data:{status:"ok"}}),{status:200});}},
     );
     assert.equal(followup.ok,true);
-    assert.equal(visible.body,"Please open your job and share location before pickup.");
+    assert.equal(visible.body,"Please share location");
     assert.equal((native ? visible.data : visible).open_target,undefined);
     assertExcludes(JSON.stringify(visible),["PRIVATE-BOOKING-REFERENCE","11111111-1111-4111-8111-111111111111","latitude","longitude"],"follow-up payload privacy");
   }

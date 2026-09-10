@@ -499,6 +499,7 @@ runInNewContext(serviceWorkerSource, {self: {
   registration: {showNotification: async (title, options) => {displayedWorkerNotification = {title, ...options};}},
 }});
 for (const [body, marker, allowed] of [
+  ["Please open your job and share location before pickup.", false, true],
   ["I am waiting at the lobby.", true, true],
   ["a".repeat(500), true, true],
   ["I am waiting at the lobby.", false, false],
@@ -1746,6 +1747,20 @@ try {
   );
   assert.equal(mismatchedPickupDriver.ok, false);
   assert.equal(mismatchedPickupDriver.reason, "invalid_driver_link");
+  for (const native of [false, true]) {
+    let visible;
+    const followup = await helper.sendDriverDevicePushAlertForPickupReminder(
+      native ? nativeAlertClient : issuedJobClient,
+      {booking_reference:"PRIVATE-BOOKING-REFERENCE",delivery_surface:"driver_app",driver_id:8,
+        driver_job_link_id:"11111111-1111-4111-8111-111111111111",reminder_kind:"location_followup"},
+      {env:configuredEnv,pushSender:async(_sub,payload)=>{visible=payload;},
+        nativeFetch:async(_url,init)=>{visible=JSON.parse(init.body);return new Response(JSON.stringify({data:{status:"ok"}}),{status:200});}},
+    );
+    assert.equal(followup.ok,true);
+    assert.equal(visible.body,"Please open your job and share location before pickup.");
+    assert.equal((native ? visible.data : visible).open_target,undefined);
+    assertExcludes(JSON.stringify(visible),["PRIVATE-BOOKING-REFERENCE","11111111-1111-4111-8111-111111111111","latitude","longitude"],"follow-up payload privacy");
+  }
 } finally {
   await rm(tempDir, { force: true, recursive: true });
 }

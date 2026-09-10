@@ -320,7 +320,7 @@ function envEvidenceRuntimePolicy(
   };
 }
 
-async function readAdminControlledRuntimePolicy({
+export async function readAdminControlledRuntimePolicy({
   client,
   env,
   purpose,

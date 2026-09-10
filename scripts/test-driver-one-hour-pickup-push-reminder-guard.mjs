@@ -203,6 +203,10 @@ await writeFile(
   tempDriverLinkPath,
   "exports.isDriverJobLinkExpired = () => false;\nexports.isDriverJobLinkExpiryOutsideAllowedWindow = () => false;\n",
 );
+await writeFile(path.join(tempDir, "lib/admin-device-push-notification.js"),
+  "exports.sendAdminDevicePushAlert = async () => { throw new Error('Unexpected Admin send'); };\n");
+await writeFile(path.join(tempDir, "lib/driver-live-location-runtime.js"),
+  "exports.driverLiveLocationRuntimeGateOpen = () => false;\n");
 
 class QueryBuilder {
   constructor(client, table) {
@@ -214,6 +218,7 @@ class QueryBuilder {
   }
   select() { return this; }
   eq(field, value) { this.filters.push(["eq", field, value]); return this; }
+  is(field, value) { this.filters.push(["is", field, value]); return this; }
   gte(field, value) { this.filters.push(["gte", field, value]); return this; }
   lt(field, value) { this.filters.push(["lt", field, value]); return this; }
   in(field, value) { this.filters.push(["in", field, value]); return this; }
@@ -245,6 +250,9 @@ function createReminderClient({
         payload: query.payload,
         table: query.table,
       });
+      if (query.operation === "select" && ["customer_driver_app_notification_outbox", "admin_app_notification_outbox"].includes(query.table)) {
+        return { data: [], error: null };
+      }
       if (query.table === "bookings") {
         return {
           data: [
@@ -410,3 +418,4 @@ try {
 }
 
 console.log("Driver one-hour pickup app push reminder guard passed.");
+await import("./test-driver-location-followup-runtime.mjs");

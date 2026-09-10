@@ -193,6 +193,7 @@ export type AdminDevicePushSender = (
 ) => Promise<void>;
 
 type AdminDevicePushAlertOptions = {
+  pickupLocationState?: "missing" | "overlap";
   badgeClient?: Pick<SupabaseClient, "from">;
   bookingReference?: unknown;
   safeMessage?: unknown;
@@ -808,6 +809,7 @@ function safeAlertPayload(
   vehiclePlate?: unknown,
   bookingReference?: unknown,
   safeMessage?: unknown,
+  pickupLocationState?: "missing" | "overlap",
 ): AdminDevicePushPayload {
   const statusLabel = adminDevicePushVehicleStatusLabels[eventType];
   const publicReference =
@@ -819,7 +821,11 @@ function safeAlertPayload(
       ? safeVehiclePlate(vehiclePlate)
       : null;
   const copy =
-    plate && publicReference && eventType === "driver_pool_accepted"
+    eventType === "driver_issue" && pickupLocationState === "missing"
+      ? { title: "Location unavailable", body: "Location unavailable after the pickup reminder. Open Dashboard to review." }
+      : eventType === "driver_issue" && pickupLocationState === "overlap"
+      ? { title: "Check overlapping jobs", body: "Driver is sharing another job. Open Dashboard to review." }
+      : plate && publicReference && eventType === "driver_pool_accepted"
       ? {
           body: `${plate} won Driver Pool Job ${publicReference}. Open Dashboard to review.`,
           title: `${plate} won Job ${publicReference}`,
@@ -966,7 +972,10 @@ function safeNativePayload(
           : adminDevicePushEventCopy[eventType].body;
 
   return {
-    body: (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply") && messageBody
+    body: eventType === "driver_issue" && (
+      messageBody === "Location unavailable after the pickup reminder. Open Dashboard to review." ||
+      messageBody === "Driver is sharing another job. Open Dashboard to review."
+    ) ? messageBody : (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply") && messageBody
       ? messageBody : body,
     data: {
       open_target: "/",
@@ -1312,6 +1321,7 @@ export async function sendAdminDevicePushAlert(
     options.vehiclePlate,
     options.bookingReference,
     options.safeMessage,
+    options.pickupLocationState,
   );
   if (payloadHasForbiddenFragments(payload)) {
     return blockedAlertResult("provider_failure", true);

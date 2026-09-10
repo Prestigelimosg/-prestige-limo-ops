@@ -820,9 +820,9 @@ export default function DriverPortalPage() {
         ) : installedAccountSignInRequired ? (
           <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
             <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
-            <p className="text-sm font-medium leading-6 text-slate-700">
-              {accountPinOnly
-                ? "Enter your 6-digit PIN on your registered phone."
+            <p className={nativePinSignIn ? "text-xs font-medium leading-5 text-slate-700" : "text-sm font-medium leading-6 text-slate-700"}>
+              {nativePinSignIn
+                ? <>First sign-in: Email + 6-digit PIN.<br />Next time: 6-digit PIN only.</>
                 : <>Sign in with the account created from your acknowledged private Job Link. The first
                   successful sign-in binds this account to this Prestige Driver installation.</>}
             </p>

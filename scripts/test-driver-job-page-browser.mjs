@@ -2574,10 +2574,20 @@ async function runChromeTest() {
       }))()`);
       assert.deepEqual(nativePinEntry, { emailInputs: 0, pinInputs: 1, firstSignIn: "First sign-in" },
         "Installed phone on the established native bridge must open directly at six-digit PIN entry.");
+      const nativeLoginHelp = await evaluate(`(() => {
+        const help = document.querySelector('[data-driver-portal-sign-in] p');
+        return { text: help?.innerText, fontSize: help ? getComputedStyle(help).fontSize : null };
+      })()`);
+      assert.deepEqual(nativeLoginHelp, {
+        text: 'First sign-in: Email + 6-digit PIN.\nNext time: 6-digit PIN only.',
+        fontSize: '12px',
+      }, 'Both installed phone platforms need the same two small login instructions.');
       await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
       await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-email-step]'))`), 5000,
         "Installed phone first sign-in retains the existing email step");
       assert.equal(await evaluate(`window.__driverPinBodies.length`), 0, "Switching sign-in modes makes no provider request.");
+      assert.equal(await evaluate(`document.querySelector('[data-driver-portal-sign-in] p')?.innerText`), nativeLoginHelp.text,
+        'First-sign-in mode keeps the same short explanation without another panel.');
       await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
       await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-password-form] input'))`), 5000,
         "Installed phone return to PIN entry");

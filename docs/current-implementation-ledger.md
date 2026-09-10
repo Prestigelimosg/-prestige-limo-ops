@@ -1,3 +1,9 @@
+## Driver Login Two-Line Instructions (2026-09-10; local work, release pending)
+
+- Owner observed the installed Pixel login page during first-time account setup and explicitly requested short instructions on that page. Replace only its existing explanatory paragraph on the supported Android/iPhone native presentation with two small lines: "First sign-in: Email + 6-digit PIN." and "Next time: 6-digit PIN only."
+- Reuse the same paragraph above the existing First sign-in / Use PIN toggle in both modes. Keep the toggle, inputs, first-time email confirmation, PIN submission, account enrollment, one-phone binding, browser restrictions, native binaries and all other workflows unchanged. No new panel, button, route, authentication behavior or provider call is added.
+- The existing account-device guard first failed on the missing instructions. Its update and the existing Driver browser regression cover the two 12px lines on Android and iPhone, their persistence when switching to first sign-in, no request from switching, and unchanged PIN rejection/success. Production publication and physical acceptance of the wording remain pending.
+
 ## Android Driver Beta Install And Same-Job Handoff (2026-09-10; local work, release pending)
 
 - Owner approved two compact Android browser controls on the existing valid private Driver Job page: Install Driver App (Beta APK) and Open This Job. The first-run browser regression reproduced zero install controls before the change. The installed wrapper already accepts the exact private HTTPS job URL on cold and warm starts; ordinary installer launch does not retain the pre-installation URL.

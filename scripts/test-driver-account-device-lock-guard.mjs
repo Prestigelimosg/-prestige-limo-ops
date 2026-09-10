@@ -100,6 +100,8 @@ includes("portalPage", 'nativeBridgeReady && /\\b(?:Android|iPhone)\\b/i.test(wi
 includes("authRoute", '/\\b(?:Android|iPhone)\\b/i.test', "same Android and iPhone presentation scope on server");
 includes("portalPage", 'const accountPinOnly = nativePinSignIn && !accountFirstSignIn;', "PIN entry on supported native phones");
 includes("portalPage", '...(accountPinOnly ? {} : { email: accountEmail })', "Bound-phone PIN omits client email");
+includes("portalPage", "First sign-in: Email + 6-digit PIN.", "short first-sign-in instruction on the login page");
+includes("portalPage", "Next time: 6-digit PIN only.", "short returning-phone instruction on the login page");
 
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "1. Install Prestige Driver. 2. Create your account below. 3. Sign in with email + 6-digit PIN.", "owner-approved shared iOS and Android installation guidance");

@@ -257,6 +257,27 @@ class MockSupabaseClient {
     this.selectHistory = [];
   }
 
+  async rpc(name, args) {
+    assert.equal(name, "admin_delete_saved_booking_atomic");
+    this.rpcCalls = [...(this.rpcCalls || []), clone(args)];
+    if (this.failures.rpc) return { data: null, error: this.failures.rpc };
+    const snapshot = clone(this.rows);
+    const target = this.rows.bookings.find(row => String(row.id) === args.p_booking_id && row.booking_reference === args.p_booking_reference);
+    if (!target) return { data: null, error: null };
+    const steps = [
+      ...["booking_service_items", "booking_route_points"].map(table => [table, [{column:"booking_id",type:"eq",value:target.id}]]),
+      ...["driver_job_bids", "driver_job_bid_offers", "customer_driver_app_notification_outbox", "driver_live_location_latest_positions", "driver_live_location_audit_events", "driver_ots_photo_proofs", "driver_job_dsp_actual_time_events", "driver_job_status_events", "driver_job_links"].map(table => [table,[{column:"booking_reference",type:"eq",value:args.p_booking_reference}]]),
+      ["bookings", [ {column:"id",type:"eq",value:target.id}, {column:"booking_reference",type:"eq",value:args.p_booking_reference}, ...(!args.p_any_status ? [{column:args.p_status_column,type:"eq",value:args.p_expected_status}] : [])]],
+    ];
+    let result;
+    for (const [table, filters] of steps) {
+      const columns = table === "bookings" ? (args.p_status_column === "status" ? "id, booking_reference, status" : "id, booking_reference, admin_internal_status, customer_facing_status") : null;
+      result = this.deleteRows(table, filters, table === "bookings" ? "maybeSingle" : "many", columns);
+      if (result.error) { this.rows = snapshot; return result; }
+    }
+    return result;
+  }
+
   from(table) {
     this.operations.push({
       table,
@@ -983,6 +1004,7 @@ try {
     version: "admin-saved-booking-delete-v1",
   });
   assert.equal(currentValidMock.createdClients.length, 1);
+  assert.equal(currentValidMock.client.rpcCalls.length, 1, "Exactly one atomic cleanup RPC");
   assert.equal(currentValidMock.client.selectHistory.length, 1);
   assert.deepEqual(currentValidMock.client.selectHistory[0].filters, [
     {
@@ -1599,7 +1621,7 @@ try {
   assert.equal(cleanupFailureResult.status, 500);
   assert.equal(
     cleanupFailureResult.body.error,
-    "Admin saved booking operational job cleanup failed safely.",
+    "Admin saved booking delete failed safely.",
   );
   assert.equal(
     cleanupFailureMock.client.rows.bookings.some(
@@ -1609,6 +1631,16 @@ try {
     "If exact operational cleanup fails, saved booking delete must fail safely instead of leaving hidden leftovers.",
   );
   assertNoUnsafeResponse(cleanupFailureResult, "cleanup failure response");
+  assert.deepEqual(cleanupFailureMock.client.rows, seed, "A late cleanup failure must roll back every earlier deletion");
+  for (const [code, expectedStatus] of [["55000",409],["40001",409],["PGRST202",500]]) {
+    const rpcFailure = installMockClient(seed, { rpc: { code, message: "private database diagnostic" } });
+    const result = await routeJson(await route.DELETE(deleteRequest("http://localhost/api/admin-saved-bookings", {booking_id:"delete-completed-1"})));
+    assert.equal(result.status, expectedStatus);
+    assert.deepEqual(rpcFailure.client.rows, seed);
+    assert.equal(rpcFailure.client.deleteHistory.length, 0, "Missing or failed RPC must never fall back to individual deletes");
+    assert.equal(JSON.stringify(result).includes("private database diagnostic"), false);
+  }
+
 } finally {
   restoreEnv();
   delete globalThis.__prestigeAdminSavedBookingDeleteApiMock;

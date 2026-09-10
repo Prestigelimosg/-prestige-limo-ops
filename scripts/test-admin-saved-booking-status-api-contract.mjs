@@ -835,6 +835,22 @@ try {
 
   setEnv(enabledEnv());
 
+  // Public OTP references are opaque hex references, not numeric saved-row IDs.
+  for (const reference of ["CBOTP-ABCDEF0123456789ABCDEF01", "CBOTP-ABCDEF0123456789ABCDEF01-RET"]) {
+    const otpSeed = clone(seed);
+    otpSeed.bookings.push({ id: 90001, booking_reference: reference, admin_internal_status: "admin_review_required", status: "draft" });
+    const otpMock = installMockClient(otpSeed);
+    const otpResult = await routeJson(await route.PATCH(jsonRequest("http://localhost/api/admin-saved-booking-statuses", {
+      booking_id: reference, status: "cancelled",
+    })));
+    assert.equal(otpResult.status, 200, "Public OTP cancellation must resolve the exact reference");
+    assert.equal(otpResult.body.booking.status, "cancelled");
+    assert.equal(otpMock.client.updateHistory[0].filters[0].column, "booking_reference");
+    assert.equal(otpMock.client.rows.bookings.find(row => row.id === 90001).customer_facing_status, "cancelled");
+    assert.deepEqual(otpMock.client.rows.bookings.filter(row => row.id !== 90001), seed.bookings);
+    assertNoUnsafeResponse(otpResult, "Public OTP cancellation");
+  }
+
   const multiSegmentBookingReferenceMock = installMockClient(seed);
   const multiSegmentBookingReferenceResult = await routeJson(
     await route.PATCH(

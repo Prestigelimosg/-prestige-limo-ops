@@ -91,13 +91,15 @@ includes("accountRoute", '"driver-account-create"', "exact account creation purp
 includes("accountRoute", "resolveDriverPortalSession", "same acknowledged browser session");
 includes("authRoute", "signInDriverAccountForInstallation", "approved account sign-in route");
 includes("authRoute", "clearDriverPortalSessionCookie", "account logout cookie clearing");
-includes("authRoute", 'request.headers.get("user-agent")', "Android-only PIN presentation scope");
+includes("authRoute", 'request.headers.get("user-agent")', "Android and iPhone PIN presentation scope");
 includes("account", 'input.allowBoundDevicePin === true && input.email === undefined', "explicit missing-email bound-device sign-in");
 includes("account", '.eq("active_device_id_hash", deviceIdHash)', "PIN identity comes only from the exact phone binding");
 includes("account", 'identityReader.getUserById(text(boundAccount.auth_user_id))', "server-only verified auth identity lookup");
 includes("account", 'savedDeviceHash !== deviceIdHash || account.account_status !== "active"', "PIN cannot bind a new phone or revive revoked access");
-includes("portalPage", 'const accountPinOnly = nativeAndroid && !accountFirstSignIn;', "PIN entry confined to Android");
-includes("portalPage", '...(accountPinOnly ? {} : { email: accountEmail })', "Android PIN omits client email");
+includes("portalPage", 'nativeBridgeReady && /\\b(?:Android|iPhone)\\b/i.test(window.navigator.userAgent)', "PIN UI requires existing native bridge and supported phone");
+includes("authRoute", '/\\b(?:Android|iPhone)\\b/i.test', "same Android and iPhone presentation scope on server");
+includes("portalPage", 'const accountPinOnly = nativePinSignIn && !accountFirstSignIn;', "PIN entry on supported native phones");
+includes("portalPage", '...(accountPinOnly ? {} : { email: accountEmail })', "Bound-phone PIN omits client email");
 
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");

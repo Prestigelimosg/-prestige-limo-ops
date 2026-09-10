@@ -171,6 +171,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
       setFeedback(attempted > 0
         ? `${accepted}/${attempted} Drivers had a push request accepted by provider; delivery not confirmed.`
         : "Offer published. No Driver device push was attempted.");
+      await loadAttention(1);
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Offer was not sent."); }
     finally { setBusy(false); }
   }

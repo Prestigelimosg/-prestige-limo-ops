@@ -260,12 +260,12 @@ async function runChromeTest() {
           "pool-more-empty",
           "pool-winner",
         ].includes(embeddedDriverMode);
-        if (embeddedDriverMode === "android-pin") {
+        if (["android-pin", "android-browser"].includes(embeddedDriverMode)) {
           Object.defineProperty(navigator, "userAgent", {
             value: "Mozilla/5.0 (Linux; Android 16; Pixel 6 Pro; wv) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36",
           });
         }
-        if (embeddedDriverMode === "ios-pin") {
+        if (["ios-pin", "ios-browser"].includes(embeddedDriverMode)) {
           Object.defineProperty(navigator, "userAgent", {
             value: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
           });
@@ -994,6 +994,52 @@ async function runChromeTest() {
 
       return state;
     };
+
+    // A first-time Android browser stays on its exact private job while downloading.
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width: 390, height: 844, deviceScaleFactor: 1, mobile: true,
+    });
+    await navigateToDriverJob(mockDriverJobTokens.validA, "Driver Job Card", "embedded=android-browser");
+    const betaInstallState = await evaluate(`(() => {
+      const setup = document.querySelector('[data-driver-beta-install]');
+      const download = setup?.querySelector('[data-driver-beta-download]');
+      const open = setup?.querySelector('[data-driver-beta-open-job]');
+      return {
+        count: document.querySelectorAll('[data-driver-beta-install]').length,
+        text: setup?.innerText || '',
+        downloadHref: download?.getAttribute('href') || '',
+        downloadRel: download?.getAttribute('rel') || '',
+        downloadReferrer: download?.getAttribute('referrerpolicy') || '',
+        downloadTarget: download?.getAttribute('target') || '',
+        openHref: open?.getAttribute('href') || '',
+        overflow: document.documentElement.scrollWidth > window.innerWidth,
+        writes: window.__driverJobFetchCalls.filter(value => /^(POST|PATCH|DELETE) /.test(value)),
+      };
+    })()`);
+    assert.equal(betaInstallState.count, 1, "Android browser needs one compact Beta install handoff on the existing job page.");
+    assert.match(betaInstallState.text, /Install Driver App \(Beta APK\)/);
+    assert.match(betaInstallState.text, /Open This Job/);
+    assert.equal(betaInstallState.downloadHref, 'https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download');
+    assert.ok(betaInstallState.downloadRel.includes('noreferrer'));
+    assert.ok(betaInstallState.downloadRel.includes('noopener'));
+    assert.equal(betaInstallState.downloadReferrer, 'no-referrer');
+    assert.equal(betaInstallState.downloadTarget, '_blank', "APK destination must preserve the private job tab.");
+    assert.ok(!betaInstallState.downloadHref.includes(mockDriverJobTokens.validA));
+    assert.equal(betaInstallState.openHref,
+      `intent://app.prestigelimo.sg/driver-job/${mockDriverJobTokens.validA}#Intent;scheme=https;package=sg.prestigelimo.drivercompanion;S.browser_fallback_url=${encodeURIComponent(`https://app.prestigelimo.sg/driver-job/${mockDriverJobTokens.validA}`)};end`);
+    assert.equal(betaInstallState.overflow, false);
+    assert.deepEqual(betaInstallState.writes, [], "Displaying installation controls must not enroll, bind, acknowledge or send.");
+    for (const mode of ['android-pin', 'ios-pin', 'ios-browser', '']) {
+      await navigateToDriverJob(mockDriverJobTokens.validA, 'Driver Job Card', mode ? `embedded=${mode}` : '');
+      assert.equal(await evaluate(`document.querySelectorAll('[data-driver-beta-install]').length`), 0,
+        'Beta APK controls must be absent inside native apps, iPhone browsers and desktop.');
+    }
+    for (const token of [mockDriverJobTokens.expired, mockDriverJobTokens.revoked]) {
+      await navigateToDriverJob(token, 'Driver job link unavailable', 'embedded=android-browser');
+      assert.equal(await evaluate(`document.querySelectorAll('[data-driver-beta-install]').length`), 0,
+        'Unavailable jobs must not offer app handoff.');
+    }
+    await client.send('Emulation.clearDeviceMetricsOverride');
 
     const resetMockDriverJobData = async () => {
       const response = await fetch(driverJobApiUrl(mockDriverJobTokens.workflowOrder), {

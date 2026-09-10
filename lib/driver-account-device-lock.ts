@@ -16,6 +16,12 @@ type DbClient = Pick<SupabaseClient, "from">;
 type Env = Record<string, string | undefined>;
 type UnknownRecord = Record<string, unknown>;
 type AuthUser = { id?: string | null };
+type AuthIdentityReader = {
+  getUserById: (userId: string) => Promise<{
+    data: { user?: (AuthUser & { email?: string | null }) | null } | null;
+    error: unknown;
+  }>;
+};
 type AuthAdmin = {
   createUser: (input: {
     app_metadata: Record<string, string>;
@@ -305,23 +311,52 @@ export async function createDriverAccountForAcknowledgedLink(input: {
 }
 
 export async function signInDriverAccountForInstallation(input: {
+  allowBoundDevicePin?: boolean;
   auth?: PasswordAuth;
   client?: DbClient;
   email: unknown;
   env?: Env;
   installationId: unknown;
+  identityReader?: AuthIdentityReader;
   password: unknown;
 }): Promise<DriverAccountResult> {
   const env = input.env ?? process.env;
-  const email = normalizedEmail(input.email);
+  let email = normalizedEmail(input.email);
+  const boundDevicePin = input.allowBoundDevicePin === true && input.email === undefined;
   const deviceIdHash = deviceIdHashFor(input.installationId, env);
-  if (!email || !driverAccountPasswordIsReady(input.password)) return failure("invalid_credentials");
+  if ((!email && !boundDevicePin) || !driverAccountPasswordIsReady(input.password)) return failure("invalid_credentials");
   if (!deviceIdHash) return failure("not_native_app");
   if (!runtimeEnabled(env)) return failure("not_configured");
 
   const client = input.client ?? serviceClient(env);
   const auth = input.auth ?? passwordAuth(env);
   if (!client || !auth) return failure("not_configured");
+
+  let boundAccount: UnknownRecord | null = null;
+  if (boundDevicePin) {
+    // Only an existing active binding can supply identity. This never enrolls a phone.
+    const { data, error } = await client
+      .from("driver_access_accounts")
+      .select("id, auth_user_id, driver_reference, account_status, active_device_id_hash")
+      .eq("active_device_id_hash", deviceIdHash)
+      .eq("account_status", "active")
+      .maybeSingle();
+    boundAccount = record(data);
+    if (
+      error || !uuidPattern.test(text(boundAccount.id)) ||
+      !uuidPattern.test(text(boundAccount.auth_user_id)) ||
+      !positiveInteger(boundAccount.driver_reference) ||
+      boundAccount.account_status !== "active" ||
+      boundAccount.active_device_id_hash !== deviceIdHash
+    ) return failure("invalid_credentials");
+    const identityReader = input.identityReader ?? serviceClient(env)?.auth.admin;
+    if (!identityReader) return failure("not_configured");
+    const identity = await identityReader.getUserById(text(boundAccount.auth_user_id));
+    email = normalizedEmail(identity.data?.user?.email);
+    if (identity.error || !email || identity.data?.user?.id !== boundAccount.auth_user_id) {
+      return failure("invalid_credentials");
+    }
+  }
 
   const signedIn = await auth.signInWithPassword({ email, password: input.password as string });
   const authUserId = text(signedIn.data?.user?.id);
@@ -340,6 +375,11 @@ export async function signInDriverAccountForInstallation(input: {
     if (accountError || !uuidPattern.test(accountId) || !driverId) {
       return failure("invalid_credentials");
     }
+    if (boundAccount && (
+      authUserId !== text(boundAccount.auth_user_id) || accountId !== text(boundAccount.id) ||
+      driverId !== positiveInteger(boundAccount.driver_reference) ||
+      savedDeviceHash !== deviceIdHash || account.account_status !== "active"
+    )) return failure("invalid_credentials");
     if (account.account_status === "suspended" || account.account_status === "revoked") {
       return failure("invalid_credentials");
     }

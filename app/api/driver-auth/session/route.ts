@@ -39,6 +39,8 @@ export async function POST(request: Request) {
   }
 
   const result = await signInDriverAccountForInstallation({
+    // Platform chooses the presentation, never the account or authorization.
+    allowBoundDevicePin: /\bAndroid\b/i.test(request.headers.get("user-agent") || ""),
     email: body.email,
     installationId: body.installation_id,
     password: body.password,

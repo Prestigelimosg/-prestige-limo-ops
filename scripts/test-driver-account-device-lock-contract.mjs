@@ -23,6 +23,7 @@ async function loadHarness() {
     "lib/driver-job-link.ts",
     "lib/driver-account-password.ts",
     "lib/driver-account-device-lock.ts",
+    "app/api/driver-auth/session/route.ts",
   ]) {
     const sourcePath = path.join(process.cwd(), relativePath);
     const output = transpile(await readFile(sourcePath, "utf8"), sourcePath);
@@ -37,10 +38,16 @@ async function loadHarness() {
   await mkdir(path.dirname(supabase), { recursive: true });
   await writeFile(serverOnly, "");
   await writeFile(supabase, "exports.createClient = () => { throw new Error('unexpected client'); };\n");
+  await writeFile(path.join(directory, "lib/driver-portal-session.ts"), `
+    exports.issueDriverPortalAccountSession = () => 'driver-session=synthetic; HttpOnly; Secure';
+    exports.clearDriverPortalSessionCookie = () => 'driver-session=; Max-Age=0';
+  `);
 
   const require = createRequire(import.meta.url);
   return {
     account: require(path.join(directory, "lib/driver-account-device-lock.js")),
+    routeAccount: require(path.join(directory, "lib/driver-account-device-lock.ts")),
+    route: require(path.join(directory, "app/api/driver-auth/session/route.js")),
     cleanup: () => rm(directory, { force: true, recursive: true }),
     link: require(path.join(directory, "lib/driver-job-link.js")),
   };
@@ -97,7 +104,7 @@ class Query {
     }
 
     const rows = this.rows();
-    return { data: rows.length === 1 ? rows[0] : null, error: rows.length > 1 ? {} : null };
+    return { data: rows.length === 1 ? structuredClone(rows[0]) : null, error: rows.length > 1 ? {} : null };
   }
 
   single() { return Promise.resolve(this.execute()); }
@@ -284,6 +291,105 @@ try {
   });
   assert.deepEqual(otherInstallation, { ok: false, reason: "device_mismatch" });
   assert.equal(signOutCount, 3, "Every credential check must discard its temporary Supabase session.");
+
+  const identityReader = { getUserById: async (id) => ({ data: { user: { id, email: "driver@example.com" } }, error: null }) };
+  const beforePin = structuredClone(database);
+  const pinSignIn = await harness.account.signInDriverAccountForInstallation({
+    allowBoundDevicePin: true, identityReader,
+    auth, client, email: undefined, env, installationId: firstInstallation, password,
+  });
+  assert.deepEqual(pinSignIn, firstSignIn, "An already-bound phone must verify its existing PIN without client email.");
+  assert.deepEqual(database, beforePin, "PIN-only sign-in must not create, bind, or update an account.");
+
+  const pinInput = { allowBoundDevicePin: true, identityReader, auth, client, email: undefined, env, installationId: firstInstallation, password };
+  for (const identityResult of [
+    { data: null, error: {} },
+    { data: { user: { id: authUserId, email: "" } }, error: null },
+    { data: { user: { id: "66666666-6666-4666-8666-666666666666", email: "driver@example.com" } }, error: null },
+  ]) {
+    let providerCalls = 0;
+    const result = await harness.account.signInDriverAccountForInstallation({
+      ...pinInput,
+      identityReader: { getUserById: async () => identityResult },
+      auth: { ...auth, signInWithPassword: async () => { providerCalls++; throw new Error("Must not authenticate"); } },
+    });
+    assert.equal(result.ok, false, "Missing or mismatched Auth identity must fail closed.");
+    assert.equal(providerCalls, 0);
+  }
+  for (const input of [
+    { ...pinInput, allowBoundDevicePin: false },
+    { ...pinInput, installationId: secondInstallation },
+    { ...pinInput, installationId: "invalid" },
+    { ...pinInput, password: "583962" },
+    { ...pinInput, password: "123456" },
+    { ...pinInput, email: "" },
+    { ...pinInput, email: null },
+  ]) {
+    assert.equal((await harness.account.signInDriverAccountForInstallation(input)).ok, false);
+  }
+  for (const accountStatus of ["pending_setup", "revoked", "suspended"]) {
+    database.driver_access_accounts[0].account_status = accountStatus;
+    let providerCalls = 0;
+    const result = await harness.account.signInDriverAccountForInstallation({
+      ...pinInput, auth: { ...auth, signInWithPassword: async () => { providerCalls++; throw new Error("Must not authenticate"); } },
+    });
+    assert.equal(result.ok, false, accountStatus);
+    assert.equal(providerCalls, 0, "An inactive binding must fail before provider authentication.");
+  }
+  database.driver_access_accounts[0] = structuredClone(beforePin.driver_access_accounts[0]);
+  database.driver_access_accounts.push({ ...database.driver_access_accounts[0], id: "66666666-6666-4666-8666-666666666666" });
+  assert.equal((await harness.account.signInDriverAccountForInstallation(pinInput)).ok, false, "Ambiguous bindings fail closed.");
+  database.driver_access_accounts.pop();
+  assert.equal((await harness.account.signInDriverAccountForInstallation({
+    ...pinInput, client: { from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null, error: {} }) }; return q; } },
+  })).ok, false, "Lookup failures must not identify a Driver.");
+  for (const mutation of [
+    (row) => { row.account_status = "revoked"; },
+    (row) => { row.active_device_id_hash = null; row.account_status = "pending_setup"; },
+    (row) => { row.driver_reference = "8"; },
+  ]) {
+    const changingAuth = { ...auth, signInWithPassword: async (input) => {
+      const result = await auth.signInWithPassword(input);
+      mutation(database.driver_access_accounts[0]);
+      return result;
+    } };
+    assert.equal((await harness.account.signInDriverAccountForInstallation({ ...pinInput, auth: changingAuth })).ok, false,
+      "A concurrent revoke, unbind or Driver change must fail without rebinding.");
+    database.driver_access_accounts[0] = structuredClone(beforePin.driver_access_accounts[0]);
+  }
+  assert.equal((await harness.account.signInDriverAccountForInstallation({
+    ...pinInput, auth: { ...auth, signInWithPassword: async () => ({ data: { user: { id: "66666666-6666-4666-8666-666666666666" } }, error: null }) },
+  })).ok, false, "A different provider identity cannot use the saved binding.");
+
+  const originalRouteSignIn = harness.routeAccount.signInDriverAccountForInstallation;
+  harness.routeAccount.signInDriverAccountForInstallation = (input) => originalRouteSignIn({ ...input, auth, client, env, identityReader });
+  const routeRequest = (body, ua = "Mozilla/5.0 (Linux; Android 16; Pixel 6 Pro; wv)", overrides = {}) => new Request("https://app.example.com/api/driver-auth/session", {
+    method: "POST", headers: { origin: "https://app.example.com", referer: "https://app.example.com/driver-portal",
+      "content-type": "application/json", "x-prestige-driver-purpose": "driver-account-sign-in", "user-agent": ua, ...overrides },
+    body: JSON.stringify(body),
+  });
+  const pinBody = { installation_id: firstInstallation, password };
+  const routeSuccess = await harness.route.POST(routeRequest(pinBody));
+  assert.equal(routeSuccess.status, 200);
+  assert.deepEqual(await routeSuccess.json(), { ok: true, session: "active" }, "No account/email/device data leaves the sign-in response.");
+  assert.match(routeSuccess.headers.get("set-cookie"), /HttpOnly/);
+  for (const request of [
+    routeRequest(pinBody, "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"),
+    routeRequest(pinBody, "Mozilla/5.0 (Macintosh; Intel Mac OS X)"),
+    routeRequest({ ...pinBody, installation_id: secondInstallation }),
+    routeRequest({ ...pinBody, password: "583962" }),
+    routeRequest({ ...pinBody, account_id: firstSignIn.accountId }),
+    routeRequest(pinBody, "Android", { origin: "https://other.example.com" }),
+    routeRequest(pinBody, "Android", { referer: "https://app.example.com/book" }),
+    routeRequest(pinBody, "Android", { "x-prestige-driver-purpose": "wrong" }),
+  ]) {
+    const result = await harness.route.POST(request);
+    assert.equal(result.status, 401, "Android user-agent alone must never authorize sign-in.");
+    assert.equal(result.headers.get("set-cookie"), null);
+  }
+  const oldIosResult = await harness.route.POST(routeRequest({ ...pinBody, email: "driver@example.com" }, "iPhone"));
+  assert.equal(oldIosResult.status, 200, "The existing iOS email/password request remains valid.");
+  assert.deepEqual(database, beforePin, "All PIN-only reads leave the account and binding unchanged.");
 
   assert.equal(await harness.account.verifyDriverAccountSession({
     accountId: firstSignIn.accountId,

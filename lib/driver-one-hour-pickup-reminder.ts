@@ -338,7 +338,7 @@ export async function runDriverOneHourPickupReminders(
 }
 
 const locationFollowupWorkflow = "driver_pickup_location_followup";
-const locationFollowupCopy = "Please open your job and share location before pickup.";
+const locationFollowupCopy = "Please share location";
 const locationReadLimit = 100;
 const minuteMs = 60_000;
 

@@ -1,3 +1,8 @@
+## Driver Location Reminder Short Copy (2026-09-10)
+
+- Owner requested exact wording `Please share location`. Updated only the existing missing-location Driver in-app notice, native/web push payload and web service-worker allowlist; timing, eligibility, duplicate protection, Admin copy and native binaries remain unchanged.
+- Existing Driver push guard verifies the exact wording across native/web payloads and service-worker display; existing reminder runtime guard verifies the saved in-app text. No live test notification is sent.
+
 ## Driver Pickup Reminder Missing-Location Follow-Up (local implementation 2026-09-10; release pending)
 
 - Owner approved a bounded extension after inspection confirmed that the existing one-hour pickup reminder and Admin Pickup Risk monitor were implemented, but no missing-location follow-up existed. The existing Supabase Cron route, one-minute schedule, authentication, original one-hour reminder text, eligibility and duplicate protection remain unchanged. No second scheduler, route, table, map, panel or native project was added.

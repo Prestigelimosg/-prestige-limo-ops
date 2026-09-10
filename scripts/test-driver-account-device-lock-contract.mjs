@@ -374,7 +374,6 @@ try {
   assert.deepEqual(await routeSuccess.json(), { ok: true, session: "active" }, "No account/email/device data leaves the sign-in response.");
   assert.match(routeSuccess.headers.get("set-cookie"), /HttpOnly/);
   for (const request of [
-    routeRequest(pinBody, "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"),
     routeRequest(pinBody, "Mozilla/5.0 (Macintosh; Intel Mac OS X)"),
     routeRequest({ ...pinBody, installation_id: secondInstallation }),
     routeRequest({ ...pinBody, password: "583962" }),
@@ -387,6 +386,28 @@ try {
     assert.equal(result.status, 401, "Android user-agent alone must never authorize sign-in.");
     assert.equal(result.headers.get("set-cookie"), null);
   }
+  const iphoneUa = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148";
+  const iosPinResult = await harness.route.POST(routeRequest(pinBody, iphoneUa));
+  assert.equal(iosPinResult.status, 200, "An already-bound iPhone must sign in with PIN without client email.");
+  assert.deepEqual(await iosPinResult.json(), { ok: true, session: "active" });
+  assert.match(iosPinResult.headers.get("set-cookie"), /HttpOnly/);
+  for (const body of [
+    { ...pinBody, installation_id: secondInstallation },
+    { ...pinBody, installation_id: "" },
+    { ...pinBody, password: "583962" },
+    { ...pinBody, account_id: firstSignIn.accountId },
+  ]) {
+    const denied = await harness.route.POST(routeRequest(body, iphoneUa));
+    assert.equal(denied.status, 401, "iPhone presentation must not bypass PIN, binding or input checks.");
+    assert.equal(denied.headers.get("set-cookie"), null);
+  }
+  for (const status of ["suspended", "revoked", "pending_setup"]) {
+    database.driver_access_accounts[0].account_status = status;
+    const denied = await harness.route.POST(routeRequest(pinBody, iphoneUa));
+    assert.equal(denied.status, 401, "iPhone PIN must not reactivate an account.");
+    assert.equal(denied.headers.get("set-cookie"), null);
+  }
+  database.driver_access_accounts[0] = structuredClone(beforePin.driver_access_accounts[0]);
   const oldIosResult = await harness.route.POST(routeRequest({ ...pinBody, email: "driver@example.com" }, "iPhone"));
   assert.equal(oldIosResult.status, 200, "The existing iOS email/password request remains valid.");
   assert.deepEqual(database, beforePin, "All PIN-only reads leave the account and binding unchanged.");

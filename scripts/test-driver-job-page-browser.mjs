@@ -251,6 +251,7 @@ async function runChromeTest() {
         const embeddedDriverHarness = [
           "1",
           "android-pin",
+          "ios-pin",
           "account-profile",
           "alerts-off",
           "alerts-on",
@@ -262,6 +263,11 @@ async function runChromeTest() {
         if (embeddedDriverMode === "android-pin") {
           Object.defineProperty(navigator, "userAgent", {
             value: "Mozilla/5.0 (Linux; Android 16; Pixel 6 Pro; wv) AppleWebKit/537.36 Chrome/140.0.0.0 Mobile Safari/537.36",
+          });
+        }
+        if (embeddedDriverMode === "ios-pin") {
+          Object.defineProperty(navigator, "userAgent", {
+            value: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
           });
         }
         if (embeddedDriverHarness) {
@@ -418,7 +424,7 @@ async function runChromeTest() {
           const url = String(target);
           window.__driverJobFetchCalls.push(\`\${method} \${url}\`);
 
-          if (embeddedDriverMode === "android-pin" && new URL(url, window.location.origin).pathname === "/api/driver-auth/session") {
+          if (["android-pin", "ios-pin"].includes(embeddedDriverMode) && new URL(url, window.location.origin).pathname === "/api/driver-auth/session") {
             const body = JSON.parse(args[1]?.body || "{}");
             window.__driverPinBodies.push(body);
             window.__driverPinSignedIn = body.password === "482951" && !Object.hasOwn(body, "email");
@@ -2510,46 +2516,48 @@ async function runChromeTest() {
       visibleText: installedLinkSessionState.text,
     });
 
-    await navigateAndWaitForBodyText(
-      client, evaluate, new URL("/driver-portal?embedded=android-pin", appUrl).toString(),
-      "Driver sign in", "Android Driver PIN entry",
-    );
-    const androidPinEntry = await evaluate(`(() => ({
-      emailInputs: document.querySelectorAll('[data-driver-portal-sign-in] input[type="email"]').length,
-      pinInputs: document.querySelectorAll('[data-driver-portal-sign-in] input[type="password"][inputmode="numeric"][maxlength="6"]').length,
-      firstSignIn: document.querySelector('[data-driver-portal-first-sign-in]')?.textContent,
-    }))()`);
-    assert.deepEqual(androidPinEntry, { emailInputs: 0, pinInputs: 1, firstSignIn: "First sign-in" },
-      "Android on the established native bridge must open directly at six-digit PIN entry.");
-    await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
-    await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-email-step]'))`), 5000,
-      "Android first sign-in retains the existing email step");
-    assert.equal(await evaluate(`window.__driverPinBodies.length`), 0, "Switching sign-in modes makes no provider request.");
-    await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
-    await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-password-form] input'))`), 5000,
-      "Android return to PIN entry");
-    for (const pin of ["583962", "482951"]) {
-      await evaluate(`(() => {
-        const input = document.querySelector('[data-driver-portal-password-form] input');
-        input.focus(); input.select();
-      })()`);
-      await client.send("Input.insertText", { text: pin });
-      await waitForCondition(() => evaluate(`document.querySelector('[data-driver-portal-password-form] input')?.value === ${JSON.stringify(pin)}`), 5000,
-        "Android six-digit PIN input");
-      await evaluate(`document.querySelector('[data-driver-portal-password-form] button[type="submit"]').click()`);
-      if (pin === "583962") {
-        await waitForCondition(() => evaluate(`document.body.innerText.includes('Sign-in could not be completed')`), 5000,
-          "Android invalid PIN remains signed out");
-        assert.equal(await evaluate(`document.querySelectorAll('[data-driver-portal-job]').length`), 0);
-      } else {
-        await waitForCondition(() => evaluate(`document.querySelectorAll('[data-driver-portal-job]').length === 2`), 5000,
-          "Android PIN success returns to existing assigned jobs");
+    for (const pinPlatform of ["android", "ios"]) {
+      await navigateAndWaitForBodyText(
+        client, evaluate, new URL(`/driver-portal?embedded=${pinPlatform}-pin`, appUrl).toString(),
+        "Driver sign in", "Installed phone Driver PIN entry",
+      );
+      const nativePinEntry = await evaluate(`(() => ({
+        emailInputs: document.querySelectorAll('[data-driver-portal-sign-in] input[type="email"]').length,
+        pinInputs: document.querySelectorAll('[data-driver-portal-sign-in] input[type="password"][inputmode="numeric"][maxlength="6"]').length,
+        firstSignIn: document.querySelector('[data-driver-portal-first-sign-in]')?.textContent,
+      }))()`);
+      assert.deepEqual(nativePinEntry, { emailInputs: 0, pinInputs: 1, firstSignIn: "First sign-in" },
+        "Installed phone on the established native bridge must open directly at six-digit PIN entry.");
+      await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
+      await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-email-step]'))`), 5000,
+        "Installed phone first sign-in retains the existing email step");
+      assert.equal(await evaluate(`window.__driverPinBodies.length`), 0, "Switching sign-in modes makes no provider request.");
+      await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
+      await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-password-form] input'))`), 5000,
+        "Installed phone return to PIN entry");
+      for (const pin of ["583962", "482951"]) {
+        await evaluate(`(() => {
+          const input = document.querySelector('[data-driver-portal-password-form] input');
+          input.focus(); input.select();
+        })()`);
+        await client.send("Input.insertText", { text: pin });
+        await waitForCondition(() => evaluate(`document.querySelector('[data-driver-portal-password-form] input')?.value === ${JSON.stringify(pin)}`), 5000,
+          "Installed phone six-digit PIN input");
+        await evaluate(`document.querySelector('[data-driver-portal-password-form] button[type="submit"]').click()`);
+        if (pin === "583962") {
+          await waitForCondition(() => evaluate(`document.body.innerText.includes('Sign-in could not be completed')`), 5000,
+            "Installed phone invalid PIN remains signed out");
+          assert.equal(await evaluate(`document.querySelectorAll('[data-driver-portal-job]').length`), 0);
+        } else {
+          await waitForCondition(() => evaluate(`document.querySelectorAll('[data-driver-portal-job]').length === 2`), 5000,
+            "Installed phone PIN success returns to existing assigned jobs");
+        }
       }
+      assert.deepEqual(await evaluate(`window.__driverPinBodies`), ["583962", "482951"].map((password) => ({
+        installation_id: "77777777-7777-4777-8777-777777777777", password,
+      })), "PIN sign-in sends only installation identity and PIN through the existing route.");
+      assert.equal(await evaluate(`document.querySelectorAll('[data-driver-portal-sign-in]').length`), 0);
     }
-    assert.deepEqual(await evaluate(`window.__driverPinBodies`), ["583962", "482951"].map((password) => ({
-      installation_id: "77777777-7777-4777-8777-777777777777", password,
-    })), "PIN sign-in sends only installation identity and PIN through the existing route.");
-    assert.equal(await evaluate(`document.querySelectorAll('[data-driver-portal-sign-in]').length`), 0);
 
     await navigateAndWaitForBodyText(
       client,

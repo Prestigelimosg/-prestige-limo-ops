@@ -216,8 +216,8 @@ export default function DriverPortalPage() {
   const [accountEmail, setAccountEmail] = useState("");
   const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
   const [accountFirstSignIn, setAccountFirstSignIn] = useState(false);
-  const nativeAndroid = nativeBridgeReady && /\bAndroid\b/i.test(window.navigator.userAgent);
-  const accountPinOnly = nativeAndroid && !accountFirstSignIn;
+  const nativePinSignIn = nativeBridgeReady && /\b(?:Android|iPhone)\b/i.test(window.navigator.userAgent);
+  const accountPinOnly = nativePinSignIn && !accountFirstSignIn;
   const [accountPassword, setAccountPassword] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
@@ -826,7 +826,7 @@ export default function DriverPortalPage() {
                 : <>Sign in with the account created from your acknowledged private Job Link. The first
                   successful sign-in binds this account to this Prestige Driver installation.</>}
             </p>
-            {nativeAndroid ? (
+            {nativePinSignIn ? (
               <button
                 className="text-xs font-semibold text-slate-700 underline"
                 data-driver-portal-first-sign-in="true"
@@ -905,7 +905,7 @@ export default function DriverPortalPage() {
                   </button>
                 </div> : null}
                 <label className="block text-sm font-semibold text-slate-800">
-                  {nativeAndroid ? "6-digit PIN" : "Password"}
+                  {nativePinSignIn ? "6-digit PIN" : "Password"}
                   <input
                     autoComplete="current-password"
                     className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"

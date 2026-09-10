@@ -1,3 +1,9 @@
+## Driver Account Installation Guidance (2026-09-10; local copy change, release pending)
+
+- Owner observed the existing Create Driver Account paragraph on the physical Pixel and requested concise wording encouraging app installation, including iOS. The shared private Driver Job page now says: "1. Install Prestige Driver. 2. Create your account below. 3. Sign in with email + 6-digit PIN."
+- Only this paragraph changes. Its existing small typography, placement, account visibility, email/PIN enrollment, sign-in, phone binding, browser reporting, alerts, Calendar and native apps are preserved. No new control or download route is added.
+- The existing Driver account guard protects the new wording and unchanged account boundaries. Production publication remains pending; the separate physical signup and PIN tests use the already released authentication version.
+
 ## iPhone Driver Bound-Phone PIN Sign-In (2026-09-10; local repair, release pending)
 
 - Owner reproduced Email/Continue on the installed iPhone Driver app and approved narrowly extending the existing Android bound-phone PIN flow. The prior repair explicitly limited both UI presentation and omitted-email requests to Android; the iPhone failure was therefore in the remote page and route, not the installed binary.

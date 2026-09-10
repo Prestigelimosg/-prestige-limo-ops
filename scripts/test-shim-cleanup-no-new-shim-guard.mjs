@@ -212,7 +212,7 @@ const assignmentDisplayLoaderSource = appPage.slice(
 );
 assertIncludes(
   assignmentDisplayLoaderSource,
-  "fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200`",
+  "fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200${offset",
   "App page typed driver assignment display loader",
 );
 assertExcludes(

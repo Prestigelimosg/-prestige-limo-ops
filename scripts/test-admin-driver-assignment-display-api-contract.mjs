@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import ts from "typescript";
+import { runInNewContext } from "node:vm";
 
 const routeBlockedMessage =
   "Admin booking persistence is available only from the internal admin dashboard.";
@@ -120,6 +121,9 @@ async function writeMockModules(tempDir) {
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await mkdir(path.dirname(supabasePath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await mkdir(path.join(tempDir, "lib"), { recursive: true });
+  await writeFile(path.join(tempDir, "lib/driver-device-push-notification.js"),
+    "module.exports = { sendDriverDevicePushAlertForAppUpdate: async () => { throw new Error('Display reads must never send push'); } };");
   await writeFile(
     supabasePath,
     [
@@ -160,6 +164,7 @@ class MockSupabaseQuery {
     this.filters = [];
     this.orderBy = [];
     this.resultLimit = null;
+    this.resultOffset = 0;
     this.selectedColumns = null;
     this.table = table;
   }
@@ -179,6 +184,12 @@ class MockSupabaseQuery {
   limit(count) {
     this.resultLimit = count;
 
+    return this;
+  }
+
+  range(from, to) {
+    this.resultOffset = from;
+    this.resultLimit = to - from + 1;
     return this;
   }
 
@@ -205,6 +216,7 @@ class MockSupabaseQuery {
       this.orderBy,
       this.resultLimit,
       this.selectedColumns,
+      this.resultOffset,
     );
   }
 }
@@ -243,12 +255,13 @@ class MockSupabaseClient {
     );
   }
 
-  selectRows(table, filters, orderBy, resultLimit, selectedColumns) {
+  selectRows(table, filters, orderBy, resultLimit, selectedColumns, offset = 0) {
     const failure = this.failures[`select:${table}`] || this.failures[table] || null;
 
     this.selectHistory.push({
       filters: clone(filters),
       limit: resultLimit,
+      offset,
       orderBy: clone(orderBy),
       selectedColumns,
       table,
@@ -272,14 +285,14 @@ class MockSupabaseClient {
       rows = [...rows].sort((left, right) => {
         const leftValue = String(left[order.column] || "");
         const rightValue = String(right[order.column] || "");
-        const result = leftValue.localeCompare(rightValue);
+        const result = order.column === "id" ? Number(leftValue) - Number(rightValue) : leftValue.localeCompare(rightValue);
 
         return order.options?.ascending === false ? -result : result;
       });
     }
 
     if (resultLimit) {
-      rows = rows.slice(0, resultLimit);
+      rows = rows.slice(offset, offset + resultLimit);
     }
 
     const selected = selectedColumns
@@ -427,9 +440,9 @@ try {
     "Booking driver assignment display must use a dedicated typed loader.",
   );
   assert.equal(
-    appPageSource.includes("const assignedDriverSelectValue = assignedDriverId;"),
+    appPageSource.includes("const assignedDriverSelectValue = savedAssignedDriverOptionValue || assignedDriverId;"),
     true,
-    "Verified driver selection must remain empty until an explicit persisted driver ID is selected.",
+    "Driver selection must preserve the existing saved-ID placeholder or an explicit verified ID.",
   );
   assert.equal(
     appPageSource.includes("assignedDriverId || (assignedDriverRecord ? String(assignedDriverRecord.id) : \"\")"),
@@ -679,6 +692,67 @@ try {
     assert.equal(result.ok, false);
     assert.equal(result.category, "permission_or_rls_denied");
     assert.equal(mock.createdClients.length, 1);
+  }
+  {
+    const drivers = Array.from({ length: 405 }, (_, i) => ({
+      id: i + 1, driver_name: `Driver ${String(i + 1).padStart(3, "0")}`,
+      availability_status: "available", contact_number: "70000000",
+      vehicle_type: "AVF", plate_number: `T${i + 1}`,
+      invoice: "PRIVATE", driver_payout_rules: { hidden: true },
+    }));
+    const mock = installMock({ drivers });
+    setEnv(validEnv());
+    const ids = [];
+    for (const offset of [0, 200, 400]) {
+      const response = await route.GET(request(`http://localhost/api/admin-driver-assignment-display?limit=200&offset=${offset}`));
+      assert.equal(response.status, 200, "offset pagination must use the existing verified route");
+      const payload = await readJson(response);
+      assertSafeApiPayload(payload.drivers, "Driver page");
+      ids.push(...payload.drivers.map(driver => driver.id));
+    }
+    assert.deepEqual(ids, drivers.map(driver => driver.id), "all 405 drivers must be available without gaps or duplicates");
+    assert.deepEqual(mock.client.selectHistory.map(read => read.offset), [0, 200, 400]);
+    assert.deepEqual(mock.client.selectHistory[0].orderBy.map(order => order.column), ["driver_name", "id"]);
+    for (const offset of ["-1", "1.5", "wrong", "9007199254740991"]) {
+      const before = mock.client.operations.length;
+      const response = await route.GET(request(`http://localhost/api/admin-driver-assignment-display?limit=200&offset=${offset}`));
+      assert.equal(response.status, 400, "unsafe offsets must fail before querying");
+      assert.equal(mock.client.operations.length, before);
+    }
+    const loaderSource = appPageSource.slice(
+      appPageSource.indexOf("async function fetchDriverAssignmentDisplayDriverRecords"),
+      appPageSource.indexOf("async function loadDriverAssignmentDisplayDrivers"),
+    );
+    const calls = [];
+    const context = { exports: {}, adminLegacyDataPurpose: "admin-booking-persistence", adminDriverAssignmentDisplayApiPath: "/api/admin-driver-assignment-display",
+      fetch: async (url) => {
+        calls.push(url);
+        return route.GET(request(`http://localhost${url}`));
+      },
+    };
+    runInNewContext(transpileTypescript(`export ${loaderSource}`, "loader.ts"), context);
+    const loaded = await context.exports.fetchDriverAssignmentDisplayDriverRecords();
+    assert.deepEqual(Array.from(loaded, row => row.id), drivers.map(row => row.id), "existing client loader must combine every page");
+    assert.deepEqual(calls, ["/api/admin-driver-assignment-display?limit=200", "/api/admin-driver-assignment-display?limit=200&offset=200", "/api/admin-driver-assignment-display?limit=200&offset=400"]);
+    for (const size of [0, 200, 400, 1005]) {
+      const rows = Array.from({ length: size }, (_, i) => ({ ...drivers[0], id: i + 1,
+        driver_name: `Driver ${String(i + 1).padStart(4, "0")}` }));
+      mock.client.tables.drivers = rows;
+      calls.length = 0;
+      const all = await context.exports.fetchDriverAssignmentDisplayDriverRecords();
+      assert.deepEqual(Array.from(all, row => row.id), rows.map(row => row.id));
+      assert.equal(calls.length, Math.floor(size / 200) + 1, "full pages require another request, including an empty final page");
+    }
+    for (const mode of ["failure", "repeat"]) {
+      let count = 0;
+      context.fetch = async () => {
+        count += 1;
+        if (count === 2 && mode === "failure") return { ok: false, json: async () => ({error:"Synthetic second page failure"}) };
+        return { ok: true, json: async () => ({ok:true,drivers:drivers.slice(0,200)}) };
+      };
+      await assert.rejects(context.exports.fetchDriverAssignmentDisplayDriverRecords(), mode === "failure" ? /Synthetic second page failure/ : /changed while loading/i);
+      assert.equal(count, 2, "failed or repeated pages must not expose partial results or loop");
+    }
   }
 } finally {
   restoreEnv();

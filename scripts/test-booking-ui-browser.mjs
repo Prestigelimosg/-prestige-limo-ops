@@ -27003,6 +27003,63 @@ async function runChromeTest() {
       assert.match(driverStatusState.jobSummaryText, /SQ333/);
     }
 
+    reporter.step("checking assignment selector beyond 200 drivers");
+    const paginationLoad = client.once("Page.loadEventFired");
+    await client.send("Page.navigate", { url: appUrl });
+    await paginationLoad;
+    await clickTab("Dispatch");
+    await evaluate(`(() => {
+      const previousFetch = window.fetch.bind(window);
+      window.__driverPaginationRequests = [];
+      const drivers = Array.from({ length: 405 }, (_, index) => ({
+        id: 10001 + index,
+        driver_name: "PAGINATION DRIVER " + String(index + 1).padStart(3, "0"),
+        contact_number: "+65 7000 " + String(index + 1).padStart(4, "0"),
+        vehicle_type: "AVF", plate_number: "T" + (index + 1),
+        availability_status: index === 201 ? "inactive" : "available",
+      }));
+      window.fetch = async (...args) => {
+        const url = new URL(String(args[0]?.url || args[0]), location.origin);
+        if (url.pathname === "/api/admin-driver-assignment-display") {
+          const offset = Number(url.searchParams.get("offset") || 0);
+          const limit = Number(url.searchParams.get("limit") || 100);
+          window.__driverPaginationRequests.push({ offset, limit, method: args[1]?.method || "GET" });
+          return new Response(JSON.stringify({ ok: true, drivers: drivers.slice(offset, offset + limit) }),
+            { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return previousFetch(...args);
+      };
+    })()`);
+    await setBookingMessageValue(bookingSample, "pagination test local draft");
+    await evaluate(`(() => {
+      [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "Create Job Card")?.click();
+    })()`);
+    await waitForCondition(() => evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "Load Drivers for Assignment");
+      if (!button || button.disabled) return false;
+      button.click(); return true;
+    })()`), 5000, "existing assignment loader available");
+    const paginationState = await waitForCondition(() => evaluate(`(() => {
+      const select = document.querySelector('[data-dispatch-workflow-step="driver-assignment"] select');
+      if (!select?.querySelector('option[value="10405"]')) return false;
+      return { count: [...select.options].filter(option => /^[0-9]+$/.test(option.value)).length,
+        inactivePresent: Boolean(select.querySelector('option[value="10202"]')),
+        requests: window.__driverPaginationRequests };
+    })()`), 10000, "driver 405 available in the existing assignment selector");
+    assert.equal(paginationState.count, 404, "all available drivers must be selectable across every page");
+    assert.equal(paginationState.inactivePresent, false, "inactive drivers remain excluded");
+    assert.deepEqual(paginationState.requests, [0, 200, 400].map(offset => ({ offset, limit: 200, method: "GET" })));
+    await evaluate(`(() => {
+      const select = document.querySelector('[data-dispatch-workflow-step="driver-assignment"] select');
+      select.value = "10405";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await waitForCondition(() => evaluate(`(() => {
+      const section = document.querySelector('[data-dispatch-workflow-step="driver-assignment"]');
+      const label = [...(section?.querySelectorAll("label") || [])].find(item => item.querySelector("span")?.textContent.trim() === "Driver Name");
+      return section?.querySelector("select")?.value === "10405" && label?.querySelector("input")?.value === "PAGINATION DRIVER 405";
+    })()`), 5000, "driver 405 selected in the draft without saving");
+
     const summary = reporter.summary({
       blockedSupabaseMutationRequests: blockedSupabaseMutationRequests.length,
       blockedSupabaseRequests: blockedSupabaseRequests.length,

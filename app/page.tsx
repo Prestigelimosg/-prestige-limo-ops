@@ -22845,23 +22845,39 @@ export default function Home() {
   }
 
   async function fetchDriverAssignmentDisplayDriverRecords() {
-    const response = await fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200`, {
-      headers: {
-        "x-prestige-admin-purpose": adminLegacyDataPurpose,
-      },
-      method: "GET",
-    });
-    const result = (await response.json().catch(() => null)) as {
-      drivers?: DriverAssignmentDisplayRecord[];
-      error?: string;
-      ok?: boolean;
-    } | null;
+    const pageSize = 200;
+    const drivers: DriverAssignmentDisplayRecord[] = [];
+    const seenIds = new Set<number>();
+    while (true) {
+      const offset = drivers.length;
+      const response = await fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200${offset ? `&offset=${offset}` : ""}`, {
+        headers: {
+          "x-prestige-admin-purpose": adminLegacyDataPurpose,
+        },
+        method: "GET",
+      });
+      const result = (await response.json().catch(() => null)) as {
+        drivers?: DriverAssignmentDisplayRecord[];
+        error?: string;
+        ok?: boolean;
+      } | null;
 
-    if (!response.ok || result?.ok !== true) {
-      throw new Error(result?.error || "Driver assignment display request failed.");
+      if (!response.ok || result?.ok !== true || !Array.isArray(result.drivers)) {
+        throw new Error(result?.error || "Driver assignment display request failed.");
+      }
+      const page = result.drivers;
+      if (page.length > pageSize) {
+        throw new Error("Driver list changed while loading. Please load drivers again.");
+      }
+      for (const driver of page) {
+        if (!Number.isSafeInteger(driver.id) || driver.id <= 0 || seenIds.has(driver.id)) {
+          throw new Error("Driver list changed while loading. Please load drivers again.");
+        }
+        seenIds.add(driver.id);
+        drivers.push(driver);
+      }
+      if (page.length < pageSize) return drivers;
     }
-
-    return Array.isArray(result.drivers) ? result.drivers : [];
   }
 
   async function loadDriverAssignmentDisplayDrivers(

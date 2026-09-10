@@ -46,6 +46,7 @@ const allowedParams = new Set([
   "driver_name",
   "id",
   "limit",
+  "offset",
   "plate_number",
 ]);
 const maxNameLength = 220;
@@ -362,11 +363,17 @@ export async function listAdminDriverAssignmentDisplay(
   const plateNumber = safeText(params.plate_number, maxContactLength);
   const availabilityStatus = safeText(params.availability_status, maxStatusLength);
   const limit = id ? 1 : safeLimit(params.limit);
+  const offset = params.offset === undefined ? 0 : Number(params.offset);
+  if (!Number.isSafeInteger(offset) || offset < 0 ||
+      !Number.isSafeInteger(offset + limit - 1) || (id && offset !== 0)) {
+    return { error: "Admin driver assignment display offset is invalid.", ok: false, status: 400 };
+  }
 
   let query = clientResult.data
     .from("drivers")
     .select(driverAssignmentDisplaySelect)
-    .order("driver_name", { ascending: true });
+    .order("driver_name", { ascending: true })
+    .order("id", { ascending: true });
 
   if (id) {
     query = query.eq("id", id);
@@ -388,7 +395,7 @@ export async function listAdminDriverAssignmentDisplay(
     query = query.eq("availability_status", availabilityStatus);
   }
 
-  const { data, error } = await query.limit(limit);
+  const { data, error } = await (id ? query.limit(1) : query.range(offset, offset + limit - 1));
 
   if (error) {
     return safeAdapterFailure(safeReadError, 500, error);

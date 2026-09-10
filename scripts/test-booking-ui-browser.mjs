@@ -6191,6 +6191,7 @@ async function runChromeTest() {
     );
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
+      window.__prestigeMockAiResponse = null;
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
@@ -6202,7 +6203,18 @@ async function runChromeTest() {
           await new Promise((resolve) => setTimeout(resolve, 150));
         }
 
-        return window.__prestigeOriginalFetch(...args);
+        const response = await window.__prestigeOriginalFetch(...args);
+        if (targetText.includes("/api/ai-parse")) {
+          const payload = await response.clone().json().catch(() => ({}));
+          window.__prestigeMockAiResponse = {
+            status: response.status,
+            ok: payload.ok,
+            mode: payload.mode,
+            external_send: payload.external_send,
+            write_action: payload.write_action,
+          };
+        }
+        return response;
       };
     })()`);
 
@@ -6227,6 +6239,21 @@ async function runChromeTest() {
       "AI Assist loading state",
     );
     assert.equal(aiAssistLoadingText, "Preparing AI review draft...");
+
+    const mockAiResponse = await waitForCondition(
+      () => evaluate("window.__prestigeMockAiResponse || null"),
+      10000,
+      "local mock AI response",
+    );
+    assert.equal(mockAiResponse.status, 200,
+      `Mock AI test prerequisite failed: POST /api/ai-parse returned HTTP ${mockAiResponse.status}. ` +
+      "Check that APP_URL uses the same hostname as the local server request origin (normally http://localhost:<port>). " +
+      "Use an isolated local server with AI_PARSE_MODE=mock, PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED=false, " +
+      "PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED=false and PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE unset. " +
+      "Do not change Production authentication.");
+    assert.deepEqual(mockAiResponse, {
+      status: 200, ok: true, mode: "mock", external_send: false, write_action: false,
+    }, "Browser regression requires the existing read-only mock AI response");
 
     const aiDraftState = await waitForCondition(
       async () => {
@@ -18680,6 +18707,7 @@ async function runChromeTest() {
               );
               return {
                 payout: payout?.value || "",
+                vehicleRequirement: control?.querySelector('select[aria-label="Driver Pool vehicle type"]')?.value ?? null,
                 sendDisabled: send?.disabled ?? true,
                 sendText: send?.textContent.trim() || "",
                 text: control?.textContent.replace(/\s+/g, " ").trim() || "",
@@ -18938,7 +18966,8 @@ async function runChromeTest() {
           candidateState?.fields?.flight === "SQ999" &&
           candidateState?.driverPoolControl?.sendText === "Send to Driver Pool" &&
           candidateState?.driverPoolControl?.payout === "75.00" &&
-          candidateState?.driverPoolControl?.sendDisabled === false &&
+          candidateState?.driverPoolControl?.vehicleRequirement === "" &&
+          candidateState?.driverPoolControl?.sendDisabled === true &&
           candidateState?.driverPoolOfferRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -19039,6 +19068,8 @@ async function runChromeTest() {
       );
     }
 
+    assert.equal(loadedBookingState.driverPoolControl.vehicleRequirement, "", "Pool vehicle must start unselected");
+    assert.equal(loadedBookingState.driverPoolControl.sendDisabled, true, "Pool Send must wait for explicit vehicle selection");
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
@@ -26971,6 +27002,63 @@ async function runChromeTest() {
       assert.match(driverStatusState.jobSummaryText, /Raffles Hotel Singapore/);
       assert.match(driverStatusState.jobSummaryText, /SQ333/);
     }
+
+    reporter.step("checking assignment selector beyond 200 drivers");
+    const paginationLoad = client.once("Page.loadEventFired");
+    await client.send("Page.navigate", { url: appUrl });
+    await paginationLoad;
+    await clickTab("Dispatch");
+    await evaluate(`(() => {
+      const previousFetch = window.fetch.bind(window);
+      window.__driverPaginationRequests = [];
+      const drivers = Array.from({ length: 405 }, (_, index) => ({
+        id: 10001 + index,
+        driver_name: "PAGINATION DRIVER " + String(index + 1).padStart(3, "0"),
+        contact_number: "+65 7000 " + String(index + 1).padStart(4, "0"),
+        vehicle_type: "AVF", plate_number: "T" + (index + 1),
+        availability_status: index === 201 ? "inactive" : "available",
+      }));
+      window.fetch = async (...args) => {
+        const url = new URL(String(args[0]?.url || args[0]), location.origin);
+        if (url.pathname === "/api/admin-driver-assignment-display") {
+          const offset = Number(url.searchParams.get("offset") || 0);
+          const limit = Number(url.searchParams.get("limit") || 100);
+          window.__driverPaginationRequests.push({ offset, limit, method: args[1]?.method || "GET" });
+          return new Response(JSON.stringify({ ok: true, drivers: drivers.slice(offset, offset + limit) }),
+            { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return previousFetch(...args);
+      };
+    })()`);
+    await setBookingMessageValue(bookingSample, "pagination test local draft");
+    await evaluate(`(() => {
+      [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "Create Job Card")?.click();
+    })()`);
+    await waitForCondition(() => evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(button => button.textContent.trim() === "Load Drivers for Assignment");
+      if (!button || button.disabled) return false;
+      button.click(); return true;
+    })()`), 5000, "existing assignment loader available");
+    const paginationState = await waitForCondition(() => evaluate(`(() => {
+      const select = document.querySelector('[data-dispatch-workflow-step="driver-assignment"] select');
+      if (!select?.querySelector('option[value="10405"]')) return false;
+      return { count: [...select.options].filter(option => /^[0-9]+$/.test(option.value)).length,
+        inactivePresent: Boolean(select.querySelector('option[value="10202"]')),
+        requests: window.__driverPaginationRequests };
+    })()`), 10000, "driver 405 available in the existing assignment selector");
+    assert.equal(paginationState.count, 404, "all available drivers must be selectable across every page");
+    assert.equal(paginationState.inactivePresent, false, "inactive drivers remain excluded");
+    assert.deepEqual(paginationState.requests, [0, 200, 400].map(offset => ({ offset, limit: 200, method: "GET" })));
+    await evaluate(`(() => {
+      const select = document.querySelector('[data-dispatch-workflow-step="driver-assignment"] select');
+      select.value = "10405";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await waitForCondition(() => evaluate(`(() => {
+      const section = document.querySelector('[data-dispatch-workflow-step="driver-assignment"]');
+      const label = [...(section?.querySelectorAll("label") || [])].find(item => item.querySelector("span")?.textContent.trim() === "Driver Name");
+      return section?.querySelector("select")?.value === "10405" && label?.querySelector("input")?.value === "PAGINATION DRIVER 405";
+    })()`), 5000, "driver 405 selected in the draft without saving");
 
     const summary = reporter.summary({
       blockedSupabaseMutationRequests: blockedSupabaseMutationRequests.length,

@@ -30,6 +30,74 @@ const names = [
 ];
 const files = Object.fromEntries(await Promise.all(names.map(async (name) => [name, await readFile(name, "utf8")])));
 
+// Execute the actual Admin publish/read callbacks: the first offer must wake an
+// empty pending list without a reload or a second publish/provider request.
+const adminPoolSource = files["app/admin-driver-pool-control.tsx"];
+const attentionCallback = adminPoolSource.slice(adminPoolSource.indexOf("  const loadAttention = useCallback("), adminPoolSource.indexOf("\n\n  useEffect(() => {", adminPoolSource.indexOf("  const loadAttention = useCallback(")));
+const publishCallback = adminPoolSource.slice(adminPoolSource.indexOf("  async function publish()"), adminPoolSource.indexOf("  async function cancel()"));
+assert.ok(attentionCallback.includes("setAttentionItems") && publishCallback.includes('method: "POST"'));
+const callbacks = ts.transpileModule(`${attentionCallback}\n${publishCallback}\nreturn { publish, loadAttention };`, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+for (const outcome of ["success", "publish-failed", "list-failed", "no-vehicle"]) {
+  const state = { items: [], feedback: "", attentionFeedback: "", busy: false, enabled: true, page: 1, requests: [], offer: null };
+  let serverStatus = "open";
+  const row = () => ({ offer_key: "c".repeat(64), public_booking_reference: "QA-POOL", offer_status: serverStatus,
+    attention_status: serverStatus === "open" ? "open" : "accepted_link_pending" });
+  const bindings = {
+    useCallback: (callback) => callback,
+    vehicleRequirement: outcome === "no-vehicle" ? "" : "VVV",
+    bookingReference: "QA-POOL-EMPTY-LIST", expectedUpdatedAt: "2026-09-10T00:00:00Z", payout: "45",
+    headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+    crypto: { randomUUID: () => "12345678-1234-1234-1234-123456789abc" },
+    fetch: async (url, options) => {
+      state.requests.push({ url, method: options.method || "GET" });
+      if (options.method === "POST") return { ok: outcome !== "publish-failed", json: async () => ({
+        ok: outcome !== "publish-failed", error: "Publish rejected", offer: { ...row(), provider_attempted_driver_count: 1, provider_accepted_driver_count: 1 },
+      }) };
+      assert.equal(url, "/api/admin-driver-job-bid-offers?scope=attention&page=1&limit=20");
+      assert.equal(options.cache, "no-store");
+      return { ok: outcome !== "list-failed", json: async () => ({ ok: outcome !== "list-failed", enabled: true,
+        error: "Pending read unavailable", items: [row()], has_more: false, page: 1 }) };
+    },
+    setBusy: (value) => { state.busy = value; }, setFeedback: (value) => { state.feedback = value; },
+    setOffer: (value) => { state.offer = value; }, setAttentionLoadingPage: () => {},
+    setAttentionEnabled: (value) => { state.enabled = value; }, setAttentionHasMore: () => {},
+    setAttentionPage: (value) => { state.page = value; },
+    setAttentionFeedback: (value) => { state.attentionFeedback = value; },
+    setAttentionItems: (updater) => { state.items = updater(state.items); },
+  };
+  const actions = new Function(...Object.keys(bindings), callbacks)(...Object.values(bindings));
+  await actions.publish();
+  assert.equal(state.busy, false);
+  assert.equal(state.requests.filter((request) => request.method === "POST").length, outcome === "no-vehicle" ? 0 : 1);
+  if (outcome === "success") {
+    assert.equal(state.items.length, 1, "Publishing the first offer must populate an initially empty Admin pending list");
+    assert.equal(state.items[0].attention_status, "open");
+    const start = adminPoolSource.lastIndexOf("  useEffect(() => {", adminPoolSource.indexOf("if (!attentionEnabled || attentionItems.length"));
+    const end = adminPoolSource.indexOf("\n  useEffect(() => {", start + 1);
+    let timer; let cleanup;
+    new Function("useEffect", "attentionEnabled", "attentionItems", "attentionPage", "loadAttention", "window", "document", adminPoolSource.slice(start, end))(
+      (effect) => { cleanup = effect(); }, state.enabled, state.items, state.page, actions.loadAttention,
+      { setInterval: (callback, delay) => { assert.equal(delay, 10000); timer = callback; return 1; }, clearInterval: () => { timer = null; } },
+      { visibilityState: "visible" },
+    );
+    assert.equal(typeof timer, "function", "The existing timer must start after the first offer appears");
+    serverStatus = "assigned";
+    timer();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.items[0].attention_status, "accepted_link_pending", "The existing timer must discover acceptance without a reload");
+    assert.equal(state.requests.filter((request) => request.method === "POST").length, 1);
+    cleanup(); assert.equal(timer, null);
+  } else if (outcome === "list-failed") {
+    assert.equal(state.offer.offer_status, "open", "A failed pending read must retain the successfully published offer");
+    assert.equal(state.attentionFeedback, "Pending read unavailable", "Pending read failure must remain visible without resending");
+    assert.equal(state.requests.length, 2);
+  } else {
+    assert.equal(state.requests.some((request) => request.method === "GET"), false, "Rejected publishes must not refresh as if successful");
+  }
+}
+
 // Execute the real refresh effect: an initially empty list must discover a new
 // offer without a manual Refresh; hidden/signed-out/busy screens must not poll.
 const portalSource = files["app/driver-portal/page.tsx"];

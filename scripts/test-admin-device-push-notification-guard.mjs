@@ -593,6 +593,25 @@ try {
     assert.equal(nativePayload.body, "I am waiting at the lobby.");
     assert.equal(webPayload.url, "/");
   }
+  for (const pickupLocationState of ["missing", "overlap"]) {
+    let webPayload, nativePayload;
+    const result = await helper.sendAdminDevicePushAlert("driver_issue", {
+      env: configuredEnv, pickupLocationState,
+      loadedSubscriptionLoader: async () => [
+        {channel:"web",endpoint:"https://push.example.test/location",webSubscription:{endpoint:"https://push.example.test/location",keys:{auth:"fake-auth",p256dh:"fake-key"}}},
+        {channel:"native_ios",endpoint:"ExponentPushToken[location-followup]",webSubscription:null},
+      ],
+      pushSender:async(_sub,payload)=>{webPayload=payload;},
+      nativePushSender:async(_token,payload)=>{nativePayload=payload;},
+    });
+    assert.equal(result.ok,true);
+    const body=pickupLocationState === "missing"
+      ? "Location unavailable after the pickup reminder. Open Dashboard to review."
+      : "Driver is sharing another job. Open Dashboard to review.";
+    assert.equal(webPayload.body,body);assert.equal(nativePayload.body,body);
+    assert.equal(webPayload.url,"/");
+    assertExcludes(JSON.stringify(nativePayload),["latitude","longitude","driver_job_link_id"],"Admin follow-up safe copy");
+  }
 
   for (const [eventType, safeMessage, allowed] of [
     ["driver_to_customer_reply", "a".repeat(500), true],

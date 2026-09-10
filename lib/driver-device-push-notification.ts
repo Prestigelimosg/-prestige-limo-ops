@@ -140,6 +140,7 @@ type DriverPoolAssignmentCancelledVisibleBody =
 type DriverMessagePreview = string & { readonly __driverMessagePreview: unique symbol };
 type DriverNativePushVisibleBody =
   | DriverMessagePreview
+  | "Please open your job and share location before pickup."
   | "A driver-pool job is available. Open the app to review."
   | DriverPoolWinnerVisibleBody
   | DriverPoolAssignmentCancelledVisibleBody
@@ -154,6 +155,7 @@ type DriverDevicePushPayload = {
   message_preview?: true;
   body:
     | DriverMessagePreview
+    | "Please open your job and share location before pickup."
     | "A driver-pool job is available. Open the app to review."
     | DriverPoolWinnerVisibleBody
     | DriverPoolAssignmentCancelledVisibleBody
@@ -1486,6 +1488,7 @@ export async function sendDriverDevicePushAlertForPickupReminder(
   input: DriverDevicePushAlertInput & {
     driver_id: unknown;
     notification_id?: string | null;
+    reminder_kind?: "location_followup";
   },
   options: DriverDevicePushAlertOptions = {},
 ): Promise<DriverDevicePushAlertResult> {
@@ -1519,13 +1522,16 @@ export async function sendDriverDevicePushAlertForPickupReminder(
     return alertResult("invalid_driver_link", { enabled: true });
   }
 
+  const visibleBody = input.reminder_kind === "location_followup"
+    ? "Please open your job and share location before pickup."
+    : "Pickup is in 1 hour. Open Driver Portal to review.";
   return sendPayloadToDriverSubscriptions(
     client,
     driverId,
-    pickupReminderPayload(linkId),
+    { ...pickupReminderPayload(linkId), body: visibleBody },
     config,
     options,
     null,
-    "Pickup is in 1 hour. Open Driver Portal to review.",
+    visibleBody,
   );
 }

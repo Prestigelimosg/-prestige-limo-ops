@@ -77,7 +77,7 @@ type AdminSavedBookingDeleteResult<T> =
     };
 
 type UnknownRecord = Record<string, unknown>;
-type SavedBookingDeleteClient = Pick<SupabaseClient, "from">;
+type SavedBookingDeleteClient = Pick<SupabaseClient, "from" | "rpc">;
 type SavedBookingDeleteSelectResult<T> = {
   data: T | null;
   error: unknown;
@@ -96,8 +96,6 @@ const safeActorError =
 const safeConfigError =
   "Admin saved booking delete configuration is not ready.";
 const safeDeleteError = "Admin saved booking delete failed safely.";
-const safeDeleteCleanupError =
-  "Admin saved booking operational job cleanup failed safely.";
 const safeSessionActorError =
   "Admin saved booking delete requires a verified admin or dispatcher server session.";
 const safeTargetMissingError =
@@ -597,30 +595,27 @@ export async function deleteAdminCompletedSavedBooking(
     };
   }
 
-  const childCleanupResult = await deleteSavedBookingChildRowsForBookingId(
-    clientResult.data,
-    target.id,
-  );
-
-  if (!childCleanupResult.ok) {
-    return childCleanupResult;
-  }
-
-  const cleanupResult = await deleteOperationalJobArtifactsForBookingReference(
-    clientResult.data,
-    target.booking_reference,
-  );
-
-  if (!cleanupResult.ok) {
-    return cleanupResult;
-  }
-
-  const { data, error } = await deleteSavedBookingTarget(
-    clientResult.data,
-    target,
-  );
+  // One database transaction owns the established exact-booking cleanup.
+  // Never fall back to separate deletes if the migration/RPC is unavailable.
+  const { data, error } = await clientResult.data.rpc("admin_delete_saved_booking_atomic", {
+    p_booking_id: String(target.id),
+    p_booking_reference: target.booking_reference,
+    p_status_column: target.delete_status_column,
+    p_expected_status: target.delete_status_value ?? target.status,
+    p_any_status: anyStatusDelete,
+    p_actor_role: actor.actor_role,
+  });
 
   if (error) {
+    if (error.code === "55000" || error.code === "40001") {
+      return {
+        error: error.code === "40001"
+          ? "Booking changed. Reload before deleting. No records were deleted."
+          : "Driver account setup needs review before deleting this booking. No records were deleted.",
+        ok: false,
+        status: 409,
+      };
+    }
     return safeDatabaseFailure(safeDeleteError, 500, error);
   }
 
@@ -730,81 +725,6 @@ async function findCompletedSavedBookingDeleteTarget(
   return {
     data: toDeleteTargetRecord(legacyResult.data, "status"),
     error: null,
-  };
-}
-
-async function deleteSavedBookingTarget(
-  client: SavedBookingDeleteClient,
-  target: AdminSavedBookingDeleteTargetRecord,
-): Promise<SavedBookingDeleteSelectResult<unknown>> {
-  const selectedColumns =
-    target.delete_status_column === "admin_internal_status"
-      ? "id, booking_reference, admin_internal_status, customer_facing_status"
-      : "id, booking_reference, status";
-
-  let deleteQuery = client
-    .from("bookings")
-    .delete()
-    .eq("id", target.id)
-    .eq("booking_reference", target.booking_reference);
-
-  if (target.delete_status_value) {
-    deleteQuery = deleteQuery.eq(target.delete_status_column, target.delete_status_value);
-  }
-
-  return deleteQuery.select(selectedColumns).maybeSingle();
-}
-
-async function deleteSavedBookingChildRowsForBookingId(
-  client: SavedBookingDeleteClient,
-  bookingId: string | number,
-): Promise<AdminSavedBookingDeleteResult<null>> {
-  const cleanupTables = ["booking_service_items", "booking_route_points"];
-
-  for (const table of cleanupTables) {
-    const { error } = await client.from(table).delete().eq("booking_id", bookingId);
-
-    if (error) {
-      return safeDatabaseFailure(safeDeleteCleanupError, 500, error);
-    }
-  }
-
-  return {
-    data: null,
-    ok: true,
-  };
-}
-
-async function deleteOperationalJobArtifactsForBookingReference(
-  client: SavedBookingDeleteClient,
-  bookingReference: string,
-): Promise<AdminSavedBookingDeleteResult<null>> {
-  const cleanupTables = [
-    "driver_job_bids",
-    "driver_job_bid_offers",
-    "customer_driver_app_notification_outbox",
-    "driver_live_location_latest_positions",
-    "driver_live_location_audit_events",
-    "driver_ots_photo_proofs",
-    "driver_job_dsp_actual_time_events",
-    "driver_job_status_events",
-    "driver_job_links",
-  ];
-
-  for (const table of cleanupTables) {
-    const { error } = await client
-      .from(table)
-      .delete()
-      .eq("booking_reference", bookingReference);
-
-    if (error) {
-      return safeDatabaseFailure(safeDeleteCleanupError, 500, error);
-    }
-  }
-
-  return {
-    data: null,
-    ok: true,
   };
 }
 

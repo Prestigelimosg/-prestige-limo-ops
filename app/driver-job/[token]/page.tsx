@@ -3283,8 +3283,7 @@ export default function DriverJobPage() {
                       <>
                       <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
                       <p className="text-xs font-medium leading-5 text-violet-900">
-                        Optional. This acknowledged Job Link can create one account only. You may continue every
-                        reporting action in this browser without installing Prestige Driver.
+                        1. Install Prestige Driver. 2. Create your account below. 3. Sign in with email + 6-digit PIN.
                       </p>
                       {driverAccountSetup.stage === "email" ? (
                         <form

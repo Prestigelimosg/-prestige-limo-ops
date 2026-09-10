@@ -102,6 +102,8 @@ includes("portalPage", 'const accountPinOnly = nativePinSignIn && !accountFirstS
 includes("portalPage", '...(accountPinOnly ? {} : { email: accountEmail })', "Bound-phone PIN omits client email");
 
 includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
+includes("jobPage", "1. Install Prestige Driver. 2. Create your account below. 3. Sign in with email + 6-digit PIN.", "owner-approved shared iOS and Android installation guidance");
+excludes("jobPage", /reporting action in this browser without installing Prestige Driver/, "superseded account installation discouragement");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
 for (const fragment of [
   "hasVerifiedDriverAccount",

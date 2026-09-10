@@ -215,6 +215,9 @@ export default function DriverPortalPage() {
   );
   const [accountEmail, setAccountEmail] = useState("");
   const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
+  const [accountFirstSignIn, setAccountFirstSignIn] = useState(false);
+  const nativeAndroid = nativeBridgeReady && /\bAndroid\b/i.test(window.navigator.userAgent);
+  const accountPinOnly = nativeAndroid && !accountFirstSignIn;
   const [accountPassword, setAccountPassword] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
@@ -502,7 +505,7 @@ export default function DriverPortalPage() {
     try {
       const response = await fetch("/api/driver-auth/session", {
         body: JSON.stringify({
-          email: accountEmail,
+          ...(accountPinOnly ? {} : { email: accountEmail }),
           installation_id: installationId,
           password: accountPassword,
         }),
@@ -818,10 +821,27 @@ export default function DriverPortalPage() {
           <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
             <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
             <p className="text-sm font-medium leading-6 text-slate-700">
-              Sign in with the account created from your acknowledged private Job Link. The first
-              successful sign-in binds this account to this Prestige Driver installation.
+              {accountPinOnly
+                ? "Enter your 6-digit PIN on your registered phone."
+                : <>Sign in with the account created from your acknowledged private Job Link. The first
+                  successful sign-in binds this account to this Prestige Driver installation.</>}
             </p>
-            {!accountEmailConfirmed ? (
+            {nativeAndroid ? (
+              <button
+                className="text-xs font-semibold text-slate-700 underline"
+                data-driver-portal-first-sign-in="true"
+                disabled={accountSignInState === "signing_in"}
+                onClick={() => {
+                  setAccountFirstSignIn(!accountFirstSignIn);
+                  setAccountEmail("");
+                  setAccountEmailConfirmed(false);
+                  setAccountPassword("");
+                  setAccountSignInState("idle");
+                }}
+                type="button"
+              >{accountPinOnly ? "First sign-in" : "Use PIN"}</button>
+            ) : null}
+            {!accountPinOnly && !accountEmailConfirmed ? (
               <form
                 className="space-y-3"
                 data-driver-portal-email-step="true"
@@ -863,7 +883,7 @@ export default function DriverPortalPage() {
                   void signInDriverAccount();
                 }}
               >
-                <div
+                {!accountPinOnly ? <div
                   className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
                   data-driver-portal-confirmed-email="true"
                 >
@@ -883,9 +903,9 @@ export default function DriverPortalPage() {
                   >
                     Change email
                   </button>
-                </div>
+                </div> : null}
                 <label className="block text-sm font-semibold text-slate-800">
-                  Password
+                  {nativeAndroid ? "6-digit PIN" : "Password"}
                   <input
                     autoComplete="current-password"
                     className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950"

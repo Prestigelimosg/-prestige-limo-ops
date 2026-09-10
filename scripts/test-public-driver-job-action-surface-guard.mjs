@@ -330,7 +330,15 @@ assert.deepEqual(
   "driver page static public information links",
 );
 assert.equal(countOccurrences(driverPage, "<Link"), 4, "driver page public information Link count");
-assert.equal(countOccurrences(driverPage, 'target="_blank"'), 0, "driver page new-tab public link count");
+const betaDownloadAnchor = driverPage.match(/<a\s[^>]*data-driver-beta-download="true"[^>]*>[\s\S]*?<\/a>/g) || [];
+assert.equal(betaDownloadAnchor.length, 1, "Only the owner-approved Beta binary download may open a new tab.");
+assertIncludes(betaDownloadAnchor[0], 'href={driverBetaApkDownloadUrl}', 'fixed Beta APK destination');
+assertIncludes(betaDownloadAnchor[0], 'referrerPolicy="no-referrer"', 'private job referrer protection');
+assertIncludes(betaDownloadAnchor[0], 'rel="noopener noreferrer"', 'Beta APK opener protection');
+assertIncludes(betaDownloadAnchor[0], 'target="_blank"', 'preserve original private job tab');
+assertExcludes(betaDownloadAnchor[0], /token|onClick|fetch\(/, 'APK download must not receive job identity or perform writes');
+assert.equal(countOccurrences(driverPage.replace(betaDownloadAnchor[0], ''), 'target="_blank"'), 0,
+  "All other Driver actions retain the existing same-tab contract.");
 assert.equal(countOccurrences(driverPage, "anchor.download = filename"), 0, "driver page forced calendar attachment download count");
 assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 0, "driver page must not create a calendar download/import anchor");
 for (const fragment of [

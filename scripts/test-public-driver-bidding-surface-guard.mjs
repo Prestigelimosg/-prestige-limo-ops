@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 
 import "./test-driver-pool-fast-accept-guard.mjs";
 
@@ -190,7 +191,60 @@ for (const fragment of [
 ]) {
   assertIncludes(files.serviceWorker, fragment, `Driver Pool service worker generic target ${fragment}`);
 }
-assertExcludes(files.serviceWorker, /offer_payout_sgd|customer_price|invoice|payment|paynow|billing|passenger/i, "Driver Pool service worker privacy boundary");
+// The shared worker contains privacy-denial terms. Verify what it displays,
+// rather than rejecting those terms in the protective filter itself.
+const workerHandlers = new Map();
+let displayedPoolNotification;
+let openedPoolTarget;
+runInNewContext(files.serviceWorker, { self: {
+  addEventListener: (type, handler) => workerHandlers.set(type, handler),
+  registration: { showNotification: async (title, options) => {
+    displayedPoolNotification = JSON.parse(JSON.stringify({ title, ...options }));
+  } },
+  clients: {
+    matchAll: async () => [],
+    openWindow: async (url) => { openedPoolTarget = url; },
+  },
+} });
+const poolBody = "A driver-pool job is available. Open the app to review.";
+for (const body of [poolBody, "invoice PRIVATE-INVOICE payment PRIVATE-PAYMENT"]) {
+  const pending = [];
+  workerHandlers.get("push")({
+    data: { json: () => ({
+      body,
+      tag: "prestige-driver-pool-synthetic-offer",
+      target_path: "/driver-portal?view=available-jobs",
+      offer_payout_sgd: 98765,
+      customer_price: 87654,
+      passenger: "PRIVATE-PASSENGER",
+      invoice: "PRIVATE-INVOICE",
+      payment: "PRIVATE-PAYMENT",
+      paynow: "PRIVATE-PAYNOW",
+      billing: "PRIVATE-BILLING",
+      internal_admin_notes: "PRIVATE-ADMIN-NOTES",
+    }) },
+    waitUntil: (promise) => pending.push(promise),
+  });
+  await Promise.all(pending);
+  assert.deepEqual(displayedPoolNotification, {
+    title: "Prestige Limo Ops",
+    body: body === poolBody ? poolBody : "New Driver Job app update. Tap to review.",
+    data: { jobKey: "", targetPath: "/driver-portal?view=available-jobs" },
+    tag: "prestige-driver-pool-synthetic-offer",
+    renotify: true,
+    requireInteraction: true,
+  }, "Driver Pool notification must expose only its fixed copy and safe routing");
+  assertExcludes(JSON.stringify(displayedPoolNotification),
+    /PRIVATE-|98765|87654|offer_payout_sgd|customer_price|invoice|payment|paynow|billing|passenger/i,
+    "Displayed Driver Pool notification privacy boundary");
+  const clicks = [];
+  workerHandlers.get("notificationclick")({
+    notification: { data: displayedPoolNotification.data, close() {} },
+    waitUntil: (promise) => clicks.push(promise),
+  });
+  await Promise.all(clicks);
+  assert.equal(openedPoolTarget, "/driver-portal?view=available-jobs");
+}
 
 for (const [label, source] of [
   ["native app", files.nativeApp],

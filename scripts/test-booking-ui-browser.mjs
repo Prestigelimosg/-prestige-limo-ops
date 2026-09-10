@@ -6191,6 +6191,7 @@ async function runChromeTest() {
     );
     await evaluate(`(() => {
       window.__prestigeFetchCalls = [];
+      window.__prestigeMockAiResponse = null;
       window.__prestigeOriginalFetch = window.__prestigeOriginalFetch || window.fetch.bind(window);
       window.fetch = async (...args) => {
         const target = args[0]?.url || args[0];
@@ -6202,7 +6203,18 @@ async function runChromeTest() {
           await new Promise((resolve) => setTimeout(resolve, 150));
         }
 
-        return window.__prestigeOriginalFetch(...args);
+        const response = await window.__prestigeOriginalFetch(...args);
+        if (targetText.includes("/api/ai-parse")) {
+          const payload = await response.clone().json().catch(() => ({}));
+          window.__prestigeMockAiResponse = {
+            status: response.status,
+            ok: payload.ok,
+            mode: payload.mode,
+            external_send: payload.external_send,
+            write_action: payload.write_action,
+          };
+        }
+        return response;
       };
     })()`);
 
@@ -6227,6 +6239,21 @@ async function runChromeTest() {
       "AI Assist loading state",
     );
     assert.equal(aiAssistLoadingText, "Preparing AI review draft...");
+
+    const mockAiResponse = await waitForCondition(
+      () => evaluate("window.__prestigeMockAiResponse || null"),
+      10000,
+      "local mock AI response",
+    );
+    assert.equal(mockAiResponse.status, 200,
+      `Mock AI test prerequisite failed: POST /api/ai-parse returned HTTP ${mockAiResponse.status}. ` +
+      "Check that APP_URL uses the same hostname as the local server request origin (normally http://localhost:<port>). " +
+      "Use an isolated local server with AI_PARSE_MODE=mock, PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED=false, " +
+      "PRESTIGE_ADMIN_ACCOUNT_AUTH_ENABLED=false and PRESTIGE_ADMIN_DISPATCHER_AUTH_MODE unset. " +
+      "Do not change Production authentication.");
+    assert.deepEqual(mockAiResponse, {
+      status: 200, ok: true, mode: "mock", external_send: false, write_action: false,
+    }, "Browser regression requires the existing read-only mock AI response");
 
     const aiDraftState = await waitForCondition(
       async () => {
@@ -18680,6 +18707,7 @@ async function runChromeTest() {
               );
               return {
                 payout: payout?.value || "",
+                vehicleRequirement: control?.querySelector('select[aria-label="Driver Pool vehicle type"]')?.value ?? null,
                 sendDisabled: send?.disabled ?? true,
                 sendText: send?.textContent.trim() || "",
                 text: control?.textContent.replace(/\s+/g, " ").trim() || "",
@@ -18938,7 +18966,8 @@ async function runChromeTest() {
           candidateState?.fields?.flight === "SQ999" &&
           candidateState?.driverPoolControl?.sendText === "Send to Driver Pool" &&
           candidateState?.driverPoolControl?.payout === "75.00" &&
-          candidateState?.driverPoolControl?.sendDisabled === false &&
+          candidateState?.driverPoolControl?.vehicleRequirement === "" &&
+          candidateState?.driverPoolControl?.sendDisabled === true &&
           candidateState?.driverPoolOfferRequests?.some(
             (request) =>
               request.method === "GET" &&
@@ -19039,6 +19068,8 @@ async function runChromeTest() {
       );
     }
 
+    assert.equal(loadedBookingState.driverPoolControl.vehicleRequirement, "", "Pool vehicle must start unselected");
+    assert.equal(loadedBookingState.driverPoolControl.sendDisabled, true, "Pool Send must wait for explicit vehicle selection");
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");

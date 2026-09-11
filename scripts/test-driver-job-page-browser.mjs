@@ -1019,6 +1019,7 @@ async function runChromeTest() {
     assert.equal(betaInstallState.count, 1, "Android browser needs one compact Beta install handoff on the existing job page.");
     assert.match(betaInstallState.text, /Install Driver App \(Beta APK\)/);
     assert.match(betaInstallState.text, /Open This Job/);
+    assert.match(betaInstallState.text, /Allow notifications for job alerts\. Allow location to share your location during jobs\./);
     assert.equal(betaInstallState.downloadHref, 'https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download');
     assert.ok(betaInstallState.downloadRel.includes('noreferrer'));
     assert.ok(betaInstallState.downloadRel.includes('noopener'));

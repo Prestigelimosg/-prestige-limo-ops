@@ -1,3 +1,9 @@
+## Android Beta Installation Permission Purpose (2026-09-11; local wording change, not released)
+
+- Owner requested a short explanation of notification and location purposes only for APK installation. Append "Allow notifications for job alerts. Allow location to share your location during jobs." within the existing small Beta-install instruction paragraph on valid private Job pages in Android browsers.
+- Preserve Android-browser/valid-page/native-exclusion conditions, download and exact-job links, app name, installation handoff, permissions, sharing controls and all existing actions. No iPhone/native-app copy, automatic permission request, GPS start or notification send is added.
+- Existing onboarding guard passed before adding the fail-first copy assertion. Updated onboarding and account-device guards, TypeScript and production build pass; lint has zero errors and the pre-existing live-location dependency warning. The public action-surface aggregate still fails its previously recorded unrelated legacy Driver Pool payload assertion; no Pool code or assertion is changed. Extend the existing Android installation browser case to check the sentence with its existing no-write and platform-exclusion coverage; the full browser suite was not rerun for this static copy addition. Release and physical verification pending.
+
 ## Driver Portal And Account Concise Instructions (2026-09-11; local wording change, not released)
 
 - Owner requested short instructions for both the Driver Portal paragraph and account setup during physical two-phone QA. The acknowledged iPhone page visibly displayed a long Portal paragraph with Home Screen installation guidance; Pixel displayed the verbose account-created handoff.

@@ -2731,6 +2731,8 @@ export default function DriverJobPage() {
               </div>
               <p className="text-xs leading-5 text-slate-600">
                 Install, then return here and tap Open This Job.
+                <br />
+                Allow notifications for job alerts. Allow location to share your location during jobs.
               </p>
             </div>
           ) : null}

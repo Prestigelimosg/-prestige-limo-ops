@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 
 const pagePath = "app/driver-job/[token]/page.tsx";
 const pageSource = await readFile(pagePath, "utf8");
+const betaInstall = pageSource.match(/androidBrowser && !embeddedDriverApp && pageState.kind === "ready"[\s\S]*?data-driver-beta-install="true"([\s\S]*?)<\/header>/)?.[1];
+assert.ok(betaInstall, "Keep the existing Android-browser-only Beta installation section.");
+assert.match(betaInstall, /Allow notifications for job alerts\. Allow location to share your location during jobs\./);
+assert.match(betaInstall, /className="text-xs leading-5 text-slate-600"/);
 
 const portalEntry = pageSource.match(/data-driver-portal-entry="enrolled"([\s\S]*?)<\/Link>/)?.[1];
 assert.ok(portalEntry, "Keep the existing acknowledged Driver Portal entry.");

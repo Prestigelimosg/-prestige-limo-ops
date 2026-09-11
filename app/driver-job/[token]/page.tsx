@@ -1930,7 +1930,7 @@ export default function DriverJobPage() {
         ...current,
         feedback: {
           tone: "success",
-          text: "Driver account created. The first sign-in inside Prestige Driver will bind it to that phone. This Job Link remains available for browser reporting.",
+          text: "Account created. Open Prestige Driver and sign in with your email + 6-digit PIN. One account, one phone.",
         },
         password: "",
         saving: false,
@@ -3083,17 +3083,16 @@ export default function DriverJobPage() {
                     className="space-y-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2"
                     data-driver-portal-entry="enrolled"
                   >
-                    <p className="text-sm font-semibold text-violet-950">Driver Portal</p>
+                    <p className="text-sm font-semibold text-violet-950">My Jobs</p>
                     <p className="text-xs font-medium leading-5 text-violet-900">
-                      Open all acknowledged upcoming and active jobs assigned to this verified driver. On
-                      iPhone, use Add to Home Screen from this page to install the reusable Driver Portal.
+                      View your upcoming and active jobs.
                     </p>
                     <Link
                       className="flex h-11 w-full items-center justify-center rounded-md border border-violet-700 bg-white px-3 text-sm font-semibold text-violet-950 transition hover:bg-violet-100"
                       data-driver-portal-open="true"
                       href="/driver-portal"
                     >
-                      Open Driver Portal
+                      Open My Jobs
                     </Link>
                   </div>
                 ) : null}
@@ -3299,7 +3298,7 @@ export default function DriverJobPage() {
                     {driverAccountSetup.status === "created" ? (
                       <div className="space-y-1" data-driver-account-success-summary="true">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                        <p className="text-sm font-semibold text-violet-950">Create your account</p>
                         <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-900">
                           Account created
                         </span>
@@ -3312,9 +3311,9 @@ export default function DriverJobPage() {
                       </div>
                     ) : (
                       <>
-                      <p className="text-sm font-semibold text-violet-950">Create Driver Account</p>
+                      <p className="text-sm font-semibold text-violet-950">Create your account</p>
                       <p className="text-xs font-medium leading-5 text-violet-900">
-                        1. Install Prestige Driver. 2. Create your account below. 3. Sign in with email + 6-digit PIN.
+                        Create your account below. Then sign in to Prestige Driver.
                       </p>
                       {driverAccountSetup.stage === "email" ? (
                         <form
@@ -3428,7 +3427,7 @@ export default function DriverJobPage() {
                               disabled={driverAccountSetup.saving || !driverAccountPasswordReady}
                               type="submit"
                             >
-                              {driverAccountSetup.saving ? "Creating account..." : "Create Driver Account"}
+                              {driverAccountSetup.saving ? "Creating account..." : "Create account"}
                             </button>
                           </form>
                         </div>

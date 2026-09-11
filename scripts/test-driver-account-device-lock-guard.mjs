@@ -103,8 +103,10 @@ includes("portalPage", '...(accountPinOnly ? {} : { email: accountEmail })', "Bo
 includes("portalPage", "First sign-in: Email + 6-digit PIN.", "short first-sign-in instruction on the login page");
 includes("portalPage", "Next time: 6-digit PIN only.", "short returning-phone instruction on the login page");
 
-includes("jobPage", "Create Driver Account", "acknowledged Job Link account action");
-includes("jobPage", "1. Install Prestige Driver. 2. Create your account below. 3. Sign in with email + 6-digit PIN.", "owner-approved shared iOS and Android installation guidance");
+includes("jobPage", ">Create your account</p>", "personal account heading");
+includes("jobPage", 'driverAccountSetup.saving ? "Creating account..." : "Create account"', "existing account submit action");
+includes("jobPage", "Create your account below. Then sign in to Prestige Driver.", "concise shared account setup guidance");
+includes("jobPage", "Account created. Open Prestige Driver and sign in with your email + 6-digit PIN. One account, one phone.", "concise first sign-in handoff and one-phone rule");
 excludes("jobPage", /reporting action in this browser without installing Prestige Driver/, "superseded account installation discouragement");
 includes("jobPage", "driver-account-create", "Job Link account purpose header");
 for (const fragment of [

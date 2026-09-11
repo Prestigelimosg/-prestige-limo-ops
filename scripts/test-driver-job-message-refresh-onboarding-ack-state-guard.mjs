@@ -4,6 +4,18 @@ import { readFile } from "node:fs/promises";
 const pagePath = "app/driver-job/[token]/page.tsx";
 const pageSource = await readFile(pagePath, "utf8");
 
+const portalEntry = pageSource.match(/data-driver-portal-entry="enrolled"([\s\S]*?)<\/Link>/)?.[1];
+assert.ok(portalEntry, "Keep the existing acknowledged Driver Portal entry.");
+assert.match(portalEntry, />My Jobs<\/p>/);
+assert.match(portalEntry, /View your upcoming and active jobs\./);
+assert.match(portalEntry, /className="text-xs font-medium leading-5 text-violet-900"/);
+assert.match(portalEntry, /href="\/driver-portal"/);
+assert.match(portalEntry, /Open My Jobs/);
+assert.doesNotMatch(portalEntry, /Add to Home Screen|verified driver|reusable Driver Portal/);
+const portalSource = await readFile("app/driver-portal/page.tsx", "utf8");
+assert.match(portalSource, /data-driver-portal-heading="true">\s*My Jobs\s*<\/h1>/);
+assert.match(portalSource, /View your upcoming and active jobs\./);
+
 const requiredFragments = [
   ["foreground refresh helper", "const refreshDriverAppUpdates = useCallback"],
   ["visible refresh interval", "const DRIVER_APP_UPDATES_VISIBLE_REFRESH_MS = 5_000"],

@@ -1,3 +1,11 @@
+## Driver Portal And Account Concise Instructions (2026-09-11; local wording change, not released)
+
+- Owner requested short instructions for both the Driver Portal paragraph and account setup during physical two-phone QA. The acknowledged iPhone page visibly displayed a long Portal paragraph with Home Screen installation guidance; Pixel displayed the verbose account-created handoff.
+- Owner then approved personal wording: the existing Portal entry and destination heading are "My Jobs", its button is "Open My Jobs", and its explanation is "View your upcoming and active jobs." Account headings are "Create your account" and the existing submit button says "Create account". Keep Prestige Driver as the app name.
+- Account guidance is "Create your account below. Then sign in to Prestige Driver."; success guidance is "Account created. Open Prestige Driver and sign in with your email + 6-digit PIN. One account, one phone."
+- Preserve the small existing text styles, button destination/visibility, native and browser behavior, account creation, email-first binding, PIN return, one-phone rule, install controls, Calendar and all other actions. The already concise two-line login explanation stays intact. No native rebuild or authentication change.
+- Existing onboarding and account-device guards passed before their bounded wording assertions were updated; the new assertions failed against the old copy. Updated onboarding/account-device guards, exact-driver session/jobs guard, TypeScript and production build pass. Bounded lint has zero errors and the pre-existing live-location effect dependency warning. Diff review confirms only text literals changed in the two application files; styles, controls and event handlers are unchanged. Release and physical verification of the new wording are pending.
+
 ## Location Access Booking-Count Restriction Removal (2026-09-11; local repair, release pending)
 
 - Owner approved removing the location-access booking-count restriction after actual Link creation evicted an older reference and local execution reproduced truncation at 51 plus lost concurrent additions. This is the existing explicit-booking authorization lane, not a Driver-storage limit or permission for broad tracking.

@@ -703,7 +703,7 @@ export default function DriverPortalPage() {
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Prestige Limo</p>
               <h1 className="mt-1 text-2xl font-bold" data-driver-portal-heading="true">
-                Driver Portal
+                My Jobs
               </h1>
               <PublicAppBuildMarker tone="dark" />
             </div>
@@ -721,7 +721,7 @@ export default function DriverPortalPage() {
             ) : null}
           </div>
           <p className="mt-2 text-sm font-medium leading-6 text-slate-300">
-            Your acknowledged upcoming and active jobs on this device.
+            View your upcoming and active jobs.
           </p>
           {readState.kind === "ready" && readState.accountSession && notificationCentreOpen ? (
             <section

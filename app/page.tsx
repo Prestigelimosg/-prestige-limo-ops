@@ -21096,7 +21096,7 @@ export default function Home() {
     }));
     setMessage({
       tone: "success",
-      text: `Parsed ${detectedFields} field${detectedFields === 1 ? "" : "s"}. Review before saving.`,
+      text: "Booking parsed. Review before saving.",
     });
 
     if (getNeedsReviewWarnings(finalForm).length > 0 && !activeAdminEmailAiIntakeId) {
@@ -21167,7 +21167,7 @@ export default function Home() {
       }));
       setMessage({
         tone: "success",
-        text: `Parsed ${detectedFields} fields and applied CRM memory. Review before saving.`,
+        text: "Booking parsed and applied CRM memory. Review before saving.",
       });
     }
 

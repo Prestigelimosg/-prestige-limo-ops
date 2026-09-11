@@ -31359,6 +31359,7 @@ export default function Home() {
   }
   const dayOfTripActiveJobBookings = operationalBookings
     .filter(bookingRecordIsDispatchActiveJobsMonitorEligible)
+    .filter((bookingRecord) => bookingRecordIsInsideActiveJobMonitorWindow(bookingRecord, currentTimeMs))
     .filter((bookingRecord) => bookingRecordIsCurrentAssignedActiveJob(bookingRecord, currentTimeMs))
     .filter((bookingRecord) => {
       return (

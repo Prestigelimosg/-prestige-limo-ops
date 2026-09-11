@@ -30,19 +30,14 @@ for (const retiredCopy of [
 
 for (const essentialControl of [
   "Message Customer",
-  'placeholder="Type a message to the customer"',
+  '"Type a message to the customer"',
   'data-driver-customer-message-send="true"',
-  '"Sending…" : "Send to customer"',
+  '"Send to Admin" : "Send to customer"',
   "Customer replies close after Passenger on board.",
   'data-driver-customer-quick-reply-feedback="true"',
-  "Report Issue",
-  "Issue type",
-  '<option value="">Choose issue</option>',
-  "driverJobIssueChoices.map",
-  'data-driver-job-report-issue-submit="true"',
-  'reportingDriverIssue ? "Alerting..." : "Alert Admin"',
-  "Choose an issue before alerting admin.",
-  'data-driver-job-report-issue-message="true"',
+  'data-driver-message-recipient="admin"',
+  'data-driver-message-recipient="customer"',
+  "Private to Admin. Report any issue here.",
   "OTS Photo to Admin",
   'data-driver-job-ots-photo-proof-state={driverOtsPhotoProofStatusLabel.toLowerCase()}',
   "Photo",
@@ -52,7 +47,6 @@ for (const essentialControl of [
   'driverOtsPhotoProof.action === "uploading" ? "Sending..." : "Send Photo to Admin"',
   'data-driver-job-ots-photo-proof-message="true"',
   "uploadDriverOtsPhotoProof",
-  "reportDriverIssue",
   "sendDriverCustomerQuickReply",
 ]) {
   assertIncludes(driverPage, essentialControl, "Driver private-job essential control");
@@ -65,13 +59,14 @@ assert.match(
 );
 
 const workflowHandoffStart = driverPage.indexOf('data-driver-job-workflow-handoff="true"');
-const reportIssueStart = driverPage.indexOf('data-driver-job-report-issue="true"');
+const messageStart = driverPage.indexOf('data-driver-customer-quick-replies="true"');
+assertExcludes(driverPage, 'data-driver-job-report-issue="true"', "Owner replaced issue UI");
 assert.notEqual(workflowHandoffStart, -1, "The existing How this page works disclosure must remain.");
-assert.notEqual(reportIssueStart, -1, "The existing Report Issue sector must remain.");
+assert.notEqual(messageStart, -1, "The existing message composer must remain.");
 assert.equal(
-  workflowHandoffStart > reportIssueStart,
+  workflowHandoffStart > messageStart,
   true,
-  "The one existing How this page works disclosure must render after Report Issue at the bottom of the private job page.",
+  "The one existing How this page works disclosure must render after Messages at the bottom of the private job page.",
 );
 for (const handoffContent of [
   "How this page works",
@@ -79,7 +74,7 @@ for (const handoffContent of [
   "This private job stays inside Prestige Driver.",
   "Tap Save & Acknowledge Job after confirming driver and vehicle details.",
   "Tap OTW to save status and start native background location sharing.",
-  "Use Report Issue when admin needs an in-app alert.",
+  "For an issue, select Admin in Messages and send your message.",
   "Private account and internal compensation details are not shown here.",
 ]) {
   assertIncludes(driverPage, handoffContent, "Unchanged How this page works content");

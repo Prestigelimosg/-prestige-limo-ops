@@ -181,6 +181,7 @@ export type AdminDevicePushEventType =
   | "driver_otw"
   | "driver_pob"
   | "driver_to_customer_reply"
+  | "driver_to_admin_reply"
   | "email_booking_amendment"
   | "email_booking_cancellation"
   | "email_confirmed_booking";
@@ -735,6 +736,10 @@ const adminDevicePushEventCopy: Record<
     body: "Driver reported POB. Open Dashboard to review.",
     title: "Driver reported POB",
   },
+  driver_to_admin_reply: {
+    body: "A private message is ready. Open Dashboard to review.",
+    title: "Driver → Admin",
+  },
   driver_to_customer_reply: {
     body: "Driver sent a customer app reply. Open Dashboard to review.",
     title: "Driver app reply",
@@ -844,7 +849,7 @@ function safeAlertPayload(
 
   const message = safeText(safeMessage, 500);
   const messagePreview =
-    (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply") &&
+    (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply" || eventType === "driver_to_admin_reply") &&
     message && !forbiddenPayloadFragments.some((fragment) => message.toLowerCase().includes(fragment)) &&
     !/(internal_note|internal_admin|admin_finance|mock_qa|mock_archive|password|api_key|authorization|cookie)/i.test(message)
       ? message : null;
@@ -975,11 +980,12 @@ function safeNativePayload(
     body: eventType === "driver_issue" && (
       messageBody === "Location unavailable after the pickup reminder. Open Dashboard to review." ||
       messageBody === "Driver is sharing another job. Open Dashboard to review."
-    ) ? messageBody : (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply") && messageBody
+    ) ? messageBody : (eventType === "customer_to_driver_reply" || eventType === "driver_to_customer_reply" || eventType === "driver_to_admin_reply") && messageBody
       ? messageBody : body,
     data: {
       open_target: "/",
-      type: eventType === "driver_pool_accepted" ? "driver_acknowledged" : eventType,
+      type: eventType === "driver_pool_accepted" ? "driver_acknowledged"
+        : eventType === "driver_to_admin_reply" ? "driver_issue" : eventType,
     },
     priority: "high",
     sound: "default",

@@ -820,14 +820,14 @@ async function runChromeTest() {
         postAcknowledgementTools: (() => {
           const section = document.querySelector("[data-driver-job-post-ack-tools]");
           const status = document.querySelector("[data-driver-primary-step='status-workflow']");
-          const reportIssue = document.querySelector("[data-driver-job-report-issue]");
+          const reportIssue = document.querySelector("[data-driver-job-workflow-handoff]");
 
           return {
             accountCount: document.querySelectorAll("[data-driver-account-setup='true']").length,
             afterStatus: Boolean(
               section && status && (status.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING),
             ),
-            beforeReportIssue: Boolean(
+            beforeHandoff: Boolean(
               section && reportIssue && (section.compareDocumentPosition(reportIssue) & Node.DOCUMENT_POSITION_FOLLOWING),
             ),
             calendarActionCount: document.querySelectorAll("[data-driver-job-calendar-action='true']").length,
@@ -920,8 +920,8 @@ async function runChromeTest() {
           .sort((first, second) => first.top - second.top || first.left - second.left)
           .map((button) => button.text),
         workflowHandoff: {
-          afterReportIssue: (() => {
-            const reportIssue = document.querySelector("[data-driver-job-report-issue]");
+          afterMessages: (() => {
+            const reportIssue = document.querySelector("[data-driver-customer-quick-replies]");
             const workflowHandoff = document.querySelector("[data-driver-job-workflow-handoff]");
             return Boolean(
               reportIssue &&
@@ -1059,72 +1059,6 @@ async function runChromeTest() {
       });
     };
 
-    const clickReportIssue = async () => {
-      const beforeState = await pageState();
-      const selected = await evaluate(`(() => {
-        const select = document.querySelector("[data-driver-job-report-issue-select]");
-        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-
-        if (!select) {
-          return false;
-        }
-
-        setter?.call(select, "vehicle_issue");
-        select.dispatchEvent(new Event("input", { bubbles: true }));
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
-      })()`);
-      assert.equal(selected, true, "Expected driver issue dropdown to be selectable.");
-
-      const clicked = await evaluate(`(() => {
-        const button = document.querySelector("[data-driver-job-report-issue-submit]");
-
-        if (!button || button.disabled) {
-          return false;
-        }
-
-        button.click();
-        return true;
-      })()`);
-      assert.equal(clicked, true, "Expected Alert Admin button to be clickable.");
-
-      const issueState = await waitForCondition(
-        () =>
-          evaluate(`(() => {
-            const button = document.querySelector("[data-driver-job-report-issue-submit]");
-            const message = document.querySelector("[data-driver-job-report-issue-message]");
-            const buttonRect = button?.getBoundingClientRect();
-            const messageRect = message?.getBoundingClientRect();
-
-            return message?.textContent.trim() === "Admin alerted in-app: Vehicle issue. No external message was sent." &&
-              document.querySelector("[data-driver-job-activity-log]") === null
-              ? {
-                  distance: Math.round((messageRect?.top || 0) - (buttonRect?.bottom || 0)),
-                  messageText: message.textContent.trim(),
-                }
-              : false;
-          })()`),
-        30000,
-        "driver issue alert feedback",
-      );
-
-      assert.equal(issueState.distance <= 16, true, "Expected issue alert feedback near Alert Admin button.");
-      const afterState = await pageState();
-      assert.equal(
-        afterState.fetchCalls.some((call) =>
-          call === `POST /api/driver-job/${mockDriverJobTokens.workflowOrder}/issue-alert`,
-        ),
-        true,
-        "Expected driver issue alert to use the tokenized internal issue-alert route.",
-      );
-      assert.equal(
-        afterState.fetchCalls.length,
-        beforeState.fetchCalls.length + 1,
-        "Driver issue alert should make one internal app POST only.",
-      );
-      assertNoSensitiveText(afterState);
-      return afterState;
-    };
 
     const saveAndAcknowledgeJob = async () => {
       const beforeSaveState = await pageState();
@@ -1282,11 +1216,11 @@ async function runChromeTest() {
         {
           accountCount: 1,
           afterStatus: true,
-          beforeReportIssue: true,
+          beforeHandoff: true,
           calendarActionCount: 1,
           visible: true,
         },
-        "Expected one established Account block and one Calendar action after Job Status and before Report Issue.",
+        "Expected one established Account block and one Calendar action after Job Status and before the bottom handoff.",
       );
       assert.equal(
         afterSaveState.confirmDetails.editorVisible,
@@ -1833,9 +1767,9 @@ async function runChromeTest() {
     );
     assert.equal(validState.workflowHandoff.visible, true, "Expected public driver job workflow handoff guidance.");
     assert.equal(
-      validState.workflowHandoff.afterReportIssue,
+      validState.workflowHandoff.afterMessages,
       true,
-      "Expected the one existing How this page works disclosure after Report Issue at the bottom.",
+      "Expected the one existing How this page works disclosure after Messages at the bottom.",
     );
     assert.equal(
       validState.workflowHandoff.summary,
@@ -1861,7 +1795,7 @@ async function runChromeTest() {
         "Allow camera/photos only for OTS photo.",
         "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
         "Use the status buttons only when ready.",
-        "Use Report Issue when admin needs an in-app alert.",
+        "For an issue, select Admin in Messages and send your message.",
       ],
       "Expected compact driver workflow handoff guidance.",
     );
@@ -1871,30 +1805,7 @@ async function runChromeTest() {
       "Expected driver handoff to avoid private/internal account detail exposure.",
     );
     assert.equal(validState.urgentIssueHandoffVisible, false, "Expected old bulky urgent issue handoff to be replaced.");
-    assert.equal(validState.reportIssue.visible, true, "Expected compact driver Report Issue alert control.");
-    assert.equal(validState.reportIssue.selectVisible, true, "Expected driver issue dropdown.");
-    assert.equal(validState.reportIssue.submitText, "Alert Admin", "Expected compact Alert Admin action.");
-    assert.deepEqual(
-      validState.reportIssue.choices,
-      [
-        "Cannot find passenger",
-        "Passenger no-show",
-        "Passenger late",
-        "Flight or pickup timing changed",
-        "Route or itinerary changed",
-        "Vehicle issue",
-        "Traffic delay",
-        "Accident / safety concern",
-        "Other issue",
-      ],
-      "Expected safe driver issue dropdown choices.",
-    );
-    assert.equal(validState.reportIssue.boundary, "", "Expected the retired Report Issue boundary copy to stay removed.");
-    assert.equal(
-      validState.reportIssue.text.includes("Choose the issue and alert admin inside the app."),
-      false,
-      "Expected the retired Report Issue introductory copy to stay removed.",
-    );
+    assert.equal(validState.reportIssue.visible, false, "Owner replaced Report Issue with typed private Admin messaging.");
     assert.deepEqual(
       validState.primaryStepOrder.slice(0, 6),
       [
@@ -1903,7 +1814,6 @@ async function runChromeTest() {
         "save-acknowledge",
         "status-workflow",
         "status-buttons",
-        "report-issue",
       ],
       "Expected job card, confirm-details, save acknowledgement, merged OTW/location control, and issue controls in order.",
     );
@@ -1919,7 +1829,7 @@ async function runChromeTest() {
       {
         accountCount: 0,
         afterStatus: false,
-        beforeReportIssue: false,
+        beforeHandoff: false,
         calendarActionCount: 0,
         visible: false,
       },
@@ -1931,19 +1841,9 @@ async function runChromeTest() {
       "Expected combined details card to own acknowledgement state.",
     );
     assert.equal(
-      validState.primaryStepOrder.indexOf("report-issue") > validState.primaryStepOrder.indexOf("status-buttons"),
-      true,
-      "Expected Report Issue after the status buttons.",
-    );
-    assert.equal(
       validState.layoutPositions.statusButtons > validState.layoutPositions.saveAcknowledge,
       true,
       "Expected frequent status buttons after Save & Acknowledge Job.",
-    );
-    assert.equal(
-      validState.layoutPositions.reportIssue > validState.layoutPositions.statusButtons,
-      true,
-      "Expected Report Issue below the frequent status buttons.",
     );
     assert.equal(
       validState.layoutPositions.statusHistory,
@@ -2135,9 +2035,9 @@ async function runChromeTest() {
     assert.equal(validState.visibleText.includes("Messages & Updates"), true);
     assert.deepEqual(
       validState.visualButtonLabels.filter((buttonLabel) =>
-        ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"].includes(buttonLabel),
+        ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed"].includes(buttonLabel),
       ),
-      ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed", "Alert Admin"],
+      ["Save & Acknowledge Job", "OTW", "OTS", "POB", "Job Completed"],
       "Expected public driver job page to show one save/acknowledge action, status, and issue controls in order.",
     );
     assert.deepEqual(
@@ -2148,7 +2048,6 @@ async function runChromeTest() {
           "OTS",
           "POB",
           "Job Completed",
-          "Alert Admin",
         ].includes(
           buttonLabel,
         ),
@@ -2159,7 +2058,6 @@ async function runChromeTest() {
         "OTS",
         "POB",
         "Job Completed",
-        "Alert Admin",
       ],
       "Expected public driver job page to show the human primary workflow order.",
     );
@@ -2177,7 +2075,7 @@ async function runChromeTest() {
       {
         accountCount: 0,
         afterStatus: true,
-        beforeReportIssue: true,
+        beforeHandoff: true,
         calendarActionCount: 1,
         visible: true,
       },
@@ -2363,7 +2261,7 @@ async function runChromeTest() {
     );
     await clickBlockedStatus("Job Completed", "Update POB before Job Completed.", "I've arrived");
     await clickStatus("POB", "Passenger on board", "Status updated to Passenger on board.");
-    await clickReportIssue();
+    assert.equal((await pageState()).reportIssue.visible, false, "Report Issue is replaced by the existing Admin recipient composer.");
     await clickStatus("Job Completed", "Completed", "Status updated to Completed.");
     const completedState = await pageState();
     assert.deepEqual(
@@ -2418,14 +2316,9 @@ async function runChromeTest() {
     assert.equal(arrivalState.workflowHandoff.visible, true, "Expected Arrival job to show workflow handoff guidance.");
     assert.equal(arrivalState.statusBoundary.visible, false, "Expected Arrival job to keep status boundary guidance removed.");
     assert.equal(arrivalState.urgentIssueHandoffVisible, false, "Expected Arrival old urgent handoff to stay replaced.");
-    assert.equal(arrivalState.reportIssue.visible, true, "Expected Arrival job to show Report Issue alert control.");
+    assert.equal(arrivalState.reportIssue.visible, false, "Arrival uses the same Admin message composer.");
     assert.equal(
-      arrivalState.reportIssue.choices.includes("Cannot find passenger"),
-      true,
-      "Expected Arrival Report Issue to cover passenger lookup issues.",
-    );
-    assert.equal(
-      arrivalState.workflowHandoff.items.includes("Use Report Issue when admin needs an in-app alert."),
+      arrivalState.workflowHandoff.items.includes("For an issue, select Admin in Messages and send your message."),
       true,
       "Expected Arrival driver handoff to point to the internal report issue action.",
     );
@@ -3127,7 +3020,6 @@ async function runChromeTest() {
             "OTS",
             "POB",
             "Job Completed",
-            "Alert Admin",
           ].includes(
             buttonLabel,
           ),

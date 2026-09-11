@@ -9,10 +9,6 @@ import type {
   SafeDriverJobStatusHistoryItem,
 } from "../../../lib/driver-job-link";
 import {
-  driverJobIssueChoices,
-  getDriverJobIssueChoice,
-} from "../../../lib/driver-job-issue-alert";
-import {
   driverJobStatusDisplayLabels,
   guardDriverJobStatusTransition,
 } from "../../../lib/driver-job-status-workflow";
@@ -139,6 +135,7 @@ type DriverQuickReplyState = {
 };
 
 type DriverAppUpdateRecord = {
+  safe_context?: Record<string, unknown> | null;
   created_at?: string | null;
   id?: string | null;
   notification_status?: string | null;
@@ -158,22 +155,6 @@ type DriverAppUpdateApiResponse =
   | {
       error?: string;
       ok: false;
-    };
-
-type DriverIssueAlertApiResponse =
-  | {
-      alert?: {
-        issue_label?: string | null;
-        issue_type?: string | null;
-        notification_status?: string | null;
-      };
-      external_send?: false;
-      ok: true;
-    }
-  | {
-      error?: string;
-      ok: false;
-      reason?: DriverJobApiBlockedReason;
     };
 
 type DriverLiveLocationApiResponse =
@@ -1025,9 +1006,6 @@ export default function DriverJobPage() {
   const [savedDriverDetails, setSavedDriverDetails] = useState<DriverDetails | null>(null);
   const [driverDetailsEditorOpen, setDriverDetailsEditorOpen] = useState(false);
   const [, setActivityLog] = useState<ActivityLogEvent[]>([]);
-  const [driverIssueFeedback, setDriverIssueFeedback] = useState<ControlFeedback | null>(null);
-  const [reportingDriverIssue, setReportingDriverIssue] = useState(false);
-  const [selectedDriverIssue, setSelectedDriverIssue] = useState("");
   const [driverAppUpdates, setDriverAppUpdates] =
     useState<DriverAppUpdateState>(emptyDriverAppUpdateState);
   const [driverDeviceAlertReadiness, setDriverDeviceAlertReadiness] =
@@ -1037,6 +1015,12 @@ export default function DriverJobPage() {
     sendingKey: "",
   });
   const [driverCustomerMessageDraft, setDriverCustomerMessageDraft] = useState("");
+  const [driverMessageRecipient, setDriverMessageRecipient] = useState<"admin" | "customer">("admin");
+  const [driverAdminMessageDraft, setDriverAdminMessageDraft] = useState("");
+  const driverMessageSendingRef = useRef(false);
+  const driverAdminMessageAttemptRef = useRef<{ key: string; id: string } | null>(null);
+  const driverMessageDraft = driverMessageRecipient === "admin" ? driverAdminMessageDraft : driverCustomerMessageDraft;
+
   const [driverLiveLocation, setDriverLiveLocation] =
     useState<DriverLiveLocationState>(emptyDriverLiveLocationState);
   const [driverOtsPhotoProof, setDriverOtsPhotoProof] =
@@ -1142,46 +1126,52 @@ export default function DriverJobPage() {
   }
 
   async function sendDriverCustomerQuickReply(message: string) {
-    if (!token || driverQuickReply.sendingKey) return;
-
+    if (!token || driverQuickReply.sendingKey || driverMessageSendingRef.current) return;
+    const recipient = driverMessageRecipient;
     const safeMessage = message.replace(/\s+/g, " ").trim();
     if (!safeMessage) return;
-    const clientMessageId = crypto.randomUUID();
-
+    const attemptKey = JSON.stringify([token, recipient, safeMessage]);
+    const clientMessageId = recipient === "admin" && driverAdminMessageAttemptRef.current?.key === attemptKey
+      ? driverAdminMessageAttemptRef.current.id : crypto.randomUUID();
+    if (recipient === "admin") driverAdminMessageAttemptRef.current = { key: attemptKey, id: clientMessageId };
+    driverMessageSendingRef.current = true;
     setDriverQuickReply({ feedback: null, sendingKey: clientMessageId });
 
     try {
       const response = await fetch(
         `/api/driver-job/${encodeURIComponent(token)}/quick-replies`,
         {
-          body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage }),
-          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage,
+            ...(recipient === "admin" ? { recipient: "admin" } : {}) }),
+          headers: { "Content-Type": "application/json",
+            ...(recipient === "admin" ? { "x-prestige-driver-purpose": "driver-admin-message" } : {}) },
           method: "POST",
         },
       );
       const result = await response.json().catch(() => null);
-
-      if (!response.ok || !result?.ok || result?.direction !== "driver_to_customer") {
-        throw new Error(
-          response.status === 409
-            ? "Customer replies close after Passenger on board."
-            : result?.error || "Reply could not be sent. Please contact dispatch.",
-        );
+      if (!response.ok || !result?.ok ||
+        (recipient === "admin" ? result?.direction !== "driver_to_admin" : result?.direction !== "driver_to_customer")) {
+        throw new Error(response.status === 409 && recipient === "customer"
+          ? "Customer replies close after Passenger on board."
+          : result?.error || "Reply could not be sent. Please contact dispatch.");
       }
-
+      if (loadedDriverJobTokenRef.current !== token) return;
       setDriverQuickReply({
-        feedback: { tone: "success", text: `Sent to customer: ${safeMessage}` },
+        feedback: { tone: "success", text: recipient === "admin" ? "Sent to Admin." : `Sent to customer: ${safeMessage}` },
         sendingKey: "",
       });
-      setDriverCustomerMessageDraft("");
+      if (recipient === "admin") {
+        setDriverAdminMessageDraft("");
+        driverAdminMessageAttemptRef.current = null;
+      } else setDriverCustomerMessageDraft("");
     } catch (error) {
+      if (loadedDriverJobTokenRef.current !== token) return;
       setDriverQuickReply({
-        feedback: {
-          tone: "error",
-          text: error instanceof Error ? error.message : "Reply could not be sent. Please contact dispatch.",
-        },
+        feedback: { tone: "error", text: error instanceof Error ? error.message : "Reply could not be sent. Please contact dispatch." },
         sendingKey: "",
       });
+    } finally {
+      driverMessageSendingRef.current = false;
     }
   }
 
@@ -1390,14 +1380,15 @@ export default function DriverJobPage() {
       setPageState({ kind: "loading" });
       loadedDriverJobTokenRef.current = "";
       setAcknowledged(false);
+      setDriverAdminMessageDraft("");
+      setDriverCustomerMessageDraft("");
+      driverAdminMessageAttemptRef.current = null;
+      setDriverQuickReply({ feedback: null, sendingKey: "" });
       setDetailsFeedback(null);
       setDriverDetailsRaw("");
       setParseDetailsFeedback(null);
       setDriverDetails(emptyDriverDetails);
       setActivityLog([]);
-      setDriverIssueFeedback(null);
-      setReportingDriverIssue(false);
-      setSelectedDriverIssue("");
       setDriverAppUpdates({ feedback: null, kind: "loading", updates: [] });
       setDriverDeviceAlertReadiness(emptyDriverDeviceAlertReadiness);
       stopDriverLiveLocationBrowserWatch();
@@ -2021,56 +2012,6 @@ export default function DriverJobPage() {
         },
         status: "unavailable",
       }));
-    }
-  }
-
-  async function reportDriverIssue() {
-    if (!token || pageState.kind !== "ready") {
-      return;
-    }
-
-    const issueChoice = getDriverJobIssueChoice(selectedDriverIssue);
-
-    if (!issueChoice) {
-      setDriverIssueFeedback({
-        tone: "error",
-        text: "Choose an issue before alerting admin.",
-      });
-      return;
-    }
-
-    setReportingDriverIssue(true);
-    setDriverIssueFeedback(null);
-
-    try {
-      const response = await fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`, {
-        body: JSON.stringify({ issue_type: issueChoice.value }),
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      const result = await response.json() as DriverIssueAlertApiResponse;
-
-      if (!response.ok || !result.ok) {
-        setDriverIssueFeedback({
-          tone: "error",
-          text: "Admin alert could not be saved. Contact dispatcher directly.",
-        });
-        return;
-      }
-
-      setDriverIssueFeedback({
-        tone: "success",
-        text: `Admin alerted in-app: ${issueChoice.label}. No external message was sent.`,
-      });
-      addActivity("Admin alert prepared", `Driver reported: ${issueChoice.label}.`);
-    } catch {
-      setDriverIssueFeedback({
-        tone: "error",
-        text: "Admin alert failed. Contact dispatcher directly.",
-      });
-    } finally {
-      setReportingDriverIssue(false);
     }
   }
 
@@ -2833,7 +2774,7 @@ export default function DriverJobPage() {
                             className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
                             data-driver-job-app-update-status="true"
                           >
-                            {driverAppUpdateStatusLabel(update.notification_status)}
+                            {update.safe_context?.direction === "driver_to_admin" ? "Sent" : driverAppUpdateStatusLabel(update.notification_status)}
                           </span>
                         </div>
                         <p
@@ -2864,30 +2805,47 @@ export default function DriverJobPage() {
               data-driver-customer-shared-conversation="true"
             >
               <h2 id="driver-customer-message-heading" className="text-base font-semibold text-slate-900">
-                Message Customer
+                Messages
               </h2>
               <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-2.5">
+                <div className="flex gap-1 rounded-md border border-sky-200 bg-white p-1" aria-label="Send message to">
+                  <button type="button" data-driver-message-recipient="admin"
+                    aria-pressed={driverMessageRecipient === "admin"} disabled={Boolean(driverQuickReply.sendingKey)}
+                    className={`min-h-11 flex-1 rounded px-3 text-sm font-semibold ${driverMessageRecipient === "admin" ? "bg-sky-800 text-white" : "text-sky-950"}`}
+                    onClick={() => { setDriverMessageRecipient("admin"); setDriverQuickReply({ feedback: null, sendingKey: "" }); }}>
+                    Admin
+                  </button>
+                  <button type="button" data-driver-message-recipient="customer"
+                    aria-pressed={driverMessageRecipient === "customer"} disabled={Boolean(driverQuickReply.sendingKey)}
+                    className={`min-h-11 flex-1 rounded px-3 text-sm font-semibold ${driverMessageRecipient === "customer" ? "bg-sky-800 text-white" : "text-sky-950"}`}
+                    onClick={() => { setDriverMessageRecipient("customer"); setDriverQuickReply({ feedback: null, sendingKey: "" }); }}>
+                    Customer
+                  </button>
+                </div>
+                {driverMessageRecipient === "admin" ? <p className="text-xs text-slate-600">Private to Admin. Report any issue here.</p> : null}
                 <textarea
                   className="min-h-24 w-full rounded-md border border-sky-300 bg-white px-3 py-2 text-sm text-slate-950"
                   data-driver-customer-message-composer="true"
-                  disabled={Boolean(driverQuickReply.sendingKey) || ["pob", "completed"].includes(workflowStatus)}
+                  disabled={Boolean(driverQuickReply.sendingKey) || (driverMessageRecipient === "admin" ? !acknowledged || workflowStatus === "completed" : ["pob", "completed"].includes(workflowStatus))}
                   maxLength={500}
-                  onChange={(event) => setDriverCustomerMessageDraft(event.target.value)}
-                  placeholder="Type a message to the customer"
-                  value={driverCustomerMessageDraft}
+                  onChange={(event) => driverMessageRecipient === "admin" ? setDriverAdminMessageDraft(event.target.value) : setDriverCustomerMessageDraft(event.target.value)}
+                  aria-label={driverMessageRecipient === "admin" ? "Message Admin" : "Message Customer"}
+                  placeholder={driverMessageRecipient === "admin" ? "Type a message to Admin" : "Type a message to the customer"}
+                  value={driverMessageDraft}
                 />
                 <button
                   className="min-h-11 rounded-md border border-sky-700 bg-sky-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
                   data-driver-customer-message-send="true"
-                  disabled={Boolean(driverQuickReply.sendingKey) || ["pob", "completed"].includes(workflowStatus) || !driverCustomerMessageDraft.trim()}
-                  onClick={() => void sendDriverCustomerQuickReply(driverCustomerMessageDraft)}
+                  disabled={Boolean(driverQuickReply.sendingKey) || (driverMessageRecipient === "admin" ? !acknowledged || workflowStatus === "completed" : ["pob", "completed"].includes(workflowStatus)) || !driverMessageDraft.trim()}
+                  onClick={() => void sendDriverCustomerQuickReply(driverMessageDraft)}
                   type="button"
                 >
-                  {driverQuickReply.sendingKey ? "Sending…" : "Send to customer"}
+                  {driverQuickReply.sendingKey ? "Sending…" : driverMessageRecipient === "admin" ? "Send to Admin" : "Send to customer"}
                 </button>
-                {["pob", "completed"].includes(workflowStatus) ? (
+                {driverMessageRecipient === "customer" && ["pob", "completed"].includes(workflowStatus) ? (
                   <p className="text-xs font-semibold text-slate-600">Customer replies close after Passenger on board.</p>
                 ) : null}
+                {driverMessageRecipient === "admin" && !acknowledged ? <p className="text-xs text-slate-600">Save &amp; Acknowledge this job first.</p> : null}
                 {driverQuickReply.feedback ? (
                   <p
                     aria-live="polite"
@@ -3524,54 +3482,7 @@ export default function DriverJobPage() {
               </section>
             ) : null}
 
-            <section
-              className="order-[93] space-y-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5"
-              data-driver-job-report-issue="true"
-              data-driver-primary-step="report-issue"
-            >
-              <div className="space-y-1">
-                <h2 className="text-base font-semibold text-amber-950">Report Issue</h2>
-              </div>
-              <label className="block space-y-1 text-sm font-semibold text-amber-950">
-                <span>Issue type</span>
-                <select
-                  className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-                  data-driver-job-report-issue-select="true"
-                  onChange={(event) => {
-                    setSelectedDriverIssue(event.target.value);
-                    setDriverIssueFeedback(null);
-                  }}
-                  value={selectedDriverIssue}
-                >
-                  <option value="">Choose issue</option>
-                  {driverJobIssueChoices.map((choice) => (
-                    <option data-driver-job-report-issue-choice={choice.value} key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="space-y-2">
-                <button
-                  className="h-11 w-full rounded-md bg-amber-700 px-3 text-sm font-semibold text-white transition active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
-                  data-driver-job-report-issue-submit="true"
-                  disabled={reportingDriverIssue}
-                  onClick={reportDriverIssue}
-                  type="button"
-                >
-                  {reportingDriverIssue ? "Alerting..." : "Alert Admin"}
-                </button>
-                {driverIssueFeedback ? (
-                  <p
-                    aria-live="polite"
-                    className={`rounded-md border px-2.5 py-1.5 text-sm font-semibold ${feedbackClassName(driverIssueFeedback.tone)}`}
-                    data-driver-job-report-issue-message="true"
-                  >
-                    {driverIssueFeedback.text}
-                  </p>
-                ) : null}
-              </div>
-            </section>
+
 
             <details
               className="order-[94] rounded-md border border-stone-200 bg-white p-2.5"
@@ -3645,7 +3556,7 @@ export default function DriverJobPage() {
                   Use the status buttons only when ready.
                 </li>
                 <li className="border-l-2 border-slate-200 pl-3">
-                  Use Report Issue when admin needs an in-app alert.
+                  For an issue, select Admin in Messages and send your message.
                 </li>
               </ul>
               <p

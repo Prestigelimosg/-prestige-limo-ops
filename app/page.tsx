@@ -32677,7 +32677,9 @@ export default function Home() {
                         {activeJobMessageHistory.messages.map((message, index) => (
                           <li className="rounded bg-slate-50 px-2 py-1.5" key={message.id || index}>
                             <p className="font-semibold">
-                              {message.actor_role === "customer"
+                              {message.safe_context?.direction === "driver_to_admin"
+                                ? "Driver → Admin"
+                                : message.actor_role === "customer"
                                 ? "Customer → Driver"
                                 : message.actor_role === "driver"
                                   ? "Driver → Customer"

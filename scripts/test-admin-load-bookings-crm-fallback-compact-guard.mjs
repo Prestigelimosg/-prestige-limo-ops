@@ -820,8 +820,8 @@ assertIncludes(
 );
 assertIncludes(
   appPage,
-  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);",
-  "Today's Jobs driver report auto-refresh defaults on",
+  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(false);",
+  "Today's Jobs driver report auto-refresh defaults off as requested by owner",
 );
 assertIncludes(
   appPage,

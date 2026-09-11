@@ -15258,7 +15258,7 @@ export default function Home() {
   const [driverDeleteMessage, setDriverDeleteMessage] = useState<DriverDeleteMessage | null>(null);
   const [completingBookingId, setCompletingBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);
+  const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(false);
   const [adminPickupRiskMonitorEnabled, setAdminPickupRiskMonitorEnabled] = useState(false);
   const [dashboardDriverJobStatusReadStates, setDashboardDriverJobStatusReadStates] =
     useState<Record<string, AdminDriverJobStatusReadState>>({});
@@ -32227,7 +32227,9 @@ export default function Home() {
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-lime-950">Active Assigned Jobs</h3>
           <p className="text-xs text-lime-900 sm:text-sm">
-            Driver updates refresh automatically.
+            {dashboardDriverJobAutoRefreshEnabled
+              ? "Driver updates refresh automatically."
+              : "Turn on auto-refresh for driver updates."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

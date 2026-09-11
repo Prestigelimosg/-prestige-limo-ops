@@ -475,8 +475,8 @@ for (const forbidden of [
 
 assertIncludes(
   appPage,
-  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(true);",
-  "dashboard auto-refresh on by default state",
+  "const [dashboardDriverJobAutoRefreshEnabled, setDashboardDriverJobAutoRefreshEnabled] = useState(false);",
+  "owner-approved dashboard auto-refresh off by default state",
 );
 assertIncludes(
   appPage,

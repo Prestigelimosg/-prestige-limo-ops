@@ -1,3 +1,9 @@
+## Dashboard Auto-Refresh Default Off (2026-09-11; owner-requested preference, release pending)
+
+- Owner explicitly requested Dashboard auto-refresh Off by default. This supersedes earlier default-On notes only for the existing Active Assigned Jobs auto-refresh control. Initialize its existing local state to false; retain its On/Off button, ten-second interval when enabled, first-load reads, manual Refresh controls, and existing interval cleanup. No saved preference, new timer, polling lane or global automation change.
+- The existing short help sentence reflects the control state. Report and message reads governed by this switch stay off until enabled; other alert, GPS, acknowledgement, Customer/Driver and completion workflows are unchanged.
+- Existing Dashboard, load-booking, shared-message and admin-completion guards passed before editing and after the two existing default assertions were updated. Production webpack build including TypeScript passes; page lint has zero errors and 17 pre-existing warnings. Isolated credential-free browser verifies initial Off, explicit On, and Off after a fresh page load, including the accessibility pressed state. No live booking or provider write. Publication and Production acceptance pending.
+
 ## Address Flight-Narrative Cleanup Order (2026-09-11; local repair, release pending)
 
 - Owner reproduced an arrival arrow-route draft whose street destination retained "Arriving via" after the flight code and ETA were removed. The earlier terminal-specific repair did not cover this existing street-address cleanup path. Reproduced in the live Admin draft and locally; no booking was saved or sent during inspection.

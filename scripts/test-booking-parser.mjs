@@ -32,6 +32,41 @@ const requiredConfidenceCategories = [
 const referenceDate = new Date(2026, 4, 13, 12, 0, 0);
 const parseBookingForTest = (input) => parseBookingMessage(input, { referenceDate });
 
+// A flight sentence after an arrow-route terminal is not part of the address.
+const terminalFlightSuffixMessage = `Mon, 14 Sep 26
+Pickup at 12noon from 12 Example Road > T2.  Taking SQ246, ETD: 1:55pm`;
+for (const suffix of [
+  "T2.  Taking SQ246, ETD: 1:55pm",
+  "T2 Taking SQ246, ETD: 1:55pm",
+  "Terminal 2; Taking flight SQ246, ETD: 1:55pm",
+  "T2, Flight SQ246, ETD: 1:55pm",
+]) {
+  const result = parseJobCardBookingMessage(
+    terminalFlightSuffixMessage.replace("T2.  Taking SQ246, ETD: 1:55pm", suffix),
+    { referenceDate },
+  );
+  assert.equal(result.dropoff, "Changi Airport T2");
+  assert.equal(result.pickup, "12 Example Road");
+  assert.equal(result.date, "2026-09-14");
+  assert.equal(result.time, "1200hrs", "ETD must not replace the explicit pickup time");
+  assert.equal(result.flight, "SQ246");
+  assert.equal(result.bookingType, "DEP");
+  assert.equal(result.company, "");
+  assert.equal(result.booker, "");
+  assert.equal(result.name, "");
+  assert.equal(result.vehicle, "", "Do not infer a vehicle from a terminal or flight");
+}
+for (const destination of ["T2 Door 3", "T2. Meet at Door 3", "T2. Taking luggage to counter"]) {
+  const result = parseBookingForTest(`Flight: SQ246\nFrom 12 Example Road > ${destination}`);
+  assert.equal(result.dropoff, destination, "Retain non-flight terminal instructions");
+}
+const conflictingTerminalFlight = parseBookingForTest(
+  "Flight: SQ111\nFrom 12 Example Road > T2. Taking SQ246, ETD: 1:55pm",
+);
+assert.equal(conflictingTerminalFlight.success, false);
+assert.equal(conflictingTerminalFlight.multipleBookingsDetected, true);
+assert.match(conflictingTerminalFlight.parserWarning, /Please select one extracted booking/);
+
 const groundBookerCanonicalIntake = `Company/account: Transzend Groundbooker
 Booker: Pat
 Booker email: transzend@groundbooker.com

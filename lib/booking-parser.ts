@@ -3508,9 +3508,16 @@ function detectRoute(text: string, flight = "") {
     }
 
     if (flight && /^t(?:erminal\s*)?[1-4]\b/i.test(routeDropoff)) {
+      const terminalWithFlightSuffix = routeDropoff.match(
+        /^((?:t|terminal\s*)[1-4])\s*[.,;]?\s+(?:taking\s+(?:flight\s+)?|flight\s+|flt\s+)([A-Z]{2}\s?\d{1,4})\b/i,
+      );
+      const terminalDropoff = terminalWithFlightSuffix &&
+        normalizeFlightCode(terminalWithFlightSuffix[2]) === flight
+        ? terminalWithFlightSuffix[1]
+        : routeDropoff;
       return {
         pickup: cleanLocation(routePickup),
-        dropoff: normalizeLocationName(routeDropoff),
+        dropoff: normalizeLocationName(terminalDropoff),
       };
     }
 

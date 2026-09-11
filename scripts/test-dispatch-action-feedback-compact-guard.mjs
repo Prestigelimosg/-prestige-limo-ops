@@ -96,6 +96,15 @@ const driverJobLinkRevokeBlock = sectionBetween(
 );
 const ledgerSection = sectionBetween(ledger, "### Dispatch Action Feedback And Compact Review", "\n### ");
 
+const parserInitialFeedback = sectionBetween(
+  appPage,
+  "const finalDebugBooking = {",
+  "if (getNeedsReviewWarnings(finalForm).length > 0",
+);
+assertIncludes(parserInitialFeedback, 'text: "Booking parsed. Review before saving."', "ordinary parser feedback");
+assertExcludes(parserInitialFeedback, "${detectedFields}", "feedback must not count parser metadata as booking fields");
+assertIncludes(appPage, 'text: "Booking parsed and applied CRM memory. Review before saving."', "ordinary parser CRM feedback");
+
 for (const fragment of [
   "function actionFeedbackButtonClass",
   "border-emerald-400 bg-emerald-100 text-emerald-950",

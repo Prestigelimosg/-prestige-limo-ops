@@ -746,3 +746,51 @@ assertIncludes(
 );
 
 console.log("Dashboard urgent requests and active monitor guard passed");
+
+// Execute the actual Dashboard selector: future assignment must not bypass pickup timing.
+const dashboardWindowHelper = sliceBetween(appPage,
+  "function bookingRecordIsInsideActiveJobMonitorWindow(", "function activeJobMinutesUntilPickup(");
+const currentAssignedHelper = sliceBetween(appPage,
+  "function bookingRecordIsCurrentAssignedActiveJob(", "function getBookingName(");
+const dashboardRowsSource = sliceBetween(appPage,
+  "const dayOfTripActiveJobBookings = operationalBookings", "const liveDispatchMapEligibleBookings = operationalBookings");
+const selectDashboardRows = new Function("operationalBookings", "currentTimeMs", `
+  const bookingRecordPickupDateTimeMs = row => row.pickup;
+  const bookingRecordIsDispatchActiveJobsMonitorEligible = row => row.assigned && !row.request;
+  const bookingRecordIsCompletedStatus = row => row.status === "completed";
+  const bookingRecordIsCancelledStatus = row => row.status === "cancelled";
+  const activeJobDashboardSearchTerm = "";
+  const activeJobDateBucket = () => 0;
+  const getBookingDateKey = () => "2026-09-11";
+  const normaliseTimeForSort = x => x;
+  const formatPickupTimeFromRecord = row => row.pickup;
+  ${ts.transpileModule(dashboardWindowHelper + currentAssignedHelper + dashboardRowsSource,
+    {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText}
+  return dayOfTripActiveJobBookings.map(row => row.id);
+`);
+const hour = 60 * 60 * 1000;
+const windowNow = Date.parse("2026-09-11T07:00:00Z");
+const windowRow = (id, delta, extra = {}) => ({id, pickup: windowNow + delta, assigned:true, status:"assigned", ...extra});
+assert.deepEqual(selectDashboardRows([windowRow("advance", 22 * 24 * hour)], windowNow), [],
+  "Assigned job weeks ahead must stay out of Dashboard");
+assert.deepEqual(selectDashboardRows([windowRow("before", hour + 1)], windowNow), [], "One millisecond before window is hidden");
+assert.deepEqual(selectDashboardRows([windowRow("boundary", hour)], windowNow), ["boundary"], "Exact one-hour boundary appears");
+for (const report of ["otw", "ots", "pob", "completed"]) {
+  assert.deepEqual(selectDashboardRows([windowRow(report, -hour, {report})], windowNow), [report],
+    "Driver report alone must not close an operational card");
+}
+assert.deepEqual(selectDashboardRows([windowRow("cancelled", 0, {status:"cancelled"}),
+  windowRow("admin-completed",0,{status:"completed"}), windowRow("unassigned",0,{assigned:false}),
+  windowRow("request",0,{request:true}), windowRow("invalid",0,{pickup:null})], windowNow), []);
+assert.deepEqual(selectDashboardRows([windowRow("existing-overdue-boundary", -24*hour)], windowNow), ["existing-overdue-boundary"]);
+assert.deepEqual(selectDashboardRows([windowRow("existing-overdue-excluded", -24*hour-1)], windowNow), []);
+const automaticBoundaryRow = windowRow("automatic", hour + 1);
+assert.deepEqual(selectDashboardRows([automaticBoundaryRow], windowNow + 1), ["automatic"], "Existing clock recomputation opens the window");
+assert.equal((dashboardRowsSource.match(/bookingRecordIsInsideActiveJobMonitorWindow/g)||[]).length,1);
+for(const [start,end] of [
+  ["const liveDispatchMapEligibleBookings = operationalBookings", "function getActiveJobBookingReference("],
+  ["const pendingDriverAckQueueEligibleBookings = operationalBookings", "const pendingDriverAckQueueReferenceList ="],
+]) {
+  assertExcludes(sliceBetween(appPage,start,end), "bookingRecordIsInsideActiveJobMonitorWindow", "Dashboard cutoff must not narrow shared GPS or Pending ACK eligibility");
+}
+console.log("Dashboard one-hour boundary and assigned/report/ACK/GPS isolation passed");

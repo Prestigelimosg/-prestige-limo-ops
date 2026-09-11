@@ -2870,6 +2870,9 @@ function cleanLocation(value: string) {
     .replace(/\s+Singapore\s+\d{6}.*$/i, "")
     .replace(/\s+\d{6}.*$/i, "")
     .replace(/\s+on\s+\d{1,2}\s+[A-Za-z]+.*$/i, "")
+    // Remove the whole flight phrase before the generic flight-code cleanup
+    // loses the evidence that distinguishes it from destination instructions.
+    .replace(/\s+(?:arriving\s+(?:(?:via|on)\s+)?|taking\s+(?:flight\s+)?|(?:flight|flt)\s+)[A-Z]{2}\s?\d{1,4}\b.*$/i, "")
     .replace(/\s+\d{3,4}\s+[A-Z]{2}\s?\d{1,4}.*$/i, "")
     .replace(/\s+[A-Z]{2}\s?\d{1,4}.*$/i, "")
     .replace(/\s+below:?$/i, "")

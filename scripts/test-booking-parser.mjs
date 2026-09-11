@@ -32,6 +32,46 @@ const requiredConfidenceCategories = [
 const referenceDate = new Date(2026, 4, 13, 12, 0, 0);
 const parseBookingForTest = (input) => parseBookingMessage(input, { referenceDate });
 
+// Flight narrative after a street destination must not become part of its address.
+for (const suffix of [
+  '. Arriving via SQ246, ETA: 12:55am',
+  '. Arriving via\u00a0SQ246, ETA: 12:55am',
+  '; Arriving on SQ246, ETA: 12:55am',
+  ', Arriving SQ246, ETA: 12:55am',
+  '. Flight SQ246, ETA: 12:55am',
+  '. Flt SQ246, ETA: 12:55am',
+]) {
+  const message = `Fri, 18 Sep 26\nPickup from Airport (Guest to call driver when he arrives) > 12 Example Road${suffix}`;
+  for (const parse of [parseBookingMessage, parseJobCardBookingMessage]) {
+    const result = parse(message, { referenceDate });
+    assert.equal(result.dropoff, '12 Example Road', suffix);
+    assert.equal(result.pickup, 'Airport (Guest to call driver when he arrives)');
+    assert.equal(result.date, '2026-09-18');
+    assert.equal(result.time, '0055hrs');
+    assert.equal(result.flight, 'SQ246');
+    assert.equal(result.bookingType, 'MNG');
+    assert.equal(result.company, '');
+    assert.equal(result.booker, '');
+    assert.equal(result.name, '');
+  }
+}
+for (const suffix of ['. Taking SQ246, ETD: 1:55pm', '. Taking flight SQ246, ETD: 1:55pm']) {
+  const result = parseBookingForTest(`Mon, 14 Sep 26\nPickup at 12noon\nPickup: 12 Example Road${suffix}\nDrop-off: Changi Airport T2`);
+  assert.equal(result.pickup, '12 Example Road');
+  assert.equal(result.dropoff, 'Changi Airport T2');
+  assert.equal(result.time, '1200hrs', 'Preserve explicit pickup time rather than flight departure time');
+  assert.equal(result.flight, 'SQ246');
+  assert.equal(result.bookingType, 'DEP');
+}
+for (const destination of [
+  '12 Example Road. Meet at side entrance',
+  '12 Example Road. Arriving via side entrance',
+  '12 Example Road. Taking luggage to reception',
+]) {
+  const result = parseBookingForTest(`Fri, 18 Sep 26\nPickup at 12noon from Airport > ${destination}`);
+  assert.equal(result.dropoff, destination, 'Keep destination instructions without a flight code');
+}
+
 // A flight sentence after an arrow-route terminal is not part of the address.
 const terminalFlightSuffixMessage = `Mon, 14 Sep 26
 Pickup at 12noon from 12 Example Road > T2.  Taking SQ246, ETD: 1:55pm`;

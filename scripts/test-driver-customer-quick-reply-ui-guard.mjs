@@ -22,11 +22,9 @@ for (const expected of [
   assert.ok(source.includes(expected), `driver typed-message UI must retain ${expected}`);
 }
 
-assert.match(
-  source,
-  /<h2 id="driver-customer-message-heading"[\s\S]{0,250}>\s*Message Customer\s*<\/h2>\s*<div[^>]+>\s*<textarea/,
-  "Driver Message Customer must leave its retired explanatory area blank and continue directly to the established composer.",
-);
+assert.match(source, /<h2 id="driver-customer-message-heading"[\s\S]{0,250}>\s*Messages\s*<\/h2>/);
+assert.ok(source.includes('data-driver-message-recipient="admin"'));
+assert.ok(source.includes('data-driver-message-recipient="customer"'));
 assert.equal(
   source.includes("Type a message. The verified Boss and managing PA share this booking conversation, and admin can see it."),
   false,
@@ -52,8 +50,8 @@ for (const expected of [
 }
 assert.equal(
   (driverSend.match(/insertQuickReplyNotification\(/g) || []).length,
-  1,
-  "one Driver typed message must create one existing customer_app outbox row",
+  2,
+  "Each mutually exclusive recipient branch must use the same existing insert helper once",
 );
 for (const expected of [
   "One Driver → Customer message creates one existing `customer_app` outbox row that both authorized PA and Boss may read",

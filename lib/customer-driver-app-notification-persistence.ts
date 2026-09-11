@@ -3301,6 +3301,18 @@ async function insertQuickReplyNotification(
     .single();
 
   if (error) {
+    if (input.safe_context.direction === "driver_to_admin" && asRecord(error).code === "23505") {
+      const existing = await client.from(notificationTable).select(notificationSelect)
+        .eq("event_key", input.event_key!).eq("driver_job_link_id", input.driver_job_link_id!)
+        .eq("booking_reference", input.booking_reference!).maybeSingle();
+      const saved = normalizeRecord(existing.data);
+      if (!existing.error && saved.id && saved.delivery_surface === "driver_app" &&
+        saved.workflow_area === "admin_driver_job_messages" &&
+        saved.safe_context.direction === "driver_to_admin" && saved.safe_message === input.safe_message) {
+        return { data: toSafeRecord(saved), ok: true };
+      }
+      return { error: "This message attempt has changed. Please review it before sending again.", ok: false, status: 409 };
+    }
     return safeAdapterFailure(quickReplyCreateError, 500, error);
   }
 
@@ -3314,7 +3326,15 @@ async function insertQuickReplyNotification(
     };
   }
 
-  if (notification.delivery_surface === "driver_app") {
+  if (notification.safe_context.direction === "driver_to_admin" &&
+    notification.workflow_area === "admin_driver_job_messages") {
+    try {
+      const { sendAdminDevicePushAlert } = await import("./admin-device-push-notification");
+      await sendAdminDevicePushAlert("driver_to_admin_reply", { safeMessage: notification.safe_message });
+    } catch {
+      // Save succeeds even when Admin push is unavailable; a retry must not duplicate it.
+    }
+  } else if (notification.delivery_surface === "driver_app") {
     await sendDriverDevicePushAlertForAppUpdate(client, notification).catch(() => null);
   }
 
@@ -3710,11 +3730,74 @@ export async function sendCustomerQuickReplyToDriver(
 export async function sendDriverQuickReplyToCustomer(
   token: string,
   rawBody: unknown,
+  request?: Request,
 ): Promise<CustomerDriverQuickReplyResult> {
   const quickReplyGate = resolveCustomerDriverQuickRepliesRuntimeGate();
 
   if (!quickReplyGate.ok) {
     return customerDriverQuickReplyError(quickReplyGate.error, quickReplyGate.status);
+  }
+
+  if (asRecord(rawBody).recipient === "admin") {
+    // The Job Link remains the established credential; never accept client booking/driver IDs.
+    if (!request || request.headers.get("origin") !== new URL(request.url).origin ||
+      request.headers.get("x-prestige-driver-purpose") !== "driver-admin-message") {
+      return customerDriverQuickReplyError("This message request is not allowed.", 403);
+    }
+    const messageBody = { ...asRecord(rawBody) };
+    delete messageBody.recipient;
+    const parsed = parseCustomerDriverQuickReplyPayload(messageBody, "driver_to_customer");
+    if (!parsed.ok || parsed.data.template_key || !parsed.data.client_message_id) {
+      return customerDriverQuickReplyError(quickReplyMalformedError, 400);
+    }
+    const clientResult = getDriverNotificationClient();
+    if (!clientResult.ok) return customerDriverQuickReplyError(clientResult.error, clientResult.status);
+    const client = clientResult.data;
+    const linkResult = await resolveDriverLinkScope(client, token);
+    if (!linkResult.ok) return customerDriverQuickReplyError(linkResult.error, linkResult.status);
+    if (!linkResult.data.id) return customerDriverQuickReplyError("Job access could not be verified.", 403);
+    const link = await client.from("driver_job_links")
+      .select("driver_id, safe_link_context").eq("id", linkResult.data.id).maybeSingle();
+    const booking = await client.from("bookings").select("driver_id, status")
+      .eq("booking_reference", linkResult.data.booking_reference).maybeSingle();
+    const driverId = asRecord(link.data).driver_id;
+    const acknowledgedAt = asRecord(asRecord(link.data).safe_link_context).driver_acknowledged_at;
+    if (link.error || booking.error || !Number.isSafeInteger(driverId) || Number(driverId) <= 0 ||
+      asRecord(booking.data).driver_id !== driverId ||
+      typeof acknowledgedAt !== "string" || !Number.isFinite(Date.parse(acknowledgedAt))) {
+      return customerDriverQuickReplyError("Save & Acknowledge this job before messaging Admin.", 403);
+    }
+    const completed = await client.from("driver_job_status_events").select("id")
+      .eq("booking_reference", linkResult.data.booking_reference).eq("status_value", "completed")
+      .limit(1).maybeSingle();
+    if (completed.error) return customerDriverQuickReplyError("Job status could not be checked. Please try again.", 503);
+    if (completed.data || ["completed", "cancelled", "canceled", "archived"].includes(String(asRecord(booking.data).status))) {
+      return customerDriverQuickReplyError("Messages close when this job ends.", 409);
+    }
+    const created = await insertQuickReplyNotification(client, {
+      booking_reference: linkResult.data.booking_reference,
+      delivery_surface: "driver_app",
+      driver_job_link_id: linkResult.data.id,
+      event_key: `driver-admin:${createHash("sha256").update(JSON.stringify([
+        linkResult.data.booking_reference, linkResult.data.id, parsed.data.client_message_id,
+      ])).digest("hex")}`,
+      notification_status: "read",
+      notification_type: "trip_update",
+      priority: "normal",
+      safe_context: { direction: "driver_to_admin" },
+      safe_message: parsed.data.safe_message,
+      safe_title: "You → Admin",
+      workflow_area: "admin_driver_job_messages",
+    }, {
+      actor_label: "verified_driver_job_link", actor_role: "driver",
+      client_message_id: parsed.data.client_message_id, source_surface: "driver_api",
+    });
+    if (!created.ok) return customerDriverQuickReplyError(created.error, created.status);
+    return customerDriverQuickReplyResult(200, {
+      delivery_surface: "driver_app", direction: "driver_to_admin", notification: created.data,
+      external_send: false, no_provider_send: true, ok: true, provider_send: false,
+      version: customerDriverQuickRepliesRuntimeVersion,
+    });
   }
 
   const parsed = parseCustomerDriverQuickReplyPayload(rawBody, "driver_to_customer");
@@ -4385,6 +4468,7 @@ export async function loadDriverAppNotificationsForToken(
     for (const value of asArray(data)) {
       const record = normalizeRecord(value);
       if (!record.id || uniqueRecords.has(record.id)) continue;
+      if (record.safe_context.direction === "driver_to_admin" && record.driver_job_link_id !== linkResult.data.id) continue;
       uniqueRecords.set(record.id, record);
     }
     const notifications = [...uniqueRecords.values()].map((record) =>
@@ -4430,7 +4514,9 @@ export async function loadDriverAppNotificationsForToken(
           record.workflow_area === "customer_driver_quick_replies"),
     )
     .filter((record) => record.booking_reference === linkResult.data.booking_reference)
-    .filter((record) => !record.driver_job_link_id || record.driver_job_link_id === linkResult.data.id)
+    .filter((record) => record.safe_context.direction === "driver_to_admin"
+      ? Boolean(record.driver_job_link_id) && record.driver_job_link_id === linkResult.data.id
+      : !record.driver_job_link_id || record.driver_job_link_id === linkResult.data.id)
     .map((record) =>
       toSafeRecord(
         record.delivery_surface === "customer_app"

@@ -37960,8 +37960,8 @@ async function runChromeTest() {
             visible: Boolean(document.querySelector("[data-driver-job-status-timing-evidence]")),
           },
           driverWorkflowHandoff: {
-            afterReportIssue: (() => {
-              const reportIssue = document.querySelector("[data-driver-job-report-issue]");
+            afterMessages: (() => {
+              const reportIssue = document.querySelector("[data-driver-customer-quick-replies]");
               const workflowHandoff = document.querySelector("[data-driver-job-workflow-handoff]");
               return Boolean(
                 reportIssue &&
@@ -38402,9 +38402,9 @@ async function runChromeTest() {
         `${viewport.label}: expected compact driver workflow handoff guidance`,
       );
       assert.equal(
-        initialState.driverWorkflowHandoff.afterReportIssue,
+        initialState.driverWorkflowHandoff.afterMessages,
         true,
-        `${viewport.label}: expected How this page works after Report Issue at the bottom`,
+        `${viewport.label}: expected How this page works after Messages at the bottom`,
       );
       assert.equal(
         initialState.driverWorkflowHandoff.summary,
@@ -38430,7 +38430,7 @@ async function runChromeTest() {
           "Allow camera/photos only for OTS photo.",
           "Review pickup time, pickup place, drop-off, route, and job notes before starting.",
           "Use the status buttons only when ready.",
-          "Use Report Issue when admin needs an in-app alert.",
+          "For an issue, select Admin in Messages and send your message.",
         ],
         `${viewport.label}: expected driver handoff to explain onboarding, review, status, and report issue steps`,
       );
@@ -38458,23 +38458,9 @@ async function runChromeTest() {
         `${viewport.label}: expected dispatcher cancel/replacement workflow to remain absent and future staff-controlled`,
       );
       assert.equal(initialState.payNowFieldPresent, false, `${viewport.label}: expected no PayNow field on public driver job link`);
-      assert.deepEqual(
-        initialState.reportIssue.choices,
-        [
-          "Cannot find passenger",
-          "Passenger no-show",
-          "Passenger late",
-          "Flight or pickup timing changed",
-          "Route or itinerary changed",
-          "Vehicle issue",
-          "Traffic delay",
-          "Accident / safety concern",
-          "Other issue",
-        ],
-        `${viewport.label}: expected driver report issue choices`,
-      );
-      assert.equal(initialState.reportIssue.visible, true, `${viewport.label}: expected driver report issue alert control`);
-      assert.equal(initialState.reportIssue.submitText, "Alert Admin", `${viewport.label}: expected Alert Admin button`);
+      assert.deepEqual(initialState.reportIssue.choices, [], `${viewport.label}: retired issue choices stay absent`);
+      assert.equal(initialState.reportIssue.visible, false, `${viewport.label}: Report Issue replaced by private Admin messages`);
+      assert.equal(initialState.reportIssue.submitText, "", `${viewport.label}: retired Alert Admin button stays absent`);
       assert.equal(
         initialState.reportIssue.boundary,
         "",
@@ -38513,7 +38499,7 @@ async function runChromeTest() {
           "Save & Acknowledge Job",
           "Job Status",
           "Status Timing",
-          "Report Issue",
+          "Messages",
         ].filter((value) => !initialState.text.includes(value)),
         [],
         `${viewport.label}: expected readable driver job card details and workflow sections`,

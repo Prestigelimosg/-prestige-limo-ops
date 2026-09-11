@@ -615,10 +615,10 @@ assertIncludes(
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
   "driver page safe notification GET caller",
 );
-assert.equal(countOccurrences(files[driverPagePath], "fetch("), 13, "driver page fetch count must not grow beyond approved callers");
+assert.equal(countOccurrences(files[driverPagePath], "fetch("), 12, "driver page fetch count must not grow beyond approved callers");
 assert.equal(
   countOccurrences(files[driverPagePath], 'cache: "no-store"'),
-  10,
+  9,
   "driver page no-store fetch count must match existing safe callers",
 );
 assertIncludes(
@@ -644,8 +644,8 @@ for (const fragment of [
 }
 assertIncludes(
   files[driverPagePath],
-  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage })",
-  "driver page typed-message caller sends only its client id and bounded message",
+  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage,",
+  "driver page existing typed-message caller retains client id and bounded message",
 );
 assertIncludes(
   files[driverPagePath],

@@ -31,7 +31,7 @@ function safeFailureResponse() {
 export async function POST(request: Request, context: DriverJobQuickReplyRouteContext) {
   try {
     const [{ token }, body] = await Promise.all([context.params, readJsonBody(request)]);
-    const result = await sendDriverQuickReplyToCustomer(token, body);
+    const result = await sendDriverQuickReplyToCustomer(token, body, request);
 
     return Response.json(result.body, { status: result.status });
   } catch {

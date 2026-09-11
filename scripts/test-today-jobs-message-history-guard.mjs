@@ -12,6 +12,8 @@ for (const expected of [
   'message.workflow_area === "admin_customer_job_messages"',
   '"Customer → Driver"',
   '"Driver → Customer"',
+  '"Driver → Admin"',
+  'message.safe_context?.direction === "driver_to_admin"',
   '"Admin → Driver"',
   '"Admin → Customer"',
   'message.workflow_area === "admin_customer_job_messages" &&',

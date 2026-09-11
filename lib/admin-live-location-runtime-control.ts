@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 export const adminLiveLocationRuntimeControlVersion =
   "admin-live-location-runtime-control:v1";
 
-type RuntimeControlClient = Pick<SupabaseClient, "from">;
+type RuntimeControlClient = Pick<SupabaseClient, "from" | "rpc">;
 type UnknownRecord = Record<string, unknown>;
 
 export type AdminLiveLocationRuntimeControlActor = {
@@ -59,7 +59,10 @@ function cleanText(value: unknown, maxLength = 160) {
 function cleanBookingReference(value: unknown) {
   const cleaned = cleanText(value, 120);
 
-  return safeReferencePattern.test(cleaned) ? cleaned : "";
+  return safeReferencePattern.test(cleaned) &&
+    !/^(all|all[-_](drivers|jobs))$/i.test(cleaned)
+    ? cleaned
+    : "";
 }
 
 function runtimeControlClient(env: Record<string, string | undefined>) {
@@ -124,10 +127,9 @@ function normalizeRuntimeSetting(row: UnknownRecord) {
   const captureEnabled = row.driver_live_location_capture_enabled === true;
   const adminMapEnabled = row.admin_active_jobs_map_enabled === true;
   const allowedReferences = Array.isArray(row.driver_live_location_allowed_job_references)
-    ? row.driver_live_location_allowed_job_references
-        .map(cleanBookingReference)
-        .filter(Boolean)
-        .slice(0, 50)
+    ? [...new Set(
+        row.driver_live_location_allowed_job_references.map(cleanBookingReference).filter(Boolean),
+      )]
     : [];
   const staleAfter = Number(row.driver_live_location_stale_after_seconds);
   const staleAfterSeconds =
@@ -229,50 +231,16 @@ export async function openAdminLiveLocationRuntimeControl({
     });
   }
 
-  const existingRuntimeSetting = await readRuntimeSetting(clientResult.client);
+  // Merge under the database row lock, never overwrite a stale whole-list read.
+  // A missing migration fails closed; there is no capped or sequential fallback.
+  const { data, error } = await clientResult.client.rpc(
+    "admin_open_live_location_booking",
+    { p_booking_reference: safeReference },
+  );
 
-  if (!existingRuntimeSetting.ok) {
-    return result({
-      action: "open",
-      ok: false,
-      reason: existingRuntimeSetting.reason,
-      runtime_status: "error",
-    });
-  }
-
-  const existingAllowedBookingReferences =
-    existingRuntimeSetting.allowed_booking_references.filter(
-      (reference) => reference !== safeReference,
-    );
-  const mergedAllowedBookingReferences = [
-    ...existingAllowedBookingReferences,
-    safeReference,
-  ].slice(-50);
-
-  const { data, error } = await clientResult.client
-    .from(runtimeSettingsTable)
-    .upsert(
-      {
-        admin_active_jobs_map_enabled: true,
-        driver_live_location_allowed_job_references: mergedAllowedBookingReferences,
-        driver_live_location_capture_enabled: true,
-        driver_live_location_mode: "runtime",
-        driver_live_location_retention_minutes: 120,
-        driver_live_location_stale_after_seconds: 300,
-        setting_name: runtimeSettingName,
-        setting_status: "active",
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "setting_name",
-      },
-    )
-    .select(
-      "setting_name, setting_status, driver_live_location_capture_enabled, admin_active_jobs_map_enabled, driver_live_location_mode, driver_live_location_allowed_job_references, driver_live_location_stale_after_seconds, driver_live_location_retention_minutes",
-    )
-    .maybeSingle();
-
-  if (error) {
+  const opened = normalizeRuntimeSetting(asRecord(data));
+  if (error || opened.runtime_status !== "active" ||
+      !opened.allowed_booking_references.includes(safeReference)) {
     return result({
       action: "open",
       ok: false,
@@ -282,7 +250,7 @@ export async function openAdminLiveLocationRuntimeControl({
   }
 
   return {
-    ...normalizeRuntimeSetting(asRecord(data)),
+    ...opened,
     action: "open" as const,
     no_op: false,
     reason: "runtime_opened",

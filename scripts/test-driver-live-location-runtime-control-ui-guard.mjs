@@ -69,7 +69,7 @@ for (const phrase of [
   "Creating a driver job link now auto-authorizes live movement for that booking by opening the existing admin live-location runtime allowlist after the link row is saved.",
   "The visible Driver Job Link panel no longer exposes the manual `Enable Live Location` button; the panel stays limited to `Create Link`, `Copy Link`, `Revoke`, and useful status copy.",
   "The Dispatch Live Dispatch Map opens live movement for the active job references in one operator click through `/api/admin-live-location-runtime` instead of requiring a selected booking to be added manually.",
-  "Runtime control keeps existing `driver_live_location_allowed_job_references`, removes duplicates, and caps the selected booking list at 50 references.",
+  "Runtime control preserves every explicit booking reference atomically, removes duplicates, and has no booking-count cap.",
   "Driver `Share Location` first calls `GET /api/driver-job/[token]/live-location` for server readiness; Chrome GPS is requested only after that readiness check passes.",
   "Admin marker refresh uses the existing guarded `GET /api/admin-active-jobs-map-locations` route and returns both selected booking references and current driver markers.",
   "The admin UI renders compact active marker rows, per-driver `Open Map` fallback links, and an optional browser map canvas that remains off unless the separate browser-safe map config route is enabled.",
@@ -173,9 +173,8 @@ for (const fragment of [
   "driver_live_location_capture_enabled",
   "admin_active_jobs_map_enabled",
   "driver_live_location_mode",
-  "existingAllowedBookingReferences",
-  "mergedAllowedBookingReferences",
-  "driver_live_location_allowed_job_references: mergedAllowedBookingReferences",
+  "admin_open_live_location_booking",
+  "p_booking_reference: safeReference",
   "safeReferencePattern",
   "customerVisible: false",
   "external_send: false",
@@ -289,3 +288,5 @@ for (const forbiddenPattern of [
 }
 
 console.log("Driver live-location multi-driver admin list guard passed");
+
+await import("./test-location-access-without-count-limit.mjs");

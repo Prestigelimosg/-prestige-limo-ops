@@ -69,7 +69,7 @@ const allowedPositionFields = new Set([
   "speed_meters_per_second",
 ]);
 const maxSafeLabelLength = 160;
-const maxRuntimeAllowedReferences = 50;
+const runtimeReadBatchSize = 50;
 const safeReferencePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const unassignedDriverLabels = new Set([
   "driver tbc",
@@ -232,10 +232,7 @@ function blockedResult(reason: DriverLiveLocationBlockedReason, status: number) 
 }
 
 function uniqueSafeReferences(values: unknown[]) {
-  return [...new Set(values.map(safeIdentifier).filter(Boolean))].slice(
-    0,
-    maxRuntimeAllowedReferences,
-  );
+  return [...new Set(values.map(safeIdentifier).filter(Boolean))];
 }
 
 function allowedReferencesFromUnknown(value: unknown) {
@@ -1091,29 +1088,42 @@ export async function handleAdminActiveJobsMapRuntimeRequest({
 
   const allowedReferences = runtimePolicy.policy.allowedJobReferences;
 
-  const { data: bookingData, error: bookingError } = await clientResult.client
-    .from(bookingsTable)
-    .select(
-      "booking_reference, driver_id, driver_name, status, admin_internal_status, customer_facing_status, cancellation_review_status",
-    )
-    .in("booking_reference", allowedReferences)
-    .limit(50);
-
-  if (bookingError) {
-    return blockedResult("driver_live_location_config_not_ready", 503);
-  }
-
-  const { data, error } = await clientResult.client
-    .from(latestPositionsTable)
-    .select(
-      "accuracy_meters, assigned_job_label, booking_reference, driver_display_label, driver_job_link_id, heading_degrees, job_status, latitude, longitude, sharing_state, speed_meters_per_second, stale_after, updated_at, vehicle_plate_label",
-    )
-    .in("booking_reference", allowedReferences)
-    .in("sharing_state", ["active", "stale"])
-    .limit(50);
-
-  if (error) {
-    return blockedResult("driver_live_location_config_not_ready", 503);
+  const bookingData: UnknownRecord[] = [];
+  const data: UnknownRecord[] = [];
+  // Bound each request, not the number of authorized jobs. Read every batch
+  // before any retention cleanup so partial evidence can never orphan a pin.
+  for (let offset = 0; offset < allowedReferences.length; offset += runtimeReadBatchSize) {
+    const references = allowedReferences.slice(offset, offset + runtimeReadBatchSize);
+    for (const [table, selection, target] of [
+      [bookingsTable, "id, booking_reference, driver_id, driver_name, status, admin_internal_status, customer_facing_status, cancellation_review_status", bookingData],
+      [latestPositionsTable, "id, accuracy_meters, assigned_job_label, booking_reference, driver_display_label, driver_job_link_id, heading_degrees, job_status, latitude, longitude, sharing_state, speed_meters_per_second, stale_after, updated_at, vehicle_plate_label", data],
+    ] as const) {
+      let cursor: string | number | null = null;
+      const seen = new Set<string | number>();
+      while (true) {
+        let query = clientResult.client.from(table).select(selection)
+          .in("booking_reference", references).order("id", { ascending: true })
+          .limit(runtimeReadBatchSize);
+        if (table === latestPositionsTable) query = query.in("sharing_state", ["active", "stale"]);
+        if (cursor !== null) query = query.gt("id", cursor);
+        const page = await query;
+        if (page.error || !Array.isArray(page.data)) {
+          return blockedResult("driver_live_location_config_not_ready", 503);
+        }
+        const rows: UnknownRecord[] = page.data.map(asRecord);
+        for (const row of rows) {
+          const id = row.id;
+          if ((typeof id !== "string" && typeof id !== "number") || !id || seen.has(id) ||
+              !references.includes(cleanText(row.booking_reference, 120))) {
+            return blockedResult("driver_live_location_config_not_ready", 503);
+          }
+          seen.add(id);
+        }
+        target.push(...rows);
+        if (rows.length < runtimeReadBatchSize) break;
+        cursor = rows[rows.length - 1].id as string | number;
+      }
+    }
   }
 
   const retained = partitionAdminLiveLocationRowsForRetention({

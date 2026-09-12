@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildCustomerInvoiceActionEmail,
   formatCustomerInvoiceActionSentAt,
@@ -303,6 +303,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const [localPaidInvoices, setLocalPaidInvoices] = useState<Record<string, PaymentMethod>>({});
   const [localInvoiceStatusOverrides, setLocalInvoiceStatusOverrides] = useState<Record<string, "Paid" | "Unpaid">>({});
   const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
+  const invoiceViewPending = useRef(false);
   const [invoiceActionMode, setInvoiceActionMode] = useState<InvoiceActionMode>(null);
   const [invoiceActionPending, setInvoiceActionPending] = useState(false);
   const [invoiceEditItems, setInvoiceEditItems] = useState<InvoiceEditLineItem[]>([]);
@@ -446,7 +447,8 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     return () => controller.abort();
   }, [customer.companyName, customer.id, selectedInvoiceNumber]);
 
-  function openInvoice(invoiceNumber: string) {
+  async function openInvoice(invoiceNumber: string) {
+    if (invoiceViewPending.current) return;
     setSelectedInvoiceNumber(invoiceNumber);
     setInvoiceActionMessage("");
     setInvoiceActionMode(null);
@@ -455,6 +457,53 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     setInvoiceEditItems([]);
     setInvoiceEditDspPricing({});
     setInvoiceEditDspPricingPending(false);
+
+    if (!storedInvoices.some((invoice) => invoice.invoiceNumber === invoiceNumber)) {
+      setInvoiceActionMessage("The saved invoice is unavailable. Reload and try again.");
+      return;
+    }
+
+    let viewer: Window | null = null;
+    invoiceViewPending.current = true;
+    try {
+      // Reserve the viewer during the click before awaiting the protected PDF read.
+      viewer = window.open("", "_blank");
+      if (!viewer) {
+        setInvoiceActionMessage("Please allow pop-ups, then open the invoice again.");
+        return;
+      }
+      viewer.opener = null;
+      viewer.document.title = invoiceNumber;
+      viewer.document.body.textContent = "Opening invoice…";
+      setInvoiceActionMessage("Opening invoice…");
+      const response = await fetch(
+        `/api/admin-customer-invoice-pdf/${encodeURIComponent(invoiceNumber)}`,
+        {
+          cache: "no-store",
+          headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
+          signal: AbortSignal.timeout(20000),
+        },
+      );
+      if (!response.ok || response.headers.get("content-type")?.split(";")[0] !== "application/pdf") {
+        throw new Error("Stored invoice PDF read failed");
+      }
+      const pdf = await response.blob();
+      if ((await pdf.slice(0, 5).text()) !== "%PDF-") throw new Error("Invalid stored PDF");
+      if (viewer.closed) {
+        setInvoiceActionMessage("Invoice window closed. Open it again when ready.");
+        return;
+      }
+      const pdfUrl = URL.createObjectURL(pdf);
+      viewer.location.replace(pdfUrl);
+      // Release the temporary URL after the browser has loaded the stored PDF bytes.
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+      setInvoiceActionMessage("Invoice opened.");
+    } catch {
+      if (viewer && !viewer.closed) viewer.close();
+      setInvoiceActionMessage("Invoice could not be opened. Please try again.");
+    } finally {
+      invoiceViewPending.current = false;
+    }
   }
 
   async function loadIssuedInvoiceDspPricing(
@@ -1101,7 +1150,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                     <button
                       className="font-bold text-sky-700 underline-offset-4 hover:underline"
                       data-customer-invoice-folder-view={invoice.invoiceNumber}
-                      onClick={() => openInvoice(invoice.invoiceNumber)}
+                      onClick={() => void openInvoice(invoice.invoiceNumber)}
                       type="button"
                     >
                       {invoice.invoiceNumber}
@@ -1123,7 +1172,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                       <button
                         className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-800 hover:bg-slate-100"
                         data-customer-invoice-folder-open={invoice.invoiceNumber}
-                        onClick={() => openInvoice(invoice.invoiceNumber)}
+                        onClick={() => void openInvoice(invoice.invoiceNumber)}
                         type="button"
                       >
                         View

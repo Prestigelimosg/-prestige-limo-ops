@@ -77,6 +77,11 @@ try{
  await waitForCondition(()=>evaluate(`!document.querySelector('[data-customer-folder-saved-bookings-select="${job.booking_reference}"]')`),10000,'billed job excluded');
  assert.equal(await evaluate(`!!document.querySelector('[data-customer-folder-saved-bookings-select="${other.booking_reference}"]')`),true);
  await waitForCondition(()=>evaluate(`document.body.textContent.includes('Marked as sent')`),10000,'persistent folder status');
+ await wait('[data-customer-invoice-folder-selected-item-table]');
+ const storedItemText=await evaluate(`document.querySelector('[data-customer-invoice-folder-selected-item-table]').textContent`);
+ assert.ok(!/\|\s*REF\b/i.test(storedItemText),'Total invoices item display must also omit the repeated reference');
+ assert.ok(rows[0].line_items[0].description.includes('REF '+job.public_booking_reference),'Display removal must not rewrite stored descriptions');
+ assert.equal(rows[0].line_items[0].bookingReference,job.booking_reference);
  assert.equal(rows.length,1);assert.equal(requests.filter(r=>r.method!=='GET').length,1,'Exactly one invoice write and no email/payment/deletion');
  assert.deepEqual(errors,[]);
  console.log(`Browser PASS (${missingTravelerPrefix?'registered traveller without prefix':'Company + Booker'}): Paid tick → review → Mark as sent → same paid invoice in Total invoices → only linked job removed from pending; Bill To reference retained, item reference hidden, 390px button visible; no email or booking mutation.`);

@@ -58,6 +58,7 @@ type DisplayInvoice = {
   amount: string;
   amountCents: number;
   customerEmail?: string;
+  documentType?: string;
   dueDate: string;
   invoiceNumber: string;
   issueDate: string;
@@ -250,6 +251,7 @@ function displayStoredInvoice(invoice: StoredInvoiceRecord): DisplayInvoice | nu
     amount,
     amountCents: Number(invoice.amountCents) || centsFromAmountLabel(amount),
     customerEmail: invoice.customerEmail,
+    documentType: invoice.documentType,
     dueDate: safeDisplay(invoice.dueDateLabel, "Due date to confirm"),
     invoiceNumber,
     issueDate: safeDisplay(invoice.issueDateLabel, "Date to confirm"),
@@ -1188,7 +1190,9 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
                   >
                     <td className="px-4 py-4 font-bold text-slate-600">{itemIndex + 1}</td>
                     <td className="px-4 py-4 font-semibold leading-6 text-slate-900">
-                      {item.description || "Invoice item description pending"}
+                      {((selectedInvoice.documentType || "invoice") === "invoice"
+                        ? item.description?.replace(/\s*\|\s*REF\s+[^|]+$/i, "")
+                        : item.description) || "Invoice item description pending"}
                     </td>
                     <td className="px-4 py-4 text-right font-bold text-slate-950">
                       {item.amountLabel || selectedInvoice.amount}

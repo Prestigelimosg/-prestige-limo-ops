@@ -663,7 +663,10 @@ export function createCustomerInvoicePdfBytes(
   let rowY = tableHeaderY - 18;
 
   invoice.lineItems.slice(0, 4).forEach((item, index) => {
-    const descriptionLines = wrapText(item.description, 60).slice(0, 7);
+    const displayedDescription = documentType === "invoice"
+      ? item.description.replace(/\s*\|\s*REF\s+[^|]+$/i, "")
+      : item.description;
+    const descriptionLines = wrapText(displayedDescription, 60).slice(0, 7);
     const rowHeight = Math.max(42, 18 + descriptionLines.length * 11);
     const itemAmountValue = invoiceMoneyValue(item.amountLabel);
     const quantity = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : 1;

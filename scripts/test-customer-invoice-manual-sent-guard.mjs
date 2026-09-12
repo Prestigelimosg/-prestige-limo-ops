@@ -7,6 +7,42 @@ assert.ok(page.includes('data-selected-job-invoice-mark-sent="true"'), 'Paid rev
 const writes = [], invoices = [];
 const client = clientFor({writes,invoices});
 const paidInput = {...issueInput,status:'Paid',action:'mark_manually_sent'};
+// Regression: a registered traveller without a configured prefix must complete
+// the owner's Paid -> Mark as sent flow using standard numbering, same identity.
+const noPrefixWrites = [], noPrefixInvoices = [];
+const noPrefixClient = clientFor({bookings:[{...job,traveler_id:70}],writes:noPrefixWrites,invoices:noPrefixInvoices});
+let prefixChecks = 0;
+noPrefixClient.rpc = async () => { prefixChecks += 1; return {data:null,error:{code:'P0001',message:'traveler_invoice_prefix_required'}}; };
+const travelerPaidInput = {...paidInput,travelerId:70};
+const noPrefixIssued = await recordModule.createCustomerInvoiceRecord(travelerPaidInput,actor,noPrefixClient);
+assert.equal(noPrefixIssued.ok,true,JSON.stringify(noPrefixIssued));
+assert.match(noPrefixIssued.data.invoiceNumber,/^INV-\d{8}-\d{4}$/);
+assert.equal(noPrefixWrites[0].booker_id,38);
+assert.equal(noPrefixWrites[0].traveler_id,70);
+assert.equal(noPrefixWrites[0].email_delivery_status,'not_sent');
+assert.ok(noPrefixIssued.data.manuallySentAt);
+assert.equal((await recordModule.createCustomerInvoiceRecord(travelerPaidInput,actor,noPrefixClient)).status,409);
+assert.equal(noPrefixWrites.length,1);
+assert.equal(prefixChecks,1,'Duplicate guard runs before any further number reservation');
+for (const prefixError of [
+ {code:'P0001',message:'traveler_invoice_sequence_not_active'},
+ {code:'P0001',message:'traveler_invoice_prefix_malformed'},
+ {code:'P0001',message:'verified_traveler_invoice_identity_mismatch'},
+ {code:'42501',message:'permission denied'},
+ {code:'P0001',message:'database unavailable'},
+]) {
+ const attempts=[];const db=clientFor({bookings:[{...job,traveler_id:70}],writes:attempts});
+ db.rpc=async()=>({data:null,error:prefixError});
+ assert.equal((await recordModule.createCustomerInvoiceRecord(travelerPaidInput,actor,db)).ok,false);
+ assert.equal(attempts.length,0,'Only an absent prefix may use standard numbering');
+}
+const ordinaryWrites=[];const ordinaryDb=clientFor({bookings:[{...job,traveler_id:70}],writes:ordinaryWrites});
+ordinaryDb.rpc=noPrefixClient.rpc;
+assert.equal((await recordModule.createCustomerInvoiceRecord({...travelerPaidInput,action:undefined},actor,ordinaryDb)).status,409);
+assert.equal(ordinaryWrites.length,0,'Normal Issue/Send numbering remains unchanged');
+const configuredWrites=[];const configuredDb=clientFor({bookings:[{...job,traveler_id:70}],writes:configuredWrites});
+configuredDb.rpc=async()=>({data:[{invoice_number:'LOCAL-0002'}],error:null});
+assert.equal((await recordModule.createCustomerInvoiceRecord(travelerPaidInput,actor,configuredDb)).data.invoiceNumber,'LOCAL-0002');
 const issued = await recordModule.createCustomerInvoiceRecord(paidInput,actor,client);
 assert.equal(issued.ok,true,JSON.stringify(issued));
 assert.equal(writes.length,1);

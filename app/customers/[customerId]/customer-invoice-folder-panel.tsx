@@ -63,6 +63,7 @@ type DisplayInvoice = {
   issueDate: string;
   lastReminderSentAt?: string | null;
   lineItems: InvoiceLineItem[];
+  manuallySentAt?: string | null;
   paidAt?: string | null;
   paymentMethod?: PaymentMethod;
   reminderSendCount: number;
@@ -85,6 +86,7 @@ type StoredInvoiceRecord = {
   issueDateLabel?: string;
   lastReminderSentAt?: string | null;
   lineItems?: InvoiceLineItem[];
+  manuallySentAt?: string | null;
   paidAt?: string | null;
   paymentMethod?: PaymentMethod;
   reference?: string;
@@ -253,6 +255,7 @@ function displayStoredInvoice(invoice: StoredInvoiceRecord): DisplayInvoice | nu
     issueDate: safeDisplay(invoice.issueDateLabel, "Date to confirm"),
     lastReminderSentAt: invoice.lastReminderSentAt,
     lineItems: Array.isArray(invoice.lineItems) ? invoice.lineItems : [],
+    manuallySentAt: invoice.manuallySentAt,
     paidAt: invoice.paidAt,
     paymentMethod: invoice.paymentMethod,
     reminderSendCount: Number(invoice.reminderSendCount) || 0,
@@ -1145,6 +1148,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-base font-bold text-slate-950">{selectedInvoice.invoiceNumber} items</h3>
+              {selectedInvoice.manuallySentAt ? <p className="text-xs font-semibold text-emerald-800">Marked as sent</p> : null}
               <p className="mt-0.5 text-sm font-semibold text-slate-600">Only this selected invoice is shown below.</p>
             </div>
             <span

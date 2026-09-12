@@ -345,6 +345,8 @@ type CustomerDisplayedInvoiceRecord = CustomerLocalInvoiceRecord & {
   customerEmail?: string;
   emailDeliveryStatus?: "blocked" | "failed" | "not_sent" | "sent";
   emailSentAt?: string | null;
+  manuallySentAt?: string | null;
+  manualSendVersion?: string;
   pdfFilename?: string;
   storageSource?: "local" | "server";
   travelerId?: number;
@@ -2553,6 +2555,8 @@ function downloadBrowserBlob(blob: Blob, filename: string) {
 
 export default function MockCustomerDashboardPage() {
   const customerInvoicePrepPanelRef = useRef<HTMLDivElement | null>(null);
+  const manualInvoiceSentPendingRef = useRef(false);
+  const [manualInvoiceSentPending, setManualInvoiceSentPending] = useState(false);
   const plainInvoicePanelRef = useRef<HTMLDivElement | null>(null);
   const plainInvoiceCrmRequestSequenceRef = useRef(0);
   const plainInvoiceRecipientRequestSequenceRef = useRef(0);
@@ -6740,7 +6744,54 @@ export default function MockCustomerDashboardPage() {
     setPlainInvoiceSelectedJobEditing((current) => !current);
   }
 
+  async function markSelectedJobInvoiceSent() {
+    if (manualInvoiceSentPendingRef.current || issuingCustomerInvoiceKey || emailingCustomerInvoiceNumber ||
+        downloadingCustomerInvoiceNumber || plainInvoiceIssuedRecord?.manuallySentAt) return;
+    if (plainInvoiceSelectedJobReviewStatus !== "Paid" ||
+        (!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent)) {
+      setPlainInvoiceFeedback("Review this paid invoice first.");
+      setPlainInvoiceFeedbackTone("error");
+      return;
+    }
+    const requestBody = plainInvoiceIssuedRecord
+      ? { action: "mark_manually_sent", invoiceNumber: plainInvoiceIssuedRecord.invoiceNumber,
+          customerId: plainInvoiceIssuedRecord.customerId, expectedPdfVersion: plainInvoiceIssuedRecord.manualSendVersion }
+      : { ...plainInvoiceRequestBodyFromPreview("issued"), action: "mark_manually_sent" };
+    if (!confirmInvoiceSafetyAction({
+      action: "Mark as sent", amountLabel: formatInvoiceAmount(plainInvoiceSelectedJobReviewAmountCents),
+      customerName: plainInvoiceIssuedRecord?.customerName || plainInvoicePreview?.customerName || "",
+      documentLabel: "Paid invoice", reference: plainInvoiceIssuedRecord?.reference || plainInvoicePreview?.reference || "",
+      consequence: "Record this paid invoice as manually sent. Its jobs leave Jobs not billed yet. No email will be sent.",
+    })) return;
+    manualInvoiceSentPendingRef.current = true;
+    setManualInvoiceSentPending(true);
+    try {
+      const response = await fetch(adminCustomerInvoicesApiPath, {
+        body: JSON.stringify(requestBody), method: plainInvoiceIssuedRecord ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json", "x-prestige-admin-purpose": "admin-booking-persistence" },
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok || !result.invoice?.manuallySentAt) {
+        throw new Error(result?.error || "Invoice was not confirmed as manually sent. Reload before retrying.");
+      }
+      const invoice = { ...(result.invoice as CustomerDisplayedInvoiceRecord), storageSource: "server" as const };
+      saveCustomerLocalInvoice(invoice);
+      updateIssuedInvoiceState(invoice);
+      setPlainInvoiceIssuedRecord(invoice);
+      window.dispatchEvent(new Event("prestige:customer-invoice-updated"));
+      setPlainInvoiceFeedback(`${invoice.invoiceNumber} marked as sent. No email sent.`);
+      setPlainInvoiceFeedbackTone("success");
+    } catch (error) {
+      setPlainInvoiceFeedback(customerInvoiceActionFailureMessage("Mark as sent", error));
+      setPlainInvoiceFeedbackTone("error");
+    } finally {
+      manualInvoiceSentPendingRef.current = false;
+      setManualInvoiceSentPending(false);
+    }
+  }
+
   async function sendSelectedJobInvoice() {
+    if (manualInvoiceSentPendingRef.current) return;
     if (!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent) {
       setPlainInvoiceSelectedJobEditing(true);
       setPlainInvoiceFeedback("Use Edit to complete every amount and update the invoice review before sending.");
@@ -6772,6 +6823,7 @@ export default function MockCustomerDashboardPage() {
   }
 
   async function downloadSelectedJobInvoicePdf() {
+    if (manualInvoiceSentPendingRef.current) return;
     if (!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent) {
       setPlainInvoiceSelectedJobEditing(true);
       setPlainInvoiceFeedback("Use Edit to complete every amount and update the invoice review before creating the PDF.");
@@ -9657,6 +9709,17 @@ export default function MockCustomerDashboardPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5" data-selected-job-invoice-actions="true">
+                        {plainInvoiceSelectedJobReviewStatus === "Paid" ? (
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-700 bg-white px-3 text-xs font-bold text-emerald-800 disabled:opacity-50"
+                            data-selected-job-invoice-mark-sent="true"
+                            disabled={manualInvoiceSentPending || Boolean(issuingCustomerInvoiceKey || emailingCustomerInvoiceNumber || downloadingCustomerInvoiceNumber || plainInvoiceIssuedRecord?.manuallySentAt) || (!plainInvoiceIssuedRecord && !isPlainInvoicePreviewCurrent)}
+                            onClick={markSelectedJobInvoiceSent}
+                            type="button"
+                          >
+                            {plainInvoiceIssuedRecord?.manuallySentAt ? "Marked as sent" : manualInvoiceSentPending ? "Saving" : "Mark as sent"}
+                          </button>
+                        ) : null}
                         <button
                           aria-disabled={Boolean(plainInvoiceIssuedRecord)}
                           className={`inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-bold transition ${

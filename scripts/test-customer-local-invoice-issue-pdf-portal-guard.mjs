@@ -126,11 +126,13 @@ for (const documentType of ["invoice", "quotation", "credit_note"]) {
     amountCents: 26000, billingMonthLabel: "September 2026", customerId: "INTERNAL-CRM-ONLY-99042",
     customerName: "Example Company", dueDateIso: "2026-09-14", documentType,
     reference: "99001", route: "Airport > Hotel", service: "TRF", status: "Unpaid",
+    lineItems: [{description: "CITY TRANSFER | 14 SEPT 2026, 1200 | AIRPORT > HOTEL | ALPHARD | SAMPLE PASSENGER | REF 99001", bookingReference: "ADM-20990101000001", amountLabel: "$260.00", quantity: 1}],
   }, []);
   const before = JSON.stringify(invoice);
   const rendered = Buffer.from(pdfModule.createCustomerInvoicePdfBytes(invoice)).toString("latin1");
   assert.ok(rendered.includes("Example Company"));
   assert.ok(rendered.includes("Reference: 99001"));
+  assert.equal(rendered.includes("REF 99001"), documentType !== "invoice", "Only invoice item display removes its repeated reference; Bill To and other document types retain theirs");
   assert.ok(!rendered.includes(invoice.customerId), "Missing address must never print the internal account ID");
   assert.equal(JSON.stringify(invoice), before, "Presentation must retain exact stored ownership and invoice values");
 }

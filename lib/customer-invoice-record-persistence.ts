@@ -867,11 +867,12 @@ async function reserveTravelerInvoiceNumber(
   client: CustomerInvoiceClient,
   input: {
     actor: AdminBookingPersistenceAdapterActor;
+    allowUnconfiguredPrefix: boolean;
     bookerId: number;
     customerAccount: string;
     travelerId: number;
   },
-): Promise<CustomerInvoiceResult<string>> {
+): Promise<CustomerInvoiceResult<string | null>> {
   const { data, error } = await client.rpc("reserve_customer_invoice_number", {
     p_actor_label: input.actor.actor_label,
     p_actor_role: input.actor.actor_role,
@@ -883,6 +884,15 @@ async function reserveTravelerInvoiceNumber(
   const invoiceNumber = safeInvoiceNumber(firstRow.invoice_number);
 
   if (error || !invoiceNumber) {
+    // Only the Paid manual-sent action may reuse standard numbering when this
+    // verified traveller has no prefix. Other numbering errors stay closed.
+    if (
+      input.allowUnconfiguredPrefix &&
+      asRecord(error).code === "P0001" &&
+      asRecord(error).message === "traveler_invoice_prefix_required"
+    ) {
+      return { data: null, ok: true, version: customerInvoiceRecordVersion };
+    }
     const errorText = Object.values(asRecord(error))
       .map((value) => String(value ?? "").toLowerCase())
       .join(" ");
@@ -947,22 +957,24 @@ export async function createCustomerInvoiceRecord(
       return verification;
     }
   }
-  const travelerInvoiceNumber =
+  const travelerNumberReservation =
     sanitized.data.documentState === "issued" &&
     sanitized.data.travelerId &&
     sanitized.data.bookerId &&
     sanitized.data.documentType === "invoice"
       ? await reserveTravelerInvoiceNumber(invoiceClient, {
           actor,
+          allowUnconfiguredPrefix: markManuallySent,
           bookerId: sanitized.data.bookerId,
           customerAccount: sanitized.data.customerName,
           travelerId: sanitized.data.travelerId,
         })
       : null;
 
-  if (travelerInvoiceNumber && !travelerInvoiceNumber.ok) {
-    return travelerInvoiceNumber;
+  if (travelerNumberReservation && !travelerNumberReservation.ok) {
+    return travelerNumberReservation;
   }
+  const travelerInvoiceNumber = travelerNumberReservation?.data ?? null;
   const issueDate = new Date();
   const invoiceDateKey = issueDate.toISOString().slice(0, 10).replace(/-/g, "");
   const amountLabel = formatInvoiceAmount(sanitized.data.amountCents);
@@ -979,8 +991,8 @@ export async function createCustomerInvoiceRecord(
   const { logoImage, profile } = await loadServerLogoImage();
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const invoiceNumber = travelerInvoiceNumber?.ok
-      ? travelerInvoiceNumber.data
+    const invoiceNumber = travelerInvoiceNumber
+      ? travelerInvoiceNumber
       : await nextInvoiceNumber(invoiceClient, invoiceDateKey, attempt, sanitized.data.documentType);
     const invoiceForPdf: CustomerLocalInvoiceRecord = {
       amountCents: sanitized.data.amountCents,

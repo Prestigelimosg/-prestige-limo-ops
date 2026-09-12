@@ -10050,7 +10050,7 @@ export default function MockCustomerDashboardPage() {
                             {plainInvoiceSelectedJobReviewLines.map((item, index) => (
                               <tr className="border-b border-slate-200 align-top" key={`${item.description}-${index}`}>
                                 <td className="w-px whitespace-nowrap px-1 py-2 tabular-nums sm:px-2">{index + 1}</td>
-                                <td className="whitespace-pre-wrap break-words px-1 py-2 font-semibold text-slate-950 sm:px-2">{item.description}</td>
+                                <td className="whitespace-pre-wrap break-words px-1 py-2 font-semibold text-slate-950 sm:px-2">{item.description.replace(/\s*\|\s*REF\s+[^|]+$/i, "")}</td>
                                 <td className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">{plainInvoiceQuantityLabel(item.quantity)}</td>
                                 <td className="w-px whitespace-nowrap px-1 py-2 text-right tabular-nums sm:px-2">{plainInvoiceLineItemRateLabel(item)}</td>
                                 <td className="w-px whitespace-nowrap px-1 py-2 text-right font-bold tabular-nums sm:px-2">{item.amountLabel}</td>

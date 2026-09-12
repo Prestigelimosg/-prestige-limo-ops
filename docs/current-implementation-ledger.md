@@ -1,3 +1,9 @@
+## Total Invoices Item Reference Display Completion (2026-09-12; local, release pending)
+
+- Owner screenshot reproduced the remaining trailing REF in Section 2 Total invoices after a successful Paid manual-sent action. The earlier display change covered selected-job review and PDF but missed this separate existing item table.
+- Remove only the trailing REF segment from the selected invoice item cell at render time. Preserve Bill To Reference, stored line descriptions and bookingReference, numbering, Paid/manual-sent evidence, pending eligibility, PDF/email/payment, edit controls, and quotation/credit-note display. No API, data, schema, or provider change.
+- The existing local browser regression failed first on this exact Section 2 cell, then checks it after real isolated issuance and folder reload alongside review/PDF output, stored-reference preservation, Paid/manual-sent persistence, and exact pending exclusion. Production publication remains separate.
+
 ## Paid Manual Sent Without Prefix And Invoice Item Reference Display (2026-09-12; local, release pending)
 
 - Owner approved two bounded follow-ups: Paid checkbox -> Mark as sent must complete without mandatory prefix setup; Bill To retains its reference while the invoice item display omits the repeated trailing REF. The reported Production failure was a 409 for a registered traveller with no numbering prefix; the existing generic feedback hid the actionable server reason. Reproduced locally before repair.

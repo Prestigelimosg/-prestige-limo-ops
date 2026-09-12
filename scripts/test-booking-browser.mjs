@@ -64,7 +64,7 @@ function extractStateScript(expectMultipleValue) {
     warning: document.body.innerText.includes("Multiple bookings detected") ? "Multiple bookings detected" : "",
     previewText: document.body.innerText.includes("Extracted booking") ? document.body.innerText : "",
     jobCard: pres.find((text) => text.includes("Name:")) || "",
-    driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
+    driverDispatch: document.querySelector('[data-copy-preview="driverDispatch"]')?.innerText || "",
     buttonLabels: [...document.querySelectorAll("button")].map((button) => button.textContent.trim()),
     errors: window.__prestigeErrors || [],
     consoleErrors: window.__prestigeConsoleErrors || [],
@@ -564,7 +564,7 @@ async function runChromeTest() {
         `([...document.querySelectorAll("pre")].map((pre) => pre.innerText).find((text) => text.includes("Name:")) || "")`,
       ),
       driverDispatch: await evaluate(
-        `([...document.querySelectorAll("pre")].map((pre) => pre.innerText).find((text) => text.includes("DRIVER DISPATCH")) || "")`,
+        `(document.querySelector('[data-copy-preview="driverDispatch"]')?.innerText || "")`,
       ),
       buttonLabels: await evaluate(
         `[...document.querySelectorAll("button")].map((button) => button.textContent.trim())`,

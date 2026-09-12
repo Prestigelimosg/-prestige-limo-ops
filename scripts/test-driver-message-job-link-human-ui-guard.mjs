@@ -63,3 +63,55 @@ assert.ok(
 );
 
 console.log("Manual WhatsApp Copy + human Driver Job Link UI guard passed");
+
+const generatorStart = app.indexOf("const draftDriverDispatchCard = useMemo(() => {");
+const generatorEnd = app.indexOf("const driverJobLinkMessage = useMemo", generatorStart);
+assert.ok(generatorStart >= 0 && generatorEnd > generatorStart);
+const generator = app.slice(generatorStart, generatorEnd);
+assert.ok(!generator.includes('["DRIVER DISPATCH"]'), "Manual copy must omit the heading by default");
+assert.ok(!generator.includes('`Driver: ${clean(booking.driverName) || "Driver TBC"}`'), "Manual copy must omit the driver-name line for assigned and unassigned jobs");
+const readiness = app.slice(app.indexOf("const dispatchReleaseDriverDispatchReady ="),app.indexOf("const dispatchReleaseDriverJobLinkReady ="));
+assert.ok(!readiness.includes('startsWith("DRIVER DISPATCH")'), "Readiness must not require the removed heading");
+for(const fragment of ["dispatchReleaseTripComplete", "dispatchReleaseDriverReady", "!dispatchReleaseDriverDispatchHasPlaceholder", "!dispatchReleaseDriverDispatchHasFinanceLine"]) {
+  assert.ok(readiness.includes(fragment), "Retain readiness guard: " + fragment);
+}
+
+// Run the existing formatter with synthetic jobs; other copy generators are not replaced.
+const generatorBody = generator.slice(generator.indexOf("() => {") + 7, generator.lastIndexOf("  }, ["));
+const formatCopy = new Function("booking", "options", `
+  const clean = value => String(value ?? "").trim();
+  const cleanReferenceText = clean;
+  const safeDriverVehicleModelDisplay = clean;
+  const driverAssignmentDisplayDrivers = options.drivers || [];
+  const activeAdminDriverJobLink = null;
+  const dispatchReleaseWorkflowBookingReference = "";
+  const draftPricing = {driverPayout:65};
+  const formatChildSeatNote = () => "Child seat: 1 booster";
+  const dispatchCopyLocationFlightParts = b => ({pickup:b.pickup,dropoff:b.dropoff,standaloneFlightLine:b.flight ? "Flight: " + b.flight : ""});
+  const formatPickupDateTime = () => "14 Sep 2026, 1800hrs";
+  const isDspItinerary = options.dsp || false;
+  const itineraryDisplayStops = options.stops || [];
+  ${generatorBody}
+`);
+const copyBooking = {vehicle:"VVV",bookingType:"DEP",pickup:"Example pickup",dropoff:"Example airport",name:"Example passenger",pax:2};
+const basicCopy = formatCopy(copyBooking,{});
+assert.equal(basicCopy,"VVV DEP\n14 Sep 2026, 1800hrs\n\nExample pickup > Example airport\n\nPassenger: Example passenger\nPax: 2");
+const assignedCopy = formatCopy({...copyBooking,driverName:"Example chauffeur",driverContact:"00000000",driverPlate:"EXAMPLE",driverVehicleModel:"V-Class",flight:"QA123",extraStopLocation:"Example stop",childSeatRequired:"yes",driverIncludePayout:true},{});
+assert.doesNotMatch(assignedCopy,/DRIVER DISPATCH|^Driver:/m);
+for (const line of ["Contact: 00000000","Plate: EXAMPLE","Vehicle: V-Class","Flight: QA123","Example pickup > Example stop > Example airport","Child seat: 1 booster","Payout: $65"]) assert.ok(assignedCopy.includes(line),line);
+const dspCopy = formatCopy({...copyBooking,bookingType:"DSP"},{dsp:true,stops:[{time:"1900",location:"Example stop"}]});
+assert.match(dspCopy,/Itinerary:\n1900 - Example stop/);
+assert.doesNotMatch(dspCopy,/DRIVER DISPATCH|^Driver:/m);
+const checkReady = new Function("driverDispatchCopyText", "booking", "dispatchReleaseTripComplete", "dispatchReleaseDriverReady", `
+ const clean = value => String(value ?? "").trim();
+ const dispatchReleaseDriverDispatchHasPlaceholder = /\\bTBC\\b|Pickup > Drop-off|Date TBC|Time TBC/i.test(driverDispatchCopyText);
+ const dispatchReleaseDriverDispatchHasFinanceLine = /payout\\s*:/i.test(driverDispatchCopyText);
+ ${readiness}
+ return dispatchReleaseDriverDispatchReady;
+`);
+assert.equal(checkReady(basicCopy,copyBooking,true,true),true,"New default format can be ready");
+assert.equal(checkReady(basicCopy+"\nManual note",copyBooking,true,true),true,"Manual edits remain supported");
+for (const invalid of ["","DRIVER DISPATCH","Unrelated note",basicCopy.replace("VVV DEP","AVF DEP"),basicCopy+"\nTBC",basicCopy+"\nPayout: $65"]) assert.equal(checkReady(invalid,copyBooking,true,true),false);
+assert.equal(checkReady(basicCopy,copyBooking,false,true),false);
+assert.equal(checkReady(basicCopy,copyBooking,true,false),false,"Removing driver text must not bypass assignment readiness");
+console.log("Default manual copy and dependent readiness runtime checks passed");

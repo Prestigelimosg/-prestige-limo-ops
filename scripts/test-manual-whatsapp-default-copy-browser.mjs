@@ -51,7 +51,7 @@ try {
   const preview=()=>evaluate(`document.querySelector('[data-copy-preview="driverDispatch"]').textContent`);
   const initial=await preview();
   assert.doesNotMatch(initial,/DRIVER DISPATCH|^Driver:/m);
-  for(const fragment of ['VVV DEP','14 Sept 2026','1800hrs','Example Hotel','Alex Sample','Pax: 2'])assert.ok(initial.includes(fragment),fragment + ": " + initial);
+  for(const fragment of ['VVV DEP','14 Sept Mon, 1800hrs','Example Hotel','Alex Sample','Pax: 2'])assert.ok(initial.includes(fragment),fragment + ": " + initial);
   const customerBefore=await evaluate(`document.querySelector('[data-copy-preview="customerCopy"]').textContent`);
   const jobBefore=await evaluate(`document.querySelector('[data-copy-preview="jobCard"]').textContent`);
   const linkBefore=await evaluate(`document.querySelector('[data-driver-job-link-preview-disclosure]')?.textContent`);

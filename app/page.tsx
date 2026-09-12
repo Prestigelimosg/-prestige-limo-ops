@@ -19274,6 +19274,15 @@ export default function Home() {
           flightLocationParts.standaloneFlightLine,
           driverDispatchRoute,
         ];
+    const pickupDate = new Date(`${booking.date}T00:00:00Z`);
+    const pickupDateParts = Number.isNaN(pickupDate.getTime())
+      ? []
+      : new Intl.DateTimeFormat("en-SG", {
+          day: "2-digit", month: "short", weekday: "short", timeZone: "UTC",
+        }).formatToParts(pickupDate);
+    const pickupDateLabel = pickupDateParts.length
+      ? ["day", "month", "weekday"].map((type) => pickupDateParts.find((part) => part.type === type)?.value).join(" ")
+      : formatDate(booking.date);
     const sections = [
       [
         clean(booking.driverContact) ? `Contact: ${clean(booking.driverContact)}` : "",
@@ -19282,7 +19291,7 @@ export default function Home() {
       ],
       [
         `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
-        formatPickupDateTime(booking.date, booking.time),
+        `${pickupDateLabel}, ${formatPickupTime(booking.time)}`,
       ],
       routeLines,
       [

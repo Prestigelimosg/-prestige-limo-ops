@@ -88,14 +88,15 @@ const formatCopy = new Function("booking", "options", `
   const draftPricing = {driverPayout:65};
   const formatChildSeatNote = () => "Child seat: 1 booster";
   const dispatchCopyLocationFlightParts = b => ({pickup:b.pickup,dropoff:b.dropoff,standaloneFlightLine:b.flight ? "Flight: " + b.flight : ""});
-  const formatPickupDateTime = () => "14 Sep 2026, 1800hrs";
+  const formatDate = value => value || "Date TBC";
+  const formatPickupTime = value => value ? "1800hrs" : "Time TBC";
   const isDspItinerary = options.dsp || false;
   const itineraryDisplayStops = options.stops || [];
   ${generatorBody}
 `);
-const copyBooking = {vehicle:"VVV",bookingType:"DEP",pickup:"Example pickup",dropoff:"Example airport",name:"Example passenger",pax:2};
+const copyBooking = {date:"2026-09-14",time:"1800",vehicle:"VVV",bookingType:"DEP",pickup:"Example pickup",dropoff:"Example airport",name:"Example passenger",pax:2};
 const basicCopy = formatCopy(copyBooking,{});
-assert.equal(basicCopy,"VVV DEP\n14 Sep 2026, 1800hrs\n\nExample pickup > Example airport\n\nPassenger: Example passenger\nPax: 2");
+assert.equal(basicCopy,"VVV DEP\n14 Sept Mon, 1800hrs\n\nExample pickup > Example airport\n\nPassenger: Example passenger\nPax: 2");
 const assignedCopy = formatCopy({...copyBooking,driverName:"Example chauffeur",driverContact:"00000000",driverPlate:"EXAMPLE",driverVehicleModel:"V-Class",flight:"QA123",extraStopLocation:"Example stop",childSeatRequired:"yes",driverIncludePayout:true},{});
 assert.doesNotMatch(assignedCopy,/DRIVER DISPATCH|^Driver:/m);
 for (const line of ["Contact: 00000000","Plate: EXAMPLE","Vehicle: V-Class","Flight: QA123","Example pickup > Example stop > Example airport","Child seat: 1 booster","Payout: $65"]) assert.ok(assignedCopy.includes(line),line);
@@ -115,3 +116,11 @@ for (const invalid of ["","DRIVER DISPATCH","Unrelated note",basicCopy.replace("
 assert.equal(checkReady(basicCopy,copyBooking,false,true),false);
 assert.equal(checkReady(basicCopy,copyBooking,true,false),false,"Removing driver text must not bypass assignment readiness");
 console.log("Default manual copy and dependent readiness runtime checks passed");
+
+assert.match(formatCopy({...copyBooking,date:"2025-09-14"},{}),/14 Sept Sun, 1800hrs/);
+assert.match(formatCopy({...copyBooking,date:"2026-09-13"},{}),/13 Sept Sun, 1800hrs/);
+assert.match(formatCopy({...copyBooking,date:"2026-01-01"},{}),/01 Jan Thu, 1800hrs/);
+assert.match(formatCopy({...copyBooking,date:"2028-02-29"},{}),/29 Feb Tue, 1800hrs/);
+assert.match(formatCopy({...copyBooking,date:"",time:""},{}),/Date TBC, Time TBC/);
+assert.match(formatCopy({...copyBooking,date:"invalid"},{}),/invalid, 1800hrs/);
+console.log("Manual copy weekday is derived from the booking date; missing and invalid dates preserve fallback");

@@ -1260,3 +1260,47 @@ includes("lib/admin-driver-job-link-persistence.ts", [
 ]);
 
 console.log("Driver Pool fast-accept guard passed.");
+
+// Render the actual existing Pool card, without accounts, database or provider calls.
+const poolSourceFile = ts.createSourceFile('page.tsx', portalSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let poolCardCallback;
+function findPoolCard(node) {
+  if (ts.isCallExpression(node) && node.expression.getText(poolSourceFile) === 'availableJobs.map') poolCardCallback = node.arguments[0].getText(poolSourceFile);
+  ts.forEachChild(node, findPoolCard);
+}
+findPoolCard(poolSourceFile);
+assert.ok(poolCardCallback, 'Use the existing Available Jobs card');
+const poolCardModule = {exports:{}};
+new Function('require','module','exports',ts.transpileModule(`
+  export function renderCard(job:any, availableJobsBusy=false) {
+    const availableJobsFeedback = {};
+    const decideAvailableJob = () => {};
+    return [job].map(${poolCardCallback})[0];
+  }
+`,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(createRequire(import.meta.url),poolCardModule,poolCardModule.exports);
+const poolDateJob = {
+  offer_key:'synthetic-pool-date',public_booking_reference:'QA-DATE',safe_trip_summary:'DEP',safe_vehicle_label:'AVF',
+  pickup_at:'2026-09-14T10:00:00Z',closes_at:'2026-09-14T09:30:00Z',offer_payout_sgd:65,
+  safe_pickup_area:'Example pickup area',safe_dropoff_area:'Example drop-off area',updated_at:'2026-09-12T00:00:00Z',
+};
+const poolDateOriginal = JSON.stringify(poolDateJob);
+const poolDateHtml = renderToStaticMarkup(poolCardModule.exports.renderCard(poolDateJob));
+assert.ok(poolDateHtml.includes('14 Sept Mon, 1800hrs'));
+assert.ok(poolDateHtml.includes('14 Sept Mon, 1730hrs'));
+assert.ok(poolDateHtml.includes('dateTime="2026-09-14T09:30:00Z"'), 'Keep the original deadline timestamp');
+for (const text of ['DEP · AVF','Job QA-DATE','SGD 65.00','Example pickup area','Example drop-off area','Offer closes','Accept','Decline']) assert.ok(poolDateHtml.includes(text),text);
+assert.equal(JSON.stringify(poolDateJob),poolDateOriginal,'Formatting must not mutate the offer');
+const poolBusyHtml=renderToStaticMarkup(poolCardModule.exports.renderCard(poolDateJob,true));
+assert.equal((poolBusyHtml.match(/disabled=""/g)||[]).length,2,'Both buttons retain their busy-state guard');
+for (const [timestamp,expected] of [
+  ['2026-09-13T16:00:00Z','14 Sept Mon, 0000hrs'],
+  ['2026-09-13T15:59:00Z','13 Sept Sun, 2359hrs'],
+  ['2025-09-14T10:00:00Z','14 Sept Sun, 1800hrs'],
+  ['2026-12-31T16:00:00Z','01 Jan Fri, 0000hrs'],
+  ['2028-02-28T16:00:00Z','29 Feb Tue, 0000hrs'],
+  ['invalid','Time unavailable'],
+]) {
+  const html=renderToStaticMarkup(poolCardModule.exports.renderCard({...poolDateJob,pickup_at:timestamp,closes_at:timestamp}));
+  assert.equal(html.split(expected).length-1,2,`Pickup and closing time: ${timestamp}`);
+}
+console.log('Driver Pool date display passes Singapore midnight, weekday, 24-hour, year/leap boundaries and original offer preservation.');

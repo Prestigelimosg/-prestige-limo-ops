@@ -35,6 +35,8 @@ export const customerInvoiceAmendedBookingRefreshAction = "refresh_amended_unpai
 export const customerInvoiceIssuedEditAction = "edit_issued_invoice";
 export const customerInvoiceTestArtifactArchiveAction = "archive_test_invoice";
 
+export const customerInvoiceManualSentAction = "mark_manually_sent";
+
 export type CustomerInvoiceEmailDeliveryStatus = "blocked" | "failed" | "not_sent" | "sent";
 
 export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
@@ -42,6 +44,8 @@ export type CustomerInvoiceStoredRecord = CustomerLocalInvoiceRecord & {
   customerEmail?: string;
   emailDeliveryStatus: CustomerInvoiceEmailDeliveryStatus;
   emailSentAt?: string | null;
+  manuallySentAt?: string | null;
+  manualSendVersion?: string;
   lastReminderSentAt?: string | null;
   paidAt?: string | null;
   paymentMethod?: CustomerInvoicePaymentMethod;
@@ -56,6 +60,7 @@ export type CustomerInvoicePaymentMethod = "Bank transfer" | "Card" | "Cash";
 export type CustomerInvoiceActionEmailKind = "payment_thank_you" | "reminder";
 
 export type CustomerInvoiceCreateInput = {
+  action?: unknown;
   amountCents?: unknown;
   billingMonthLabel?: unknown;
   bookerId?: unknown;
@@ -150,6 +155,7 @@ const customerInvoiceLegacySelect = [
   "updated_at",
 ].join(", ");
 const customerInvoiceSelect = `${customerInvoiceLegacySelect}, booker_id, traveler_id, document_type, document_state, original_invoice_number, credit_note_reason, payment_method, paid_at, reminder_send_count, last_reminder_sent_at, last_reminder_message_id, thank_you_sent_at, thank_you_message_id`;
+const customerInvoiceAdminSelect = `${customerInvoiceSelect}, manually_sent_at, manually_sent_pdf_sha256, pdf_sha256`;
 const customerInvoiceLegacyPdfSelect = "invoice_number, customer_id, pdf_base64, pdf_content_type, pdf_filename";
 const customerInvoicePdfSelect = `${customerInvoiceLegacyPdfSelect}, document_type, document_state`;
 const maxTextLength = 1000;
@@ -484,6 +490,13 @@ function toStoredRecord(row: UnknownRecord): CustomerInvoiceStoredRecord | null 
         ? row.email_delivery_status
         : "not_sent",
     emailSentAt: safeText(row.email_sent_at, 80),
+    ...(typeof row.pdf_sha256 === "string" && /^[a-f0-9]{64}$/.test(row.pdf_sha256)
+      ? {
+          manualSendVersion: row.pdf_sha256,
+          manuallySentAt: row.status === "Paid" && row.manually_sent_pdf_sha256 === row.pdf_sha256
+            ? safeText(row.manually_sent_at, 80) : null,
+        }
+      : {}),
     id: safeText(row.id, 120) || invoiceNumber,
     invoiceNumber,
     issueDateIso: safeText(row.issue_date_iso, 80) || new Date().toISOString(),
@@ -910,6 +923,14 @@ export async function createCustomerInvoiceRecord(
     return sanitized;
   }
 
+  const markManuallySent = input.action === customerInvoiceManualSentAction;
+  if (markManuallySent && (
+    sanitized.data.status !== "Paid" || sanitized.data.documentState !== "issued" ||
+    sanitized.data.documentType !== "invoice"
+  )) {
+    return safeFailure(safeValidationError, 400);
+  }
+
   const invoiceClient = client ?? createServerClient();
   const invoiceLineItems = sanitized.data.lineItems.map((item) => ({
     ...item,
@@ -1015,6 +1036,10 @@ export async function createCustomerInvoiceRecord(
       reference: invoiceForPdf.reference,
       route: invoiceForPdf.route,
       service: invoiceForPdf.service,
+      ...(markManuallySent ? {
+        manually_sent_at: new Date().toISOString(),
+        manually_sent_pdf_sha256: pdfSha256,
+      } : {}),
       source_surface: "admin_api",
       status: invoiceForPdf.status,
       traveler_id: sanitized.data.travelerId,
@@ -1023,11 +1048,11 @@ export async function createCustomerInvoiceRecord(
     const { data, error } = await invoiceClient
       .from(customerInvoiceRecordTableName)
       .insert(insertPayload)
-      .select(customerInvoiceSelect)
+      .select(markManuallySent ? customerInvoiceAdminSelect : customerInvoiceSelect)
       .single();
 
     if (!error && data) {
-      const record = toStoredRecord(asRecord(data));
+      const record = toStoredRecord({ ...asRecord(data), pdf_sha256: pdfSha256 });
 
       return record
         ? {
@@ -1044,6 +1069,9 @@ export async function createCustomerInvoiceRecord(
     ) {
       return safeFailure("Invoice already contains one or more selected jobs.", 409);
     }
+
+    // Never silently lose a requested manual-sent marker through legacy fallback.
+    if (markManuallySent && error) return safeFailure(safeWriteError, 500);
 
     if (lifecycleColumnUnavailableError(error)) {
       if (sanitized.data.bookerId || travelerInvoiceNumber) {
@@ -1140,11 +1168,16 @@ export async function loadAdminCustomerInvoiceRecords(
   }
 
   const invoiceClient = client ?? createServerClient();
-  const { data, error } = await invoiceClient
+  let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
-    .select(customerInvoiceSelect)
+    .select(customerInvoiceAdminSelect)
     .order("created_at", { ascending: false })
     .limit(50);
+
+  if (error && /manually_sent/.test(String(asRecord(error).message || ""))) {
+    ({ data, error } = await invoiceClient.from(customerInvoiceRecordTableName)
+      .select(customerInvoiceSelect).order("created_at", { ascending: false }).limit(50));
+  }
 
   if (error) {
     if (!lifecycleColumnUnavailableError(error)) {
@@ -1205,9 +1238,14 @@ export async function loadAdminCustomerInvoiceRecord(
   const invoiceClient = client ?? createServerClient();
   let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
-    .select(customerInvoiceSelect)
+    .select(customerInvoiceAdminSelect)
     .eq("invoice_number", invoiceNumber)
     .maybeSingle();
+
+  if (error && /manually_sent/.test(String(asRecord(error).message || ""))) {
+    ({ data, error } = await invoiceClient.from(customerInvoiceRecordTableName)
+      .select(customerInvoiceSelect).eq("invoice_number", invoiceNumber).maybeSingle());
+  }
 
   if (error) {
     if (!lifecycleColumnUnavailableError(error)) {
@@ -1237,6 +1275,49 @@ export async function loadAdminCustomerInvoiceRecord(
         version: customerInvoiceRecordVersion,
       }
     : safeFailure(safeMissingError, 404);
+}
+
+export async function markAdminCustomerInvoiceManuallySent(
+  input: { invoiceNumber?: unknown; customerId?: unknown; expectedPdfVersion?: unknown },
+  actor: AdminBookingPersistenceAdapterActor,
+  client?: CustomerInvoiceClient,
+): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord>> {
+  if (!safeActor(actor)) return safeFailure(safePersistenceConfigError, 403);
+  if (!checkAdminBookingPersistenceStagingConfigReadiness().ok) return safeFailure(safePersistenceConfigError, 503);
+  const invoiceNumber = safeInvoiceNumber(input.invoiceNumber);
+  const customerId = safeText(input.customerId, 160);
+  const expectedPdfVersion = safeText(input.expectedPdfVersion, 64);
+  if (!invoiceNumber || !customerId || !expectedPdfVersion || !/^[a-f0-9]{64}$/.test(expectedPdfVersion)) {
+    return safeFailure(safeValidationError, 400);
+  }
+  const invoiceClient = client ?? createServerClient();
+  const read = await invoiceClient.from(customerInvoiceRecordTableName)
+    .select(customerInvoiceAdminSelect).eq("invoice_number", invoiceNumber)
+    .eq("customer_id", customerId).maybeSingle();
+  if (read.error) return safeFailure(safeReadError, 500);
+  const row = asRecord(read.data);
+  if (row.status !== "Paid" || row.document_type !== "invoice" || row.document_state !== "issued" ||
+      row.pdf_sha256 !== expectedPdfVersion || !safeLineItems(row.line_items)?.some((line) => line.bookingReference)) {
+    return safeFailure("This paid invoice changed or is not ready. Reload its review before marking it sent.", 409);
+  }
+  const existing = toStoredRecord(row);
+  if (!existing) return safeFailure(safeMissingError, 404);
+  if (existing.manuallySentAt) return { data: existing, ok: true, version: customerInvoiceRecordVersion };
+  const { data, error } = await invoiceClient.from(customerInvoiceRecordTableName)
+    .update({
+      manually_sent_at: new Date().toISOString(),
+      manually_sent_pdf_sha256: expectedPdfVersion,
+      actor_label: actor.actor_label, actor_role: actor.actor_role,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("invoice_number", invoiceNumber).eq("customer_id", customerId)
+    .eq("status", "Paid").eq("document_type", "invoice").eq("document_state", "issued")
+    .eq("pdf_sha256", expectedPdfVersion).eq("updated_at", row.updated_at)
+    .select(customerInvoiceAdminSelect).maybeSingle();
+  if (error) return safeFailure(safeWriteError, 500);
+  const record = toStoredRecord(asRecord(data));
+  if (!record) return safeFailure("This invoice changed. Reload its review before marking it sent.", 409);
+  return { data: record, ok: true, version: customerInvoiceRecordVersion };
 }
 
 export async function verifyIssuedCustomerInvoiceAccountForPortalAccess(

@@ -1,6 +1,8 @@
 import { resolveAdminCustomerInvoiceBoundary } from "../../../lib/admin-customer-invoice-boundary";
 import {
   archiveAdminCustomerTestInvoiceArtifact,
+  customerInvoiceManualSentAction,
+  markAdminCustomerInvoiceManuallySent,
   createCustomerInvoiceRecord,
   customerInvoiceAmendedBookingRefreshAction,
   customerInvoiceIssuedEditAction,
@@ -102,6 +104,12 @@ export async function PATCH(request: Request) {
     }
 
     const body = await readJsonBody(request);
+
+    if (body?.action === customerInvoiceManualSentAction) {
+      const result = await markAdminCustomerInvoiceManuallySent(body, boundary.actor);
+      if (!result.ok) return safeErrorResponse(result);
+      return Response.json({ invoice: result.data, ok: true, version: result.version });
+    }
 
     if (body?.action === customerInvoiceAmendedBookingRefreshAction) {
       const refreshed = await refreshAdminCustomerAmendedUnpaidInvoice(

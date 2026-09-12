@@ -207,3 +207,6 @@ for (const [insertError, expectedStatus] of [
   assert.equal(insertAttempts.length, 1, "Never retry a booking-coverage conflict or drop Booker identity in a legacy insert");
 }
 console.log("Company + Booker invoice preparation guard passed.");
+
+// Reuse the existing isolated invoice/PDF harness for manual-sent coverage.
+export { recordModule, clientFor, issueInput, actor, loadFunctions, folderSource, job };

@@ -1884,7 +1884,7 @@ function assertBookingUiState(state) {
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST BOOKER/);
   assert.doesNotMatch(state.jobCardPreview, /BROWSER UI TEST TRAVELER/);
   assert.match(state.visibleText, /Manual WhatsApp Copy — Optional/);
-  assert.match(state.driverDispatch, /DRIVER DISPATCH/);
+  assert.doesNotMatch(state.driverDispatch, /DRIVER DISPATCH|^Driver:/m);
   assert.match(state.visibleText, /Pricing/);
   assert.equal(state.dispatchReleaseChecklist.visible, true);
   assert.match(state.dispatchReleaseChecklist.text, /Dispatch Release/);
@@ -5377,7 +5377,7 @@ async function runChromeTest() {
         dayOfTripCompletionHandoff: dayOfTripCompletionHandoff(),
         driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),
         driverAcknowledgementReadiness: driverAcknowledgementReadiness(),
-        driverDispatch: pres.find((text) => text.includes("DRIVER DISPATCH")) || "",
+        driverDispatch: document.querySelector('[data-copy-preview="driverDispatch"]')?.innerText || "",
         errors: window.__prestigeErrors || [],
         fields,
         monthlyBillingMonthGroupingReview: monthlyBillingMonthGroupingReview(),
@@ -6090,11 +6090,11 @@ async function runChromeTest() {
     assert.deepEqual(driverDispatchCopyPlacementState.globalCopyMessages, []);
     assert.deepEqual(driverDispatchCopyPlacementState.allFeedback, []);
     assert.equal(driverDispatchCopyPlacementState.copyButtonText, "Copied");
-    assert.match(
+    assert.doesNotMatch(
       driverDispatchCopyPlacementState.copiedTexts[
         driverDispatchCopyPlacementState.copiedTexts.length - 1
       ] || "",
-      /DRIVER DISPATCH/,
+      /DRIVER DISPATCH|^Driver:/m,
     );
 
     const generatedDriverDispatchCopy =
@@ -6184,7 +6184,7 @@ async function runChromeTest() {
       editedDriverDispatchCopyText,
       "Expected edited Driver Dispatch text to be copied instead of the generated preview",
     );
-    assert.match(editedDriverDispatchCopyState.copiedText, /DRIVER DISPATCH/);
+    assert.doesNotMatch(editedDriverDispatchCopyState.copiedText, /DRIVER DISPATCH|^Driver:/m);
 
     const savedCountBeforeAiAssist = await evaluate(
       `document.body.innerText.match(/Saved\\s+(\\d+)/)?.[1] || ""`,

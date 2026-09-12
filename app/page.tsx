@@ -19275,9 +19275,7 @@ export default function Home() {
           driverDispatchRoute,
         ];
     const sections = [
-      ["DRIVER DISPATCH"],
       [
-        `Driver: ${clean(booking.driverName) || "Driver TBC"}`,
         clean(booking.driverContact) ? `Contact: ${clean(booking.driverContact)}` : "",
         driverPlate ? `Plate: ${driverPlate}` : "",
         driverVehicleModel ? `Vehicle: ${driverVehicleModel}` : "",
@@ -30164,7 +30162,9 @@ export default function Home() {
   const dispatchReleaseDriverDispatchReady =
     dispatchReleaseTripComplete &&
     dispatchReleaseDriverReady &&
-    clean(driverDispatchCopyText).startsWith("DRIVER DISPATCH") &&
+    driverDispatchCopyText.split(/\r?\n/).some(
+      (line) => clean(line) === `${clean(booking.vehicle) || "Vehicle"} ${clean(booking.bookingType) || "Booking"}`,
+    ) &&
     !dispatchReleaseDriverDispatchHasPlaceholder &&
     !dispatchReleaseDriverDispatchHasFinanceLine;
   const dispatchReleaseDriverJobLinkReady =

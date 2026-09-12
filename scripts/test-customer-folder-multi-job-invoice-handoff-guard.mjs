@@ -394,7 +394,7 @@ for (const fragment of [
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
   'const signoffY = 260;',
   'const paymentY = 203;',
-  'const notesY = 118;',
+  'const notesY = documentType === "invoice" ? 113 : 118;',
   'const termsY = 45;',
   'pdfRightTextAt("Payment Made"',
   "pdfRightTextAt(balanceDueValue",

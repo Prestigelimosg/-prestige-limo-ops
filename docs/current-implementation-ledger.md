@@ -1,3 +1,11 @@
+### Invoice PDF Bank Details And Notes Spacing — 2026-09-12
+
+- Owner requested four presentation changes from the stored invoice PDF screenshot: underline Bank Details, enlarge the bank company name, place Notes closer above Midnight surcharge, and remove blank spacing between note entries.
+- Reproduced in the existing shared PDF renderer: Bank Details lacked an underline, bank company text used 7pt, Notes had a 15pt first-line offset, and entries used 12pt leading. The new executable PDF assertions failed before the repair.
+- Bounded repair in `lib/customer-local-invoices.ts`: invoice-only Bank Details underline, exact company-name bank line at 9pt with clearance before subsequent 7pt bank rows, Notes at 113pt with a 10pt first-line offset and 8pt entry leading. Plain and labeled company names are supported. Bank values, surcharge wording/amounts, section order, totals, Bill To/reference identity, and other invoice layout stay unchanged.
+- Existing PDF issuance/regeneration consumers reuse this renderer. No persistence, download/view route, email, numbering, payment, booking, payout, GPS, Calendar, or native-app changes. Existing saved PDFs are not silently regenerated; they retain their bytes until an explicitly approved existing regeneration action.
+- Validation: `scripts/test-customer-local-invoice-issue-pdf-portal-guard.mjs` executes rendered PDF assertions for all three document types, company-label variants, unchanged invoice data, font sizes and note spacing. Synthetic invoice PDF rendered and visually inspected locally; quotation and credit-note before/after PDFs compared byte-identical. Focused invoice lifecycle, multi-job handoff and line-description guards, scoped ESLint, diff checks, and the local production build passed. Initial sandbox build could not bind its compilation-worker port; the same build passed with that local permission. Publication and Production verification remain pending.
+
 ## Total Invoices Number And View Open Saved PDF (2026-09-12; local, release pending)
 
 - Owner reported that Section 2 invoice number and View appeared inactive. Read-only Production Chrome clicks on the already-selected invoice reproduced no visible change. Both existing controls called openInvoice, which only selected the item table; this behavior predates the item-reference display repair.

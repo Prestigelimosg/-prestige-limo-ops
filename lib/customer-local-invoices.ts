@@ -590,6 +590,9 @@ export function createCustomerInvoicePdfBytes(
     .flatMap((line) => wrapText(line, 62))
     .slice(0, 9);
   const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;
+  const bankCompanyLineIndex = paymentDetailLines.findIndex((line) =>
+    line.replace(/^company[' ]?s name:\s*/i, "").trim().toLowerCase() === ascii(companyName).trim().toLowerCase(),
+  );
   const termsLines = wrapText(
     companyProfile.invoice_footer_terms ||
       defaultCompanyProfile.invoice_footer_terms ||
@@ -687,7 +690,7 @@ export function createCustomerInvoicePdfBytes(
   const totalsY = Math.min(360, rowY - 8);
   const signoffY = 260;
   const paymentY = 203;
-  const notesY = 118;
+  const notesY = documentType === "invoice" ? 113 : 118;
   const termsY = 45;
   const streamLines = [
     ...paidLabelStreamLines,
@@ -719,11 +722,21 @@ export function createCustomerInvoicePdfBytes(
     pdfTextAt(companyProfile.invoice_signoff_name, 50, signoffY - 32, 8),
     pdfTextAt(companyProfile.phone, 50, signoffY - 43, 8),
     pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g"),
+    ...(documentType === "invoice" && paymentHeading === "Bank Details"
+      ? [pdfLinePath(50, paymentY - 2, 95, paymentY - 2, 0.5, "0.35 G")]
+      : []),
     ...paymentDetailLines.map((line, index) =>
-      pdfTextAt(line, 50, paymentY - 15 - index * 8, 7),
+      pdfTextAt(
+        line,
+        50,
+        paymentY - 15 - index * 8 - (documentType === "invoice" && bankCompanyLineIndex >= 0 && index > bankCompanyLineIndex ? 3 : 0),
+        documentType === "invoice" && index === bankCompanyLineIndex ? 9 : 7,
+      ),
     ),
     pdfTextAt("Notes", 50, notesY, 8, "0.35 g"),
-    ...noteLines.map((line, index) => pdfTextAt(line, 50, notesY - 15 - index * 12, 7)),
+    ...noteLines.map((line, index) =>
+      pdfTextAt(line, 50, notesY - (documentType === "invoice" ? 10 : 15) - index * (documentType === "invoice" ? 8 : 12), 7),
+    ),
     pdfTextAt("Terms & Conditions:", 50, termsY, 8, "0.35 g"),
     ...termsLines.map((line, index) => pdfTextAt(line, 50, termsY - 13 - index * 9, 6.5)),
   ];

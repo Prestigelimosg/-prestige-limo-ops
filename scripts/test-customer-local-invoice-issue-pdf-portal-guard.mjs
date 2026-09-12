@@ -135,6 +135,29 @@ for (const documentType of ["invoice", "quotation", "credit_note"]) {
   assert.equal(rendered.includes("REF 99001"), documentType !== "invoice", "Only invoice item display removes its repeated reference; Bill To and other document types retain theirs");
   assert.ok(!rendered.includes(invoice.customerId), "Missing address must never print the internal account ID");
   assert.equal(JSON.stringify(invoice), before, "Presentation must retain exact stored ownership and invoice values");
+  assert.equal(rendered.includes("0.35 G 0.5 w 50 201 m 95 201 l S"), documentType === "invoice", "Only invoice Bank Details is underlined");
+  assert.ok(rendered.includes(documentType === "invoice"
+    ? "/F1 9 Tf 50 188 Td (Prestige Limo SG)"
+    : "/F1 7 Tf 50 188 Td (Prestige Limo SG)"), "Invoice bank company name is larger; other documents retain their font");
+  assert.ok(rendered.includes(`/F1 8 Tf 50 ${documentType === "invoice" ? 113 : 118} Td (Notes)`));
+  for (const label of ["Company's name: ", "Company’s name: "]) {
+    const profile = { ...profileModule.defaultCompanyProfile,
+      bank_payment_instructions: profileModule.defaultCompanyProfile.bank_payment_instructions.replace("Bank Details\nPrestige Limo SG", `Bank Details\n${label}Prestige Limo SG`),
+    };
+    const labeled = Buffer.from(pdfModule.createCustomerInvoicePdfBytes(invoice, profile)).toString("latin1");
+    assert.ok(labeled.includes(`/F1 ${documentType === "invoice" ? 9 : 7} Tf 50 188 Td (Company`), "Straight and curly apostrophe company labels both receive the invoice-only larger font");
+    assert.ok(labeled.includes(`/F1 7 Tf 50 ${documentType === "invoice" ? 177 : 180} Td (DBS Bank`), "The next bank line retains its font and clears the larger company name");
+  }
+
+  for (const [index, text] of [
+    "Midnight surcharge: $15 applies from 11:00 PM to 6:59 AM.",
+    "Waiting time: 15 minutes grace; airport arrivals include 60 minutes grace.",
+    "Additional waiting time: $15 per 15-minute block.",
+    "Hourly jobs: 15 minutes grace; 16 minutes onward counts as the next hour.",
+  ].entries()) {
+    assert.ok(rendered.includes(`/F1 7 Tf 50 ${103 - index * (documentType === "invoice" ? 8 : 12)} Td (${text})`), "Notes retain wording with compact invoice-only spacing");
+  }
+
 }
 
 for (const fragment of [
@@ -161,7 +184,7 @@ for (const fragment of [
   'const [paymentHeading = "Bank Details", ...paymentDetailLines] = paymentLines;',
   "const signoffY = 260;",
   "const paymentY = 203;",
-  "const notesY = 118;",
+  'const notesY = documentType === "invoice" ? 113 : 118;',
   "const termsY = 45;",
   'pdfTextAt(paymentHeading, 50, paymentY, 8, "0.35 g")',
   "Terms & Conditions:",

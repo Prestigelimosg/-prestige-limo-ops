@@ -45,7 +45,7 @@ assertIncludes(
 );
 assertIncludes(localInvoices, "const signoffY = 260;", "signoff section position");
 assertIncludes(localInvoices, "const paymentY = 203;", "bank section position");
-assertIncludes(localInvoices, "const notesY = 118;", "owner-approved notes section position");
+assertIncludes(localInvoices, 'const notesY = documentType === "invoice" ? 113 : 118;', "owner-approved notes section position");
 assertIncludes(localInvoices, "const termsY = 45;", "owner-approved final terms section position");
 assertIncludes(
   localInvoices,

@@ -61,6 +61,7 @@ if (process.argv.includes("--link-only")) {
 }
 
 await db.exec(await readFile('supabase/migrations/20260913030100_driver_link_delivery_reservation.sql','utf8'));
+await db.exec(await readFile('supabase/migrations/20260913032248_driver_link_after_duplicate_retirement.sql','utf8'));
 const reserve = async(mode='recovery', request=crypto.randomUUID()) => (await db.query(
   `select public.reserve_driver_job_link_delivery($1,$2,$3,$4,$5,$6,$7,$8) result`,
   ['STABLE-QA',first.link.id,7,mode,"c".repeat(64),request,'admin','Synthetic Admin'])).rows[0].result;
@@ -98,6 +99,36 @@ assert.equal((await acknowledge()).safe_link_context.driver_acknowledged_at,ack.
 await assert.rejects(acknowledge(8),/assignment/i);
 await assert.rejects(acknowledge(7,'d'.repeat(64)),/unavailable/i);
 assert.equal((await reserve('reminder')).reason,'acknowledged');
+// Retiring redundant history must preserve the original acknowledged token.
+const survivingBefore = (await db.query('select to_jsonb(l) row from driver_job_links l where id=$1',[first.link.id])).rows[0].row;
+const retiredDuplicate = (await db.query(`insert into driver_job_links
+  (booking_reference,driver_id,token_hash,link_status,expires_at,safe_link_context,created_at)
+  select booking_reference,driver_id,'retired-duplicate','revoked',expires_at,
+    safe_link_context-'driver_acknowledged_at',created_at+interval '1 minute'
+  from driver_job_links where id=$1 returning id`,[first.link.id])).rows[0].id;
+await db.query('update driver_job_links set revoked_at=now() where id=$1',[retiredDuplicate]);
+const survivingPayload = {...survivingBefore.safe_link_context.driver_job_payload};
+for (const key of ['driver_contact','driver_name','driver_plate_number','driver_vehicle_model']) delete survivingPayload[key];
+const surviving = await call(survivingPayload,'c'.repeat(64));
+assert.equal(surviving.disposition,'reused');
+assert.deepEqual(surviving.link,survivingBefore,'Retired newer history cannot alter original token, ACK, revision, timestamps or Calendar metadata');
+await db.exec("update customer_driver_app_notification_outbox set created_at=now()-interval '16 minutes'");
+assert.equal((await reserve()).claimed,true,'Intentional recovery may reserve the sole surviving active link');
+assert.equal((await reserve('reminder')).reason,'acknowledged','An acknowledged survivor never receives an ACK reminder');
+const retiredReservation=(await db.query(`select public.reserve_driver_job_link_delivery($1,$2,$3,$4,$5,$6,$7,$8) result`,
+  ['STABLE-QA',retiredDuplicate,7,'recovery','c'.repeat(64),crypto.randomUUID(),'admin','Synthetic Admin'])).rows[0].result;
+assert.equal(retiredReservation.reason,'invalid_link','A revoked duplicate cannot be sent');
+// A newer active-but-expired or malformed row must still prevent fallback.
+await db.query("update driver_job_links set link_status='active',revoked_at=null,expires_at=now()-interval '1 minute' where id=$1",[retiredDuplicate]);
+await assert.rejects(call(),/access requires Admin review/i);
+assert.equal((await reserve()).reason,'stale_link');
+await db.query("update driver_job_links set expires_at=now()+interval '1 hour' where id=$1",[retiredDuplicate]);
+await assert.rejects(call(),/duplicate/i);
+assert.equal((await reserve()).reason,'stale_link','Multiple active links remain unavailable to recovery');
+await db.query("update driver_job_links set link_status='revoked',revoked_at=now() where id=$1",[retiredDuplicate]);
+await db.query("update driver_job_links set safe_link_context=safe_link_context-'native_handoff_ciphertext' where id=$1",[first.link.id]);
+await assert.rejects(call(),/cannot be recovered securely/i);
+await db.query('update driver_job_links set safe_link_context=$2 where id=$1',[first.link.id,JSON.stringify(survivingBefore.safe_link_context)]);
 await db.exec("update bookings set driver_id=8 where booking_reference='STABLE-QA'");
 assert.equal((await reserve()).reason,'driver_mismatch');
 await db.exec("update bookings set driver_id=7, admin_internal_status='cancelled' where booking_reference='STABLE-QA'");

@@ -1030,6 +1030,7 @@ async function runChromeTest() {
     assert.equal(betaInstallState.count, 1, "Android browser needs one compact Beta install handoff on the existing job page.");
     assert.match(betaInstallState.text, /Install Driver App \(Beta APK\)/);
     assert.match(betaInstallState.text, /Open This Job/);
+    assert.match(betaInstallState.text, /Confirm details → Save & Acknowledge Job → Create your account/);
     assert.match(betaInstallState.text, /Allow notifications for job alerts\. Allow location to share your location during jobs\./);
     assert.equal(betaInstallState.downloadHref, 'https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download');
     assert.ok(betaInstallState.downloadRel.includes('noreferrer'));
@@ -1041,12 +1042,43 @@ async function runChromeTest() {
       `intent://app.prestigelimo.sg/driver-job/${mockDriverJobTokens.validA}#Intent;scheme=https;package=sg.prestigelimo.drivercompanion;S.browser_fallback_url=${encodeURIComponent(`https://app.prestigelimo.sg/driver-job/${mockDriverJobTokens.validA}`)};end`);
     assert.equal(betaInstallState.overflow, false);
     assert.deepEqual(betaInstallState.writes, [], "Displaying installation controls must not enroll, bind, acknowledge or send.");
-    for (const mode of ['android-pin', 'ios-pin', 'ios-browser', '']) {
+    await navigateToDriverJob(mockDriverJobTokens.validA, 'Driver Job Card', 'embedded=ios-browser');
+    const appleInstallState = await evaluate(`(() => {
+      const setup = document.querySelector('[data-driver-beta-install]');
+      const download = setup?.querySelector('[data-driver-beta-download]');
+      return {
+        count: document.querySelectorAll('[data-driver-beta-install]').length,
+        text: setup?.innerText || '',
+        href: download?.getAttribute('href'),
+        rel: download?.getAttribute('rel'),
+        referrer: download?.getAttribute('referrerpolicy'),
+        target: download?.getAttribute('target'),
+        androidIntent: Boolean(setup?.querySelector('a[href^="intent:"]')),
+        overflow: document.documentElement.scrollWidth > window.innerWidth,
+        writes: window.__driverJobFetchCalls.filter(value => /^(POST|PATCH|DELETE) /.test(value)),
+      };
+    })()`);
+    assert.equal(appleInstallState.count, 1, 'iPhone needs installation instructions in the same private job page.');
+    assert.match(appleInstallState.text, /Install Driver App \(Beta TestFlight\)/);
+    assert.match(appleInstallState.text, /Install TestFlight, then Prestige Driver/);
+    assert.match(appleInstallState.text, /Reopen the job link Admin sent you/);
+    assert.match(appleInstallState.text, /Confirm details → Save & Acknowledge Job → Create your account/);
+    assert.equal(appleInstallState.href, 'https://testflight.apple.com/join/m3sjGfd3');
+    assert.equal(appleInstallState.referrer, 'no-referrer');
+    assert.ok(appleInstallState.rel.includes('noreferrer') && appleInstallState.rel.includes('noopener'));
+    assert.equal(appleInstallState.target, '_blank');
+    assert.equal(appleInstallState.androidIntent, false);
+    assert.equal(appleInstallState.overflow, false);
+    assert.deepEqual(appleInstallState.writes, []);
+    for (const mode of ['android-pin', 'ios-pin', '']) {
       await navigateToDriverJob(mockDriverJobTokens.validA, 'Driver Job Card', mode ? `embedded=${mode}` : '');
       assert.equal(await evaluate(`document.querySelectorAll('[data-driver-beta-install]').length`), 0,
-        'Beta APK controls must be absent inside native apps, iPhone browsers and desktop.');
+        'Installation controls must be absent inside native apps and desktop.');
     }
     for (const token of [mockDriverJobTokens.expired, mockDriverJobTokens.revoked]) {
+      await navigateToDriverJob(token, 'Driver job link unavailable', 'embedded=ios-browser');
+      assert.equal(await evaluate(`document.querySelectorAll('[data-driver-beta-install]').length`), 0,
+        'Unavailable iPhone jobs must not offer installation.');
       await navigateToDriverJob(token, 'Driver job link unavailable', 'embedded=android-browser');
       assert.equal(await evaluate(`document.querySelectorAll('[data-driver-beta-install]').length`), 0,
         'Unavailable jobs must not offer app handoff.');

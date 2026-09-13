@@ -20,6 +20,7 @@ import { driverAccountPasswordIsReady } from "../../../lib/driver-account-passwo
 
 // Fixed public binary only. Never append the private job URL or account details.
 const driverBetaApkDownloadUrl = "https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download";
+const driverBetaTestFlightUrl = "https://testflight.apple.com/join/m3sjGfd3";
 
 type DriverJobApiBlockedReason =
   | "acknowledgement_required"
@@ -997,6 +998,7 @@ export default function DriverJobPage() {
   const [pageState, setPageState] = useState<PageState>({ kind: "loading" });
   const [embeddedDriverApp, setEmbeddedDriverApp] = useState(false);
   const [androidBrowser, setAndroidBrowser] = useState(false);
+  const [iosBrowser, setIosBrowser] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
@@ -1065,6 +1067,7 @@ export default function DriverJobPage() {
     const embeddedDetectionFrame = window.requestAnimationFrame(() => {
       setEmbeddedDriverApp(isVerifiedEmbeddedDriverApp());
       setAndroidBrowser(/Android/i.test(navigator.userAgent));
+      setIosBrowser(/iPhone|iPad|iPod/i.test(navigator.userAgent));
     });
 
     return () => window.cancelAnimationFrame(embeddedDetectionFrame);
@@ -2686,32 +2689,37 @@ export default function DriverJobPage() {
               Mobile web driver card. Keep this link private and use it only for this assigned job.
             </p>
           ) : null}
-          {androidBrowser && !embeddedDriverApp && pageState.kind === "ready" ? (
+          {(androidBrowser || iosBrowser) && !embeddedDriverApp && pageState.kind === "ready" ? (
             <div className="space-y-1 pt-2" data-driver-beta-install="true">
               <div className="flex flex-wrap gap-2">
                 <a
                   className="inline-flex min-h-11 items-center rounded-md border border-stone-300 bg-white px-2.5 text-xs font-semibold text-slate-950"
                   data-driver-beta-download="true"
-                  href={driverBetaApkDownloadUrl}
+                  href={iosBrowser ? driverBetaTestFlightUrl : driverBetaApkDownloadUrl}
                   referrerPolicy="no-referrer"
                   rel="noopener noreferrer"
                   target="_blank"
                 >
-                  Install Driver App (Beta APK)
+                  {iosBrowser ? "Install Driver App (Beta TestFlight)" : "Install Driver App (Beta APK)"}
                 </a>
-                <a
+                {androidBrowser ? <a
                   className="inline-flex min-h-11 items-center rounded-md bg-slate-950 px-2.5 text-xs font-semibold text-white"
                   data-driver-beta-open-job="true"
                   href={`intent://app.prestigelimo.sg/driver-job/${encodeURIComponent(token)}#Intent;scheme=https;package=sg.prestigelimo.drivercompanion;S.browser_fallback_url=${encodeURIComponent(`https://app.prestigelimo.sg/driver-job/${encodeURIComponent(token)}`)};end`}
                 >
                   Open This Job
-                </a>
+                </a> : null}
               </div>
               <p className="text-xs leading-5 text-slate-600">
-                Install, then return here and tap Open This Job.
+                {iosBrowser
+                  ? "1. Install TestFlight, then Prestige Driver. 2. Reopen the job link Admin sent you."
+                  : "1. Install Prestige Driver. 2. Return here and tap Open This Job."}
                 <br />
-                Allow notifications for job alerts. Allow location to share your location during jobs.
+                3. Confirm details → Save &amp; Acknowledge Job → Create your account.
               </p>
+              {androidBrowser ? <p className="text-xs leading-5 text-slate-600">
+                Allow notifications for job alerts. Allow location to share your location during jobs.
+              </p> : null}
             </div>
           ) : null}
         </header>

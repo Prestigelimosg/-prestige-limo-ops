@@ -23131,6 +23131,28 @@ export default function Home() {
     );
   }
 
+  const [driverPinResetFeedback, setDriverPinResetFeedback] = useState<Record<string, string>>({});
+  const [driverPinResetBusy, setDriverPinResetBusy] = useState<string | null>(null);
+
+  async function allowDriverPinReset(driver: DriverRecord) {
+    const id = String(driver.id);
+    if (driverPinResetBusy) return;
+    if (!window.confirm(`Have you verified ${driver.driver_name} using their saved contact ${driver.contact_number || "(not recorded)"}? Allow one PIN reset on their registered phone for 15 minutes?`)) return;
+    setDriverPinResetBusy(id);
+    try {
+      const response = await fetch(adminFullDriverProfileRuntimeWriteActionApiPath, {
+        method: "POST", cache: "no-store", credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-prestige-admin-purpose": adminLegacyDataPurpose },
+        body: JSON.stringify({ action_type: "driver_pin_reset_authorize", id: driver.id, identity_verified: true }),
+      });
+      const result = await response.json();
+      setDriverPinResetFeedback(current => ({ ...current, [id]: response.ok && result.ok === true
+        ? "Allowed. Ask them to use Forgot PIN on the registered phone within 15 minutes."
+        : "Reset unavailable. Check the active account; an unfinished reset needs review." }));
+    } catch { setDriverPinResetFeedback(current => ({ ...current, [id]: "Could not confirm permission. Check before retrying." })); }
+    finally { setDriverPinResetBusy(null); }
+  }
+
   async function deleteDriverProfile(driver: DriverRecord, assignedJobCount: number) {
     const driverId = clean(String(driver.id));
 
@@ -50101,7 +50123,13 @@ export default function Home() {
 		                            </div>
 		                          </div>
 		                        </button>
-		                        <div className="flex justify-end border-t border-stone-100 px-3 py-2">
+                          {driverPinResetFeedback[driverId] ? <p role="status" className="px-3 py-2 text-xs text-slate-700">{driverPinResetFeedback[driverId]}</p> : null}
+                          <div className="flex justify-end gap-2 border-t border-stone-100 px-3 py-2">
+                            <button type="button" className="h-9 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                              data-driver-pin-reset-authorize={driver.id} disabled={driverPinResetBusy !== null || !fullProfileDriver}
+                              onClick={() => fullProfileDriver && void allowDriverPinReset(fullProfileDriver)}>
+                              {driverPinResetBusy === driverId ? "Allowing…" : "Allow PIN reset"}
+                            </button>
 		                          <button
 		                            className="h-9 rounded-md border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 		                            data-driver-delete-button={driver.id}

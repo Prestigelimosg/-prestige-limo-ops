@@ -96,6 +96,7 @@ async function resolveVerifiedAccountDriverId({
   }
 
   const activeAccount = await verifyDriverAccountSession({
+    sessionIssuedAt: session.claims.issuedAt,
     accountId: session.claims.accountId,
     client,
     deviceIdHash: session.claims.deviceIdHash,

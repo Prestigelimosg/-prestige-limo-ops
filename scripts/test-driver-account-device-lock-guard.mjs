@@ -283,3 +283,18 @@ for (const sourceKey of ["account", "accountRoute", "authRoute", "installation"]
 }
 
 console.log("Driver account one-device and acknowledged-link lock guard passed.");
+
+// Reset controls stay in the established Admin row and registered-phone sign-in.
+const adminPage = await readFile("app/page.tsx", "utf8");
+const adminRoute = await readFile("app/api/admin-full-driver-profile-runtime-write-action/route.ts", "utf8");
+assert.match(adminPage, /data-driver-pin-reset-authorize/);
+assert.match(adminPage, /window\.confirm\(`Have you verified/);
+assert.match(adminRoute, /body\.identity_verified !== true/);
+assert.match(adminRoute, /\["action_type", "id", "identity_verified"\]/);
+for (const file of ["app/api/driver-job-bids/route.ts", "app/api/driver-native-job-open/[jobKey]/route.ts", "app/api/driver-portal/jobs/route.ts", "lib/driver-job-link-production.ts"]) {
+  const source = await readFile(file, "utf8");
+  const calls = source.match(/verifyDriverAccountSession\(\{[\s\S]*?\}\)/g) || [];
+  assert.ok(calls.length, file);
+  for (const call of calls) assert.match(call, /sessionIssuedAt: session\.claims\.issuedAt/, file + " preserves the original signed session timestamp");
+}
+console.log("PIN recovery controls and every existing account-session consumer checked.");

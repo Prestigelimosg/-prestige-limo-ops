@@ -1,4 +1,4 @@
-import { signInDriverAccountForInstallation } from "../../../../lib/driver-account-device-lock.ts";
+import { completeDriverPinReset, signInDriverAccountForInstallation } from "../../../../lib/driver-account-device-lock.ts";
 import {
   clearDriverPortalSessionCookie,
   issueDriverPortalAccountSession,
@@ -29,6 +29,18 @@ function sameOriginPortalRequest(request: Request, purpose: string) {
 }
 
 export async function POST(request: Request) {
+  if (request.headers.get("x-prestige-driver-purpose") === "driver-account-pin-reset") {
+    if (!sameOriginPortalRequest(request, "driver-account-pin-reset")
+      || !/\b(?:Android|iPhone)\b/i.test(request.headers.get("user-agent") || "")) {
+      return response({ ok: false }, 401);
+    }
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || Array.isArray(body) || Object.keys(body).some(key => !["installation_id", "password", "confirmation"].includes(key))) {
+      return response({ ok: false }, 400);
+    }
+    const reset = await completeDriverPinReset({ installationId: body.installation_id, password: body.password, confirmation: body.confirmation });
+    return response(reset, reset.ok ? 200 : 403, reset.ok ? clearDriverPortalSessionCookie() : undefined);
+  }
   if (!sameOriginPortalRequest(request, "driver-account-sign-in")) {
     return response({ ok: false, reason: "unauthorized" }, 401);
   }
@@ -53,6 +65,7 @@ export async function POST(request: Request) {
   }
 
   const cookie = issueDriverPortalAccountSession({
+    now: result.sessionIssuedAt,
     accountId: result.accountId,
     deviceIdHash: result.deviceIdHash || "",
     driverId: result.driverId,

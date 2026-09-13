@@ -136,6 +136,7 @@ export async function GET(
 
   const installationId = request.headers.get("x-prestige-driver-installation-id");
   const accountIsActiveOnThisPhone = await verifyDriverAccountSession({
+    sessionIssuedAt: session.claims.issuedAt,
     accountId: session.claims.accountId,
     client: clientResult.client,
     deviceIdHash: session.claims.deviceIdHash,

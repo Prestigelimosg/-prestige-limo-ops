@@ -219,6 +219,11 @@ export default function DriverPortalPage() {
   const nativePinSignIn = nativeBridgeReady && /\b(?:Android|iPhone)\b/i.test(window.navigator.userAgent);
   const accountPinOnly = nativePinSignIn && !accountFirstSignIn;
   const [accountPassword, setAccountPassword] = useState("");
+  const [pinRecoveryOpen, setPinRecoveryOpen] = useState(false);
+  const [recoveryPin, setRecoveryPin] = useState("");
+  const [recoveryConfirmation, setRecoveryConfirmation] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
   const [accountSignInState, setAccountSignInState] = useState<DriverAccountSignInState>("idle");
   const [biometricFeedback, setBiometricFeedback] = useState("");
   const [biometricEnabledThisSession, setBiometricEnabledThisSession] = useState(false);
@@ -531,6 +536,30 @@ export default function DriverPortalPage() {
     }
   }
 
+  async function resetForgottenPin() {
+    if (!installationId || recoveryBusy) return;
+    if (recoveryPin !== recoveryConfirmation) {
+      setRecoveryMessage("PINs do not match."); return;
+    }
+    setRecoveryBusy(true);
+    setRecoveryMessage("");
+    try {
+      const response = await fetch("/api/driver-auth/session", {
+        method: "POST", cache: "no-store", credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-prestige-driver-purpose": "driver-account-pin-reset" },
+        body: JSON.stringify({ installation_id: installationId, password: recoveryPin, confirmation: recoveryConfirmation }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) {
+        setRecoveryMessage(result.review_required ? "Reset needs Admin review. Please contact Prestige Admin." : "Ask Admin to allow a reset, then try on your registered phone. Avoid repeated or sequential digits.");
+        return;
+      }
+      setPinRecoveryOpen(false); setAccountFirstSignIn(false); setAccountPassword("");
+      setAccountSignInState("idle"); setRecoveryMessage("PIN updated. Sign in with your new PIN.");
+    } catch { setRecoveryMessage("Reset could not be confirmed. Contact Prestige Admin before retrying."); }
+    finally { setRecoveryPin(""); setRecoveryConfirmation(""); setRecoveryBusy(false); }
+  }
+
   function enableBiometricUnlock() {
     setBiometricFeedback("");
     (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
@@ -833,6 +862,7 @@ export default function DriverPortalPage() {
                 disabled={accountSignInState === "signing_in"}
                 onClick={() => {
                   setAccountFirstSignIn(!accountFirstSignIn);
+                  setPinRecoveryOpen(false); setRecoveryPin(""); setRecoveryConfirmation(""); setRecoveryMessage("");
                   setAccountEmail("");
                   setAccountEmailConfirmed(false);
                   setAccountPassword("");
@@ -841,7 +871,7 @@ export default function DriverPortalPage() {
                 type="button"
               >{accountPinOnly ? "First sign-in" : "Use PIN"}</button>
             ) : null}
-            {!accountPinOnly && !accountEmailConfirmed ? (
+            {!pinRecoveryOpen && (!accountPinOnly && !accountEmailConfirmed ? (
               <form
                 className="space-y-3"
                 data-driver-portal-email-step="true"
@@ -932,7 +962,25 @@ export default function DriverPortalPage() {
                   </p>
                 ) : null}
               </form>
-            )}
+            ))}
+            {nativePinSignIn ? <>
+              <button type="button" className="text-xs font-semibold text-slate-700 underline"
+                data-driver-forgot-pin="true" disabled={recoveryBusy || accountSignInState === "signing_in"}
+                onClick={() => { setPinRecoveryOpen(!pinRecoveryOpen); setAccountPassword(""); setRecoveryPin(""); setRecoveryConfirmation(""); setRecoveryMessage(""); }}>
+                {pinRecoveryOpen ? "Back to sign in" : "Forgot PIN"}
+              </button>
+              {pinRecoveryOpen ? <form className="space-y-3" data-driver-pin-reset-form="true" onSubmit={event => { event.preventDefault(); void resetForgottenPin(); }}>
+                <p className="text-xs leading-5 text-slate-700">Contact Admin first. Once approved, set your new PIN here within 15 minutes.</p>
+                <label className="block text-sm font-semibold">New 6-digit PIN
+                  <input className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 text-base" type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} pattern="[0-9]{6}" required value={recoveryPin} onChange={event => setRecoveryPin(event.target.value)} />
+                </label>
+                <label className="block text-sm font-semibold">Confirm PIN
+                  <input className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 text-base" type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} pattern="[0-9]{6}" required value={recoveryConfirmation} onChange={event => setRecoveryConfirmation(event.target.value)} />
+                </label>
+                <button type="submit" disabled={recoveryBusy} className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400">{recoveryBusy ? "Updating…" : "Set new PIN"}</button>
+              </form> : null}
+              {recoveryMessage ? <p role="status" className="text-xs leading-5 text-slate-700">{recoveryMessage}</p> : null}
+            </> : null}
           </section>
         ) : readState.kind === "blocked" ? (
           <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-driver-installation-required="true" data-driver-portal-blocked={readState.reason}>

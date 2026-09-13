@@ -298,7 +298,7 @@ try {
     allowBoundDevicePin: true, identityReader,
     auth, client, email: undefined, env, installationId: firstInstallation, password,
   });
-  assert.deepEqual(pinSignIn, firstSignIn, "An already-bound phone must verify its existing PIN without client email.");
+  assert.deepEqual({ ...pinSignIn, sessionIssuedAt: firstSignIn.sessionIssuedAt }, firstSignIn, "An already-bound phone must verify its existing PIN without client email.");
   assert.deepEqual(database, beforePin, "PIN-only sign-in must not create, bind, or update an account.");
 
   const pinInput = { allowBoundDevicePin: true, identityReader, auth, client, email: undefined, env, installationId: firstInstallation, password };
@@ -438,7 +438,95 @@ try {
     installationId: firstInstallation,
   }), false, "Suspension must invalidate the app session immediately.");
 
-  console.log("Driver account acknowledged-link and one-installation contract tests passed.");
+  // Real recovery helper: no provider call without one registered-phone claim.
+  const resetClaim = { account_id: "33333333-3333-4333-8333-333333333333", auth_user_id: "44444444-4444-4444-8444-444444444444", claim_id: "55555555-5555-4555-8555-555555555555" };
+  let attempts = 0, finished = 0, reserved = false;
+  const resetClient = { rpc: async (name, args) => {
+    if (name === 'claim_driver_pin_reset') {
+      assert.equal(args.p_device_hash, firstSignIn.deviceIdHash);
+      if (reserved) return {data:null,error:null};
+      reserved = true; return {data:resetClaim,error:null};
+    }
+    assert.equal(name, 'finish_driver_pin_reset'); assert.equal(args.p_claim_id,resetClaim.claim_id);
+    finished++; return {data:true,error:null};
+  }};
+  const resetAuth = { updateUserById: async (id, body) => {
+    attempts++; assert.equal(id,resetClaim.auth_user_id);assert.deepEqual(Object.keys(body),['password']);
+    return {data:{user:{id}},error:null};
+  }};
+  const resetInput = {env, installationId:firstInstallation, password:'837492',confirmation:'837492',client:resetClient,authAdmin:resetAuth};
+  assert.equal((await harness.account.completeDriverPinReset({...resetInput,confirmation:'947283'})).ok,false);
+  assert.equal((await harness.account.completeDriverPinReset({...resetInput,installationId:'invalid'})).ok,false);
+  assert.equal(attempts,0);
+  assert.equal((await harness.account.completeDriverPinReset(resetInput)).ok,true);
+  assert.equal((await harness.account.completeDriverPinReset(resetInput)).ok,false);
+  assert.equal(attempts,1);assert.equal(finished,1);
+  reserved=false;
+  const uncertain=await harness.account.completeDriverPinReset({...resetInput,authAdmin:{updateUserById:async()=>{attempts++;throw Error('synthetic timeout');}}});
+  assert.equal(uncertain.review_required,true);assert.equal(finished,1);
+  assert.equal((await harness.account.completeDriverPinReset(resetInput)).ok,false);
+  assert.equal(attempts,2,'An uncertain attempt must never automatically repeat.');
+  const cutoff=Date.now();
+  assert.equal(harness.account.driverPinSessionIsCurrent({}),true);
+  assert.equal(harness.account.driverPinSessionIsCurrent({pin_reset_state:'claimed'}),false);
+  assert.equal(harness.account.driverPinSessionIsCurrent({pin_session_not_before:new Date(cutoff).toISOString()},cutoff-1),false);
+  assert.equal(harness.account.driverPinSessionIsCurrent({pin_session_not_before:new Date(cutoff).toISOString()},cutoff+1),true);
+  assert.equal(harness.account.driverPinSessionIsCurrent({pin_session_not_before:'bad'},cutoff+1),false);
+  assert.equal((await harness.account.authorizeDriverPinReset({env,driverId:7,actorRole:'dispatcher',actorLabel:'Test',client:resetClient})).ok,false);
+
+  // Existing sign-in/session consumers reject old PINs and pre-reset cookies.
+  database.driver_access_accounts[0].account_status='active';
+  database.driver_access_accounts[0].pin_reset_state='complete';
+  database.driver_access_accounts[0].pin_session_not_before=new Date(Date.now()-100).toISOString();
+  const newAuth={signInWithPassword:async ({password:pin})=>pin==='837492'?{data:{user:{id:authUserId}},error:null}:{data:null,error:{}},signOut:async()=>{}};
+  assert.equal((await harness.account.signInDriverAccountForInstallation({...pinInput,auth:newAuth})).ok,false,'Old PIN fails after provider password changes');
+  const newSession=await harness.account.signInDriverAccountForInstallation({...pinInput,auth:newAuth,password:'837492'});
+  assert.equal(newSession.ok,true);
+  const sessionInput={accountId:firstSignIn.accountId,client,deviceIdHash:firstSignIn.deviceIdHash,driverId:7,env,installationId:firstInstallation};
+  assert.equal(await harness.account.verifyDriverAccountSession({...sessionInput,sessionIssuedAt:Date.now()-1000}),false);
+  assert.equal(await harness.account.verifyDriverAccountSession({...sessionInput,sessionIssuedAt:newSession.sessionIssuedAt}),true);
+  database.driver_access_accounts[0].pin_reset_state='claimed';
+  assert.equal((await harness.account.signInDriverAccountForInstallation({...pinInput,auth:newAuth,password:'837492'})).ok,false);
+  assert.equal(await harness.account.verifyDriverAccountSession({...sessionInput,sessionIssuedAt:newSession.sessionIssuedAt}),false);
+
+  // Both platforms use the same request; no cross-origin or email recovery escape.
+  let resets=0;
+  harness.routeAccount.completeDriverPinReset=async () => {resets++;return {ok:true};};
+  for (const platform of ['Android','iPhone']) {
+    const request=new Request('https://app.test/api/driver-auth/session',{method:'POST',headers:{origin:'https://app.test',referer:'https://app.test/driver-portal','user-agent':platform,'x-prestige-driver-purpose':'driver-account-pin-reset','content-type':'application/json'},body:JSON.stringify({installation_id:firstInstallation,password:'837492',confirmation:'837492'})});
+    const result=await harness.route.POST(request);assert.equal(result.status,200);assert.match(result.headers.get('set-cookie'),/Max-Age=0/);
+  }
+  for (const body of [{email:'injected@example.test',installation_id:firstInstallation,password:'837492',confirmation:'837492'},null]) {
+    const result=await harness.route.POST(new Request('https://app.test/api/driver-auth/session',{method:'POST',headers:{origin:'https://app.test',referer:'https://app.test/driver-portal','user-agent':'Android','x-prestige-driver-purpose':'driver-account-pin-reset'},body:JSON.stringify(body)}));assert.equal(result.status,400);
+  }
+  assert.equal(resets,2);
+  // Execute the actual Admin action route with isolated identity and persistence boundaries.
+  let allowedAdmin = false, adminRole = "admin", authorizations = 0, profileWrites = 0;
+  const adminExports = {};
+  const adminSource = transpile(await readFile("app/api/admin-full-driver-profile-runtime-write-action/route.ts", "utf8"), "admin-route.ts");
+  new Function("require", "exports", adminSource)((name) => {
+    if (name.endsWith("driver-account-device-lock")) return { authorizeDriverPinReset: async input => {
+      authorizations++; return input.actorRole === "admin" ? {ok:true,expires_at:"2099-01-01T00:15:00Z"} : {ok:false};
+    }};
+    if (name.endsWith("admin-full-driver-profile-runtime-write-action")) return {executeAdminFullDriverProfileRuntimeWriteAction:async()=>{profileWrites++;return {status:"saved"};}};
+    if (name.endsWith("admin-booking-supabase-adapter")) return {adminDispatcherBoundaryToPersistenceAdapterActor:()=>({actor_role:adminRole,actor_label:"Synthetic Admin"})};
+    if (name.endsWith("admin-dispatcher-auth-boundary")) return {adminBookingPersistencePurpose:"admin",resolveAdminDispatcherBoundary:()=>allowedAdmin ? {ok:true,context:{}} : {ok:false,error:"Unauthorized"}};
+    throw new Error("Unexpected Admin dependency "+name);
+  }, adminExports);
+  const resetRequest = body => new Request("https://app.test/api/admin-full-driver-profile-runtime-write-action",{method:"POST",body:JSON.stringify(body)});
+  const resetBody = {action_type:"driver_pin_reset_authorize",id:7,identity_verified:true};
+  assert.equal((await adminExports.POST(resetRequest(resetBody))).status,403);
+  assert.equal(authorizations,0);
+  allowedAdmin=true;
+  for (const body of [{...resetBody,identity_verified:false},{...resetBody,password:"837492"}]) assert.equal((await adminExports.POST(resetRequest(body))).status,403);
+  assert.equal(authorizations,0);
+  assert.equal((await adminExports.POST(resetRequest(resetBody))).status,200);
+  adminRole="dispatcher";
+  assert.equal((await adminExports.POST(resetRequest(resetBody))).status,403);
+  assert.equal(profileWrites,0,"PIN authorization never writes a Driver profile");
+  assert.equal((await adminExports.POST(resetRequest({action_type:"existing-profile-action"}))).status,200);
+  assert.equal(profileWrites,1,"Existing profile action retains its established path");
+  console.log("Driver account, PIN recovery provider-once, session cutoff and two-platform route contracts passed.");
 } finally {
   await harness.cleanup();
 }

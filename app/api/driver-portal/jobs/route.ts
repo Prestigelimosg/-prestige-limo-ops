@@ -103,6 +103,7 @@ export async function GET(request: Request) {
 
   if (session.claims.accountId && session.claims.deviceIdHash) {
     const activeAccount = await verifyDriverAccountSession({
+    sessionIssuedAt: session.claims.issuedAt,
       accountId: session.claims.accountId,
       client: clientResult.client,
       deviceIdHash: session.claims.deviceIdHash,
@@ -179,6 +180,7 @@ export async function POST(request: Request) {
 
   if (session.claims.accountId && session.claims.deviceIdHash) {
     const activeAccount = await verifyDriverAccountSession({
+    sessionIssuedAt: session.claims.issuedAt,
       accountId: session.claims.accountId,
       client: clientResult.client,
       deviceIdHash: session.claims.deviceIdHash,
@@ -233,6 +235,7 @@ export async function PATCH(request: Request) {
   const clientResult = getDriverJobStatusPersistenceClientForProduction();
   if (!clientResult.ok) return response({ ok: false }, 503);
   const verified = await verifyDriverAccountSession({
+    sessionIssuedAt: session.claims.issuedAt,
     accountId: session.claims.accountId, client: clientResult.client,
     deviceIdHash: session.claims.deviceIdHash, driverId: session.claims.driverId,
     installationId: request.headers.get("x-prestige-driver-installation-id"),

@@ -1,3 +1,4 @@
+import { authorizeDriverPinReset } from "../../../lib/driver-account-device-lock";
 import {
   adminFullDriverProfileRuntimeWriteActionEnvGateName,
   executeAdminFullDriverProfileRuntimeWriteAction,
@@ -100,8 +101,16 @@ export async function POST(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    const body = await readJsonBody(request);
+    if (body?.action_type === "driver_pin_reset_authorize") {
+      if (Object.keys(body).some(key => !["action_type", "id", "identity_verified"].includes(key)) || body.identity_verified !== true) {
+        return blockedResponse("Verify this driver before allowing a PIN reset.");
+      }
+      const reset = await authorizeDriverPinReset({ driverId: body.id, actorRole: actor.actor_role, actorLabel: actor.actor_label });
+      return Response.json(reset, { status: reset.ok ? 200 : 403, headers: { "cache-control": "no-store" } });
+    }
     const result = await executeAdminFullDriverProfileRuntimeWriteAction(
-      await readJsonBody(request),
+      body,
       actor,
     );
 

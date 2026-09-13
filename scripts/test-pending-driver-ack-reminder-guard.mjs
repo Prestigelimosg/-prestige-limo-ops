@@ -23,9 +23,8 @@ for (const [source, value, label] of [
   [route, 'parsedAction.data.action === "remind_ack"', "route action discrimination"],
   [reminder, "admin-driver-ack-reminder-v1", "reminder contract version"],
   [reminder, "15 * 60 * 1000", "15-minute minimum age/cooldown"],
-  [reminder, "maximumReminderCount = 3", "three-reminder cap"],
-  [reminder, 'const reminderWorkflowArea = "pending_driver_ack_reminder"', "audit workflow"],
-  [reminder, 'notification_status: "archived"', "audit-only persistence"],
+  [reminder, '"reserve_driver_job_link_delivery"', "atomic repeating reminder reservation"],
+
   [reminder, "native_handoff_ciphertext", "opaque native handoff requirement"],
   [push, "sendDriverNativePendingAckReminder", "native-only push helper"],
   [push, "Job acknowledgement needed. Tap to review.", "fixed safe reminder copy"],
@@ -55,3 +54,8 @@ includes(routePatch, "remindAdminDriverToAcknowledgeLink", "established-route re
 includes(routePatch, "revokeAdminDriverJobLink", "preserved revoke call");
 
 console.log("Pending Driver ACK native reminder guard passed.");
+
+const reservation=await readFile("supabase/migrations/20260913030100_driver_link_delivery_reservation.sql","utf8");
+for(const fragment of ["'pending_driver_ack_reminder'", "then 'queued' else 'archived'", "interval '15 minutes'", "'acknowledged'", "'terminal_booking'", "'driver_mismatch'"])
+  includes(reservation,fragment,"reservation contract");
+assert.ok(!reminder.includes("maximumReminderCount"));

@@ -70,6 +70,8 @@ class QueryBuilder {
   in(field, value) { this.filters.push({ field, type: "in", value }); return this; }
   order() { return this; }
   limit() { return this; }
+  range(start,end) { this.start=start; this.end=end; return this; }
+  gt(field,value) { this.filters.push({field,type:"gt",value}); return this; }
   then(resolve, reject) { return Promise.resolve(this.client.resolve(this)).then(resolve, reject); }
 }
 
@@ -79,7 +81,7 @@ const recentLinkId = "33333333-3333-4333-8333-333333333333";
 const acknowledgedLinkId = "44444444-4444-4444-8444-444444444444";
 const now = new Date("2026-08-30T10:30:00.000Z");
 
-function createClient({ linkError = null, outboxError = null } = {}) {
+function createClient({ linkError = null, outboxError = null, extraEligible = 0 } = {}) {
   const links = [
     {
       booking_reference: "AUTO-ACK-FIRST",
@@ -135,11 +137,15 @@ function createClient({ linkError = null, outboxError = null } = {}) {
       workflow_area: "pending_driver_ack_reminder",
     },
   ];
+  for (let index = 0; index < extraEligible; index += 1) {
+    links.push({ ...links[0], booking_reference: `AUTO-ACK-PAGE-${index}`,
+      id: `55555555-5555-4555-8555-${String(index).padStart(12, "0")}` });
+  }
   return {
     from(table) { return new QueryBuilder(this, table); },
     resolve(query) {
       if (query.table === "driver_job_links") {
-        return { data: linkError ? null : links, error: linkError };
+        return { data: linkError ? null : links.slice(query.start,query.end+1), error: linkError };
       }
       if (query.table === "customer_driver_app_notification_outbox") {
         return { data: outboxError ? null : outbox, error: outboxError };
@@ -171,16 +177,27 @@ try {
 
   assert.equal(result.ok, true);
   assert.equal(result.candidate_count, 2);
-  assert.equal(result.eligible_count, 1);
-  assert.equal(result.reminder_sent_count, 1);
-  assert.equal(result.skipped_count, 1);
+  assert.equal(result.eligible_count, 2);
+  assert.equal(result.reminder_sent_count, 2);
+  assert.equal(result.skipped_count, 0);
   assert.equal(result.failure_count, 0);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].input.driver_job_link_id, firstLinkId);
   assert.equal(calls[0].input.booking_reference, "AUTO-ACK-FIRST");
   assert.equal(calls[0].actor.actor_role, "system");
   assert.equal(calls[0].actor.source_surface, "system");
-  assert.equal(calls[0].options.trigger, "automatic_first_reminder");
+  assert.equal(calls[0].options.trigger, "automatic_repeat_reminder");
+
+  const pagedIds = new Set();
+  const paged = await helper.runDriverAckAutoRemindersWithClient(createClient({ extraEligible: 205 }), {
+    now, sendReminder: async (_client, input) => {
+      assert.ok(!pagedIds.has(input.driver_job_link_id), "Each eligible link is visited only once");
+      pagedIds.add(input.driver_job_link_id);
+      return { ok: false, status: 409, reason: "cooldown", error: "already reserved" };
+    },
+  });
+  assert.equal(pagedIds.size, 207, "Eligible links beyond the first 100 are not omitted");
+  assert.equal(paged.skipped_count, 207);
 
   const readFailure = await helper.runDriverAckAutoRemindersWithClient(
     createClient({ linkError: { message: "blocked" } }),
@@ -189,12 +206,12 @@ try {
   assert.equal(readFailure.ok, false);
   assert.equal(readFailure.reason, "read_failed");
 
-  const outboxFailure = await helper.runDriverAckAutoRemindersWithClient(
-    createClient({ outboxError: { message: "blocked" } }),
-    { now, sendReminder: async () => { throw new Error("must not send"); } },
-  );
-  assert.equal(outboxFailure.ok, false);
-  assert.equal(outboxFailure.reason, "read_failed");
+  const reservedElsewhere=await helper.runDriverAckAutoRemindersWithClient(createClient(),{
+    now,sendReminder:async()=>({ok:false,status:409,reason:'cooldown',error:'already reserved'}),
+  });
+  assert.equal(reservedElsewhere.ok,true);
+  assert.equal(reservedElsewhere.reminder_sent_count,0);
+  assert.equal(reservedElsewhere.skipped_count,2);
 
   const sendFailure = await helper.runDriverAckAutoRemindersWithClient(createClient(), {
     now,
@@ -207,7 +224,7 @@ try {
   });
   assert.equal(sendFailure.ok, false);
   assert.equal(sendFailure.reason, "send_failed");
-  assert.equal(sendFailure.failure_count, 1);
+  assert.equal(sendFailure.failure_count, 2);
 
   process.env.CRON_SECRET = "exact-test-cron-secret";
   const route = createRequire(import.meta.url)(routePath);
@@ -252,7 +269,7 @@ try {
   );
   assert.equal(failedRun.status, 503);
 
-  console.log("Driver ACK automatic first-reminder runtime passed.");
+  console.log("Driver ACK automatic repeating reminder runtime passed.");
 } finally {
   if (originalCronSecret === undefined) {
     delete process.env.CRON_SECRET;

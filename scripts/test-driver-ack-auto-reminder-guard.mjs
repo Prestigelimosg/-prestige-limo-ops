@@ -18,11 +18,11 @@ function includes(source, fragment, label) {
 for (const [source, fragment, label] of [
   [scheduler, "driver-ack-auto-reminder-v1", "scheduler version"],
   [scheduler, "15 * 60 * 1000", "15-minute eligibility"],
-  [scheduler, "automatic_first_reminder", "automatic trigger audit"],
+  [scheduler, "automatic_repeat_reminder", "automatic repeating trigger"],
   [scheduler, "createAdminDriverAckReminder", "established reminder reuse"],
-  [scheduler, "existingReminderLinkIds", "one automatic reminder only"],
-  [reminder, 'trigger === "automatic_first_reminder" && audits.length > 0', "automatic/manual race protection"],
-  [reminder, "automatic_already_attempted", "automatic repeat rejection"],
+  [scheduler, ".range(offset, offset + candidatePageSize - 1)", "all eligible pages"],
+  [reminder, '"reserve_driver_job_link_delivery"', "atomic automatic/manual race protection"],
+  [reminder, 'p_mode: "reminder"', "shared reminder reservation"],
   [route, 'process.env.CRON_SECRET?.trim()', "Vercel Cron authorization"],
   [route, "runDriverAckAutoReminders", "isolated cron runner"],
   [app, "Auto reminder scheduled", "pending queue scheduled state"],
@@ -55,3 +55,6 @@ assert.equal(autoCron?.length, 1, "Automatic ACK reminders need exactly one Verc
 assert.equal(autoCron[0].schedule, "* * * * *");
 
 console.log("Driver ACK automatic first-reminder guard passed.");
+
+assert.ok(!scheduler.includes("existingReminderLinkIds"));
+assert.ok(!reminder.includes("maximumReminderCount"));

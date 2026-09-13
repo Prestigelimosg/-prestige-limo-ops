@@ -83,7 +83,7 @@ export type DriverJobProductionDetailsUpdateResult =
       reason: DriverJobDetailsBlockedReason;
     };
 
-export type DriverJobStatusPersistenceClient = Pick<SupabaseClient, "from">;
+export type DriverJobStatusPersistenceClient = Pick<SupabaseClient, "from"> & Partial<Pick<SupabaseClient, "rpc">>;
 
 export type VerifiedDriverJobAccountProfile = {
   contact: string;
@@ -1439,6 +1439,7 @@ export async function loadVerifiedDriverProfileForJobThroughStatusPersistence({
 export async function saveDriverJobDetailsThroughStatusPersistence(
   input: SaveDriverJobDetailsPersistenceInput,
 ): Promise<DriverJobProductionDetailsUpdateResult> {
+  if (!input.client.rpc) return detailsBlockedResult("not_configured");
   const nextDetails = safeDriverDetailsFromInput(input);
 
   if (!nextDetails.name) {
@@ -1516,83 +1517,18 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     }
   }
 
-  const safeContext = asRecord(resolvedLink.link.safe_link_context);
-  const currentPayload = asRecord(safeContext.driver_job_payload);
-  const nextDriverJobPayload = {
-    ...currentPayload,
-    assigned_driver_contact: nextDetails.contact,
-    assigned_driver_name: nextDetails.name,
-    assigned_driver_plate: nextDetails.plate,
-    assigned_driver_vehicle_model: nextDetails.vehicleModel,
-    driver_contact: nextDetails.contact,
-    driver_name: nextDetails.name,
-    driver_plate_number: nextDetails.plate,
-    driver_vehicle_model: nextDetails.vehicleModel,
-  };
   const acknowledgedAt = new Date().toISOString();
-  const nextSafeContext = {
-    ...safeContext,
-    driver_acknowledged_at: acknowledgedAt,
-    driver_job_payload: nextDriverJobPayload,
-  };
-
-  const bookingDriverDetailsUpdate: Record<string, string | number | null> = {
-    driver_contact: nextDetails.contact || null,
-    driver_id: verifiedDriverId,
-    driver_name: nextDetails.name,
-    driver_plate_number: nextDetails.plate || null,
-  };
-
-  if (nextDetails.vehicleModel) {
-    bookingDriverDetailsUpdate.vehicle_type_or_category = nextDetails.vehicleModel;
-  }
-
-  const { error: bookingUpdateError } = await input.client
-    .from("bookings")
-    .update(bookingDriverDetailsUpdate)
-    .eq("booking_reference", resolvedLink.link.booking_reference);
-
-  if (bookingUpdateError) {
-    return detailsBlockedResult("not_configured");
-  }
-
-  let updatedLink: DriverJobLinkPersistenceRow | null = null;
-  const linkUpdate = {
-    driver_id: verifiedDriverId,
-    safe_link_context: nextSafeContext,
-  };
-
-  if (resolvedLink.link.id) {
-    const { data, error } = await input.client
-      .from("driver_job_links")
-      .update(linkUpdate)
-      .eq("id", resolvedLink.link.id)
-      .select(driverJobLinkSelect)
-      .single();
-
-    if (error) {
-      return detailsBlockedResult("not_configured");
-    }
-
-    updatedLink = toLinkPersistenceRow(asRecord(data));
-  } else {
-    const { data, error } = await input.client
-      .from("driver_job_links")
-      .update(linkUpdate)
-      .eq("booking_reference", resolvedLink.link.booking_reference)
-      .select(driverJobLinkSelect)
-      .single();
-
-    if (error) {
-      return detailsBlockedResult("not_configured");
-    }
-
-    updatedLink = toLinkPersistenceRow(asRecord(data));
-  }
-
-  if (!updatedLink) {
-    return detailsBlockedResult("not_configured");
-  }
+  // Merge ACK into the latest locked link, never a stale pre-amendment JSON snapshot.
+  const { data: acknowledgedData, error: acknowledgeError } = await input.client.rpc(
+    "acknowledge_current_driver_job_link",
+    {
+      p_booking_reference: resolvedLink.link.booking_reference, p_link_id: resolvedLink.link.id,
+      p_token_hash: safeHashToken(input.token), p_driver_id: verifiedDriverId,
+      p_name: nextDetails.name, p_contact: nextDetails.contact, p_plate: nextDetails.plate, p_vehicle: nextDetails.vehicleModel,
+    },
+  );
+  const updatedLink = toLinkPersistenceRow(asRecord(acknowledgedData));
+  if (acknowledgeError || !updatedLink) return detailsBlockedResult("not_configured");
 
   const supersessionSaved = await expireOlderDifferentDriverLinksAfterAcknowledgement({
     acknowledgedAt,

@@ -536,7 +536,9 @@ async function runChromeTest() {
               new Response(JSON.stringify(
                 method === "POST"
                   ? { action: "saved", ok: true, status: "cal_saved" }
-                  : driverCalendarReturnState === "saved"
+                  : window.__sameLinkAmendment
+                    ? { action: "status", connected: true, ok: true, status: "update_calendar" }
+                    : driverCalendarReturnState === "saved"
                     ? { action: "status", connected: true, ok: true, status: "cal_saved" }
                     : { action: "status", connected: false, ok: true, status: "save_to_calendar" },
               ), {
@@ -564,7 +566,8 @@ async function runChromeTest() {
                 notifications: [
                   {
                     created_at: "2026-06-08T03:00:00.000Z",
-                    id: "driver-app-update-safe-one",
+                    id: window.__sameLinkAmendment ? "driver-same-link-amendment" : "driver-app-update-safe-one",
+                    workflow_area: window.__sameLinkAmendment ? "driver_job_link_delivery" : "admin_driver_job_messages",
                     notification_status: "queued",
                     priority: "normal",
                     safe_message: window.__driverAppUpdateTest.safeMessage,
@@ -707,6 +710,10 @@ async function runChromeTest() {
             return originalFetch(...args).then(async (response) => {
               const result = await response.json();
               if (result.ok) {
+                if (method === "GET" && window.__sameLinkAmendment) {
+                  result.payload.pickupLocation = "Same Link Amended Pickup";
+                  result.payload.route = "Same Link Amended Pickup > Mock Workflow Dropoff";
+                }
                 if (method === "GET" && embeddedDriverMode === "account-profile") {
                   result.driver_account_profile = {
                     contact: "+65 9123 4567",
@@ -2131,6 +2138,11 @@ async function runChromeTest() {
     assertNoSensitiveText(embeddedAcknowledgedReloadState);
     await navigateToDriverJob(mockDriverJobTokens.workflowOrder, "Saved & Acknowledged");
     await saveDriverJobGoogleCalendar();
+    const writesBeforeAmendment=await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`);
+    await evaluate(`window.__sameLinkAmendment=true; window.dispatchEvent(new Event('focus')); true`);
+    await waitForCondition(()=>evaluate(`document.body.innerText.includes('Same Link Amended Pickup') && document.body.innerText.includes('Update needed')`),12000,'same-token amendment refresh and existing Calendar status');
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-driver-job-acknowledged-state="true"]'))`),true,'Same-link refresh preserves acknowledged state');
+    assert.deepEqual(await evaluate(`window.__driverJobFetchCalls.filter(x=>!x.startsWith('GET '))`),writesBeforeAmendment,'Amendment refresh must not write Calendar, ACK, reports or GPS');
     await verifyDriverCalendarCallbackFeedback({
       expectedFeedback: "Calendar connected and saved. Open the event and tap Open Driver Job for reporting.",
       expectedSaved: true,

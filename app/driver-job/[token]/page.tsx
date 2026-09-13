@@ -135,6 +135,7 @@ type DriverQuickReplyState = {
 };
 
 type DriverAppUpdateRecord = {
+  workflow_area?: string | null;
   safe_context?: Record<string, unknown> | null;
   created_at?: string | null;
   id?: string | null;
@@ -1036,6 +1037,8 @@ export default function DriverJobPage() {
   const [updatingStatus, setUpdatingStatus] = useState("");
   const driverAppUpdatesAbortControllerRef = useRef<AbortController | null>(null);
   const driverAppUpdatesRequestSequenceRef = useRef(0);
+  const driverAmendmentRefreshKeyRef = useRef("");
+  const driverCalendarActionRevisionRef = useRef(0);
   const driverAppUpdatesOpenTargetHandledRef = useRef(false);
   const driverOtsPhotoProofInputRef = useRef<HTMLInputElement | null>(null);
   const driverLiveLocationWatchIdRef = useRef<number | null>(null);
@@ -1325,6 +1328,39 @@ export default function DriverJobPage() {
         kind: updates.length > 0 ? "loaded" : "empty",
         updates,
       });
+      const amendmentKey = updates.filter((item) => item.workflow_area === "driver_job_link_delivery")
+        .map((item) => item.id).join(":");
+      if (preserveContent && amendmentKey && driverAmendmentRefreshKeyRef.current !== `${token}:${amendmentKey}`) {
+        const nativeInstallationId = currentEmbeddedDriverInstallationId();
+        const jobResponse = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
+          cache: "no-store", signal: abortController.signal,
+          headers: nativeInstallationId ? { "x-prestige-driver-installation-id": nativeInstallationId } : undefined,
+        });
+        const jobResult = await jobResponse.json() as DriverJobApiResponse;
+        if (abortController.signal.aborted || requestSequence !== driverAppUpdatesRequestSequenceRef.current || loadedDriverJobTokenRef.current !== token) return;
+        if (!jobResponse.ok || !jobResult.ok) throw new Error("Job refresh unavailable");
+        // Refresh safe job details only. Preserve locally saved reports, ACK, input drafts and sharing state.
+        setPageState((current) => current.kind !== "ready" ? current : ({ kind: "ready", job: {
+          ...jobResult.payload, acknowledged: current.job.acknowledged,
+          status: current.job.status, statusLabel: current.job.statusLabel, statusHistory: current.job.statusHistory,
+        } }));
+        if (jobResult.payload.acknowledged) {
+          const calendarRevision = driverCalendarActionRevisionRef.current;
+          const calendarResponse = await fetch(`/api/driver-job/${encodeURIComponent(token)}/calendar`, {
+            cache: "no-store", signal: abortController.signal,
+          });
+          const calendarResult = await calendarResponse.json() as DriverCalendarApiResponse;
+          if (abortController.signal.aborted || requestSequence !== driverAppUpdatesRequestSequenceRef.current || loadedDriverJobTokenRef.current !== token) return;
+          if (!calendarResponse.ok || !calendarResult.ok) throw new Error("Calendar status refresh unavailable");
+          if (calendarRevision === driverCalendarActionRevisionRef.current) {
+            setDriverCalendar((current) => current.action !== "idle" ? current : ({
+              ...current, status: calendarResult.status, connected: calendarResult.connected === true,
+              feedback: calendarResult.status === "cal_saved" ? current.feedback : null,
+            }));
+          }
+        }
+        driverAmendmentRefreshKeyRef.current = `${token}:${amendmentKey}`;
+      }
     } catch {
       if (
         abortController.signal.aborted ||
@@ -1944,6 +1980,7 @@ export default function DriverJobPage() {
       return;
     }
 
+    driverCalendarActionRevisionRef.current += 1;
     setDriverCalendar((current) => ({
       ...current,
       action: "saving",

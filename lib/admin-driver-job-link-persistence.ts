@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -17,8 +17,8 @@ import {
   getDriverJobLinkExpiresAt,
   hashDriverJobLinkToken,
 } from "./driver-job-link";
-import { sealDriverNativeJobHandoffToken } from "./driver-native-job-handoff";
-import { sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
+import { openDriverNativeJobHandoff, sealDriverNativeJobHandoffToken } from "./driver-native-job-handoff";
+import { sendDriverDevicePushAlertForAppUpdate, sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
 import {
   createAdminDriverAckReminder,
   type AdminDriverAckReminderInput,
@@ -80,17 +80,19 @@ export type AdminDriverJobLinkRecord = {
 };
 
 export type AdminDriverJobLinkCreateInput = {
+  request_id?: string;
   booking_reference: string;
   driver_job_payload: AdminDriverJobLinkSafePayload;
   ttl_hours: number;
 };
 
 export type AdminDriverJobLinkCreateResult = {
+  disposition: "created" | "reused" | "amended";
   driver_job_token: string;
   link: AdminDriverJobLinkRecord;
   native_app_alert: {
     provider_accepted: boolean;
-    reason: "not_available" | "provider_accepted" | "provider_failed";
+    reason: "not_available" | "provider_accepted" | "provider_failed" | "recent_attempt";
   };
 };
 
@@ -151,7 +153,7 @@ const safeDriverJobLinkRevokeError = "Admin driver job link revoke failed safely
 const allowedLinkStatuses = new Set(["active", "expired", "revoked"]);
 const allowedJobCardKinds = new Set(["amendment", "new", "reissued"]);
 const allowedReadParams = new Set(["booking_reference", "limit", "link_status", "page"]);
-const allowedCreateFields = new Set(["booking_reference", "driver_job_payload", "ttl_hours"]);
+const allowedCreateFields = new Set(["booking_reference", "driver_job_payload", "ttl_hours", "request_id"]);
 const allowedSafePayloadFields = new Set([
   "assigned_driver_contact",
   "assigned_driver_name",
@@ -568,7 +570,9 @@ export function classifyAdminDriverJobCardKind(
     return "new";
   }
 
-  const previousPayload = safeDriverJobPayload(previousContext.driver_job_payload);
+  const issuedPayload = { ...asRecord(previousContext.driver_job_payload) };
+  for (const field of ["driver_contact", "driver_name", "driver_plate_number", "driver_vehicle_model"]) delete issuedPayload[field];
+  const previousPayload = safeDriverJobPayload(issuedPayload);
 
   if (!previousPayload) {
     return null;
@@ -596,7 +600,7 @@ export function parseAdminDriverJobLinkCreatePayload(
   const driverJobPayload = safeDriverJobPayload(record.driver_job_payload);
   const ttlHours = positiveInteger(record.ttl_hours, defaultDriverJobLinkTtlHours, maxTtlHours);
 
-  if (!bookingReference || !driverJobPayload || !ttlHours) {
+  if (!bookingReference || !driverJobPayload || !ttlHours || (record.request_id !== undefined && !validUuid(record.request_id))) {
     return {
       error: "Admin driver job link create payload is malformed.",
       ok: false,
@@ -609,6 +613,7 @@ export function parseAdminDriverJobLinkCreatePayload(
       booking_reference: bookingReference,
       driver_job_payload: driverJobPayload,
       ttl_hours: ttlHours,
+      ...(record.request_id ? { request_id: validUuid(record.request_id)! } : {}),
     },
     ok: true,
   };
@@ -1048,40 +1053,18 @@ export async function loadAdminDriverJobLinks(
   const paginatedLinkIds = paginatedLinks.map((link) => link.id);
 
   if (paginatedLinkIds.length > 0) {
-    const { data: reminderData, error: reminderError } = await clientResult.data
-      .from("customer_driver_app_notification_outbox")
-      .select("driver_job_link_id, created_at, safe_context")
-      .in("driver_job_link_id", paginatedLinkIds)
-      .eq("workflow_area", "pending_driver_ack_reminder")
-      .order("created_at", { ascending: false })
-      .limit(parsed.data.limit * 3);
-
-    if (reminderError) {
-      return safeAdapterFailure(safeDriverJobLinkLoadError, 500, reminderError);
-    }
-
-    const summariesByLinkId = new Map<
-      string,
-      AdminDriverJobLinkRecord["safe_summary"]["ack_reminder"]
-    >();
-    for (const reminderRow of asArray(reminderData).map(asRecord)) {
-      const linkId = validUuid(reminderRow.driver_job_link_id);
-      if (!linkId || !paginatedLinkIds.includes(linkId)) {
-        continue;
-      }
-
-      const existing = summariesByLinkId.get(linkId);
-      const safeContext = asRecord(reminderRow.safe_context);
-      const createdAt = validDateText(reminderRow.created_at);
+    const { data: reminderData, error: reminderError } = await clientResult.data.rpc(
+      "read_driver_ack_reminder_summaries", { p_link_ids: paginatedLinkIds },
+    );
+    if (reminderError) return safeAdapterFailure(safeDriverJobLinkLoadError, 500, reminderError);
+    const summariesByLinkId = new Map<string, AdminDriverJobLinkRecord["safe_summary"]["ack_reminder"]>();
+    for (const row of asArray(reminderData).map(asRecord)) {
+      const linkId = validUuid(row.driver_job_link_id);
+      if (!linkId || !paginatedLinkIds.includes(linkId)) continue;
       summariesByLinkId.set(linkId, {
-        count: (existing?.count ?? 0) + 1,
-        last_provider_accepted:
-          existing
-            ? existing.last_provider_accepted
-            : typeof safeContext.provider_accepted === "boolean"
-              ? safeContext.provider_accepted
-              : null,
-        last_sent_at: existing ? existing.last_sent_at : createdAt,
+        count: Math.max(0, Number(row.count) || 0),
+        last_provider_accepted: typeof row.last_provider_accepted === "boolean" ? row.last_provider_accepted : null,
+        last_sent_at: validDateText(row.last_sent_at),
       });
     }
 
@@ -1114,18 +1097,6 @@ export async function createAdminDriverJobLink(
     return clientResult;
   }
 
-  const { data: bookingData, error: bookingError } = await clientResult.data
-    .from("bookings")
-    .select("driver_id")
-    .eq("booking_reference", input.booking_reference)
-    .maybeSingle();
-  const bookingRecord = asRecord(bookingData);
-  const verifiedDriverId = Number(bookingRecord.driver_id);
-
-  if (bookingError) {
-    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, bookingError);
-  }
-
   if (["1", "true", "enabled"].includes((process.env.PRESTIGE_DRIVER_POOL_ENABLED || "").trim().toLowerCase())) {
     const { data: openOfferData, error: openOfferError } = await clientResult.data
       .from("driver_job_bid_offers")
@@ -1143,7 +1114,7 @@ export async function createAdminDriverJobLink(
   const { data: operationalBookingData, error: operationalBookingError } = await clientResult.data
     .from("bookings")
     .select(
-      "service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number, admin_internal_status, customer_facing_status",
+      "driver_id, updated_at, service_type, pickup_at, pickup_location, dropoff_location, route_summary, passenger_name, flight_no, driver_name, driver_contact, driver_plate_number, vehicle_type_or_category, admin_internal_status, customer_facing_status",
     )
     .eq("booking_reference", input.booking_reference)
     .maybeSingle();
@@ -1153,6 +1124,7 @@ export async function createAdminDriverJobLink(
   }
 
   const operationalBookingRecord = asRecord(operationalBookingData);
+  const verifiedDriverId = Number(operationalBookingRecord.driver_id);
   const terminalStatus = [
     String(operationalBookingRecord.admin_internal_status || ""),
     String(operationalBookingRecord.customer_facing_status || ""),
@@ -1174,94 +1146,86 @@ export async function createAdminDriverJobLink(
     };
   }
 
-  const token = generateDriverJobLinkToken();
-  const tokenHash = hashDriverJobLinkToken(token);
-  const nativeHandoffCiphertext =
-    Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0
-      ? sealDriverNativeJobHandoffToken({
-          bookingReference: input.booking_reference,
-          token,
-          tokenHash,
-        })
-      : null;
-  const now = new Date();
-  const expiresAt = getDriverJobLinkExpiresAt(now, input.ttl_hours);
-
-  const { data: previousLinkData, error: previousLinkError } = await clientResult.data
-    .from("driver_job_links")
-    .select("safe_link_context")
-    .eq("booking_reference", input.booking_reference)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (previousLinkError) {
-    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, previousLinkError);
+  const candidateToken = generateDriverJobLinkToken();
+  const tokenHash = hashDriverJobLinkToken(candidateToken);
+  const ciphertext = sealDriverNativeJobHandoffToken({
+    bookingReference: input.booking_reference, token: candidateToken, tokenHash,
+  });
+  if (!ciphertext || !validDateText(operationalBookingRecord.updated_at)) {
+    return { error: "The saved booking link could not be prepared securely. Reload or contact Admin.", ok: false, status: 409 };
+  }
+  // Inspect the current sealed token before a possible in-place amendment. Never repair corrupt access by minting a token.
+  const previousRead = await clientResult.data.from("driver_job_links")
+    .select("id, token_hash, safe_link_context, link_status, revoked_at, expires_at")
+    .eq("booking_reference", input.booking_reference).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (previousRead.error) return safeAdapterFailure(safeDriverJobLinkCreateError, 500, previousRead.error);
+  const previous = asRecord(previousRead.data);
+  if (previous.link_status === "active" && !previous.revoked_at && Date.parse(String(previous.expires_at)) > Date.now()) {
+    const recovered = openDriverNativeJobHandoff({ bookingReference: input.booking_reference,
+      tokenHash: previous.token_hash, ciphertext: asRecord(previous.safe_link_context).native_handoff_ciphertext });
+    if (!recovered || hashDriverJobLinkToken(recovered) !== previous.token_hash) {
+      return { error: "Existing link cannot be recovered securely. Review access and use Revoke Link before replacing it.", ok: false, status: 409 };
+    }
+  }
+  const revision = safeDriverJobPayloadRevision(input.driver_job_payload);
+  const applied = await clientResult.data.rpc("apply_admin_driver_job_link", {
+    p_booking_reference: input.booking_reference, p_expected_updated_at: operationalBookingRecord.updated_at,
+    p_driver_id: Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0 ? verifiedDriverId : null,
+    p_payload: input.driver_job_payload, p_revision: revision, p_token_hash: tokenHash, p_ciphertext: ciphertext,
+    p_expires_at: getDriverJobLinkExpiresAt(new Date(), input.ttl_hours).toISOString(),
+    p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+    p_expected_driver_state: {
+      driver_name: operationalBookingRecord.driver_name ?? null, driver_contact: operationalBookingRecord.driver_contact ?? null,
+      driver_plate_number: operationalBookingRecord.driver_plate_number ?? null,
+      vehicle_type_or_category: operationalBookingRecord.vehicle_type_or_category ?? null,
+    },
+  });
+  if (applied.error) {
+    const conflict = ["22023", "40001"].includes(String(asRecord(applied.error).code));
+    return safeAdapterFailure(conflict
+      ? "The booking or its active link needs review. Reload the booking; resolve existing links through Revoke Link before a replacement."
+      : safeDriverJobLinkCreateError, conflict ? 409 : 500, applied.error);
+  }
+  const appliedRecord = asRecord(applied.data);
+  const storedLink = asRecord(appliedRecord.link);
+  const link = normalizeDriverJobLinkRecord(storedLink);
+  const disposition = appliedRecord.disposition;
+  const token = openDriverNativeJobHandoff({ bookingReference: input.booking_reference,
+    tokenHash: storedLink.token_hash, ciphertext: asRecord(storedLink.safe_link_context).native_handoff_ciphertext });
+  if (!link || !token || hashDriverJobLinkToken(token) !== storedLink.token_hash ||
+    (disposition !== "created" && disposition !== "reused" && disposition !== "amended")) {
+    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, null);
   }
 
-  const previousLinkRecord = asRecord(previousLinkData);
-  const jobCardKind = classifyAdminDriverJobCardKind(
-    Object.keys(previousLinkRecord).length > 0 ? previousLinkRecord.safe_link_context : null,
-    input.driver_job_payload,
-  );
-
-  const payload = {
-    actor_label: actor.actor_label,
-    actor_role: actor.actor_role,
-    booking_reference: input.booking_reference,
-    driver_id:
-      Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0
-        ? verifiedDriverId
-        : null,
-    expires_at: expiresAt.toISOString(),
-    issued_at: now.toISOString(),
-    link_status: "active",
-    revoked_at: null,
-    safe_link_context: {
-      driver_job_payload: input.driver_job_payload,
-      job_card_kind: jobCardKind,
-      job_card_revision: safeDriverJobPayloadRevision(input.driver_job_payload),
-      link_purpose: "manual_driver_assignment_job_card",
-      ...(nativeHandoffCiphertext
-        ? { native_handoff_ciphertext: nativeHandoffCiphertext }
-        : {}),
-    },
-    source_surface: actor.source_surface,
-    token_hash: tokenHash,
-    updated_at: now.toISOString(),
-  };
-  const { data, error } = await clientResult.data
-    .from("driver_job_links")
-    .insert(payload)
-    .select(driverJobLinkSelect)
-    .single();
-  const link = normalizeDriverJobLinkRecord(asRecord(data));
-
-  if (error || !link) {
-    return safeAdapterFailure(safeDriverJobLinkCreateError, 500, error);
+  let nativeAppAlert: AdminDriverJobLinkCreateResult["native_app_alert"] = { provider_accepted: false, reason: "not_available" };
+  if (Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0) {
+    const reserved = await clientResult.data.rpc("reserve_driver_job_link_delivery", {
+      p_booking_reference: link.booking_reference, p_link_id: link.id, p_driver_id: verifiedDriverId,
+      p_mode: disposition === "reused" ? "recovery" : disposition === "amended" ? "amendment" : "created",
+      p_revision: revision, p_request_id: input.request_id ?? randomUUID(), p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+    });
+    const reservation = asRecord(reserved.data);
+    if (!reserved.error && reservation.claimed === true && validUuid(reservation.audit_id)) {
+      const nativeAlertResult = asRecord(reservation.safe_context).delivery_kind === "amendment" && link.safe_summary.acknowledged
+        ? await sendDriverDevicePushAlertForAppUpdate(clientResult.data, {
+            booking_reference: link.booking_reference, driver_job_link_id: link.id,
+            delivery_surface: "driver_app", workflow_area: "driver_job_link_delivery", actor_role: actor.actor_role,
+          }).catch(() => null)
+        : await sendDriverDevicePushAlertForNewJobLink(clientResult.data, {
+            driver_job_link_id: link.id, driver_job_token: token,
+          }).catch(() => null);
+      nativeAppAlert = nativeAlertResult?.native_provider_accepted
+        ? { provider_accepted: true, reason: "provider_accepted" }
+        : { provider_accepted: false, reason: "provider_failed" };
+      await clientResult.data.from("customer_driver_app_notification_outbox").update({
+        safe_context: { ...asRecord(reservation.safe_context), provider_accepted: nativeAppAlert.provider_accepted },
+        updated_at: new Date().toISOString(),
+      }).eq("id", reservation.audit_id);
+    } else if (!reserved.error && ["cooldown", "already_requested"].includes(String(reservation.reason))) {
+      nativeAppAlert = { provider_accepted: false, reason: "recent_attempt" };
+    } else if (reserved.error) nativeAppAlert = { provider_accepted: false, reason: "provider_failed" };
   }
-
-  const nativeAlertResult = await sendDriverDevicePushAlertForNewJobLink(
-    clientResult.data,
-    {
-      driver_job_link_id: link.id,
-      driver_job_token: token,
-    },
-  ).catch(() => null);
-  const nativeAppAlert = nativeAlertResult?.native_provider_accepted
-    ? { provider_accepted: true, reason: "provider_accepted" as const }
-    : nativeAlertResult && nativeAlertResult.native_provider_request_count > 0
-      ? { provider_accepted: false, reason: "provider_failed" as const }
-      : { provider_accepted: false, reason: "not_available" as const };
-
-  return {
-    data: {
-      driver_job_token: token,
-      link,
-      native_app_alert: nativeAppAlert,
-    },
-    ok: true,
-  };
+  return { data: { driver_job_token: token, link, disposition, native_app_alert: nativeAppAlert }, ok: true };
 }
 
 export async function revokeAdminDriverJobLink(

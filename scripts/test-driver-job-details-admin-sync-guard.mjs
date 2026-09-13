@@ -308,17 +308,14 @@ for (const fragment of [
   "resolveAcknowledgedDriverIdentity(",
   "verifiedAccountDriverId",
   "syncVerifiedAccountDriverProfile(",
-  '.from("driver_job_links")',
-  "driver_id: verifiedDriverId",
-  "safe_link_context: nextSafeContext",
-  '.from("bookings")',
-  "driver_contact: nextDetails.contact || null",
-  "driver_id: verifiedDriverId",
-  "driver_name: nextDetails.name",
-  "driver_plate_number: nextDetails.plate || null",
-  "bookingDriverDetailsUpdate.vehicle_type_or_category = nextDetails.vehicleModel",
-  ".eq(\"booking_reference\", resolvedLink.link.booking_reference)",
-  "booking_reference: resolvedLink.link.booking_reference",
+  '"acknowledge_current_driver_job_link"',
+  "p_driver_id: verifiedDriverId",
+  "p_token_hash: safeHashToken(input.token)",
+  "p_booking_reference: resolvedLink.link.booking_reference",
+  "p_name: nextDetails.name",
+  "p_contact: nextDetails.contact",
+  "p_plate: nextDetails.plate",
+  "p_vehicle: nextDetails.vehicleModel",
   "payloadForLink(",
 ]) {
   assertIncludes(detailsPersistenceBlock, fragment, `Driver details persistence fragment ${fragment}`);
@@ -520,3 +517,7 @@ assertIncludes(loadBookingsBlock, "mergeCurrentBookingDriverDetailsFromRecord", 
 assertExcludes(loadBookingsBlock, "window.location.reload", "Load bookings reload");
 
 console.log("Driver job details admin sync guard passed.");
+
+const ackSql=await readFile("supabase/migrations/20260913030200_driver_ack_merge_current_link.sql","utf8");
+for (const fragment of ["for update", "token_hash=p_token_hash", "update public.bookings set driver_id=p_driver_id", "driver_plate_number=nullif(p_plate", "vehicle_type_or_category=", "current_payload || details", "update public.driver_job_links set driver_id=p_driver_id"])
+  assertIncludes(ackSql,fragment,"current-link ACK transaction");

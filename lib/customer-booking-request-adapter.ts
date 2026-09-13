@@ -37,7 +37,11 @@ export type CustomerBookingRequestSubmitResult =
     }
   | {
       ok: false;
+      existingBookingReference?: string | null;
       reason?:
+        | "customer_trip_duplicate"
+        | "customer_trip_in_progress"
+        | "customer_trip_check_unavailable"
         | "invitation_invalid"
         | "invitation_required"
         | "invitation_used"
@@ -268,6 +272,12 @@ export async function submitCustomerBookingRequest(
     if (!response.ok) {
       const resultReason = response.headers?.get("x-prestige-customer-booking-result");
 
+      if (resultReason === "customer_trip_duplicate" || resultReason === "customer_trip_in_progress" || resultReason === "customer_trip_check_unavailable") {
+        const body = asRecord(await response.json());
+        const reference = body?.booking_reference;
+        return { ok: false, reason: resultReason, existingBookingReference:
+          typeof reference === "string" && /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(reference) ? reference : null };
+      }
       if (
         resultReason === "invitation_required" ||
         resultReason === "invitation_invalid" ||

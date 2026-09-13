@@ -222,6 +222,7 @@ export default function CustomerBookingPage() {
   const [registeredTravelers, setRegisteredTravelers] = useState<CustomerBookingMemoryTraveler[]>([]);
   const [registeredTravelerMenuOpen, setRegisteredTravelerMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [duplicateBookingHref, setDuplicateBookingHref] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [bookingInvitationResolved, setBookingInvitationResolved] = useState(false);
   const [hasBookingInvitation, setHasBookingInvitation] = useState(false);
@@ -350,6 +351,7 @@ export default function CustomerBookingPage() {
       ),
     );
     setConfirmationStatus(null);
+    setDuplicateBookingHref(null);
   }
 
   function phoneOtpFailureText(
@@ -497,6 +499,7 @@ export default function CustomerBookingPage() {
         : current.filter((item) => !returnTripRequiredFields.includes(item)),
     );
     setConfirmationStatus(null);
+    setDuplicateBookingHref(null);
   }
 
   async function ensureBookingMemorySuggestions() {
@@ -541,6 +544,7 @@ export default function CustomerBookingPage() {
       ),
     );
     setConfirmationStatus(null);
+    setDuplicateBookingHref(null);
   }
 
   function selectRegisteredTraveler(value: string) {
@@ -562,6 +566,7 @@ export default function CustomerBookingPage() {
     );
     setRegisteredTravelerMenuOpen(false);
     setConfirmationStatus(null);
+    setDuplicateBookingHref(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -570,6 +575,7 @@ export default function CustomerBookingPage() {
     if (!bookingInvitationResolved || !portalProfileResolved) {
       setMissingFields([]);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: "Please wait while we check your booking access.",
@@ -583,6 +589,7 @@ export default function CustomerBookingPage() {
     if (!hasBookingInvitation && !hasPortalBookingAccess && !publicPhoneVerified) {
       setMissingFields([]);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: "Verify the contact mobile number below, or ask Prestige Limo for a private booking invitation.",
@@ -605,6 +612,7 @@ export default function CustomerBookingPage() {
     if (missing.length > 0) {
       setMissingFields(missing);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text:
@@ -625,6 +633,7 @@ export default function CustomerBookingPage() {
     if (normalizedSpecialRequest.length > 500) {
       setMissingFields(["specialRequest"]);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: "Special request must be 500 characters or fewer.",
@@ -635,6 +644,7 @@ export default function CustomerBookingPage() {
     if (/[\u0000-\u0009\u000b-\u001f\u007f]/.test(normalizedSpecialRequest)) {
       setMissingFields(["specialRequest"]);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: "Special request contains unsupported control characters.",
@@ -650,6 +660,7 @@ export default function CustomerBookingPage() {
     ) {
       setMissingFields(["luggage"]);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: "Enter the number of bags as a whole number.",
@@ -660,6 +671,7 @@ export default function CustomerBookingPage() {
     if (!termsAccepted) {
       setMissingFields([]);
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: "Please accept the booking terms, surcharges, and waiting-time policy before submitting.",
@@ -670,6 +682,7 @@ export default function CustomerBookingPage() {
     setMissingFields([]);
     setSubmitting(true);
     setConfirmationStatus(null);
+    setDuplicateBookingHref(null);
     setFeedback({
       tone: "info",
       text: "Submitting your booking request for review...",
@@ -685,6 +698,19 @@ export default function CustomerBookingPage() {
       });
 
       if (!result.ok) {
+        if (result.reason === "customer_trip_duplicate" || result.reason === "customer_trip_in_progress" || result.reason === "customer_trip_check_unavailable") {
+          if (result.reason === "customer_trip_duplicate" && result.existingBookingReference) {
+            const target = new URLSearchParams({ booking: result.existingBookingReference });
+            if (form.travelerId) target.set("traveler_id", form.travelerId);
+            setDuplicateBookingHref(`/my-bookings?${target.toString()}`);
+          }
+          setFeedback({ tone: "error", text: result.reason === "customer_trip_duplicate"
+            ? "A matching booking already exists. Contact us if you need another vehicle."
+            : result.reason === "customer_trip_in_progress"
+              ? "Your matching request is still being processed. Please wait and check My Bookings."
+              : "We could not check your existing bookings. Please try again shortly." });
+          return;
+        }
         if (result.reason === "public_request_pending" || result.reason === "public_request_in_progress" || result.reason === "booking_admission_unavailable") {
           setFeedback({
             tone: "error",
@@ -761,6 +787,7 @@ export default function CustomerBookingPage() {
       });
     } catch {
       setConfirmationStatus(null);
+      setDuplicateBookingHref(null);
       setFeedback({
         tone: "error",
         text: `Booking request could not be submitted right now. Please contact ${companyName}.`,
@@ -1555,6 +1582,7 @@ export default function CustomerBookingPage() {
                   role="status"
                 >
                   {feedback.text}
+                  {duplicateBookingHref ? <a className="ml-2 underline" href={duplicateBookingHref}>View booking</a> : null}
                 </div>
               ) : null}
               {confirmationStatus ? (

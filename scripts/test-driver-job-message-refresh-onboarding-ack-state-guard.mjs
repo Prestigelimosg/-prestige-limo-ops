@@ -3,8 +3,18 @@ import { readFile } from "node:fs/promises";
 
 const pagePath = "app/driver-job/[token]/page.tsx";
 const pageSource = await readFile(pagePath, "utf8");
-const betaInstall = pageSource.match(/androidBrowser && !embeddedDriverApp && pageState.kind === "ready"[\s\S]*?data-driver-beta-install="true"([\s\S]*?)<\/header>/)?.[1];
-assert.ok(betaInstall, "Keep the existing Android-browser-only Beta installation section.");
+const betaInstall = pageSource.match(/\(androidBrowser \|\| iosBrowser\) && !embeddedDriverApp && pageState.kind === "ready"[\s\S]*?data-driver-beta-install="true"([\s\S]*?)<\/header>/)?.[1];
+assert.ok(betaInstall, "Use the same valid-job installation section for both phone browsers, excluding native apps.");
+assert.match(betaInstall, /href=\{iosBrowser \? driverBetaTestFlightUrl : driverBetaApkDownloadUrl\}/);
+assert.match(pageSource, /const driverBetaTestFlightUrl = "https:\/\/testflight.apple.com\/join\/m3sjGfd3";/);
+assert.match(betaInstall, /Install TestFlight, then Prestige Driver/);
+assert.match(betaInstall, /Reopen the job link Admin sent you/);
+assert.match(betaInstall, /Confirm details → Save &amp; Acknowledge Job → Create your account/);
+assert.match(betaInstall, /\{androidBrowser \? <a/);
+assert.match(betaInstall, /\{androidBrowser \? <p/);
+assert.match(betaInstall, /referrerPolicy="no-referrer"/);
+assert.match(betaInstall, /rel="noopener noreferrer"/);
+assert.doesNotMatch(betaInstall, /onClick|fetch\(|window\.location|setTimeout|localStorage|sessionStorage/);
 assert.match(betaInstall, /Allow notifications for job alerts\. Allow location to share your location during jobs\./);
 assert.match(betaInstall, /className="text-xs leading-5 text-slate-600"/);
 

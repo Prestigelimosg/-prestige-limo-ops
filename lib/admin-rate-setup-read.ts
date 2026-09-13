@@ -204,7 +204,7 @@ function payoutRuleFromDb(value: unknown, bookingType: (typeof bookingTypes)[num
   return Object.keys(rule).length > 0 ? rule : null;
 }
 
-function payoutRulesFromDb(value: unknown): DriverPayoutRules {
+export function payoutRulesFromDb(value: unknown): DriverPayoutRules {
   const source = asRecord(value);
   const rules: DriverPayoutRules = {};
 

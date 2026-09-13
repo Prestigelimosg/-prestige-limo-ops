@@ -304,7 +304,7 @@ for (const fragment of [
   "const completedHistoryDisplayStatus = isCancelledStatus",
   "? \"cancelled\"",
   ": isCompletedStatus",
-  "md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)]",
+  "md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(6rem,auto)]",
   "flex min-w-0 flex-wrap items-center gap-1.5 md:justify-end md:text-right",
   "inline-flex items-center rounded-full",
   "data-completed-history-bucket={",
@@ -459,3 +459,5 @@ for (const phrase of [
 assertIncludes(preactivationSuite, guardScript, "preactivation bookings earlier history compact guard registration");
 
 console.log("Bookings earlier history compact guard passed");
+
+assertIncludes(completedHistoryPanel, "data-completed-calendar-payout={bookingId}", "read-only Calendar amount beside the driver");

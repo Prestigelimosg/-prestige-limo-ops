@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -28,6 +28,9 @@ const safeApiLeakPattern =
   /mock-admin-google-calendar-sync-session-token|ya29\.mock-google-calendar-sync-access-token|BEGIN PRIVATE KEY|PRIVATE KEY-----|server-only|server_only|stack|sql|secret|api_key|createClient/i;
 const sourceFiles = [
   "lib/admin-booking-calendar-policy.ts",
+  "lib/pricing.ts",
+  "lib/admin-rate-setup-read.ts",
+  "lib/hourly-billing.ts",
   "lib/admin-booking-calendar-event.ts",
   "lib/admin-booking-google-calendar-sync.ts",
   "lib/driver-job-operations-calendar-sync.ts",
@@ -177,6 +180,7 @@ async function writeMockModules(tempDir) {
 
   await mkdir(path.dirname(serverOnlyPath), { recursive: true });
   await writeFile(serverOnlyPath, "");
+  await symlink(path.resolve("node_modules/@supabase"), path.join(tempDir, "node_modules/@supabase"), "dir");
 }
 
 async function loadHarness() {
@@ -260,7 +264,13 @@ async function readRouteResponse(response) {
 }
 
 function assertNoLeaks(value, label) {
-  const text = JSON.stringify(value);
+  const safeValue = value?.statuses ? {
+    ...value, statuses: value.statuses.map(({ calendar_payout, ...row }) => {
+      assert.ok(calendar_payout === null || /^\$(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(calendar_payout));
+      return row;
+    }),
+  } : value;
+  const text = JSON.stringify(safeValue);
 
   assert.doesNotMatch(text, safeApiLeakPattern, label);
   assert.doesNotMatch(text, unsafeLeakPattern, label);
@@ -289,6 +299,10 @@ function installFetchMock({ tokenStatus = 200, eventStatuses = [200, 409, 200] }
       url: requestUrl.origin + requestUrl.pathname,
     };
 
+    if (call.method === "GET" && requestUrl.pathname.includes("/events/")) {
+      const previous = [...calls].reverse().find((entry) => entry.method === "POST" && entry.url.includes("/events"));
+      return new Response(JSON.stringify({ ...JSON.parse(previous.body), etag: '"baseline-v1"' }), { status: 200 });
+    }
     calls.push(call);
 
     if (requestUrl.pathname === "/token") {
@@ -439,7 +453,7 @@ try {
   );
   const assignmentOnlySuccessSource = sourceBetween(
     updateAppliedSnapshotSource,
-    "if (assignmentOnly) {\n        const retainedAssignmentBooking",
+    "if (assignmentOnly) {\n        await refreshDashboardDriverJobLinksRead([updatedBookingReference]);\n        const retainedAssignmentBooking",
     "const calendarSyncResult = await autoSyncSavedBookingGoogleCalendar(updatedBooking);",
   );
   assert.doesNotMatch(
@@ -957,7 +971,7 @@ try {
       },
       { booking_reference: "PL-CAL-STATUS-OUTDATED", status: "update_calendar" },
       { booking_reference: "PL-CAL-STATUS-MISSING", status: "save_to_calendar" },
-    ]);
+    ].map((row) => ({ ...row, calendar_payout: null })));
     assert.equal(
       providerEventsById.get(expectedProviderEvents[0].id).description.includes(
         "Customer: Safe Corporate [Safe Traveler]",
@@ -1266,6 +1280,204 @@ try {
     assert.equal(status, 403, label);
     assertBlockedResponse(body, label);
     assert.equal(calls.length, 0, label);
+  }
+  // Operations-only payout: run the real writer, default resolver and status reader
+  // against an exact-reference fake database and a versioned fake Google event store.
+  {
+    const actor = { actorLabel: "QA Admin", mode: "server-session-role-surface", role: "admin" };
+    const env = validEnv();
+    const input = { bookings: [safeBooking()], date_label: "payout-regression" };
+    const tables = {
+      bookings: { booking_reference: safeBooking().booking_reference, company_id: 7, driver_id: 8,
+        service_type: "TRF", pickup_at: "2026-06-15T07:30:00Z", extra_stop_count: 0,
+        child_seat_count: 0, vehicle_type_or_category: "AVF", driver_payout_override: 999 },
+      companies: { driver_payout_rules: { TRF: { amount: 60 } } },
+      drivers: { driver_payout_rules: { TRF: { amount: 50 } } },
+      rate_settings: { driver_payout_rules: { TRF: { amount: 45 } }, midnight_payout: 10,
+        extra_stop_payout: 10, child_seat_driver_payout: 10 },
+    };
+    const dbReads = [];
+    const payoutClient = { from(table) {
+      assert.ok(Object.hasOwn(tables, table));
+      return { select(columns) {
+        assert.doesNotMatch(columns, /override|customer_rate|customer_price|invoice|payment/);
+        return { eq(column, value) {
+          assert.equal(column, table === "bookings" ? "booking_reference" : "id");
+          assert.equal(value, table === "bookings" ? tables.bookings.booking_reference : table === "companies" ? 7 : table === "drivers" ? 8 : "default");
+          dbReads.push({ table, column, value });
+          return { async maybeSingle() { return { data: tables[table], error: null }; } };
+        } };
+      } };
+    } };
+    let stored = null;
+    let conflict = false;
+    const requests = [];
+    const fetcher = async (url, init = {}) => {
+      const u = new URL(String(url));
+      if (u.pathname === "/token") return Response.json({ access_token: googleAccessToken });
+      const method = init.method || "GET";
+      requests.push({ method, init });
+      if (method === "GET") return stored ? Response.json(stored) : new Response("{}", { status: 404 });
+      assert.equal(u.searchParams.get("sendUpdates"), "none");
+      const resource = JSON.parse(init.body);
+      assert.equal(resource.attendees, undefined);
+      if (method === "POST") {
+        if (stored) return new Response("{}", { status: 409 });
+      } else {
+        assert.equal(method, "PUT");
+        assert.equal(new Headers(init.headers).get("If-Match"), stored.etag);
+        if (conflict) {
+          stored.summary = stored.summary.replace(/\$[\d.]+ > /, "$88 > ");
+          stored.etag = '"changed-by-calendar"';
+          return new Response("{}", { status: 412 });
+        }
+      }
+      stored = { ...resource, etag: `"v${requests.length}"` };
+      return Response.json(stored);
+    };
+    const options = { env, fetcher, payoutClient };
+    const sync = (payload = input, extra = {}) => googleSync.syncAdminBookingCalendarAgendaToGoogle(payload, actor, { ...options, ...extra });
+    const read = (payload = input) => googleSync.readAdminBookingCalendarStatusesFromGoogle(payload, actor, options);
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /^SLV1234 \$50 > /, "existing Driver default wins; override 999 never used");
+    stored = null;
+    tables.drivers.driver_payout_rules = { TRF: "50" };
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$50 > /, "reuse existing normalizer for legacy scalar/string rate records");
+    tables.drivers.driver_payout_rules = { TRF: { amount: 50 } };
+    const original = structuredClone(stored);
+    assert.equal((await read()).data.statuses[0].calendar_payout, "$50");
+    stored.summary = stored.summary.replace("$50", "$75.25");
+    let status = (await read()).data.statuses[0];
+    assert.equal(status.status, "cal_saved", "manual amount alone must not require Update Cal");
+    assert.equal(status.calendar_payout, "$75.25");
+    const amended = { ...input, bookings: [{ ...input.bookings[0], driver_plate_number: "NEW5678", traveler_name: "Amended Passenger", pickup_time: "1800hrs" }] };
+    assert.equal((await read(amended)).data.statuses[0].status, "update_calendar");
+    assert.equal((await sync(amended)).ok, true);
+    assert.match(stored.summary, /^NEW5678 \$75.25 > Amended Passenger/);
+    assert.equal(stored.id, original.id, "same event after plate, passenger and schedule change");
+    assert.deepEqual(stored.reminders, original.reminders);
+    assert.equal(stored.extendedProperties.private.prestigeBookingReference, original.extendedProperties.private.prestigeBookingReference);
+    conflict = true;
+    assert.equal((await sync(amended)).ok, false);
+    assert.match(stored.summary, /\$88 > /, "concurrent Calendar edit survives failed conditional update");
+    conflict = false;
+    assert.equal((await sync(amended)).ok, true);
+    assert.match(stored.summary, /\$88 > /);
+    stored.summary = stored.summary.replace(" $88 > ", " > ");
+    assert.equal((await sync(amended)).ok, true);
+    assert.doesNotMatch(stored.summary, /\$/, "intentional removal after seeding stays removed");
+    assert.equal((await read(amended)).data.statuses[0].calendar_payout, null);
+    stored.summary = stored.summary.replace(" > ", " $0 > ");
+    assert.equal((await sync(amended)).ok, true);
+    assert.equal((await read(amended)).data.statuses[0].calendar_payout, "$0");
+    stored.summary = stored.summary.replace("$0", "$wrong");
+    const puts = requests.filter((r) => r.method === "PUT").length;
+    assert.equal((await sync(amended)).ok, false);
+    assert.equal(requests.filter((r) => r.method === "PUT").length, puts, "malformed manual amount is never overwritten");
+    stored.summary = original.summary;
+    delete stored.etag;
+    assert.equal((await sync()).ok, false, "missing version evidence must block replacement");
+    stored.etag = '"identity-check"';
+    stored.extendedProperties.private.prestigeBookingReference = "OTHER-BOOKING";
+    assert.equal((await sync()).ok, false, "wrong event ownership must not be overwritten");
+    assert.equal((await read()).data.statuses[0].calendar_payout, null);
+    stored = null;
+    const failingClient = { from() { throw new Error("database unavailable"); } };
+    assert.equal((await sync(input, { payoutClient: failingClient })).ok, true, "optional amount lookup failure cannot stop Calendar creation");
+    assert.doesNotMatch(stored.summary, /\$/);
+    assert.ok(dbReads.length > 0);
+    // Removing a plate temporarily must not discard the last manual Calendar amount.
+    stored.summary = stored.summary.replace(" > ", " $91 > ");
+    const noPlate = { ...input, bookings: [{ ...input.bookings[0], driver_plate_number: "" }] };
+    assert.equal((await sync(noPlate)).ok, true);
+    assert.doesNotMatch(stored.summary, /\$/);
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$91 > /);
+    stored = null;
+    const readCount = dbReads.length;
+    assert.equal((await sync(noPlate)).ok, true);
+    assert.equal(dbReads.length, readCount, "no payout lookup until a plate exists");
+    assert.doesNotMatch(stored.summary, /\$/);
+    assert.equal((await sync()).ok, true, "later ACK/default writer can seed the same event when plate is known");
+    assert.match(stored.summary, /SLV1234 \$50 > /);
+    stored = null;
+    tables.drivers.driver_payout_rules = {};
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$60 > /, "company default used when no Driver rule exists");
+    stored = null;
+    tables.companies.driver_payout_rules = {};
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$45 > /, "settings default used when no exact Driver or company rule exists");
+    stored = null;
+    tables.bookings.pickup_at = "2026-06-14T16:30:00Z";
+    tables.bookings.extra_stop_count = 2;
+    tables.bookings.child_seat_count = 1;
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$85 > /, "same default calculation includes SGT midnight, stops and seats");
+    stored = null;
+    tables.bookings.service_type = "DSP";
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$70 > /, "DSP uses existing default plus midnight/seat; no guessed JC or hourly total");
+  }
+  {
+    // Execute the actual React effect callback with controlled read responses.
+    const effectSource = sourceBetween(appSource,
+      '  useEffect(() => {\n    if (activeTab !== "bookings" && activeTab !== "completed")',
+      '  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);') +
+      '  }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);';
+    const execute = async ({ tab = "completed", payout = "$75.25", fail = false } = {}) => {
+      const state = { payouts: {}, statuses: {}, message: null, calls: [], cleanup: null, listeners: new Map() };
+      const bindings = {
+        activeTab: tab, bookingGoogleCalendarStatusPayloadSignature: "fixture",
+        bookingGoogleCalendarStatusSourceRef: { current: [{ booking_reference: "EXACT-REF" }] },
+        bookingGoogleCalendarStatusRequestRevisionRef: { current: 0 },
+        adminBookingCalendarGoogleSyncApiPath: "/api/admin-booking-calendar-google-sync",
+        adminLegacyDataPurpose: "admin_dashboard",
+        cleanReferenceText: (v) => String(v || "").trim(),
+        buildSavedBookingCalendarEventPayload: (v) => v,
+        setBookingGoogleCalendarPayouts: (v) => { state.payouts = v; },
+        setBookingGoogleCalendarStatuses: (v) => { state.statuses = v; },
+        setBookingGoogleCalendarStatusMessage: (v) => { state.message = v; },
+        window: { addEventListener: (k, fn) => state.listeners.set(k, fn), removeEventListener: (k) => state.listeners.delete(k) },
+        document: { visibilityState: "visible", addEventListener: (k, fn) => state.listeners.set(k, fn), removeEventListener: (k) => state.listeners.delete(k) },
+        useEffect: (fn) => { state.cleanup = fn(); },
+        fetch: async (url, init) => {
+          state.calls.push({ url, init });
+          assert.equal(url, "/api/admin-booking-calendar-google-sync?mode=status");
+          return Response.json(fail ? { ok: false, error: "unavailable" } : {
+            ok: true, statuses: [{ booking_reference: "EXACT-REF", status: "cal_saved", calendar_payout: payout }],
+          }, { status: fail ? 503 : 200 });
+        },
+      };
+      const code = transpileTypescript(effectSource, "completed-calendar-effect.ts");
+      new Function(...Object.keys(bindings), code)(...Object.values(bindings));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return state;
+    };
+    const state = await execute();
+    assert.deepEqual(state.payouts, { "exact-ref": "$75.25" });
+    assert.equal(state.calls.length, 1);
+    assert.ok(state.listeners.has("focus"));
+    state.listeners.get("focus")();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(state.calls.length, 2, "returning from Calendar reuses read-only status endpoint");
+    state.cleanup();
+    assert.equal(state.listeners.size, 0);
+    const malformed = await execute({ payout: "<script>secret</script>" });
+    assert.deepEqual(malformed.payouts, { "exact-ref": null });
+    malformed.cleanup();
+    const failed = await execute({ fail: true });
+    assert.deepEqual(failed.payouts, {});
+    assert.equal(failed.message.tone, "error");
+    failed.cleanup();
+    const bookings = await execute({ tab: "bookings" });
+    assert.deepEqual(bookings.statuses, { "exact-ref": "cal_saved" });
+    assert.equal(bookings.listeners.size, 0, "Bookings gains no focus polling");
+    bookings.cleanup();
+    const other = await execute({ tab: "dispatch" });
+    assert.equal(other.calls.length, 0);
+    assert.doesNotMatch(effectSource, /setInterval|syncAdminBooking|Update \+ Cal|payout_override/);
   }
 } finally {
   restoreEnv();

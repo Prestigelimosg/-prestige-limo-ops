@@ -357,7 +357,11 @@ class MockSupabaseClient {
       },'single');
       return inserted.error ? inserted : {data:{link:inserted.data,disposition:'created'},error:null};
     }
-    if (name === "reserve_driver_job_link_delivery") return {data:{claimed:false,reason:'driver_mismatch'},error:null}; // Provider delivery is covered by the SQL and native-push contracts.
+    if (name === "reserve_driver_job_link_delivery") {
+      const current=this.tables.driver_job_links.find(row=>row.id===args.p_link_id);
+      assert.equal(args.p_revision,current.safe_link_context.job_card_revision,'Delivery uses the locked stored revision, including a formatting-only reuse');
+      return {data:{claimed:false,reason:'driver_mismatch'},error:null}; // Provider delivery is covered by the SQL and native-push contracts.
+    }
     if (name === "read_driver_ack_reminder_summaries") {
       return {data:args.p_link_ids.map(id=>{
         const audits=this.tables.customer_driver_app_notification_outbox.filter(x=>x.driver_job_link_id===id).sort((a,b)=>b.created_at.localeCompare(a.created_at));
@@ -847,6 +851,9 @@ try {
     "Historic unsafe/incomplete snapshots must not be guessed as New or Amendment.",
   );
 
+  // A reused DB result can retain a historical display revision rather than the request hash.
+  const originalDeliveryRevision=client.tables.driver_job_links[0].safe_link_context.job_card_revision;
+  client.tables.driver_job_links[0].safe_link_context.job_card_revision='9'.repeat(64);
   const gpsWritesBeforeReuse=client.operations.filter(x=>x.table==='driver_live_location_runtime_settings').length;
   const reused=await readResponse(await harness.route.POST(requestWithJson('POST','http://localhost/api/admin-driver-job-links',safeCreatePayload())));
   assert.equal(reused.status,200);
@@ -855,6 +862,8 @@ try {
   assert.equal(reused.body.link.id,created.body.link.id);
   assert.equal(reused.body.live_location,null);
   assert.equal(client.operations.filter(x=>x.table==='driver_live_location_runtime_settings').length,gpsWritesBeforeReuse,'Reusing a link must not reopen GPS');
+
+  client.tables.driver_job_links[0].safe_link_context.job_card_revision=originalDeliveryRevision;
 
   const optionalDriverDetailsPayload = safeCreatePayload({
     booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",

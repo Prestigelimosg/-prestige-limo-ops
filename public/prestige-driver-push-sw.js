@@ -94,7 +94,9 @@ self.addEventListener("push", (event) => {
     !/(price|billing|invoice|payment|payout|pay[_ ]?now|internal[_ ]?(?:admin[_ ]?)?notes?|admin[_ ]?finance|parser|debug|secret|token|service_role|provider|gps|live location|driver location|password|api_key|authorization|cookie|mock_qa|mock_archive)/i.test(payload.body)
     ? payload.body.trim() : null;
   const body =
-    payload.body === "New Driver Job issued. Tap to review."
+    payload.body === "Job updated. Tap to review."
+      ? "Job updated. Tap to review."
+      : payload.body === "New Driver Job issued. Tap to review."
       ? "New Driver Job issued. Tap to review."
       : payload.body === "Pickup is in 1 hour. Open Driver Portal to review."
         ? "Pickup is in 1 hour. Open Driver Portal to review."

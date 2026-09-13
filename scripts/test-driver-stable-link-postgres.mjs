@@ -1,6 +1,7 @@
 // Execute the actual migration in a disposable Postgres-compatible engine.
 // PRESTIGE_TEST_PGLITE points to an externally installed @electric-sql/pglite ESM entry.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 const { PGlite } = await import(process.env.PRESTIGE_TEST_PGLITE || "@electric-sql/pglite");
 const db = new PGlite();
@@ -62,6 +63,47 @@ if (process.argv.includes("--link-only")) {
 
 await db.exec(await readFile('supabase/migrations/20260913030100_driver_link_delivery_reservation.sql','utf8'));
 await db.exec(await readFile('supabase/migrations/20260913032248_driver_link_after_duplicate_retirement.sql','utf8'));
+// Browser month spellings are presentation, not a second job amendment.
+await db.exec(await readFile('supabase/migrations/20260913040035_driver_link_equivalent_pickup_display.sql','utf8'));
+await db.exec('begin');
+await db.exec('delete from driver_job_links');
+const displayPayload = {...payload, pickup_date:'2026-09-14', pickup_time:'1000hrs', pickup_datetime:'14 Sept 2026, 1000hrs'};
+const displayHash = value => createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b))))).digest('hex');
+const displayFirst = await call(displayPayload,displayHash(displayPayload));
+const displayReserve = async (result) => (await db.query(
+  `select public.reserve_driver_job_link_delivery($1,$2,7,$3,$4,$5,'admin','Synthetic Admin') result`,
+  ['STABLE-QA',result.link.id,result.disposition==='created'?'created':result.disposition==='amended'?'amendment':'recovery',result.link.safe_link_context.job_card_revision,crypto.randomUUID()])).rows[0].result;
+assert.equal((await displayReserve(displayFirst)).claimed,true);
+const displayOther = {...displayPayload,pickup_datetime:'14 Sep 2026, 1000hrs'};
+const displayAgain = await call(displayOther,displayHash(displayOther));
+assert.equal(displayAgain.disposition,'reused','Sep versus Sept alone must not create an amendment');
+assert.deepEqual(displayAgain.link,displayFirst.link,'Display-only repeat preserves the entire link and original delivery revision');
+assert.equal((await displayReserve(displayAgain)).reason,'cooldown','Second Admin device must not reserve another alert');
+await db.query(`update driver_job_links set safe_link_context=safe_link_context || '{"driver_acknowledged_at":"2026-09-13T01:00Z"}',google_calendar_event_id='unchanged-calendar' where id=$1`,[displayFirst.link.id]);
+const beforeDisplayAck = (await db.query('select to_jsonb(l) row from driver_job_links l where id=$1',[displayFirst.link.id])).rows[0].row;
+assert.deepEqual((await call(displayOther,displayHash(displayOther))).link,beforeDisplayAck);
+for (const changedField of [
+  {pickup_location:'Actually amended pickup'},
+  {pickup_datetime:'14 Sep 2026, 1030hrs',pickup_time:'1030hrs'},
+  {pickup_datetime:'15 Sep 2026, 1000hrs',pickup_date:'2026-09-15'},
+  {dropoff_location:'Actually amended drop-off'},
+]) {
+  const realChange={...displayOther,...changedField};
+  const amendedDisplay = await call(realChange,displayHash(realChange));
+  assert.equal(amendedDisplay.disposition,'amended','A real detail change remains an amendment');
+  assert.equal(amendedDisplay.link.id,displayFirst.link.id);
+  assert.equal(amendedDisplay.link.token_hash,displayFirst.link.token_hash);
+  assert.equal(amendedDisplay.link.safe_link_context.driver_acknowledged_at,'2026-09-13T01:00Z');
+  assert.equal(amendedDisplay.link.google_calendar_event_id,'unchanged-calendar');
+  assert.equal((await displayReserve(amendedDisplay)).claimed,true,'A genuine amendment bypasses recovery cooldown');
+  const alternateSpelling={...realChange,pickup_datetime:realChange.pickup_datetime.replace(' Sep ',' Sept ')};
+  const repeat=await call(alternateSpelling,displayHash(alternateSpelling));
+  assert.equal(repeat.disposition,'reused');
+  assert.deepEqual(repeat.link,amendedDisplay.link);
+  assert.equal((await displayReserve(repeat)).reason,'cooldown','Existing amendment kind must not bypass cooldown on a formatting-only repeat');
+}
+assert.equal((await db.query('select count(*)::int n from driver_job_links')).rows[0].n,1);
+await db.exec('rollback');
 const reserve = async(mode='recovery', request=crypto.randomUUID()) => (await db.query(
   `select public.reserve_driver_job_link_delivery($1,$2,$3,$4,$5,$6,$7,$8) result`,
   ['STABLE-QA',first.link.id,7,mode,"c".repeat(64),request,'admin','Synthetic Admin'])).rows[0].result;

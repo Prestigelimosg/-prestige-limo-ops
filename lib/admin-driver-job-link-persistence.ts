@@ -1202,7 +1202,9 @@ export async function createAdminDriverJobLink(
     const reserved = await clientResult.data.rpc("reserve_driver_job_link_delivery", {
       p_booking_reference: link.booking_reference, p_link_id: link.id, p_driver_id: verifiedDriverId,
       p_mode: disposition === "reused" ? "recovery" : disposition === "amended" ? "amendment" : "created",
-      p_revision: revision, p_request_id: input.request_id ?? randomUUID(), p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+      // A formatting-only reuse keeps the locked link's original delivery revision.
+      p_revision: asRecord(storedLink.safe_link_context).job_card_revision,
+      p_request_id: input.request_id ?? randomUUID(), p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
     });
     const reservation = asRecord(reserved.data);
     if (!reserved.error && reservation.claimed === true && validUuid(reservation.audit_id)) {
@@ -1213,6 +1215,7 @@ export async function createAdminDriverJobLink(
           }).catch(() => null)
         : await sendDriverDevicePushAlertForNewJobLink(clientResult.data, {
             driver_job_link_id: link.id, driver_job_token: token,
+            amendment: asRecord(reservation.safe_context).delivery_kind === "amendment",
           }).catch(() => null);
       nativeAppAlert = nativeAlertResult?.native_provider_accepted
         ? { provider_accepted: true, reason: "provider_accepted" }

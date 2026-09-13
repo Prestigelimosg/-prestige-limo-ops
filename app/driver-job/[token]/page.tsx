@@ -2759,17 +2759,12 @@ export default function DriverJobPage() {
                   className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
                   data-driver-job-current-status="true"
                 >
-                  {embeddedDriverApp
-                    ? driverSafeStatusLabel(pageState.job.status)
-                    : statusDisplay(pageState.job.status, pageState.job.statusLabel)}
+                  {driverSafeStatusLabel(pageState.job.status)}
                 </span>
               </div>
 
               <dl className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
-                {(embeddedDriverApp
-                  ? embeddedDriverDetailRows(pageState.job)
-                  : detailRows(pageState.job)
-                ).map((detail) => (
+                {embeddedDriverDetailRows(pageState.job).map((detail) => (
                   <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-2 text-sm" key={detail.label}>
                     <dt className="font-semibold text-slate-500">{detail.label}</dt>
                     <dd className="min-w-0 break-words text-slate-950">{displayValue(detail.value)}</dd>

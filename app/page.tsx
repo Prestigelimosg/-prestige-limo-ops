@@ -19849,7 +19849,34 @@ export default function Home() {
     (notification) =>
       !adminAppNotificationIsNewBookingRequest(notification) &&
       !adminAppNotificationChangeRequestContext(notification),
-  );
+  ).map((notification) => {
+    if (clean(notification.workflow_area) !== "driver_pickup_location_followup") {
+      return notification;
+    }
+
+    // Display only: the saved warning already carries its exact internal reference.
+    // Never match an alert by driver, passenger, flight, or a shortened reference.
+    const reference = clean(notification.booking_reference);
+    const loadedMatches = reference
+      ? bookings.filter((record) => clean(record.booking_reference) === reference)
+      : [];
+    const persistedMatches = reference
+      ? adminBookingPersistenceRecords.filter((record) => clean(record.booking_reference) === reference)
+      : [];
+    const matches = [...loadedMatches, ...persistedMatches];
+    const publicReferences = new Set(matches.map((record) => clean(record.public_booking_reference)));
+    const driverNames = new Set(matches.map((record) => clean(record.driver_name)));
+    const exact = loadedMatches.length <= 1 && persistedMatches.length <= 1 &&
+      matches.length > 0 && publicReferences.size === 1 && driverNames.size === 1;
+    const publicReference = exact ? clean(matches[0].public_booking_reference) : "";
+    const jobLabel = publicReference
+      ? `Job ${publicReference} · ${clean(matches[0].driver_name) || "Driver TBC"}`
+      : "Job details unavailable";
+    return {
+      ...notification,
+      safe_title: `${clean(notification.safe_title) || "Admin update"} · ${jobLabel}`,
+    };
+  });
   const visibleOtherAdminAppNotifications = otherAdminAppNotifications;
   const dashboardMonthlyBillingNotificationIndex = visibleOtherAdminAppNotifications.findIndex((notification) =>
     Boolean(adminAppNotificationMonthlyBillingMonth(notification)),

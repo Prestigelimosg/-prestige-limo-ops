@@ -262,3 +262,50 @@ for (const width of [320, 390, 589, 1280]) {
   cleanup(); assert.equal(listeners.size, 0);
 }
 console.log("Admin alert menu viewport placement and cleanup passed");
+
+// Execute the existing shared alert presentation used by both menu and feed.
+const presentationStart = appPage.indexOf('  const otherAdminAppNotifications =');
+const presentationEnd = appPage.indexOf('  const visibleOtherAdminAppNotifications =', presentationStart);
+const presentationCode = ts.transpileModule(appPage.slice(presentationStart, presentationEnd), {
+  compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS},
+}).outputText;
+const present = new Function('adminAppNotificationReadState', 'bookings', 'adminBookingPersistenceRecords',
+  'clean', 'adminAppNotificationIsNewBookingRequest', 'adminAppNotificationChangeRequestContext',
+  presentationCode + '\nreturn otherAdminAppNotifications;');
+const clean = value => String(value ?? '').trim();
+const locationAlerts = [
+  {id:'location-a', workflow_area:'driver_pickup_location_followup', booking_reference:'ADM-TEST-A', safe_title:'Location unavailable', safe_message:'Check with the driver.'},
+  {id:'location-b', workflow_area:'driver_pickup_location_followup', booking_reference:'ADM-TEST-B', safe_title:'Check overlapping jobs', safe_message:'Check overlapping assignments.'},
+  {id:'ordinary', workflow_area:'driver_issue', booking_reference:'ADM-TEST-A', safe_title:'Driver issue alert', safe_message:'Existing issue'},
+];
+const records = [
+  {booking_reference:'ADM-TEST-A', public_booking_reference:'10901', driver_name:'Alex', passenger_name:'PRIVATE_PASSENGER', driver_payout_amount:800},
+  {booking_reference:'ADM-TEST-B', public_booking_reference:'10902', driver_name:'Blair'},
+];
+const renderAlerts = (rows, loaded, persisted = []) => present({notifications:rows}, loaded, persisted, clean, () => false, () => null);
+const original = JSON.stringify([locationAlerts, records]);
+const displayed = renderAlerts(locationAlerts, records);
+assert.equal(displayed[0].safe_title, 'Location unavailable · Job 10901 · Alex');
+assert.equal(displayed[1].safe_title, 'Check overlapping jobs · Job 10902 · Blair');
+assert.deepEqual(displayed[2], locationAlerts[2], 'Other workflows must remain unchanged');
+assert.equal(JSON.stringify([locationAlerts, records]), original, 'Display enrichment must not mutate saved alerts or bookings');
+assert.deepEqual(renderAlerts(locationAlerts, [], records), displayed, 'Existing persisted admin records also resolve exact references');
+assert.deepEqual(renderAlerts(locationAlerts, records, records), displayed, 'Matching copies from existing readers agree');
+for (const loaded of [[], [records[1]], [records[0], records[0]], [{...records[0], public_booking_reference:''}], [{...records[0], booking_reference:'wrong', id:'ADM-TEST-A', flight_no:'ADM-TEST-A'}]]) {
+  assert.equal(renderAlerts([locationAlerts[0]], loaded)[0].safe_title, 'Location unavailable · Job details unavailable');
+}
+assert.equal(renderAlerts([locationAlerts[0]], [records[0]], [{...records[0], public_booking_reference:'10999'}])[0].safe_title, 'Location unavailable · Job details unavailable', 'Conflicting readers cannot pick a job');
+assert.equal(renderAlerts([locationAlerts[0]], [{...records[0], driver_name:''}])[0].safe_title, 'Location unavailable · Job 10901 · Driver TBC');
+assert.equal(renderAlerts([{...locationAlerts[0], booking_reference:''}], records)[0].safe_title, 'Location unavailable · Job details unavailable');
+const renderedLocationMenu = new Function('React', 'otherAdminAppNotifications', 'clean', 'openSavedAdminNotificationsFromNotificationCentre', compiledMenu + '\nreturn renderMenu;')(React, displayed, clean, openAlert);
+const locationMarkup = renderToStaticMarkup(renderedLocationMenu());
+for (const row of displayed) assert.ok(locationMarkup.includes(row.safe_title));
+assert.ok(!locationMarkup.includes('PRIVATE_PASSENGER') && !locationMarkup.includes('800'));
+const titleStart = appPage.indexOf('<h4', appPage.indexOf('data-admin-app-notification-feed-row-id='));
+const titleEnd = appPage.indexOf('</h4>', titleStart) + '</h4>'.length;
+const cardTitleCode = ts.transpileModule('function cardTitle(title){return ' + appPage.slice(titleStart, titleEnd) + ';}', {
+  compilerOptions:{target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.CommonJS, jsx:ts.JsxEmit.React}, fileName:'card.tsx',
+}).outputText;
+const cardTitle = new Function('React', cardTitleCode + '\nreturn cardTitle;')(React);
+for (const row of displayed) assert.ok(renderToStaticMarkup(cardTitle(row.safe_title)).includes(row.safe_title));
+console.log('Location alerts identify their exact job in the existing menu and card; missing/ambiguous records fail closed');

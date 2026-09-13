@@ -400,6 +400,10 @@ const guardChecks = [
     script: "scripts/test-dashboard-urgent-requests-active-monitor-guard.mjs",
   },
   {
+    label: "Admin booking notice exact-job guidance guard",
+    script: "scripts/test-admin-booking-notice-guard.mjs",
+  },
+  {
     label: "manual Extra Charges review toggle guard",
     script: "scripts/test-manual-extra-charges-review-toggle-guard.mjs",
   },

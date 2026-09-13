@@ -18994,6 +18994,18 @@ export default function Home() {
     () => driverAssignmentDisplayDrivers.filter(isAssignableDriver),
     [driverAssignmentDisplayDrivers],
   );
+  const driverProfilePossibleDuplicates = useMemo(() => {
+    const digits = clean(driverProfileDraft.plateNumber).replace(/\s+/g, "")
+      .match(/^[a-z]*(0*[0-9]{4})[a-z]*$/i)?.[1];
+    if (!digits) return [];
+
+    // Advisory comparison only. Preserve leading zeros and the existing driver identity.
+    return drivers.filter((driver) =>
+      String(driver.id) !== clean(driverProfileDraft.driverId) &&
+      clean(driver.plate_number).replace(/\s+/g, "")
+        .match(/^[a-z]*(0*[0-9]{4})[a-z]*$/i)?.[1] === digits,
+    );
+  }, [drivers, driverProfileDraft.driverId, driverProfileDraft.plateNumber]);
   const filteredDrivers = useMemo(() => {
     const query = clean(driverSearchTerm);
 
@@ -49984,6 +49996,13 @@ export default function Home() {
 	                  }
 	                  value={driverProfileDraft.plateNumber}
 	                />
+                  {driverProfilePossibleDuplicates.length > 0 ? (
+                    <span className="mt-1 block break-words text-xs text-amber-800" role="status" data-driver-profile-duplicate-warning="true">
+                      Possible duplicate: {driverProfilePossibleDuplicates.slice(0, 2).map((driver) => clean(driver.driver_name) || "Unnamed driver").join(", ")}
+                      {driverProfilePossibleDuplicates.length > 2 ? ` and ${driverProfilePossibleDuplicates.length - 2} more` : ""}.
+                      {" "}Check name and contact.
+                    </span>
+                  ) : null}
 	              </label>
 	              <label>
 	                <span className="mb-1 block text-sm font-medium text-slate-700">Availability</span>

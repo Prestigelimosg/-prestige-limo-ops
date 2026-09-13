@@ -945,6 +945,7 @@ type AdminBookingGoogleCalendarStatusResponse = {
   statuses?: Array<{
     booking_reference?: string | null;
     status?: AdminBookingGoogleCalendarStatusValue | null;
+    calendar_payout?: string | null;
   }>;
 };
 
@@ -15170,6 +15171,8 @@ export default function Home() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [bookingGoogleCalendarStatuses, setBookingGoogleCalendarStatuses] =
     useState<Record<string, AdminBookingGoogleCalendarStatusValue>>({});
+  const [bookingGoogleCalendarPayouts, setBookingGoogleCalendarPayouts] =
+    useState<Record<string, string | null>>({});
   const [bookingGoogleCalendarStatusMessage, setBookingGoogleCalendarStatusMessage] =
     useState<Message | null>(null);
   const [bookingDriverDetailsDeliveryStatuses, setBookingDriverDetailsDeliveryStatuses] =
@@ -19930,7 +19933,7 @@ export default function Home() {
     filteredRecentBookingDisplayItems.length,
   );
   const bookingGoogleCalendarStatusPayloadSignature = JSON.stringify(
-    operationalBookings.map(buildSavedBookingCalendarEventPayload),
+    (activeTab === "completed" ? visibleCompletedBookings : operationalBookings).map(buildSavedBookingCalendarEventPayload),
   );
   const bookingDriverDetailsDeliveryReferenceKey = Array.from(
     new Set(
@@ -19939,7 +19942,7 @@ export default function Home() {
         .filter(Boolean),
     ),
   ).join("\n");
-  bookingGoogleCalendarStatusSourceRef.current = operationalBookings;
+  bookingGoogleCalendarStatusSourceRef.current = activeTab === "completed" ? visibleCompletedBookings : operationalBookings;
   const filteredCompletedBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
   const completedHistoryMonthGroups = useMemo(() => {
@@ -20022,10 +20025,11 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (activeTab !== "bookings") {
+    if (activeTab !== "bookings" && activeTab !== "completed") {
       return;
     }
 
+    setBookingGoogleCalendarPayouts({});
     const sourceBookings = bookingGoogleCalendarStatusSourceRef.current;
     const requestRevision = bookingGoogleCalendarStatusRequestRevisionRef.current + 1;
     bookingGoogleCalendarStatusRequestRevisionRef.current = requestRevision;
@@ -20039,9 +20043,11 @@ export default function Home() {
     let cancelled = false;
 
     async function loadConfiguredGoogleCalendarStatuses() {
+      const nextPayouts: Record<string, string | null> = {};
       const nextStatuses: Record<string, AdminBookingGoogleCalendarStatusValue> = {};
 
       for (let index = 0; index < sourceBookings.length; index += 25) {
+        if (cancelled || bookingGoogleCalendarStatusRequestRevisionRef.current !== requestRevision) return;
         const bookingChunk = sourceBookings.slice(index, index + 25);
         const response = await fetch(`${adminBookingCalendarGoogleSyncApiPath}?mode=status`, {
           body: JSON.stringify({
@@ -20072,6 +20078,9 @@ export default function Home() {
             ["cal_saved", "save_to_calendar", "update_calendar"].includes(status)
           ) {
             nextStatuses[bookingReference] = status;
+            const payout = statusRecord.calendar_payout;
+            nextPayouts[bookingReference] = typeof payout === "string" && /^\$(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(payout)
+              ? payout : null;
           }
         }
       }
@@ -20083,30 +20092,50 @@ export default function Home() {
         return;
       }
 
+      setBookingGoogleCalendarPayouts(nextPayouts);
       setBookingGoogleCalendarStatuses(nextStatuses);
       setBookingGoogleCalendarStatusMessage(null);
     }
 
-    void loadConfiguredGoogleCalendarStatuses().catch((error) => {
-      if (
-        cancelled ||
-        bookingGoogleCalendarStatusRequestRevisionRef.current !== requestRevision
-      ) {
-        return;
-      }
+    let reading = false;
+    const refreshCalendarRead = () => {
+      if (reading || cancelled) return;
+      reading = true;
+      setBookingGoogleCalendarPayouts({});
+      void loadConfiguredGoogleCalendarStatuses().catch((error) => {
+        if (
+          cancelled ||
+          bookingGoogleCalendarStatusRequestRevisionRef.current !== requestRevision
+        ) {
+          return;
+        }
 
-      setBookingGoogleCalendarStatuses({});
-      setBookingGoogleCalendarStatusMessage({
-        tone: "error",
-        text:
-          error instanceof Error
-            ? `Calendar status unavailable: ${error.message}`
-            : "Calendar status unavailable. No calendar status is assumed.",
-      });
-    });
+        setBookingGoogleCalendarStatuses({});
+        setBookingGoogleCalendarStatusMessage({
+          tone: "error",
+          text:
+            error instanceof Error
+              ? `Calendar status unavailable: ${error.message}`
+              : "Calendar status unavailable. No calendar status is assumed.",
+        });
+      }).finally(() => { reading = false; });
+    };
+    refreshCalendarRead();
+    // Re-read on returning from Calendar; no new timer or writer.
+    const refreshVisibleCalendarRead = () => {
+      if (document.visibilityState === "visible") refreshCalendarRead();
+    };
+    if (activeTab === "completed") {
+      window.addEventListener("focus", refreshVisibleCalendarRead);
+      window.addEventListener("pageshow", refreshVisibleCalendarRead);
+      document.addEventListener("visibilitychange", refreshVisibleCalendarRead);
+    }
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", refreshVisibleCalendarRead);
+      window.removeEventListener("pageshow", refreshVisibleCalendarRead);
+      document.removeEventListener("visibilitychange", refreshVisibleCalendarRead);
     };
   }, [activeTab, bookingGoogleCalendarStatusPayloadSignature]);
 
@@ -29596,6 +29625,11 @@ export default function Home() {
   );
   const completedBookingsPanel = (
     <>
+      {bookingGoogleCalendarStatusMessage ? (
+        <p className="text-xs text-amber-800" data-completed-calendar-read-error="true">
+          Calendar amount unavailable. Reopen Completed to retry.
+        </p>
+      ) : null}
       {completedTabCompletionMessages.length > 0 ? (
         <div className="mt-4 space-y-2" data-completed-undo-feedback-list="true">
           {completedTabCompletionMessages.map(([bookingId, completionMessage]) => (
@@ -29804,7 +29838,7 @@ export default function Home() {
                 >
                   <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                     <details className="min-w-0 rounded-md bg-white" data-completed-operational-details={bookingId}>
-                      <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_minmax(8rem,auto)] md:items-center">
+                      <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(6rem,auto)] md:items-center">
                         <span className="min-w-0">
                           <span className="block truncate font-semibold text-slate-950">
                             <AdminOperationalUppercaseValue field="company">
@@ -29828,7 +29862,12 @@ export default function Home() {
                           <AdminOperationalUppercaseValue field="pickup">{routeText}</AdminOperationalUppercaseValue>
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-slate-800">{driverText}</span>
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-slate-800">{driverText}</span>
+                            <span className="shrink-0 text-xs text-slate-600" data-completed-calendar-payout={bookingId}>
+                              {bookingGoogleCalendarPayouts[cleanReferenceText(getBookingCalendarReference(savedBooking)).toLowerCase()] ?? "—"}
+                            </span>
+                          </span>
                           <span className="block truncate text-xs text-slate-500">
                             <AdminOperationalUppercaseValue field="vehicle">
                               {operationalCard.vehicle_display || "Vehicle TBC"}

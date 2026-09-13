@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -6692,6 +6692,7 @@ async function runChromeTest() {
               statuses: (parsedBody?.bookings || []).map((booking) => ({
                 booking_reference: booking.booking_reference,
                 status: "cal_saved",
+                calendar_payout: window.__prestigeCalendarPayout === undefined ? "$50" : window.__prestigeCalendarPayout,
               })),
               version: "bookings-calendar-status-browser-mock",
             }),
@@ -7877,6 +7878,40 @@ async function runChromeTest() {
       10000,
       "Completed / History exact-date handoff",
     );
+    // Focused acceptance of the actual Completed component and its existing Calendar read.
+    await waitForCondition(() => evaluate(`document.querySelector("[data-completed-calendar-payout]")?.textContent.includes("$50")`), 10000, "Completed Calendar amount readback");
+    await evaluate(`(() => { window.__prestigeCalendarPayout = "$75.25"; window.dispatchEvent(new Event("focus")); })()`);
+    await waitForCondition(() => evaluate(`document.querySelector("[data-completed-calendar-payout]")?.textContent.includes("$75.25")`), 10000, "Calendar edit reflected on return");
+    const readOnlyPayout = await evaluate(`(() => {
+      const amount = document.querySelector("[data-completed-calendar-payout]");
+      return Boolean(amount) && !amount.querySelector("input,button,textarea,select,[contenteditable]");
+    })()`);
+    assert.equal(readOnlyPayout, true, "Completed payout must be display-only");
+    assert.equal(await evaluate(`document.querySelector("[data-completed-calendar-payout]")?.textContent.trim()`), "$75.25", "Show only the amount without a Payout label");
+    for (const width of [1440, 390]) {
+      await client.send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < 500 });
+      const bounds = await evaluate(`(() => {
+        const amount = document.querySelector("[data-completed-calendar-payout]");
+        const card = amount?.closest("[data-completed-operational-card]");
+        card?.scrollIntoView({ block: "center" });
+        const a = amount?.getBoundingClientRect(); const c = card?.getBoundingClientRect();
+        return a && c ? { left: a.left, right: a.right, cardLeft: c.left, cardRight: c.right } : null;
+      })()`);
+      assert.ok(bounds && bounds.left >= bounds.cardLeft && bounds.right <= bounds.cardRight, `Payout fits Completed card at ${width}px`);
+      if (process.env.PRESTIGE_BOOKING_UI_FOCUS === "calendar-payout") {
+        const screenshot = await client.send("Page.captureScreenshot", { format: "png" });
+        await writeFile(`/private/tmp/prestige-completed-calendar-payout-${width}.png`, Buffer.from(screenshot.data, "base64"));
+      }
+    }
+    await client.send("Emulation.clearDeviceMetricsOverride");
+    await evaluate(`(() => { window.__prestigeCalendarPayout = null; window.dispatchEvent(new Event("focus")); })()`);
+    await waitForCondition(() => evaluate(`document.querySelector("[data-completed-calendar-payout]")?.textContent.includes("—")`), 10000, "Missing Calendar amount is a dash");
+    await evaluate(`(() => { delete window.__prestigeCalendarPayout; })()`);
+    if (process.env.PRESTIGE_BOOKING_UI_FOCUS === "calendar-payout") {
+      assert.equal(browserErrors.length, 0, "No browser exceptions in focused Completed acceptance");
+      console.log(JSON.stringify(reporter.summary({ ok: true, focus: "calendar-payout", localSyntheticOnly: true, mobileAndDesktop: true })));
+      return;
+    }
     await setInputValue(
       "[data-completed-search-input='true']",
       "",

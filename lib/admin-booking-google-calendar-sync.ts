@@ -30,6 +30,13 @@ const requiredEnvNames = [
 
 type EnvInput = Record<string, string | undefined>;
 type Fetcher = typeof fetch;
+type PayoutReadClient = Pick<import("@supabase/supabase-js").SupabaseClient, "from">;
+type CalendarSyncOptions = {
+  env?: EnvInput;
+  fetcher?: Fetcher;
+  now?: Date;
+  payoutClient?: PayoutReadClient;
+};
 
 type GoogleCalendarSyncConfig = {
   apiBaseUrl: string;
@@ -87,6 +94,7 @@ export type AdminBookingGoogleCalendarStatusValue =
 export type AdminBookingGoogleCalendarStatus = {
   booking_reference: string;
   status: AdminBookingGoogleCalendarStatusValue;
+  calendar_payout: string | null;
 };
 
 export type AdminBookingGoogleCalendarStatusResult =
@@ -108,6 +116,8 @@ type GoogleCalendarEventResource = {
     private: {
       prestigeBookingReference: string;
       prestigeSource: "prestige_limo_ops";
+      prestigePayoutInitialized?: "1";
+      prestigeCalendarPayout?: string;
     };
   };
   id: string;
@@ -409,6 +419,103 @@ function buildGoogleCalendarEventResource(
   };
 }
 
+// Only the amount immediately before the existing plate/title separator is editable.
+// Other dollar signs (for example in a passenger name) are never payout evidence.
+function calendarTitlePayout(summary: unknown) {
+  if (typeof summary !== "string") return null;
+  const match = summary.match(/^(?:(?:MIDNIGHT JOB - |CANCELLED - ))*([A-Za-z0-9][A-Za-z0-9 -]{0,39}?) \$(0|[1-9]\d{0,5})(\.\d{1,2})? > /);
+  return match ? `$${match[2]}${match[3] || ""}` : null;
+}
+
+function calendarTitleWithoutPayout(summary: unknown) {
+  if (typeof summary !== "string") return "";
+  const payout = calendarTitlePayout(summary);
+  return payout ? summary.replace(` ${payout} > `, " > ") : summary;
+}
+
+function calendarTitleWithPayout(summary: string, payout: string | null) {
+  if (!payout || !/^(?:(?:MIDNIGHT JOB - |CANCELLED - ))*[A-Za-z0-9][A-Za-z0-9 -]{0,39} > /.test(summary)) {
+    return summary;
+  }
+  return summary.replace(" > ", ` ${payout} > `);
+}
+
+function calendarEventIdentityMatches(value: Record<string, unknown>, expected: GoogleCalendarEventResource) {
+  const properties = value.extendedProperties as { private?: Record<string, unknown> } | undefined;
+  return value.id === expected.id &&
+    properties?.private?.prestigeBookingReference === expected.extendedProperties.private.prestigeBookingReference &&
+    properties?.private?.prestigeSource === "prestige_limo_ops";
+}
+
+// Best-effort READ ONLY. A missing rate/database must not disable the established Calendar sync.
+// Resolve the existing default for this persisted booking, never its manual payout override.
+async function readCalendarDefaultPayout(reference: string, options: CalendarSyncOptions): Promise<string | null> {
+  try {
+    const env = options.env || process.env;
+    let client = options.payoutClient;
+    if (!client) {
+      if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
+      const { createClient } = await import("@supabase/supabase-js");
+      const deadline = AbortSignal.timeout(3000);
+      client = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { fetch: (input, init) => fetch(input, { ...init, signal: deadline }) },
+      });
+    }
+    const bookingResult = await client.from("bookings")
+      .select("booking_reference, company_id, driver_id, service_type, route_type, pickup_at, vehicle_type_or_category, extra_stop_count, child_seat_required, child_seat_count")
+      .eq("booking_reference", reference).maybeSingle();
+    const booking = bookingResult.data;
+    if (bookingResult.error || !booking || booking.booking_reference !== reference) return null;
+    const type = String(booking.service_type || booking.route_type || "").toUpperCase();
+    if (!["MNG", "DEP", "TRF", "DSP"].includes(type)) return null;
+    const pickup = typeof booking.pickup_at === "string" && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(booking.pickup_at)
+      ? new Date(booking.pickup_at) : null;
+    if (!pickup || !Number.isFinite(pickup.getTime())) return null;
+    const settingsResult = await client.from("rate_settings")
+      .select("driver_payout_rules, midnight_payout, extra_stop_payout, child_seat_driver_payout")
+      .eq("id", "default").maybeSingle();
+    if (settingsResult.error) return null;
+    const rateRecord = async (table: string, id: unknown): Promise<{ driver_payout_rules?: unknown }> => {
+      if (id === null || id === undefined) return {};
+      if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) throw new Error("Invalid rate identity");
+      const result = await client!.from(table).select("driver_payout_rules").eq("id", Number(id)).maybeSingle();
+      if (result.error || !result.data) throw new Error("Rate read unavailable");
+      return result.data;
+    };
+    const [company, driver] = await Promise.all([
+      rateRecord("companies", booking.company_id), rateRecord("drivers", booking.driver_id),
+    ]);
+    const { resolvePricing, calculateProfit, initialRateSettings } = await import("./pricing");
+    const { payoutRulesFromDb } = await import("./admin-rate-setup-read");
+    const saved = settingsResult.data;
+    const nonnegative = (value: unknown, fallback: number) => {
+      if (value === null || value === undefined || value === "") return fallback;
+      if (!Number.isFinite(Number(value)) || Number(value) < 0) throw new Error("Invalid rate");
+      return Number(value);
+    };
+    const settings = {
+      ...initialRateSettings,
+      driverPayoutRules: { ...initialRateSettings.driverPayoutRules, ...payoutRulesFromDb(saved?.driver_payout_rules) },
+      midnightPayout: nonnegative(saved?.midnight_payout, saved ? 0 : initialRateSettings.midnightPayout),
+      extraStopPayout: nonnegative(saved?.extra_stop_payout, initialRateSettings.extraStopPayout) || initialRateSettings.extraStopPayout,
+      childSeatDriverPayout: nonnegative(saved?.child_seat_driver_payout, initialRateSettings.childSeatDriverPayout) || initialRateSettings.childSeatDriverPayout,
+    };
+    const pricing = resolvePricing({
+      bookingType: type, vehicleType: booking.vehicle_type_or_category,
+      time: new Intl.DateTimeFormat("en-GB", { timeZone: adminBookingCalendarTimezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(pickup),
+      extraStopCount: booking.extra_stop_count,
+      childSeatRequired: booking.child_seat_required, childSeatCount: booking.child_seat_count,
+    }, { driver_payout_rules: payoutRulesFromDb(company.driver_payout_rules) }, null, settings,
+      { driver_payout_rules: payoutRulesFromDb(driver.driver_payout_rules) });
+    const amount = calculateProfit(pricing).driverPayout;
+    if (!Number.isFinite(amount) || amount < 0 || amount > 999999.99) return null;
+    return `$${Number(amount.toFixed(2))}`;
+  } catch {
+    return null;
+  }
+}
+
 function calendarEventsUrl(
   config: GoogleCalendarSyncConfig,
   eventId?: string,
@@ -533,7 +640,7 @@ function providerEventMatchesExpected(
 
   return (
     value.id === expected.id &&
-    value.summary === expected.summary &&
+    calendarTitleWithoutPayout(value.summary) === expected.summary &&
     calendarEventDescriptionMatches(value.description, expected.description) &&
     value.location === expected.location &&
     calendarDateTimeMatches(
@@ -574,6 +681,7 @@ async function readGoogleCalendarEventStatus(
     return {
       booking_reference: event.booking_reference,
       status: "save_to_calendar",
+      calendar_payout: null,
     };
   }
 
@@ -589,6 +697,8 @@ async function readGoogleCalendarEventStatus(
 
   return {
     booking_reference: event.booking_reference,
+    calendar_payout: calendarEventIdentityMatches(providerEvent, expected)
+      ? calendarTitlePayout(providerEvent.summary) : null,
     status: providerEventMatchesExpected(providerEvent, expected)
       ? "cal_saved"
       : "update_calendar",
@@ -600,47 +710,65 @@ async function upsertGoogleCalendarEvent(
   fetcher: Fetcher,
   accessToken: string,
   event: AdminBookingCalendarEventData,
+  options: CalendarSyncOptions,
 ) {
   const eventResource = buildGoogleCalendarEventResource(event);
-  const commonRequest = {
-    body: JSON.stringify(eventResource),
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
+  let defaultPayout: string | null | undefined;
+  const getDefault = async () => {
+    if (defaultPayout === undefined) defaultPayout = await readCalendarDefaultPayout(event.booking_reference, options);
+    return defaultPayout;
   };
+  const hasPlate = calendarTitleWithPayout(event.title, "$0") !== event.title;
+  // Keep the established insert/conflict/update sequence and deterministic event ID.
+  // Do not read rates for titles without a plate; ACK can seed it when a plate is saved.
+  const initialPayout = hasPlate ? await getDefault() : null;
+  eventResource.summary = calendarTitleWithPayout(event.title, initialPayout);
+  if (initialPayout) eventResource.extendedProperties.private.prestigePayoutInitialized = "1";
+  const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
   const insertResponse = await fetcher(calendarEventsUrl(config), {
-    ...commonRequest,
-    method: "POST",
+    body: JSON.stringify(eventResource), headers, method: "POST",
   });
+  if (insertResponse.ok) return true;
+  if (insertResponse.status !== 409) return false;
 
-  if (insertResponse.ok) {
-    return true;
+  // Read before replacing an existing event so an Admin's Calendar amount survives.
+  // A concurrent edit yields 412 rather than being overwritten; no blind retry here.
+  const currentResponse = await fetcher(calendarEventReadUrl(config, eventResource.id), {
+    headers: { Authorization: `Bearer ${accessToken}` }, method: "GET", cache: "no-store",
+  });
+  if (!currentResponse.ok) return false;
+  const current = await readProviderJson(currentResponse);
+  if (!current || !calendarEventIdentityMatches(current, eventResource) ||
+      typeof current.etag !== "string" || !current.etag || current.status === "cancelled") return false;
+  const currentPayout = calendarTitlePayout(current.summary);
+  const properties = current.extendedProperties as { private?: Record<string, unknown> };
+  const initialized = properties.private?.prestigePayoutInitialized === "1";
+  const prefix = typeof current.summary === "string" ? current.summary.split(" > ")[0] : "";
+  if (!currentPayout && prefix.includes("$")) return false;
+  // Deliberate removal after initialization stays removed. A valid manual amount wins even on legacy events.
+  const previousHadPlate = typeof current.summary === "string" && calendarTitleWithPayout(calendarTitleWithoutPayout(current.summary), "$0") !== calendarTitleWithoutPayout(current.summary);
+  const carried = !previousHadPlate && typeof properties.private?.prestigeCalendarPayout === "string" &&
+    /^\$(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(properties.private.prestigeCalendarPayout)
+      ? properties.private.prestigeCalendarPayout : null;
+  const payout = currentPayout || carried || (initialized ? null : initialPayout);
+  if (payout && !hasPlate) eventResource.extendedProperties.private.prestigeCalendarPayout = payout;
+  eventResource.summary = calendarTitleWithPayout(event.title, payout);
+  if (initialized || currentPayout || (hasPlate && payout)) {
+    eventResource.extendedProperties.private.prestigePayoutInitialized = "1";
+  } else {
+    delete eventResource.extendedProperties.private.prestigePayoutInitialized;
   }
-
-  if (insertResponse.status !== 409) {
-    return false;
-  }
-
-  const updateResponse = await fetcher(
-    calendarEventsUrl(config, eventResource.id),
-    {
-      ...commonRequest,
-      method: "PUT",
-    },
-  );
-
+  const updateResponse = await fetcher(calendarEventsUrl(config, eventResource.id), {
+    body: JSON.stringify(eventResource),
+    headers: { ...headers, "If-Match": current.etag }, method: "PUT",
+  });
   return updateResponse.ok;
 }
 
 export async function syncAdminBookingCalendarAgendaToGoogle(
   input: unknown,
   actor: AdminDispatcherBoundaryContext,
-  options: {
-    env?: EnvInput;
-    fetcher?: Fetcher;
-    now?: Date;
-  } = {},
+  options: CalendarSyncOptions = {},
 ): Promise<AdminBookingGoogleCalendarSyncResult> {
   const actorFailure = validateActor(actor);
 
@@ -653,22 +781,14 @@ export async function syncAdminBookingCalendarAgendaToGoogle(
 
 export async function syncVerifiedDriverDetailsToAdminBookingCalendar(
   input: unknown,
-  options: {
-    env?: EnvInput;
-    fetcher?: Fetcher;
-    now?: Date;
-  } = {},
+  options: CalendarSyncOptions = {},
 ): Promise<AdminBookingGoogleCalendarSyncResult> {
   return syncValidatedAdminBookingCalendarAgendaToGoogle(input, options);
 }
 
 async function syncValidatedAdminBookingCalendarAgendaToGoogle(
   input: unknown,
-  options: {
-    env?: EnvInput;
-    fetcher?: Fetcher;
-    now?: Date;
-  },
+  options: CalendarSyncOptions,
 ): Promise<AdminBookingGoogleCalendarSyncResult> {
   const agendaResult = buildAdminBookingCalendarAgenda(input, {
     now: options.now,
@@ -719,6 +839,7 @@ async function syncValidatedAdminBookingCalendarAgendaToGoogle(
         fetcher,
         accessToken,
         event,
+        options,
       );
 
       if (!synced) {
@@ -756,11 +877,7 @@ async function syncValidatedAdminBookingCalendarAgendaToGoogle(
 export async function readAdminBookingCalendarStatusesFromGoogle(
   input: unknown,
   actor: AdminDispatcherBoundaryContext,
-  options: {
-    env?: EnvInput;
-    fetcher?: Fetcher;
-    now?: Date;
-  } = {},
+  options: CalendarSyncOptions = {},
 ): Promise<AdminBookingGoogleCalendarStatusResult> {
   const actorFailure = validateActor(actor);
 

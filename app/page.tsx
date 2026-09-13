@@ -906,6 +906,11 @@ const dispatchReleaseNonEligibleBookingStatuses = [
 type Message = {
   tone: "info" | "success" | "error";
   text: string;
+  bookingNotices?: Array<{
+    bookingReference: string;
+    text: string;
+    needsAttention: boolean;
+  }>;
 };
 
 type RateOverrideListMessage = Message & {
@@ -23746,6 +23751,11 @@ export default function Home() {
       setDispatchLoadFocusTarget("driverJobLink");
       const savedMessage = {
         tone: "info",
+        bookingNotices: savedBookings.map(({ record }) => ({
+          bookingReference: clean(record.booking_reference),
+          text: `${clean(record.public_booking_reference) ? `Booking ${clean(record.public_booking_reference)}` : "Saved booking (number unavailable)"} — Saving to Calendar…`,
+          needsAttention: false,
+        })),
         text: `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(
           ", ",
         )}. Syncing Google Calendar...`,
@@ -23764,7 +23774,13 @@ export default function Home() {
       };
       await completeActiveAdminEmailAiReviewAfterSave();
 
-      const calendarSyncResults = [];
+      const calendarSyncResults: Array<{
+        eventCount: number;
+        message: string;
+        ok: boolean;
+        reference: string;
+        skipped?: boolean;
+      }> = [];
 
       for (const savedBooking of savedBookings) {
         const calendarSyncResult = adminBookingCalendarReadyForRealSync(savedBooking.bookingValue)
@@ -23796,8 +23812,32 @@ export default function Home() {
         savedBookingCount: savedBookings.length,
       });
 
+      const savedBookingNotices = savedBookings.map(({ record, bookingValue }, index) => {
+        const result = calendarSyncResults[index];
+        const skipped = "skipped" in result && result.skipped;
+        const nextSteps: string[] = [];
+        if (!result.ok) {
+          nextSteps.push("Calendar not updated. Check Update + Cal.");
+        } else if (skipped) {
+          if (!formatAdminBookingPickupDateTime(bookingValue)) {
+            nextSteps.push("Check pickup date/time.");
+          }
+          if (!clean(bookingValue.pickup) && !clean(bookingValue.dropoff)) {
+            nextSteps.push("Add pickup or drop-off.");
+          }
+        } else {
+          nextSteps.push("Saved to Calendar.");
+        }
+        const publicReference = clean(record.public_booking_reference);
+        return {
+          bookingReference: clean(record.booking_reference),
+          text: `${publicReference ? `Booking ${publicReference}` : "Saved booking (number unavailable)"} — ${nextSteps.join(" ")}`,
+          needsAttention: !result.ok || Boolean(skipped),
+        };
+      });
       const saveMessage = {
         tone: calendarSyncFailed ? "error" : "success",
+        bookingNotices: savedBookingNotices,
         text: calendarSyncFailed
           ? `Operational booking${savedBookings.length > 1 ? "s" : ""} saved: ${savedBookingReferences.join(
               ", ",
@@ -36679,6 +36719,7 @@ export default function Home() {
     const noticeText = clean(notice.text);
 
     return (
+      (notice.tone !== "error" && noticeText === "No queued saved admin app notifications.") ||
       notice.tone === "success" &&
       (noticeText === "Bookings loaded. Choose a booking below." ||
         /^Loaded \d+(?: of \d+)? saved admin app notification/.test(noticeText) ||
@@ -51220,14 +51261,42 @@ export default function Home() {
                 </p>
                 <div className="mt-1 space-y-0.5">
                   {dashboardSystemNotices.map((notice) => (
-                    <p
+                    <div
                       data-admin-app-notification-feed-feedback={
                         notice === adminAppNotificationReadState.message ? "true" : undefined
                       }
                       key={`${notice.tone}-${notice.text}`}
                     >
-                      {notice.text}
-                    </p>
+                      {notice.bookingNotices?.length ? notice.bookingNotices.map((bookingNotice) => (
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-0.5" key={bookingNotice.bookingReference}>
+                          <p>{bookingNotice.text}</p>
+                          {bookingNotice.needsAttention && bookingNotice.bookingReference ? (
+                            <button
+                              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 disabled:opacity-50"
+                              data-admin-booking-notice-open="true"
+                              disabled={Boolean(adminAiReadOnlyBookingNavigationPendingKey)}
+                              onClick={async () => {
+                                if (adminAiReadOnlyBookingNavigationPendingKey) return;
+                                setAdminAiReadOnlyBookingNavigationPendingKey(`booking-notice:${bookingNotice.bookingReference}`);
+                                try {
+                                  await loadAdminAiReadOnlyBookingInDispatch(
+                                    bookingNotice.bookingReference,
+                                    "Could not open this booking. Try again.",
+                                  );
+                                } catch {
+                                  setMessage({ tone: "error", text: "Could not open this booking. Try again." });
+                                } finally {
+                                  setAdminAiReadOnlyBookingNavigationPendingKey("");
+                                }
+                              }}
+                              type="button"
+                            >
+                              {adminAiReadOnlyBookingNavigationPendingKey === `booking-notice:${bookingNotice.bookingReference}` ? "Opening…" : "Open in Dispatch"}
+                            </button>
+                          ) : null}
+                        </div>
+                      )) : <p>{notice.text}</p>}
+                    </div>
                   ))}
                 </div>
               </div>

@@ -1499,7 +1499,7 @@ async function insertRowAndSelectIdWithFallback(
   }
 
   // An admission fence rejection is final, never a schema-fallback opportunity.
-  if (table === "bookings" && ["PBL01", "PBL02"].includes(currentResult.error?.code || "")) {
+  if (table === "bookings" && ("customer_request_trip_group" in currentPayload || ["PBL01", "PBL02", "PBD01", "PBD02"].includes(currentResult.error?.code || ""))) {
     return currentResult;
   }
 
@@ -2930,11 +2930,51 @@ export const codexMonthlyInvoiceAutomationPersistenceAdapterActor: AdminBookingP
   source_surface: "system",
 };
 
+// Server-derived matching data only; never part of a Customer read projection.
+function customerRequestTripGroup(inputs: AdminBookingPersistenceInput[]) {
+  return inputs.map((input) => {
+    const row = bookingToDbRow(input.booking, dbIdentifierOrNull(input.booking.customer_id), customerBookingRequestPersistenceAdapterActor);
+    return {
+      booking_reference: row.booking_reference,
+      customer_id: row.customer_id, company_id: row.company_id, booker_id: row.booker_id,
+      traveler_id: row.traveler_id, passenger_name: row.passenger_name,
+      pickup_at: row.pickup_at, pickup_location: row.pickup_location, dropoff_location: row.dropoff_location,
+      service_type: row.service_type, vehicle_type_or_category: row.vehicle_type_or_category,
+      flight_no: row.flight_no, pax_count: row.pax_count, luggage_count: row.luggage_count,
+      stops: input.route_points.filter((point) => point.point_type === "stop" || point.point_type === "waypoint")
+        .sort((a,b) => (a.sequence_number ?? 0) - (b.sequence_number ?? 0)).map((point) => point.location_text),
+    };
+  });
+}
+
+function customerTripDuplicateResult(value: unknown): Extract<AdminBookingResult<null>, { ok: false }> {
+  const row = asRecord(value);
+  const reference = typeof row.public_reference === "string" && /^(?:[0-9]{5}|[A-Z0-9]{2,12}-[0-9]{5})$/.test(row.public_reference)
+    ? row.public_reference : null;
+  return { ok: false, status: 429, error: "customer_trip_duplicate",
+    customer_booking_duplicate: { reference, inProgress: row.in_progress === true } };
+}
+
+export async function checkCustomerBookingRequestDuplicates(
+  inputs: AdminBookingPersistenceInput[],
+): Promise<AdminBookingResult<null>> {
+  const clientResult = getServerOnlySupabaseClient(customerBookingRequestPersistenceAdapterActor);
+  if (!clientResult.ok) return clientResult;
+  try {
+    const { data, error } = await clientResult.data.rpc("check_customer_same_trip", { p_group: customerRequestTripGroup(inputs) });
+    const row = asRecord(Array.isArray(data) && data.length === 1 ? data[0] : null);
+    if (error || typeof row.duplicate !== "boolean") return { ok: false, status: 503, error: "customer_trip_check_unavailable" };
+    return row.duplicate ? customerTripDuplicateResult(row) : { ok: true, data: null };
+  } catch { return { ok: false, status: 503, error: "customer_trip_check_unavailable" }; }
+}
+
 export async function createAdminBookingThroughSupabaseAdapter(
   input: AdminBookingPersistenceInput,
   auditInput: AdminBookingAuditInput,
   actor: AdminBookingPersistenceAdapterActor,
+  customerRequestGroup?: AdminBookingPersistenceInput[],
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
+  if (customerRequestGroup && !isVerifiedCustomerBookingRequestActor(actor)) return { ok: false, status: 403, error: safeSaveError };
   const clientResult = getServerOnlySupabaseClient(actor);
 
   if (!clientResult.ok) {
@@ -2962,7 +3002,9 @@ export async function createAdminBookingThroughSupabaseAdapter(
     return contactResult;
   }
 
-  const bookingRow = bookingToDbRow(input.booking, customerId, actor);
+  const bookingRow = { ...bookingToDbRow(input.booking, customerId, actor),
+    ...(customerRequestGroup ? { customer_request_trip_group: customerRequestTripGroup(customerRequestGroup) } : {}),
+  };
   const { data: insertedBooking, error: bookingError } = await insertRowAndSelectIdWithFallback(
     client,
     "bookings",
@@ -2973,6 +3015,12 @@ export async function createAdminBookingThroughSupabaseAdapter(
   const bookingId = dbIdentifierOrNull(asRecord(insertedBooking).id);
 
   if (bookingError || !bookingId) {
+    if (customerRequestGroup && bookingError?.code === "PBD01") {
+      let detail: unknown = null;
+      try { detail = JSON.parse(bookingError.details || "null"); } catch { /* Keep the safe generic duplicate notice. */ }
+      return customerTripDuplicateResult(detail);
+    }
+    if (customerRequestGroup && bookingError?.code === "PBD02") return { ok: false, status: 503, error: "customer_trip_check_unavailable" };
     return safeAdapterFailure(safeSaveError, 500, bookingError, "booking_row");
   }
 

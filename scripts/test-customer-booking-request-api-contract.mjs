@@ -56,9 +56,9 @@ async function loadRouteHarness() {
     persistencePath,
     [
       "function mock() { return globalThis.__prestigeCustomerBookingRequestApiMock; }",
-      "async function createAdminBooking(data, actor, audit) {",
+      "async function createAdminBooking(data, actor, audit, group) {",
       "  const state = mock();",
-      "  state.createCalls.push({ actor, audit, data });",
+      "  state.createCalls.push({ actor, audit, data, group });",
       "  if (state.phoneProofCalls.length && state.admissionCalls.length !== 1) throw new Error('Public writer requires one admission');",
       "  if (!state.phoneProofCalls.length && state.admissionCalls.length) throw new Error('Invitation/session must bypass admission');",
       "  return Array.isArray(state.createResults) && state.createResults.length > 0 ? state.createResults.shift() : state.createResult;",
@@ -86,6 +86,7 @@ async function loadRouteHarness() {
     adapterPath,
     [
       "module.exports = {",
+      "  async checkCustomerBookingRequestDuplicates(group) { const s=globalThis.__prestigeCustomerBookingRequestApiMock; s.duplicateCalls.push(group); return s.duplicateResult; },",
       "  customerBookingRequestPersistenceAdapterActor: {",
       "    actor_label: 'Customer booking request',",
       "    actor_role: 'system',",
@@ -239,6 +240,9 @@ async function loadRouteHarness() {
 
 function installMock(overrides = {}) {
   const state = {
+    receiptCalls: [],
+    duplicateCalls: [],
+    duplicateResult: { ok: true, data: null },
     adminAppNotificationCalls: [],
     adminAppNotificationThrows: false,
     alertCalls: [],
@@ -459,6 +463,25 @@ for (const phrase of [
 const harness = await loadRouteHarness();
 
 try {
+  for (const inProgress of [false, true]) {
+    const state=installMock({ portalBoundary: {ok:true,data:{auth_user_id:"synthetic-pa"}},
+      verifiedIdentity:{ok:true,data:{customer_account_reference:"120",company_id:1,booker_id:5,traveler_id:901,traveler_name:"Synthetic Person"}},
+      duplicateResult:{ok:false,status:429,error:"customer_trip_duplicate",customer_booking_duplicate:{reference:inProgress?null:"11001",inProgress}} });
+    const response=await harness.route.POST(postRequest({passengerName:"Synthetic Person"},validHeadersWithoutInvitation()));
+    assert.equal(response.status,429);
+    assert.equal(response.headers.get("x-prestige-customer-booking-result"),inProgress?"customer_trip_in_progress":"customer_trip_duplicate");
+    assert.equal(state.duplicateCalls.length,1);
+    assert.equal(state.duplicateCalls[0][0].booking.booker_id,5);
+    for(const key of ["createCalls","codexPreparationCalls","adminAppNotificationCalls","alertCalls","devicePushAlertCalls","receiptCalls"]) assert.equal(state[key].length,0,key);
+    assertSafeCustomerBody(await response.json(),"duplicate response");
+  }
+  const unavailable=installMock({portalBoundary:{ok:true,data:{}},verifiedIdentity:{ok:true,data:{customer_account_reference:"120"}},duplicateResult:{ok:false,status:503,error:"customer_trip_check_unavailable"}});
+  assert.equal((await harness.route.POST(postRequest({},validHeadersWithoutInvitation()))).status,503);
+  assert.equal(unavailable.createCalls.length,0);
+  const raced=installMock({portalBoundary:{ok:true,data:{}},verifiedIdentity:{ok:true,data:{customer_account_reference:"120"}},createResult:{ok:false,status:429,error:"customer_trip_duplicate",customer_booking_duplicate:{reference:"11001",inProgress:false}}});
+  assert.equal((await harness.route.POST(postRequest({},validHeadersWithoutInvitation()))).status,429);
+  assert.equal(raced.adminAppNotificationCalls.length,0);
+  assert.equal(raced.devicePushAlertCalls.length,0);
   const missingPhoneProofMock = installMock();
   const missingPhoneProofResponse = await harness.route.POST(
     postRequest({ passengerName: "Safe Passenger" }, validHeadersWithoutInvitation()),

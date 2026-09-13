@@ -167,6 +167,7 @@ export type AdminBookingResult<T> =
       ok: false;
       category?: AdminBookingPersistenceSafeErrorCategory;
       customer_account_collision_review?: AdminCustomerAccountCollisionReview;
+      customer_booking_duplicate?: { reference: string | null; inProgress: boolean };
       error: string;
       operation?: AdminBookingPersistenceSafeErrorOperation;
       status: number;
@@ -1544,6 +1545,7 @@ export async function createAdminBooking(
     actor_label: "Admin dashboard",
     change_summary: "Operational booking fields saved through admin booking persistence prototype.",
   },
+  customerRequestGroup?: AdminBookingPersistenceInput[],
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
   const parsed = parseAdminBookingPersistencePayload(input);
 
@@ -1551,7 +1553,7 @@ export async function createAdminBooking(
     return parsed;
   }
 
-  return createAdminBookingThroughSupabaseAdapter(parsed.data, auditInput, actor);
+  return createAdminBookingThroughSupabaseAdapter(parsed.data, auditInput, actor, customerRequestGroup);
 }
 
 export async function updateAdminBooking(

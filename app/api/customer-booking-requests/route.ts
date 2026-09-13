@@ -5,7 +5,7 @@ import {
   type AdminBookingPersistenceRecord,
 } from "../../../lib/admin-booking-persistence";
 import { createCustomerBookingRequestAdminAppNotification } from "../../../lib/admin-app-notification-persistence";
-import { customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
+import { checkCustomerBookingRequestDuplicates, customerBookingRequestPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import { sendAdminNewBookingDevicePushAlert } from "../../../lib/admin-device-push-notification";
 import { sendAdminNewBookingEmailAlert } from "../../../lib/admin-new-booking-email-alert";
 import {
@@ -448,9 +448,7 @@ export async function POST(request: Request) {
     }
 
     const savedRequests: AdminBookingPersistenceRecord[] = [];
-
-    for (const requestPayload of parsed.data.requests) {
-      const verifiedRequestPayload = verifiedIdentity?.ok
+    const verifiedRequests = parsed.data.requests.map((requestPayload) => verifiedIdentity?.ok
         ? {
             ...requestPayload,
             booking: {
@@ -466,15 +464,33 @@ export async function POST(request: Request) {
                 : {}),
             },
           }
-        : requestPayload;
+        : requestPayload);
+
+    function duplicateResponse(result: { customer_booking_duplicate?: { reference: string | null; inProgress: boolean } }) {
+      const match = result.customer_booking_duplicate;
+      return Response.json({ ok: false, booking_reference: match?.reference || null }, {
+        status: 429, headers: { "Cache-Control": "no-store", [customerBookingResultHeader]: match?.inProgress ? "customer_trip_in_progress" : "customer_trip_duplicate" },
+      });
+    }
+    function duplicateCheckUnavailable() {
+      return Response.json({ ok: false }, { status: 503, headers: { "Cache-Control": "no-store", [customerBookingResultHeader]: "customer_trip_check_unavailable" } });
+    }
+    // Both legs, verified identity, before any CRM/booking writes or notifications.
+    if (verifiedIdentity?.ok) {
+      const duplicateCheck = await checkCustomerBookingRequestDuplicates(verifiedRequests);
+      if (!duplicateCheck.ok) return duplicateCheck.customer_booking_duplicate ? duplicateResponse(duplicateCheck) : duplicateCheckUnavailable();
+    }
+    for (const verifiedRequestPayload of verifiedRequests) {
       const result = await createAdminBooking(verifiedRequestPayload, customerBookingRequestPersistenceAdapterActor, {
         action: "customer_booking_request_create",
         source_route: "/book",
         actor_label: "Customer booking request",
         change_summary: "Customer-submitted booking request saved for admin review.",
-      });
+      }, verifiedIdentity?.ok ? verifiedRequests : undefined);
 
       if (!result.ok) {
+        if (result.customer_booking_duplicate) return duplicateResponse(result);
+        if (result.error === "customer_trip_check_unavailable") return duplicateCheckUnavailable();
         const singleUseGroupReference =
           invitationGroupReference || phoneOtpGroupReference;
 

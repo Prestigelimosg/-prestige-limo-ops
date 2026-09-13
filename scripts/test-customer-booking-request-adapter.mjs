@@ -104,6 +104,13 @@ try {
     travelerId: "901",
     vehicleType: "Alphard / Vellfire",
   };
+  for (const reason of ["customer_trip_duplicate", "customer_trip_in_progress", "customer_trip_check_unavailable"]) {
+    for (const reference of ["11001", "CUST-PRIVATE-REFERENCE", "https://example.com", null]) {
+      const duplicate = await submitCustomerBookingRequest(safeInput, {fetcher: async () => new Response(JSON.stringify({ok:false,booking_reference:reference}), {status:429,headers:{"x-prestige-customer-booking-result":reason}})});
+      assert.equal(duplicate.ok,false); assert.equal(duplicate.reason,reason);
+      assert.equal(duplicate.existingBookingReference,reference === "11001" ? "11001" : null);
+    }
+  }
   const success = await submitCustomerBookingRequest(safeInput, {
     fetcher: async (url, init) => {
       fetchCalls.push({

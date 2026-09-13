@@ -81,7 +81,7 @@ async function main() {
           window.__customerBookingAccessCalls.push({ method, url });
 
           if (url.includes("/api/customer-booking-memory")) {
-            if (scenario === "principal" || scenario === "portal") {
+            if (scenario === "principal" || scenario === "portal" || scenario.startsWith("duplicate")) {
               return new Response(JSON.stringify({
                 booker_profile: {
                   booker_name: "Verified Booker",
@@ -157,6 +157,7 @@ async function main() {
           }
 
           if (url.includes("/api/customer-booking-requests")) {
+            if(scenario.startsWith("duplicate")) return new Response(JSON.stringify({ok:false,booking_reference:scenario === "duplicate" ? "11001" : null}), {status:429,headers:{"x-prestige-customer-booking-result":scenario === "duplicate" ? "customer_trip_duplicate" : "customer_trip_in_progress"}});
             throw new Error("The booking access browser guard must never submit a booking.");
           }
 
@@ -336,6 +337,24 @@ async function main() {
     assert.equal(pending.submitLabel, "Phone verification required");
     assert.equal(pending.bookingPosts, 0);
     assert.equal(await evaluate(`document.querySelector('[data-customer-booking-phone-otp-code]') !== null`), false);
+
+    for (const scenario of ["duplicate", "duplicate-in-progress"]) {
+      reporter.step(`same-trip feedback: ${scenario}`);
+      await navigateWithLoadEvent(client, bookingUrl(scenario));
+      await waitForCondition(async () => (await state()).submitLabel === "Submit Booking Request",10000,"signed-in duplicate scenario");
+      for(const [field,value] of Object.entries({passengerName:"Synthetic Person",contactNo:"+65 9000 1234",emailAddress:"qa@example.com",pickupDate:"2026-10-01",pickupLocation:"Synthetic A",dropoffLocation:"Synthetic B"})) {
+        await setInput(`[data-customer-booking-field="${field}"]`,value);
+      }
+      for(const [part,value] of [["hour","12"],["minute","00"]]) await evaluate(`(() => {const el=document.querySelector('[data-customer-booking-time-part="${part}"]');el.value='${value}';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      await click('[data-customer-booking-terms-checkbox="true"]');
+      await click('[data-customer-booking-submit="true"]');
+      await waitForCondition(async ()=>await evaluate(`document.querySelector('[data-customer-booking-feedback]')?.textContent.includes('${scenario === "duplicate" ? "A matching booking already exists" : "still being processed"}')`),10000,"duplicate feedback");
+      assert.equal((await state()).bookingPosts,1);
+      const href=await evaluate(`document.querySelector('[data-customer-booking-feedback] a')?.getAttribute('href') || null`);
+      assert.equal(href,scenario === "duplicate" ? "/my-bookings?booking=11001" : null);
+      await setInput('[data-customer-booking-field="pickupLocation"]','Changed Pickup');
+      assert.equal(await evaluate(`document.querySelector('[data-customer-booking-feedback] a') !== null`),false);
+    }
 
     console.log(JSON.stringify(reporter.summary({ ok: true }), null, 2));
     console.log("Customer booking access browser guard passed.");

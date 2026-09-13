@@ -98,10 +98,10 @@ for (const envName of [
 
 for (const fragment of [
   'from("bookings")',
-  '.select("driver_id")',
-  "booking_reference: input.booking_reference",
+  '"driver_id, updated_at, service_type',
+  "p_booking_reference: input.booking_reference",
   "Number.isSafeInteger(verifiedDriverId)",
-  "driver_id:",
+  "p_driver_id:",
 ]) {
   assert.equal(persistence.includes(fragment), true, `Existing link issuer must bind verified driver identity with ${fragment}.`);
 }

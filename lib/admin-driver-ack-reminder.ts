@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
@@ -12,8 +14,6 @@ import {
 export const adminDriverAckReminderVersion = "admin-driver-ack-reminder-v1";
 
 const reminderIntervalMs = 15 * 60 * 1000;
-const maximumReminderCount = 3;
-const reminderWorkflowArea = "pending_driver_ack_reminder";
 const terminalBookingStatuses = new Set([
   "archived",
   "cancelled",
@@ -28,7 +28,7 @@ const terminalBookingStatuses = new Set([
 ]);
 
 type UnknownRecord = Record<string, unknown>;
-type ReminderClient = Pick<SupabaseClient, "from">;
+type ReminderClient = Pick<SupabaseClient, "from" | "rpc">;
 
 export type AdminDriverAckReminderInput = {
   booking_reference: string;
@@ -51,11 +51,9 @@ export type AdminDriverAckReminderResult =
       ok: false;
       reason:
         | "acknowledged"
-        | "automatic_already_attempted"
         | "cooldown"
         | "driver_mismatch"
         | "invalid_link"
-        | "limit_reached"
         | "native_app_unavailable"
         | "not_ready"
         | "persistence_failed"
@@ -68,7 +66,7 @@ export type AdminDriverAckReminderResult =
 type ReminderOptions = {
   now?: Date;
   sendNativeReminder?: typeof sendDriverNativePendingAckReminder;
-  trigger?: "automatic_first_reminder" | "manual";
+  trigger?: "automatic_repeat_reminder" | "manual";
 };
 
 type AdminDriverAckReminderActor = Pick<
@@ -234,68 +232,27 @@ export async function createAdminDriverAckReminder(
     return blocked("native_app_unavailable", "The assigned driver must have exactly one active native alert subscription.");
   }
 
-  const { data: auditData, error: auditError } = await client
-    .from("customer_driver_app_notification_outbox")
-    .select("id, created_at, event_key")
-    .eq("driver_job_link_id", linkId)
-    .eq("workflow_area", reminderWorkflowArea)
-    .order("created_at", { ascending: false })
-    .limit(maximumReminderCount + 1);
-  if (auditError) {
-    return blocked("persistence_failed", "Reminder audit history could not be verified.", 500);
-  }
-  const audits = rows(auditData);
-  if (trigger === "automatic_first_reminder" && audits.length > 0) {
-    return blocked(
-      "automatic_already_attempted",
-      "The automatic first reminder was already attempted for this exact Driver Job Link.",
-    );
-  }
-  if (audits.length >= maximumReminderCount) {
-    return blocked("limit_reached", "This pending link already reached the maximum of three reminders.");
-  }
-  const previousReminderAtMs = dateMs(audits[0]?.created_at);
-  if (previousReminderAtMs !== null && nowMs - previousReminderAtMs < reminderIntervalMs) {
+  const { data: reservationData, error: reservationError } = await client.rpc(
+    "reserve_driver_job_link_delivery",
+    {
+      p_booking_reference: bookingReference, p_link_id: linkId, p_driver_id: driverId,
+      p_mode: "reminder", p_revision: null, p_request_id: randomUUID(),
+      p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+    },
+  );
+  const reservation = record(reservationData);
+  if (reservationError) return blocked("persistence_failed", "The reminder could not be reserved safely.", 500);
+  if (reservation.claimed !== true) {
+    const reason = text(reservation.reason, 80);
+    if (reason === "acknowledged" || reason === "driver_mismatch" || reason === "invalid_link" ||
+      reason === "stale_link" || reason === "terminal_booking") {
+      return blocked(reason, "This link is no longer eligible for an acknowledgement reminder.");
+    }
     return blocked("cooldown", "Wait 15 minutes before reminding this driver again.");
   }
-
-  const reminderCount = audits.length + 1;
-  const eventKey = `pending-driver-ack-reminder:${linkId}:${reminderCount}`;
-  const { data: insertedData, error: insertError } = await client
-    .from("customer_driver_app_notification_outbox")
-    .insert({
-      actor_label: actor.actor_label,
-      actor_role: actor.actor_role,
-      booking_reference: bookingReference,
-      delivery_surface: "driver_app",
-      driver_job_link_id: linkId,
-      event_key: eventKey,
-      notification_status: "archived",
-      notification_type: "system_notice",
-      priority: "high",
-      safe_context: {
-        reminder_attempt: reminderCount,
-        reminder_kind: "native_pending_ack",
-        reminder_trigger: trigger,
-      },
-      safe_message: "Job acknowledgement needed. Tap to review.",
-      safe_title: "Prestige Driver",
-      source_surface: actor.source_surface,
-      updated_at: now.toISOString(),
-      workflow_area: reminderWorkflowArea,
-    })
-    .select("id")
-    .single();
-  const auditId = text(record(insertedData).id, 80);
-  if (insertError || !auditId) {
-    return blocked(
-      insertError && record(insertError).code === "23505" ? "cooldown" : "persistence_failed",
-      insertError && record(insertError).code === "23505"
-        ? "Wait 15 minutes before reminding this driver again."
-        : "The reminder audit could not be reserved safely.",
-      insertError && record(insertError).code === "23505" ? 409 : 500,
-    );
-  }
+  const auditId = text(reservation.audit_id, 80);
+  const reminderCount = positiveInteger(reservation.reminder_count);
+  if (!auditId || !reminderCount) return blocked("persistence_failed", "The reminder reservation is incomplete.", 500);
 
   const sendNativeReminder = options.sendNativeReminder ?? sendDriverNativePendingAckReminder;
   const sendResult = await sendNativeReminder(client, {
@@ -308,6 +265,7 @@ export async function createAdminDriverAckReminder(
     .from("customer_driver_app_notification_outbox")
     .update({
       safe_context: {
+        ...record(reservation.safe_context),
         reminder_attempt: reminderCount,
         reminder_kind: "native_pending_ack",
         reminder_trigger: trigger,
@@ -324,9 +282,7 @@ export async function createAdminDriverAckReminder(
 
   return {
     data: {
-      next_available_at: reminderCount < maximumReminderCount
-        ? nextAvailableAt(nowMs)
-        : null,
+      next_available_at: text(reservation.next_available_at, 80) || nextAvailableAt(nowMs),
       provider_accepted: true,
       reminder_count: reminderCount,
       version: adminDriverAckReminderVersion,

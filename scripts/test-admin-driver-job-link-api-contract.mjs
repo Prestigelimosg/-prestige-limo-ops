@@ -32,6 +32,7 @@ const sourceFiles = [
   "app/api/admin-driver-job-links/route.ts",
 ];
 const originalEnv = {
+  PRESTIGE_DRIVER_PORTAL_SESSION_SECRET: process.env.PRESTIGE_DRIVER_PORTAL_SESSION_SECRET,
   PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED:
     process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED,
   PRESTIGE_ADMIN_DISPATCHER_ACTOR_LABEL:
@@ -322,9 +323,57 @@ class MockSupabaseClient {
       driver_job_links: [],
     };
 
+    for (const booking of this.tables.bookings) booking.updated_at = "2026-06-10T00:00:00.000Z";
     for (const [table, rows] of Object.entries(seed)) {
       this.tables[table] = rows.map((row) => clone(row));
     }
+  }
+
+  async rpc(name, args) {
+    if (name === "apply_admin_driver_job_link") {
+      const b = this.tables.bookings.find(x=>x.booking_reference===args.p_booking_reference);
+      if (!b || b.updated_at!==args.p_expected_updated_at || (b.driver_id ?? null)!==args.p_driver_id)
+        return { data:null,error:{code:"40001"} };
+      assert.deepEqual(args.p_expected_driver_state, {
+        driver_name: b.driver_name ?? null, driver_contact: b.driver_contact ?? null,
+        driver_plate_number: b.driver_plate_number ?? null,
+        vehicle_type_or_category: b.vehicle_type_or_category ?? null,
+      }, "Creation carries the exact driver snapshot for the booking-lock check");
+      const active = this.tables.driver_job_links.filter(x=>x.booking_reference===args.p_booking_reference && x.link_status==='active' && !x.revoked_at && Date.parse(x.expires_at)>Date.now());
+      if (active.length>1 || (active[0] && active[0].driver_id!==args.p_driver_id)) return {data:null,error:{code:'22023'}};
+      if(active[0]) {
+        const l=active[0];
+        const old={...l.safe_link_context.driver_job_payload};
+        for(const k of ['driver_name','driver_contact','driver_plate_number','driver_vehicle_model']) delete old[k];
+        const same=JSON.stringify(old)===JSON.stringify(args.p_payload);
+        if(!same) l.safe_link_context={...l.safe_link_context,driver_job_payload:{...args.p_payload},job_card_revision:args.p_revision,job_card_kind:'amendment'};
+        return {data:{link:clone(l),disposition:same?'reused':'amended'},error:null};
+      }
+      const inserted=this.insertRows('driver_job_links',{
+        actor_label:args.p_actor_label,actor_role:args.p_actor_role,source_surface:'admin_api',
+        booking_reference:args.p_booking_reference,driver_id:args.p_driver_id,token_hash:args.p_token_hash,
+        expires_at:args.p_expires_at,issued_at:new Date().toISOString(),link_status:'active',revoked_at:null,
+        safe_link_context:{driver_job_payload:args.p_payload,job_card_revision:args.p_revision,job_card_kind:'new',native_handoff_ciphertext:args.p_ciphertext},
+      },'single');
+      return inserted.error ? inserted : {data:{link:inserted.data,disposition:'created'},error:null};
+    }
+    if (name === "reserve_driver_job_link_delivery") return {data:{claimed:false,reason:'driver_mismatch'},error:null}; // Provider delivery is covered by the SQL and native-push contracts.
+    if (name === "read_driver_ack_reminder_summaries") {
+      return {data:args.p_link_ids.map(id=>{
+        const audits=this.tables.customer_driver_app_notification_outbox.filter(x=>x.driver_job_link_id===id).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+        return {driver_job_link_id:id,count:audits.filter(x=>x.workflow_area==='pending_driver_ack_reminder').length,
+          last_sent_at:audits[0]?.created_at??null,last_provider_accepted:audits[0]?.safe_context?.provider_accepted??null};
+      }),error:null};
+    }
+    if(name === "admin_open_live_location_booking") {
+      const old=this.tables.driver_live_location_runtime_settings[0];
+      return this.upsertRows('driver_live_location_runtime_settings',{
+        setting_name:'driver_live_location_runtime',setting_status:'active',driver_live_location_mode:'runtime',
+        driver_live_location_capture_enabled:true,admin_active_jobs_map_enabled:true,
+        driver_live_location_allowed_job_references:[...new Set([...(old?.driver_live_location_allowed_job_references||[]),args.p_booking_reference])],
+      },'setting_name','single');
+    }
+    throw new Error('Unexpected RPC '+name);
   }
 
   from(table) {
@@ -532,6 +581,7 @@ function safeEnv(enabled = true) {
     PRESTIGE_ADMIN_DISPATCHER_SESSION_TOKEN: serverSessionToken,
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleSentinel,
     SUPABASE_URL: supabaseUrlSentinel,
+    PRESTIGE_DRIVER_PORTAL_SESSION_SECRET: "synthetic-driver-link-seal-secret-for-contract-tests",
   });
 }
 
@@ -711,7 +761,7 @@ try {
 
   assert.equal(created.status, 200);
   assert.equal(created.body.ok, true);
-  assert.equal(created.body.token_display_once, true);
+  assert.equal(created.body.token_display_once, false);
   assert.match(created.body.driver_job_url, /^https:\/\/app\.prestigelimo\.sg\/driver-job\/[A-Za-z0-9_-]+$/);
   assert.equal(created.body.link.booking_reference, "JOB-LINK-CONTRACT-001");
   assert.equal(created.body.link.link_status, "active");
@@ -797,6 +847,15 @@ try {
     "Historic unsafe/incomplete snapshots must not be guessed as New or Amendment.",
   );
 
+  const gpsWritesBeforeReuse=client.operations.filter(x=>x.table==='driver_live_location_runtime_settings').length;
+  const reused=await readResponse(await harness.route.POST(requestWithJson('POST','http://localhost/api/admin-driver-job-links',safeCreatePayload())));
+  assert.equal(reused.status,200);
+  assert.equal(reused.body.disposition,'reused');
+  assert.equal(reused.body.driver_job_url,created.body.driver_job_url);
+  assert.equal(reused.body.link.id,created.body.link.id);
+  assert.equal(reused.body.live_location,null);
+  assert.equal(client.operations.filter(x=>x.table==='driver_live_location_runtime_settings').length,gpsWritesBeforeReuse,'Reusing a link must not reopen GPS');
+
   const optionalDriverDetailsPayload = safeCreatePayload({
     booking_reference: "JOB-LINK-CONTRACT-OPTIONAL-DRIVER",
     driver_job_payload: {
@@ -874,7 +933,7 @@ try {
 
   assert.equal(dashboardBrowserCreate.status, 200);
   assert.equal(dashboardBrowserCreate.body.ok, true);
-  assert.equal(dashboardBrowserCreate.body.token_display_once, true);
+  assert.equal(dashboardBrowserCreate.body.token_display_once, false);
   assert.match(
     dashboardBrowserCreate.body.driver_job_url,
     /^https:\/\/app\.prestigelimo\.sg\/driver-job\/[A-Za-z0-9_-]+$/,

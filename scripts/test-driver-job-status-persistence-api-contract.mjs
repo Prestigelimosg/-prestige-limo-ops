@@ -231,6 +231,21 @@ class MockSupabaseClient {
     };
   }
 
+  async rpc(name,p) {
+    assert.equal(name,'acknowledge_current_driver_job_link');
+    const l=this.tables.driver_job_links.find(x=>x.id===p.p_link_id && x.booking_reference===p.p_booking_reference && x.token_hash===p.p_token_hash);
+    const b=this.tables.bookings.find(x=>x.booking_reference===p.p_booking_reference);
+    if(!l || !b || (b.driver_id && b.driver_id!==p.p_driver_id)) return {data:null,error:{code:'assignment'}};
+    const payload={...l.safe_link_context.driver_job_payload,
+      assigned_driver_name:p.p_name,assigned_driver_contact:p.p_contact,assigned_driver_plate:p.p_plate,assigned_driver_vehicle_model:p.p_vehicle,
+      driver_name:p.p_name,driver_contact:p.p_contact,driver_plate_number:p.p_plate,driver_vehicle_model:p.p_vehicle};
+    const details={driver_id:p.p_driver_id,driver_name:p.p_name,driver_contact:p.p_contact||null,driver_plate_number:p.p_plate||null};
+    if(p.p_vehicle) details.vehicle_type_or_category=p.p_vehicle;
+    await this.resolveUpdate({table:'bookings',filters:[{column:'booking_reference',value:p.p_booking_reference}],payload:details},'single');
+    return this.resolveUpdate({table:'driver_job_links',filters:[{column:'id',value:l.id}],payload:{driver_id:p.p_driver_id,
+      safe_link_context:{...l.safe_link_context,driver_job_payload:payload,driver_acknowledged_at:new Date().toISOString()}}},'single');
+  }
+
   from(table) {
     assert.ok(this.tables[table], `Unexpected mocked Supabase table: ${table}`);
 

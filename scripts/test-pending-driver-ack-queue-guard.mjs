@@ -141,8 +141,8 @@ for (const fragment of [
   '? "reissued"\n    : "amendment";',
   '.eq("booking_reference", input.booking_reference)',
   '.order("created_at", { ascending: false })',
-  "job_card_revision: safeDriverJobPayloadRevision(input.driver_job_payload)",
-  "job_card_kind: jobCardKind",
+  "const revision = safeDriverJobPayloadRevision(input.driver_job_payload)",
+  '"apply_admin_driver_job_link"',
 ]) {
   assertIncludes(persistence, fragment, "safe job-card revision classification");
 }
@@ -155,3 +155,8 @@ assert.ok(!createBlock.includes('link_status: "revoked"'), "Issuing an amendment
 assert.ok(!createBlock.includes("revokeAdminDriverJobLink"), "Create must not call the manual revoke lane.");
 
 console.log("Pending Driver ACK Queue guard passed");
+
+const stableSql=await readFile("supabase/migrations/20260913030000_driver_stable_booking_link.sql","utf8");
+for(const field of ["for update","v_count>1","l.driver_id is distinct from b.driver_id","'amended'","'job_card_revision',p_revision"])
+  assertIncludes(stableSql,field,"atomic same-booking same-driver reuse");
+assert.ok(!stableSql.includes("driver_acknowledged_at',"),"Amending a stable link must not reset ACK");

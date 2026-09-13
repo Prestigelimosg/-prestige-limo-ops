@@ -179,18 +179,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const liveLocationAuthorization = await authorizeLiveLocationForDriverJobLink({
+    const liveLocationAuthorization = result.data.disposition === "created" ? await authorizeLiveLocationForDriverJobLink({
       bookingReference: result.data.link.booking_reference,
       context: boundary.context,
-    });
+    }) : null;
 
     return Response.json({
+      disposition: result.data.disposition,
       driver_job_url: driverJobUrlFromToken(result.data.driver_job_token),
       link: result.data.link,
       live_location: liveLocationAuthorization,
       native_app_alert: result.data.native_app_alert,
       ok: true,
-      token_display_once: true,
+      token_display_once: false,
     });
   } catch {
     return safeFailureResponse();

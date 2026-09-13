@@ -64,6 +64,13 @@ function createMockClient({
   const calls = [];
   const client = {
     calls,
+    async rpc(name, args) {
+      calls.push({ operation:'rpc',name,args });
+      assert.equal(name,'reserve_driver_job_link_delivery');
+      if(audits[0] && now-Date.parse(audits[0].created_at)<15*60*1000) return {data:{claimed:false,reason:'cooldown'},error:null};
+      return {data:{claimed:true,audit_id:'33333333-3333-4333-8333-333333333333',reminder_count:audits.length+1,
+        safe_context:{delivery_kind:'reminder'},next_available_at:'2026-08-30T10:45:00.000Z'},error:null};
+    },
     from(table) { return new QueryBuilder(client, table); },
     resolve(query) {
       calls.push({
@@ -168,17 +175,14 @@ try {
   assert.equal(happy.ok, true);
   assert.equal(happy.data.reminder_count, 1);
   assert.equal(sendCount, 1);
-  const insert = happyClient.calls.find(
-    (call) => call.table === "customer_driver_app_notification_outbox" && call.operation === "insert",
-  );
-  assert.equal(insert.value.notification_status, "archived");
-  assert.equal(insert.value.workflow_area, "pending_driver_ack_reminder");
-  assert.equal(insert.value.driver_job_link_id, linkId);
-  assert.equal(insert.value.event_key, `pending-driver-ack-reminder:${linkId}:1`);
-  assert.equal(insert.value.safe_message, "Job acknowledgement needed. Tap to review.");
-  assert.equal(insert.value.safe_context.reminder_trigger, "manual");
-  assert.equal(insert.value.source_surface, "admin_api");
-  assert.equal(JSON.stringify(insert.value).includes("token"), false);
+  const reservation=happyClient.calls.find(call=>call.operation==='rpc');
+  assert.equal(reservation.args.p_link_id,linkId);
+  assert.equal(reservation.args.p_booking_reference,bookingReference);
+  assert.equal(reservation.args.p_mode,'reminder');
+  assert.equal(reservation.args.p_actor_role,'admin');
+  assert.match(reservation.args.p_request_id,/^[a-f0-9-]{36}$/);
+  assert.equal(JSON.stringify(reservation.args).includes('token'),false);
+  assert.equal(happyClient.calls.some(call=>call.operation==='insert'),false,'Only the transaction may reserve the audit');
 
   sendCount = 0;
   const earlyClient = createMockClient({ issuedAt: "2026-08-30T10:20:00.000Z" });
@@ -213,13 +217,13 @@ try {
     },
     {
       now,
-      sendNativeReminder: async () => { sendCount += 1; },
-      trigger: "automatic_first_reminder",
+      sendNativeReminder: async () => { sendCount += 1; return {native_provider_accepted:true,native_provider_request_count:1}; },
+      trigger: "automatic_repeat_reminder",
     },
   );
-  assert.equal(automaticAfterExisting.ok, false);
-  assert.equal(automaticAfterExisting.reason, "automatic_already_attempted");
-  assert.equal(sendCount, 0);
+  assert.equal(automaticAfterExisting.ok, true);
+  assert.equal(automaticAfterExisting.data.reminder_count, 2);
+  assert.equal(sendCount, 1);
 
   const capped = await helper.createAdminDriverAckReminder(
     createMockClient({
@@ -231,10 +235,10 @@ try {
     }),
     { booking_reference: bookingReference, driver_job_link_id: linkId },
     actor,
-    { now, sendNativeReminder: async () => { throw new Error("must not send"); } },
+    { now, sendNativeReminder: async () => ({native_provider_accepted:true,native_provider_request_count:1}) },
   );
-  assert.equal(capped.ok, false);
-  assert.equal(capped.reason, "limit_reached");
+  assert.equal(capped.ok, true);
+  assert.equal(capped.data.reminder_count, 4);
 
   const multipleDevices = await helper.createAdminDriverAckReminder(
     createMockClient({ subscriptions: [{ endpoint: "one" }, { endpoint: "two" }] }),

@@ -15185,6 +15185,7 @@ export default function Home() {
   const bookingAutoSyncInFlightRef = useRef(false);
   const bookingAutoSyncPausedUntilRef = useRef(0);
   const loadBookingsTypedReadTerminalUnavailableRef = useRef(false);
+  const driverJobLinkCreateAttemptRef = useRef<{ key: string; id: string } | null>(null);
   const driverJobLinkVehicleFallbackRefreshLastRequestedRef = useRef<Record<string, number>>({});
   const [handledCustomerBookingRequestKeys, setHandledCustomerBookingRequestKeys] = useState<
     string[]
@@ -19402,7 +19403,7 @@ export default function Home() {
   ]);
   const driverJobLinkPreviewText =
     driverJobLinkMessage ||
-    "Create Link to generate the one-time driver job link preview for this booking.";
+    "Create Link to retrieve the private driver job link for this booking.";
 
   const generatedDispatchCopyMessages = useMemo(
     () => ({
@@ -27526,8 +27527,12 @@ export default function Home() {
     }));
 
     try {
+      const attemptKey = JSON.stringify(payloadResult.data);
+      if (driverJobLinkCreateAttemptRef.current?.key !== attemptKey) {
+        driverJobLinkCreateAttemptRef.current = { key: attemptKey, id: crypto.randomUUID() };
+      }
       const response = await fetch(adminDriverJobLinksApiPath, {
-        body: JSON.stringify(payloadResult.data),
+        body: JSON.stringify({ ...payloadResult.data, request_id: driverJobLinkCreateAttemptRef.current.id }),
         headers: {
           "Content-Type": "application/json",
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
@@ -27540,6 +27545,7 @@ export default function Home() {
         throw new Error(result?.error || "Driver job link create failed.");
       }
 
+      const disposition = result.disposition;
       const link = result.link as AdminDriverJobLinkRecord;
       const driverJobUrl = clean(result.driver_job_url);
       const nativeAppAlert =
@@ -27553,13 +27559,16 @@ export default function Home() {
           : null;
       const nativeAppAlertMessage = nativeAppAlert?.provider_accepted === true
         ? "Native app alert request was accepted by the provider; delivery to the phone is not guaranteed."
-        : nativeAppAlert?.reason === "provider_failed"
-          ? "Native app alert provider was unavailable. Use the one-time Copy Link fallback."
-          : "No verified installed native Driver app was available for this alert. Use the one-time Copy Link fallback.";
+        : nativeAppAlert?.reason === "recent_attempt"
+          ? "An alert was recently requested. Wait 60 seconds before another resend."
+          : nativeAppAlert?.reason === "provider_failed"
+            ? "The app alert could not be confirmed. Use Copy Link if needed."
+            : "No eligible Driver app alert was available. Use Copy Link if needed.";
 
       if (!link || !driverJobUrl) {
-        throw new Error("Driver job link response was missing the one-time URL.");
+        throw new Error("Driver job link response was missing the private URL.");
       }
+      driverJobLinkCreateAttemptRef.current = null;
 
       const liveLocation =
         result.live_location &&
@@ -27600,7 +27609,7 @@ export default function Home() {
           },
           runtimeStatus: "active",
         }));
-      } else {
+      } else if (disposition === "created") {
         setAdminActiveJobsMapReadState((current) => ({
           ...current,
           loadedReference: link.booking_reference,
@@ -27617,9 +27626,10 @@ export default function Home() {
         loadedReference: link.booking_reference,
         message: {
           tone: "success",
-          text: liveLocationAuthorized
-            ? `Driver job link created and live movement authorized automatically. ${nativeAppAlertMessage} Copy the one-time link now if manual sending is needed; it will not be listed again.`
-            : `Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup. ${nativeAppAlertMessage} Copy the one-time link now if manual sending is needed; it will not be listed again.`,
+          text: `${disposition === "amended" ? `Job updated on the same link. ${link.safe_summary.acknowledged ? "Acknowledgement kept." : "Waiting for acknowledgement."}`
+            : disposition === "reused" ? "Existing job link reused."
+              : liveLocationAuthorized ? "Driver job link created and live movement authorized automatically."
+                : "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup."} ${nativeAppAlertMessage}`,
         },
         oneTimeUrl: driverJobUrl,
       });
@@ -27649,7 +27659,7 @@ export default function Home() {
         ...current,
         message: {
           tone: "info",
-          text: "Create a fresh driver job link before copying. Existing saved links cannot reveal the token again.",
+          text: "Press Create Link to retrieve the current job link before copying.",
         },
       }));
       return;

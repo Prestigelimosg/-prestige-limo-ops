@@ -10,12 +10,11 @@ import {
 export const driverAckAutoReminderVersion = "driver-ack-auto-reminder-v1";
 
 const automaticReminderAgeMs = 15 * 60 * 1000;
-const automaticReminderTrigger = "automatic_first_reminder" as const;
-const maximumCandidatesPerRun = 100;
-const reminderWorkflowArea = "pending_driver_ack_reminder";
+const automaticReminderTrigger = "automatic_repeat_reminder" as const;
+const candidatePageSize = 100;
 
 type UnknownRecord = Record<string, unknown>;
-type ReminderClient = Pick<SupabaseClient, "from">;
+type ReminderClient = Pick<SupabaseClient, "from" | "rpc">;
 type ReminderSender = typeof createAdminDriverAckReminder;
 
 type DriverAckAutoReminderOptions = {
@@ -138,44 +137,22 @@ export async function runDriverAckAutoRemindersWithClient(
   }
 
   const dueBefore = new Date(nowMs - automaticReminderAgeMs).toISOString();
-  const linkRead = await client
-    .from("driver_job_links")
-    .select(
-      "id, booking_reference, driver_id, link_status, issued_at, expires_at, revoked_at, safe_link_context, created_at",
-    )
-    .eq("link_status", "active")
-    .is("revoked_at", null)
-    .lte("issued_at", dueBefore)
-    .order("issued_at", { ascending: true })
-    .limit(maximumCandidatesPerRun);
-  if (linkRead.error) {
-    return result("read_failed");
+  const candidates: UnknownRecord[] = [];
+  for (let offset = 0; ; offset += candidatePageSize) {
+    const linkRead = await client.from("driver_job_links")
+      .select("id, booking_reference, driver_id, link_status, issued_at, expires_at, revoked_at, safe_link_context, created_at")
+      .eq("link_status", "active").is("revoked_at", null)
+      .is("safe_link_context->>driver_acknowledged_at", null)
+      .lte("issued_at", dueBefore).gt("expires_at", now.toISOString())
+      .order("issued_at", { ascending: true }).order("id", { ascending: true })
+      .range(offset, offset + candidatePageSize - 1);
+    if (linkRead.error) return result("read_failed");
+    const page = rows(linkRead.data);
+    candidates.push(...page.filter((link) => eligibleCandidate(link, nowMs)));
+    if (page.length < candidatePageSize) break;
   }
-
-  const candidates = rows(linkRead.data).filter((link) => eligibleCandidate(link, nowMs));
-  if (candidates.length === 0) {
-    return result("ok");
-  }
-
-  const candidateLinkIds = candidates.map((link) => text(link.id, 80));
-  const reminderRead = await client
-    .from("customer_driver_app_notification_outbox")
-    .select("driver_job_link_id")
-    .in("driver_job_link_id", candidateLinkIds)
-    .eq("workflow_area", reminderWorkflowArea)
-    .limit(maximumCandidatesPerRun * 3);
-  if (reminderRead.error) {
-    return result("read_failed", { candidate_count: candidates.length });
-  }
-
-  const existingReminderLinkIds = new Set(
-    rows(reminderRead.data)
-      .map((reminder) => text(reminder.driver_job_link_id, 80))
-      .filter((linkId) => uuidPattern.test(linkId)),
-  );
-  const eligible = candidates.filter(
-    (link) => !existingReminderLinkIds.has(text(link.id, 80)),
-  );
+  // The same atomic reservation checks both the 15-minute interval and current ACK/assignment.
+  const eligible = candidates;
 
   let failureCount = 0;
   let reminderSentCount = 0;

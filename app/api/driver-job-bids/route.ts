@@ -42,6 +42,7 @@ async function authenticated(request: Request) {
   const database = getDriverPoolClientForProduction();
   if (!database.ok) return null;
   const valid = await verifyDriverAccountSession({
+    sessionIssuedAt: session.claims.issuedAt,
     accountId: session.claims.accountId,
     client: database.client,
     deviceIdHash: session.claims.deviceIdHash,

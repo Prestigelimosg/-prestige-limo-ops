@@ -426,6 +426,10 @@ async function runChromeTest() {
 
           if (["android-pin", "ios-pin"].includes(embeddedDriverMode) && new URL(url, window.location.origin).pathname === "/api/driver-auth/session") {
             const body = JSON.parse(args[1]?.body || "{}");
+            if (args[1]?.headers?.["x-prestige-driver-purpose"] === "driver-account-pin-reset") {
+              window.__driverResetBodies = [...(window.__driverResetBodies || []), body];
+              return Promise.resolve(new Response(JSON.stringify({ok:true}), {status:200,headers:{"content-type":"application/json"}}));
+            }
             window.__driverPinBodies.push(body);
             window.__driverPinSignedIn = body.password === "482951" && !Object.hasOwn(body, "email");
             return Promise.resolve(new Response(JSON.stringify({ ok: window.__driverPinSignedIn }), {
@@ -2497,6 +2501,18 @@ async function runChromeTest() {
       await evaluate(`document.querySelector('[data-driver-portal-first-sign-in]').click()`);
       await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-portal-password-form] input'))`), 5000,
         "Installed phone return to PIN entry");
+      await evaluate(`document.querySelector('[data-driver-forgot-pin]').click()`);
+      await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-pin-reset-form]'))`),5000,'Forgot PIN opens existing sign-in recovery form');
+      assert.equal(await evaluate(`window.__driverResetBodies?.length || 0`),0,'Opening Forgot PIN does not send a request');
+      assert.equal(await evaluate(`document.querySelectorAll('[data-driver-pin-reset-form] input[type="password"]').length`),2);
+      for (let field=0;field<2;field++) {
+        await evaluate(`document.querySelectorAll('[data-driver-pin-reset-form] input')[${field}].focus()`);
+        await client.send('Input.insertText',{text:'837492'});
+      }
+      await evaluate(`document.querySelector('[data-driver-pin-reset-form] button[type="submit"]').click()`);
+      await waitForCondition(() => evaluate(`document.body.innerText.includes('PIN updated. Sign in with your new PIN.')`),5000,'Successful reset returns to PIN sign-in');
+      assert.deepEqual(await evaluate(`window.__driverResetBodies`),[{installation_id:'77777777-7777-4777-8777-777777777777',password:'837492',confirmation:'837492'}]);
+      assert.equal(await evaluate(`document.querySelectorAll('[data-driver-pin-reset-form]').length`),0);
       for (const pin of ["583962", "482951"]) {
         await evaluate(`(() => {
           const input = document.querySelector('[data-driver-portal-password-form] input');

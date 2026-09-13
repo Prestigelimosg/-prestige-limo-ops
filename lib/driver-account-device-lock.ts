@@ -40,6 +40,7 @@ type PasswordAuth = {
 };
 
 type AccountSuccess = {
+  sessionIssuedAt?: number;
   accountId: string;
   deviceIdHash: string | null;
   driverId: number;
@@ -320,6 +321,7 @@ export async function signInDriverAccountForInstallation(input: {
   identityReader?: AuthIdentityReader;
   password: unknown;
 }): Promise<DriverAccountResult> {
+  const sessionIssuedAt = Date.now();
   const env = input.env ?? process.env;
   let email = normalizedEmail(input.email);
   const boundDevicePin = input.allowBoundDevicePin === true && input.email === undefined;
@@ -337,7 +339,7 @@ export async function signInDriverAccountForInstallation(input: {
     // Only an existing active binding can supply identity. This never enrolls a phone.
     const { data, error } = await client
       .from("driver_access_accounts")
-      .select("id, auth_user_id, driver_reference, account_status, active_device_id_hash")
+      .select("id, auth_user_id, driver_reference, account_status, active_device_id_hash, pin_reset_state, pin_session_not_before")
       .eq("active_device_id_hash", deviceIdHash)
       .eq("account_status", "active")
       .maybeSingle();
@@ -347,7 +349,7 @@ export async function signInDriverAccountForInstallation(input: {
       !uuidPattern.test(text(boundAccount.auth_user_id)) ||
       !positiveInteger(boundAccount.driver_reference) ||
       boundAccount.account_status !== "active" ||
-      boundAccount.active_device_id_hash !== deviceIdHash
+      boundAccount.active_device_id_hash !== deviceIdHash || !driverPinSessionIsCurrent(boundAccount, sessionIssuedAt)
     ) return failure("invalid_credentials");
     const identityReader = input.identityReader ?? serviceClient(env)?.auth.admin;
     if (!identityReader) return failure("not_configured");
@@ -365,14 +367,14 @@ export async function signInDriverAccountForInstallation(input: {
   try {
     const { data: accountData, error: accountError } = await client
       .from("driver_access_accounts")
-      .select("id, auth_user_id, driver_reference, account_status, active_device_id_hash")
+      .select("id, auth_user_id, driver_reference, account_status, active_device_id_hash, pin_reset_state, pin_session_not_before")
       .eq("auth_user_id", authUserId)
       .maybeSingle();
     const account = record(accountData);
     const accountId = text(account.id);
     const driverId = positiveInteger(account.driver_reference);
     const savedDeviceHash = text(account.active_device_id_hash);
-    if (accountError || !uuidPattern.test(accountId) || !driverId) {
+    if (accountError || !uuidPattern.test(accountId) || !driverId || !driverPinSessionIsCurrent(account, sessionIssuedAt)) {
       return failure("invalid_credentials");
     }
     if (boundAccount && (
@@ -414,13 +416,14 @@ export async function signInDriverAccountForInstallation(input: {
       return failure("invalid_credentials");
     }
 
-    return { accountId, deviceIdHash, driverId, ok: true };
+    return { accountId, deviceIdHash, driverId, sessionIssuedAt, ok: true };
   } finally {
     await auth.signOut({ scope: "local" }).catch(() => undefined);
   }
 }
 
 export async function verifyDriverAccountSession(input: {
+  sessionIssuedAt?: number;
   accountId: string;
   client: DbClient;
   deviceIdHash: string;
@@ -440,12 +443,80 @@ export async function verifyDriverAccountSession(input: {
 
   const { data, error } = await input.client
     .from("driver_access_accounts")
-    .select("id")
+    .select("id, pin_reset_state, pin_session_not_before")
     .eq("id", input.accountId)
     .eq("driver_reference", String(input.driverId))
     .eq("account_status", "active")
     .eq("active_device_id_hash", input.deviceIdHash)
     .maybeSingle();
 
-  return !error && text(record(data).id) === input.accountId;
+  return !error && text(record(data).id) === input.accountId && driverPinSessionIsCurrent(record(data), input.sessionIssuedAt);
+}
+
+
+// A PIN change does not invalidate our independent app cookie by itself.
+// Legacy accounts with no reset cutoff retain their established session behavior.
+export function driverPinSessionIsCurrent(account: UnknownRecord, issuedAt?: number) {
+  if (account.pin_reset_state === "claimed") return false;
+  if (account.pin_session_not_before == null) return true;
+  const cutoff = Date.parse(String(account.pin_session_not_before));
+  return Number.isFinite(cutoff) && Number.isFinite(issuedAt) && (issuedAt as number) > cutoff;
+}
+
+type ResetClient = Pick<SupabaseClient, "rpc">;
+type ResetAuth = {
+  updateUserById: (id: string, attributes: { password: string }) => Promise<{
+    data: { user?: AuthUser | null } | null; error: unknown;
+  }>;
+};
+
+export async function authorizeDriverPinReset(input: {
+  driverId: unknown; actorRole: string; actorLabel: string; client?: ResetClient; env?: Env;
+}) {
+  const env = input.env ?? process.env;
+  const driverId = positiveInteger(input.driverId);
+  if (!driverId || input.actorRole !== "admin" || !input.actorLabel.trim() || input.actorLabel.length > 160) {
+    return { ok: false, error: "Verified Admin required." };
+  }
+  if (!runtimeEnabled(env)) return { ok: false, error: "PIN recovery is unavailable." };
+  try {
+    const client = input.client ?? serviceClient(env);
+    if (!client) return { ok: false, error: "PIN recovery is unavailable." };
+    const result = await client.rpc("authorize_driver_pin_reset", {
+      p_driver_id: driverId, p_actor_role: input.actorRole, p_actor_label: input.actorLabel,
+    });
+    const data = record(result.data);
+    if (result.error || data.ok !== true || !Number.isFinite(Date.parse(String(data.expires_at)))) {
+      return { ok: false, error: "Reset unavailable. Check the active registered account; an unfinished reset needs review." };
+    }
+    return { ok: true, expires_at: String(data.expires_at) };
+  } catch { return { ok: false, error: "PIN recovery is unavailable. No retry was sent." }; }
+}
+
+export async function completeDriverPinReset(input: {
+  installationId: unknown; password: unknown; confirmation: unknown;
+  client?: ResetClient; authAdmin?: ResetAuth; env?: Env;
+}) {
+  const env = input.env ?? process.env;
+  const deviceHash = deviceIdHashFor(input.installationId, env);
+  if (!runtimeEnabled(env) || !deviceHash || !driverAccountPasswordIsReady(input.password)
+    || input.password !== input.confirmation) return { ok: false };
+  try {
+    const client = input.client ?? serviceClient(env);
+    const auth = input.authAdmin ?? serviceClient(env)?.auth.admin;
+    if (!client || !auth) return { ok: false };
+    const reserved = await client.rpc("claim_driver_pin_reset", { p_device_hash: deviceHash });
+    const claim = record(reserved.data);
+    if (reserved.error || !uuidPattern.test(text(claim.account_id))
+      || !uuidPattern.test(text(claim.auth_user_id)) || !uuidPattern.test(text(claim.claim_id))) return { ok: false };
+    // Exactly one provider attempt. Unknown outcome leaves the claimed reset locked for review.
+    // Never undo the claim or automatically retry a possible password change.
+    const updated = await auth.updateUserById(text(claim.auth_user_id), { password: input.password as string });
+    if (updated.error || updated.data?.user?.id !== claim.auth_user_id) return { ok: false, review_required: true };
+    const finished = await client.rpc("finish_driver_pin_reset", {
+      p_account_id: claim.account_id, p_claim_id: claim.claim_id, p_device_hash: deviceHash,
+    });
+    if (finished.error || finished.data !== true) return { ok: false, review_required: true };
+    return { ok: true };
+  } catch { return { ok: false, review_required: true }; }
 }

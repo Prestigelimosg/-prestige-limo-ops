@@ -500,6 +500,7 @@ runInNewContext(serviceWorkerSource, {self: {
 }});
 for (const [body, marker, allowed] of [
   ["Please share location", false, true],
+  ["Job updated. Tap to review.", false, true],
   ["I am waiting at the lobby.", true, true],
   ["a".repeat(500), true, true],
   ["I am waiting at the lobby.", false, false],
@@ -1533,6 +1534,28 @@ try {
     ["NEW-PRIVATE-DRIVER-JOB-TOKEN", "/driver-job/", "PRIVATE-BOOKING-REFERENCE"],
     "native pre-ACK provider payload",
   );
+  for (const acknowledged of [false,true]) {
+    let amendmentRequest=null;
+    const amendmentClient=createMockClient({acknowledged,nativeHandoff:true,subscriptions:[{
+      auth:'native_expo_push_token',endpoint:nativeExpoPushToken,p256dh:'native_expo_push_token',source_surface:'driver_native_ios',
+    }]});
+    const options={env:configuredEnv,nativePushSender:async(expoToken,jobKey,openTarget,visibleBody)=>{
+      amendmentRequest={jobKey,openTarget,visibleBody};
+    }};
+    const result=acknowledged
+      ? await helper.sendDriverDevicePushAlertForAppUpdate(amendmentClient,{
+          booking_reference:'PRIVATE-BOOKING-REFERENCE',delivery_surface:'driver_app',
+          driver_job_link_id:'11111111-1111-4111-8111-111111111111',actor_role:'admin',workflow_area:'driver_job_link_delivery',
+        },options)
+      : await helper.sendDriverDevicePushAlertForNewJobLink(amendmentClient,{
+          driver_job_link_id:'11111111-1111-4111-8111-111111111111',driver_job_token:'NEW-PRIVATE-DRIVER-JOB-TOKEN',amendment:true,
+        },options);
+    assert.equal(result.native_provider_accepted,true);
+    assert.deepEqual(amendmentRequest,{
+      jobKey:helper.opaqueDriverJobLinkKey('11111111-1111-4111-8111-111111111111'),openTarget:null,
+      visibleBody:'Job updated. Tap to review.',
+    },'Amendment label is explicit before and after ACK and opens the same job');
+  }
   let pendingAckNativeRequest = null;
   let pendingAckWebSendCount = 0;
   const pendingAckReminderAlert = await helper.sendDriverNativePendingAckReminder(

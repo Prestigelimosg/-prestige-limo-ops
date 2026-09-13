@@ -146,6 +146,7 @@ type DriverNativePushVisibleBody =
   | DriverPoolAssignmentCancelledVisibleBody
   | "Job reassigned, do not proceed."
   | "Job update available"
+  | "Job updated. Tap to review."
   | "Job acknowledgement needed. Tap to review."
   | "New job offer available. Open Driver Portal."
   | "New job available. Tap to review."
@@ -162,6 +163,7 @@ type DriverDevicePushPayload = {
     | "Job reassigned, do not proceed."
     | "New Driver Job app update. Tap to review."
     | "New Driver Job issued. Tap to review."
+    | "Job updated. Tap to review."
     | "Pickup is in 1 hour. Open Driver Portal to review.";
   job_key: string;
   tag: string;
@@ -1275,6 +1277,7 @@ export async function sendDriverDevicePushAlertForNewJobLink(
   input: {
     driver_job_link_id: string;
     driver_job_token: string;
+    amendment?: boolean;
   },
   options: DriverDevicePushAlertOptions = {},
 ): Promise<DriverDevicePushAlertResult> {
@@ -1309,6 +1312,7 @@ export async function sendDriverDevicePushAlertForNewJobLink(
   if (!link || !linkId || !driverId || !exactToken || !payload) {
     return alertResult("invalid_driver_link", { enabled: true });
   }
+  if (input.amendment === true) payload.body = "Job updated. Tap to review.";
   const nativeAccountEligible = nativeHandoffAvailable &&
     await driverHasActiveOnePhoneAccount(client, driverId);
 
@@ -1319,7 +1323,7 @@ export async function sendDriverDevicePushAlertForNewJobLink(
     config,
     options,
     null,
-    "New job available. Tap to review.",
+    input.amendment === true ? "Job updated. Tap to review." : "New job available. Tap to review.",
     nativeAccountEligible ? payload.job_key : null,
     true,
   );
@@ -1380,6 +1384,9 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     ? messageText as DriverMessagePreview
     : null;
   const payload = safePayload(linkId, messagePreview);
+  const jobAmendment = input.workflow_area === "driver_job_link_delivery" &&
+    (input.actor_role === "admin" || input.actor_role === "dispatcher");
+  if (jobAmendment) payload.body = "Job updated. Tap to review.";
   const nativeOpenTarget = input.workflow_area === "admin_driver_job_messages"
     ? "messages"
     : null;
@@ -1390,7 +1397,7 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     config,
     options,
     nativeOpenTarget,
-    messagePreview || "Job update available",
+    messagePreview || (jobAmendment ? "Job updated. Tap to review." : "Job update available"),
   );
 }
 

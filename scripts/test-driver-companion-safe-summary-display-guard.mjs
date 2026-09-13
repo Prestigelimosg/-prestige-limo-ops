@@ -25,18 +25,18 @@ assert.equal(
 );
 assert.match(
   embeddedDriverPageSource,
-  /embeddedDriverApp\s*\?\s*driverSafeStatusLabel\(pageState\.job\.status\)\s*:\s*statusDisplay\(pageState\.job\.status, pageState\.job\.statusLabel\)/,
-  "The verified embedded app status badge must fail closed through the established driver-safe label while ordinary browser display stays unchanged",
+  /data-driver-job-current-status="true"[\s\S]{0,100}\{driverSafeStatusLabel\(pageState\.job\.status\)\}/,
+  "Browser and embedded job badges must use the same existing safe status labels",
 );
 assert.match(
   embeddedDriverPageSource,
-  /embeddedDriverApp\s*\?\s*embeddedDriverDetailRows\(pageState\.job\)\s*:\s*detailRows\(pageState\.job\)/,
-  "The exact embedded job card must pass its verified app context into safe detail presentation",
+  /\{embeddedDriverDetailRows\(pageState\.job\)\.map\(\(detail\)/,
+  "Browser and embedded job summaries must use the same existing readable details",
 );
 assert.match(
   embeddedDriverPageSource,
   /function embeddedDriverDetailRows\(job: SafeDriverJobPayload\)[\s\S]*?row\.label === "Date\/time"[\s\S]*?formatDriverPickupDateTime\(row\.value\)/,
-  "The verified embedded app must format the persisted pickup key as friendly SGT while ordinary browser detail output stays unchanged",
+  "The existing formatter must remain scoped to summary Date/time only",
 );
 
 assert.equal(

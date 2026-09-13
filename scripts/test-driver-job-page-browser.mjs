@@ -714,6 +714,11 @@ async function runChromeTest() {
             return originalFetch(...args).then(async (response) => {
               const result = await response.json();
               if (result.ok) {
+                if (method === "GET" && new URLSearchParams(window.location.search).get("summary") === "readable") {
+                  result.payload.status = "admin_review_required";
+                  result.payload.statusLabel = "admin_review_required";
+                  result.payload.pickupDateTime = "2026-09-14T12:00";
+                }
                 if (method === "GET" && window.__sameLinkAmendment) {
                   result.payload.pickupLocation = "Same Link Amended Pickup";
                   result.payload.route = "Same Link Amended Pickup > Mock Workflow Dropoff";
@@ -1074,6 +1079,23 @@ async function runChromeTest() {
       await navigateToDriverJob(mockDriverJobTokens.validA, 'Driver Job Card', mode ? `embedded=${mode}` : '');
       assert.equal(await evaluate(`document.querySelectorAll('[data-driver-beta-install]').length`), 0,
         'Installation controls must be absent inside native apps and desktop.');
+    }
+    for (const mode of ['android-browser', 'ios-browser', 'android-pin', 'ios-pin', '']) {
+      await navigateToDriverJob(mockDriverJobTokens.validA, 'Driver Job Card', `embedded=${mode}&summary=readable`);
+      const summary = await evaluate(`(() => {
+        const card = document.querySelector('[data-driver-primary-step="job-summary"]');
+        return {
+          status: card.querySelector('[data-driver-job-current-status]').textContent.trim(),
+          date: [...card.querySelectorAll('dl > div')].find(row => row.querySelector('dt').textContent === 'Date/time').querySelector('dd').textContent,
+          rawText: /admin_review_required|2026-09-14T12:00/.test(card.innerText),
+          overflow: document.documentElement.scrollWidth > window.innerWidth,
+          writes: window.__driverJobFetchCalls.filter(call => /^(POST|PATCH|DELETE) /.test(call)),
+        };
+      })()`);
+      assert.deepEqual(summary, {
+        status: 'Pending dispatch confirmation', date: '14 Sep 2026, 1200hrs SGT',
+        rawText: false, overflow: false, writes: [],
+      }, `Readable summary must match on ${mode || 'desktop'} without writes.`);
     }
     for (const token of [mockDriverJobTokens.expired, mockDriverJobTokens.revoked]) {
       await navigateToDriverJob(token, 'Driver job link unavailable', 'embedded=ios-browser');

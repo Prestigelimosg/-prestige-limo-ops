@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 
 const guardChecks = [
   {
+    label: "Admin Driver profile possible-duplicate advisory",
+    script: "scripts/test-driver-profile-duplicate-warning.mjs",
+  },
+  {
     label: "authenticated Customer same-trip duplicate guard",
     script: "scripts/test-customer-same-trip-adapter-guard.mjs",
   },

@@ -18738,14 +18738,14 @@ async function runChromeTest() {
               const control = document.querySelector("[data-driver-pool-control='ready']");
               const payout = control?.querySelector("input[aria-label='Driver Pool offer payout in SGD']");
               const send = [...(control?.querySelectorAll("button") || [])].find(
-                (button) => button.textContent.trim() === "Send to Driver Pool",
+                (button) => button.textContent.trim() === "Send to selected drivers",
               );
               return {
                 payout: payout?.value || "",
                 vehicleRequirement: control?.querySelector('select[aria-label="Driver Pool vehicle type"]')?.value ?? null,
                 sendDisabled: send?.disabled ?? true,
                 sendText: send?.textContent.trim() || "",
-                text: control?.textContent.replace(/\s+/g, " ").trim() || "",
+                text: control?.textContent.replace(/\\s+/g, " ").trim() || "",
               };
             })(),
             fetchCalls: window.__prestigeFetchCalls || [],
@@ -18999,9 +18999,9 @@ async function runChromeTest() {
 
         return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
           candidateState?.fields?.flight === "SQ999" &&
-          candidateState?.driverPoolControl?.sendText === "Send to Driver Pool" &&
+          candidateState?.driverPoolControl?.sendText === "Send to selected drivers" &&
           candidateState?.driverPoolControl?.payout === "75.00" &&
-          candidateState?.driverPoolControl?.vehicleRequirement === "" &&
+          candidateState?.driverPoolControl?.vehicleRequirement === "VVV" &&
           candidateState?.driverPoolControl?.sendDisabled === true &&
           candidateState?.driverPoolOfferRequests?.some(
             (request) =>
@@ -19103,14 +19103,14 @@ async function runChromeTest() {
       );
     }
 
-    assert.equal(loadedBookingState.driverPoolControl.vehicleRequirement, "", "Pool vehicle must start unselected");
-    assert.equal(loadedBookingState.driverPoolControl.sendDisabled, true, "Pool Send must wait for explicit vehicle selection");
+    assert.equal(loadedBookingState.driverPoolControl.vehicleRequirement, "VVV", "Pool may reuse the exact saved vehicle requirement");
+    assert.equal(loadedBookingState.driverPoolControl.sendDisabled, true, "Pool Send must wait for selected drivers");
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
     assert.match(
       loadedBookingState.driverPoolControl.text,
-      /Pool offer total SGD\s*Send to Driver Pool/,
+      /Pool offer total SGD\s*Send to selected drivers/,
       "Expected one compact Driver Pool row with the resolved fixed-trip payout and explicit Send control",
     );
     assert.match(
@@ -21668,7 +21668,7 @@ async function runChromeTest() {
           "[data-driver-pool-control='ready'], [data-driver-pool-control='cancelled']",
         );
         const sendButton = [...(control?.querySelectorAll("button") || [])].find(
-          (button) => button.textContent.trim() === "Send to Driver Pool",
+          (button) => button.textContent.trim() === "Send to selected drivers",
         );
         const bodyText = document.body.innerText.replace(/\\s+/g, " ");
         const patchRequest = (window.__prestigeDriverPoolOfferRequests || []).find(
@@ -21692,13 +21692,14 @@ async function runChromeTest() {
       10000,
       "Driver Pool cancellation in-place ready state",
     );
-    assert.equal(cancelledDriverPoolUi.sendText, "Send to Driver Pool");
-    assert.equal(cancelledDriverPoolUi.sendDisabled, true, "posting requires an explicit Pool vehicle choice");
+    assert.equal(cancelledDriverPoolUi.sendText, "Send to selected drivers");
+    assert.equal(cancelledDriverPoolUi.sendDisabled, true, "posting requires selected drivers");
     const poolVehicleChoices = await evaluate(`(() => {
       const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
       return select ? { value: select.value, choices: [...select.options].map((option) => option.value) } : null;
     })()`);
-    assert.deepEqual(poolVehicleChoices, { value: "", choices: ["", "E / AVF", "AVF", "S", "VVV", "COMBI"] });
+    assert.deepEqual(poolVehicleChoices, { value: "VVV", choices: ["", "E / AVF", "AVF", "S", "VVV", "COMBI"] });
+    await evaluate(`document.querySelector('[data-driver-pool-selected-drivers] input[type="checkbox"]').click()`);
     for (const vehicle of ["E / AVF", "AVF", "VVV", "COMBI"]) {
       await evaluate(`(() => {
         const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
@@ -21707,7 +21708,7 @@ async function runChromeTest() {
       })()`);
       await waitForCondition(async () => evaluate(`(() => {
         const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
-        const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === "Send to Driver Pool");
+        const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === "Send to selected drivers");
         return select?.value === ${JSON.stringify(vehicle)} && button && !button.disabled;
       })()`), 3000, "explicit Pool vehicle choice enables the established send action");
     }

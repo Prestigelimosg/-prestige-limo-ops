@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type PoolDriver = { id: number; driver_name: string | null; plate_number: string | null; vehicle_type: string | null; availability_status: string | null };
+type PoolResponse = { driver_id: number; driver_name: string; plate_number: string; vehicle_type: string; status: "pending" | "available" | "declined" | "accepted" | "closed" };
+
 export type DriverPoolAdminOffer = {
+  selection_mode?: "admin" | "first_accept";
+  audience?: "selected" | "wider";
+  responses?: PoolResponse[];
   closes_at: string;
   offer_key: string;
   offer_payout_sgd: number;
@@ -27,6 +33,8 @@ type AdminDriverPoolAttentionItem = DriverPoolAdminOffer & {
 };
 
 type Props = {
+  drivers: PoolDriver[];
+  savedVehicle: string;
   bookingReference: string;
   disabled: boolean;
   eligible: boolean;
@@ -34,7 +42,7 @@ type Props = {
   requiresExplicitPayout: boolean;
   showPleaseAssignDriver: boolean;
   suggestedPayout: number;
-  onLoadBooking: (bookingReference: string) => Promise<void>;
+  onLoadBooking: (bookingReference: string, reviewResponses?: boolean) => Promise<void>;
   onAssignedOfferChange?: (offer: AssignedDriverPoolAdminOffer | null) => void;
 };
 
@@ -54,12 +62,14 @@ function pickupLabel(value: string) {
     : "Pickup time unavailable";
 }
 
-export function AdminDriverPoolControl({ bookingReference, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, onLoadBooking, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
+export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, onLoadBooking, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [serverEligible, setServerEligible] = useState(false);
   const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
   const [payout, setPayout] = useState(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
-  const [vehicleRequirement, setVehicleRequirement] = useState("");
+  const [vehicleRequirement, setVehicleRequirement] = useState(["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(savedVehicle) ? savedVehicle : "");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [driverSearch, setDriverSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [attentionEnabled, setAttentionEnabled] = useState(false);
@@ -80,7 +90,8 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
         setServerEligible(result.eligible === true);
         setOffer(result.offer || null);
       }
-    } catch { /* Feature remains quietly unavailable. */ }
+      else { setFeedback("Driver Pool could not refresh. Reload before acting."); }
+    } catch { setFeedback("Driver Pool could not refresh. Reload before acting."); }
   }, [bookingReference]);
 
   const loadAttention = useCallback(async (page: number, quiet = false) => {
@@ -157,11 +168,12 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
 
   async function publish() {
     if (!vehicleRequirement) { setFeedback("Choose the Pool vehicle type."); return; }
+    if (selectedIds.length < 1 || selectedIds.length > 5) { setFeedback("Select 1–5 drivers."); return; }
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
         body: JSON.stringify({ booking_reference: bookingReference, expected_updated_at: expectedUpdatedAt,
-          idempotency_key: crypto.randomUUID(), offer_payout_sgd: Number(payout), vehicle_requirement: vehicleRequirement }), headers, method: "POST",
+          idempotency_key: crypto.randomUUID(), offer_payout_sgd: Number(payout), vehicle_requirement: vehicleRequirement, selected_driver_ids: selectedIds }), headers, method: "POST",
       });
       const result = await response.json() as { error?: string; offer?: DriverPoolAdminOffer; ok?: boolean };
       if (!response.ok || result.ok !== true || !result.offer) throw new Error(result.error || "Offer was not sent.");
@@ -171,9 +183,35 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
       setFeedback(attempted > 0
         ? `${accepted}/${attempted} Drivers had a push request accepted by provider; delivery not confirmed.`
         : "Offer published. No Driver device push was attempted.");
+      await load();
       await loadAttention(1);
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Offer was not sent."); }
     finally { setBusy(false); }
+  }
+
+  async function selectOrWiden(action: "award" | "widen", driverId?: number) {
+    if (!offer || busy || offer.offer_status !== "open") return;
+    setBusy(true); setFeedback("");
+    try {
+      const response = await fetch("/api/admin-driver-job-bid-offers", {
+        method: "PATCH", headers,
+        body: JSON.stringify({ action, offer_key: offer.offer_key, expected_updated_at: offer.updated_at,
+          idempotency_key: crypto.randomUUID(), ...(action === "award" ? { driver_id: driverId } : {
+            booking_reference: bookingReference, offer_payout_sgd: offer.offer_payout_sgd, vehicle_requirement: offer.safe_vehicle_label,
+          }) }),
+      });
+      const result = await response.json() as { ok?: boolean; accepted?: boolean; error?: string };
+      if (!response.ok || result.ok !== true || (action === "award" && result.accepted !== true)) throw new Error(result.error || "Driver Pool action was not confirmed. Refresh to review.");
+      await load();
+      await loadAttention(1);
+      if (action === "award") {
+        setFeedback("Driver assigned. Create the Driver Job Link when ready.");
+        await onLoadBooking(bookingReference);
+      } else setFeedback("Offered to the wider pool. Admin still chooses the winner.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Driver Pool action was not confirmed. Refresh to review.");
+      await load();
+    } finally { setBusy(false); }
   }
 
   async function cancel() {
@@ -220,7 +258,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
     setAttentionWorkingKey(item.offer_key);
     setAttentionFeedback("");
     try {
-      await onLoadBooking(item.booking_reference);
+      await onLoadBooking(item.booking_reference, item.selection_mode === "admin" && item.attention_status === "open");
     } catch (error) {
       setAttentionFeedback(error instanceof Error ? error.message : `Job ${item.public_booking_reference} could not be loaded.`);
     } finally {
@@ -234,13 +272,45 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
         <div className="flex flex-wrap items-end gap-2" data-driver-pool-control={offer?.offer_status || "ready"}>
           {offer?.offer_status === "open" ? (
             <>
-              <span className="text-xs font-semibold text-sky-950">Pool open · {offer.safe_vehicle_label || "Vehicle TBC"} · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
+              <span className="text-xs font-semibold text-sky-950">{offer.selection_mode === "admin" ? offer.audience === "selected" ? "Selected group" : "Wider pool" : "Pool open"} · {offer.safe_vehicle_label || "Vehicle TBC"} · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
+              {offer.selection_mode === "admin" ? (
+                <div className="w-full space-y-1" data-driver-pool-responses="true">
+                  <p className="text-xs font-semibold text-sky-950">Responses · choose one Available driver</p>
+                  <div className="max-h-48 overflow-y-auto rounded border border-sky-200 bg-white">
+                    {(offer.responses || []).map((driver) => (
+                      <div className="flex items-center gap-2 border-b border-sky-100 px-2 py-1 text-xs last:border-0" key={driver.driver_id}>
+                        <span className="min-w-0 flex-1 break-words">{driver.driver_name} · {driver.vehicle_type} · {driver.plate_number}</span>
+                        <span>{driver.status === "available" ? "Available" : driver.status === "pending" ? "Waiting" : driver.status === "declined" ? "Declined" : "Closed"}</span>
+                        {driver.status === "available" ? <button className="h-8 rounded bg-sky-950 px-3 font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled} onClick={() => void selectOrWiden("award", driver.driver_id)} type="button">Assign</button> : null}
+                      </div>
+                    ))}
+                    {!offer.responses ? <p className="p-2 text-xs">Refreshing responses…</p> : null}
+                  </div>
+                  {offer.audience === "selected" && offer.responses && !offer.responses.some((driver) => driver.status === "available") ?
+                    <button className="h-8 rounded border border-sky-300 bg-white px-3 text-xs font-semibold" disabled={busy || disabled} onClick={() => void selectOrWiden("widen")} type="button">Offer to wider pool</button> : null}
+                </div>
+              ) : null}
               <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy} onClick={() => void cancel()} type="button">{busy ? "Cancelling…" : "Cancel Offer"}</button>
             </>
           ) : offer?.offer_status === "assigned" ? (
             <span className="text-xs font-semibold text-emerald-800">Accepted · Driver assigned. Create the Driver Job Link when ready.</span>
           ) : (
             <>
+              <div className="w-full space-y-1" data-driver-pool-selected-drivers="true">
+                <label className="text-xs font-semibold text-slate-700">Select drivers · {selectedIds.length}/5
+                  <input aria-label="Search Pool drivers" className="ml-2 h-8 rounded border border-sky-300 px-2 text-xs" onChange={(event) => setDriverSearch(event.target.value)} placeholder="Name or plate" value={driverSearch} />
+                </label>
+                <div className="max-h-40 overflow-y-auto rounded border border-sky-200 bg-white">
+                  {drivers.filter((driver) => driver.availability_status?.trim().toLowerCase() === "available" &&
+                    `${driver.driver_name || ""} ${driver.plate_number || ""}`.toLowerCase().includes(driverSearch.trim().toLowerCase())).map((driver) => (
+                    <label className="flex min-h-8 items-center gap-2 border-b border-sky-100 px-2 py-1 text-xs last:border-0" key={driver.id}>
+                      <input type="checkbox" checked={selectedIds.includes(driver.id)} disabled={busy || disabled || (!selectedIds.includes(driver.id) && selectedIds.length >= 5)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, driver.id].slice(0, 5) : current.filter((id) => id !== driver.id))} />
+                      <span className="break-words">{driver.driver_name || "Unnamed driver"} · {driver.vehicle_type || "Vehicle unavailable"} · {driver.plate_number || "Plate unavailable"}</span>
+                    </label>
+                  ))}
+                  {!drivers.length ? <p className="p-2 text-xs text-slate-500">Use Load Drivers for Assignment above.</p> : null}
+                </div>
+              </div>
               <label className="text-xs font-semibold text-slate-700">Pool vehicle
                 <select aria-label="Driver Pool vehicle type" className="ml-2 h-8 rounded-md border border-sky-300 bg-white px-2 text-sm" disabled={busy || disabled} onChange={(event) => setVehicleRequirement(event.target.value)} value={vehicleRequirement}>
                   <option value="">Choose vehicle</option>
@@ -254,7 +324,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
               <label className="text-xs font-semibold text-slate-700">Pool offer total SGD
                 <input aria-label="Driver Pool offer payout in SGD" className="ml-2 h-8 w-28 rounded-md border border-sky-300 bg-white px-2 text-sm" min="0.01" onChange={(event) => setPayout(event.target.value)} step="0.01" type="number" value={payout} />
               </label>
-              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to Driver Pool"}</button>
+              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || selectedIds.length < 1 || selectedIds.length > 5 || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to selected drivers"}</button>
               {showPleaseAssignDriver ? (
                 <span className="text-xs font-semibold text-emerald-800">Please assign driver.</span>
               ) : null}
@@ -281,7 +351,7 @@ export function AdminDriverPoolControl({ bookingReference, disabled, eligible, e
                     <span className="font-semibold text-slate-950">Job {item.public_booking_reference}</span>
                     <span className="ml-2 text-slate-500">{pickupLabel(item.pickup_at)}</span>
                     <span className={`ml-2 font-semibold ${item.attention_status === "open" ? "text-sky-800" : "text-emerald-800"}`}>
-                      {item.attention_status === "open" ? `Pool open · SGD ${item.offer_payout_sgd.toFixed(2)}` : "Accepted · Job Link pending"}
+                      {item.attention_status === "open" ? `${item.selection_mode === "admin" ? item.audience === "selected" ? "Selected group" : "Wider pool" : "Pool open"} · SGD ${item.offer_payout_sgd.toFixed(2)} · View responses` : "Accepted · Job Link pending"}
                     </span>
                   </button>
                   {item.attention_status === "open" ? (

@@ -1,10 +1,15 @@
 import { after } from "next/server";
 
+import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notification";
+
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import { adminBookingPersistencePurpose, resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
-import { sendDriverDevicePushAlertForDriverPoolOffer } from "../../../lib/driver-device-push-notification";
+import { sendDriverDevicePushAlertForDriverPoolOffer, sendDriverDeviceSilentRefreshForDriverPoolOffer } from "../../../lib/driver-device-push-notification";
 import {
   cancelDriverPoolOffer,
+  decideDriverPoolOffer,
+  loadDriverPoolWinnerPlate,
+  parseDriverPoolAdminActionPayload,
   getDriverPoolClientForProduction,
   loadAdminDriverPoolAttentionOffers,
   loadAdminDriverPoolOffer,
@@ -84,7 +89,45 @@ export async function PATCH(request: Request) {
   try {
     const access = boundary(request);
     if (!access.ok) return response({ error: access.error, ok: false }, 403);
-    const parsed = parseDriverPoolCancelPayload(await body(request));
+    const payload = await body(request);
+    if (payload && typeof payload === "object" && "action" in payload) {
+      const parsedAction = parseDriverPoolAdminActionPayload(payload);
+      if (!parsedAction.ok) return response({ error: parsedAction.error, ok: false }, parsedAction.status);
+      const database = getDriverPoolClientForProduction();
+      if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
+      const actor = adminDispatcherBoundaryToPersistenceAdapterActor(access.context);
+      const input = parsedAction.data;
+      if (input.action === "widen") {
+        const result = await publishDriverPoolOffer(database.client, {
+          booking_reference: input.booking_reference!, offer_key: input.offer_key,
+          expected_updated_at: input.expected_updated_at, idempotency_key: input.idempotency_key,
+          offer_payout_sgd: input.offer_payout_sgd!, vehicle_requirement: input.vehicle_requirement!,
+        }, actor);
+        return result.ok ? response({ offer: result.data, ok: true }, 200) : response({ error: result.error, ok: false }, result.status);
+      }
+      const result = await decideDriverPoolOffer(database.client, input.driver_id!, input, "accept", actor);
+      if (result.ok && result.data.reason === "accepted" && result.data.public_booking_reference) {
+        after(async () => {
+          await Promise.allSettled([
+            (async () => {
+              const vehiclePlate = await loadDriverPoolWinnerPlate(database.client, input.driver_id!);
+              if (vehiclePlate) await sendAdminDevicePushAlert("driver_pool_accepted", {
+                bookingReference: result.data.public_booking_reference!, vehiclePlate,
+              });
+            })(),
+            sendDriverDevicePushAlertForDriverPoolOffer(database.client, {
+              driver_id: input.driver_id!, notification_kind: "winner", offer_key: input.offer_key,
+              public_booking_reference: result.data.public_booking_reference!,
+            }),
+            ...result.data.other_recipient_driver_ids.map((driverId) => sendDriverDeviceSilentRefreshForDriverPoolOffer(database.client, {
+              driver_id: driverId, offer_key: input.offer_key,
+            })),
+          ]);
+        });
+      }
+      return result.ok ? response({ ...result.data, ok: true }, 200) : response({ error: result.error, ok: false }, result.status);
+    }
+    const parsed = parseDriverPoolCancelPayload(payload);
     if (!parsed.ok) return response({ error: parsed.error, ok: false }, parsed.status);
     const database = getDriverPoolClientForProduction();
     if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);

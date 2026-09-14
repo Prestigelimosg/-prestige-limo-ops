@@ -21,28 +21,28 @@ try {
  }
  const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import {AdminDriverPoolControl} from './admin';import Driver from './driver';
  const drivers=Array.from({length:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:'AVF',plate_number:'QA100'+(i+1),availability_status:'available'}));
- const base={offer_key:'a'.repeat(64),offer_status:'open',audience:'selected',selection_mode:'admin',response_status:'pending',offer_payout_sgd:100,recipient_count:10,push_target_count:0,closes_at:'2099-09-15T12:00:00Z',pickup_at:'2099-09-15T12:00:00Z',public_booking_reference:'99001',safe_pickup_area:'After assignment',safe_dropoff_area:'After assignment',safe_trip_summary:'TRF',updated_at:'2026-09-14T00:00:00.123456Z',safe_vehicle_label:'AVF'};
- let offer=null;let driverJobs=[{...base}];
- window.poolTest={requests:[],loads:[],failAward:false,failDecline:false,respond:()=>{offer.responses=drivers.slice(0,10).map(d=>({driver_id:d.id,driver_name:d.driver_name,vehicle_type:d.vehicle_type,plate_number:d.plate_number,status:'available'}));},remove:()=>{driverJobs=[];}};
+ const base={offer_key:'a'.repeat(64),offer_status:'open',audience:'selected',selection_mode:'first_accept',response_status:'pending',offer_payout_sgd:100,recipient_count:10,push_target_count:0,closes_at:'2099-09-15T12:00:00Z',pickup_at:'2099-09-15T12:00:00Z',public_booking_reference:'99001',safe_pickup_area:'After assignment',safe_dropoff_area:'After assignment',safe_trip_summary:'TRF',updated_at:'2026-09-14T00:00:00.123456Z',safe_vehicle_label:'AVF'};
+ let offer=null;let driverJobs=[{...base,audience:location.pathname==='/driver-wide'?'wider':'selected'}];
+ window.poolTest={requests:[],loads:[],failAccept:false,failDecline:false,win:()=>{offer.offer_status='assigned';},remove:()=>{driverJobs=[];}};
  window.fetch=async(url,opts={})=>{
   const body=opts.body?JSON.parse(opts.body):null;const test=window.poolTest;
   test.requests.push({url:String(url),method:opts.method||'GET',body});
-  if(String(url)==='/api/driver-portal/jobs')return Response.json({ok:true,session:'account',jobs:[],device_alerts:{ready:false},alerts:[],alert_count:0});
+  if(String(url)==='/api/driver-portal/jobs')return Response.json({ok:true,session:'account',jobs:[],device_alerts:{ready:false},alerts:[],alert_count:0,alerts_available:true});
   if(String(url).startsWith('/api/driver-job-bids')){
-   if(opts.method==='POST'){driverJobs[0].response_status='awaiting_admin';return Response.json({ok:true,accepted:false,reason:'awaiting_admin'});}
+   if(opts.method==='POST'){if(test.failAccept)return Response.json({ok:false,reason:'schedule_conflict'},{status:409});driverJobs=[];return Response.json({ok:true,accepted:true,reason:'accepted'});}
    if(opts.method==='PATCH'){if(test.failDecline)return Response.json({ok:false,reason:'Decline could not be saved.'},{status:409});driverJobs=[];return Response.json({ok:true,accepted:false,reason:'declined'});}
    return Response.json({ok:true,enabled:true,jobs:driverJobs,has_more:false});
   }
   if(!String(url).startsWith('/api/admin-driver-job-bid-offers'))throw Error('Unexpected request: '+url);
   if(opts.method==='POST')offer={...base,recipient_count:body.selected_driver_ids.length,safe_vehicle_label:body.vehicle_requirement,responses:body.selected_driver_ids.map(id=>({driver_id:id,driver_name:'Synthetic Driver '+id,plate_number:'QA100'+id,vehicle_type:'AVF',status:'pending'}))};
   if(opts.method==='PATCH'){
-   if(body.action==='award'){if(test.failAward)return Response.json({ok:false,error:'Driver has an overlapping job.'},{status:409});offer.offer_status='assigned';return Response.json({ok:true,accepted:true});}
+   if(body.action==='award')throw Error('Unexpected Admin winner selection');
    if(body.action==='widen'){offer.audience='wider';offer.recipient_count=12;}
   }
   if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:offer?[{...offer,booking_reference:'POOL-QA',attention_status:offer.offer_status==='assigned'?'accepted_link_pending':'open'}]:[],has_more:false,page:1});
   return Response.json({ok:true,enabled:true,eligible:true,offer});
  };
- createRoot(document.getElementById('root')).render(location.pathname==='/driver'?<Driver/>:<AdminDriverPoolControl drivers={drivers} savedVehicle="AVF" bookingReference="POOL-QA" expectedUpdatedAt={base.updated_at} eligible disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={100} onLoadBooking={async(ref)=>window.poolTest.loads.push(ref)}/>);`;
+ createRoot(document.getElementById('root')).render(location.pathname.startsWith('/driver')?<Driver/>:<AdminDriverPoolControl drivers={drivers} savedVehicle="AVF" bookingReference="POOL-QA" expectedUpdatedAt={base.updated_at} eligible disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={100} onLoadBooking={async(ref)=>window.poolTest.loads.push(ref)}/>);`;
  await writeFile(path.join(temp,'entry.js'),ts.transpileModule(entry,{compilerOptions}).outputText);
  await new Promise((resolve,reject)=>webpack({mode:'development',entry:path.join(temp,'entry.js'),resolve:{modules:[path.join(process.cwd(),'node_modules')]},output:{path:temp,filename:'bundle.js'}},(err,stats)=>err||stats.hasErrors()?reject(err||Error(stats.toString({all:false,errors:true}))):resolve()));
  const bundle=await readFile(path.join(temp,'bundle.js'));
@@ -70,26 +70,35 @@ try {
   await click('Send to selected drivers');await wait("document.body.innerText.includes('Selected group')");
   assert.deepEqual(await evaluate("window.poolTest.requests.find(r=>r.method==='POST').body.selected_driver_ids"),[1,2,3,4,5,6,7,8,9,10]);
   await wait("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]')!==null");
-  await evaluate('window.poolTest.respond()');await wait("[...document.querySelectorAll('button')].filter(b=>b.textContent==='Assign').length===10");
-  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Offer to wider pool')"),false);
-  if(width===390){const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-admin-responses.png',Buffer.from(shot.data,'base64'));}
-  await evaluate('window.poolTest.failAward=true');await click('Assign');await wait("document.body.innerText.includes('overlapping job')");assert.deepEqual(await evaluate('window.poolTest.loads'),[]);
-  await evaluate('window.poolTest.failAward=false');await click('Assign');await wait('window.poolTest.loads.length===1');
-  assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.body?.action==='award').at(-1).body.driver_id"),1);
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Assign')"),false);
+  await wait("document.body.innerText.includes('First valid acceptance wins')");
+  await evaluate('window.poolTest.win()');await wait("document.body.innerText.includes('Accepted · Driver assigned')");
+  await wait("document.body.innerText.includes('Accepted · Job Link pending')");
+  assert.equal(await evaluate("window.poolTest.requests.some(r=>r.body?.action==='award')"),false);
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Admin overflow at ${width}`);
   await client.send('Page.navigate',{url});await wait("document.querySelectorAll('input[type=checkbox]').length===12");await evaluate("document.querySelector('input[type=checkbox]').click()");await click('Send to selected drivers');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Offer to wider pool')");await click('Offer to wider pool');await wait("document.body.innerText.includes('Wider pool')");
   assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.method==='POST').length"),1);
   assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.body?.action==='widen').length"),1);
-  await client.send('Page.navigate',{url:url+'/driver'});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Available')");await click('Available');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Pending'&&b.disabled)");
-  assert.equal(await evaluate("document.querySelectorAll('[data-driver-pool-offer]').length"),1);
-  assert.equal(await evaluate("document.querySelector('[data-driver-pool-accepted-confirmation]')!==null"),false);
-  await click('Refresh');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Pending'&&b.disabled)");
-  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Driver overflow at ${width}`);
-  if(width===390){const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-awaiting-admin.png',Buffer.from(shot.data,'base64'));}
-  await evaluate('window.poolTest.failDecline=true');await click('Cancel');await wait("document.body.innerText.includes('Decline could not be saved.')");
-  assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Pending'&&b.disabled)"),true);
-  await evaluate('window.poolTest.failDecline=false');await click('Cancel');await wait("document.querySelectorAll('[data-driver-pool-offer]').length===0");
+  for (const driverPath of ['/driver','/driver-wide']) {
+    await client.send('Page.navigate',{url:url+driverPath});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Accept')");
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>['Available','Pending','Cancel'].includes(b.textContent))"),false);
+    await wait("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Alerts 1')");
+    await evaluate('window.poolTest.failAccept=true');await click('Accept');await wait("document.body.innerText.includes('schedule_conflict')");
+    assert.equal(await evaluate("document.querySelectorAll('[data-driver-pool-offer]').length"),1);
+    await evaluate('window.poolTest.failAccept=false');await click('Accept');await wait("document.body.innerText.includes('Accepted! Pls ack when admin send job link')");
+    assert.equal(await evaluate("document.querySelectorAll('[data-driver-pool-offer]').length"),0);
+    await wait("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Alerts 0')");
+    await click('Refresh');await wait("document.querySelectorAll('[data-driver-pool-offer]').length===0");
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Driver overflow at ${width}`);
+    if(width===390){const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-first-accept.png',Buffer.from(shot.data,'base64'));}
+    await client.send('Page.navigate',{url:url+driverPath});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Decline')");
+    await evaluate('window.poolTest.failDecline=true');await click('Decline');await wait("document.body.innerText.includes('Decline could not be saved.')");
+    assert.equal(await evaluate("document.querySelectorAll('[data-driver-pool-offer]').length"),1);
+    await evaluate('window.poolTest.failDecline=false');await click('Decline');await wait("document.querySelectorAll('[data-driver-pool-offer]').length===0");
+    assert.equal(await evaluate("document.querySelector('[data-driver-pool-accepted-confirmation]')!==null"),false);
+  }
+
  }
  assert.deepEqual(errors,[]);
- console.log('PASS actual Admin/Driver JSX at 390px and 1280px: checkbox limit, selected-only POST, ten responses, rejected award, exact winner, one-job widening, persistent Pending state, visible failed withdrawal, Cancel withdrawal, no overflow or browser errors. API responses are synthetic.');
+ console.log('PASS actual Admin/Driver JSX at 390px and 1280px: checkbox limit, selected-only POST, no Admin winner controls, exact winner refresh, one-job widening, first Accept for both groups, winner confirmation, failed acceptance and decline, offer count 1 to 0, no overflow or browser errors. API responses are synthetic.');
 } finally {await client?.close();if(chrome)await terminateChildProcess(chrome);if(server)await new Promise(resolve=>server.close(resolve));await rm(temp,{recursive:true,force:true});}

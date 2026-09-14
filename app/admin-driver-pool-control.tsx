@@ -207,7 +207,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
       if (action === "award") {
         setFeedback("Driver assigned. Create the Driver Job Link when ready.");
         await onLoadBooking(bookingReference);
-      } else setFeedback("Offered to the wider pool. Admin still chooses the winner.");
+      } else setFeedback("Offered to the wider pool. First valid acceptance wins. Create the Driver Job Link after assignment.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Driver Pool action was not confirmed. Refresh to review.");
       await load();
@@ -272,7 +272,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
         <div className="flex flex-wrap items-end gap-2" data-driver-pool-control={offer?.offer_status || "ready"}>
           {offer?.offer_status === "open" ? (
             <>
-              <span className="text-xs font-semibold text-sky-950">{offer.selection_mode === "admin" ? offer.audience === "selected" ? "Selected group" : "Wider pool" : "Pool open"} · {offer.safe_vehicle_label || "Vehicle TBC"} · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
+              <span className="text-xs font-semibold text-sky-950">{offer.audience === "selected" ? "Selected group" : "Wider pool"} · First valid acceptance wins · {offer.safe_vehicle_label || "Vehicle TBC"} · SGD {offer.offer_payout_sgd.toFixed(2)} · {offer.recipient_count} eligible Drivers · {Math.min(offer.push_target_count, offer.recipient_count)} push-capable Drivers · {Math.max(0, offer.recipient_count - offer.push_target_count)} app-only Drivers</span>
               {offer.selection_mode === "admin" ? (
                 <div className="w-full space-y-1" data-driver-pool-responses="true">
                   <p className="text-xs font-semibold text-sky-950">Responses · choose one Available driver</p>
@@ -286,10 +286,10 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
                     ))}
                     {!offer.responses ? <p className="p-2 text-xs">Refreshing responses…</p> : null}
                   </div>
-                  {offer.audience === "selected" && offer.responses && !offer.responses.some((driver) => driver.status === "available") ?
-                    <button className="h-8 rounded border border-sky-300 bg-white px-3 text-xs font-semibold" disabled={busy || disabled} onClick={() => void selectOrWiden("widen")} type="button">Offer to wider pool</button> : null}
                 </div>
               ) : null}
+              {offer.audience === "selected" ?
+                <button className="h-8 rounded border border-sky-300 bg-white px-3 text-xs font-semibold" disabled={busy || disabled} onClick={() => void selectOrWiden("widen")} type="button">Offer to wider pool</button> : null}
               <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy} onClick={() => void cancel()} type="button">{busy ? "Cancelling…" : "Cancel Offer"}</button>
             </>
           ) : offer?.offer_status === "assigned" ? (
@@ -351,7 +351,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
                     <span className="font-semibold text-slate-950">Job {item.public_booking_reference}</span>
                     <span className="ml-2 text-slate-500">{pickupLabel(item.pickup_at)}</span>
                     <span className={`ml-2 font-semibold ${item.attention_status === "open" ? "text-sky-800" : "text-emerald-800"}`}>
-                      {item.attention_status === "open" ? `${item.selection_mode === "admin" ? item.audience === "selected" ? "Selected group" : "Wider pool" : "Pool open"} · SGD ${item.offer_payout_sgd.toFixed(2)} · View responses` : "Accepted · Job Link pending"}
+                      {item.attention_status === "open" ? `${item.audience === "selected" ? "Selected group" : "Wider pool"} · SGD ${item.offer_payout_sgd.toFixed(2)} · ${item.selection_mode === "admin" ? "View responses" : "First acceptance wins"}` : "Accepted · Job Link pending"}
                     </span>
                   </button>
                   {item.attention_status === "open" ? (

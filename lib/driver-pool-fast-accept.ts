@@ -273,7 +273,7 @@ function mapOffer(row: UnknownRecord): DriverPoolOfferState | null {
       !Number.isSafeInteger(recipients) || recipients < 0 ||
       !Number.isSafeInteger(targets) || targets < 0 || targets > recipients) return null;
   return {
-    selection_mode: asRecord(row.safe_offer_context).selection_mode === "admin" ? "admin" : "first_accept",
+    selection_mode: "first_accept",
     audience: asRecord(row.safe_offer_context).audience === "selected" ? "selected" : "wider",
     closes_at: closesAt,
     offer_key: key,

@@ -336,12 +336,11 @@ for (const [label, source] of [
 }
 
 const driverPage = files[driverPagePath];
-assert.equal(countOccurrences(driverPage, "fetch("), 13, "driver page fetch call count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 10, "driver page no-store fetch count");
+assert.equal(countOccurrences(driverPage, "fetch("), 14, "driver page fetch call count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 11, "driver page no-store fetch count");
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
-  "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
   "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
   "fetch(driverLiveLocationRoute()",
   "fetch(driverOtsPhotoProofRoute()",
@@ -359,8 +358,9 @@ for (const fragment of [
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",
   "driver_vehicle_model: nextDetails.vehicleModel",
-  "body: JSON.stringify({ issue_type: issueChoice.value })",
-  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage })",
+  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage,",
+  '...(recipient === "admin" ? { recipient: "admin" } : {})',
+  '...(recipient === "admin" ? { "x-prestige-driver-purpose": "driver-admin-message" } : {})',
   'result?.direction !== "driver_to_customer"',
   "result.proof?.customerVisible !== false",
   "result.proof?.external_send !== false",
@@ -379,7 +379,7 @@ for (const fragment of [
 ]) {
   assertIncludes(driverPage, fragment, `driver page caller ${fragment}`);
 }
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 6, "driver page POST count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 5, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assertIncludes(driverPage, "const driverPaymentDetailLinePattern =", "driver page pasted payment-detail filter");

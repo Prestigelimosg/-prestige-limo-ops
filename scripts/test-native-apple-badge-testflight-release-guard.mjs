@@ -35,7 +35,7 @@ assert.deepEqual(
 
 for (const app of [admin, customer, driver]) {
   assert.equal(app.userInterfaceStyle, "light");
-  assert.equal(app.plugins.includes("expo-notifications"), true);
+  assert.equal(app.plugins.some((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === "expo-notifications"), true);
 }
 
 for (const phrase of [

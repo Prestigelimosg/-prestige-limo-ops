@@ -8,6 +8,7 @@ import {
   Button,
   BackHandler,
   Linking,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -18,10 +19,11 @@ import {
   initialWindowMetrics,
 } from "react-native-safe-area-context";
 import {
-  WebView,
   type WebViewMessageEvent,
   type WebViewNavigation,
 } from "react-native-webview";
+
+import { WebView } from "./src/refreshable-webview";
 
 import {
   DriverJobRequestError,
@@ -328,16 +330,24 @@ export default function App() {
 
     let mounted = true;
 
-    const openNotificationData = async (data: unknown) => {
+    const openNotificationData = async (data: unknown, notificationResponse = false) => {
       const request = nativeNotificationOpenRequest(data);
       if (!request) {
         return;
       }
 
       if (request.openTarget === "available_jobs") {
-        const portalUrl = `${productionOrigin}/driver-portal?view=available-jobs`;
+        // Only a real tap consumes the persisted badge. Silent Pool refreshes
+        // still open the portal directly and must not consume visible alerts.
+        const portalUrl = notificationResponse
+          ? nativeDriverJobHandoffUrl(request.jobKey)
+          : `${productionOrigin}/driver-portal?view=available-jobs`;
         currentWebViewUrlRef.current = portalUrl;
-        webViewRequestHeadersRef.current = {};
+        webViewRequestHeadersRef.current = notificationResponse ? {
+          "x-prestige-driver-installation-id": installationId,
+          "x-prestige-driver-purpose": "driver-native-job-open",
+          "x-prestige-driver-open-target": "available_jobs",
+        } : {};
         setCanGoBack(false);
         setScreen((current) => ({
           active: false,
@@ -376,7 +386,7 @@ export default function App() {
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         void Notifications.setBadgeCountAsync(0).catch(() => false);
-        void openNotificationData(response.notification.request.content.data);
+        void openNotificationData(response.notification.request.content.data, true);
       },
     );
     const receivedSubscription = Notifications.addNotificationReceivedListener(
@@ -397,7 +407,7 @@ export default function App() {
       const initialResponse = Notifications.getLastNotificationResponse();
       if (initialResponse) {
         void Notifications.setBadgeCountAsync(0).catch(() => false);
-        void openNotificationData(initialResponse.notification.request.content.data)
+        void openNotificationData(initialResponse.notification.request.content.data, true)
           .finally(() => Notifications.clearLastNotificationResponse());
       }
     } catch {
@@ -563,6 +573,14 @@ export default function App() {
             return;
           }
           const existingToken = await readNativeNotificationToken();
+          if (Platform.OS === "android") {
+            await Notifications.setNotificationChannelAsync("default", {
+              name: "Job alerts",
+              importance: Notifications.AndroidImportance.HIGH,
+              sound: "default",
+              showBadge: true,
+            });
+          }
           const permission = await Notifications.requestPermissionsAsync();
 
           if (!permission.granted) {

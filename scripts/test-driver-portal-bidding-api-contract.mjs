@@ -49,7 +49,8 @@ for (const fragment of [
   "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose)",
   "adminDispatcherBoundaryToPersistenceAdapterActor(access.context)",
   "parseDriverPoolPublishPayload(await body(request))",
-  "parseDriverPoolCancelPayload(await body(request))",
+  "const payload = await body(request);",
+  "parseDriverPoolCancelPayload(payload)",
   "getDriverPoolClientForProduction()",
   "loadAdminDriverPoolOffer(database.client, reference)",
   "publishDriverPoolOffer(database.client, parsed.data, actor)",
@@ -96,7 +97,7 @@ for (const forbidden of [
 for (const fragment of [
   "driverPoolIsEnabled",
   "PRESTIGE_DRIVER_POOL_ENABLED",
-  "exactKeys(record, [\"booking_reference\", \"expected_updated_at\", \"offer_payout_sgd\", \"idempotency_key\"])",
+  "exactKeys(record, [\"booking_reference\", \"expected_updated_at\", \"offer_payout_sgd\", \"idempotency_key\", \"vehicle_requirement\", \"selected_driver_ids\"])",
   "exactKeys(record, [\"offer_key\", \"expected_updated_at\"])",
   "exactKeys(record, [\"offer_key\", \"expected_updated_at\", \"idempotency_key\"])",
   ".rpc(\"publish_driver_pool_offer\"",

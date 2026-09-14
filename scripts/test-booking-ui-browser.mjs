@@ -19154,15 +19154,20 @@ async function runChromeTest() {
         ),
       `Expected any permitted direct and background typed-read refreshes to remain guarded GET limit=25 reads, got ${loadedBookingTypedReadCalls.join(", ")}`,
     );
+    // Bookings may finish a background Calendar status read after Dispatch loads.
+    // The exact status-mode POST reads events; the normal Calendar POST is a write
+    // and must remain rejected by this load-only request assertion.
+    const calendarStatusReadCall = "POST /api/admin-booking-calendar-google-sync?mode=status";
     const loadedBookingFetchCallSet = new Set(
       loadedBookingState.fetchCalls.filter(
-        (call) => !call.includes("/api/admin-load-bookings-typed-read"),
+        (call) => !call.includes("/api/admin-load-bookings-typed-read") &&
+          call !== calendarStatusReadCall,
       ),
     );
     assert.deepEqual(
       [...loadedBookingFetchCallSet].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
-      `Expected Load this booking to make only guarded read GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
+      `Expected Load this booking to make only guarded reads (GETs or exact Calendar status POST), got ${loadedBookingState.fetchCalls.join(", ")}`,
     );
     assert.deepEqual(
       loadedBookingState.adminBookingExactReadRequests.map((request) => ({

@@ -48,6 +48,8 @@ const allowedDetailLabels = [
 ];
 
 const allowedDriverAppUpdateFields = [
+  "workflow_area",
+  "safe_context",
   "created_at",
   "id",
   "notification_status",
@@ -311,9 +313,10 @@ for (const forbiddenIssuePattern of [
   assertExcludes(issueChoices, forbiddenIssuePattern, "driver issue choices forbidden fields");
 }
 
-assert.equal(countOccurrences(driverPage, "fetch("), 13, "driver page fetch count");
-assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 10, "driver page no-store count");
-assert.equal(countOccurrences(driverPage, 'method: "POST"'), 6, "driver page POST count");
+// Existing same-link amendment adds two GETs; approved typed Admin messaging removes the old issue POST.
+assert.equal(countOccurrences(driverPage, "fetch("), 14, "driver page fetch count");
+assert.equal(countOccurrences(driverPage, 'cache: "no-store"'), 11, "driver page no-store count");
+assert.equal(countOccurrences(driverPage, 'method: "POST"'), 5, "driver page POST count");
 assert.equal(countOccurrences(driverPage, 'method: "DELETE"'), 1, "driver page DELETE count");
 assert.equal(countOccurrences(driverPage, 'method: "PATCH"'), 2, "driver page PATCH count");
 assert.equal(countOccurrences(driverPage, "<form"), 2, "driver page acknowledged account form count");
@@ -330,9 +333,13 @@ assert.deepEqual(
   "driver page static public information links",
 );
 assert.equal(countOccurrences(driverPage, "<Link"), 4, "driver page public information Link count");
+assertIncludes(driverPage, 'https://drive.usercontent.google.com/uc?id=1eRbvPP_bTLr2tbWM15O5_qutFqi3vx8S&export=download', 'established Android Drive file');
+assertIncludes(driverPage, 'https://testflight.apple.com/join/m3sjGfd3', 'established external TestFlight group');
+assertIncludes(driverPage, '(androidBrowser || iosBrowser) && !embeddedDriverApp && pageState.kind === "ready"', 'installation controls remain mobile browser and ready-job only');
+assertExcludes(driverPage, '/issue-alert', 'approved typed Admin message replaces the visible legacy issue caller');
 const betaDownloadAnchor = driverPage.match(/<a\s[^>]*data-driver-beta-download="true"[^>]*>[\s\S]*?<\/a>/g) || [];
 assert.equal(betaDownloadAnchor.length, 1, "Only the owner-approved Beta binary download may open a new tab.");
-assertIncludes(betaDownloadAnchor[0], 'href={driverBetaApkDownloadUrl}', 'fixed Beta APK destination');
+assertIncludes(betaDownloadAnchor[0], 'href={iosBrowser ? driverBetaTestFlightUrl : driverBetaApkDownloadUrl}', 'existing platform-specific Beta destination');
 assertIncludes(betaDownloadAnchor[0], 'referrerPolicy="no-referrer"', 'private job referrer protection');
 assertIncludes(betaDownloadAnchor[0], 'rel="noopener noreferrer"', 'Beta APK opener protection');
 assertIncludes(betaDownloadAnchor[0], 'target="_blank"', 'preserve original private job tab');
@@ -344,10 +351,10 @@ assert.equal(countOccurrences(driverPage, 'document.createElement("a")'), 0, "dr
 for (const fragment of [
   "fetch(`/api/driver-job/${encodeURIComponent(token)}`",
   "`/api/driver-job/${encodeURIComponent(token)}/notifications?limit=5&page=1`",
-  "fetch(`/api/driver-job/${encodeURIComponent(token)}/issue-alert`",
-  "body: JSON.stringify({ issue_type: issueChoice.value })",
   "`/api/driver-job/${encodeURIComponent(token)}/quick-replies`",
-  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage })",
+  "body: JSON.stringify({ client_message_id: clientMessageId, message_text: safeMessage,",
+  '...(recipient === "admin" ? { recipient: "admin" } : {})',
+  '...(recipient === "admin" ? { "x-prestige-driver-purpose": "driver-admin-message" } : {})',
   "driver_contact: nextDetails.contact",
   "driver_name: nextDetails.name",
   "driver_plate_number: nextDetails.plate",

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock";
 import { opaqueDriverJobLinkKey } from "../../../../lib/driver-device-push-notification";
 import {
@@ -120,6 +122,14 @@ export async function GET(
     return blocked(404);
   }
 
+  const openTarget = request.headers.get("x-prestige-driver-open-target");
+  const poolNotificationOpen = openTarget !== null;
+  if (poolNotificationOpen && (
+    openTarget !== "available_jobs" || new URL(request.url).search !== ""
+  )) {
+    return blocked(404);
+  }
+
   const session = resolveDriverPortalSession(request.headers.get("cookie"));
   if (
     !session.ok ||
@@ -145,6 +155,43 @@ export async function GET(
   });
   if (!accountIsActiveOnThisPhone) {
     return blocked(401);
+  }
+
+  if (poolNotificationOpen) {
+    // A Pool alert has an offer-derived key, not a private Job Link. Read only
+    // this verified driver's recent invitations, including terminal offers.
+    // Missing/old evidence or a badge failure never blocks the safe portal.
+    try {
+      const { data, error } = await clientResult.client
+        .from("driver_job_bids")
+        .select("driver_reference,driver_job_bid_offers!inner(offer_key)")
+        .eq("driver_reference", String(session.claims.driverId))
+        .order("submitted_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1000);
+      const ownsNotification = !error && rows(data).some((bid) => {
+        if (bid.driver_reference !== String(session.claims.driverId)) return false;
+        const offerKey = text(record(bid.driver_job_bid_offers).offer_key, 64);
+        return jobKeyPattern.test(offerKey) && createHash("sha256")
+          .update(`prestige-driver-pool-offer:${offerKey}`)
+          .digest("hex") === jobKey;
+      });
+      if (ownsNotification) {
+        await resetDriverNativePushBadgeCount(clientResult.client, session.claims.driverId);
+      }
+    } catch {
+      // Badge synchronization is best-effort; the notification still opens.
+    }
+    const destination = new URL("/driver-portal?view=available-jobs", request.url);
+    return new Response(null, {
+      headers: {
+        "Cache-Control": "no-store",
+        Location: destination.toString(),
+        "Referrer-Policy": "no-referrer",
+        Vary: "Cookie, x-prestige-driver-installation-id",
+      },
+      status: 302,
+    });
   }
 
   const { data: linkData, error: linkError } = await clientResult.client

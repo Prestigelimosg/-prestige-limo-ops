@@ -60,7 +60,10 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.RECEIVE_BOOT_COMPLETED"
-      ]
+      ],
+      "googleServicesFile": "./google-services.json",
+      "icon": "./assets/icon.png",
+      "versionCode": 4
     },
     "plugins": [
       [
@@ -79,7 +82,12 @@
           "faceIDPermission": "Allow Prestige Driver to use Face ID to unlock the approved Driver account."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default"
+        }
+      ],
       "expo-secure-store",
       "expo-web-browser",
       "./plugins/with-driver-camera-query"

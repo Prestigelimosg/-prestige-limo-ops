@@ -448,7 +448,8 @@ function calendarEventIdentityMatches(value: Record<string, unknown>, expected: 
 }
 
 // Best-effort READ ONLY. A missing rate/database must not disable the established Calendar sync.
-// Resolve the existing default for this persisted booking, never its manual payout override.
+// Seed from a verified Pool award first; otherwise use the existing default.
+// An ordinary manual payout override is not a Pool award.
 async function readCalendarDefaultPayout(reference: string, options: CalendarSyncOptions): Promise<string | null> {
   try {
     const env = options.env || process.env;
@@ -463,10 +464,32 @@ async function readCalendarDefaultPayout(reference: string, options: CalendarSyn
       });
     }
     const bookingResult = await client.from("bookings")
-      .select("booking_reference, company_id, driver_id, service_type, route_type, pickup_at, vehicle_type_or_category, extra_stop_count, child_seat_required, child_seat_count")
+      .select("booking_reference, company_id, driver_id, service_type, route_type, pickup_at, vehicle_type_or_category, extra_stop_count, child_seat_required, child_seat_count, driver_payout_override, driver_payout_reason")
       .eq("booking_reference", reference).maybeSingle();
     const booking = bookingResult.data;
     if (bookingResult.error || !booking || booking.booking_reference !== reference) return null;
+    if (booking.driver_payout_reason === "Driver Pool accepted fixed offer.") {
+      const driverId = Number(booking.driver_id);
+      if (!Number.isSafeInteger(driverId) || driverId <= 0) return null;
+      const offerResult = await client.from("driver_job_bid_offers")
+        .select("id, booking_reference, offer_payout_sgd")
+        .eq("booking_reference", reference).eq("offer_status", "assigned").maybeSingle();
+      const offer = offerResult.data;
+      if (offerResult.error || !offer || offer.booking_reference !== reference) return null;
+      const bidResult = await client.from("driver_job_bids")
+        .select("booking_reference, driver_reference")
+        .eq("driver_job_bid_offer_id", offer.id).eq("bid_status", "accepted").maybeSingle();
+      const bid = bidResult.data;
+      if (bidResult.error || !bid || bid.booking_reference !== reference || String(bid.driver_reference) !== String(driverId)) return null;
+      const rawAmount = String(offer.offer_payout_sgd ?? "");
+      const rawOverride = String(booking.driver_payout_override ?? "");
+      if (!/^\d+(?:\.\d{1,2})?$/.test(rawAmount) || !/^\d+(?:\.\d{1,2})?$/.test(rawOverride)) return null;
+      const amount = Number(rawAmount);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 99999.99 || amount !== Number(rawOverride)) return null;
+      // The fixed offer already covers the job: do not add default-rate extras again.
+      return `$${amount}`;
+    }
+
     const type = String(booking.service_type || booking.route_type || "").toUpperCase();
     if (!["MNG", "DEP", "TRF", "DSP"].includes(type)) return null;
     const pickup = typeof booking.pickup_at === "string" && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(booking.pickup_at)

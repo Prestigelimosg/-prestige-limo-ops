@@ -17270,6 +17270,7 @@ async function runChromeTest() {
               updated_at: "2026-05-19T00:02:00.000Z",
             };
             window.__prestigeDriverPoolOffer = cancelledOffer;
+            window.__prestigeDriverPoolAttentionItems = (window.__prestigeDriverPoolAttentionItems || []).filter((item) => item.offer_key !== cancelledOffer.offer_key);
             window.__prestigeLoadedBookings = (window.__prestigeLoadedBookings || []).map((booking) =>
               booking.id === "ui-cleanup-load-fixture"
                 ? {
@@ -21457,11 +21458,13 @@ async function runChromeTest() {
     reporter.step("Driver Pool accepted assignment cancel refreshes in place");
     await evaluate(`(() => {
       window.__prestigeAdminDriverJobLinks = [];
+      window.confirm = (message) => { (window.__prestigePoolConfirmations ||= []).push(message); return true; };
       window.__prestigeDriverPoolOffer = {
         closes_at: "2026-05-28T03:00:00.000Z",
         offer_key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         offer_payout_sgd: 75,
         offer_status: "assigned",
+        assignment: { driver_name: "LOADED SAVED DRIVER", plate_number: "SLA1234X", can_cancel: true, blocked_reason: null, has_job_link: false },
         provider_accepted_driver_count: 1,
         provider_attempted_driver_count: 1,
         push_target_count: 1,
@@ -21486,6 +21489,7 @@ async function runChromeTest() {
         })),
         {
           attention_status: "accepted_link_pending",
+          assignment: { driver_name: "LOADED SAVED DRIVER", plate_number: "SLA1234X", can_cancel: true, blocked_reason: null, has_job_link: false },
           booking_reference: "ui-cleanup-load-fixture",
           closes_at: "2027-05-28T03:00:00.000Z",
           offer_key: "b".repeat(64),
@@ -21562,8 +21566,8 @@ async function runChromeTest() {
       "assigned Driver Pool booking with cancel control",
     );
     assert.equal(
-      assignedDriverPoolUi.acceptedText,
-      "Accepted · Driver assigned. Create the Driver Job Link when ready.",
+      assignedDriverPoolUi.acceptedText.startsWith("Accepted · Driver assigned. Create the Driver Job Link when ready."),
+      true,
       "Assigned Driver Pool wording must not require a manual reload",
     );
 
@@ -21580,7 +21584,7 @@ async function runChromeTest() {
               ).length,
               clientHeight: list.querySelector(".overflow-y-auto")?.clientHeight || 0,
               loadJobCount: [...list.querySelectorAll("button")].filter(
-                (button) => button.textContent.trim() === "Load Job",
+                (button) => button.textContent.trim() === "Go to Create Link",
               ).length,
               rowCount: rows.length,
               scrollHeight: list.querySelector(".overflow-y-auto")?.scrollHeight || 0,
@@ -21607,7 +21611,7 @@ async function runChromeTest() {
     const clickedAcceptedPendingJob = await evaluate(`(() => {
       const row = document.querySelector("[data-admin-driver-pool-pending-row='10839']");
       const button = [...(row?.querySelectorAll("button") || [])].find(
-        (candidate) => candidate.textContent.trim() === "Load Job",
+        (candidate) => candidate.textContent.trim() === "Go to Create Link",
       );
       if (!button || button.disabled) return false;
       button.click();

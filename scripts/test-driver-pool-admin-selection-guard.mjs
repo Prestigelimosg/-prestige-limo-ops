@@ -27,8 +27,8 @@ try {
  const helper=load('lib/driver-pool-fast-accept.ts',modules);
  const publish={booking_reference:'POOL-QA',expected_updated_at:offer.updated_at,offer_payout_sgd:100,idempotency_key:crypto.randomUUID(),vehicle_requirement:'AVF',selected_driver_ids:[5,2,1]};
  assert.deepEqual(helper.parseDriverPoolPublishPayload(publish).data.selected_driver_ids,[1,2,5]);
- for(const ids of [undefined,[],[1,1],Array.from({length:11},(_,i)=>i+1),[0],[-1],['1'],[null],[1.5]]) assert.equal(helper.parseDriverPoolPublishPayload({...publish,selected_driver_ids:ids}).ok,false);
- for(const count of [1,5,6,10]) assert.equal(helper.parseDriverPoolPublishPayload({...publish,selected_driver_ids:Array.from({length:count},(_,i)=>i+1)}).ok,true);
+ for(const ids of [undefined,[],[1,1],[0],[-1],['1'],[null],[1.5]]) assert.equal(helper.parseDriverPoolPublishPayload({...publish,selected_driver_ids:ids}).ok,false);
+ for(const count of [1,5,6,10,11,20,50,201,500]) assert.equal(helper.parseDriverPoolPublishPayload({...publish,selected_driver_ids:Array.from({length:count},(_,i)=>i+1)}).ok,true);
  assert.equal(helper.parseDriverPoolPublishPayload({...publish,customer_price:999}).ok,false);
  const direct={...publish,audience:'wider',selected_driver_ids:[]};
  assert.equal(helper.parseDriverPoolPublishPayload(direct).ok,true,'Direct wider pool must not require a selected offer');
@@ -107,6 +107,15 @@ try {
  assert.deepEqual(sends.map(s=>s.driver_id),[6,7,8]);
  sends.length=0;rpcResult.idempotent=true;assert.equal((await route.POST(request(direct,'POST'))).status,200);assert.equal(sends.length,0);
  count=calls.length;assert.equal((await route.POST(request({...direct,selected_driver_ids:undefined},'POST'))).status,400);assert.equal(calls.length,count);
+ // Larger selected audiences use the same publisher and exact existing notification sender.
+ for(const n of [11,20,50,201,500]) {
+  const ids=Array.from({length:n},(_,i)=>2*i+1);sends.length=0;
+  rpcResult={offer:{...offer,recipient_count:n,safe_offer_context:{selection_mode:'first_accept',audience:'selected'}},recipient_driver_ids:ids,idempotent:false};
+  assert.equal((await route.POST(request({...publish,selected_driver_ids:ids},'POST'))).status,200);
+  assert.deepEqual(calls.at(-1).input.p_selected_driver_ids,ids);assert.deepEqual(sends.map(s=>s.driver_id),ids);
+  sends.length=0;rpcResult.idempotent=true;
+  assert.equal((await route.POST(request({...publish,selected_driver_ids:ids},'POST'))).status,200);assert.equal(sends.length,0);
+ }
  // Actual Driver route: availability, decline and denied business outcomes never schedule winner sends.
  const driverRoute=load('app/api/driver-job-bids/route.ts',{
   'next/server':{after:cb=>after.push(cb)},

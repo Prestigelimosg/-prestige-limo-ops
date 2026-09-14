@@ -48,6 +48,7 @@ try {
   await db.exec(fs.readFileSync('supabase/migrations/20260914023445_driver_pool_admin_selection.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20260914060753_driver_pool_all_groups_first_accept.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20260914124007_driver_pool_direct_audience.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20260914135103_driver_pool_selected_without_fixed_cap.sql','utf8'));
   const publish = async (ids=[1,2,3,4,5],key=randomUUID(),ref='POOL-QA') => val(`select publish_driver_pool_offer($1,(select updated_at from bookings where booking_reference=$1),100,$2,'admin','Synthetic Admin','AVF',$3::bigint[]) result`,[ref,key,ids]);
   const respond = (o,id,key=randomUUID()) => val('select accept_driver_pool_offer($1,$2,$3,$4) result',[o.offer.offer_key,id,o.offer.updated_at,key]);
   const decline = (o,id) => val('select decline_driver_pool_offer($1,$2,$3,$4) result',[o.offer.offer_key,id,o.offer.updated_at,randomUUID()]);
@@ -78,7 +79,7 @@ try {
     insert into drivers select i,'Synthetic '||i,'9000000'||i,'QATEST'||i,'AVF','available' from generate_series(9,11) i;
     insert into driver_access_accounts select id::text,'active',repeat('a',64) from drivers where id between 9 and 11;`);
   await reset(); await addBoundaryDrivers();
-  await assert.rejects(publish([...tenIds,11]));
+  await assert.rejects(publish([...tenIds,999]));
   assert.equal((await q('select count(*)::int n from driver_job_bid_offers'))[0].n,0);
   const tenOffer=await publish(tenIds);
   assert.deepEqual(tenOffer.recipient_driver_ids,tenIds);
@@ -88,9 +89,27 @@ try {
   assert.equal((await respond(tenOffer,10)).reason,'accepted');
   assert.equal(await assigned(),10);
   assert.equal((await q("select count(*)::int n from driver_job_bids where bid_status='accepted'"))[0].n,1);
-  console.log('PASS ten selected recipients, one first-accept winner, and eleven-recipient rejection.');
+  console.log('PASS ten selected recipients, one first-accept winner, and nonexistent-recipient rejection.');
+  for(const count of [11,20,50,201,500]) {
+    await reset();
+    await db.exec(`insert into drivers select i,'Synthetic '||i,'9000000'||i,'QATEST'||i,'AVF','available' from generate_series(9,${count+1}) i;
+      insert into driver_access_accounts select id::text,'active',repeat('a',64) from drivers where id>=9;`);
+    const ids=Array.from({length:count},(_,i)=>i+1), key=randomUUID();
+    const selected=await publish(ids,key);
+    assert.deepEqual(selected.recipient_driver_ids,ids);
+    assert.equal(selected.offer.recipient_count,count);
+    assert.equal((await publish(ids,key)).idempotent,true);
+    assert.equal((await list(count+1)).jobs.length,0,'Unselected matching driver sees no offer');
+    assert.equal((await respond(selected,count+1)).ok,false);
+    assert.equal((await respond(selected,count)).reason,'accepted');
+    assert.equal(await assigned(),count);
+    assert.equal((await respond(selected,1)).ok,false);
+    assert.equal((await q("select count(*)::int n from driver_job_bids where bid_status='accepted'"))[0].n,1);
+    assert.equal((await q('select count(*)::int n from driver_job_links'))[0].n,0);
+  }
+  console.log('PASS 11/20/50/201/500 exact selected recipients, idempotency, excluded-driver isolation and one first-accept winner.');
   await reset();
-  for (const ids of [[1,1],Array.from({length:11},(_,i)=>i+1),[0],[-1],[null]]) await assert.rejects(publish(ids));
+  for (const ids of [[1,1],[0],[-1],[null]]) await assert.rejects(publish(ids));
   let o=await publish(); assert.deepEqual(o.recipient_driver_ids,[1,2,3,4,5]);
   assert.equal((await list(6)).jobs.length,0); assert.equal((await respond(o,6)).ok,false);
   assert.equal((await award(o,1)).ok,false);

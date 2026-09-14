@@ -20,7 +20,7 @@ try {
   await writeFile(path.join(temp,name+'.js'),ts.transpileModule(source,{compilerOptions}).outputText);
  }
  const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import {AdminDriverPoolControl} from './admin';import Driver from './driver';
- const drivers=Array.from({length:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:location.pathname==="/readiness"&&i===9?"VVV":"AVF",plate_number:'QA100'+(i+1),availability_status:'available'}));
+ const drivers=Array.from({length:location.pathname==='/large'?501:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:location.pathname==="/readiness"&&i===9?"VVV":"AVF",plate_number:'QA100'+(i+1),availability_status:'available'}));
  const base={offer_key:'a'.repeat(64),offer_status:'open',audience:'selected',selection_mode:'first_accept',response_status:'pending',offer_payout_sgd:100,recipient_count:10,push_target_count:0,closes_at:'2099-09-15T12:00:00Z',pickup_at:'2099-09-15T12:00:00Z',public_booking_reference:'99001',safe_pickup_area:'After assignment',safe_dropoff_area:'After assignment',safe_trip_summary:'TRF',updated_at:'2026-09-14T00:00:00.123456Z',safe_vehicle_label:'AVF'};
  let offer=null;let driverJobs=[{...base,audience:location.pathname==='/driver-wide'?'wider':'selected'}];
  window.poolTest={requests:[],loads:[],cancelled:[],confirmations:[],allowConfirm:true,failCancel:false,failAccept:false,failDecline:false,failReadiness:false,win:()=>{offer.offer_status='assigned';offer.assignment={driver_name:'Synthetic Driver 1',plate_number:'QA1001',can_cancel:true,blocked_reason:null,has_job_link:false};},block:()=>{offer.assignment={...offer.assignment,can_cancel:false,blocked_reason:'This booking changed after acceptance. Review the saved assignment before cancelling.'};},remove:()=>{driverJobs=[];}};
@@ -41,8 +41,10 @@ try {
    if(body.action==='widen'){offer.audience='wider';offer.recipient_count=12;} else if(!body.action){offer.offer_status='cancelled';}
   }
   if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:offer&&['open','assigned'].includes(offer.offer_status)?[{...offer,booking_reference:'POOL-QA',attention_status:offer.offer_status==='assigned'?'accepted_link_pending':'open'}]:[],has_more:false,page:1});
+  const requested=new URL(String(url),'https://synthetic.invalid').searchParams.get('driver_ids')?.split(',').map(Number)||[];
+  if(requested.length>200)throw Error('Readiness batch exceeded 200');
   if(test.failReadiness)return Response.json({ok:false},{status:503});
-  return Response.json({ok:true,enabled:true,eligible:true,offer,driver_alert_readiness:drivers.map(d=>({driver_id:d.id,ready:location.pathname==="/readiness"?(d.id===12?null:d.id!==11):true}))});
+  return Response.json({ok:true,enabled:true,eligible:true,offer,driver_alert_readiness:drivers.filter(d=>requested.includes(d.id)).map(d=>({driver_id:d.id,ready:location.pathname==="/readiness"?(d.id===12?null:d.id!==11):true}))});
  };
  createRoot(document.getElementById('root')).render(location.pathname.startsWith('/driver')?<Driver/>:<AdminDriverPoolControl drivers={drivers} savedVehicle="AVF" bookingReference="POOL-QA" expectedUpdatedAt={base.updated_at} eligible disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={100} onLoadBooking={async(ref)=>window.poolTest.loads.push(ref)} onCancelAssignment={async(item)=>{window.poolTest.cancelled.push(item);if(window.poolTest.failCancel)throw Error('Driver Pool state changed. Reload and try again.');offer.offer_status='cancelled';return true;}}/>);`;
  await writeFile(path.join(temp,'entry.js'),ts.transpileModule(entry,{compilerOptions}).outputText);
@@ -77,20 +79,32 @@ try {
   assert.equal(await evaluate("document.querySelector('input[type=checkbox]').disabled"),false,'Previously selected driver can still be unticked');
   await evaluate("document.querySelector('input[type=checkbox]').click();window.poolTest.failReadiness=false");
   await click('Refresh alert status');await wait("document.querySelector('[data-driver-alert-status=\"1\"]').innerText==='Online · alerts ready'");
-  await evaluate("[...document.querySelectorAll('summary')].find(s=>s.textContent==='All drivers pool').click()");
+  assert.equal(await evaluate("document.querySelectorAll('summary').length"),1,'One Driver Pool disclosure');
+  assert.equal(await evaluate("document.querySelector('summary').textContent"),'Driver Pool');
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].filter(b=>b.textContent.startsWith('Send to')).length"),2);
+  await evaluate("document.querySelector('summary').click()");await wait("!document.querySelector('details').open");
+  await evaluate("document.querySelector('summary').click()");await wait("document.querySelector('details').open");
   const allShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-direct-all-'+width+'.png',Buffer.from(allShot.data,'base64'));
   await click('Send to all drivers');await wait("document.body.innerText.includes('Wider pool')");
   assert.deepEqual(await evaluate("window.poolTest.requests.filter(r=>r.method==='POST').map(r=>r.body.selected_driver_ids)"),[[]]);
   assert.equal(await evaluate("window.poolTest.requests.some(r=>r.body?.action==='widen')"),false,'Direct all sends once without a selected offer or widening');
   await evaluate("window.poolTest.allowConfirm=true");await click('Cancel Offer');
   await wait("document.body.innerText.includes('Offer cancelled')");
+  await client.send('Page.navigate',{url:url+'/large'});await wait("document.querySelector('[data-driver-alert-status=\"501\"]')?.innerText==='Online · alerts ready'");
+  assert.deepEqual(await evaluate("window.poolTest.requests.filter(r=>r.url.includes('driver_ids=')).map(r=>new URL(r.url,location.origin).searchParams.get('driver_ids').split(',').length)"),[200,200,101]);
+  for(let i=0;i<500;i++)await evaluate(`document.querySelectorAll('input[type=checkbox]')[${i}].click()`);
+  await wait("document.querySelectorAll('input[type=checkbox]:checked').length===500");
+  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[500].disabled"),false,'No replacement fixed cap');
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+  await click('Send to selected drivers');await wait("document.body.innerText.includes('Selected group')");
+  assert.deepEqual(await evaluate("window.poolTest.requests.find(r=>r.method==='POST').body.selected_driver_ids"),Array.from({length:500},(_,i)=>i+1));
   await client.send('Page.navigate',{url});await wait("document.querySelectorAll('input[type=checkbox]').length===12");
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Send to selected drivers').disabled"),true);
-  for(let i=0;i<10;i++)await evaluate(`document.querySelectorAll('input[type=checkbox]')[${i}].click()`);
-  await wait("document.querySelectorAll('input[type=checkbox]:checked').length===10");
-  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[10].disabled"),true);
+  for(let i=0;i<11;i++)await evaluate(`document.querySelectorAll('input[type=checkbox]')[${i}].click()`);
+  await wait("document.querySelectorAll('input[type=checkbox]:checked').length===11");
+  assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[11].disabled"),false);
   await click('Send to selected drivers');await wait("document.body.innerText.includes('Selected group')");
-  assert.deepEqual(await evaluate("window.poolTest.requests.find(r=>r.method==='POST').body.selected_driver_ids"),[1,2,3,4,5,6,7,8,9,10]);
+  assert.deepEqual(await evaluate("window.poolTest.requests.find(r=>r.method==='POST').body.selected_driver_ids"),[1,2,3,4,5,6,7,8,9,10,11]);
   await wait("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]')!==null");
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Assign')"),false);
   await wait("document.body.innerText.includes('First valid acceptance wins')");
@@ -147,5 +161,5 @@ try {
 
  }
  assert.deepEqual(errors,[]);
- console.log('PASS actual Admin/Driver JSX at 390px and 1280px: inline readiness and vehicle eligibility, direct all-driver POST without prior selected offer, checkbox limit, selected-only POST, no Admin winner controls, exact winner refresh, per-row winner/cancel/link navigation, blocked reason, confirmation dismissal, failed cancellation, one-job widening and open cancellation, first Accept for both groups, winner confirmation, failed acceptance and decline, offer count 1 to 0, no overflow or browser errors. API responses are synthetic.');
+ console.log('PASS actual Admin/Driver JSX at 390px and 1280px: inline readiness and vehicle eligibility, direct all-driver POST without prior selected offer, one disclosure and two buttons, 500 selections with bounded readiness batches, selected-only POST, no Admin winner controls, exact winner refresh, per-row winner/cancel/link navigation, blocked reason, confirmation dismissal, failed cancellation, one-job widening and open cancellation, first Accept for both groups, winner confirmation, failed acceptance and decline, offer count 1 to 0, no overflow or browser errors. API responses are synthetic.');
 } finally {await client?.close();if(chrome)await terminateChildProcess(chrome);if(server)await new Promise(resolve=>server.close(resolve));await rm(temp,{recursive:true,force:true});}

@@ -4,7 +4,7 @@ import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notific
 
 import { adminDispatcherBoundaryToPersistenceAdapterActor } from "../../../lib/admin-booking-supabase-adapter";
 import { adminBookingPersistencePurpose, resolveAdminDispatcherBoundary } from "../../../lib/admin-dispatcher-auth-boundary";
-import { sendDriverDevicePushAlertForDriverPoolOffer, sendDriverDeviceSilentRefreshForDriverPoolOffer } from "../../../lib/driver-device-push-notification";
+import { loadDriverPoolAlertReadiness, sendDriverDevicePushAlertForDriverPoolOffer, sendDriverDeviceSilentRefreshForDriverPoolOffer } from "../../../lib/driver-device-push-notification";
 import {
   cancelDriverPoolOffer,
   decideDriverPoolOffer,
@@ -54,13 +54,20 @@ export async function GET(request: Request) {
         : response({ error: result.error, ok: false }, result.status);
     }
 
-    if ([...params.keys()].some((key) => key !== "booking_reference")) {
+    if ([...params.keys()].some((key) => !["booking_reference", "driver_ids"].includes(key))) {
+      return response({ error: "Malformed Driver Pool request.", ok: false }, 400);
+    }
+    const rawIds = params.get("driver_ids");
+    const driverIds = rawIds ? rawIds.split(",").map(Number) : [];
+    if (params.getAll("driver_ids").length > 1 || (rawIds !== null &&
+        (!/^[1-9][0-9]*(,[1-9][0-9]*)*$/.test(rawIds) || driverIds.length > 200 ||
+         new Set(driverIds).size !== driverIds.length || driverIds.some((id) => !Number.isSafeInteger(id))))) {
       return response({ error: "Malformed Driver Pool request.", ok: false }, 400);
     }
     const reference = params.get("booking_reference") || "";
     const result = await loadAdminDriverPoolOffer(database.client, reference);
     return result.ok
-      ? response({ ...result.data, ok: true }, 200)
+      ? response({ ...result.data, ...(rawIds !== null ? { driver_alert_readiness: await loadDriverPoolAlertReadiness(database.client, driverIds) } : {}), ok: true }, 200)
       : response({ error: result.error, ok: false }, result.status);
   } catch {
     return response({ error: "Driver Pool request failed safely.", ok: false }, 500);

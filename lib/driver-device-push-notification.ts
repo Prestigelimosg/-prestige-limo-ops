@@ -1062,6 +1062,37 @@ async function loadActiveDriverSubscriptions(
   }
 }
 
+// Admin-only readiness snapshot. No provider requests, badge writes or credentials leave this helper.
+export async function loadDriverPoolAlertReadiness(
+  client: DriverDevicePushClient,
+  driverIds: number[],
+): Promise<{ driver_id: number; ready: boolean | null }[]> {
+  const unknown = driverIds.map((driver_id) => ({ driver_id, ready: null }));
+  if (!driverIds.length) return [];
+  if (driverIds.length > 200 || new Set(driverIds).size !== driverIds.length ||
+      driverIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) return unknown;
+  if (!resolveProviderConfig(process.env)) return unknown;
+  try {
+    const [accounts, subscriptions] = await Promise.all([
+      client.from("driver_access_accounts").select("id, driver_reference, active_device_id_hash")
+        .in("driver_reference", driverIds.map(String)).eq("account_status", "active").limit(201),
+      client.from("driver_device_push_subscriptions").select("driver_id, endpoint, p256dh, auth, source_surface")
+        .in("driver_id", driverIds).eq("subscription_status", "active").limit(2001),
+    ]);
+    if (accounts.error || subscriptions.error || asRows(accounts.data).length > 200 ||
+        asRows(subscriptions.data).length > 2000) return unknown;
+    return driverIds.map((driver_id) => {
+      const matches = asRows(accounts.data).filter((row) => row.driver_reference === String(driver_id));
+      const account = matches[0];
+      const activeAccount = matches.length === 1 && Boolean(safeUuid(account.id)) &&
+        /^[0-9a-f]{64}$/.test(safeText(account.active_device_id_hash, 64) || "");
+      const targets = asRows(subscriptions.data).filter((row) => Number(row.driver_id) === driver_id);
+      // The sender reads at most ten targets; ambiguous overflow must not claim readiness.
+      return { driver_id, ready: !activeAccount ? false : targets.length > 10 ? null : targets.some((row) => Boolean(toLoadedDriverSubscription(row))) };
+    });
+  } catch { return unknown; }
+}
+
 async function driverHasActiveOnePhoneAccount(
   client: DriverDevicePushClient,
   driverId: number,

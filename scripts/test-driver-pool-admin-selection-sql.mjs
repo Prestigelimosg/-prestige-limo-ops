@@ -47,6 +47,7 @@ try {
   console.log('REPRODUCED baseline: a declined invitation assigned a driver without a winning bid.');
   await db.exec(fs.readFileSync('supabase/migrations/20260914023445_driver_pool_admin_selection.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20260914060753_driver_pool_all_groups_first_accept.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20260914124007_driver_pool_direct_audience.sql','utf8'));
   const publish = async (ids=[1,2,3,4,5],key=randomUUID(),ref='POOL-QA') => val(`select publish_driver_pool_offer($1,(select updated_at from bookings where booking_reference=$1),100,$2,'admin','Synthetic Admin','AVF',$3::bigint[]) result`,[ref,key,ids]);
   const respond = (o,id,key=randomUUID()) => val('select accept_driver_pool_offer($1,$2,$3,$4) result',[o.offer.offer_key,id,o.offer.updated_at,key]);
   const decline = (o,id) => val('select decline_driver_pool_offer($1,$2,$3,$4) result',[o.offer.offer_key,id,o.offer.updated_at,randomUUID()]);
@@ -54,6 +55,24 @@ try {
   const widen = (o,key=randomUUID()) => val("select publish_driver_pool_offer('POOL-QA',$1,100,$2,'admin','Synthetic Admin','AVF',null,$3) result",[o.offer.updated_at,key,o.offer.offer_key]);
   const list = id => val('select list_driver_pool_available_jobs($1,1,20) result',[id]);
   const assigned = async () => { const id=(await q("select driver_id from bookings where booking_reference='POOL-QA'"))[0].driver_id; return id === null ? null : Number(id); };
+  await reset();
+  await assert.rejects(publish(null), 'Missing recipient input cannot fan out');
+  const allKey=randomUUID();
+  const allOffer=await publish([],allKey);
+  assert.equal(allOffer.offer.safe_offer_context.audience,'wider');
+  assert.deepEqual(allOffer.recipient_driver_ids,[1,2,3,4,5,6,7,8]);
+  assert.equal((await publish([],allKey)).idempotent,true);
+  await assert.rejects(publish([1],allKey),'Audience cannot change on an idempotent retry');
+  assert.equal((await respond(allOffer,8)).reason,'accepted');
+  assert.equal(await assigned(),8);
+  assert.equal((await respond(allOffer,7)).ok,false);
+  assert.equal((await list(7)).jobs.length,0);
+  await reset();
+  const cancelAll=await publish([]);
+  await val("select cancel_driver_pool_offer($1,$2,'admin','Synthetic Admin') result",[cancelAll.offer.offer_key,cancelAll.offer.updated_at]);
+  assert.equal(await assigned(),null);
+  assert.equal((await list(1)).jobs.length,0);
+  console.log('PASS direct wider publication, missing-input rejection, exact idempotency, single winner, losing-offer removal and cancellation.');
   const tenIds=Array.from({length:10},(_,i)=>i+1);
   const addBoundaryDrivers=async()=>db.exec(`
     insert into drivers select i,'Synthetic '||i,'9000000'||i,'QATEST'||i,'AVF','available' from generate_series(9,11) i;
@@ -71,7 +90,7 @@ try {
   assert.equal((await q("select count(*)::int n from driver_job_bids where bid_status='accepted'"))[0].n,1);
   console.log('PASS ten selected recipients, one first-accept winner, and eleven-recipient rejection.');
   await reset();
-  for (const ids of [[],[1,1],Array.from({length:11},(_,i)=>i+1),[0],[-1],[null]]) await assert.rejects(publish(ids));
+  for (const ids of [[1,1],Array.from({length:11},(_,i)=>i+1),[0],[-1],[null]]) await assert.rejects(publish(ids));
   let o=await publish(); assert.deepEqual(o.recipient_driver_ids,[1,2,3,4,5]);
   assert.equal((await list(6)).jobs.length,0); assert.equal((await respond(o,6)).ok,false);
   assert.equal((await award(o,1)).ok,false);

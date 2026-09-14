@@ -322,6 +322,8 @@ export default function DriverPortalPage() {
   }, []);
 
   const loadAvailableJobs = useCallback(async (page = 1, options: { quiet?: boolean } = {}) => {
+    // The acceptance receipt is temporary feedback, not current assignment status.
+    setAvailableJobsAcceptedConfirmation("");
     const revision = availableJobsReadRevisionRef.current + 1;
     availableJobsReadRevisionRef.current = revision;
     if (!options.quiet) setAvailableJobsBusy(true);

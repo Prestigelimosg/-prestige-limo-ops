@@ -53,8 +53,25 @@ try {
   const widen = (o,key=randomUUID()) => val("select publish_driver_pool_offer('POOL-QA',$1,100,$2,'admin','Synthetic Admin','AVF',null,$3) result",[o.offer.updated_at,key,o.offer.offer_key]);
   const list = id => val('select list_driver_pool_available_jobs($1,1,20) result',[id]);
   const assigned = async () => { const id=(await q("select driver_id from bookings where booking_reference='POOL-QA'"))[0].driver_id; return id === null ? null : Number(id); };
+  const tenIds=Array.from({length:10},(_,i)=>i+1);
+  const addBoundaryDrivers=async()=>db.exec(`
+    insert into drivers select i,'Synthetic '||i,'9000000'||i,'QATEST'||i,'AVF','available' from generate_series(9,11) i;
+    insert into driver_access_accounts select id::text,'active',repeat('a',64) from drivers where id between 9 and 11;`);
+  await reset(); await addBoundaryDrivers();
+  await assert.rejects(publish([...tenIds,11]));
+  assert.equal((await q('select count(*)::int n from driver_job_bid_offers'))[0].n,0);
+  const tenOffer=await publish(tenIds);
+  assert.deepEqual(tenOffer.recipient_driver_ids,tenIds);
+  assert.equal((await list(11)).jobs.length,0);
+  for(const id of tenIds) assert.equal((await respond(tenOffer,id)).reason,'awaiting_admin');
+  assert.equal(await assigned(),null);
+  assert.equal((await q('select driver_payout_override from bookings'))[0].driver_payout_override,null);
+  assert.equal((await award(tenOffer,10)).reason,'accepted');
+  assert.equal(await assigned(),10);
+  assert.equal((await q("select count(*)::int n from driver_job_bids where bid_status='accepted'"))[0].n,1);
+  console.log('PASS ten selected recipients and responses, one Admin winner, and eleven-recipient rejection.');
   await reset();
-  for (const ids of [[],[1,1],[1,2,3,4,5,6],[0],[-1],[null]]) await assert.rejects(publish(ids));
+  for (const ids of [[],[1,1],Array.from({length:11},(_,i)=>i+1),[0],[-1],[null]]) await assert.rejects(publish(ids));
   let o=await publish(); assert.deepEqual(o.recipient_driver_ids,[1,2,3,4,5]);
   assert.equal((await list(6)).jobs.length,0); assert.equal((await respond(o,6)).ok,false);
   assert.equal((await award(o,1)).reason,'response_required');
@@ -120,10 +137,13 @@ try {
   await assert.rejects(val("select publish_driver_pool_offer('POOL-QA',(select updated_at from bookings),100,$1,'admin','Synthetic Admin','AVF') result",[randomUUID()]));
   // Check independent sessions, not merely Promise.all on a single connection.
   if (connect) {
-    for (let round=0;round<6;round++) {
-      await reset(); o=await publish();
-      for (const id of [1,2,3,4,5]) await respond(o,id);
-      const clients=await Promise.all([1,2,3,4,5].map(()=>connect()));
+    for (let round=0;round<7;round++) {
+      await reset();
+      const ids=round===6 ? tenIds : [1,2,3,4,5];
+      if(round===6) await addBoundaryDrivers();
+      o=await publish(ids);
+      for (const id of ids) await respond(o,id);
+      const clients=await Promise.all(ids.map(()=>connect()));
       try {
         const results=await Promise.all(clients.map((client,i)=>client.query("select accept_driver_pool_offer($1,$2,$3,$4,'admin','Synthetic Admin') result",[o.offer.offer_key,i+1,o.offer.updated_at,randomUUID()])));
         assert.equal(results.filter(r=>r.rows[0].result.reason==='accepted').length,1);
@@ -162,7 +182,7 @@ try {
       await blocker.query('commit');
       assert.equal((await pending).rows[0].result.ok,false);assert.equal(await assigned(),null);
     } finally {await Promise.all([blocker.end(),contender.end()]);}
-    console.log('PASS independent PostgreSQL sessions: six five-way Admin award races, overlapping-job award race, and response-versus-widen race.');
+    console.log('PASS independent PostgreSQL sessions: six five-way and one ten-way Admin award races, overlapping-job award race, and response-versus-widen race.');
   }
   const privileges=await q("select proname,prosecdef,has_function_privilege('anon',oid,'EXECUTE') a,has_function_privilege('authenticated',oid,'EXECUTE') u,has_function_privilege('service_role',oid,'EXECUTE') s from pg_proc where proname in ('accept_driver_pool_offer','publish_driver_pool_offer','list_driver_pool_available_jobs')");
   assert.equal(privileges.length,3); assert.ok(privileges.every(p=>!p.prosecdef&&!p.a&&!p.u&&p.s));

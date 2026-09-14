@@ -168,7 +168,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
 
   async function publish() {
     if (!vehicleRequirement) { setFeedback("Choose the Pool vehicle type."); return; }
-    if (selectedIds.length < 1 || selectedIds.length > 5) { setFeedback("Select 1–5 drivers."); return; }
+    if (selectedIds.length < 1 || selectedIds.length > 10) { setFeedback("Select 1–10 drivers."); return; }
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
@@ -297,14 +297,14 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
           ) : (
             <>
               <div className="w-full space-y-1" data-driver-pool-selected-drivers="true">
-                <label className="text-xs font-semibold text-slate-700">Select drivers · {selectedIds.length}/5
+                <label className="text-xs font-semibold text-slate-700">Select drivers · {selectedIds.length}/10
                   <input aria-label="Search Pool drivers" className="ml-2 h-8 rounded border border-sky-300 px-2 text-xs" onChange={(event) => setDriverSearch(event.target.value)} placeholder="Name or plate" value={driverSearch} />
                 </label>
                 <div className="max-h-40 overflow-y-auto rounded border border-sky-200 bg-white">
                   {drivers.filter((driver) => driver.availability_status?.trim().toLowerCase() === "available" &&
                     `${driver.driver_name || ""} ${driver.plate_number || ""}`.toLowerCase().includes(driverSearch.trim().toLowerCase())).map((driver) => (
                     <label className="flex min-h-8 items-center gap-2 border-b border-sky-100 px-2 py-1 text-xs last:border-0" key={driver.id}>
-                      <input type="checkbox" checked={selectedIds.includes(driver.id)} disabled={busy || disabled || (!selectedIds.includes(driver.id) && selectedIds.length >= 5)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, driver.id].slice(0, 5) : current.filter((id) => id !== driver.id))} />
+                      <input type="checkbox" checked={selectedIds.includes(driver.id)} disabled={busy || disabled || (!selectedIds.includes(driver.id) && selectedIds.length >= 10)} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, driver.id].slice(0, 10) : current.filter((id) => id !== driver.id))} />
                       <span className="break-words">{driver.driver_name || "Unnamed driver"} · {driver.vehicle_type || "Vehicle unavailable"} · {driver.plate_number || "Plate unavailable"}</span>
                     </label>
                   ))}
@@ -324,7 +324,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
               <label className="text-xs font-semibold text-slate-700">Pool offer total SGD
                 <input aria-label="Driver Pool offer payout in SGD" className="ml-2 h-8 w-28 rounded-md border border-sky-300 bg-white px-2 text-sm" min="0.01" onChange={(event) => setPayout(event.target.value)} step="0.01" type="number" value={payout} />
               </label>
-              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || selectedIds.length < 1 || selectedIds.length > 5 || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to selected drivers"}</button>
+              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || selectedIds.length < 1 || selectedIds.length > 10 || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : "Send to selected drivers"}</button>
               {showPleaseAssignDriver ? (
                 <span className="text-xs font-semibold text-emerald-800">Please assign driver.</span>
               ) : null}

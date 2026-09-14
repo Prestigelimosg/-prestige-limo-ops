@@ -268,7 +268,7 @@ assert.ok(vehicleMigration.indexOf("'vehicle_mismatch'") < vehicleMigration.inde
 assert.doesNotMatch(vehicleMigration, /security definer|create table|alter table/i);
 assert.match(files["app/admin-driver-pool-control.tsx"], /useState\(""\)/);
 assert.match(files["app/admin-driver-pool-control.tsx"], /vehicle_requirement: vehicleRequirement/);
-assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| selectedIds.length < 1 \|\| selectedIds.length > 5 \|\| !vehicleRequirement/);
+assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| selectedIds.length < 1 \|\| selectedIds.length > 10 \|\| !vehicleRequirement/);
 for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
   assert.ok(files["app/admin-driver-pool-control.tsx"].includes(`<option value="${vehicle}">`));
 }

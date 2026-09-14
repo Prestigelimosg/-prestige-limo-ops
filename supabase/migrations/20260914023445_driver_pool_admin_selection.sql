@@ -341,7 +341,7 @@ begin
      or p_vehicle_requirement is null
      or p_vehicle_requirement not in ('E / AVF', 'AVF', 'S', 'VVV', 'COMBI')
      or (v_widen and lower(btrim(p_offer_key)) !~ '^[0-9a-f]{64}$')
-     or (not v_widen and (p_selected_driver_ids is null or cardinality(p_selected_driver_ids) not between 1 and 5
+     or (not v_widen and (p_selected_driver_ids is null or cardinality(p_selected_driver_ids) not between 1 and 10
        or exists(select 1 from unnest(p_selected_driver_ids) d where d is null or d <= 0)
        or cardinality(p_selected_driver_ids) <> (select count(distinct d) from unnest(p_selected_driver_ids) d)))
      or (v_widen and p_selected_driver_ids is not null) then

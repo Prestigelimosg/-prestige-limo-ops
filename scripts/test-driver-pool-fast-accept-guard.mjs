@@ -1135,7 +1135,7 @@ assert.ok(
 
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
-  "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : "Accept"', ">Decline<", "Load more",
+  "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : "Accept"', 'job.response_status === "awaiting_admin" ? "Cancel" : "Decline"', "Load more",
   "Pickup area", "Drop-off area", "Offer closes", "job.safe_pickup_area",
   "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
   "setAvailableJobs([])",
@@ -1294,6 +1294,15 @@ assert.ok(poolDateHtml.includes('14 Sept Mon, 1730hrs'));
 assert.ok(poolDateHtml.includes('dateTime="2026-09-14T09:30:00Z"'), 'Keep the original deadline timestamp');
 for (const text of ['DEP · AVF','Job QA-DATE','SGD 65.00','Example pickup area','Example drop-off area','Offer closes','Accept','Decline']) assert.ok(poolDateHtml.includes(text),text);
 assert.equal(JSON.stringify(poolDateJob),poolDateOriginal,'Formatting must not mutate the offer');
+const poolPendingCard = poolCardModule.exports.renderCard({...poolDateJob, selection_mode:'admin', response_status:'awaiting_admin'});
+const poolPendingHtml = renderToStaticMarkup(poolPendingCard);
+assert.match(poolPendingHtml, />Pending<\/button>/);
+assert.match(poolPendingHtml, />Cancel<\/button>/, 'Pending drivers withdraw through the existing Cancel control');
+assert.doesNotMatch(poolPendingHtml, />Decline<\/button>/);
+assert.equal((poolPendingHtml.match(/disabled=""/g)||[]).length,1,'Pending is disabled while Cancel stays available');
+const poolUnansweredHtml = renderToStaticMarkup(poolCardModule.exports.renderCard({...poolDateJob,selection_mode:'admin',response_status:'pending'}));
+assert.match(poolUnansweredHtml, />Available<\/button>/);
+assert.match(poolUnansweredHtml, />Decline<\/button>/, 'Unanswered invitations keep their existing Decline action');
 const poolBusyHtml=renderToStaticMarkup(poolCardModule.exports.renderCard(poolDateJob,true));
 assert.equal((poolBusyHtml.match(/disabled=""/g)||[]).length,2,'Both buttons retain their busy-state guard');
 for (const [timestamp,expected] of [

@@ -1299,15 +1299,28 @@ try {
     const dbReads = [];
     const payoutClient = { from(table) {
       assert.ok(Object.hasOwn(tables, table));
-      return { select(columns) {
-        assert.doesNotMatch(columns, /override|customer_rate|customer_price|invoice|payment/);
-        return { eq(column, value) {
-          assert.equal(column, table === "bookings" ? "booking_reference" : "id");
-          assert.equal(value, table === "bookings" ? tables.bookings.booking_reference : table === "companies" ? 7 : table === "drivers" ? 8 : "default");
-          dbReads.push({ table, column, value });
-          return { async maybeSingle() { return { data: tables[table], error: null }; } };
-        } };
-      } };
+      const filters = [];
+      const query = {
+        select(columns) {
+          assert.doesNotMatch(columns, /customer_rate|customer_price|invoice|payment/);
+          if (table !== "bookings") assert.doesNotMatch(columns, /override/);
+          return query;
+        },
+        eq(column, value) {
+          const expected = table === "bookings" ? { booking_reference: tables.bookings.booking_reference }
+            : table === "driver_job_bid_offers" ? { booking_reference: tables.bookings.booking_reference, offer_status: "assigned" }
+            : table === "driver_job_bids" ? { driver_job_bid_offer_id: "11111111-1111-4111-8111-111111111111", bid_status: "accepted" }
+            : { id: table === "companies" ? 7 : table === "drivers" ? 8 : "default" };
+          assert.equal(value, expected[column]);
+          filters.push([column,value]); dbReads.push({ table, column, value }); return query;
+        },
+        async maybeSingle() {
+          if (tables[table]?.error) return { data: null, error: tables[table].error };
+          if (!Array.isArray(tables[table])) return { data: tables[table], error: null };
+          const rows = tables[table].filter(row => filters.every(([column,value]) => row[column] === value));
+          return rows.length > 1 ? { data: null, error: { message: "Ambiguous records" } } : { data: rows[0] || null, error: null };
+        },
+      }; return query;
     } };
     let stored = null;
     let conflict = false;
@@ -1419,6 +1432,54 @@ try {
     tables.bookings.service_type = "DSP";
     assert.equal((await sync()).ok, true);
     assert.match(stored.summary, /\$70 > /, "DSP uses existing default plus midnight/seat; no guessed JC or hourly total");
+    // Confirmed Pool amount is the complete agreed amount, ahead of defaults/extras.
+    tables.bookings.driver_payout_override = "75.25";
+    tables.bookings.driver_payout_reason = "Driver Pool accepted fixed offer.";
+    tables.driver_job_bid_offers = [{ id: "11111111-1111-4111-8111-111111111111",
+      booking_reference: tables.bookings.booking_reference, offer_status: "assigned", offer_payout_sgd: "75.25" }];
+    tables.driver_job_bids = [{ driver_job_bid_offer_id: tables.driver_job_bid_offers[0].id,
+      booking_reference: tables.bookings.booking_reference, driver_reference: "8", bid_status: "accepted" }];
+    stored = null;
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$75.25 > /, "confirmed Pool fixed amount must beat the default and must not add extras");
+    const poolEventId = stored.id;
+    stored.summary = stored.summary.replace("$75.25", "$82");
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$82 > /, "explicit Calendar amount still wins over the Pool seed");
+    assert.equal(stored.id, poolEventId);
+    const validPool = structuredClone(tables.driver_job_bid_offers);
+    const validBid = structuredClone(tables.driver_job_bids);
+    for (const mutate of [
+      () => tables.driver_job_bid_offers = [],
+      () => tables.driver_job_bid_offers.push({...validPool[0]}),
+      () => tables.driver_job_bid_offers[0].offer_status = "cancelled",
+      () => tables.driver_job_bid_offers[0].booking_reference = "OTHER",
+      () => tables.driver_job_bids[0].driver_reference = "9",
+      () => tables.driver_job_bids[0].booking_reference = "OTHER",
+      () => tables.driver_job_bids[0].bid_status = "pending",
+      () => tables.driver_job_bids.push({...validBid[0]}),
+      () => tables.driver_job_bid_offers[0].offer_payout_sgd = "90",
+      () => tables.driver_job_bid_offers[0].offer_payout_sgd = "",
+      () => tables.driver_job_bid_offers[0].offer_payout_sgd = "Infinity",
+      () => tables.driver_job_bid_offers = {error:{message:"Pool read unavailable"}},
+    ]) {
+      tables.driver_job_bid_offers = structuredClone(validPool);
+      tables.driver_job_bids = structuredClone(validBid);
+      mutate(); stored = null;
+      assert.equal((await sync()).ok, true, "unverified Pool evidence must not block Calendar");
+      assert.doesNotMatch(stored.summary, /\$/, "unverified Pool amount must be omitted, not replaced with an unrelated default");
+    }
+    tables.driver_job_bid_offers = structuredClone(validPool);
+    tables.driver_job_bids = structuredClone(validBid);
+    stored = null;
+    assert.equal((await sync(noPlate)).ok, true);
+    assert.equal((await sync()).ok, true, "ACK seeds the same previously plateless event with the Pool amount");
+    assert.match(stored.summary, /\$75.25 > /);
+    delete tables.bookings.driver_payout_reason;
+    stored = null;
+    assert.equal((await sync()).ok, true);
+    assert.match(stored.summary, /\$70 > /, "ordinary manual payout override cannot masquerade as a Pool award");
+
   }
   {
     // Execute the actual React effect callback with controlled read responses.

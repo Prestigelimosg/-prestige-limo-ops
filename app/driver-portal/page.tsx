@@ -12,6 +12,8 @@ type DriverPortalJob = {
 };
 
 type DriverPoolAvailableJob = {
+  selection_mode?: "admin" | "first_accept";
+  response_status?: "pending" | "awaiting_admin";
   closes_at: string;
   offer_key: string;
   offer_payout_sgd: number;
@@ -432,6 +434,11 @@ export default function DriverPortalPage() {
         throw new Error("This job requires a different vehicle type.");
       }
       if (!response.ok || result.ok !== true) throw new Error(result.reason || "This offer is no longer available.");
+      if (result.reason === "awaiting_admin") {
+        setAvailableJobs((current) => current.map((item) => item.offer_key === job.offer_key ? { ...item, response_status: "awaiting_admin" } : item));
+        setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: "Pending" }));
+        return;
+      }
       setAvailableJobs((current) => current.filter((item) => item.offer_key !== job.offer_key));
       if (result.accepted) {
         setAvailableJobsAcceptedConfirmation("Accepted! Pls ack when admin send job link");
@@ -1085,8 +1092,8 @@ export default function DriverPortalPage() {
                       <div className="rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Drop-off area</dt><dd className="mt-0.5 font-semibold text-slate-800">{job.safe_dropoff_area}</dd></div>
                       <div className="rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Offer closes</dt><dd className="mt-0.5 font-semibold text-slate-800"><time dateTime={job.closes_at}>{closesLabel}</time></dd></div>
                     </dl>
-                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "accept")} type="button">Accept</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "decline")} type="button">Decline</button></div>
-                    {availableJobsFeedback[job.offer_key] ? <p className="mt-2 text-xs font-semibold text-slate-600" role="status">{availableJobsFeedback[job.offer_key]}</p> : null}
+                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy || job.response_status === "awaiting_admin"} onClick={() => void decideAvailableJob(job, "accept")} type="button">{job.response_status === "awaiting_admin" ? "Pending" : job.selection_mode === "admin" ? "Available" : "Accept"}</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "decline")} type="button">Decline</button></div>
+                    {availableJobsFeedback[job.offer_key] && availableJobsFeedback[job.offer_key] !== "Pending" ? <p className="mt-2 text-xs font-semibold text-slate-600" role="status">{availableJobsFeedback[job.offer_key]}</p> : null}
                   </article>
                   );
                 })}

@@ -46,6 +46,8 @@ for (const outcome of ["success", "publish-failed", "list-failed", "no-vehicle"]
     attention_status: serverStatus === "open" ? "open" : "accepted_link_pending" });
   const bindings = {
     useCallback: (callback) => callback,
+    selectedIds: [1, 2],
+    load: async () => {},
     vehicleRequirement: outcome === "no-vehicle" ? "" : "VVV",
     bookingReference: "QA-POOL-EMPTY-LIST", expectedUpdatedAt: "2026-09-10T00:00:00Z", payout: "45",
     headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
@@ -236,6 +238,7 @@ const exactPublishPayload = timeoutHarness.helper.parseDriverPoolPublishPayload(
   idempotency_key: "12345678-1234-1234-1234-123456789abc",
   offer_payout_sgd: 55,
   vehicle_requirement: "AVF",
+  selected_driver_ids: [1, 2],
 });
 assert.equal(exactPublishPayload.ok, true, "microsecond booking timestamp must be accepted");
 assert.equal(
@@ -265,7 +268,7 @@ assert.ok(vehicleMigration.indexOf("'vehicle_mismatch'") < vehicleMigration.inde
 assert.doesNotMatch(vehicleMigration, /security definer|create table|alter table/i);
 assert.match(files["app/admin-driver-pool-control.tsx"], /useState\(""\)/);
 assert.match(files["app/admin-driver-pool-control.tsx"], /vehicle_requirement: vehicleRequirement/);
-assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| !vehicleRequirement/);
+assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| selectedIds.length < 1 \|\| selectedIds.length > 10 \|\| !vehicleRequirement/);
 for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
   assert.ok(files["app/admin-driver-pool-control.tsx"].includes(`<option value="${vehicle}">`));
 }
@@ -894,6 +897,7 @@ async function loadAdminDriverPoolCancelRouteHarness() {
     exports.parseDriverPoolPublishPayload = () => ({ data: {}, ok: true });
     exports.publishDriverPoolOffer = async () => ({ data: {}, ok: true });
   `);
+  await writeModule("lib/admin-device-push-notification.js", "exports.sendAdminDevicePushAlert = async () => { throw new Error('Unexpected Admin push in cancellation'); };");
   await mkdir(path.dirname(routePath), { recursive: true });
   await writeFile(routePath, ts.transpileModule(routeSource, {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -1070,7 +1074,7 @@ includes("app/api/admin-driver-job-bid-offers/route.ts", [
   "parseDriverPoolAttentionQuery", "loadAdminDriverPoolAttentionOffers",
 ]);
 includes("app/admin-driver-pool-control.tsx", [
-  "Send to Driver Pool", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
+  "Send to selected drivers", "Cancel Offer", "Booking remains active.", "Pool offer total SGD",
   "Driver Pool pending", "Accepted · Job Link pending", "Load more", "onLoadBooking",
   'data-admin-driver-pool-pending-list="true"', "max-h-52 overflow-y-auto",
   "onAssignedOfferChange", 'offer?.offer_status === "assigned"',
@@ -1090,10 +1094,10 @@ assert.doesNotMatch(
   "The assigned state must not instruct Admin to reload before using the established Driver Job Link lane",
 );
 includes("scripts/test-booking-ui-browser.mjs", [
-  "__prestigeDriverPoolOfferRequests", "Pool offer total SGD\\s*Send to Driver Pool",
+  "__prestigeDriverPoolOfferRequests", "Pool offer total SGD\\s*Send to selected drivers",
   "compact Admin Driver Pool pending jobs list", "accepted Driver Pool pending job exact load",
   "open Driver Pool pending offer cancellation",
-  'payout === "75.00"', 'sendText === "Send to Driver Pool"',
+  'payout === "75.00"', 'sendText === "Send to selected drivers"',
   "Driver Pool accepted assignment cancel refreshes in place",
   "Accepted · Driver assigned. Create the Driver Job Link when ready.",
   'bodyText.includes("Please assign driver.")',
@@ -1131,7 +1135,7 @@ assert.ok(
 
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
-  "SGD {job.offer_payout_sgd.toFixed(2)}", ">Accept<", ">Decline<", "Load more",
+  "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : "Accept"', ">Decline<", "Load more",
   "Pickup area", "Drop-off area", "Offer closes", "job.safe_pickup_area",
   "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
   "setAvailableJobs([])",
@@ -1304,3 +1308,5 @@ for (const [timestamp,expected] of [
   assert.equal(html.split(expected).length-1,2,`Pickup and closing time: ${timestamp}`);
 }
 console.log('Driver Pool date display passes Singapore midnight, weekday, 24-hour, year/leap boundaries and original offer preservation.');
+
+await import("./test-driver-pool-admin-selection-guard.mjs");

@@ -29,7 +29,18 @@ export function getDriverPoolClientForProduction():
   }
 }
 
+export type DriverPoolAdminResponse = {
+  driver_id: number;
+  driver_name: string;
+  plate_number: string;
+  vehicle_type: string;
+  status: "pending" | "available" | "declined" | "accepted" | "closed";
+};
+
 export type DriverPoolOfferState = {
+  selection_mode: "admin" | "first_accept";
+  audience: "selected" | "wider";
+  responses?: DriverPoolAdminResponse[];
   closes_at: string;
   offer_key: string;
   offer_payout_sgd: number;
@@ -57,6 +68,8 @@ export type DriverPoolCancelResult = {
 };
 
 export type DriverPoolAvailableJob = {
+  selection_mode: "admin" | "first_accept";
+  response_status: "pending" | "awaiting_admin";
   closes_at: string;
   offer_key: string;
   offer_payout_sgd: number;
@@ -153,6 +166,7 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
   idempotency_key: string;
   offer_payout_sgd: number;
   vehicle_requirement: string;
+  selected_driver_ids: number[];
 }> {
   const record = asRecord(value);
   const reference = bookingReference(record.booking_reference);
@@ -160,12 +174,15 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
   const payout = positiveMoney(record.offer_payout_sgd);
   const key = idempotencyKey(record.idempotency_key);
   const vehicle = record.vehicle_requirement;
-  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement"]) ||
-      !reference || !expected || !payout || !key ||
+  const ids = record.selected_driver_ids;
+  const validIds = Array.isArray(ids) && ids.length >= 1 && ids.length <= 10 &&
+    ids.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0) && new Set(ids).size === ids.length;
+  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement", "selected_driver_ids"]) ||
+      !reference || !expected || !payout || !key || !validIds ||
       typeof vehicle !== "string" || !["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(vehicle)) {
     return { error: "Malformed Driver Pool offer rejected.", ok: false, status: 400 };
   }
-  return { data: { booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout, vehicle_requirement: vehicle }, ok: true };
+  return { data: { booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout, vehicle_requirement: vehicle, selected_driver_ids: (ids as number[]).slice().sort((a, b) => a - b) }, ok: true };
 }
 
 export function parseDriverPoolCancelPayload(value: unknown): AdminBookingResult<{
@@ -178,6 +195,32 @@ export function parseDriverPoolCancelPayload(value: unknown): AdminBookingResult
   return exactKeys(record, ["offer_key", "expected_updated_at"]) && key && expected
     ? { data: { expected_updated_at: expected, offer_key: key }, ok: true }
     : { error: "Malformed Driver Pool cancellation rejected.", ok: false, status: 400 };
+}
+
+export function parseDriverPoolAdminActionPayload(value: unknown): AdminBookingResult<{
+  action: "award" | "widen";
+  offer_key: string;
+  expected_updated_at: string;
+  idempotency_key: string;
+  driver_id?: number;
+  booking_reference?: string;
+  offer_payout_sgd?: number;
+  vehicle_requirement?: string;
+}> {
+  const record = asRecord(value);
+  const decision = parseDriverPoolDecisionPayload({ offer_key: record.offer_key, expected_updated_at: record.expected_updated_at, idempotency_key: record.idempotency_key });
+  if (!decision.ok) return decision;
+  if (record.action === "award" && exactKeys(record, ["action", "offer_key", "expected_updated_at", "idempotency_key", "driver_id"]) &&
+      typeof record.driver_id === "number" && Number.isSafeInteger(record.driver_id) && record.driver_id > 0) {
+    return { ok: true, data: { ...decision.data, action: "award", driver_id: record.driver_id } };
+  }
+  const reference = bookingReference(record.booking_reference);
+  const payout = positiveMoney(record.offer_payout_sgd);
+  if (record.action === "widen" && exactKeys(record, ["action", "offer_key", "expected_updated_at", "idempotency_key", "booking_reference", "offer_payout_sgd", "vehicle_requirement"]) &&
+      reference && payout && typeof record.vehicle_requirement === "string" && ["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(record.vehicle_requirement)) {
+    return { ok: true, data: { ...decision.data, action: "widen", booking_reference: reference, offer_payout_sgd: payout, vehicle_requirement: record.vehicle_requirement } };
+  }
+  return { ok: false, error: "Malformed Driver Pool Admin action rejected.", status: 400 };
 }
 
 export function parseDriverPoolDecisionPayload(value: unknown): AdminBookingResult<{
@@ -230,6 +273,8 @@ function mapOffer(row: UnknownRecord): DriverPoolOfferState | null {
       !Number.isSafeInteger(recipients) || recipients < 0 ||
       !Number.isSafeInteger(targets) || targets < 0 || targets > recipients) return null;
   return {
+    selection_mode: asRecord(row.safe_offer_context).selection_mode === "admin" ? "admin" : "first_accept",
+    audience: asRecord(row.safe_offer_context).audience === "selected" ? "selected" : "wider",
     closes_at: closesAt,
     offer_key: key,
     offer_payout_sgd: payout,
@@ -292,7 +337,8 @@ function actorIsValid(actor: AdminBookingPersistenceAdapterActor) {
 
 export async function publishDriverPoolOffer(
   client: DriverPoolClient,
-  input: ReturnType<typeof parseDriverPoolPublishPayload> extends AdminBookingResult<infer T> ? T : never,
+  input: { booking_reference: string; expected_updated_at: string; idempotency_key: string; offer_payout_sgd: number;
+    vehicle_requirement: string; selected_driver_ids?: number[]; offer_key?: string },
   actor: AdminBookingPersistenceAdapterActor,
 ): Promise<AdminBookingResult<DriverPoolOfferState>> {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 };
@@ -313,6 +359,8 @@ export async function publishDriverPoolOffer(
       p_idempotency_key: input.idempotency_key,
       p_offer_payout_sgd: input.offer_payout_sgd,
       p_vehicle_requirement: input.vehicle_requirement,
+      p_selected_driver_ids: input.selected_driver_ids ?? null,
+      p_offer_key: input.offer_key ?? null,
     }).abortSignal(controller.signal));
   } catch (caught) {
     error = caught;
@@ -354,7 +402,7 @@ export async function loadAdminDriverPoolOffer(client: DriverPoolClient, referen
   if (!exact) return { error: "Malformed booking reference.", ok: false, status: 400 } as const;
   const [{ data, error }, { data: bookingData, error: bookingError }] = await Promise.all([
     client.from("driver_job_bid_offers")
-      .select("offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,closes_at,updated_at,safe_vehicle_label")
+      .select("id,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,closes_at,updated_at,safe_vehicle_label,safe_offer_context")
       .eq("booking_reference", exact).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("bookings")
       .select("driver_id,public_booking_reference,pickup_at,admin_internal_status,customer_facing_status")
@@ -362,6 +410,36 @@ export async function loadAdminDriverPoolOffer(client: DriverPoolClient, referen
   ]);
   if (error || bookingError) { const failure = classify(error || bookingError); return { ...failure, ok: false } as const; }
   const offer = data ? mapOffer(asRecord(data)) : null;
+  if (offer?.selection_mode === "admin") {
+    const responses: DriverPoolAdminResponse[] = [];
+    // Read every exact-offer response in bounded pages, using the established six safe Driver fields.
+    for (let offset = 0; ; offset += 100) {
+      const { data: bids, error: bidError } = await client.from("driver_job_bids")
+        .select("driver_reference,bid_status,safe_bid_context").eq("driver_job_bid_offer_id", asRecord(data).id)
+        .order("driver_reference", { ascending: true }).range(offset, offset + 99);
+      if (bidError) return { ...classify(bidError), ok: false } as const;
+      const rows = asRows(bids);
+      const ids = positiveDriverIds(rows.map((bid) => bid.driver_reference));
+      if (ids.length !== rows.length) return { error: "Driver Pool responses require review.", ok: false, status: 503 } as const;
+      if (ids.length) {
+        const { data: drivers, error: driverError } = await client.from("drivers")
+          .select("id,driver_name,plate_number,vehicle_type").in("id", ids).limit(100);
+        if (driverError) return { ...classify(driverError), ok: false } as const;
+        const byId = new Map(asRows(drivers).map((driver) => [Number(driver.id), driver]));
+        for (const bid of rows) {
+          const driverId = Number(bid.driver_reference);
+          const driver = byId.get(driverId) || {};
+          const status = bid.bid_status === "pending"
+            ? asRecord(bid.safe_bid_context).response === "available" ? "available" : "pending"
+            : bid.bid_status === "declined" ? "declined" : bid.bid_status === "accepted" ? "accepted" : "closed";
+          responses.push({ driver_id: driverId, driver_name: text(driver.driver_name) || "Driver unavailable",
+            plate_number: text(driver.plate_number, 40) || "Plate unavailable", vehicle_type: text(driver.vehicle_type, 80) || "Vehicle unavailable", status });
+        }
+      }
+      if (rows.length < 100) break;
+    }
+    offer.responses = responses;
+  }
   const booking = asRecord(bookingData);
   const adminStatus = String(booking.admin_internal_status || "").trim().toLowerCase();
   const customerStatus = String(booking.customer_facing_status || "").trim().toLowerCase();
@@ -400,7 +478,7 @@ export async function loadAdminDriverPoolAttentionOffers(
 
   while (attentionItems.length < targetCount && rawRowsRemain) {
     const { data, error } = await client.from("driver_job_bid_offers")
-      .select("booking_reference,public_booking_reference,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,pickup_at,closes_at,updated_at")
+      .select("booking_reference,public_booking_reference,offer_key,offer_status,offer_payout_sgd,recipient_count,push_target_count,pickup_at,closes_at,updated_at,safe_offer_context")
       .in("offer_status", ["open", "assigned"])
       .order("pickup_at", { ascending: true })
       .order("offer_key", { ascending: true })
@@ -521,7 +599,9 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
     const pickup = timestamp(row.pickup_at); const closes = timestamp(row.closes_at); const updated = exactConcurrencyTimestamp(row.updated_at);
     const publicRef = text(row.public_booking_reference, 120);
     if (!key || !payout || !pickup || !closes || !updated || !publicRef) return null;
-    return { offer_key: key, public_booking_reference: publicRef, offer_payout_sgd: payout,
+    return { selection_mode: row.selection_mode === "admin" ? "admin" : "first_accept",
+      response_status: row.response_status === "awaiting_admin" ? "awaiting_admin" : "pending",
+      offer_key: key, public_booking_reference: publicRef, offer_payout_sgd: payout,
       pickup_at: pickup, closes_at: closes, safe_pickup_area: text(row.safe_pickup_area) || "Available after assignment",
       safe_dropoff_area: text(row.safe_dropoff_area) || "Available after assignment",
       safe_vehicle_label: text(row.safe_vehicle_label, 120), safe_trip_summary: text(row.safe_trip_summary, 120), updated_at: updated };
@@ -543,15 +623,24 @@ export async function loadDriverPoolWinnerPlate(
   return error ? null : safeDriverPlate(asRecord(data).plate_number);
 }
 
-export async function decideDriverPoolOffer(client: DriverPoolClient, driverId: number, input: { offer_key: string; expected_updated_at: string; idempotency_key: string }, action: "accept" | "decline") {
+export async function decideDriverPoolOffer(client: DriverPoolClient, driverId: number, input: { offer_key: string; expected_updated_at: string; idempotency_key: string }, action: "accept" | "decline", actor?: AdminBookingPersistenceAdapterActor) {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 } as const;
+  if (actor && !actorIsValid(actor)) return { error: "Verified Admin or Dispatcher required.", ok: false, status: 403 } as const;
   const { data, error } = await client.rpc(action === "accept" ? "accept_driver_pool_offer" : "decline_driver_pool_offer", {
     p_driver_id: driverId, p_expected_updated_at: input.expected_updated_at,
     p_idempotency_key: input.idempotency_key, p_offer_key: input.offer_key,
+    ...(actor ? { p_actor_role: actor.actor_role, p_actor_label: actor.actor_label } : {}),
   });
   if (error) { const failure = classify(error); return { ...failure, ok: false } as const; }
   const result = asRecord(data);
   const reason = text(result.reason, 80) || "no_longer_available";
+  if (result.ok === false) {
+    const messages: Record<string, string> = {
+      schedule_conflict: "Driver has an overlapping job.", vehicle_mismatch: "This job requires a different vehicle type.",
+      not_eligible: "Driver is no longer eligible for this offer.", response_required: "Choose a driver with an Available response.",
+    };
+    return { error: messages[reason] || "This offer is no longer available. Reload to review.", ok: false, status: 409 } as const;
+  }
   const otherRecipientDriverIds = reason === "accepted"
     ? positiveDriverIds(result.other_recipient_driver_ids).filter((id) => id !== driverId)
     : [];

@@ -15719,7 +15719,7 @@ export default function Home() {
   const [dispatchReleaseWorkflowLoadRevision, setDispatchReleaseWorkflowLoadRevision] =
     useState(0);
   const [dispatchLoadFocusTarget, setDispatchLoadFocusTarget] = useState<
-    "customerCopy" | "driverJobLink" | "jobCard" | null
+    "customerCopy" | "driverJobLink" | "driverPoolResponses" | "jobCard" | null
   >(null);
   const [driverJobLinkHandoffReference, setDriverJobLinkHandoffReference] = useState("");
   const driverJobLinkHandoffFocusAppliedRef = useRef("");
@@ -15786,7 +15786,9 @@ export default function Home() {
 
     const timeoutId = window.setTimeout(() => {
       const focusStep =
-        dispatchLoadFocusTarget === "driverJobLink"
+        dispatchLoadFocusTarget === "driverPoolResponses"
+          ? "driver-assignment"
+          : dispatchLoadFocusTarget === "driverJobLink"
           ? "driver-job-link"
           : dispatchLoadFocusTarget === "jobCard"
             ? "job-card-preview"
@@ -27872,7 +27874,7 @@ export default function Home() {
     }
   }
 
-  async function loadAdminDriverPoolPendingBooking(bookingReference: string) {
+  async function loadAdminDriverPoolPendingBooking(bookingReference: string, reviewResponses = false) {
     const exactBookingReference = cleanReferenceText(bookingReference);
     if (!exactBookingReference) {
       throw new Error("Driver Pool pending job has no valid booking reference.");
@@ -27886,9 +27888,13 @@ export default function Home() {
     await loadSelectedBooking(exactBookingRecord, {
       adminBookingRecordOverride: exactBooking,
       bookingFormOverride: bookingRecordToForm(exactBookingRecord),
-      focusDriverJobLink: true,
+      focusDriverJobLink: !reviewResponses,
       suppressCustomerRequestHandledMemory: true,
     });
+    if (reviewResponses) {
+      setMobileDispatchBookingStep("options");
+      setDispatchLoadFocusTarget("driverPoolResponses");
+    }
   }
 
   async function assignDraftDriver() {
@@ -45443,6 +45449,8 @@ export default function Home() {
                 </button>
               </div>
               <AdminDriverPoolControl
+                drivers={assignableDriverAssignmentDisplayDrivers}
+                savedVehicle={clean(booking.vehicle).toUpperCase()}
                 bookingReference={
                   cleanReferenceText(appliedAdminBookingSnapshotReference) ||
                   cleanReferenceText(loadedBookingId)

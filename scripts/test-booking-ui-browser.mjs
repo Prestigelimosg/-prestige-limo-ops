@@ -5377,7 +5377,8 @@ async function runChromeTest() {
         dayOfTripCompletionHandoff: dayOfTripCompletionHandoff(),
         driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),
         driverAcknowledgementReadiness: driverAcknowledgementReadiness(),
-        driverDispatch: document.querySelector('[data-copy-preview="driverDispatch"]')?.innerText || "",
+        // This content assertion also covers the owner-approved collapsed preview.
+        driverDispatch: document.querySelector('[data-copy-preview="driverDispatch"]')?.textContent || "",
         errors: window.__prestigeErrors || [],
         fields,
         monthlyBillingMonthGroupingReview: monthlyBillingMonthGroupingReview(),
@@ -18738,14 +18739,14 @@ async function runChromeTest() {
               const control = document.querySelector("[data-driver-pool-control='ready']");
               const payout = control?.querySelector("input[aria-label='Driver Pool offer payout in SGD']");
               const send = [...(control?.querySelectorAll("button") || [])].find(
-                (button) => button.textContent.trim() === "Send to Driver Pool",
+                (button) => button.textContent.trim() === "Send to selected drivers",
               );
               return {
                 payout: payout?.value || "",
                 vehicleRequirement: control?.querySelector('select[aria-label="Driver Pool vehicle type"]')?.value ?? null,
                 sendDisabled: send?.disabled ?? true,
                 sendText: send?.textContent.trim() || "",
-                text: control?.textContent.replace(/\s+/g, " ").trim() || "",
+                text: control?.textContent.replace(/\\s+/g, " ").trim() || "",
               };
             })(),
             fetchCalls: window.__prestigeFetchCalls || [],
@@ -18999,9 +19000,9 @@ async function runChromeTest() {
 
         return candidateState?.fields?.company === "LOADED SAVED COMPANY" &&
           candidateState?.fields?.flight === "SQ999" &&
-          candidateState?.driverPoolControl?.sendText === "Send to Driver Pool" &&
+          candidateState?.driverPoolControl?.sendText === "Send to selected drivers" &&
           candidateState?.driverPoolControl?.payout === "75.00" &&
-          candidateState?.driverPoolControl?.vehicleRequirement === "" &&
+          candidateState?.driverPoolControl?.vehicleRequirement === "VVV" &&
           candidateState?.driverPoolControl?.sendDisabled === true &&
           candidateState?.driverPoolOfferRequests?.some(
             (request) =>
@@ -19103,14 +19104,14 @@ async function runChromeTest() {
       );
     }
 
-    assert.equal(loadedBookingState.driverPoolControl.vehicleRequirement, "", "Pool vehicle must start unselected");
-    assert.equal(loadedBookingState.driverPoolControl.sendDisabled, true, "Pool Send must wait for explicit vehicle selection");
+    assert.equal(loadedBookingState.driverPoolControl.vehicleRequirement, "VVV", "Pool may reuse the exact saved vehicle requirement");
+    assert.equal(loadedBookingState.driverPoolControl.sendDisabled, true, "Pool Send must wait for selected drivers");
     assert.equal(loadedBookingState.aiDraftExists, false, "Expected AI draft panel to clear after loading saved booking");
     assert.equal(loadedBookingState.aiFeedbackExists, false, "Expected AI feedback to clear after loading saved booking");
     assert.equal(loadedBookingState.pastedMessage, "", "Expected pasted intake message to clear after loading saved booking");
     assert.match(
       loadedBookingState.driverPoolControl.text,
-      /Pool offer total SGD\s*Send to Driver Pool/,
+      /Pool offer total SGD\s*Send to selected drivers/,
       "Expected one compact Driver Pool row with the resolved fixed-trip payout and explicit Send control",
     );
     assert.match(
@@ -19154,15 +19155,20 @@ async function runChromeTest() {
         ),
       `Expected any permitted direct and background typed-read refreshes to remain guarded GET limit=25 reads, got ${loadedBookingTypedReadCalls.join(", ")}`,
     );
+    // Bookings may finish a background Calendar status read after Dispatch loads.
+    // The exact status-mode POST reads events; the normal Calendar POST is a write
+    // and must remain rejected by this load-only request assertion.
+    const calendarStatusReadCall = "POST /api/admin-booking-calendar-google-sync?mode=status";
     const loadedBookingFetchCallSet = new Set(
       loadedBookingState.fetchCalls.filter(
-        (call) => !call.includes("/api/admin-load-bookings-typed-read"),
+        (call) => !call.includes("/api/admin-load-bookings-typed-read") &&
+          call !== calendarStatusReadCall,
       ),
     );
     assert.deepEqual(
       [...loadedBookingFetchCallSet].sort(),
       [...expectedLoadedBookingFetchCalls].sort(),
-      `Expected Load this booking to make only guarded read GETs, got ${loadedBookingState.fetchCalls.join(", ")}`,
+      `Expected Load this booking to make only guarded reads (GETs or exact Calendar status POST), got ${loadedBookingState.fetchCalls.join(", ")}`,
     );
     assert.deepEqual(
       loadedBookingState.adminBookingExactReadRequests.map((request) => ({
@@ -21216,7 +21222,10 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.fields.name, "LOADED SAVED TRAVELER");
     assert.match(loadedBookingState.jobCardPreview, /SQ999/);
     assert.doesNotMatch(loadedBookingState.jobCardPreview, /LOADED SAVED TRAVELER/);
-    assert.match(loadedBookingState.driverDispatch, /LOADED SAVED DRIVER/);
+    // Owner-approved Manual WhatsApp Copy omits the heading and Driver name line.
+    assert.doesNotMatch(loadedBookingState.driverDispatch, /DRIVER DISPATCH|^Driver:/m);
+    assert.match(loadedBookingState.driverDispatch, /Contact: \+65 8888 0000/);
+    assert.match(loadedBookingState.driverDispatch, /Plate: SLA1234X/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
 
@@ -21668,7 +21677,7 @@ async function runChromeTest() {
           "[data-driver-pool-control='ready'], [data-driver-pool-control='cancelled']",
         );
         const sendButton = [...(control?.querySelectorAll("button") || [])].find(
-          (button) => button.textContent.trim() === "Send to Driver Pool",
+          (button) => button.textContent.trim() === "Send to selected drivers",
         );
         const bodyText = document.body.innerText.replace(/\\s+/g, " ");
         const patchRequest = (window.__prestigeDriverPoolOfferRequests || []).find(
@@ -21692,13 +21701,30 @@ async function runChromeTest() {
       10000,
       "Driver Pool cancellation in-place ready state",
     );
-    assert.equal(cancelledDriverPoolUi.sendText, "Send to Driver Pool");
-    assert.equal(cancelledDriverPoolUi.sendDisabled, true, "posting requires an explicit Pool vehicle choice");
+    assert.equal(cancelledDriverPoolUi.sendText, "Send to selected drivers");
+    assert.equal(cancelledDriverPoolUi.sendDisabled, true, "posting requires selected drivers");
     const poolVehicleChoices = await evaluate(`(() => {
       const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
       return select ? { value: select.value, choices: [...select.options].map((option) => option.value) } : null;
     })()`);
-    assert.deepEqual(poolVehicleChoices, { value: "", choices: ["", "E / AVF", "AVF", "S", "VVV", "COMBI"] });
+    assert.deepEqual(poolVehicleChoices, { value: "VVV", choices: ["", "E / AVF", "AVF", "S", "VVV", "COMBI"] });
+    const clickedLoadPoolDrivers = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (item) => item.textContent.trim() === "Load Drivers for Assignment",
+      );
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedLoadPoolDrivers, true, "Pool selection must load the existing assignment drivers first");
+    await waitForCondition(async () => evaluate(`(() => {
+      const checkbox = document.querySelector('[data-driver-pool-selected-drivers] input[type="checkbox"]');
+      return checkbox && !checkbox.disabled;
+    })()`), 5000, "existing driver list ready for Pool selection");
+    await evaluate(`document.querySelector('[data-driver-pool-selected-drivers] input[type="checkbox"]').click()`);
+    await waitForCondition(async () => evaluate(
+      `document.querySelectorAll('[data-driver-pool-selected-drivers] input[type="checkbox"]:checked').length === 1`,
+    ), 3000, "one Pool driver selected before enabling Send");
     for (const vehicle of ["E / AVF", "AVF", "VVV", "COMBI"]) {
       await evaluate(`(() => {
         const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
@@ -21707,7 +21733,7 @@ async function runChromeTest() {
       })()`);
       await waitForCondition(async () => evaluate(`(() => {
         const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
-        const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === "Send to Driver Pool");
+        const button = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === "Send to selected drivers");
         return select?.value === ${JSON.stringify(vehicle)} && button && !button.disabled;
       })()`), 3000, "explicit Pool vehicle choice enables the established send action");
     }
@@ -21943,10 +21969,12 @@ async function runChromeTest() {
       "Expected edited Customer Copy text to reset when a different booking is loaded",
     );
     assert.doesNotMatch(
-      lutherLoadedPricingState.customerCopy,
+      lutherLoadedPricingState.customerCopy.split(/^DRIVER DETAILS$/m)[0],
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|DEP)\b/i,
-      "Expected Customer Copy to show Departure without vehicle type or the DEP booking code",
+      "Customer booking details use Departure; the separate verified Driver Details may show car type",
     );
+    assert.match(lutherLoadedPricingState.customerCopy, /^Car type: Alphard$/m);
+    assert.doesNotMatch(lutherLoadedPricingState.customerCopy, /\b(?:AVF|VVV|DEP|Payout|PayNow|Profit)\b/i);
 
     const seededCompletedLoadStaleMessage = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
@@ -22304,7 +22332,9 @@ async function runChromeTest() {
     assert.equal(completedLoadedBookingState.fields.driverName, "COMPLETED TEST DRIVER");
     assert.match(completedLoadedBookingState.jobCardPreview, /SQ888/);
     assert.doesNotMatch(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST TRAVELER/);
-    assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST DRIVER/);
+    assert.doesNotMatch(completedLoadedBookingState.driverDispatch, /DRIVER DISPATCH|^Driver:/m);
+    assert.match(completedLoadedBookingState.driverDispatch, /Contact: \+65 8444 8888/);
+    assert.match(completedLoadedBookingState.driverDispatch, /Plate: SLE888C/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST TRAVELER/);
 
     await evaluate(`(() => {

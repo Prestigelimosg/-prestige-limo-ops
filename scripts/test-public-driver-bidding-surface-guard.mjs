@@ -138,7 +138,7 @@ for (const fragment of [
   "resolveAdminDispatcherBoundary(request, adminBookingPersistencePurpose)",
   "adminDispatcherBoundaryToPersistenceAdapterActor(access.context)",
   "parseDriverPoolPublishPayload(await body(request))",
-  "parseDriverPoolCancelPayload(await body(request))",
+  "parseDriverPoolCancelPayload(payload)",
   "publishDriverPoolOffer(database.client, parsed.data, actor)",
   "cancelDriverPoolOffer(database.client, parsed.data, actor)",
 ]) {
@@ -155,7 +155,7 @@ for (const fragment of [
   assertIncludes(files.rootApp, fragment, `Admin Dispatch Driver Pool insertion ${fragment}`);
 }
 for (const fragment of [
-  "Send to Driver Pool",
+  "Send to selected drivers",
   "Cancel Offer",
   "eligible Drivers",
   "push-capable Drivers",

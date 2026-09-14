@@ -5377,7 +5377,8 @@ async function runChromeTest() {
         dayOfTripCompletionHandoff: dayOfTripCompletionHandoff(),
         driverAcknowledgementFollowUp: driverAcknowledgementFollowUp(),
         driverAcknowledgementReadiness: driverAcknowledgementReadiness(),
-        driverDispatch: document.querySelector('[data-copy-preview="driverDispatch"]')?.innerText || "",
+        // This content assertion also covers the owner-approved collapsed preview.
+        driverDispatch: document.querySelector('[data-copy-preview="driverDispatch"]')?.textContent || "",
         errors: window.__prestigeErrors || [],
         fields,
         monthlyBillingMonthGroupingReview: monthlyBillingMonthGroupingReview(),
@@ -21221,7 +21222,10 @@ async function runChromeTest() {
     assert.equal(loadedBookingState.fields.name, "LOADED SAVED TRAVELER");
     assert.match(loadedBookingState.jobCardPreview, /SQ999/);
     assert.doesNotMatch(loadedBookingState.jobCardPreview, /LOADED SAVED TRAVELER/);
-    assert.match(loadedBookingState.driverDispatch, /LOADED SAVED DRIVER/);
+    // Owner-approved Manual WhatsApp Copy omits the heading and Driver name line.
+    assert.doesNotMatch(loadedBookingState.driverDispatch, /DRIVER DISPATCH|^Driver:/m);
+    assert.match(loadedBookingState.driverDispatch, /Contact: \+65 8888 0000/);
+    assert.match(loadedBookingState.driverDispatch, /Plate: SLA1234X/);
     assert.match(loadedBookingState.driverDispatch, /LOADED SAVED TRAVELER/);
     assert.doesNotMatch(loadedBookingState.bodyText, /Booking saved successfully/);
 
@@ -21704,7 +21708,23 @@ async function runChromeTest() {
       return select ? { value: select.value, choices: [...select.options].map((option) => option.value) } : null;
     })()`);
     assert.deepEqual(poolVehicleChoices, { value: "VVV", choices: ["", "E / AVF", "AVF", "S", "VVV", "COMBI"] });
+    const clickedLoadPoolDrivers = await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (item) => item.textContent.trim() === "Load Drivers for Assignment",
+      );
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(clickedLoadPoolDrivers, true, "Pool selection must load the existing assignment drivers first");
+    await waitForCondition(async () => evaluate(`(() => {
+      const checkbox = document.querySelector('[data-driver-pool-selected-drivers] input[type="checkbox"]');
+      return checkbox && !checkbox.disabled;
+    })()`), 5000, "existing driver list ready for Pool selection");
     await evaluate(`document.querySelector('[data-driver-pool-selected-drivers] input[type="checkbox"]').click()`);
+    await waitForCondition(async () => evaluate(
+      `document.querySelectorAll('[data-driver-pool-selected-drivers] input[type="checkbox"]:checked').length === 1`,
+    ), 3000, "one Pool driver selected before enabling Send");
     for (const vehicle of ["E / AVF", "AVF", "VVV", "COMBI"]) {
       await evaluate(`(() => {
         const select = document.querySelector('select[aria-label="Driver Pool vehicle type"]');
@@ -21949,10 +21969,12 @@ async function runChromeTest() {
       "Expected edited Customer Copy text to reset when a different booking is loaded",
     );
     assert.doesNotMatch(
-      lutherLoadedPricingState.customerCopy,
+      lutherLoadedPricingState.customerCopy.split(/^DRIVER DETAILS$/m)[0],
       /\b(?:AVF|VVV|Combi|Alphard|Vellfire|V-Class|V Class|Viano|minibus|mini bus|car type|vehicle type|service vehicle|DEP)\b/i,
-      "Expected Customer Copy to show Departure without vehicle type or the DEP booking code",
+      "Customer booking details use Departure; the separate verified Driver Details may show car type",
     );
+    assert.match(lutherLoadedPricingState.customerCopy, /^Car type: Alphard$/m);
+    assert.doesNotMatch(lutherLoadedPricingState.customerCopy, /\b(?:AVF|VVV|DEP|Payout|PayNow|Profit)\b/i);
 
     const seededCompletedLoadStaleMessage = await evaluate(`(() => {
       const textarea = document.querySelector("textarea");
@@ -22310,7 +22332,9 @@ async function runChromeTest() {
     assert.equal(completedLoadedBookingState.fields.driverName, "COMPLETED TEST DRIVER");
     assert.match(completedLoadedBookingState.jobCardPreview, /SQ888/);
     assert.doesNotMatch(completedLoadedBookingState.jobCardPreview, /COMPLETED TEST TRAVELER/);
-    assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST DRIVER/);
+    assert.doesNotMatch(completedLoadedBookingState.driverDispatch, /DRIVER DISPATCH|^Driver:/m);
+    assert.match(completedLoadedBookingState.driverDispatch, /Contact: \+65 8444 8888/);
+    assert.match(completedLoadedBookingState.driverDispatch, /Plate: SLE888C/);
     assert.match(completedLoadedBookingState.driverDispatch, /COMPLETED TEST TRAVELER/);
 
     await evaluate(`(() => {

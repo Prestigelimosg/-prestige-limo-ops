@@ -6,6 +6,13 @@ type PoolDriver = { id: number; driver_name: string | null; plate_number: string
 type PoolResponse = { driver_id: number; driver_name: string; plate_number: string; vehicle_type: string; status: "pending" | "available" | "declined" | "accepted" | "closed" };
 
 export type DriverPoolAdminOffer = {
+  assignment?: {
+    driver_name: string;
+    plate_number: string;
+    can_cancel: boolean;
+    blocked_reason: string | null;
+    has_job_link: boolean;
+  };
   selection_mode?: "admin" | "first_accept";
   audience?: "selected" | "wider";
   responses?: PoolResponse[];
@@ -36,6 +43,8 @@ type Props = {
   drivers: PoolDriver[];
   savedVehicle: string;
   bookingReference: string;
+  publicBookingReference?: string;
+  onCancelAssignment: (offer: AssignedDriverPoolAdminOffer) => Promise<boolean>;
   disabled: boolean;
   eligible: boolean;
   expectedUpdatedAt: string;
@@ -62,7 +71,7 @@ function pickupLabel(value: string) {
     : "Pickup time unavailable";
 }
 
-export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, onLoadBooking, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
+export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference, publicBookingReference, onCancelAssignment, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, onLoadBooking, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
   const [enabled, setEnabled] = useState(false);
   const [serverEligible, setServerEligible] = useState(false);
   const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
@@ -189,15 +198,17 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
     finally { setBusy(false); }
   }
 
-  async function selectOrWiden(action: "award" | "widen", driverId?: number) {
-    if (!offer || busy || offer.offer_status !== "open") return;
+  async function selectOrWiden(action: "award" | "widen", driverId?: number, pendingItem?: AdminDriverPoolAttentionItem) {
+    const targetOffer = pendingItem || offer;
+    const targetReference = pendingItem?.booking_reference || bookingReference;
+    if (!targetOffer || busy || attentionWorkingKey || targetOffer.offer_status !== "open") return;
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
         method: "PATCH", headers,
-        body: JSON.stringify({ action, offer_key: offer.offer_key, expected_updated_at: offer.updated_at,
+        body: JSON.stringify({ action, offer_key: targetOffer.offer_key, expected_updated_at: targetOffer.updated_at,
           idempotency_key: crypto.randomUUID(), ...(action === "award" ? { driver_id: driverId } : {
-            booking_reference: bookingReference, offer_payout_sgd: offer.offer_payout_sgd, vehicle_requirement: offer.safe_vehicle_label,
+            booking_reference: targetReference, offer_payout_sgd: targetOffer.offer_payout_sgd, vehicle_requirement: targetOffer.safe_vehicle_label,
           }) }),
       });
       const result = await response.json() as { ok?: boolean; accepted?: boolean; error?: string };
@@ -207,15 +218,17 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
       if (action === "award") {
         setFeedback("Driver assigned. Create the Driver Job Link when ready.");
         await onLoadBooking(bookingReference);
-      } else setFeedback("Offered to the wider pool. First valid acceptance wins. Create the Driver Job Link after assignment.");
+      } else if (pendingItem) setAttentionFeedback(`Job ${pendingItem.public_booking_reference}: offered to the wider pool. First valid acceptance wins.`);
+      else setFeedback("Offered to the wider pool. First valid acceptance wins. Create the Driver Job Link after assignment.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Driver Pool action was not confirmed. Refresh to review.");
+      const message = error instanceof Error ? error.message : "Driver Pool action was not confirmed. Refresh to review.";
+      if (pendingItem) setAttentionFeedback(message); else setFeedback(message);
       await load();
     } finally { setBusy(false); }
   }
 
   async function cancel() {
-    if (!offer) return;
+    if (!offer || busy || attentionWorkingKey || !window.confirm(`Cancel the offer for job ${publicBookingReference || "shown above"}? Drivers can no longer accept this offer. The booking stays active.`)) return;
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
@@ -230,7 +243,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
   }
 
   async function cancelPendingOffer(item: AdminDriverPoolAttentionItem) {
-    if (item.attention_status !== "open" || attentionWorkingKey) return;
+    if (item.attention_status !== "open" || busy || attentionWorkingKey || !window.confirm(`Cancel the offer for job ${item.public_booking_reference}? Drivers can no longer accept this offer. The booking stays active.`)) return;
     setAttentionWorkingKey(item.offer_key);
     setAttentionFeedback("");
     try {
@@ -253,8 +266,26 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
     }
   }
 
+  async function cancelAssignment(item: AssignedDriverPoolAdminOffer, publicReference: string) {
+    if (!item.assignment?.can_cancel || attentionWorkingKey || busy) return;
+    if (!window.confirm(`Cancel ${item.assignment.driver_name}'s assignment for job ${publicReference}? The driver will be notified. The booking stays active and needs another driver. No Job Link will be created.`)) return;
+    setAttentionWorkingKey(item.offer_key);
+    setAttentionFeedback("");
+    try {
+      if (await onCancelAssignment(item)) {
+        setAttentionFeedback(`Job ${publicReference}: driver assignment cancelled. Booking stays active. Select drivers to offer it again.`);
+        await load();
+        await loadAttention(1, true);
+      }
+    } catch (error) {
+      setAttentionFeedback(error instanceof Error ? error.message : "Assignment was not cancelled. Reload this job to review.");
+      await load();
+      await loadAttention(1, true);
+    } finally { setAttentionWorkingKey(""); }
+  }
+
   async function openPendingBooking(item: AdminDriverPoolAttentionItem) {
-    if (attentionWorkingKey) return;
+    if (attentionWorkingKey || busy) return;
     setAttentionWorkingKey(item.offer_key);
     setAttentionFeedback("");
     try {
@@ -290,10 +321,20 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
               ) : null}
               {offer.audience === "selected" ?
                 <button className="h-8 rounded border border-sky-300 bg-white px-3 text-xs font-semibold" disabled={busy || disabled} onClick={() => void selectOrWiden("widen")} type="button">Offer to wider pool</button> : null}
-              <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy} onClick={() => void cancel()} type="button">{busy ? "Cancelling…" : "Cancel Offer"}</button>
+              <button className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void cancel()} type="button">{busy ? "Working…" : "Cancel Offer"}</button>
             </>
           ) : offer?.offer_status === "assigned" ? (
-            <span className="text-xs font-semibold text-emerald-800">Accepted · Driver assigned. Create the Driver Job Link when ready.</span>
+            <div className="w-full space-y-2 text-xs">
+              <p className="font-semibold text-emerald-800">Accepted · Driver assigned. Create the Driver Job Link when ready.</p>
+              {!attentionItems.some((item) => item.offer_key === offer.offer_key) ? <>
+                <p>{offer.assignment?.driver_name || "Loading driver details…"} · {offer.assignment?.plate_number || ""}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button className="min-h-10 rounded border border-sky-300 bg-white px-3 font-semibold text-sky-900" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void onLoadBooking(bookingReference).catch((error: unknown) => setFeedback(error instanceof Error ? error.message : "The Job Link section could not be opened. Try again."))} type="button">{offer.assignment?.has_job_link ? "Go to Job Link / Driver Reports" : "Go to Create Link"}</button>
+                  <button className="min-h-10 rounded border border-red-200 bg-white px-3 font-semibold text-red-700 disabled:text-slate-400" disabled={!offer.assignment?.can_cancel || Boolean(attentionWorkingKey)} onClick={() => void cancelAssignment({ ...offer, booking_reference: bookingReference }, publicBookingReference || "shown above")} type="button">Cancel Driver Assignment</button>
+                </div>
+                <p>{offer.assignment?.blocked_reason || "Cancel removes this driver only. The booking stays active."}</p>
+              </> : <p>Use the actions beside this job in Driver Pool pending below.</p>}
+            </div>
           ) : (
             <>
               <div className="w-full space-y-1" data-driver-pool-selected-drivers="true">
@@ -346,22 +387,30 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
             {attentionItems.map((item) => {
               const working = attentionWorkingKey === item.offer_key;
               return (
-                <div className="flex min-h-10 items-center gap-2 border-b border-sky-100 px-2 py-1 last:border-b-0" data-admin-driver-pool-pending-row={item.public_booking_reference} key={item.offer_key}>
-                  <button className="min-w-0 flex-1 text-left text-xs disabled:text-slate-400" disabled={Boolean(attentionWorkingKey)} onClick={() => void openPendingBooking(item)} type="button">
+                <div className="flex min-h-10 flex-wrap items-center gap-2 border-b border-sky-100 px-2 py-2 last:border-b-0" data-admin-driver-pool-pending-row={item.public_booking_reference} key={item.offer_key}>
+                  <button className="min-w-0 flex-1 text-left text-xs disabled:text-slate-400" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void openPendingBooking(item)} type="button">
                     <span className="font-semibold text-slate-950">Job {item.public_booking_reference}</span>
                     <span className="ml-2 text-slate-500">{pickupLabel(item.pickup_at)}</span>
                     <span className={`ml-2 font-semibold ${item.attention_status === "open" ? "text-sky-800" : "text-emerald-800"}`}>
                       {item.attention_status === "open" ? `${item.audience === "selected" ? "Selected group" : "Wider pool"} · SGD ${item.offer_payout_sgd.toFixed(2)} · ${item.selection_mode === "admin" ? "View responses" : "First acceptance wins"}` : "Accepted · Job Link pending"}
                     </span>
                   </button>
+                  {item.attention_status === "open" && item.audience === "selected" ? (
+                    <button className="min-h-10 rounded border border-sky-300 bg-white px-3 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void selectOrWiden("widen", undefined, item)} type="button">Offer to wider pool</button>
+                  ) : null}
                   {item.attention_status === "open" ? (
-                    <button className="h-7 shrink-0 rounded-md border border-red-200 bg-white px-2 text-xs font-semibold text-red-700 disabled:text-slate-400" disabled={Boolean(attentionWorkingKey)} onClick={() => void cancelPendingOffer(item)} type="button">
+                    <button className="min-h-10 shrink-0 rounded-md border border-red-200 bg-white px-2 text-xs font-semibold text-red-700 disabled:text-slate-400" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void cancelPendingOffer(item)} type="button">
                       {working ? "Cancelling…" : "Cancel Offer"}
                     </button>
                   ) : (
-                    <button className="h-7 shrink-0 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold text-sky-900 disabled:text-slate-400" disabled={Boolean(attentionWorkingKey)} onClick={() => void openPendingBooking(item)} type="button">
-                      {working ? "Loading…" : "Load Job"}
-                    </button>
+                    <div className="w-full space-y-2 text-xs">
+                      <p className="font-semibold">{item.assignment?.driver_name || "Driver details unavailable"} · {item.assignment?.plate_number || "Plate unavailable"} · SGD {item.offer_payout_sgd.toFixed(2)}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button className="min-h-10 rounded border border-sky-300 bg-white px-3 font-semibold text-sky-900 disabled:text-slate-400" disabled={busy || Boolean(attentionWorkingKey)} onClick={() => void openPendingBooking(item)} type="button">{working ? "Working…" : "Go to Create Link"}</button>
+                        <button className="min-h-10 rounded border border-red-200 bg-white px-3 font-semibold text-red-700 disabled:text-slate-400" disabled={!item.assignment?.can_cancel || Boolean(attentionWorkingKey) || busy} onClick={() => void cancelAssignment(item, item.public_booking_reference)} type="button">Cancel Driver Assignment</button>
+                      </div>
+                      <p>{item.assignment?.blocked_reason || (item.assignment ? "Create Link opens the existing Job Link section. Cancel removes this driver only; the booking stays active." : "Cancellation availability could not be verified. Open this job to review.")}</p>
+                    </div>
                   )}
                 </div>
               );

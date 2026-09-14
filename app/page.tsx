@@ -27815,10 +27815,9 @@ export default function Home() {
     }
   }
 
-  async function cancelAssignedDriverPoolAssignment() {
-    const offer = currentAssignedDriverPoolAdminOffer;
-    const bookingReference = loadedDriverPoolBookingReference;
-    if (!offer || !bookingReference || driverPoolAssignmentCancellationBusy) return;
+  async function cancelAssignedDriverPoolAssignment(offer: AssignedDriverPoolAdminOffer) {
+    const bookingReference = offer.booking_reference;
+    if (!bookingReference || driverPoolAssignmentCancellationBusy) return false;
 
     setDriverPoolAssignmentCancellationBusy(true);
     try {
@@ -27861,6 +27860,7 @@ export default function Home() {
       setAdminBookingPersistenceMessage(successMessage);
       setMessage(successMessage);
       setBookingSaveMessage(successMessage);
+      return true;
     } catch (error) {
       const failureMessage = {
         tone: "error",
@@ -27869,6 +27869,7 @@ export default function Home() {
       setAdminBookingPersistenceMessage(failureMessage);
       setMessage(failureMessage);
       setBookingSaveMessage(failureMessage);
+      throw error;
     } finally {
       setDriverPoolAssignmentCancellationBusy(false);
     }
@@ -27900,11 +27901,6 @@ export default function Home() {
   async function assignDraftDriver() {
     if (saveLoadedDriverAssignmentAvailable) {
       await updateAppliedAdminBookingOperationalSnapshot({ assignmentOnly: true });
-      return;
-    }
-
-    if (currentAssignedDriverPoolAdminOffer) {
-      await cancelAssignedDriverPoolAssignment();
       return;
     }
 
@@ -45414,7 +45410,8 @@ export default function Home() {
                   />
                   Include payout in dispatch
                 </label>
-                <button
+                {(!currentAssignedDriverPoolAdminOffer || saveLoadedDriverAssignmentAvailable) && (
+                  <button
                   aria-pressed={draftDriverAssignmentApplied}
                   className={`h-8 rounded-md border px-3 text-xs font-semibold transition ${
                     draftDriverAssignmentApplied
@@ -45422,9 +45419,7 @@ export default function Home() {
                       : "border-sky-300 bg-white text-sky-900 hover:bg-sky-50"
                   }`}
                   data-admin-draft-driver-assignment-state={
-                    currentAssignedDriverPoolAdminOffer
-                      ? "cancel-assignment"
-                      : draftDriverAssignmentApplied
+                    draftDriverAssignmentApplied
                         ? "applied"
                         : "ready"
                   }
@@ -45441,12 +45436,11 @@ export default function Home() {
                     ? "Saving Driver Assignment..."
                     : saveLoadedDriverAssignmentAvailable
                       ? "Save Driver Assignment"
-                      : currentAssignedDriverPoolAdminOffer
-                        ? "Cancel Driver Assignment"
-                        : draftDriverAssignmentApplied
+                      : draftDriverAssignmentApplied
                           ? "Applied / Cancel to Revise"
                           : "Apply Driver to Draft"}
-                </button>
+                  </button>
+                )}
               </div>
               <AdminDriverPoolControl
                 drivers={assignableDriverAssignmentDisplayDrivers}
@@ -45467,6 +45461,8 @@ export default function Home() {
                 )}
                 expectedUpdatedAt={clean(loadedAdminBookingBaselineRef.current?.updatedAt)}
                 onAssignedOfferChange={setAssignedDriverPoolAdminOffer}
+                onCancelAssignment={cancelAssignedDriverPoolAssignment}
+                publicBookingReference={dispatchPublicBookingReference}
                 onLoadBooking={loadAdminDriverPoolPendingBooking}
                 requiresExplicitPayout={normalizeBookingType(booking.bookingType) === "DSP"}
                 showPleaseAssignDriver={driverPoolAssignmentCancelled}

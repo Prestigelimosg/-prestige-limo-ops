@@ -403,6 +403,7 @@ try {
       ? { data: attentionOfferRows, error: null }
       : { data: [{ booking_reference: "ADM-ACCEPTED-WITH-LINK" }], error: null };
     const query = {
+      eq() { return query; },
       in() { return query; },
       limit() { return query; },
       order() { return query; },
@@ -1107,7 +1108,7 @@ assert.equal((files["app/page.tsx"].match(/<AdminDriverPoolControl/g) || []).len
 includes("app/page.tsx", [
   "Manual assignment with payout control.", "Apply Driver to Draft",
   "loadAdminDriverPoolPendingBooking", "onLoadBooking={loadAdminDriverPoolPendingBooking}",
-  "Cancel Driver Assignment", "cancelAssignedDriverPoolAssignment",
+  "onCancelAssignment={cancelAssignedDriverPoolAssignment}", "cancelAssignedDriverPoolAssignment",
   "driverPoolAssignmentCancelled", "setDriverPoolAssignmentCancelled(false)",
   "setDriverPoolAssignmentCancelled(true)",
   'text: "Please assign driver."',
@@ -1122,16 +1123,9 @@ const assignmentHandlerStart = files["app/page.tsx"].indexOf("async function ass
 const assignmentHandlerEnd = files["app/page.tsx"].indexOf("async function copyDraftDriverDispatch()", assignmentHandlerStart);
 const assignmentHandler = files["app/page.tsx"].slice(assignmentHandlerStart, assignmentHandlerEnd);
 assert.ok(assignmentHandlerStart >= 0 && assignmentHandlerEnd > assignmentHandlerStart, "Assigned Driver action handler missing");
-assert.ok(
-  assignmentHandler.indexOf("if (saveLoadedDriverAssignmentAvailable)") <
-    assignmentHandler.indexOf("if (currentAssignedDriverPoolAdminOffer)"),
-  "A deliberately selected replacement Driver must retain the established saved-assignment action before Pool cancellation",
-);
-assert.ok(
-  assignmentHandler.indexOf("if (currentAssignedDriverPoolAdminOffer)") <
-    assignmentHandler.indexOf("if (draftDriverAssignmentApplied)"),
-  "The visible Cancel Driver Assignment state must reach atomic cancellation before the old local draft-clear branch",
-);
+assert.ok(assignmentHandler.includes("if (saveLoadedDriverAssignmentAvailable)"), "Manual replacement retains its existing save action");
+assert.doesNotMatch(assignmentHandler, /cancelAssignedDriverPoolAssignment/, "Manual draft action must no longer double as Pool cancellation");
+assert.ok(files["app/admin-driver-pool-control.tsx"].includes("onCancelAssignment(item)"), "Per-job control reuses existing parent cancellation writer");
 
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",

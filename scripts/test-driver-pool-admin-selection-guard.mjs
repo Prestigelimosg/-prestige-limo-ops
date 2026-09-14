@@ -40,6 +40,35 @@ try {
  rows.driver_job_bid_offers={...offer,safe_offer_context:{selection_mode:'admin',audience:'wider'}};
  const widenedAdmin=await helper.loadAdminDriverPoolOffer(client,'POOL-QA');
  assert.equal(widenedAdmin.data.offer.selection_mode,'first_accept','historical widened offers must not show Admin winner selection');
+
+ const originalRows=rows;
+ const assignedOffer={...offer,offer_status:'assigned'};
+ const savedWinner={driver_id:2,driver_name:'Synthetic 2',driver_plate_number:'QA1002',driver_payout_override:100,driver_payout_reason:'Driver Pool accepted fixed offer.',updated_at:offer.updated_at};
+ for(const scenario of ['ready','changed','link','report','closed','wrong-winner','bad-payout']) {
+   rows={driver_job_bid_offers:assignedOffer,bookings:{...savedWinner},driver_job_links:[],driver_job_status_events:[],driver_job_bids:[{driver_reference:'2'}]};
+   if(scenario==='changed')rows.bookings.updated_at='2026-09-14T01:00:00Z';
+   if(scenario==='link')rows.driver_job_links=[{booking_reference:'POOL-QA'}];
+   if(scenario==='report')rows.driver_job_status_events=[{booking_reference:'POOL-QA'}];
+   if(scenario==='closed')rows.bookings.admin_internal_status='cancelled';
+   if(scenario==='wrong-winner')rows.driver_job_bids=[{driver_reference:'3'}];
+   if(scenario==='bad-payout')rows.bookings.driver_payout_override=101;
+   const checked=await helper.loadAdminDriverPoolOffer(client,'POOL-QA');
+   assert.equal(checked.ok,true);assert.equal(checked.data.offer.assignment.can_cancel,scenario==='ready',scenario);
+   assert.equal(checked.data.offer.assignment.driver_name,'Synthetic 2');
+   assert.equal(checked.data.offer.assignment.blocked_reason===null,scenario==='ready',scenario);
+   assert.doesNotMatch(JSON.stringify(checked.data.offer.assignment),/driver_payout|driver_id|contact|safe_offer_context/);
+ }
+
+ rows={driver_job_bid_offers:[{...assignedOffer,booking_reference:'POOL-QA',public_booking_reference:'99001',pickup_at:'2099-09-15T12:00:00Z'}],bookings:[{...savedWinner,booking_reference:'POOL-QA',internal_notes:'PRIVATE'}],driver_job_links:[],driver_job_status_events:[],driver_job_bids:[{driver_job_bid_offer_id:offer.id,driver_reference:'2'}]};
+ const attention=await helper.loadAdminDriverPoolAttentionOffers(client,1,20);
+ assert.equal(attention.ok,true);assert.equal(attention.data.items[0].assignment.can_cancel,true);
+ assert.equal(attention.data.items[0].assignment.driver_name,'Synthetic 2');
+ assert.doesNotMatch(JSON.stringify(attention),/PRIVATE|internal_notes|driver_payout_override/);
+ rows.bookings[0].admin_internal_status='cancelled';
+ const closedAttention=await helper.loadAdminDriverPoolAttentionOffers(client,1,20);
+ assert.equal(closedAttention.data.items[0].assignment.can_cancel,false);
+ assert.match(closedAttention.data.items[0].assignment.blocked_reason,/already closed/);
+ rows=originalRows;
  rows.driver_job_bid_offers=offer;
 
  rpcResult={jobs:[{...offer,public_booking_reference:'99001',pickup_at:'2099-09-15T12:00:00Z',selection_mode:'admin',response_status:'awaiting_admin',customer_price:'SECRET',driver_names:['SECRET']}],has_more:false};

@@ -23,7 +23,8 @@ try {
  const drivers=Array.from({length:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:'AVF',plate_number:'QA100'+(i+1),availability_status:'available'}));
  const base={offer_key:'a'.repeat(64),offer_status:'open',audience:'selected',selection_mode:'first_accept',response_status:'pending',offer_payout_sgd:100,recipient_count:10,push_target_count:0,closes_at:'2099-09-15T12:00:00Z',pickup_at:'2099-09-15T12:00:00Z',public_booking_reference:'99001',safe_pickup_area:'After assignment',safe_dropoff_area:'After assignment',safe_trip_summary:'TRF',updated_at:'2026-09-14T00:00:00.123456Z',safe_vehicle_label:'AVF'};
  let offer=null;let driverJobs=[{...base,audience:location.pathname==='/driver-wide'?'wider':'selected'}];
- window.poolTest={requests:[],loads:[],failAccept:false,failDecline:false,win:()=>{offer.offer_status='assigned';},remove:()=>{driverJobs=[];}};
+ window.poolTest={requests:[],loads:[],cancelled:[],confirmations:[],allowConfirm:true,failCancel:false,failAccept:false,failDecline:false,win:()=>{offer.offer_status='assigned';offer.assignment={driver_name:'Synthetic Driver 1',plate_number:'QA1001',can_cancel:true,blocked_reason:null,has_job_link:false};},block:()=>{offer.assignment={...offer.assignment,can_cancel:false,blocked_reason:'This booking changed after acceptance. Review the saved assignment before cancelling.'};},remove:()=>{driverJobs=[];}};
+ window.confirm=(message)=>{window.poolTest.confirmations.push(message);return window.poolTest.allowConfirm;};
  window.fetch=async(url,opts={})=>{
   const body=opts.body?JSON.parse(opts.body):null;const test=window.poolTest;
   test.requests.push({url:String(url),method:opts.method||'GET',body});
@@ -37,12 +38,12 @@ try {
   if(opts.method==='POST')offer={...base,recipient_count:body.selected_driver_ids.length,safe_vehicle_label:body.vehicle_requirement,responses:body.selected_driver_ids.map(id=>({driver_id:id,driver_name:'Synthetic Driver '+id,plate_number:'QA100'+id,vehicle_type:'AVF',status:'pending'}))};
   if(opts.method==='PATCH'){
    if(body.action==='award')throw Error('Unexpected Admin winner selection');
-   if(body.action==='widen'){offer.audience='wider';offer.recipient_count=12;}
+   if(body.action==='widen'){offer.audience='wider';offer.recipient_count=12;} else if(!body.action){offer.offer_status='cancelled';}
   }
-  if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:offer?[{...offer,booking_reference:'POOL-QA',attention_status:offer.offer_status==='assigned'?'accepted_link_pending':'open'}]:[],has_more:false,page:1});
+  if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:offer&&['open','assigned'].includes(offer.offer_status)?[{...offer,booking_reference:'POOL-QA',attention_status:offer.offer_status==='assigned'?'accepted_link_pending':'open'}]:[],has_more:false,page:1});
   return Response.json({ok:true,enabled:true,eligible:true,offer});
  };
- createRoot(document.getElementById('root')).render(location.pathname.startsWith('/driver')?<Driver/>:<AdminDriverPoolControl drivers={drivers} savedVehicle="AVF" bookingReference="POOL-QA" expectedUpdatedAt={base.updated_at} eligible disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={100} onLoadBooking={async(ref)=>window.poolTest.loads.push(ref)}/>);`;
+ createRoot(document.getElementById('root')).render(location.pathname.startsWith('/driver')?<Driver/>:<AdminDriverPoolControl drivers={drivers} savedVehicle="AVF" bookingReference="POOL-QA" expectedUpdatedAt={base.updated_at} eligible disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={100} onLoadBooking={async(ref)=>window.poolTest.loads.push(ref)} onCancelAssignment={async(item)=>{window.poolTest.cancelled.push(item);if(window.poolTest.failCancel)throw Error('Driver Pool state changed. Reload and try again.');offer.offer_status='cancelled';return true;}}/>);`;
  await writeFile(path.join(temp,'entry.js'),ts.transpileModule(entry,{compilerOptions}).outputText);
  await new Promise((resolve,reject)=>webpack({mode:'development',entry:path.join(temp,'entry.js'),resolve:{modules:[path.join(process.cwd(),'node_modules')]},output:{path:temp,filename:'bundle.js'}},(err,stats)=>err||stats.hasErrors()?reject(err||Error(stats.toString({all:false,errors:true}))):resolve()));
  const bundle=await readFile(path.join(temp,'bundle.js'));
@@ -74,11 +75,36 @@ try {
   await wait("document.body.innerText.includes('First valid acceptance wins')");
   await evaluate('window.poolTest.win()');await wait("document.body.innerText.includes('Accepted · Driver assigned')");
   await wait("document.body.innerText.includes('Accepted · Job Link pending')");
+  await wait("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]').innerText.includes('Cancel Driver Assignment')");
   assert.equal(await evaluate("window.poolTest.requests.some(r=>r.body?.action==='award')"),false);
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Admin overflow at ${width}`);
+  assert.equal(await evaluate("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]').innerText.includes('Synthetic Driver 1')"),true);
+  const acceptedShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-owner-accepted-'+width+'.png',Buffer.from(acceptedShot.data,'base64'));
+  await evaluate('window.poolTest.block()');
+  await wait("document.body.innerText.includes('This booking changed after acceptance')");
+  assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Cancel Driver Assignment').disabled"),true,'Blocked cancellation must explain why before a click');
+  assert.equal(await evaluate('window.poolTest.cancelled.length'),0);
+  const blockedShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-owner-blocked-'+width+'.png',Buffer.from(blockedShot.data,'base64'));
+  await evaluate('window.poolTest.win()');
+  await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Cancel Driver Assignment'&&!b.disabled)");
+  await click('Go to Create Link');assert.deepEqual(await evaluate('window.poolTest.loads'),['POOL-QA']);
+  assert.equal(await evaluate("window.poolTest.requests.some(r=>r.url.includes('driver-job-links'))"),false,'Navigation must not create a link');
+  await evaluate('window.poolTest.allowConfirm=false');await click('Cancel Driver Assignment');
+  assert.equal(await evaluate('window.poolTest.cancelled.length'),0,'Dismissing confirmation must not cancel');
+  await evaluate('window.poolTest.allowConfirm=true;window.poolTest.failCancel=true');await click('Cancel Driver Assignment');
+  await wait("document.body.innerText.includes('Driver Pool state changed')");
+  assert.equal(await evaluate("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]')!==null"),true,'Rejected cancellation retains job');
+  await evaluate('window.poolTest.failCancel=false');await click('Cancel Driver Assignment');
+  await wait("document.body.innerText.includes('driver assignment cancelled')");
+  assert.equal(await evaluate('window.poolTest.cancelled[0].booking_reference'),'POOL-QA');
+  assert.match(await evaluate('window.poolTest.confirmations.at(-1)'),/99001.*booking stays active/s);
+  await wait("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]')===null");
+
   await client.send('Page.navigate',{url});await wait("document.querySelectorAll('input[type=checkbox]').length===12");await evaluate("document.querySelector('input[type=checkbox]').click()");await click('Send to selected drivers');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Offer to wider pool')");await click('Offer to wider pool');await wait("document.body.innerText.includes('Wider pool')");
   assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.method==='POST').length"),1);
   assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.body?.action==='widen').length"),1);
+  await click('Cancel Offer');await wait("document.querySelector('[data-admin-driver-pool-pending-row=\"99001\"]')===null");
+  assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.method==='PATCH'&&!r.body.action).length"),1);
   for (const driverPath of ['/driver','/driver-wide']) {
     await client.send('Page.navigate',{url:url+driverPath});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Accept')");
     assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>['Available','Pending','Cancel'].includes(b.textContent))"),false);
@@ -100,5 +126,5 @@ try {
 
  }
  assert.deepEqual(errors,[]);
- console.log('PASS actual Admin/Driver JSX at 390px and 1280px: checkbox limit, selected-only POST, no Admin winner controls, exact winner refresh, one-job widening, first Accept for both groups, winner confirmation, failed acceptance and decline, offer count 1 to 0, no overflow or browser errors. API responses are synthetic.');
+ console.log('PASS actual Admin/Driver JSX at 390px and 1280px: checkbox limit, selected-only POST, no Admin winner controls, exact winner refresh, per-row winner/cancel/link navigation, blocked reason, confirmation dismissal, failed cancellation, one-job widening and open cancellation, first Accept for both groups, winner confirmation, failed acceptance and decline, offer count 1 to 0, no overflow or browser errors. API responses are synthetic.');
 } finally {await client?.close();if(chrome)await terminateChildProcess(chrome);if(server)await new Promise(resolve=>server.close(resolve));await rm(temp,{recursive:true,force:true});}

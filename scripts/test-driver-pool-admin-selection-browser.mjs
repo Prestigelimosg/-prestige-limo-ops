@@ -86,10 +86,10 @@ try {
   await click('Refresh');await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Pending'&&b.disabled)");
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Driver overflow at ${width}`);
   if(width===390){const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-awaiting-admin.png',Buffer.from(shot.data,'base64'));}
-  await evaluate('window.poolTest.failDecline=true');await click('Decline');await wait("document.body.innerText.includes('Decline could not be saved.')");
+  await evaluate('window.poolTest.failDecline=true');await click('Cancel');await wait("document.body.innerText.includes('Decline could not be saved.')");
   assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Pending'&&b.disabled)"),true);
-  await evaluate('window.poolTest.failDecline=false');await click('Decline');await wait("document.querySelectorAll('[data-driver-pool-offer]').length===0");
+  await evaluate('window.poolTest.failDecline=false');await click('Cancel');await wait("document.querySelectorAll('[data-driver-pool-offer]').length===0");
  }
  assert.deepEqual(errors,[]);
- console.log('PASS actual Admin/Driver JSX at 390px and 1280px: checkbox limit, selected-only POST, ten responses, rejected award, exact winner, one-job widening, persistent Pending state, visible failed decline, decline, no overflow or browser errors. API responses are synthetic.');
+ console.log('PASS actual Admin/Driver JSX at 390px and 1280px: checkbox limit, selected-only POST, ten responses, rejected award, exact winner, one-job widening, persistent Pending state, visible failed withdrawal, Cancel withdrawal, no overflow or browser errors. API responses are synthetic.');
 } finally {await client?.close();if(chrome)await terminateChildProcess(chrome);if(server)await new Promise(resolve=>server.close(resolve));await rm(temp,{recursive:true,force:true});}

@@ -34,26 +34,26 @@ const files = Object.fromEntries(await Promise.all(names.map(async (name) => [na
 // empty pending list without a reload or a second publish/provider request.
 const adminPoolSource = files["app/admin-driver-pool-control.tsx"];
 const attentionCallback = adminPoolSource.slice(adminPoolSource.indexOf("  const loadAttention = useCallback("), adminPoolSource.indexOf("\n\n  useEffect(() => {", adminPoolSource.indexOf("  const loadAttention = useCallback(")));
-const publishCallback = adminPoolSource.slice(adminPoolSource.indexOf("  async function publish()"), adminPoolSource.indexOf("  async function cancel()"));
+const publishCallback = adminPoolSource.slice(adminPoolSource.indexOf("  async function publish("), adminPoolSource.indexOf("  async function cancel()"));
 assert.ok(attentionCallback.includes("setAttentionItems") && publishCallback.includes('method: "POST"'));
 const callbacks = ts.transpileModule(`${attentionCallback}\n${publishCallback}\nreturn { publish, loadAttention };`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
-for (const outcome of ["success", "publish-failed", "list-failed", "no-vehicle"]) {
+for (const outcome of ["success", "publish-failed", "list-failed", "no-vehicle", "direct-all"]) {
   const state = { items: [], feedback: "", attentionFeedback: "", busy: false, enabled: true, page: 1, requests: [], offer: null };
   let serverStatus = "open";
   const row = () => ({ offer_key: "c".repeat(64), public_booking_reference: "QA-POOL", offer_status: serverStatus,
     attention_status: serverStatus === "open" ? "open" : "accepted_link_pending" });
   const bindings = {
     useCallback: (callback) => callback,
-    selectedIds: [1, 2], audience: "selected", selectedReady: true,
+    selectedIds: [1, 2], selectedReady: outcome !== "direct-all", busy: false, disabled: false,
     load: async () => {},
     vehicleRequirement: outcome === "no-vehicle" ? "" : "VVV",
     bookingReference: "QA-POOL-EMPTY-LIST", expectedUpdatedAt: "2026-09-10T00:00:00Z", payout: "45",
     headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
     crypto: { randomUUID: () => "12345678-1234-1234-1234-123456789abc" },
     fetch: async (url, options) => {
-      state.requests.push({ url, method: options.method || "GET" });
+      state.requests.push({ url, method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
       if (options.method === "POST") return { ok: outcome !== "publish-failed", json: async () => ({
         ok: outcome !== "publish-failed", error: "Publish rejected", offer: { ...row(), provider_attempted_driver_count: 1, provider_accepted_driver_count: 1 },
       }) };
@@ -70,10 +70,11 @@ for (const outcome of ["success", "publish-failed", "list-failed", "no-vehicle"]
     setAttentionItems: (updater) => { state.items = updater(state.items); },
   };
   const actions = new Function(...Object.keys(bindings), callbacks)(...Object.values(bindings));
-  await actions.publish();
+  await actions.publish(outcome === "direct-all" ? "wider" : "selected");
+  if (outcome === "direct-all") assert.deepEqual(state.requests.find((r) => r.method === "POST").body.selected_driver_ids, [], "All drivers ignores ticked IDs and does not require selected readiness");
   assert.equal(state.busy, false);
   assert.equal(state.requests.filter((request) => request.method === "POST").length, outcome === "no-vehicle" ? 0 : 1);
-  if (outcome === "success") {
+  if (outcome === "success" || outcome === "direct-all") {
     assert.equal(state.items.length, 1, "Publishing the first offer must populate an initially empty Admin pending list");
     assert.equal(state.items[0].attention_status, "open");
     const start = adminPoolSource.lastIndexOf("  useEffect(() => {", adminPoolSource.indexOf("if (!attentionEnabled || attentionItems.length"));
@@ -268,7 +269,7 @@ assert.ok(vehicleMigration.indexOf("'vehicle_mismatch'") < vehicleMigration.inde
 assert.doesNotMatch(vehicleMigration, /security definer|create table|alter table/i);
 assert.match(files["app/admin-driver-pool-control.tsx"], /useState\(""\)/);
 assert.match(files["app/admin-driver-pool-control.tsx"], /vehicle_requirement: vehicleRequirement/);
-assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| \(audience === "selected" && !selectedReady\) \|\| !vehicleRequirement/);
+assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| !selectedReady \|\| !vehicleRequirement/);
 for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
   assert.ok(files["app/admin-driver-pool-control.tsx"].includes(`<option value="${vehicle}">`));
 }

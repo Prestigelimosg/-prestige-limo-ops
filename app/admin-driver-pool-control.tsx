@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type PoolDriver = { id: number; driver_name: string | null; plate_number: string | null; vehicle_type: string | null; availability_status: string | null };
 type PoolResponse = { driver_id: number; driver_name: string; plate_number: string; vehicle_type: string; status: "pending" | "available" | "declined" | "accepted" | "closed" };
@@ -78,7 +78,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
   const [payout, setPayout] = useState(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
   const [vehicleRequirement, setVehicleRequirement] = useState(["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(savedVehicle) ? savedVehicle : "");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [audience, setAudience] = useState<"selected" | "wider">("selected");
+  const loadVersion = useRef(0);
   const [alertReadiness, setAlertReadiness] = useState<Record<number, boolean | null>>({});
   const driverIdsQuery = drivers.map((driver) => driver.id).sort((a, b) => a - b).join(",");
   const [driverSearch, setDriverSearch] = useState("");
@@ -94,18 +94,28 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
 
   const load = useCallback(async () => {
     if (!bookingReference) return;
+    const version = ++loadVersion.current;
     try {
-      const response = await fetch(`/api/admin-driver-job-bid-offers?booking_reference=${encodeURIComponent(bookingReference)}${driverIdsQuery ? `&driver_ids=${encodeURIComponent(driverIdsQuery)}` : ""}`, { cache: "no-store", headers });
-      const result = await response.json() as { eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null; driver_alert_readiness?: { driver_id: number; ready: boolean | null }[] };
-      if (response.ok) {
-        setFeedback((current) => current === "Driver Pool could not refresh. Reload before acting." ? "" : current);
+      // Keep the existing readiness API's 200-ID request bound without limiting the driver list.
+      const ids = driverIdsQuery ? driverIdsQuery.split(",") : [];
+      const readiness: Record<number, boolean | null> = {};
+      for (let offset = 0; offset < Math.max(ids.length, 1); offset += 200) {
+        const batch = ids.slice(offset, offset + 200).join(",");
+        const response = await fetch(`/api/admin-driver-job-bid-offers?booking_reference=${encodeURIComponent(bookingReference)}${batch ? `&driver_ids=${encodeURIComponent(batch)}` : ""}`, { cache: "no-store", headers });
+        const result = await response.json() as { eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null; driver_alert_readiness?: { driver_id: number; ready: boolean | null }[] };
+        if (version !== loadVersion.current) return;
+        if (!response.ok) throw new Error("Driver Pool refresh failed.");
+        for (const row of result.driver_alert_readiness || []) readiness[row.driver_id] = row.ready;
         setEnabled(result.enabled === true);
         setServerEligible(result.eligible === true);
         setOffer(result.offer || null);
-        setAlertReadiness(Object.fromEntries((result.driver_alert_readiness || []).map((row) => [row.driver_id, row.ready])));
       }
-      else { setAlertReadiness({}); setFeedback("Driver Pool could not refresh. Reload before acting."); }
-    } catch { setAlertReadiness({}); setFeedback("Driver Pool could not refresh. Reload before acting."); }
+      setAlertReadiness(readiness);
+      setFeedback((current) => current === "Driver Pool could not refresh. Reload before acting." ? "" : current);
+    } catch {
+      if (version !== loadVersion.current) return;
+      setAlertReadiness({}); setFeedback("Driver Pool could not refresh. Reload before acting.");
+    }
   }, [bookingReference, driverIdsQuery]);
 
   const loadAttention = useCallback(async (page: number, quiet = false) => {
@@ -193,16 +203,17 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
     const category = vehicleCategories[(driver.vehicle_type || "").toLowerCase().replace(/[^a-z0-9]/g, "")];
     return Boolean(category && (vehicleRequirement === "E / AVF" ? ["E", "AVF"].includes(category) : category === vehicleRequirement));
   };
-  const selectedReady = selectedIds.length >= 1 && selectedIds.length <= 10 && selectedIds.every((id) =>
+  const selectedReady = selectedIds.length >= 1 && selectedIds.every((id) =>
     alertReadiness[id] === true && drivers.some((driver) => driver.id === id && driver.availability_status?.trim().toLowerCase() === "available" && matchesVehicle(driver)));
 
   const offerNeedsAttention = offer?.offer_status === "open" || offer?.offer_status === "assigned";
   const showExactControl = enabled && ((eligible && serverEligible) || offerNeedsAttention);
   if (!showExactControl && !attentionEnabled && !attentionFeedback) return null;
 
-  async function publish() {
+  async function publish(audience: "selected" | "wider") {
+    if (busy || disabled) return;
     if (!vehicleRequirement) { setFeedback("Choose the Pool vehicle type."); return; }
-    if (audience === "selected" && !selectedReady) { setFeedback("Select 1–10 matching drivers with job alerts ready."); return; }
+    if (audience === "selected" && !selectedReady) { setFeedback("Select matching drivers with job alerts ready."); return; }
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
@@ -363,52 +374,53 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
             </div>
           ) : (
             <>
-              <details className="w-full rounded border border-sky-200 bg-white p-2" open={audience === "selected"}>
-                <summary className="cursor-pointer text-sm font-semibold text-sky-950" onClick={(event) => { event.preventDefault(); if (!busy) setAudience("selected"); }}>Selected drivers pool · up to 10</summary>
-              <div className="mt-2 w-full space-y-1" data-driver-pool-selected-drivers="true">
-                <p className="text-xs text-slate-600">Online means job alerts are enabled, including when the app is closed. Delivery still depends on the phone connection.</p>
-                <div className="flex flex-wrap items-center gap-2">
-                <button className="min-h-8 text-xs font-semibold text-sky-900 underline" disabled={busy} onClick={() => void load()} type="button">Refresh alert status</button>
-                <label className="text-xs font-semibold text-slate-700">Select drivers · {selectedIds.length}/10
-                  <input aria-label="Search Pool drivers" className="ml-2 h-8 rounded border border-sky-300 px-2 text-xs" onChange={(event) => setDriverSearch(event.target.value)} placeholder="Name or plate" value={driverSearch} />
-                </label>
-                </div>
-                <div className="max-h-40 overflow-y-auto rounded border border-sky-200 bg-white">
-                  {drivers.filter((driver) => driver.availability_status?.trim().toLowerCase() === "available" &&
-                    `${driver.driver_name || ""} ${driver.plate_number || ""}`.toLowerCase().includes(driverSearch.trim().toLowerCase())).map((driver) => (
-                    <label className="flex min-h-8 items-center gap-2 border-b border-sky-100 px-2 py-1 text-xs last:border-0" key={driver.id}>
-                      <input type="checkbox" checked={selectedIds.includes(driver.id)} disabled={busy || disabled || (!selectedIds.includes(driver.id) && (selectedIds.length >= 10 || alertReadiness[driver.id] !== true || !matchesVehicle(driver)))} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, driver.id].slice(0, 10) : current.filter((id) => id !== driver.id))} />
-                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 break-words">
-                        <span>{driver.driver_name || "Unnamed driver"} · {driver.vehicle_type || "Vehicle unavailable"} · {driver.plate_number || "Plate unavailable"}</span>
-                        <span className={alertReadiness[driver.id] === true ? "font-semibold text-emerald-700" : "text-slate-600"} data-driver-alert-status={driver.id}>
-                          {alertReadiness[driver.id] === true ? "Online · alerts ready" : alertReadiness[driver.id] === false ? "Alerts not ready" : "Alert status unavailable"}
-                        </span>
-                        {!matchesVehicle(driver) ? <span className="text-amber-800">{vehicleRequirement ? "Vehicle does not match" : "Choose pool vehicle"}</span> : null}
-                      </span>
+              <details className="w-full rounded border border-sky-200 bg-white p-2" open>
+                <summary className="cursor-pointer text-sm font-semibold text-sky-950">Driver Pool</summary>
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="text-xs font-semibold text-slate-700">Pool vehicle
+                    <select aria-label="Driver Pool vehicle type" className="ml-2 h-8 rounded-md border border-sky-300 bg-white px-2 text-sm" disabled={busy || disabled} onChange={(event) => { setVehicleRequirement(event.target.value); setSelectedIds([]); }} value={vehicleRequirement}>
+                      <option value="">Choose vehicle</option>
+                      <option value="E / AVF">E / AVF</option>
+                      <option value="AVF">AVF</option>
+                      <option value="S">S</option>
+                      <option value="VVV">VVV</option>
+                      <option value="COMBI">Combi</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-700">Pool offer total SGD
+                    <input aria-label="Driver Pool offer payout in SGD" className="ml-2 h-8 w-28 rounded-md border border-sky-300 bg-white px-2 text-sm" min="0.01" onChange={(event) => setPayout(event.target.value)} step="0.01" type="number" value={payout} />
+                  </label>
+                  <div className="mt-2 w-full space-y-1" data-driver-pool-selected-drivers="true">
+                    <p className="text-xs text-slate-600">Online means job alerts are enabled, including when the app is closed. Delivery still depends on the phone connection.</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                    <button className="min-h-8 text-xs font-semibold text-sky-900 underline" disabled={busy} onClick={() => void load()} type="button">Refresh alert status</button>
+                    <label className="text-xs font-semibold text-slate-700">Selected drivers · {selectedIds.length}
+                      <input aria-label="Search Pool drivers" className="ml-2 h-8 rounded border border-sky-300 px-2 text-xs" onChange={(event) => setDriverSearch(event.target.value)} placeholder="Name or plate" value={driverSearch} />
                     </label>
-                  ))}
-                  {!drivers.length ? <p className="p-2 text-xs text-slate-500">Use Load Drivers for Assignment above.</p> : null}
+                    </div>
+                    <div className="max-h-40 overflow-y-auto rounded border border-sky-200 bg-white">
+                      {drivers.filter((driver) => driver.availability_status?.trim().toLowerCase() === "available" &&
+                        `${driver.driver_name || ""} ${driver.plate_number || ""}`.toLowerCase().includes(driverSearch.trim().toLowerCase())).map((driver) => (
+                        <label className="flex min-h-8 items-center gap-2 border-b border-sky-100 px-2 py-1 text-xs last:border-0" key={driver.id}>
+                          <input type="checkbox" checked={selectedIds.includes(driver.id)} disabled={busy || disabled || (!selectedIds.includes(driver.id) && (alertReadiness[driver.id] !== true || !matchesVehicle(driver)))} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, driver.id] : current.filter((id) => id !== driver.id))} />
+                          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 break-words">
+                            <span>{driver.driver_name || "Unnamed driver"} · {driver.vehicle_type || "Vehicle unavailable"} · {driver.plate_number || "Plate unavailable"}</span>
+                            <span className={alertReadiness[driver.id] === true ? "font-semibold text-emerald-700" : "text-slate-600"} data-driver-alert-status={driver.id}>
+                              {alertReadiness[driver.id] === true ? "Online · alerts ready" : alertReadiness[driver.id] === false ? "Alerts not ready" : "Alert status unavailable"}
+                            </span>
+                            {!matchesVehicle(driver) ? <span className="text-amber-800">{vehicleRequirement ? "Vehicle does not match" : "Choose pool vehicle"}</span> : null}
+                          </span>
+                        </label>
+                      ))}
+                      {!drivers.length ? <p className="p-2 text-xs text-slate-500">Use Load Drivers for Assignment above.</p> : null}
+                    </div>
+                  </div>
+                <p className="w-full text-xs text-slate-700">Tick any number of eligible drivers to send only to them, or send to all eligible drivers matching the pool vehicle without selecting. First valid acceptance wins.</p>
+                <button className="min-h-10 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || !selectedReady || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish("selected")} type="button">Send to selected drivers</button>
+                <button className="min-h-10 rounded-md border border-sky-700 bg-white px-3 text-xs font-semibold text-sky-950 disabled:border-slate-300 disabled:text-slate-400" disabled={busy || disabled || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish("wider")} type="button">Send to all drivers</button>
+                {busy ? <span className="text-xs text-slate-600" role="status">Sending…</span> : null}
                 </div>
-              </div>
               </details>
-              <details className="w-full rounded border border-sky-200 bg-white p-2" open={audience === "wider"}>
-                <summary className="cursor-pointer text-sm font-semibold text-sky-950" onClick={(event) => { event.preventDefault(); if (!busy) setAudience("wider"); }}>All drivers pool</summary>
-                <p className="mt-2 text-xs text-slate-700">Send directly to all eligible drivers matching the pool vehicle. No 10-driver limit or earlier selected offer is needed. Drivers with alerts enabled can receive a notification; others see the offer when they open the app. First valid acceptance wins.</p>
-              </details>
-              <label className="text-xs font-semibold text-slate-700">Pool vehicle
-                <select aria-label="Driver Pool vehicle type" className="ml-2 h-8 rounded-md border border-sky-300 bg-white px-2 text-sm" disabled={busy || disabled} onChange={(event) => { setVehicleRequirement(event.target.value); setSelectedIds([]); }} value={vehicleRequirement}>
-                  <option value="">Choose vehicle</option>
-                  <option value="E / AVF">E / AVF</option>
-                  <option value="AVF">AVF</option>
-                  <option value="S">S</option>
-                  <option value="VVV">VVV</option>
-                  <option value="COMBI">Combi</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-700">Pool offer total SGD
-                <input aria-label="Driver Pool offer payout in SGD" className="ml-2 h-8 w-28 rounded-md border border-sky-300 bg-white px-2 text-sm" min="0.01" onChange={(event) => setPayout(event.target.value)} step="0.01" type="number" value={payout} />
-              </label>
-              <button className="h-8 rounded-md bg-sky-950 px-3 text-xs font-semibold text-white disabled:bg-slate-400" disabled={busy || disabled || (audience === "selected" && !selectedReady) || !vehicleRequirement || !expectedUpdatedAt || !(Number(payout) > 0)} onClick={() => void publish()} type="button">{busy ? "Sending…" : audience === "selected" ? "Send to selected drivers" : "Send to all drivers"}</button>
               {showPleaseAssignDriver ? (
                 <span className="text-xs font-semibold text-emerald-800">Please assign driver.</span>
               ) : null}

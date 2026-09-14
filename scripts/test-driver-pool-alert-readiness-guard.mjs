@@ -9,6 +9,28 @@ const ui=fs.readFileSync('app/admin-driver-pool-control.tsx','utf8');
 const uiCategories=new Function('return '+ui.match(/const vehicleCategories: Record<string, string> = (\{[\s\S]*?\});/)[1])();
 const sqlMatch=fs.readFileSync('supabase/migrations/20260909171426_driver_pool_vehicle_requirement.sql','utf8').split('as $match$')[1].split('$match$;')[0];
 assert.deepEqual(uiCategories,Object.fromEntries([...sqlMatch.matchAll(/when '([^']+)' then '([^']+)'/g)].map(m=>[m[1],m[2]])));
+// Execute the actual UI refresh over multiple bounded requests; no hidden list cap.
+const callbackSource=ui.slice(ui.indexOf('  const load = useCallback('),ui.indexOf('  const loadAttention = useCallback('));
+const callbackJs=ts.transpileModule(callbackSource+'\nreturn load;', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+for(const size of [0,1,200,201,501]) {
+ for(const failBatch of [0,2]) {
+  const state={readiness:{},feedback:'',calls:[]};
+  const bindings={useCallback:fn=>fn,bookingReference:'POOL-QA',driverIdsQuery:Array.from({length:size},(_,i)=>i+1).join(','),loadVersion:{current:0},headers:{},
+   setEnabled:()=>{},setServerEligible:()=>{},setOffer:()=>{},setAlertReadiness:value=>state.readiness=value,
+   setFeedback:value=>state.feedback=typeof value==='function'?value(state.feedback):value,
+   fetch:async(url,options)=>{
+    assert.equal(options.cache,'no-store');
+    const ids=new URL(url,'https://synthetic.invalid').searchParams.get('driver_ids')?.split(',').map(Number)||[];
+    state.calls.push(ids);assert.ok(ids.length<=200);
+    return {ok:state.calls.length!==failBatch,json:async()=>({enabled:true,eligible:true,offer:null,driver_alert_readiness:ids.map(driver_id=>({driver_id,ready:true}))})};
+   }};
+  await new Function(...Object.keys(bindings),callbackJs)(...Object.values(bindings))();
+  const failed=failBatch===2&&size>200;
+  assert.equal(Object.keys(state.readiness).length,failed?0:size);
+  assert.equal(state.feedback.includes('could not refresh'),failed);
+  if(!failed)assert.deepEqual(state.calls.flat(),Array.from({length:size},(_,i)=>i+1));
+ }
+}
 let failedTable='',queries=[];
 let rows={};
 const client={from(table){const filters=[];let max=Infinity;const q={select(columns){queries.push({table,columns});return q;},in(key,values){filters.push(r=>values.includes(r[key]));return q;},eq(key,value){filters.push(r=>r[key]===value);return q;},limit(n){max=n;return q;},then(resolve){return Promise.resolve({data:(rows[table]||[]).filter(r=>filters.every(f=>f(r))).slice(0,max),error:failedTable===table?{message:'PRIVATE ERROR'}:null}).then(resolve);}};return q;}};

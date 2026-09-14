@@ -150,8 +150,13 @@ try {
     assert.equal(await evaluate("document.querySelectorAll('[data-driver-pool-offer]').length"),0);
     await wait("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Alerts 0')");
     await click('Refresh');await wait("document.querySelectorAll('[data-driver-pool-offer]').length===0");
+    await wait("document.querySelector('[data-driver-pool-accepted-confirmation]')===null");
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Driver overflow at ${width}`);
     if(width===390){const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-first-accept.png',Buffer.from(shot.data,'base64'));}
+    await client.send('Page.navigate',{url:url+driverPath});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Accept')");
+    await click('Accept');await wait("document.querySelector('[data-driver-pool-accepted-confirmation]')!==null");
+    await wait("document.querySelector('[data-driver-pool-accepted-confirmation]')===null");
+    assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.method==='POST').length"),1,'Automatic receipt dismissal must not send again');
     await client.send('Page.navigate',{url:url+driverPath});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Decline')");
     await evaluate('window.poolTest.failDecline=true');await click('Decline');await wait("document.body.innerText.includes('Decline could not be saved.')");
     assert.equal(await evaluate("document.querySelectorAll('[data-driver-pool-offer]').length"),1);

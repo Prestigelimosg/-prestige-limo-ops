@@ -155,6 +155,50 @@ for (const count of [0, 1, 2]) {
   }
 }
 
+// A first-accept receipt is not current assignment status. Execute the real
+// loader through manual/poll refresh, failure, and an older in-flight read.
+const offerLoaderStart = portalSource.indexOf("  const loadAvailableJobs = useCallback(");
+const offerLoaderEnd = portalSource.indexOf("\n\n  useEffect", offerLoaderStart);
+const offerLoaderCode = ts.transpileModule(
+  portalSource.slice(offerLoaderStart, offerLoaderEnd) + "\nreturn loadAvailableJobs;",
+  { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } },
+).outputText;
+for (const quiet of [false, true]) {
+  for (const outcome of ["success", "failure", "superseded-by-accept"]) {
+    let receipt = "Accepted! Pls ack when admin send job link";
+    let resolveRead;
+    const revision = { current: 0 };
+    const requests = [];
+    const noop = () => {};
+    const bindings = {
+      useCallback: (fn) => fn,
+      availableJobsReadRevisionRef: revision,
+      setAvailableJobsBusy: noop,
+      setAvailableJobsAcceptedConfirmation: (value) => { receipt = value; },
+      currentNativeInstallationId: () => "",
+      fetch: (url, options) => {
+        requests.push({url, options});
+        return new Promise((resolve) => { resolveRead = resolve; });
+      },
+      setAvailableJobsReadAvailable: noop, setAvailableJobsEnabled: noop,
+      setAvailableJobs: noop, setAvailableJobsHasMore: noop, setAvailableJobsPage: noop,
+    };
+    const load = new Function(...Object.keys(bindings), offerLoaderCode)(...Object.values(bindings));
+    const pending = load(1, { quiet });
+    assert.equal(receipt, "", "Refresh must immediately dismiss stale acceptance, even offline");
+    if (outcome === "superseded-by-accept") {
+      revision.current++;
+      receipt = "New acceptance receipt";
+    }
+    resolveRead({ok: outcome !== "failure", json: async () => ({ok: true, enabled: true, jobs: [], has_more: false})});
+    await pending;
+    assert.equal(receipt, outcome === "superseded-by-accept" ? "New acceptance receipt" : "");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].options.method, undefined, "Receipt cleanup must remain read-only");
+    assert.equal(requests[0].url, "/api/driver-job-bids?page=1&limit=20");
+  }
+}
+
 function includes(name, fragments) {
   for (const fragment of fragments) assert.ok(files[name].includes(fragment), `${name} missing ${fragment}`);
 }

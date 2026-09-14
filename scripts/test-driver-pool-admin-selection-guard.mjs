@@ -30,6 +30,9 @@ try {
  for(const ids of [undefined,[],[1,1],Array.from({length:11},(_,i)=>i+1),[0],[-1],['1'],[null],[1.5]]) assert.equal(helper.parseDriverPoolPublishPayload({...publish,selected_driver_ids:ids}).ok,false);
  for(const count of [1,5,6,10]) assert.equal(helper.parseDriverPoolPublishPayload({...publish,selected_driver_ids:Array.from({length:count},(_,i)=>i+1)}).ok,true);
  assert.equal(helper.parseDriverPoolPublishPayload({...publish,customer_price:999}).ok,false);
+ const direct={...publish,audience:'wider',selected_driver_ids:[]};
+ assert.equal(helper.parseDriverPoolPublishPayload(direct).ok,true,'Direct wider pool must not require a selected offer');
+ for(const invalid of [{...direct,selected_driver_ids:[1]},{...direct,selected_driver_ids:undefined},{...direct,audience:'everyone'},{...direct,audience:'selected'}]) assert.equal(helper.parseDriverPoolPublishPayload(invalid).ok,false);
  const award={action:'award',offer_key:offer.offer_key,expected_updated_at:offer.updated_at,idempotency_key:crypto.randomUUID(),driver_id:2};
  const widen={action:'widen',offer_key:offer.offer_key,expected_updated_at:offer.updated_at,idempotency_key:crypto.randomUUID(),booking_reference:'POOL-QA',offer_payout_sgd:100,vehicle_requirement:'AVF'};
  for(const request of [award,widen]) {assert.equal(helper.parseDriverPoolAdminActionPayload(request).ok,true);assert.equal(helper.parseDriverPoolAdminActionPayload({...request,actor_role:'admin'}).ok,false);}
@@ -96,6 +99,14 @@ try {
  rpcResult={offer:{...offer,safe_offer_context:{selection_mode:'admin',audience:'wider'},recipient_count:8},recipient_driver_ids:[6,7,8],idempotent:false};
  assert.equal((await route.PATCH(request(widen))).status,200);assert.deepEqual(sends.map(s=>s.driver_id),[6,7,8]);assert.equal(calls.at(-1).input.p_offer_key,offer.offer_key);assert.equal(calls.at(-1).input.p_selected_driver_ids,null);
  sends.length=0;rpcResult.idempotent=true;await route.PATCH(request(widen));assert.equal(sends.length,0);
+ // Direct all-driver POST shares the one RPC and notifies only its exact result, once.
+ rpcResult={offer:{...offer,safe_offer_context:{selection_mode:'first_accept',audience:'wider'},recipient_count:3},recipient_driver_ids:[6,7,8],idempotent:false};
+ count=calls.length;assert.equal((await route.POST(request(direct,'POST'))).status,200);
+ assert.equal(calls.length,count+1);assert.equal(calls.at(-1).name,'publish_driver_pool_offer');
+ assert.deepEqual(calls.at(-1).input.p_selected_driver_ids,[]);assert.equal(calls.at(-1).input.p_offer_key,null);
+ assert.deepEqual(sends.map(s=>s.driver_id),[6,7,8]);
+ sends.length=0;rpcResult.idempotent=true;assert.equal((await route.POST(request(direct,'POST'))).status,200);assert.equal(sends.length,0);
+ count=calls.length;assert.equal((await route.POST(request({...direct,selected_driver_ids:undefined},'POST'))).status,400);assert.equal(calls.length,count);
  // Actual Driver route: availability, decline and denied business outcomes never schedule winner sends.
  const driverRoute=load('app/api/driver-job-bids/route.ts',{
   'next/server':{after:cb=>after.push(cb)},

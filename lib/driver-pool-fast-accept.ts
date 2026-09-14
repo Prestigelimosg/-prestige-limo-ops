@@ -184,10 +184,13 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
   const key = idempotencyKey(record.idempotency_key);
   const vehicle = record.vehicle_requirement;
   const ids = record.selected_driver_ids;
+  const allDrivers = record.audience === "wider";
+  const validAudience = record.audience === undefined || record.audience === "selected" || allDrivers;
   const validIds = Array.isArray(ids) && ids.length >= 1 && ids.length <= 10 &&
     ids.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0) && new Set(ids).size === ids.length;
-  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement", "selected_driver_ids"]) ||
-      !reference || !expected || !payout || !key || !validIds ||
+  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement", "selected_driver_ids", "audience"]) ||
+      !reference || !expected || !payout || !key || !validAudience ||
+      !(allDrivers ? Array.isArray(ids) && ids.length === 0 : validIds) ||
       typeof vehicle !== "string" || !["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(vehicle)) {
     return { error: "Malformed Driver Pool offer rejected.", ok: false, status: 400 };
   }

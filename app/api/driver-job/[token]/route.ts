@@ -144,6 +144,7 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
         ok: true,
         mode: "production",
         payload: result.payload,
+        account_setup: process.env.PRESTIGE_DRIVER_JOB_ACCOUNT_ACTIVATION_ENABLED === "true" ? "app" : "acknowledged_link",
         driver_account_profile: driverAccountProfile
           ? {
               contact: driverAccountProfile.contact,

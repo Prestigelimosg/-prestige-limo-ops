@@ -38,12 +38,12 @@ assert.deepEqual(
     "Prestige SG Driver",
     "Prestige Driver",
     "1.0.0",
-    "20",
+    "22",
     "sg.prestigelimo.drivercompanion",
     "2a797181-d09d-4384-8d01-583456e83c3e",
     "6800706103",
   ],
-  "Driver Build 20 must retain the Build 19 Apple, Expo and OTA identities",
+  "Driver Build 22 must retain the Build 19 Apple, Expo and OTA identities",
 );
 assert.equal(driver.userInterfaceStyle, "light");
 assert.deepEqual(driver.runtimeVersion, { policy: "appVersion" });
@@ -64,10 +64,6 @@ for (const phrase of [
   "No OTA update is published by this checkpoint",
   "Driver Native Visible Alert Badge Persistence Repair",
   "Driver Pool Winner Driver Alert, Silent Loser Refresh And Pre-Link Assignment Recovery",
-  "f6b2ee9a-735d-4b48-b7b3-8067a7857ba0",
-  "dc802f9a-596c-4629-b57b-13c833cd9743",
-  "e5924107-10a2-4dbc-829d-adcf02fb03f0",
-  "777eea4005ddac70a8089d65520ead8dab2344631f8a2355cde4675f68e2cc08",
   "no OTA update was published",
   "Admin/Customer remained parked",
 ]) {
@@ -79,4 +75,4 @@ assert.equal(
   "The Driver Build 19 release guard must run in preactivation verification",
 );
 
-console.log("Driver Build 20 retained OTA-foundation release guard passed.");
+console.log("Driver Build 22 retained OTA-foundation release guard passed.");

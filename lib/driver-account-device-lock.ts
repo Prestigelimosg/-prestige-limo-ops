@@ -48,6 +48,7 @@ type AccountSuccess = {
 };
 
 type AccountFailureReason =
+  | "app_activation_required"
   | "account_exists"
   | "account_unavailable"
   | "device_mismatch"
@@ -155,6 +156,7 @@ export async function createDriverAccountForAcknowledgedLink(input: {
   if (!email || !driverAccountPasswordIsReady(input.password)) return failure("invalid_input");
   if (!authorizedDriverId) return failure("invalid_link");
   if (!runtimeEnabled(env)) return failure("not_configured");
+  if (env.PRESTIGE_DRIVER_JOB_ACCOUNT_ACTIVATION_ENABLED === "true") return failure("app_activation_required");
 
   const client = input.client ?? serviceClient(env);
   const authAdmin = input.authAdmin ?? serviceClient(env)?.auth.admin;

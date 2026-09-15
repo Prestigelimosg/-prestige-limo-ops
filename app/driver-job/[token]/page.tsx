@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {DriverAccountActivation} from "../driver-account-activation";
 import { useParams } from "next/navigation";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
@@ -37,6 +38,7 @@ type DriverJobApiBlockedReason =
 type DriverJobApiResponse =
   | {
       device_alerts?: DriverDeviceAlertApiState;
+      account_setup?: "app" | "acknowledged_link";
       driver_portal?: {
         enrolled: boolean;
         link_key: string | null;
@@ -259,6 +261,7 @@ type EmbeddedDriverWindow = Window & {
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_OPEN_TARGET__?: "messages";
+  __PRESTIGE_DRIVER_ACCOUNT_SETUP__?: {supported:boolean;pending:boolean;attempted:boolean};
 };
 
 type DriverOtsPhotoProofState = {
@@ -1000,6 +1003,8 @@ export default function DriverJobPage() {
   const [androidBrowser, setAndroidBrowser] = useState(false);
   const [iosBrowser, setIosBrowser] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [accountActivationRequired,setAccountActivationRequired]=useState(false);
+  const [accountActivationPassed,setAccountActivationPassed]=useState(false);
   const [driverDetails, setDriverDetails] = useState<DriverDetails>(emptyDriverDetails);
   const [driverDetailsRaw, setDriverDetailsRaw] = useState("");
   const [driverPortalEnrolled, setDriverPortalEnrolled] = useState(false);
@@ -1031,6 +1036,7 @@ export default function DriverJobPage() {
   const [driverCalendar, setDriverCalendar] =
     useState<DriverCalendarState>(emptyDriverCalendarState);
   const [hasVerifiedDriverAccount, setHasVerifiedDriverAccount] = useState(false);
+  const [appOnlyAccountSetup,setAppOnlyAccountSetup]=useState(false);
   const [driverAccountSetup, setDriverAccountSetup] =
     useState<DriverAccountSetupState>(emptyDriverAccountSetupState);
   const driverAccountPasswordReady = driverAccountPasswordIsReady(driverAccountSetup.password);
@@ -1066,6 +1072,8 @@ export default function DriverJobPage() {
   useEffect(() => {
     const embeddedDetectionFrame = window.requestAnimationFrame(() => {
       setEmbeddedDriverApp(isVerifiedEmbeddedDriverApp());
+      const setup=(window as EmbeddedDriverWindow).__PRESTIGE_DRIVER_ACCOUNT_SETUP__;
+      setAccountActivationRequired(isVerifiedEmbeddedDriverApp() && setup?.pending===true && setup?.attempted===true);
       setAndroidBrowser(/Android/i.test(navigator.userAgent));
       setIosBrowser(/iPhone|iPad|iPod/i.test(navigator.userAgent));
     });
@@ -1492,6 +1500,7 @@ export default function DriverJobPage() {
 
         setDriverDetails(loadedDriverDetails);
         setHasVerifiedDriverAccount(Boolean(result.driver_account_profile));
+        setAppOnlyAccountSetup(result.account_setup === "app");
         setSavedDriverDetails(result.payload.acknowledged ? loadedDriverDetails : null);
         setAcknowledged(result.payload.acknowledged);
         setDriverDeviceAlertReadiness(
@@ -1770,6 +1779,7 @@ export default function DriverJobPage() {
   }
 
   async function saveAndAcknowledgeJob() {
+    if(accountActivationRequired && !accountActivationPassed)return;
     const nextDetails = cleanDriverDetails(driverDetails);
 
     setDriverDetails(nextDetails);
@@ -1941,7 +1951,9 @@ export default function DriverJobPage() {
       } | null;
 
       if (!response.ok || result?.ok !== true || result.account_created !== true) {
-        const message = result?.reason === "account_exists"
+        const message = result?.reason === "app_activation_required"
+          ? "Create your account inside Prestige Driver. Save your email and PIN there, then reopen Admin's Job Link to activate it."
+          : result?.reason === "account_exists"
           ? "A Driver account already exists for this driver or Job Link. Sign in from Prestige Driver."
           : result?.reason === "invalid_input"
             ? "Use a valid email and exactly 6 password digits. Repeated or sequential numbers are not allowed."
@@ -2702,6 +2714,7 @@ export default function DriverJobPage() {
                 >
                   {iosBrowser ? "Install Driver App (Beta TestFlight)" : "Install Driver App (Beta APK)"}
                 </a>
+                {iosBrowser && appOnlyAccountSetup ? <a className="inline-flex min-h-11 items-center rounded-md bg-slate-950 px-3 text-xs font-semibold text-white" href={`prestigedriver://job/${encodeURIComponent(token)}`} referrerPolicy="no-referrer">Open Prestige Driver</a>:null}
                 {androidBrowser ? <a
                   className="inline-flex min-h-11 items-center rounded-md bg-slate-950 px-2.5 text-xs font-semibold text-white"
                   data-driver-beta-open-job="true"
@@ -2711,11 +2724,11 @@ export default function DriverJobPage() {
                 </a> : null}
               </div>
               <p className="text-xs leading-5 text-slate-600">
-                {iosBrowser
+                {appOnlyAccountSetup ? "1. Install and open Prestige Driver. 2. Tap New driver? Create account and save your email and six-digit PIN. 3. Return to Admin's message and tap your Job Link to activate your account. 4. Review the job and tap Save & Acknowledge Job." : <>{iosBrowser
                   ? "1. Install TestFlight, then Prestige Driver. 2. Reopen the job link Admin sent you."
                   : "1. Install Prestige Driver. 2. Return here and tap Open This Job."}
                 <br />
-                3. Confirm details → Save &amp; Acknowledge Job → Create your account.
+                3. Confirm details → Save &amp; Acknowledge Job → Create your account.</>}
               </p>
               {androidBrowser ? <p className="text-xs leading-5 text-slate-600">
                 Allow notifications for job alerts. Allow location to share your location during jobs.
@@ -2723,6 +2736,8 @@ export default function DriverJobPage() {
             </div>
           ) : null}
         </header>
+
+        {embeddedDriverApp && accountActivationRequired && pageState.kind === "ready" ? <DriverAccountActivation token={token} acknowledged={acknowledged} onReady={accountReady=>{setAccountActivationPassed(true);if(accountReady)setHasVerifiedDriverAccount(true);}}/>:null}
 
         {pageState.kind === "loading" ? (
           <section
@@ -3012,7 +3027,7 @@ export default function DriverJobPage() {
                     className="h-11 w-full rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition active:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     data-driver-job-save-acknowledge="true"
                     data-driver-primary-step="save-acknowledge"
-                    disabled={savingDriverDetails || driverDetailsSavedAndUnchanged}
+                    disabled={savingDriverDetails || driverDetailsSavedAndUnchanged || (accountActivationRequired && !accountActivationPassed)}
                     onClick={saveAndAcknowledgeJob}
                     type="button"
                   >
@@ -3287,7 +3302,8 @@ export default function DriverJobPage() {
 
             {acknowledged ? (
               <section className="order-[92] space-y-2" data-driver-job-post-ack-tools="true">
-                {!hasVerifiedDriverAccount ? (
+                {!hasVerifiedDriverAccount && !accountActivationRequired && appOnlyAccountSetup ? <p className="rounded-md border border-violet-200 bg-violet-50 p-3 text-sm" data-driver-account-app-only="true">Create your account inside Prestige Driver. Save your email and six-digit PIN, then return to Admin&apos;s message and tap this Job Link to activate it.</p>:null}
+                {!hasVerifiedDriverAccount && !accountActivationRequired && !appOnlyAccountSetup ? (
                   <div
                     className={`rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 ${
                       driverAccountSetup.status === "created" ? "" : "space-y-2"

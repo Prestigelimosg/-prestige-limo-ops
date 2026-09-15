@@ -137,7 +137,7 @@ assert.equal(config.android.googleServicesFile, './google-services.json');
 assert.equal(config.android.package, 'sg.prestigelimo.drivercompanion');
 assert.equal(config.android.icon, './assets/icon.png');
 assert.ok(config.android.versionCode >= 3, 'Never regress installed Build3 version');
-assert.equal(config.android.versionCode, 4, 'Approved local next APK candidate is Build4; distributed baseline remains Build3');
+assert.equal(config.android.versionCode, 5, 'QA activation candidate advances verified installed Build4 to Build5');
 assert.deepEqual(config.plugins.find(p => Array.isArray(p) && p[0] === 'expo-notifications'), ['expo-notifications', { defaultChannel: 'default' }]);
 const channelStart = appSource.indexOf('if (Platform.OS === "android") {', appSource.indexOf('const existingToken = await readNativeNotificationToken();'));
 const permissionStart = appSource.indexOf('const permission = await Notifications.requestPermissionsAsync();', channelStart);

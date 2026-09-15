@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
+  Alert,
   Button,
   BackHandler,
   Linking,
@@ -24,6 +25,7 @@ import {
 } from "react-native-webview";
 
 import { WebView } from "./src/refreshable-webview";
+import {readDriverAccountSetup,saveDriverAccountSetup,rememberDriverAccountSetup,clearDriverAccountSetup,driverAccountSetupBootstrap,driverAccountSetupResultScript,driverAppJobUrl,type DriverAccountSetup} from "./src/driver-account-setup";
 
 import {
   DriverJobRequestError,
@@ -122,6 +124,8 @@ export default function App() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [screen, setScreen] = useState<ScreenState>(initialScreenState);
   const [installationId, setInstallationId] = useState("");
+  const [pendingAccountSetup,setPendingAccountSetup]=useState<DriverAccountSetup|null>(null);
+  const accountSetupBusyRef=useRef(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [unlockState, setUnlockState] = useState<"checking" | "ready" | "locked">("checking");
@@ -167,6 +171,8 @@ export default function App() {
     async function prepareInstallation() {
       try {
         const nextInstallationId = await readOrCreateDriverInstallationId();
+        const pendingSetup = await readDriverAccountSetup();
+        if (mounted) setPendingAccountSetup(pendingSetup);
         const [biometricEnabled, notificationToken] = await Promise.all([
           isDriverBiometricUnlockEnabled(),
           readNativeNotificationToken(),
@@ -227,7 +233,7 @@ export default function App() {
     openTarget: ScreenState["openTarget"] = null,
   ) => {
     try {
-      const incomingJob = parseDriverJobUrl(incomingUrl);
+      const incomingJob = parseDriverJobUrl(driverAppJobUrl(incomingUrl));
       const trackingState = await readTrackingState();
 
       if (
@@ -247,6 +253,18 @@ export default function App() {
 
       if (incomingJob.jobUrl.includes("?calendar=")) {
         pendingOauthTokenRef.current = "";
+      }
+
+      const pendingSetup = await readDriverAccountSetup();
+      if (pendingSetup) {
+        if (pendingSetup.activated && pendingSetup.jobUrl && parseDriverJobUrl(pendingSetup.jobUrl).token !== incomingJob.token) {
+          Alert.alert("Finish account setup", "Return to your original Job Link and tap Save & Acknowledge Job before opening another job. If that link is no longer active, contact Admin to review your setup.");
+          return;
+        }
+        // Keep the same setup proof. The server prevents a second claim across links.
+        pendingSetup.jobUrl = baseDriverJobUrl(incomingJob.jobUrl);
+        await rememberDriverAccountSetup(pendingSetup);
+        setPendingAccountSetup(pendingSetup);
       }
 
       currentWebViewUrlRef.current = incomingJob.jobUrl;
@@ -302,6 +320,12 @@ export default function App() {
       }
 
       const trackingState = await readTrackingState();
+
+      const pendingSetup = await readDriverAccountSetup();
+      if (mounted && !trackingState.active && pendingSetup?.jobUrl) {
+        await receiveDriverJobUrl(pendingSetup.jobUrl);
+        return;
+      }
 
       if (mounted && trackingState.active && trackingState.job) {
         currentWebViewUrlRef.current = trackingState.job.jobUrl;
@@ -473,6 +497,35 @@ export default function App() {
       const currentWebViewUrl = currentWebViewUrlRef.current;
 
       if (!request || !currentWebViewUrl) {
+        return;
+      }
+
+      if (request.type === "native_account_setup_save" || request.type === "native_account_setup_cancel" || request.type === "native_account_setup_activated") {
+        if (accountSetupBusyRef.current) return;
+        accountSetupBusyRef.current=true;
+        try {
+          if (request.type === "native_account_setup_activated") {
+            const saved=await readDriverAccountSetup();
+            if (!saved?.jobUrl || saved.setupId !== request.setup_id || parseDriverJobUrl(saved.jobUrl).token !== parseDriverJobUrl(currentWebViewUrl).token) return;
+            if (request.complete) { await clearDriverAccountSetup();setPendingAccountSetup(null); }
+            else { const next={...saved,activated:true};delete next.password;await rememberDriverAccountSetup(next);setPendingAccountSetup(next); }
+          } else {
+            if (currentWebViewUrl !== `${productionOrigin}/driver-portal`) return;
+            if (request.type === "native_account_setup_save") {
+              const next=await saveDriverAccountSetup(request.email,request.password);setPendingAccountSetup(next);
+              webViewRef.current?.injectJavaScript(driverAccountSetupResultScript(true));
+            } else {
+              const saved=await readDriverAccountSetup();if(saved?.jobUrl)throw new Error("Finish activation with your original Job Link or contact Admin.");
+              await clearDriverAccountSetup();setPendingAccountSetup(null);
+              webViewRef.current?.injectJavaScript(driverAccountSetupResultScript(false));
+            }
+          }
+        } catch {
+          const saved = await readDriverAccountSetup().catch(() => undefined);
+          const message = "Setup could not be confirmed on this phone. Reopen Prestige Driver and your original Job Link. If this continues, contact Admin before starting another setup.";
+          if (request.type === "native_account_setup_activated") Alert.alert("Account setup needs checking", message);
+          else webViewRef.current?.injectJavaScript(driverAccountSetupResultScript(saved !== null, message, saved === undefined || Boolean(saved?.jobUrl)));
+        } finally { accountSetupBusyRef.current=false; }
         return;
       }
 
@@ -810,7 +863,7 @@ export default function App() {
                   biometricEnabled,
                   notificationEnabled,
                   screen.openTarget,
-                )}
+                ) + driverAccountSetupBootstrap(pendingAccountSetup,currentWebViewUrlRef.current || screen.jobUrl)}
                 javaScriptCanOpenWindowsAutomatically={false}
                 mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
                 onMessage={handleBridgeMessage}

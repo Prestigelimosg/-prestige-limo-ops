@@ -11,6 +11,9 @@ export type DriverTrackingBridgeMessage = {
 
 export type DriverBridgeMessage =
   | DriverTrackingBridgeMessage
+  | {type:"native_account_setup_save";email:string;password:string}
+  | {type:"native_account_setup_cancel"}
+  | {type:"native_account_setup_activated";setup_id:string;complete:boolean}
   | { type: "native_biometrics_enable" }
   | { jobKey: string; openTarget?: "messages"; type: "native_job_open" }
   | { jobKey: string; type: "native_job_remember" }
@@ -46,6 +49,16 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
   try {
     const parsed = asRecord(JSON.parse(value));
     const keys = Object.keys(parsed);
+
+    if (parsed.type === "native_account_setup_save" && keys.length === 3
+      && typeof parsed.email === "string" && parsed.email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed.email)
+      && typeof parsed.password === "string" && /^\d{6}$/.test(parsed.password)) {
+      return {type:parsed.type,email:parsed.email,password:parsed.password};
+    }
+    if (parsed.type === "native_account_setup_cancel" && keys.length === 1) return {type:parsed.type};
+    if (parsed.type === "native_account_setup_activated" && keys.length === 3
+      && typeof parsed.setup_id === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(parsed.setup_id)
+      && typeof parsed.complete === "boolean") return {type:parsed.type,setup_id:parsed.setup_id,complete:parsed.complete};
 
     if (
       parsed.type === "native_job_open" &&

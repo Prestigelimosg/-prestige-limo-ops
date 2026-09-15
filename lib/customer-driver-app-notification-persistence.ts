@@ -4454,6 +4454,7 @@ export async function loadDriverAppNotificationsForToken(
       .from(notificationTable)
       .select(notificationSelect, { count: "exact" })
       .eq("booking_reference", linkResult.data.booking_reference)
+      .or("workflow_area.is.null,workflow_area.neq.driver_assignment_cancellation")
       .or(intendedDriverHistoryScope)
       .or(driverLinkNotificationScope)
       .order("created_at", { ascending: false })
@@ -4467,7 +4468,7 @@ export async function loadDriverAppNotificationsForToken(
     const uniqueRecords = new Map<string, CustomerDriverAppNotificationRecord>();
     for (const value of asArray(data)) {
       const record = normalizeRecord(value);
-      if (!record.id || uniqueRecords.has(record.id)) continue;
+      if (!record.id || uniqueRecords.has(record.id) || record.workflow_area === "driver_assignment_cancellation") continue;
       if (record.safe_context.direction === "driver_to_admin" && record.driver_job_link_id !== linkResult.data.id) continue;
       uniqueRecords.set(record.id, record);
     }
@@ -4493,6 +4494,7 @@ export async function loadDriverAppNotificationsForToken(
     .from(notificationTable)
     .select(notificationSelect)
     .eq("booking_reference", linkResult.data.booking_reference)
+    .or("workflow_area.is.null,workflow_area.neq.driver_assignment_cancellation")
     .order("created_at", { ascending: false })
     .limit(maxReadRows);
 
@@ -4506,6 +4508,7 @@ export async function loadDriverAppNotificationsForToken(
 
   const allRecords = asArray(data)
     .map(normalizeRecord)
+    .filter((record) => record.workflow_area !== "driver_assignment_cancellation")
     .filter(
       (record) =>
         record.delivery_surface === "driver_app" ||
@@ -4576,6 +4579,7 @@ export async function updateDriverAppNotificationStatusForToken(
     .eq("id", input.notification_id)
     .eq("delivery_surface", "driver_app")
     .eq("booking_reference", linkResult.data.booking_reference)
+    .or("workflow_area.is.null,workflow_area.neq.driver_assignment_cancellation")
     .or(driverLinkNotificationScope)
     .eq("notification_status", "queued")
     .select(notificationSelect)

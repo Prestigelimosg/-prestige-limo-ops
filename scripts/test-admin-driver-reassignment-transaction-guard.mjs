@@ -16,14 +16,9 @@ function includes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
 }
 
-const retiredCopy = ["Job", "cancel,", "do", "not", "proceed."].join(" ");
-for (const source of [app, persistence, adapter, sender, migration]) {
-  assert.equal(
-    source.includes(retiredCopy),
-    false,
-    "Retired cancellation wording must never be implemented.",
-  );
-}
+// The owner restored short cancellation wording for the separate remove-only action.
+// Replacement must retain its established notice in the original SQL branch.
+assert.equal(migration.includes("Job cancel, do not proceed."), false);
 
 for (const fragment of [
   "create or replace function public.apply_admin_driver_reassignment(",
@@ -68,7 +63,7 @@ assert.doesNotMatch(
 );
 
 for (const fragment of [
-  'update_mode?: "driver_assignment";',
+  'update_mode?: "driver_assignment" | "driver_assignment_cancel";',
   '"update_mode"',
   'updateMode === "driver_assignment"',
 ]) {
@@ -95,7 +90,7 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  'update_mode: assignmentOnly ? "driver_assignment" : undefined',
+  'update_mode: cancelDriverAssignment ? "driver_assignment_cancel" : assignmentOnly ? "driver_assignment" : undefined',
   "await refreshDashboardDriverJobLinksRead([updatedBookingReference])",
 ]) {
   includes(app, fragment, "Dispatch assignment and queue refresh wiring");

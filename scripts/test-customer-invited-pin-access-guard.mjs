@@ -353,8 +353,57 @@ copyContext.fetch = async () => ({ ok: true, json: async () => ({ ok: true, acce
 answers.push("BOSS");
 assert.equal((await copyContext.copyAccess()).portalUrl, "https://example.test/my-bookings");
 const copyActiveBranch = appSource.slice(appSource.indexOf("if (accessResult.accessUpdated)"), appSource.indexOf("const portalUrl = accessResult.portalUrl;"));
-assert.match(copyActiveBranch, /await navigator.clipboard.writeText\(accessResult.portalUrl\)/);
+assert.match(copyActiveBranch, /accessResult\.portalUrl/);
 assert.match(copyActiveBranch, /portalLinkCopied: true/);
+
+// Run the actual clipboard handler: downloads must accompany both new and
+// existing access without changing invitation creation, cancellation or booking requests.
+const clipboardHandler = appSource.slice(appSource.indexOf("  async function copyCustomerDriverDetailsWithCustomerAppLink()"), appSource.indexOf("  function adminDriverJobLinkFailureMessage"));
+const clipboardWrites = [];
+let accessCalls = 0;
+let bookingInviteCalls = 0;
+let nextAccess = { portalUrl: "https://example.test/customer-access/activate?invite=local-fixture", accessUpdated: false };
+const clipboardContext = {
+  customerDriverDetailsPortalBookingReference: "LOCAL-BOOKING",
+  customerBookingInvitationCopyStateKey: "local-booking-invitation",
+  dispatchPublicBookingReference: "LOCAL-BOOKING",
+  setCustomerDriverDetailsPortalLinkCopyState: () => {},
+  setCopyFeedback: () => {},
+  navigator: { clipboard: { writeText: async (text) => clipboardWrites.push(text) } },
+  createCustomerDriverDetailsPortalLink: async () => { accessCalls++; return nextAccess; },
+  createCustomerBookingInvitationLink: async () => { bookingInviteCalls++; return { invitationUrl: "https://example.test/request", expiresAt: "" }; },
+};
+vm.createContext(clipboardContext);
+vm.runInContext(ts.transpileModule(clipboardHandler + "\nglobalThis.copyMessage = copyCustomerDriverDetailsWithCustomerAppLink;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, clipboardContext);
+const customerIosDownload = "https://testflight.apple.com/join/7ACRt3MS";
+const customerAndroidDownload = "https://drive.google.com/file/d/1a2uhL39Fn1JyxaPz8zPfNo9RjnQPJnPa/view";
+await clipboardContext.copyMessage();
+assert.equal(accessCalls, 1);
+assert.equal(clipboardWrites.length, 1);
+const newCustomerMessage = clipboardWrites[0];
+for (const url of [customerIosDownload, customerAndroidDownload, nextAccess.portalUrl]) assert.equal(newCustomerMessage.split(url).length - 1, 1);
+assert.match(newCustomerMessage, /Already installed\? Skip step 1/);
+assert.match(newCustomerMessage, /return to this message/);
+assert.match(newCustomerMessage, /same 6-digit PIN twice/);
+assert.match(newCustomerMessage, /30 minutes/);
+assert.match(newCustomerMessage, /expired.*Admin/);
+assert.ok(newCustomerMessage.indexOf(customerAndroidDownload) < newCustomerMessage.indexOf(nextAccess.portalUrl), "Install instructions must precede activation");
+assert.doesNotMatch(newCustomerMessage, /driver|payout|invoice|PayNow|verify your email/i);
+nextAccess = { portalUrl: "https://example.test/my-bookings", accessUpdated: true };
+await clipboardContext.copyMessage();
+assert.equal(accessCalls, 2);
+for (const url of [customerIosDownload, customerAndroidDownload, nextAccess.portalUrl]) assert.ok(clipboardWrites[1].includes(url));
+assert.match(clipboardWrites[1], /existing sign-in/);
+assert.doesNotMatch(clipboardWrites[1], /activate|create.*PIN|30 minutes/i);
+nextAccess = null;
+await clipboardContext.copyMessage();
+assert.equal(clipboardWrites.length, 2, "Cancelled identity selection must not replace the clipboard");
+clipboardContext.customerDriverDetailsPortalBookingReference = "";
+await clipboardContext.copyMessage();
+assert.equal(accessCalls, 3, "Booking requests must not call access issuance");
+assert.equal(bookingInviteCalls, 1);
+assert.equal(clipboardWrites[2], "PRESTIGE LIMO BOOKING INVITATION\nPlease complete your booking request using this private one-time link:\nhttps://example.test/request\nThis link expires after 7 days.\nThe link is used up after one booking request is saved.");
+console.log("Customer download/activation clipboard, existing sign-in, cancellation and unchanged booking-request copy passed.");
 let reviewAccepted = false;
 let reviewCalls = 0;
 copyContext.window.confirm = () => reviewAccepted;

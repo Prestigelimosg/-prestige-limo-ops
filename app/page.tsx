@@ -27402,8 +27402,24 @@ export default function Home() {
         setCustomerDriverDetailsPortalLinkCopyState(null);
         return;
       }
+      const customerInstallInstructions = [
+        "1. Install Prestige SG (Customer app). Already installed? Skip step 1.",
+        "iPhone: Install TestFlight, then install Prestige Limo Sg from this link:",
+        "https://testflight.apple.com/join/7ACRt3MS",
+        "Android: Download the APK, open the downloaded file and tap Install:",
+        "https://drive.google.com/file/d/1a2uhL39Fn1JyxaPz8zPfNo9RjnQPJnPa/view",
+        "After installing, return to this message.",
+        "",
+      ];
       if (accessResult.accessUpdated) {
-        await navigator.clipboard.writeText(accessResult.portalUrl);
+        await navigator.clipboard.writeText([
+          "PRESTIGE SG APP ACCESS",
+          "",
+          ...customerInstallInstructions,
+          "2. Tap your app link and use your existing sign-in:",
+          accessResult.portalUrl,
+          "Keep this message private.",
+        ].join("\n"));
         setCustomerDriverDetailsPortalLinkCopyState({
           external_send: false,
           loadedReference: copyStateReference,
@@ -27424,9 +27440,13 @@ export default function Home() {
       await navigator.clipboard.writeText(
         [
           "PRESTIGE SG ACCESS INVITATION",
-          "Use this private invitation once to create your 6-digit PIN, then enable Face ID:",
+          "",
+          ...customerInstallInstructions,
+          "2. Tap your private invitation to open Prestige SG:",
           portalUrl,
-          "This invitation expires in 30 minutes.",
+          "3. Enter the same 6-digit PIN twice to activate your account and view My Bookings.",
+          "This invitation can be used once and expires in 30 minutes. If it has expired, ask Admin for a new invitation.",
+          "Keep this message private.",
         ].join("\n"),
       );
       setCustomerDriverDetailsPortalLinkCopyState({

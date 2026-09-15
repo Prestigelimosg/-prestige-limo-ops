@@ -127,7 +127,7 @@ includes("app", "Tracking does not start automatically");
 includes("app", "Force-quitting the app,");
 includes("app", "Linking.getInitialURL()");
 includes("app", 'Linking.addEventListener("url"');
-includes("app", "parseDriverJobUrl(incomingUrl)");
+includes("app", "parseDriverJobUrl(driverAppJobUrl(incomingUrl))");
 includes("app", "Driver Portal is ready.");
 includes("app", "trackingState.active && trackingState.job");
 includes("readme", "Expo Go cannot prove the complete embedded workflow or background location.");

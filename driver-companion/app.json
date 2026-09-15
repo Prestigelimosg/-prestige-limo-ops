@@ -2,6 +2,7 @@
   "expo": {
     "name": "Prestige SG Driver",
     "slug": "prestige-driver-companion",
+    "scheme": "prestigedriver",
     "owner": "prestige-limo-ops",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -18,7 +19,7 @@
       "version": "1.0.0",
       "supportsTablet": true,
       "bundleIdentifier": "sg.prestigelimo.drivercompanion",
-      "buildNumber": "20",
+      "buildNumber": "22",
       "icon": "./assets/icon.png",
       "associatedDomains": [
         "applinks:app.prestigelimo.sg",
@@ -63,7 +64,7 @@
       ],
       "googleServicesFile": "./google-services.json",
       "icon": "./assets/icon.png",
-      "versionCode": 4
+      "versionCode": 5
     },
     "plugins": [
       [

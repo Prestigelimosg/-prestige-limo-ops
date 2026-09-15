@@ -1,5 +1,7 @@
 "use client";
 
+import {DriverAccountSetup,nativeAccountSetupState} from "./driver-account-setup";
+
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
@@ -218,6 +220,15 @@ export default function DriverPortalPage() {
   const [accountEmail, setAccountEmail] = useState("");
   const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
   const [accountFirstSignIn, setAccountFirstSignIn] = useState(false);
+  const [accountSetupOpen,setAccountSetupOpen]=useState(false);
+  const [accountSetupPending,setAccountSetupPending]=useState(false);
+  const [accountSetupSupported,setAccountSetupSupported]=useState(false);
+  useEffect(()=>{
+    const refresh=()=>{const s=nativeAccountSetupState();setAccountSetupSupported(s?.supported===true);setAccountSetupPending(s?.pending===true);if(s?.pending)setAccountSetupOpen(true);};
+    const result=()=>{refresh();if(!nativeAccountSetupState()?.pending)setAccountSetupOpen(false);};
+    refresh();window.addEventListener("prestige-driver-account-setup-result",result);
+    return()=>window.removeEventListener("prestige-driver-account-setup-result",result);
+  },[]);
   const nativePinSignIn = nativeBridgeReady && /\b(?:Android|iPhone)\b/i.test(window.navigator.userAgent);
   const accountPinOnly = nativePinSignIn && !accountFirstSignIn;
   const [accountPassword, setAccountPassword] = useState("");
@@ -855,9 +866,12 @@ export default function DriverPortalPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-loading="true">
             <p className="text-sm font-semibold text-slate-700">Loading assigned jobs…</p>
           </section>
+        ) : installedAccountSignInRequired && accountSetupSupported && (accountSetupOpen || accountSetupPending) ? (
+          <DriverAccountSetup pending={accountSetupPending} onCancel={()=>setAccountSetupOpen(false)}/>
         ) : installedAccountSignInRequired ? (
           <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
             <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
+            {accountSetupSupported?<button className="min-h-11 rounded border px-3 font-semibold" type="button" onClick={()=>setAccountSetupOpen(true)}>New driver? Create account</button>:null}
             <p className={nativePinSignIn ? "text-xs font-medium leading-5 text-slate-700" : "text-sm font-medium leading-6 text-slate-700"}>
               {nativePinSignIn
                 ? <>First sign-in: Email + 6-digit PIN.<br />Next time: 6-digit PIN only.</>

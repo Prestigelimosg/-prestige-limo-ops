@@ -103,7 +103,7 @@ export type AdminBookingPersistenceInput = {
 export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
   expected_updated_at?: string | null;
   target_booking_reference: string;
-  update_mode?: "driver_assignment";
+  update_mode?: "driver_assignment" | "driver_assignment_cancel";
 };
 
 export type CustomerBookingRequestInput = {
@@ -1153,7 +1153,7 @@ export function parseAdminBookingUpdatePayload(
 
   if (
     Object.prototype.hasOwnProperty.call(body, "update_mode") &&
-    updateMode !== "driver_assignment"
+    updateMode !== "driver_assignment" && updateMode !== "driver_assignment_cancel"
   ) {
     return {
       ok: false,
@@ -1195,7 +1195,7 @@ export function parseAdminBookingUpdatePayload(
       ...parsed.data,
       ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
       target_booking_reference: targetBookingReference,
-      ...(updateMode === "driver_assignment" ? { update_mode: updateMode } : {}),
+      ...((updateMode === "driver_assignment" || updateMode === "driver_assignment_cancel") ? { update_mode: updateMode } : {}),
     },
   };
 }

@@ -2719,7 +2719,7 @@ type AdminDriverReassignmentRpcRecord = {
   booking_id: DbIdentifier;
   booking_reference: string;
   expired_link_ids: string[];
-  new_driver_id: number;
+  new_driver_id: number | null;
   notification: {
     booking_reference: string;
     delivery_surface: "driver_app";
@@ -2728,9 +2728,9 @@ type AdminDriverReassignmentRpcRecord = {
     notification_status: "queued";
     notification_type: "booking_status";
     priority: "urgent";
-    safe_message: "Job reassigned, do not proceed.";
+    safe_message: "Job reassigned, do not proceed." | "Job cancel, do not proceed.";
     safe_title: "Prestige Driver";
-    workflow_area: "driver_reassignment";
+    workflow_area: "driver_reassignment" | "driver_assignment_cancellation";
   };
   previous_driver_id: number;
 };
@@ -2750,6 +2750,9 @@ function normalizeAdminDriverReassignmentRpcRecord(
   const bookingReference = textOrNull(record.booking_reference);
   const previousDriverId = positiveSafeInteger(record.previous_driver_id);
   const newDriverId = positiveSafeInteger(record.new_driver_id);
+  const cancellation = record.new_driver_id === null;
+  const safeMessage = cancellation ? "Job cancel, do not proceed." : "Job reassigned, do not proceed.";
+  const workflowArea = cancellation ? "driver_assignment_cancellation" : "driver_reassignment";
   const notificationId = uuidOrNull(notification.id);
   const notificationLinkId = notification.driver_job_link_id === null
     ? null
@@ -2762,7 +2765,7 @@ function normalizeAdminDriverReassignmentRpcRecord(
     !bookingId ||
     !bookingReference ||
     !previousDriverId ||
-    !newDriverId ||
+    (!cancellation && !newDriverId) ||
     !notificationId ||
     (notification.driver_job_link_id !== null && !notificationLinkId) ||
     expiredLinkIds.length !== asArray(record.expired_link_ids).length ||
@@ -2771,9 +2774,9 @@ function normalizeAdminDriverReassignmentRpcRecord(
     notification.notification_status !== "queued" ||
     notification.notification_type !== "booking_status" ||
     notification.priority !== "urgent" ||
-    notification.safe_message !== "Job reassigned, do not proceed." ||
+    notification.safe_message !== safeMessage ||
     notification.safe_title !== "Prestige Driver" ||
-    notification.workflow_area !== "driver_reassignment"
+    notification.workflow_area !== workflowArea
   ) {
     return null;
   }
@@ -2791,9 +2794,9 @@ function normalizeAdminDriverReassignmentRpcRecord(
       notification_status: "queued",
       notification_type: "booking_status",
       priority: "urgent",
-      safe_message: "Job reassigned, do not proceed.",
+      safe_message: safeMessage,
       safe_title: "Prestige Driver",
-      workflow_area: "driver_reassignment",
+      workflow_area: workflowArea,
     },
     previous_driver_id: previousDriverId,
   };
@@ -2807,9 +2810,10 @@ async function applyAdminDriverReassignmentTransaction(
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
   const expectedUpdatedAt = textOrNull(input.expected_updated_at);
   const previousDriverId = positiveSafeInteger(existing.driver_id);
-  const newDriverId = positiveSafeInteger(input.booking.driver_id);
+  const cancellation = input.update_mode === "driver_assignment_cancel";
+  const newDriverId = cancellation ? null : positiveSafeInteger(input.booking.driver_id);
 
-  if (!expectedUpdatedAt || !previousDriverId || !newDriverId) {
+  if (!expectedUpdatedAt || !previousDriverId || (!cancellation && !newDriverId)) {
     return {
       error: safeUpdateError,
       ok: false,
@@ -2838,12 +2842,20 @@ async function applyAdminDriverReassignmentTransaction(
   if (error) {
     const errorCode = textOrNull(asRecord(error).code)?.toUpperCase() || "";
 
+    const cancellationReasons: Record<string, string> = {
+      "A terminal booking cannot have its Driver removed.": "This booking is completed or cancelled. Its driver cannot be removed here.",
+      "Use the existing Driver Pool cancellation control for this assignment.": "Use Cancel Driver Assignment in this job's Driver Pool card.",
+      "Trip reporting or location sharing has started. Review the trip before changing its Driver.": "Driver was not removed. Trip reporting has started; review this job before changing its driver.",
+      "Another Driver has an active link. Review the current assignment first.": "Another driver has an active Job Link. Reload the job and review its assignment first.",
+    };
     if (["22023", "40001", "P0002"].includes(errorCode)) {
       return {
         error:
           errorCode === "40001"
             ? safeUpdateConflictError
-            : "Verified Driver reassignment was rejected safely. Reload the booking and Driver Database before trying again.",
+            : cancellation
+              ? cancellationReasons[textOrNull(asRecord(error).message) || ""] || "Driver was not removed. Reload this booking before trying again."
+              : "Verified Driver reassignment was rejected safely. Reload the booking and Driver Database before trying again.",
         ok: false,
         operation: "booking_row",
         status: 409,
@@ -3104,6 +3116,16 @@ export async function updateAdminBookingThroughSupabaseAdapter(
       status: 409,
       error: safeUpdateConflictError,
     };
+  }
+
+  if (input.update_mode === "driver_assignment_cancel") {
+    // Explicit action only: a missing replacement in the normal save mode is never cancellation.
+    if (!expectedUpdatedAt || !positiveSafeInteger(existing.driver_id) ||
+        input.booking.driver_id != null || input.booking.driver_name != null ||
+        input.booking.driver_contact != null || input.booking.driver_plate_number != null) {
+      return { ok: false, status: 409, error: "Reload the saved booking before cancelling its current driver assignment." };
+    }
+    return applyAdminDriverReassignmentTransaction(client, input, actor, existing);
   }
 
   if (input.update_mode === "driver_assignment") {

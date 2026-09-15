@@ -1241,6 +1241,43 @@ try {
     "reassignment must load subscriptions only for the replaced driver",
   );
 
+  // Cancellation uses the same sender and badge mechanism, bound to the stored old recipient.
+  const cancelInput = {
+    booking_reference: "PRIVATE-BOOKING-REFERENCE", delivery_surface: "driver_app",
+    driver_job_link_id: null, notification_id: "22222222-2222-4222-8222-222222222222",
+    recipient_driver_id: 8, safe_message: "Job cancel, do not proceed.",
+    workflow_area: "driver_assignment_cancellation",
+  };
+  const cancelNotice = { driver_job_link_id: null, workflow_area: cancelInput.workflow_area,
+    safe_message: cancelInput.safe_message,
+    safe_context: {audience: "cancelled_driver", source: "cancel_driver_assignment", recipient_driver_id: 8} };
+  let cancelNativeBody = null;
+  const cancelClient = createMockClient({notificationOverrides: cancelNotice, subscriptions: [{
+    auth: "native_expo_push_token", endpoint: nativeExpoPushToken,
+    p256dh: "native_expo_push_token", source_surface: "driver_native_ios",
+  }]});
+  const cancelled = await helper.sendDriverDevicePushAlertForAppUpdate(cancelClient, cancelInput, {
+    env: configuredEnv, nativePushSender: async (_token, _key, _target, body) => { cancelNativeBody = body; },
+  });
+  assert.equal(cancelled.ok, true);
+  assert.equal(cancelNativeBody, "Job cancel, do not proceed.");
+  assert.equal(cancelClient.calls.some(call => call.table === "driver_job_links"), false,
+    "Already revoked or missing links must not prevent the old driver's cancellation alert");
+  assert.equal(cancelClient.calls.some(call => call.table === "driver_device_push_subscriptions" &&
+    call.filters.some(([field,value]) => field === "driver_id" && value === 8)), true);
+  for (const overrides of [
+    {safe_context: {...cancelNotice.safe_context, recipient_driver_id: 9}},
+    {booking_reference: "OTHER-BOOKING"},
+    {safe_message: "Untrusted message"},
+    {driver_job_link_id: "11111111-1111-4111-8111-111111111111"},
+  ]) {
+    let attempts = 0;
+    const rejected = await helper.sendDriverDevicePushAlertForAppUpdate(
+      createMockClient({notificationOverrides: {...cancelNotice,...overrides}, subscriptions:[{}]}), cancelInput,
+      {env: configuredEnv, pushSender: async () => { attempts++; }, nativePushSender: async () => { attempts++; }});
+    assert.equal(rejected.ok,false);assert.equal(attempts,0,"Wrong recipient/booking/notice must never send");
+  }
+
   let invalidReassignmentProviderRequests = 0;
   const activeLinkReassignment = await helper.sendDriverDevicePushAlertForAppUpdate(
     createMockClient({ linkStatus: "active", subscriptions: [{}] }),

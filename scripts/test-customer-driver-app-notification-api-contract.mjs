@@ -562,6 +562,8 @@ class MockSupabaseClient {
       return filter.conditions.every((condition) => this.rowMatchesFilter(row, condition));
     }
 
+    if (filter.type === "neq") return row[filter.column] != null && row[filter.column] !== filter.value;
+
     if (filter.type === "is") {
       return row[filter.column] === null || row[filter.column] === undefined;
     }
@@ -2593,6 +2595,9 @@ try {
     setEnv(validEnv());
     const driverGetMock = installMockClient({
       [notificationTable]: [
+        seededNotification({booking_reference: "BOOK-DRIVER-NOTIFY-001", delivery_surface: "driver_app",
+          driver_job_link_id: null, id: "cancelled-old-driver-notice", workflow_area: "driver_assignment_cancellation",
+          safe_message: "Job cancel, do not proceed.", safe_context: {recipient_driver_id: 99}}),
         seededNotification({
           booking_reference: "BOOK-DRIVER-NOTIFY-001",
           created_at: "2026-06-08T01:00:00.000Z",
@@ -2689,6 +2694,10 @@ try {
       driverNotificationRead.filters,
       [
         { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
+        { type: "or", conditions: [
+          { column: "workflow_area", type: "is", value: null },
+          { column: "workflow_area", type: "neq", value: "driver_assignment_cancellation" },
+        ] },
         {
           conditions: [
             {
@@ -2894,6 +2903,10 @@ try {
         { column: "id", type: "eq", value: "notification-driver-safe-one" },
         { column: "delivery_surface", type: "eq", value: "driver_app" },
         { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
+        { type: "or", conditions: [
+          { column: "workflow_area", type: "is", value: null },
+          { column: "workflow_area", type: "neq", value: "driver_assignment_cancellation" },
+        ] },
         {
           conditions: [
             { column: "driver_job_link_id", type: "is", value: null },
@@ -3003,6 +3016,10 @@ try {
         { column: "id", type: "eq", value: "notification-driver-other-link" },
         { column: "delivery_surface", type: "eq", value: "driver_app" },
         { column: "booking_reference", type: "eq", value: "BOOK-DRIVER-NOTIFY-001" },
+        { type: "or", conditions: [
+          { column: "workflow_area", type: "is", value: null },
+          { column: "workflow_area", type: "neq", value: "driver_assignment_cancellation" },
+        ] },
         {
           conditions: [
             { column: "driver_job_link_id", type: "is", value: null },

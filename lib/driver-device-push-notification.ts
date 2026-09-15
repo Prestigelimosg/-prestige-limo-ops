@@ -145,6 +145,7 @@ type DriverNativePushVisibleBody =
   | DriverPoolWinnerVisibleBody
   | DriverPoolAssignmentCancelledVisibleBody
   | "Job reassigned, do not proceed."
+  | "Job cancel, do not proceed."
   | "Job update available"
   | "Job updated. Tap to review."
   | "Job acknowledgement needed. Tap to review."
@@ -161,6 +162,7 @@ type DriverDevicePushPayload = {
     | DriverPoolWinnerVisibleBody
     | DriverPoolAssignmentCancelledVisibleBody
     | "Job reassigned, do not proceed."
+    | "Job cancel, do not proceed."
     | "New Driver Job app update. Tap to review."
     | "New Driver Job issued. Tap to review."
     | "Job updated. Tap to review."
@@ -705,6 +707,9 @@ async function resolveReassignedDriverNotificationTarget(
   client: DriverDevicePushClient,
   input: DriverDevicePushAlertInput,
 ): Promise<ReassignedDriverNotificationTarget | null> {
+  const cancellation = input.workflow_area === "driver_assignment_cancellation";
+  const workflowArea = cancellation ? "driver_assignment_cancellation" : "driver_reassignment";
+  const message = cancellation ? "Job cancel, do not proceed." : "Job reassigned, do not proceed.";
   const notificationId = safeUuid(input.notification_id);
   const bookingReference = safeText(input.booking_reference, 120);
   const recipientDriverId = safePositiveInteger(input.recipient_driver_id);
@@ -717,8 +722,8 @@ async function resolveReassignedDriverNotificationTarget(
     !bookingReference ||
     !recipientDriverId ||
     input.delivery_surface !== "driver_app" ||
-    input.workflow_area !== "driver_reassignment" ||
-    input.safe_message !== "Job reassigned, do not proceed." ||
+    input.workflow_area !== workflowArea ||
+    input.safe_message !== message ||
     (input.driver_job_link_id !== null && !requestedLinkId)
   ) {
     return null;
@@ -744,11 +749,12 @@ async function resolveReassignedDriverNotificationTarget(
     notification.priority !== "urgent" ||
     notification.delivery_surface !== "driver_app" ||
     notification.booking_reference !== bookingReference ||
-    notification.workflow_area !== "driver_reassignment" ||
+    notification.workflow_area !== workflowArea ||
     notification.safe_title !== "Prestige Driver" ||
-    notification.safe_message !== "Job reassigned, do not proceed." ||
-    safeContext.audience !== "replaced_driver" ||
-    safeContext.source !== "save_driver_assignment" ||
+    notification.safe_message !== message ||
+    safeContext.audience !== (cancellation ? "cancelled_driver" : "replaced_driver") ||
+    safeContext.source !== (cancellation ? "cancel_driver_assignment" : "save_driver_assignment") ||
+    (cancellation && (storedLinkId !== null || safePositiveInteger(safeContext.recipient_driver_id) !== recipientDriverId)) ||
     storedLinkId !== requestedLinkId
   ) {
     return null;
@@ -827,10 +833,10 @@ function safePayload(linkId: string, messagePreview: DriverMessagePreview | null
   };
 }
 
-function reassignmentPayload(targetId: string): DriverDevicePushPayload {
+function reassignmentPayload(targetId: string, cancellation = false): DriverDevicePushPayload {
   const jobKey = opaqueDriverJobLinkKey(targetId);
   return {
-    body: "Job reassigned, do not proceed.",
+    body: cancellation ? "Job cancel, do not proceed." : "Job reassigned, do not proceed.",
     job_key: jobKey,
     tag: `prestige-driver-update-${jobKey.slice(0, 24)}`,
     title: "Prestige Limo Ops",
@@ -1378,13 +1384,13 @@ export async function sendDriverDevicePushAlertForAppUpdate(
     });
   }
 
-  if (input.workflow_area === "driver_reassignment") {
+  if (input.workflow_area === "driver_reassignment" || input.workflow_area === "driver_assignment_cancellation") {
     const target = await resolveReassignedDriverNotificationTarget(client, input);
     if (!target) {
       return alertResult("invalid_driver_link", { enabled: true });
     }
 
-    const payload = reassignmentPayload(target.targetId);
+    const payload = reassignmentPayload(target.targetId, input.workflow_area === "driver_assignment_cancellation");
     return sendPayloadToDriverSubscriptions(
       client,
       target.driverId,
@@ -1392,7 +1398,7 @@ export async function sendDriverDevicePushAlertForAppUpdate(
       config,
       options,
       null,
-      "Job reassigned, do not proceed.",
+      input.workflow_area === "driver_assignment_cancellation" ? "Job cancel, do not proceed." : "Job reassigned, do not proceed.",
       payload.job_key,
     );
   }

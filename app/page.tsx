@@ -19161,6 +19161,9 @@ export default function Home() {
     assignedDriverPoolAdminOffer?.booking_reference === loadedDriverPoolBookingReference
       ? assignedDriverPoolAdminOffer
       : null;
+  const canCancelLoadedDriverAssignment = Boolean(
+    appliedAdminBookingSnapshot?.driver_id && !currentAssignedDriverPoolAdminOffer,
+  );
   const customerLiveLocation = useMemo(
     () => customerLiveLocationState(booking, currentTimeMs),
     [booking, currentTimeMs],
@@ -26700,9 +26703,10 @@ export default function Home() {
   }
 
   async function updateAppliedAdminBookingOperationalSnapshot(
-    options: { assignmentOnly?: boolean } = {},
+    options: { assignmentOnly?: boolean; cancelDriverAssignment?: boolean } = {},
   ) {
-    const assignmentOnly = options.assignmentOnly === true;
+    const cancelDriverAssignment = options.cancelDriverAssignment === true;
+    const assignmentOnly = options.assignmentOnly === true || cancelDriverAssignment;
     const targetBookingReference =
       cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
       cleanReferenceText(appliedAdminBookingSnapshotReference) ||
@@ -26718,7 +26722,29 @@ export default function Home() {
       return;
     }
 
-    if (assignmentOnly) {
+    if (cancelDriverAssignment) {
+      const baseline = loadedAdminBookingBaselineRef.current;
+      const failure = !baseline || baseline.bookingReference !== targetBookingReference ||
+        !appliedAdminBookingSnapshot?.driver_id
+        ? "Load the saved booking with its assigned driver before cancelling."
+        : currentAssignedDriverPoolAdminOffer
+          ? "Use Cancel Driver Assignment in the Driver Pool card below."
+          : appliedAdminBookingSnapshotIsPendingCustomerRequest
+            ? "Review this customer booking request before changing its assignment."
+            : loadedDriverAssignmentDiffersFromBaseline ||
+                !adminBookingFormMatchesLoadedBaselineOutsideDriverAssignment(booking, baseline.form)
+              ? "There are unsaved changes. Save or reload this booking before cancelling its current driver."
+              : null;
+      if (failure) {
+        const notice = { tone: "error", text: failure } satisfies Message;
+        setAdminBookingPersistenceMessage(notice); setMessage(notice); setBookingSaveMessage(notice);
+        setAdminDriverJobLinkState((current) => ({ ...current, message: notice }));
+        return;
+      }
+      if (!window.confirm(`Remove ${appliedAdminBookingSnapshot?.driver_name || "the assigned driver"} from job ${appliedAdminBookingSnapshot?.public_booking_reference || targetBookingReference}? Their access will stop and a cancellation alert will be queued. Booking stays active.`)) return;
+    }
+
+    if (assignmentOnly && !cancelDriverAssignment) {
       const baseline = loadedAdminBookingBaselineRef.current;
       const verifiedDriverId = adminDispatchVerifiedIdentityId(booking.driverId);
       const verifiedDriver = driverAssignmentDisplayDrivers.find(
@@ -26996,6 +27022,13 @@ export default function Home() {
       payload.booking.short_notice_review_status = "reviewed";
     }
 
+    if (cancelDriverAssignment) {
+      payload.booking.driver_id = null;
+      payload.booking.driver_name = null;
+      payload.booking.driver_contact = null;
+      payload.booking.driver_plate_number = null;
+    }
+
     setAdminBookingPersistenceAction("update");
     setAdminBookingPersistenceMessage({
       tone: "info",
@@ -27004,12 +27037,13 @@ export default function Home() {
         : "Updating applied operational booking fields...",
     });
 
+    let cancellationFailureMessage = "Could not confirm cancellation. Reload the job before trying again.";
     try {
       const response = await fetch("/api/admin-bookings", {
         body: JSON.stringify({
           expected_updated_at: expectedUpdatedAt,
           target_booking_reference: targetBookingReference,
-          update_mode: assignmentOnly ? "driver_assignment" : undefined,
+          update_mode: cancelDriverAssignment ? "driver_assignment_cancel" : assignmentOnly ? "driver_assignment" : undefined,
           ...payload,
         }),
         headers: {
@@ -27021,6 +27055,7 @@ export default function Home() {
       const result = await response.json();
 
       if (!response.ok || !result?.ok) {
+        if (cancelDriverAssignment && [400, 409].includes(response.status) && clean(result?.error)) cancellationFailureMessage = clean(result.error);
         throw new Error(adminBookingPersistenceFailureDetail(result, "Admin booking update failed."));
       }
 
@@ -27045,15 +27080,17 @@ export default function Home() {
           ...bookingRecordToForm(
             adminBookingPersistenceRecordToCalendarBookingRecord(updatedBooking),
           ),
-          driverContact: booking.driverContact,
-          driverId: booking.driverId,
-          driverName: booking.driverName,
-          driverPlate: booking.driverPlate,
-          driverVehicleModel: booking.driverVehicleModel,
+          driverContact: cancelDriverAssignment ? "" : booking.driverContact,
+          driverId: cancelDriverAssignment ? "" : booking.driverId,
+          driverName: cancelDriverAssignment ? "" : booking.driverName,
+          driverPlate: cancelDriverAssignment ? "" : booking.driverPlate,
+          driverVehicleModel: cancelDriverAssignment ? "" : booking.driverVehicleModel,
         };
         const assignmentMessage = {
           tone: "success",
-          text: `Driver assignment saved: ${updatedBookingReference}. Create Link is ready. Operations Calendar will receive the confirmed plate after Driver Save & Acknowledge Job; Update + Cal remains available for recovery.`,
+          text: cancelDriverAssignment
+            ? "Driver cancelled. Alert queued. Booking stays active."
+            : `Driver assignment saved: ${updatedBookingReference}. Create Link is ready. Operations Calendar will receive the confirmed plate after Driver Save & Acknowledge Job; Update + Cal remains available for recovery.`,
         } satisfies Message;
 
         lastSuccessfulBookingSaveRef.current = {
@@ -27065,6 +27102,9 @@ export default function Home() {
         setAppliedDraftDriverAssignmentSignature(
           draftDriverAssignmentSignature(retainedAssignmentBooking),
         );
+        if (cancelDriverAssignment) {
+          setAdminDriverJobLinkState({ action: null, link: null, loadedReference: updatedBookingReference, message: assignmentMessage, oneTimeUrl: "" });
+        }
         setAdminBookingPersistenceMessage(assignmentMessage);
         setMessage(assignmentMessage);
         setBookingSaveMessage(assignmentMessage);
@@ -27117,7 +27157,7 @@ export default function Home() {
       setMessage(updateMessage);
       setBookingSaveMessage(updateMessage);
     } catch (error) {
-      const failureText = adminBookingPersistenceFailureMessage("update", error);
+      const failureText = cancelDriverAssignment ? cancellationFailureMessage : adminBookingPersistenceFailureMessage("update", error);
       const updateMessage = {
         tone: "error",
         text: /another device|saved version|conflict/i.test(failureText)
@@ -27128,6 +27168,7 @@ export default function Home() {
       setAdminBookingPersistenceMessage(updateMessage);
       setMessage(updateMessage);
       setBookingSaveMessage(updateMessage);
+      if (cancelDriverAssignment) setAdminDriverJobLinkState((current) => ({ ...current, message: updateMessage }));
     } finally {
       setAdminBookingPersistenceAction(null);
     }
@@ -49607,11 +49648,17 @@ export default function Home() {
                           )
                         }`}
                         data-revoke-driver-job-link-button="true"
-                        disabled={!activeAdminDriverJobLink || adminDriverJobLinkState.action !== null}
-                        onClick={revokeDriverJobLink}
+                        data-admin-cancel-driver-assignment={canCancelLoadedDriverAssignment ? "true" : undefined}
+                        disabled={adminDriverJobLinkState.action !== null || adminBookingPersistenceAction !== null ||
+                          (!canCancelLoadedDriverAssignment && !activeAdminDriverJobLink)}
+                        onClick={canCancelLoadedDriverAssignment
+                          ? () => void updateAppliedAdminBookingOperationalSnapshot({ cancelDriverAssignment: true })
+                          : revokeDriverJobLink}
                         type="button"
                       >
-                        {driverJobLinkRevokeButtonLabel}
+                        {canCancelLoadedDriverAssignment
+                          ? adminBookingPersistenceAction === "update" ? "Cancelling..." : "Cancel Driver"
+                          : driverJobLinkRevokeButtonLabel}
                       </button>
                     </div>
                     {driverJobLinkCopyMessage?.tone === "error" ? (

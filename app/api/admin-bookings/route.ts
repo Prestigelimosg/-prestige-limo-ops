@@ -435,7 +435,7 @@ export async function PATCH(request: Request) {
       return adminBookingFailureResponse(result);
     }
 
-    const customerNotification = await maybeQueueCustomerRequestDecisionNotification(
+    const customerNotification = parsed.data.update_mode === "driver_assignment_cancel" ? null : await maybeQueueCustomerRequestDecisionNotification(
       parsed.data,
       actor,
       previousBooking.data,

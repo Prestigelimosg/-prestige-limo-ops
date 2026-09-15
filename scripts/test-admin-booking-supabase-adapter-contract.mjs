@@ -1078,6 +1078,9 @@ function assertCreatedClient(mock) {
   });
 }
 
+export { loadHarness, canonicalAdminPayload, canonicalAdminUpdatePayload, installMockClient, adminActor, adminAudit, setEnv, restoreEnv };
+
+if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
 const harness = await loadHarness();
 
 try {
@@ -3005,3 +3008,5 @@ try {
 }
 
 console.log("Admin booking Supabase adapter mocked contract tests passed.");
+
+}

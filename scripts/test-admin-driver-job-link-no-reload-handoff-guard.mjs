@@ -73,6 +73,82 @@ const primaryActionBlock = between(
 );
 const postSuccessFormAction = compilePostSuccessFormAction();
 
+// Execute the existing saved-record handoff, including its real mapper. Display-only
+// dependencies are stubbed; no database, Calendar or notification action is called.
+function compileSavedRecordHandoff() {
+  const runtimeSource = [
+    functionSource("adminDispatchVerifiedIdentityId"),
+    functionSource("adminBookingPersistenceRecordToCalendarBookingRecord"),
+    functionSource("retainSavedBookingForDriverJobLinkHandoff"),
+    "module.exports = { retainSavedBookingForDriverJobLinkHandoff };",
+  ].join("\n");
+  const compiled = ts.transpileModule(runtimeSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  let loaded;
+  const display = {
+    clean: (value) => String(value ?? "").trim(),
+    adminSnapshotSortedRoutePoints: (record) => record.route_points || [],
+    adminBookingPersistenceRoutePointLocation: (point) => point?.location_text || "",
+    adminBookingPersistenceRouteSummary: (record) => record.route_summary || "",
+    adminBookingPersistencePickupDateTime: (record) => record.pickup_at || "",
+    safeAdminBookingPersistenceCount: (value) => Number(value) || null,
+    adminBookingPersistenceCustomerDisplayName: (record) => record.customer_display_name || "",
+    billingIdentityBaseAccount: (value) => value,
+    adminBookingPersistenceServiceType: (record) => record.service_type || "",
+    adminSnapshotFlightReference: () => "",
+    adminBookingPersistencePassengerDisplayName: (record) => record.passenger_name || "",
+    formatPickupTimeFromTimestamp: () => "1200hrs",
+    adminBookingPersistencePrimaryStatus: () => "Draft",
+    loadSelectedBooking: (record, options) => { loaded = { record, options }; },
+  };
+  const runtimeModule = { exports: {} };
+  new Function("module", "exports", ...Object.keys(display), compiled)(
+    runtimeModule, runtimeModule.exports, ...Object.values(display),
+  );
+  return (record) => {
+    runtimeModule.exports.retainSavedBookingForDriverJobLinkHandoff(record);
+    return loaded;
+  };
+}
+
+const handoffSavedRecord = compileSavedRecordHandoff();
+for (const [inputId, expectedId] of [[401, 401], ["402", 402], [null, null], ["", null], [0, null], ["invalid", null]]) {
+  const saved = {
+    booking_reference: "LOCAL-AMENDMENT-REVIEW",
+    driver_id: inputId,
+    driver_name: "Synthetic Driver",
+    driver_contact: "80000000",
+    driver_plate_number: "QA1234",
+    service_type: "TRF",
+    pickup_at: "2030-01-01T04:00:00Z",
+  };
+  for (const service of ["TRF", "DSP", "DEP"]) {
+    saved.service_type = service;
+    const result = handoffSavedRecord(saved);
+    assert.equal(result.record.driver_id, expectedId,
+      `saved ${service} handoff must retain the verified driver ID, including repeated amendments`);
+    assert.equal(result.record.booking_reference, saved.booking_reference);
+    assert.equal(result.record.booking_type, service);
+    assert.equal(result.record.driver_name, saved.driver_name);
+    assert.equal(result.record.driver_contact, saved.driver_contact);
+    assert.equal(result.record.driver_plate_number, saved.driver_plate_number);
+    assert.equal(result.options.adminBookingRecordOverride, saved);
+    assert.equal(result.options.focusDriverJobLink, true);
+    assert.equal(result.options.bookingFormOverride, undefined);
+  }
+}
+
+assert.match(functionSource("bookingRecordToForm"),
+  /bookingRecordToOperationalFormFields\(bookingRecord\)/,
+  "the existing form must consume the retained operational fields");
+assert.match(functionSource("bookingRecordToOperationalFormFields"),
+  /driverId: bookingRecord\.driver_id \? String\(bookingRecord\.driver_id\) : ""/,
+  "the retained record must supply the existing form's verified driver selection");
+assert.match(functionSource("buildAdminBookingPersistencePayload"),
+  /driver_id: adminDispatchVerifiedIdentityId\(bookingValue\.driverId\)/,
+  "later amendments must carry that selection through the existing booking payload");
+
 for (const testCase of [
   {
     expected: "reset",

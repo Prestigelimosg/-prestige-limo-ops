@@ -19,9 +19,15 @@ try {
   if(name==='driver') source=source.replace('import { PublicAppBuildMarker } from "@/app/public-app-build-marker";', 'const PublicAppBuildMarker = () => null;');
   await writeFile(path.join(temp,name+'.js'),ts.transpileModule(source,{compilerOptions}).outputText);
  }
+ for(const [name,file] of [['driver-account-setup','app/driver-portal/driver-account-setup.tsx'],['driver-account-password','lib/driver-account-password.ts']]) {
+  const source=(await readFile(file,'utf8')).replace('../../lib/driver-account-password','./driver-account-password');
+  await writeFile(path.join(temp,name+'.js'),ts.transpileModule(source,{compilerOptions}).outputText);
+ }
  const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import {AdminDriverPoolControl} from './admin';import Driver from './driver';
  const drivers=Array.from({length:location.pathname==='/large'?501:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:location.pathname==="/readiness"&&i===9?"VVV":"AVF",plate_number:'QA100'+(i+1),availability_status:'available'}));
  const base={offer_key:'a'.repeat(64),offer_status:'open',audience:'selected',selection_mode:'first_accept',response_status:'pending',offer_payout_sgd:100,recipient_count:10,push_target_count:0,closes_at:'2099-09-15T12:00:00Z',pickup_at:'2099-09-15T12:00:00Z',public_booking_reference:'99001',safe_pickup_area:'After assignment',safe_dropoff_area:'After assignment',safe_trip_summary:'TRF',updated_at:'2026-09-14T00:00:00.123456Z',safe_vehicle_label:'AVF'};
+ base.safe_pickup_area='Synthetic Hotel lobby';base.safe_dropoff_area='Synthetic Airport terminal';
+ base.safe_job_details={route:'Synthetic Hotel > Synthetic intermediate stop > Synthetic Airport',flight_number:'QA123',passengers:3,luggage:2,child_seat:'1 booster seat',instructions:'Meet at the lobby. '+ 'Long instruction '.repeat(25),scheduled_end_at:'2099-09-15T15:00:00Z'};
  let offer=null;let driverJobs=[{...base,audience:location.pathname==='/driver-wide'?'wider':'selected'}];
  window.poolTest={requests:[],loads:[],cancelled:[],confirmations:[],allowConfirm:true,failCancel:false,failAccept:false,failDecline:false,failReadiness:false,win:()=>{offer.offer_status='assigned';offer.assignment={driver_name:'Synthetic Driver 1',plate_number:'QA1001',can_cancel:true,blocked_reason:null,has_job_link:false};},block:()=>{offer.assignment={...offer.assignment,can_cancel:false,blocked_reason:'This booking changed after acceptance. Review the saved assignment before cancelling.'};},remove:()=>{driverJobs=[];}};
  window.confirm=(message)=>{window.poolTest.confirmations.push(message);return window.poolTest.allowConfirm;};
@@ -142,6 +148,11 @@ try {
   assert.equal(await evaluate("window.poolTest.requests.filter(r=>r.method==='PATCH'&&!r.body.action).length"),1);
   for (const driverPath of ['/driver','/driver-wide']) {
     await client.send('Page.navigate',{url:url+driverPath});await wait("[...document.querySelectorAll('button')].some(b=>b.textContent==='Accept')");
+    for(const detail of ['Synthetic Hotel lobby','Synthetic Airport terminal','Synthetic intermediate stop','QA123','Passengers','Luggage','1 booster seat','Meet at the lobby.','Scheduled end']) {
+      assert.equal(await evaluate(`document.querySelector('[data-driver-pool-offer]').innerText.toLowerCase().includes(${JSON.stringify(detail.toLowerCase())})`),true,detail);
+    }
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Trip details overflow at ${width}`);
+    const tripShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-trip-details-'+width+driverPath.replace('/','-')+'.png',Buffer.from(tripShot.data,'base64'));
     assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>['Available','Pending','Cancel'].includes(b.textContent))"),false);
     await wait("[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Alerts 1')");
     await evaluate('window.poolTest.failAccept=true');await click('Accept');await wait("document.body.innerText.includes('schedule_conflict')");

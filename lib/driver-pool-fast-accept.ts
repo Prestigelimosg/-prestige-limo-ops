@@ -86,6 +86,15 @@ export type DriverPoolAvailableJob = {
   public_booking_reference: string;
   safe_dropoff_area: string;
   safe_pickup_area: string;
+  safe_job_details: {
+    route: string | null;
+    flight_number: string | null;
+    passengers: number | null;
+    luggage: number | null;
+    child_seat: string | null;
+    instructions: string | null;
+    scheduled_end_at: string | null;
+  };
   safe_trip_summary: string | null;
   safe_vehicle_label: string | null;
   updated_at: string;
@@ -653,11 +662,21 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
     const pickup = timestamp(row.pickup_at); const closes = timestamp(row.closes_at); const updated = exactConcurrencyTimestamp(row.updated_at);
     const publicRef = text(row.public_booking_reference, 120);
     if (!key || !payout || !pickup || !closes || !updated || !publicRef) return null;
+    const details = asRecord(row.safe_job_details);
+    const passengers = details.passengers;
+    const luggage = details.luggage;
     return { selection_mode: row.selection_mode === "admin" ? "admin" : "first_accept",
       response_status: row.response_status === "awaiting_admin" ? "awaiting_admin" : "pending",
       offer_key: key, public_booking_reference: publicRef, offer_payout_sgd: payout,
-      pickup_at: pickup, closes_at: closes, safe_pickup_area: text(row.safe_pickup_area) || "Available after assignment",
-      safe_dropoff_area: text(row.safe_dropoff_area) || "Available after assignment",
+      pickup_at: pickup, closes_at: closes, safe_pickup_area: text(row.safe_pickup_area, 1000) || "Pickup not provided",
+      safe_dropoff_area: text(row.safe_dropoff_area, 1000) || "Drop-off not provided",
+      safe_job_details: {
+        route: text(details.route, 2000), flight_number: text(details.flight_number, 120),
+        passengers: typeof passengers === "number" && Number.isSafeInteger(passengers) && passengers > 0 ? passengers : null,
+        luggage: typeof luggage === "number" && Number.isSafeInteger(luggage) && luggage >= 0 ? luggage : null,
+        child_seat: text(details.child_seat, 160), instructions: text(details.instructions, 1200),
+        scheduled_end_at: timestamp(details.scheduled_end_at),
+      },
       safe_vehicle_label: text(row.safe_vehicle_label, 120), safe_trip_summary: text(row.safe_trip_summary, 120), updated_at: updated };
   }).filter((job): job is DriverPoolAvailableJob => Boolean(job));
   return { data: { enabled: true, has_more: result.has_more === true, jobs: mapped }, ok: true } as const;

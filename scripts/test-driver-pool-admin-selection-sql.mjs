@@ -28,6 +28,14 @@ if (postgresPath) {
 try {
   const fixture = fs.readFileSync('scripts/test-driver-pool-vehicle-postgres.py','utf8').match(/sql\("""\n(create role[\s\S]*?)"""\)/)[1];
   await db.exec(fixture);
+  await db.exec(`alter table bookings
+    add column pickup_location text, add column pickup_address text,
+    add column dropoff_location text, add column dropoff_address text,
+    add column route_summary text, add column route text, add column flight_no text,
+    add column pax_count integer, add column pax integer, add column luggage_count integer,
+    add column child_seat_required boolean, add column child_seat_count integer,
+    add column child_seat_type text, add column customer_special_request text,
+    add column customer_price numeric, add column driver_notes text, add column remarks text;`);
   const migrations = ['202606090002_driver_portal_bidding_foundation.sql','20260904112430_driver_pool_fast_accept.sql','20260904125321_driver_pool_completion_repair.sql','20260904190552_driver_pool_exact_concurrency_tokens.sql','20260905012642_driver_pool_admin_cancel_assigned_offer.sql','20260909171426_driver_pool_vehicle_requirement.sql'];
   for (const name of migrations) await db.exec(fs.readFileSync('supabase/migrations/'+name,'utf8'));
   const q = async (sql, args=[]) => (await db.query(sql,args)).rows;
@@ -56,6 +64,47 @@ try {
   const widen = (o,key=randomUUID()) => val("select publish_driver_pool_offer('POOL-QA',$1,100,$2,'admin','Synthetic Admin','AVF',null,$3) result",[o.offer.updated_at,key,o.offer.offer_key]);
   const list = id => val('select list_driver_pool_available_jobs($1,1,20) result',[id]);
   const assigned = async () => { const id=(await q("select driver_id from bookings where booking_reference='POOL-QA'"))[0].driver_id; return id === null ? null : Number(id); };
+  const tripMigration = fs.readdirSync('supabase/migrations').find(name => name.endsWith('_driver_pool_visible_trip_details.sql'));
+  if (tripMigration) await db.exec(fs.readFileSync('supabase/migrations/'+tripMigration,'utf8'));
+  for (const audience of [[1,2],[]]) {
+    await reset();
+    const offer = await publish(audience);
+    await db.exec(`update bookings set pickup_location='Synthetic Hotel', dropoff_location='Synthetic Airport',
+      route_summary='Synthetic Hotel > Synthetic Stop > Synthetic Airport', flight_no='QA123',
+      pax_count=3, luggage_count=2, child_seat_required=true, child_seat_count=1, child_seat_type='booster seat',
+      customer_special_request='Meet at lobby', dropoff_datetime=pickup_at+interval '3 hours',
+      customer_price=999, driver_notes='PRIVATE ADMIN NOTE', remarks='PRIVATE REMARK';`);
+    const before = JSON.stringify(await q('select to_jsonb(o) as row from driver_job_bid_offers o'));
+    const job = (await list(1)).jobs[0];
+    assert.equal(job.safe_pickup_area,'Synthetic Hotel','Existing offers must expose the exact saved pickup before acceptance');
+    assert.equal(job.safe_dropoff_area,'Synthetic Airport');
+    assert.equal(job.safe_job_details.route,'Synthetic Hotel > Synthetic Stop > Synthetic Airport');
+    assert.equal(job.safe_job_details.flight_number,'QA123');
+    assert.equal(job.safe_job_details.passengers,3);
+    assert.equal(job.safe_job_details.luggage,2);
+    assert.equal(job.safe_job_details.child_seat,'1 booster seat');
+    assert.equal(job.safe_job_details.instructions,'Meet at lobby');
+    assert.ok(job.safe_job_details.scheduled_end_at);
+    assert.doesNotMatch(JSON.stringify(job),/PRIVATE|customer_price|driver_notes|remarks|"booking_reference"|passenger_phone/);
+    assert.equal(JSON.stringify(await q('select to_jsonb(o) as row from driver_job_bid_offers o')),before,'Reading details cannot mutate offers or their acceptance revision');
+    if(audience.length) assert.equal((await list(3)).jobs.length,0,'Unselected driver gets no job details');
+    assert.equal((await respond(offer,1)).reason,'accepted','Details do not change first acceptance');
+    assert.equal((await list(2)).jobs.length,0);
+  }
+  console.log('PASS selected/all existing-offer trip details, private-field exclusion and unchanged first acceptance.');
+  await reset();
+  await db.exec(`update bookings set pickup_address='Legacy pickup',dropoff_address='Legacy drop-off',pax=2;`);
+  await publish([1]);
+  const legacyTrip=(await list(1)).jobs[0];
+  assert.equal(legacyTrip.safe_pickup_area,'Legacy pickup');
+  assert.equal(legacyTrip.safe_dropoff_area,'Legacy drop-off');
+  assert.equal(legacyTrip.safe_job_details.passengers,2);
+  assert.equal(legacyTrip.safe_job_details.instructions,null);
+  assert.equal(legacyTrip.safe_job_details.scheduled_end_at,null);
+  await db.exec(`update bookings set pickup_address=null,dropoff_address=null;`);
+  const missingTrip=(await list(1)).jobs[0];
+  assert.equal(missingTrip.safe_pickup_area,'Pickup not provided');
+  assert.equal(missingTrip.safe_dropoff_area,'Drop-off not provided');
   await reset();
   await assert.rejects(publish(null), 'Missing recipient input cannot fan out');
   const allKey=randomUUID();

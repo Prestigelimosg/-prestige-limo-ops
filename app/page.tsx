@@ -11112,6 +11112,7 @@ function adminBookingPersistenceRecordToCalendarBookingRecord(
     dropoff_address: dropoffLocation,
     dropoff_location: dropoffLocation,
     dropoff_datetime: clean(record.dropoff_datetime) || null,
+    driver_id: adminDispatchVerifiedIdentityId(record.driver_id),
     driver_contact: clean(record.driver_contact) || null,
     driver_name: clean(record.driver_name) || null,
     driver_plate_number: clean(record.driver_plate_number) || null,

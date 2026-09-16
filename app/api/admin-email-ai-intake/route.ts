@@ -29,7 +29,7 @@ function isExactReviewBody(
   value: unknown,
 ): value is {
   intake_id: string;
-  processing_status: "reviewed";
+  processing_status: "reviewed" | "dismissed";
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -43,7 +43,7 @@ function isExactReviewBody(
     keys[0] === "intake_id" &&
     keys[1] === "processing_status" &&
     typeof body.intake_id === "string" &&
-    body.processing_status === "reviewed"
+    (body.processing_status === "reviewed" || body.processing_status === "dismissed")
   );
 }
 
@@ -105,7 +105,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const result = await markAdminEmailAiIntakeReviewed(body.intake_id);
+  const result = await markAdminEmailAiIntakeReviewed(body.intake_id, undefined, body.processing_status);
 
   if (!result.ok) {
     return Response.json(

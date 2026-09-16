@@ -6887,6 +6887,14 @@ async function runChromeTest() {
               (record) => String(record.id) === intakeId,
             );
 
+            if (body?.processing_status === "dismissed" && intake?.processing_status === "failed") {
+              window.__prestigeEmailClearBodies = [...(window.__prestigeEmailClearBodies || []), body];
+              if (window.__prestigeEmailClearFailure) return new Response(JSON.stringify({ok: false}), {status: 409});
+              intake.processing_status = "dismissed";
+              return new Response(JSON.stringify({external_send: false, intake_id: intakeId, ok: true,
+                processing_status: "dismissed", write_action: true}), {status: 200, headers: {"content-type": "application/json"}});
+            }
+
             if (
               intake &&
               intake.processing_status === "queued" &&
@@ -8995,7 +9003,55 @@ async function runChromeTest() {
       row.querySelector('summary')?.click();
       return { sourceVisible: row.querySelector('details')?.open, source:row.querySelector('pre')?.textContent, buttonCount:row.querySelectorAll('button').length };
     })()`);
-    assert.deepEqual(failedEmailRead,{sourceVisible:true,source:"Private original source for review only.",buttonCount:0},"Failed AI output cannot enter Create Job Card or save through a button");
+    assert.deepEqual(failedEmailRead,{sourceVisible:true,source:"Private original source for review only.",buttonCount:1},"Failed AI output has only the compact Clear action");
+    assert.equal(await evaluate(`document.querySelector('[data-email-ai-clear="failed-booking-source-fixture"]')?.textContent`), "Clear");
+    for (const width of [1440, 390]) {
+      await client.send("Emulation.setDeviceMetricsOverride", {width, height: 900, deviceScaleFactor: 1, mobile: width < 500});
+      const fits = await evaluate(`(() => {
+        const button=document.querySelector('[data-email-ai-clear="failed-booking-source-fixture"]');
+        button.scrollIntoView({block:"center"});
+        const b=button.getBoundingClientRect(), r=button.closest('article').getBoundingClientRect();
+        return b.width>0 && b.width<100 && b.left>=r.left && b.right<=r.right && b.right<=innerWidth;
+      })()`);
+      assert.equal(fits,true,"Compact Clear is visible within the card at " + width);
+      if(process.env.PRESTIGE_BOOKING_UI_FOCUS === "email-clear") {
+        const screenshot=await client.send("Page.captureScreenshot",{format:"png"});
+        await writeFile(`/private/tmp/prestige-email-clear-${width}.png`,Buffer.from(screenshot.data,"base64"));
+      }
+    }
+    await client.send("Emulation.clearDeviceMetricsOverride");
+    await evaluate(`(() => {
+      window.__emailClearOriginalConfirm=window.confirm;
+      window.__emailClearPrompts=[];
+      window.confirm=(message)=>{window.__emailClearPrompts.push(message);return false;};
+      document.querySelector('[data-email-ai-clear="failed-booking-source-fixture"]').click();
+    })()`);
+    assert.equal(await evaluate(`(window.__prestigeEmailClearBodies||[]).length`),0,"Cancelling confirmation sends nothing");
+    assert.match(await evaluate(`window.__emailClearPrompts[0]`),/99990/);
+    await evaluate(`(() => {
+      window.confirm=()=>true;window.__prestigeEmailClearFailure=true;
+      document.querySelector('[data-email-ai-clear="failed-booking-source-fixture"]').click();
+    })()`);
+    await waitForCondition(()=>evaluate(`document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"] [role="alert"]')?.textContent.includes("Refresh Dashboard")`),10000,"Clear failure retains card with actionable guidance");
+    assert.equal(await evaluate(`window.__prestigeAdminEmailAiIntake.find(r=>r.id==="failed-booking-source-fixture").processing_status`),"failed");
+    await evaluate(`(() => {
+      window.__prestigeEmailClearFailure=false;
+      document.querySelector('[data-email-ai-clear="failed-booking-source-fixture"]').click();
+    })()`);
+    await waitForCondition(()=>evaluate(`!document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]')`),10000,"Successful Clear removes only the selected card");
+    assert.deepEqual(await evaluate(`window.__prestigeEmailClearBodies`),[
+      {intake_id:"failed-booking-source-fixture",processing_status:"dismissed"},
+      {intake_id:"failed-booking-source-fixture",processing_status:"dismissed"},
+    ]);
+    const clearedSnapshot=await evaluate(`(() => {
+      const record=window.__prestigeAdminEmailAiIntake.find(r=>r.id==="failed-booking-source-fixture");
+      window.confirm=window.__emailClearOriginalConfirm;
+      [...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Refresh Dashboard")?.click();
+      return {status:record.processing_status,source:record.normalized_text};
+    })()`);
+    assert.deepEqual(clearedSnapshot,{status:"dismissed",source:"Private original source for review only."});
+    await waitForCondition(()=>evaluate(`document.querySelector('[data-dashboard-email-ai-intake-count]')?.textContent.trim()==="2 email"`),10000,"Remaining requests and count survive refresh");
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]'))`),false);
     await evaluate(`(() => {
       const source=window.__prestigeAdminEmailAiIntake.find(row=>row.id==="failed-booking-source-fixture");
       window.__prestigeAdminEmailAiIntake.push(
@@ -9019,6 +9075,12 @@ async function runChromeTest() {
       [...document.querySelectorAll("button")].find(button=>button.textContent.trim()==="Refresh Dashboard")?.click();
     })()`);
     await waitForCondition(()=>evaluate(`!document.querySelector('[data-dashboard-email-ai-intake-row="failed-booking-source-fixture"]')`),10000,"restore bounded email fixture");
+    if(process.env.PRESTIGE_BOOKING_UI_FOCUS === "email-clear") {
+      assert.equal(browserErrors.length,0);
+      assert.equal(blockedSupabaseMutationRequests.length,0);
+      console.log(JSON.stringify(reporter.summary({ok:true,focus:"email-clear",localSyntheticOnly:true,mobileAndDesktop:true})));
+      return;
+    }
 
     const openedEmailBookingReview = await evaluate(`(() => {
       const row = document.querySelector(

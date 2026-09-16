@@ -387,7 +387,13 @@ assert.match(runtimeSource, /\.lt\("created_at", usageWindow\.end\)/);
 assert.match(runtimeSource, /\.range\(pageStart, pageStart \+ tokenUsagePageSize - 1\)/);
 assert.match(runtimeSource, /markAdminEmailAiIntakeReviewed/);
 assert.match(runtimeSource, /processing_status:\s*"reviewed"/);
-assert.match(runtimeSource, /\.eq\("processing_status", "queued"\)/);
+assert.match(runtimeSource, /targetStatus: "reviewed" \| "dismissed" = "reviewed"/);
+assert.match(runtimeSource, /const expectedStatus = clearingFailed \? "failed" : "queued"/);
+assert.match(runtimeSource, /\.eq\("processing_status", expectedStatus\)/);
+assert.match(pageSource, /failedReview \? <button[\s\S]*?data-email-ai-clear=\{intakeId\}/);
+assert.match(pageSource, /window\.confirm\(`Clear this failed request\?/);
+assert.match(pageSource, /await markAdminEmailAiIntakeReviewed\(intakeId, "dismissed"\)/);
+assert.match(pageSource, /clearRevision !== adminEmailAiClearRevisionRef\.current/);
 assert.match(
   runtimeSource,
   /\.eq\("classification", classification\)/,

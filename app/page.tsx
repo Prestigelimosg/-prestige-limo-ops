@@ -12439,11 +12439,11 @@ async function loadAdminEmailAiIntakeRead() {
   };
 }
 
-async function markAdminEmailAiIntakeReviewed(intakeId: string) {
+async function markAdminEmailAiIntakeReviewed(intakeId: string, targetStatus: "reviewed" | "dismissed" = "reviewed") {
   const response = await fetch(adminEmailAiIntakeApiPath, {
     body: JSON.stringify({
       intake_id: intakeId,
-      processing_status: "reviewed",
+      processing_status: targetStatus,
     }),
     headers: {
       "Content-Type": "application/json",
@@ -12459,7 +12459,7 @@ async function markAdminEmailAiIntakeReviewed(intakeId: string) {
     result?.external_send !== false ||
     result?.write_action !== true ||
     clean(result?.intake_id) !== intakeId ||
-    result?.processing_status !== "reviewed"
+    result?.processing_status !== targetStatus
   ) {
     throw new Error(
       result?.error || "Email AI intake review update failed.",
@@ -15474,6 +15474,10 @@ export default function Home() {
   const [adminEmailAiCustomerProfileSuggestion, setAdminEmailAiCustomerProfileSuggestion] =
     useState<AdminEmailAiCustomerProfileNotice | null>(null);
   const adminEmailAiInitialLoadAttemptedRef = useRef(false);
+  const adminEmailAiClearPendingRef = useRef(false);
+  const adminEmailAiClearRevisionRef = useRef(0);
+  const [adminEmailAiClearPendingId, setAdminEmailAiClearPendingId] = useState("");
+  const [adminEmailAiClearError, setAdminEmailAiClearError] = useState<{ intakeId: string; text: string } | null>(null);
   const [adminAlertLocatorHighlight, setAdminAlertLocatorHighlight] = useState<{
     notificationId?: string;
     target: AdminAlertLocatorTarget;
@@ -16235,6 +16239,7 @@ export default function Home() {
     }
 
     adminEmailAiInitialLoadAttemptedRef.current = true;
+    const clearRevision = adminEmailAiClearRevisionRef.current;
     setAdminEmailAiIntakeReadState((current) => ({
       ...current,
       message: null,
@@ -16245,7 +16250,7 @@ export default function Home() {
       try {
         const result = await loadAdminEmailAiIntakeRead();
 
-        if (cancelled) {
+        if (cancelled || clearRevision !== adminEmailAiClearRevisionRef.current) {
           return;
         }
 
@@ -16257,7 +16262,7 @@ export default function Home() {
           tokenUsage: result.tokenUsage,
         });
       } catch {
-        if (cancelled) {
+        if (cancelled || clearRevision !== adminEmailAiClearRevisionRef.current) {
           return;
         }
 
@@ -21958,6 +21963,30 @@ export default function Home() {
       });
     } finally {
       setAdminAiBookingBriefLoadPending(false);
+    }
+  }
+
+  async function clearFailedAdminEmailAiRequest(record: AdminEmailAiIntakeRecord) {
+    const intakeId = clean(record.id);
+    if (!intakeId || clean(record.processing_status) !== "failed" || adminEmailAiClearPendingRef.current) return;
+    if (!window.confirm(`Clear this failed request?\n\n${clean(record.subject) || "No subject"}\n\nOnly this request leaves Booking Requests. The original email and saved bookings are kept.`)) return;
+
+    adminEmailAiClearPendingRef.current = true;
+    setAdminEmailAiClearPendingId(intakeId);
+    setAdminEmailAiClearError(null);
+    try {
+      await markAdminEmailAiIntakeReviewed(intakeId, "dismissed");
+      adminEmailAiClearRevisionRef.current += 1;
+      setAdminEmailAiIntakeReadState((current) => ({
+        ...current,
+        status: "loaded",
+        records: current.records.filter((row) => clean(row.id) !== intakeId),
+      }));
+    } catch {
+      setAdminEmailAiClearError({ intakeId, text: "Could not clear this request. Refresh Dashboard and try again." });
+    } finally {
+      adminEmailAiClearPendingRef.current = false;
+      setAdminEmailAiClearPendingId("");
     }
   }
 
@@ -51513,7 +51542,7 @@ export default function Home() {
                             AI review only · no reply sent · no booking saved
                           </p>
                         </div>
-                        <div className="flex md:justify-end">
+                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
                           {sourceOnlyReview ? (
                             <span className="text-xs font-semibold text-amber-800">Source review required</span>
                           ) : <button
@@ -51523,8 +51552,16 @@ export default function Home() {
                           >
                             Review in Dispatch
                           </button>}
+                          {failedReview ? <button
+                            className="h-8 rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                            data-email-ai-clear={intakeId}
+                            disabled={Boolean(adminEmailAiClearPendingId)}
+                            onClick={() => void clearFailedAdminEmailAiRequest(record)}
+                            type="button"
+                          >{adminEmailAiClearPendingId === intakeId ? "Clearing…" : "Clear"}</button> : null}
                         </div>
                       </div>
+                      {adminEmailAiClearError?.intakeId === intakeId ? <p className="mt-2 text-xs text-red-700" role="alert">{adminEmailAiClearError.text}</p> : null}
                       {sourceOnlyReview ? (
                         <details className="mt-2 border-t border-amber-100 pt-2" data-email-ai-failed-source={intakeId}>
                           <summary className="cursor-pointer font-medium text-amber-900">Review source email</summary>

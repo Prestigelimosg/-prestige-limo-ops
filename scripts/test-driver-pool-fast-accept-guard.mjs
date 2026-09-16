@@ -657,8 +657,15 @@ try {
             offer_payout_sgd: 55,
             pickup_at: "2027-09-05T02:00:00.000Z",
             public_booking_reference: "10907",
-            safe_dropoff_area: "Drop-off details after assignment",
-            safe_pickup_area: "Pickup details after assignment",
+            safe_dropoff_area: "Synthetic Airport",
+            safe_pickup_area: "Synthetic Hotel",
+            safe_job_details: {
+              route: "Synthetic Hotel > Synthetic Stop > Synthetic Airport",
+              flight_number: "QA123", passengers: 3, luggage: 2,
+              child_seat: "1 booster seat", instructions: "Meet at lobby",
+              scheduled_end_at: "2027-09-05T05:00:00.000Z",
+              customer_price: 999, driver_notes: "PRIVATE ADMIN NOTE",
+            },
             safe_trip_summary: "MNG",
             safe_vehicle_label: "AVF",
             updated_at: exactOfferTimestamp,
@@ -670,6 +677,14 @@ try {
   }, 7, 1, 20);
   assert.equal(availableResult.ok, true, "Available Jobs must retain the established RPC lane");
   assert.equal(availableResult.data.jobs[0].updated_at, exactOfferTimestamp);
+  assert.equal(availableResult.data.jobs[0].safe_pickup_area, "Synthetic Hotel");
+  assert.equal(availableResult.data.jobs[0].safe_dropoff_area, "Synthetic Airport");
+  assert.deepEqual(availableResult.data.jobs[0].safe_job_details, {
+    route: "Synthetic Hotel > Synthetic Stop > Synthetic Airport",
+    flight_number: "QA123", passengers: 3, luggage: 2,
+    child_seat: "1 booster seat", instructions: "Meet at lobby",
+    scheduled_end_at: "2027-09-05T05:00:00.000Z",
+  }, "Only allowlisted trip fields reach the Driver card");
 
   for (const action of ["accept", "decline"]) {
     const decisionResult = await timeoutHarness.helper.decideDriverPoolOffer({
@@ -1175,7 +1190,7 @@ assert.ok(files["app/admin-driver-pool-control.tsx"].includes("onCancelAssignmen
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
   "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : "Accept"', 'job.response_status === "awaiting_admin" ? "Cancel" : "Decline"', "Load more",
-  "Pickup area", "Drop-off area", "Offer closes", "job.safe_pickup_area",
+  "Pickup", "Drop-off", "Offer closes", "job.safe_pickup_area",
   "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
   "setAvailableJobs([])",
   "driverPoolAvailableJobsRefreshIntervalMs", "window.setInterval",
@@ -1328,6 +1343,19 @@ const poolDateJob = {
 };
 const poolDateOriginal = JSON.stringify(poolDateJob);
 const poolDateHtml = renderToStaticMarkup(poolCardModule.exports.renderCard(poolDateJob));
+const tripDetailsHtml = renderToStaticMarkup(poolCardModule.exports.renderCard({
+  ...poolDateJob, safe_job_details: {
+    route: "Synthetic Hotel > Stop > Airport", flight_number: "QA123",
+    passengers: 3, luggage: 0, child_seat: "1 booster seat",
+    instructions: "Meet at lobby <script>privateAttack()</script>",
+    scheduled_end_at: "2026-09-14T14:00:00Z",
+    driver_notes: "PRIVATE ADMIN NOTE", customer_price: 999,
+  },
+}));
+for (const detail of ['Route / stops','Synthetic Hotel &gt; Stop &gt; Airport','QA123','Passengers','Luggage','>0<','1 booster seat','Trip instructions','Scheduled end','22:00']) assert.ok(tripDetailsHtml.includes(detail),detail);
+assert.doesNotMatch(tripDetailsHtml, /<script>|PRIVATE ADMIN NOTE|customer_price/);
+assert.ok(tripDetailsHtml.includes('&lt;script&gt;'), 'Trip text must remain escaped React text');
+assert.doesNotMatch(poolDateHtml, /Trip instructions|Scheduled end|>Passengers<|>Luggage</, 'Missing legacy fields must not invent trip details');
 assert.ok(poolDateHtml.includes('14 Sept Mon, 1800hrs'));
 assert.ok(poolDateHtml.includes('14 Sept Mon, 1730hrs'));
 assert.ok(poolDateHtml.includes('dateTime="2026-09-14T09:30:00Z"'), 'Keep the original deadline timestamp');

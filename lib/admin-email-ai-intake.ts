@@ -243,7 +243,7 @@ export type AdminEmailAiIntakeReviewResult =
   | {
       data: {
         intake_id: string;
-        processing_status: "reviewed";
+        processing_status: "reviewed" | "dismissed";
         version: typeof adminEmailAiIntakeVersion;
       };
       ok: true;
@@ -542,6 +542,7 @@ function sanitizePersistenceRecord(
 export async function markAdminEmailAiIntakeReviewed(
   intakeId: string,
   client?: SupabaseClient,
+  targetStatus: "reviewed" | "dismissed" = "reviewed",
 ): Promise<AdminEmailAiIntakeReviewResult> {
   const cleanedIntakeId = cleanText(intakeId, 120);
 
@@ -595,6 +596,8 @@ export async function markAdminEmailAiIntakeReviewed(
     existingRecord?.sender_address,
   );
   const subject = cleanText(existingRecord?.subject, 240);
+  const clearingFailed = targetStatus === "dismissed";
+  const expectedStatus = clearingFailed ? "failed" : "queued";
 
   if (!existingRecord || cleanText(existingRecord.id, 120) !== cleanedIntakeId) {
     return {
@@ -609,6 +612,7 @@ export async function markAdminEmailAiIntakeReviewed(
       classification,
       senderAddress,
       subject,
+      ...(clearingFailed ? { processingStatus: "failed" } : {}),
     })
   ) {
     return {
@@ -618,20 +622,22 @@ export async function markAdminEmailAiIntakeReviewed(
     };
   }
 
-  if (processingStatus === "reviewed") {
+  if (processingStatus === targetStatus) {
     return {
       data: {
         intake_id: cleanedIntakeId,
-        processing_status: "reviewed",
+        processing_status: targetStatus,
         version: adminEmailAiIntakeVersion,
       },
       ok: true,
     };
   }
 
-  if (processingStatus !== "queued") {
+  if (processingStatus !== expectedStatus) {
     return {
-      error: "Email AI intake is no longer queued for review.",
+      error: clearingFailed
+        ? "This request is no longer failed. Refresh Dashboard before trying again."
+        : "Email AI intake is no longer queued for review.",
       ok: false,
       status: 409,
     };
@@ -640,11 +646,11 @@ export async function markAdminEmailAiIntakeReviewed(
   const updateResult = await database
     .from(intakeTable)
     .update({
-      processing_status: "reviewed",
+      processing_status: targetStatus,
       updated_at: new Date().toISOString(),
     })
     .eq("id", cleanedIntakeId)
-    .eq("processing_status", "queued")
+    .eq("processing_status", expectedStatus)
     .eq("classification", classification)
     .eq("sender_address", senderAddress)
     .eq("subject", subject)
@@ -666,7 +672,7 @@ export async function markAdminEmailAiIntakeReviewed(
 
   if (
     cleanText(updatedRecord?.id, 120) !== cleanedIntakeId ||
-    intakeStatusValue(updatedRecord?.processing_status) !== "reviewed"
+    intakeStatusValue(updatedRecord?.processing_status) !== targetStatus
   ) {
     return {
       error: "Email AI intake review changed before it could be saved.",
@@ -678,7 +684,7 @@ export async function markAdminEmailAiIntakeReviewed(
   return {
     data: {
       intake_id: cleanedIntakeId,
-      processing_status: "reviewed",
+      processing_status: targetStatus,
       version: adminEmailAiIntakeVersion,
     },
     ok: true,

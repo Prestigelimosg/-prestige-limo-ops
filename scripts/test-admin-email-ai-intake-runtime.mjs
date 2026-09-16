@@ -2166,7 +2166,7 @@ Extra
       method: "PATCH",
     }),
   );
-  assert.equal(invalidReview.status, 400);
+  assert.equal(invalidReview.status, 409, "Clear cannot dismiss a queued booking draft");
   assert.equal(intakeRows[0].processing_status, "queued");
 
   const allowedReview = await route.PATCH(
@@ -2711,6 +2711,77 @@ Extra
     correctionProviderOverride = null;
     intakeReadInterceptor = null;
     intakeRows.splice(0, intakeRows.length, ...savedMemoryRows);
+  }
+  // Clear dismisses one failed request; it does not mark a booking reviewed.
+  {
+    const savedRows = structuredClone(intakeRows);
+    const effectsBefore = [providerRequestBodies.length, downloadCalls, adminDevicePushEvents.length];
+    const failed = {...savedRows[0], id: "00000000-0000-4000-8000-000000000901",
+      sender_address: "info@prestigelimo.sg", subject: 'New booking "Prestige Transport 99991" has been received',
+      classification: "uncertain", processing_status: "failed", canonical_booking_text: "",
+      booking_parse_result: {bookings: [], failure_evidence: {stage: "classification", reason: "Synthetic failure"},
+        correction_memory: {version: 1, lesson_codes: ["explicit_route_label"]}}};
+    const other = {...failed, id: "00000000-0000-4000-8000-000000000902"};
+    intakeRows.splice(0, intakeRows.length, structuredClone(failed), structuredClone(other));
+    const patchClear = (id, overrides = {}, extra = {}) => route.PATCH(new Request("http://localhost/api/admin-email-ai-intake", {
+      method: "PATCH", headers: {"content-type": "application/json", origin: "http://localhost", referer: "http://localhost/",
+        "x-prestige-admin-purpose": "admin-email-ai-intake", ...overrides},
+      body: JSON.stringify({intake_id: id, processing_status: "dismissed", ...extra}),
+    }));
+    try {
+      assert.equal((await patchClear(failed.id, {"x-prestige-admin-purpose": "wrong"})).status, 403);
+      assert.equal((await patchClear(failed.id, {}, {delete_source: true})).status, 400);
+      assert.deepEqual(intakeRows, [failed, other]);
+      const cleared = await patchClear(failed.id);
+      assert.equal(cleared.status, 200, "The existing PATCH lane must allow clearing one visible failed request");
+      const result = await cleared.json();
+      assert.equal(result.processing_status, "dismissed");
+      assert.equal(result.intake_id, failed.id);
+      assert.equal(result.external_send, false);
+      assert.equal(result.write_action, true);
+      const {processing_status, updated_at, ...preserved} = intakeRows[0];
+      const {processing_status: oldStatus, updated_at: oldUpdated, ...original} = failed;
+      assert.equal(typeof oldUpdated, "string");
+      assert.equal(processing_status, "dismissed");
+      assert.ok(updated_at);
+      assert.equal(oldStatus, "failed");
+      assert.deepEqual(preserved, original, "Keep source, failure evidence, dedupe identity and correction memory");
+      assert.deepEqual(intakeRows[1], other, "Never clear another request");
+      const afterClear = structuredClone(intakeRows);
+      assert.equal((await patchClear(failed.id)).status, 200, "Retry is idempotent");
+      assert.deepEqual(intakeRows, afterClear);
+      const reloaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+      assert.deepEqual(reloaded.data.records.map(row=>row.id), [other.id], "Cleared card stays absent after refresh");
+      for (const state of ["queued", "processing", "reviewed"]) {
+        intakeRows[1].processing_status = state;
+        assert.equal((await patchClear(other.id)).status, 409, "Do not clear " + state + " rows");
+        assert.equal(intakeRows[1].processing_status, state);
+      }
+      intakeRows[1].processing_status = "failed";
+      const racingClient = {from(table) {
+        const query = fakeDatabase.from(table);
+        const update = query.update.bind(query);
+        query.update = payload => { intakeRows[1].processing_status = "processing"; return update(payload); };
+        return query;
+      }};
+      const raced = await runtime.markAdminEmailAiIntakeReviewed(other.id, racingClient, "dismissed");
+      assert.equal(raced.status, 409, "Concurrent state change must fail the conditional write");
+      assert.equal(intakeRows[1].processing_status, "processing");
+      intakeRows[1].processing_status = "failed";
+      const failingClient = {from(table) {
+        const query = fakeDatabase.from(table);
+        query.update = () => { query.execute = () => ({data: null, error: {message: "Synthetic database failure"}}); return query; };
+        return query;
+      }};
+      assert.equal((await runtime.markAdminEmailAiIntakeReviewed(other.id, failingClient, "dismissed")).status, 500);
+      assert.equal(intakeRows[1].processing_status, "failed");
+      intakeRows[1].subject = "Unrelated email";
+      assert.equal((await patchClear(other.id)).status, 409, "Hidden unrelated failures cannot be cleared here");
+      assert.equal((await patchClear("00000000-0000-4000-8000-000000000903")).status, 404);
+      assert.equal((await patchClear("invalid")).status, 400);
+      assert.deepEqual([providerRequestBodies.length, downloadCalls, adminDevicePushEvents.length], effectsBefore,
+        "Clear must not rerun AI, read mailbox bodies or send alerts");
+    } finally { intakeRows.splice(0, intakeRows.length, ...savedRows); }
   }
 } finally {
   Module._load = originalLoad;

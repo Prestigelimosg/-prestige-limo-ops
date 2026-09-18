@@ -14,6 +14,7 @@ export type DriverBridgeMessage =
   | {type:"native_account_setup_save";email:string;password:string}
   | {type:"native_account_setup_cancel"}
   | {type:"native_account_setup_activated";setup_id:string;complete:boolean}
+  | { jobKeys: string[]; expectedBadgeCount: number | null; requestId?: string; type: "native_alerts_dismiss" }
   | { type: "native_biometrics_enable" }
   | { jobKey: string; openTarget?: "messages"; type: "native_job_open" }
   | { jobKey: string; type: "native_job_remember" }
@@ -50,6 +51,11 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
     const parsed = asRecord(JSON.parse(value));
     const keys = Object.keys(parsed);
 
+    if (parsed.type === "native_alerts_dismiss" && (keys.length===3 || (keys.length===4 && typeof parsed.request_id==="string" && /^[a-f0-9-]{36}$/.test(parsed.request_id))) &&
+      (parsed.expected_badge_count===null || (Number.isInteger(parsed.expected_badge_count) && Number(parsed.expected_badge_count)>=0 && Number(parsed.expected_badge_count)<=99)) && Array.isArray(parsed.job_keys) &&
+      parsed.job_keys.length<=100 && parsed.job_keys.every(key=>typeof key==='string' && /^[a-f0-9]{64}$/.test(key))) {
+      return {type:"native_alerts_dismiss",jobKeys:parsed.job_keys,expectedBadgeCount:parsed.expected_badge_count as number | null,requestId:parsed.request_id as string | undefined};
+    }
     if (parsed.type === "native_account_setup_save" && keys.length === 3
       && typeof parsed.email === "string" && parsed.email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed.email)
       && typeof parsed.password === "string" && /^\d{6}$/.test(parsed.password)) {
@@ -264,6 +270,12 @@ export function embeddedDriverBridgeBootstrap(
     writable: false
   });
   Object.defineProperty(window, "__PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__", {
+    configurable: false,
+    enumerable: false,
+    value: true,
+    writable: false
+  });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__", {
     configurable: false,
     enumerable: false,
     value: true,

@@ -18,7 +18,7 @@ import {
   hashDriverJobLinkToken,
 } from "./driver-job-link";
 import { openDriverNativeJobHandoff, sealDriverNativeJobHandoffToken } from "./driver-native-job-handoff";
-import { sendDriverDevicePushAlertForAppUpdate, sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
+import { sendDriverDeviceSilentRefreshForJobLink, sendDriverDevicePushAlertForAppUpdate, sendDriverDevicePushAlertForNewJobLink } from "./driver-device-push-notification";
 import {
   createAdminDriverAckReminder,
   type AdminDriverAckReminderInput,
@@ -60,6 +60,7 @@ export type AdminDriverJobLinkRecord = {
   link_status: AdminDriverJobLinkStatus;
   revoked_at: string | null;
   safe_summary: {
+    ack_alert_closed: boolean;
     ack_reminder: {
       count: number;
       last_provider_accepted: boolean | null;
@@ -121,7 +122,7 @@ export type AdminDriverJobLinkRevokeInput = {
 };
 
 export type AdminDriverJobLinkActionInput =
-  | ({ action: "remind_ack" } & AdminDriverAckReminderInput)
+  | ({ action: "remind_ack" | "close_ack_alert" } & AdminDriverAckReminderInput)
   | ({ action: "revoke" } & AdminDriverJobLinkRevokeInput);
 
 type UnknownRecord = Record<string, unknown>;
@@ -746,7 +747,7 @@ export function parseAdminDriverJobLinkActionPayload(
 
   const driverJobLinkId = validUuid(record.driver_job_link_id);
   const bookingReference = safeText(record.booking_reference, maxBookingReferenceLength);
-  if (record.action !== "remind_ack" || !driverJobLinkId || !bookingReference) {
+  if (!["remind_ack", "close_ack_alert"].includes(String(record.action)) || !driverJobLinkId || !bookingReference) {
     return {
       error: "Admin driver job link action payload is malformed.",
       ok: false,
@@ -756,7 +757,7 @@ export function parseAdminDriverJobLinkActionPayload(
 
   return {
     data: {
-      action: "remind_ack",
+      action: record.action as "remind_ack" | "close_ack_alert",
       booking_reference: bookingReference,
       driver_job_link_id: driverJobLinkId,
     },
@@ -934,6 +935,8 @@ function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecor
   const jobCardKind = textOrNull(context.job_card_kind);
 
   return {
+    ack_alert_closed: Boolean(validDateText(context.ack_alert_closed_at)) &&
+      String(context.ack_alert_closed_revision ?? "") === String(context.job_card_revision ?? ""),
     ack_reminder: {
       count: 0,
       last_provider_accepted: null,
@@ -1262,6 +1265,24 @@ export async function revokeAdminDriverJobLink(
     data: link,
     ok: true,
   };
+}
+
+export async function closeAdminDriverAckAlert(input: AdminDriverAckReminderInput, actor: AdminBookingPersistenceAdapterActor) {
+  const client = getServerOnlyAdminDriverJobLinkSupabaseClient(actor);
+  if (!client.ok) return client;
+  const result = await client.data.rpc("reserve_driver_job_link_delivery", {
+    p_booking_reference: input.booking_reference, p_link_id: input.driver_job_link_id,
+    p_driver_id: null, p_mode: "close_ack_alert", p_revision: null,
+    p_request_id: randomUUID(), p_actor_role: actor.actor_role, p_actor_label: actor.actor_label,
+  });
+  if (result.error || asRecord(result.data).claimed !== true) {
+    return {ok:false as const, status:409, error:"This alert could not be closed. Refresh the queue and try again."};
+  }
+  const driverId = Number(asRecord(result.data).driver_id);
+  if (Number.isSafeInteger(driverId) && driverId > 0) {
+    await sendDriverDeviceSilentRefreshForJobLink(client.data, driverId, input.driver_job_link_id).catch(() => null);
+  }
+  return {ok:true as const, data:{closed:true}};
 }
 
 export async function remindAdminDriverToAcknowledgeLink(

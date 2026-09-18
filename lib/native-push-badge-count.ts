@@ -123,12 +123,14 @@ export async function resetNativePushBadgeCount(
 export async function resetDriverNativePushBadgeCount(
   client: NativePushBadgeClient,
   driverId: number,
+  remainingCount = 0,
 ) {
-  if (!Number.isSafeInteger(driverId) || driverId <= 0) return false;
+  if (!Number.isSafeInteger(driverId) || driverId <= 0 ||
+    !Number.isInteger(remainingCount) || remainingCount < 0 || remainingCount > nativePushBadgeMaximum) return false;
 
   const { error } = await client
     .from("driver_device_push_subscriptions")
-    .update({ badge_count: 0, updated_at: new Date().toISOString() })
+    .update({ badge_count: remainingCount, updated_at: new Date().toISOString() })
     .eq("driver_id", driverId)
     .eq("source_surface", "driver_native_ios")
     .eq("subscription_status", "active");

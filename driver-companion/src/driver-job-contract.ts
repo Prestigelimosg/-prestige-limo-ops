@@ -204,6 +204,7 @@ export async function loadDriverJobSummary(job: ActiveDriverJob) {
 export async function registerNativeDriverNotifications(
   job: ActiveDriverJob,
   expoPushToken: string,
+  installationId: string,
 ) {
   const response = await fetch(
     `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
@@ -215,6 +216,7 @@ export async function registerNativeDriverNotifications(
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+        "x-prestige-driver-installation-id": installationId,
       },
       method: "PATCH",
     },

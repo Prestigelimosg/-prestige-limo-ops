@@ -204,6 +204,7 @@ export async function PATCH(request: Request, context: DriverJobRouteContext) {
     if (nativeDeviceAlertUpdate) {
       const result = await applyProductionDriverNativeDeviceAlertUpdate({
         ...nativeDeviceAlertUpdate,
+        driverInstallationId: request.headers.get("x-prestige-driver-installation-id"),
         token,
       });
 

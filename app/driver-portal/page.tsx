@@ -14,6 +14,7 @@ type DriverPortalJob = {
 };
 
 type DriverPoolAvailableJob = {
+  alert_unread?: boolean;
   selection_mode?: "admin" | "first_accept";
   response_status?: "pending" | "awaiting_admin";
   closes_at: string;
@@ -48,6 +49,32 @@ type DriverPortalNotificationAlert = {
   update_count: number;
 };
 
+async function dismissNativeAlerts(keys: string[], expectedBadgeCount: number | null, waitForRead: boolean) {
+  const bridge = (window as DriverNativeWindow).ReactNativeWebView;
+  if (!bridge) return;
+  waitForRead = waitForRead && (window as DriverNativeWindow).__PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__ === true;
+  for (let offset = 0; offset < Math.max(1, keys.length); offset += 100) {
+    const requestId = waitForRead ? crypto.randomUUID() : undefined;
+    let finish = () => {};
+    const completion = waitForRead ? new Promise<void>((resolve) => {
+      const onResult = (event: Event) => {
+        if ((event as CustomEvent).detail?.request_id === requestId) finish();
+      };
+      const timeout = window.setTimeout(() => finish(), 3000);
+      finish = () => {
+        window.clearTimeout(timeout);
+        window.removeEventListener("prestige-driver-alerts-dismissed", onResult);
+        resolve();
+      };
+      window.addEventListener("prestige-driver-alerts-dismissed", onResult);
+    }) : Promise.resolve();
+    bridge.postMessage(JSON.stringify({type: "native_alerts_dismiss", job_keys: keys.slice(offset, offset + 100),
+      expected_badge_count: offset + 100 >= keys.length ? expectedBadgeCount : null,
+      ...(requestId ? {request_id: requestId} : {})}));
+    await completion;
+  }
+}
+
 type DriverPortalReadState =
   | { kind: "loading" }
   | {
@@ -81,6 +108,7 @@ type DriverNativeWindow = Window & {
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
   __PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__?: boolean;
+  __PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__?: boolean;
 };
 
 type DriverAccountSignInState = "idle" | "signing_in" | "failed";
@@ -253,8 +281,8 @@ export default function DriverPortalPage() {
   const driverPoolAccountSession = readState.kind === "ready" && readState.accountSession;
   const driverPortalSavedAlertsAvailable = readState.kind === "ready" && readState.alertsAvailable;
   const driverPortalSavedAlertCount = driverPortalSavedAlertsAvailable ? readState.alertCount : 0;
-  const driverPoolVisibleAlertCount = availableJobsReadAvailable && availableJobsEnabled ? availableJobs.length : 0;
-  const driverPoolHasCurrentAlerts = availableJobsReadAvailable && availableJobsEnabled && (availableJobs.length > 0 || availableJobsHasMore);
+  const driverPoolVisibleAlertCount = availableJobsReadAvailable && availableJobsEnabled ? availableJobs.filter(job=>job.alert_unread !== false).length : 0;
+  const driverPoolHasCurrentAlerts = availableJobsReadAvailable && availableJobsEnabled && (driverPoolVisibleAlertCount > 0 || availableJobsHasMore);
   const driverPortalCurrentAlertCount = driverPortalSavedAlertCount + driverPoolVisibleAlertCount;
   const driverPortalCountsAvailable = driverPortalSavedAlertsAvailable && availableJobsReadAvailable;
   const driverPortalAlertCountLabel = !driverPortalCountsAvailable
@@ -272,7 +300,8 @@ export default function DriverPortalPage() {
     ),
   );
 
-  const loadJobs = useCallback(async () => {
+  const jobsAlertRefreshAtRef = useRef(0);
+  const loadJobs = useCallback(async (viewedJobKeys: string[] = []) => {
     if (clearingAlertsRef.current) return;
     const revision = ++jobsReadRevisionRef.current;
     try {
@@ -288,10 +317,12 @@ export default function DriverPortalPage() {
         },
       });
       const result = await response.json() as {
+        native_badge_count?: number | null;
+        dismiss_notification_keys?: string[] | null;
         alert_count?: number;
         alerts?: DriverPortalNotificationAlert[];
         alerts_available?: boolean;
-        device_alerts?: { public_key?: string | null; ready?: boolean };
+        device_alerts?: { public_key?: string | null; ready?: boolean; native_registration_ready?: boolean | null };
         jobs?: DriverPortalJob[];
         ok?: boolean;
         reason?: string;
@@ -319,12 +350,17 @@ export default function DriverPortalPage() {
       });
       setAlertState(
         nativeInstallationId
-          ? currentNativeNotificationsEnabled()
+          ? currentNativeNotificationsEnabled() && result.device_alerts?.native_registration_ready !== false
             ? "enabled"
             : "available"
           : await readDriverPortalAlertState(),
       );
       if (revision !== jobsReadRevisionRef.current) return;
+      if (nativeInstallationId && Array.isArray(result.dismiss_notification_keys)) {
+        await dismissNativeAlerts([...new Set([...result.dismiss_notification_keys, ...viewedJobKeys])],
+          result.native_badge_count ?? null, viewedJobKeys.length > 0);
+        if (revision !== jobsReadRevisionRef.current) return;
+      }
       setReadState({
         accountSession: result.session === "account",
         alertCount: Number.isSafeInteger(result.alert_count) && Number(result.alert_count) >= 0
@@ -423,6 +459,10 @@ export default function DriverPortalPage() {
     const refresh = () => {
       if (document.visibilityState === "visible" && !availableJobsBusy) {
         void loadAvailableJobs(1, { quiet: true });
+        if (Date.now() - jobsAlertRefreshAtRef.current >= 15_000) {
+          jobsAlertRefreshAtRef.current = Date.now();
+          void loadJobs();
+        }
       }
     };
     const onVisibilityChange = () => {
@@ -436,7 +476,7 @@ export default function DriverPortalPage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [availableJobsBusy, driverPoolAccountSession, loadAvailableJobs]);
+  }, [availableJobsBusy, driverPoolAccountSession, loadAvailableJobs, loadJobs]);
 
   async function decideAvailableJob(job: DriverPoolAvailableJob, action: "accept" | "decline") {
     availableJobsReadRevisionRef.current += 1;
@@ -525,6 +565,7 @@ export default function DriverPortalPage() {
         ...current,
         [jobKey]: "This private job is not saved in Prestige Driver yet. Open the latest link from dispatch once.",
       }));
+      setClearAlertsFeedback("Open the latest Job Link from dispatch to view this job.");
       setOpeningJobKey((current) => current === jobKey ? "" : current);
     }
 
@@ -671,14 +712,17 @@ export default function DriverPortalPage() {
     }
   }
 
-  async function clearCurrentAlerts() {
+  async function clearCurrentAlerts(jobKey?: string) {
     if (clearingAlertsRef.current || readState.kind !== "ready" || !readState.alertsAvailable) return;
-    const notificationIds = [...new Set(readState.alerts.flatMap((alert) => alert.notification_ids || []))];
+    const viewedAlerts = readState.alerts.filter((alert) => !jobKey || alert.job_key === jobKey);
+    const notificationIds = [...new Set(viewedAlerts.flatMap((alert) => alert.notification_ids || []))];
+    const viewedJobKeys = [...new Set(viewedAlerts.map(alert => alert.job_key))];
     if (!notificationIds.length) return;
     clearingAlertsRef.current = true;
     ++jobsReadRevisionRef.current;
     setClearingAlerts(true);
     setClearAlertsFeedback("");
+    let readSaved = false;
     try {
       for (let offset = 0; offset < notificationIds.length; offset += 100) {
         const result = await fetch("/api/driver-portal/jobs", {
@@ -693,16 +737,30 @@ export default function DriverPortalPage() {
         const body = await result.json();
         if (!result.ok || body.ok !== true) throw new Error("Clear failed");
       }
+      readSaved = true;
     } catch {
       setClearAlertsFeedback("Some alerts could not be cleared. Refresh and try again.");
     } finally {
       clearingAlertsRef.current = false;
-      await loadJobs();
+      await loadJobs(readSaved ? viewedJobKeys : []);
       setClearingAlerts(false);
     }
   }
 
-  function openAvailableJobsFromNotificationCentre() {
+  async function openAvailableJobsFromNotificationCentre() {
+    const offers=availableJobs.filter(job=>job.alert_unread !== false).map(job=>({offer_key:job.offer_key,updated_at:job.updated_at}));
+    if (offers.length) {
+      try {
+        const cleared=await fetch("/api/driver-portal/jobs", {method:"PATCH",credentials:"same-origin",
+          headers:{"content-type":"application/json","x-prestige-driver-purpose":"driver-portal-alerts-clear",
+            ...(installationId ? {"x-prestige-driver-installation-id":installationId} : {})},
+          body:JSON.stringify({pool_offers:offers}),
+        });
+        if(!cleared.ok || (await cleared.json()).ok!==true) throw new Error("Unread state not saved");
+        await loadAvailableJobs(availableJobsPage,{quiet:true});
+        await loadJobs();
+      } catch { setClearAlertsFeedback("Could not clear the offer alerts. Refresh and try again."); }
+    }
     setNotificationCentreOpen(false);
     window.requestAnimationFrame(() => {
       document.getElementById("available-jobs")?.scrollIntoView({
@@ -721,6 +779,7 @@ export default function DriverPortalPage() {
         if (!nativeBridge) {
           throw new Error("Native Driver bridge unavailable");
         }
+        if (openMessages) await clearCurrentAlerts(job.job_key);
         nativeBridge.postMessage(JSON.stringify({
           job_key: job.job_key,
           type: "native_job_open",
@@ -738,6 +797,7 @@ export default function DriverPortalPage() {
         }));
         return;
       }
+      if (openMessages) await clearCurrentAlerts(job.job_key);
       setNotificationCentreOpen(false);
       window.location.assign(url);
     } catch {
@@ -808,7 +868,7 @@ export default function DriverPortalPage() {
                 <button
                   className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-left ring-1 ring-emerald-200"
                   data-driver-notification-purpose="available-jobs"
-                  onClick={openAvailableJobsFromNotificationCentre}
+                  onClick={() => void openAvailableJobsFromNotificationCentre()}
                   type="button"
                 >
                   <span className="min-w-0">
@@ -816,7 +876,7 @@ export default function DriverPortalPage() {
                     <span className="block text-xs font-semibold text-emerald-800">Review privacy-safe Driver Pool offers</span>
                   </span>
                   <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">
-                    {availableJobs.length}{availableJobsHasMore ? "+" : ""}
+                    {driverPoolVisibleAlertCount}{availableJobsHasMore ? "+" : ""}
                   </span>
                 </button>
               ) : null}

@@ -1,6 +1,6 @@
 import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
 import { verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock";
-import { clearDriverPortalAlerts, loadDriverPortalJobs } from "../../../../lib/driver-portal-jobs";
+import { clearDriverPortalAlerts, loadDriverPortalJobs, loadDismissedDriverNotificationKeys } from "../../../../lib/driver-portal-jobs";
 import {
   clearDriverPortalSessionCookie,
   resolveDriverPortalSession,
@@ -124,9 +124,20 @@ export async function GET(request: Request) {
     return response({ jobs: [], ok: false, reason: "not_configured" }, 503);
   }
 
+  const badge = session.claims.accountId && session.claims.deviceIdHash
+    ? await clientResult.client.from("driver_device_push_subscriptions").select("badge_count")
+      .eq("driver_id",session.claims.driverId).eq("source_surface","driver_native_ios")
+      .eq("subscription_status","active").is("revoked_at",null).limit(2)
+    : null;
   return response(
     {
-      device_alerts: publicDriverDeviceAlertReadiness(),
+      native_badge_count: badge && !badge.error && badge.data?.length===1 ? badge.data[0].badge_count : null,
+      dismiss_notification_keys: session.claims.accountId && session.claims.deviceIdHash
+        ? await loadDismissedDriverNotificationKeys(clientResult.client, session.claims.driverId).catch(() => null) : null,
+      device_alerts: {
+        ...publicDriverDeviceAlertReadiness(),
+        native_registration_ready: badge && !badge.error ? badge.data?.length === 1 : null,
+      },
       alert_count: jobsResult.alertCount,
       alerts: jobsResult.alerts.map((alert) => ({
         created_at: alert.createdAt,
@@ -242,6 +253,26 @@ export async function PATCH(request: Request) {
   });
   if (!verified) return inactiveDriverAccountResponse(false);
   const body = await readJsonBody(request);
+  if (Object.keys(body).length===2 && Number.isInteger(body.badge_count) && Number.isInteger(body.expected_badge_count) &&
+    Number(body.badge_count)>=0 && Number(body.badge_count)<=99 && Number(body.expected_badge_count)>=0 && Number(body.expected_badge_count)<=99) {
+    const subscriptions = await clientResult.client.from("driver_device_push_subscriptions").select("id")
+      .eq("driver_id",session.claims.driverId).eq("source_surface","driver_native_ios")
+      .eq("subscription_status","active").is("revoked_at",null).limit(2);
+    if (subscriptions.error || subscriptions.data?.length !== 1) return response({ok:false},409);
+    const saved=await clientResult.client.from("driver_device_push_subscriptions")
+      .update({badge_count:body.badge_count,updated_at:new Date().toISOString()})
+      .eq("id",subscriptions.data[0].id)
+      .eq("driver_id",session.claims.driverId).eq("source_surface","driver_native_ios")
+      .eq("subscription_status","active").is("revoked_at",null).eq("badge_count",body.expected_badge_count).select("id");
+    return response({ok:!saved.error && saved.data?.length===1}, saved.error || saved.data?.length!==1 ? 409 : 200);
+  }
+  if (Object.keys(body).length===1 && Array.isArray(body.pool_offers) && body.pool_offers.length>0 && body.pool_offers.length<=20 &&
+    body.pool_offers.every(item=>item && typeof item==='object' && Object.keys(item).length===2 &&
+      /^[a-f0-9]{64}$/.test(String(item.offer_key)) && typeof item.updated_at==='string' && Number.isFinite(Date.parse(item.updated_at)))) {
+    if (!clientResult.client.rpc) return response({ok:false},503);
+    const cleared = await clientResult.client.rpc("mark_driver_pool_alerts_read", {p_driver_id:session.claims.driverId,p_reads:body.pool_offers});
+    return response({ok:!cleared.error && cleared.data?.ok===true}, cleared.error || cleared.data?.ok!==true ? 409 : 200);
+  }
   if (Object.keys(body).length !== 1 || !("notification_ids" in body)) {
     return response({ ok: false }, 400);
   }

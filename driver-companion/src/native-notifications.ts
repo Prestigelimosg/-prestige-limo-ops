@@ -15,6 +15,26 @@ function validJobKey(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
+// Remove only notifications for this exact opaque job identity. Other jobs stay unread.
+export async function dismissNativeJobNotifications(jobKey: string, notifications: {
+  getPresentedNotificationsAsync: () => Promise<Array<{ request: { identifier: string; content: { data?: unknown } } }>>;
+  dismissNotificationAsync: (identifier: string) => Promise<void>;
+  setBadgeCountAsync: (count: number) => Promise<boolean>;
+}) {
+  if (!validJobKey(jobKey)) return null;
+  const presented = await notifications.getPresentedNotificationsAsync();
+  for (const notification of presented) {
+    const data = notification.request.content.data;
+    if (data && typeof data === "object" && !Array.isArray(data) &&
+      (data as Record<string, unknown>).job_key === jobKey) {
+      await notifications.dismissNotificationAsync(notification.request.identifier);
+    }
+  }
+  const remaining = (await notifications.getPresentedNotificationsAsync()).length;
+  await notifications.setBadgeCountAsync(Math.min(99, remaining));
+  return Math.min(99, remaining);
+}
+
 export function nativeDriverJobHandoffUrl(jobKey: string) {
   if (!validJobKey(jobKey)) {
     throw new Error("Invalid native notification job key.");

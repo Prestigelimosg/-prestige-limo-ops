@@ -7,6 +7,7 @@ import { adminBookingPersistencePurpose, resolveAdminDispatcherBoundary } from "
 import { loadDriverPoolAlertReadiness, sendDriverDevicePushAlertForDriverPoolOffer, sendDriverDeviceSilentRefreshForDriverPoolOffer } from "../../../lib/driver-device-push-notification";
 import {
   cancelDriverPoolOffer,
+  refreshCancelledDriverPoolRecipients,
   decideDriverPoolOffer,
   loadDriverPoolWinnerPlate,
   parseDriverPoolAdminActionPayload,
@@ -140,23 +141,17 @@ export async function PATCH(request: Request) {
     if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(access.context);
     const result = await cancelDriverPoolOffer(database.client, parsed.data, actor);
-    if (
-      result.ok &&
-      result.data.assignment_cancelled &&
-      result.data.cancelled_driver_id &&
-      result.data.public_booking_reference
-    ) {
+    if (result.ok) {
       after(async () => {
-        try {
-          await sendDriverDevicePushAlertForDriverPoolOffer(database.client, {
-            driver_id: result.data.cancelled_driver_id,
-            notification_kind: "assignment_cancelled",
-            offer_key: result.data.offer.offer_key,
-            public_booking_reference: result.data.public_booking_reference,
-          });
-        } catch {
-          // The atomic cancellation must not fail because Driver push is unavailable.
-        }
+        await Promise.allSettled([
+          refreshCancelledDriverPoolRecipients(database.client, result.data.offer.offer_key),
+          ...(result.data.assignment_cancelled && result.data.cancelled_driver_id && result.data.public_booking_reference ? [
+            sendDriverDevicePushAlertForDriverPoolOffer(database.client, {
+              driver_id: result.data.cancelled_driver_id, notification_kind: "assignment_cancelled",
+              offer_key: result.data.offer.offer_key, public_booking_reference: result.data.public_booking_reference,
+            }),
+          ] : []),
+        ]);
       });
     }
     return result.ok

@@ -103,7 +103,7 @@ function normalizedEmail(value: unknown) {
   return email.length <= 254 && emailPattern.test(email) ? email : "";
 }
 
-function deviceIdHashFor(value: unknown, env: Env) {
+export function deviceIdHashFor(value: unknown, env: Env) {
   const installationId = text(value).toLowerCase();
   const secret = deviceSecret(env);
   if (!secret || !deviceIdPattern.test(installationId)) return "";

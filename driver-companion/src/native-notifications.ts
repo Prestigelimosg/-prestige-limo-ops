@@ -25,8 +25,24 @@ export async function dismissNativeJobNotifications(jobKey: string, notification
   const presented = await notifications.getPresentedNotificationsAsync();
   for (const notification of presented) {
     const data = notification.request.content.data;
-    if (data && typeof data === "object" && !Array.isArray(data) &&
-      (data as Record<string, unknown>).job_key === jobKey) {
+    const dataRecord = data && typeof data === "object" && !Array.isArray(data)
+      ? data as Record<string, unknown> : null;
+    let matches = dataRecord?.job_key === jobKey;
+    // Background Android FCM notices may lose custom data in the system tray.
+    // Expo preserves their tag in this URI; never guess from message text.
+    if (!matches && !dataRecord?.job_key) {
+      try {
+        const identifier = new URL(notification.request.identifier);
+        matches = identifier.protocol === "expo-notifications:" &&
+          identifier.host === "foreign_notifications" && !identifier.username && !identifier.password &&
+          !identifier.pathname && !identifier.hash &&
+          identifier.searchParams.getAll("tag").length === 1 &&
+          identifier.searchParams.getAll("id").length === 1 &&
+          /^-?\d+$/.test(identifier.searchParams.get("id") ?? "") &&
+          identifier.searchParams.get("tag") === `prestige-driver-job-${jobKey}`;
+      } catch { /* Unidentifiable older notices must remain untouched. */ }
+    }
+    if (matches) {
       await notifications.dismissNotificationAsync(notification.request.identifier);
     }
   }

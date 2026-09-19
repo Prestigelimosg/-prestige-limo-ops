@@ -949,6 +949,7 @@ async function sendNativePush(
         },
         priority: "high",
         sound: "default",
+        tag: `prestige-driver-job-${jobKey}`,
         title: "Prestige Driver",
         to: expoPushToken,
       }),

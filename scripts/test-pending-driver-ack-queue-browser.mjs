@@ -23,7 +23,7 @@ const chromeBinary =
 const configuredChromeDebugPort = process.env.CHROME_DEBUG_PORT
   ? Number(process.env.CHROME_DEBUG_PORT)
   : null;
-const dismissedStorageKey = "prestige-admin-dismissed-pending-driver-ack-links";
+const dismissedStorageKey = "synthetic-server-closed-alerts";
 const firstLinkId = "11111111-2222-4333-8444-555555555555";
 const secondLinkId = "22222222-3333-4444-8555-666666666666";
 const amendedLinkId = "66666666-7777-4888-8999-000000000000";
@@ -183,6 +183,7 @@ function pageFixtureScript() {
       link_status: "active",
       revoked_at: null,
       safe_summary: {
+        ack_alert_closed: JSON.parse(window.localStorage.getItem("synthetic-server-closed-alerts") || "[]").includes(id),
         ack_reminder: ackReminder || {
           count: 0,
           last_provider_accepted: null,
@@ -284,6 +285,10 @@ function pageFixtureScript() {
 
       if (url.pathname === "/api/admin-driver-job-links" && method === "PATCH") {
         const body = request.body || {};
+        if(body.action === "close_ack_alert" && body.driver_job_link_id === firstLinkId && body.booking_reference === "ACK-CLOSE-BOOKING-ONE") {
+          window.localStorage.setItem("synthetic-server-closed-alerts", JSON.stringify([firstLinkId]));
+          return json({ok:true,closed:true});
+        }
         if (
           body.action !== "remind_ack" ||
           body.driver_job_link_id !== firstLinkId ||
@@ -580,8 +585,8 @@ async function runChromeTest() {
     );
     assert.deepEqual(
       closePersistence.requestDelta.filter((request) => request.method !== "GET"),
-      [],
-      "Close must not create POST, PATCH, DELETE, or other mutations.",
+      [{method:"PATCH",url:"/api/admin-driver-job-links",body:{action:"close_ack_alert",driver_job_link_id:firstLinkId,booking_reference:"ACK-CLOSE-BOOKING-ONE"}}],
+      "Close must call only the existing exact-link alert action.",
     );
 
     await navigateWithLoadEvent(client, appUrl);

@@ -6,6 +6,7 @@ import {
 } from "../../../lib/admin-dispatcher-auth-boundary";
 import {
   createAdminDriverJobLink,
+  closeAdminDriverAckAlert,
   loadAdminDriverJobLinks,
   parseAdminDriverJobLinkCreatePayload,
   parseAdminDriverJobLinkActionPayload,
@@ -219,6 +220,12 @@ export async function PATCH(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
+    if (parsedAction.data.action === "close_ack_alert") {
+      const result = await closeAdminDriverAckAlert(parsedAction.data, actor);
+      return result.ok
+        ? Response.json({ok:true, ...result.data})
+        : Response.json({ok:false, error:result.error}, {status:result.status});
+    }
     if (parsedAction.data.action === "remind_ack") {
       const result = await remindAdminDriverToAcknowledgeLink(parsedAction.data, actor);
 

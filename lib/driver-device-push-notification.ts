@@ -40,7 +40,7 @@ const requiredEnvNames = [
 ] as const;
 
 type EnvInput = Record<string, string | undefined>;
-type DriverDevicePushClient = Pick<SupabaseClient, "from">;
+type DriverDevicePushClient = Pick<SupabaseClient, "from"> & Partial<Pick<SupabaseClient, "rpc">>;
 type UnknownRecord = Record<string, unknown>;
 
 type DriverDevicePushProviderConfig = {
@@ -484,6 +484,7 @@ export async function registerDriverNativeDevicePushSubscriptionForAcknowledgedL
     client: DriverDevicePushClient;
     env?: EnvInput;
     expoPushToken: unknown;
+    deviceIdHash?: string;
     token: string;
   },
 ): Promise<DriverNativeDeviceAlertUpdateResult> {
@@ -503,6 +504,23 @@ export async function registerDriverNativeDevicePushSubscriptionForAcknowledgedL
   const link = await resolveAcknowledgedDriverLinkForToken(input.client, input.token);
   if (!link) {
     return nativeDeviceAlertUpdateResult("invalid_driver_link");
+  }
+
+  // Updated native clients prove the active installation before replacing old tokens.
+  // Older installed clients retain their existing registration behavior until updated.
+  if (input.deviceIdHash !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(input.deviceIdHash) || !input.client.rpc) {
+      return nativeDeviceAlertUpdateResult("invalid_subscription");
+    }
+    const registration = await input.client.rpc("register_driver_native_push_installation", {
+      p_driver_id: link.driverId, p_link_id: link.linkId,
+      p_device_id_hash: input.deviceIdHash, p_endpoint: expoPushToken,
+    });
+    return registration.error || asRecord(registration.data).registered !== true
+      ? nativeDeviceAlertUpdateResult("subscription_write_failed")
+      : nativeDeviceAlertUpdateResult("subscription_registered", {
+          jobKey: opaqueDriverJobLinkKey(link.linkId), ok: true, registered: true,
+        });
   }
 
   const now = new Date().toISOString();
@@ -1390,6 +1408,18 @@ export async function sendDriverDevicePushAlertForAppUpdate(
       return alertResult("invalid_driver_link", { enabled: true });
     }
 
+    // The cancellation/replacement warning remains visible; retire prior job notices separately.
+    try {
+      for (let offset=0; ; offset+=100) {
+        const previous=await client.from("driver_job_links").select("id")
+          .eq("booking_reference",input.booking_reference).eq("driver_id",target.driverId)
+          .order("id",{ascending:true}).range(offset,offset+99);
+        if(previous.error) break;
+        const links=asRows(previous.data);
+        await Promise.allSettled(links.map(link=>sendDriverDeviceSilentRefreshForJobLink(client,target.driverId,String(link.id),options)));
+        if(links.length<100) break;
+      }
+    } catch { /* A failed quiet refresh must never suppress the cancellation warning. */ }
     const payload = reassignmentPayload(target.targetId, input.workflow_area === "driver_assignment_cancellation");
     return sendPayloadToDriverSubscriptions(
       client,
@@ -1397,7 +1427,7 @@ export async function sendDriverDevicePushAlertForAppUpdate(
       payload,
       config,
       options,
-      null,
+      "available_jobs",
       input.workflow_area === "driver_assignment_cancellation" ? "Job cancel, do not proceed." : "Job reassigned, do not proceed.",
       payload.job_key,
     );
@@ -1476,6 +1506,10 @@ export async function sendDriverDevicePushAlertForDriverPoolOffer(
       ? "Job assignment cancelled, do not proceed."
       : "A driver-pool job is available. Open the app to review.";
   const payload = driverPoolOfferPayload(offerKey, visibleBody);
+  if (notificationKind === "assignment_cancelled") {
+    payload.job_key = createHash("sha256").update(`prestige-driver-pool-cancel:${offerKey}`).digest("hex");
+    payload.tag = `prestige-driver-pool-cancel-${payload.job_key.slice(0,24)}`;
+  }
   return sendPayloadToDriverSubscriptions(
     client,
     driverId,
@@ -1487,6 +1521,24 @@ export async function sendDriverDevicePushAlertForDriverPoolOffer(
     payload.job_key,
     false,
   );
+}
+
+export async function sendDriverDeviceSilentRefreshForJobLink(
+  client: DriverDevicePushClient, driverId: number, linkId: string,
+  options: DriverDevicePushAlertOptions = {},
+): Promise<DriverDevicePushAlertResult> {
+  if (!safePositiveInteger(driverId) || !safeUuid(linkId)) return alertResult("invalid_driver_link");
+  const config = resolveProviderConfig(options.env ?? process.env);
+  if (!config) return alertResult("push_gate_closed");
+  const link = await client.from("driver_job_links").select("id").eq("id", linkId).eq("driver_id", driverId).maybeSingle();
+  if (link.error || asRecord(link.data).id !== linkId || !(await driverHasActiveOnePhoneAccount(client, driverId))) {
+    return alertResult("invalid_driver_link");
+  }
+  const key = opaqueDriverJobLinkKey(linkId);
+  return sendPayloadToDriverSubscriptions(client, driverId, {
+    body:"New Driver Job app update. Tap to review.", job_key:key, tag:"prestige-driver-"+key.slice(0,24),
+    target_path:"/driver-portal", title:"Prestige Limo Ops", version:driverDevicePushNotificationVersion,
+  }, config, options, "available_jobs", "Job update available", key, true, true, true);
 }
 
 export async function sendDriverDeviceSilentRefreshForDriverPoolOffer(

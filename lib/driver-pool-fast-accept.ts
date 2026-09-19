@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdminBookingPersistenceAdapterActor } from "./admin-booking-supabase-adapter";
 import type { AdminBookingResult } from "./admin-booking-persistence";
-import { sendDriverDevicePushAlertForDriverPoolOffer } from "./driver-device-push-notification";
+import { sendDriverDevicePushAlertForDriverPoolOffer, sendDriverDeviceSilentRefreshForDriverPoolOffer } from "./driver-device-push-notification";
 
 export const driverPoolFeatureEnvName = "PRESTIGE_DRIVER_POOL_ENABLED";
 export const driverPoolFastAcceptVersion = "driver-pool-fast-accept-v1";
@@ -77,6 +77,7 @@ export type DriverPoolCancelResult = {
 };
 
 export type DriverPoolAvailableJob = {
+  alert_unread?: boolean;
   selection_mode: "admin" | "first_accept";
   response_status: "pending" | "awaiting_admin";
   closes_at: string;
@@ -618,6 +619,19 @@ export async function loadAdminDriverPoolAttentionOffers(
   } as const;
 }
 
+export async function refreshCancelledDriverPoolRecipients(client: DriverPoolClient, offerKey: string) {
+  for (let offset = 0; ; offset += 100) {
+    const { data, error } = await client.from("driver_job_bids")
+      .select("id,driver_reference,driver_job_bid_offers!inner(offer_key)").eq("driver_job_bid_offers.offer_key", offerKey)
+      .order("id", { ascending: true }).range(offset, offset + 99);
+    if (error) throw new Error("Cancelled offer recipients could not be read.");
+    const recipients = Array.isArray(data) ? data : [];
+    await Promise.allSettled(positiveDriverIds(recipients.map(row => row.driver_reference)).map(driverId =>
+      sendDriverDeviceSilentRefreshForDriverPoolOffer(client, {driver_id: driverId, offer_key: offerKey})));
+    if (recipients.length < 100) return;
+  }
+}
+
 export async function cancelDriverPoolOffer(client: DriverPoolClient, input: { offer_key: string; expected_updated_at: string }, actor: AdminBookingPersistenceAdapterActor) {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 } as const;
   if (!actorIsValid(actor)) return { error: "Verified Admin or Dispatcher required.", ok: false, status: 403 } as const;
@@ -679,6 +693,16 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
       },
       safe_vehicle_label: text(row.safe_vehicle_label, 120), safe_trip_summary: text(row.safe_trip_summary, 120), updated_at: updated };
   }).filter((job): job is DriverPoolAvailableJob => Boolean(job));
+  if (mapped.length) {
+    const read = await client.from("driver_job_bids")
+      .select("safe_bid_context,driver_job_bid_offers!inner(offer_key)")
+      .eq("driver_reference",String(driverId)).in("driver_job_bid_offers.offer_key",mapped.map(job=>job.offer_key));
+    if (read.error) return {error:"Job alerts could not be checked. Refresh to try again.",ok:false,status:503} as const;
+    const seen = new Map(asRows(read.data).map(bid=>[
+      asRecord(bid.driver_job_bid_offers).offer_key,asRecord(bid.safe_bid_context).alert_read_offer_updated_at,
+    ]));
+    for(const job of mapped) job.alert_unread = Date.parse(String(seen.get(job.offer_key))) !== Date.parse(job.updated_at);
+  }
   return { data: { enabled: true, has_more: result.has_more === true, jobs: mapped }, ok: true } as const;
 }
 

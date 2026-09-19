@@ -138,8 +138,6 @@ const saveCrmBillingIdentityReviewReadLimit = 200;
 const adminHandledCustomerBookingRequestsStorageKey =
   "prestige-admin-handled-customer-booking-requests";
 const customerBookingInvitationCopyStateKey = "customer-booking-invitation";
-const adminDismissedPendingDriverAckLinksStorageKey =
-  "prestige-admin-dismissed-pending-driver-ack-links";
 const adminLoadBookingsTypedReadApiPath = "/api/admin-load-bookings-typed-read";
 const driverJobLinkSuccessFeedbackResetMs = 3_000;
 const adminSavedBookingStatusesApiPath = "/api/admin-saved-booking-statuses";
@@ -966,6 +964,7 @@ type AdminDriverJobLinkRecord = {
   link_status: "active" | "expired" | "revoked";
   revoked_at: string | null;
   safe_summary: {
+    ack_alert_closed?: boolean;
     ack_reminder?: {
       count: number;
       last_provider_accepted: boolean | null;
@@ -15212,25 +15211,6 @@ export default function Home() {
       return [];
     }
   });
-  const [dismissedPendingDriverAckLinkIds, setDismissedPendingDriverAckLinkIds] = useState<
-    string[]
-  >(() => {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(
-        window.localStorage.getItem(adminDismissedPendingDriverAckLinksStorageKey) || "[]",
-      );
-
-      return Array.isArray(parsed)
-        ? parsed.map(cleanReferenceText).filter(Boolean).slice(-500)
-        : [];
-    } catch {
-      return [];
-    }
-  });
   const [
     loadBookingsTypedOperationalCardsById,
     setLoadBookingsTypedOperationalCardsById,
@@ -24397,31 +24377,25 @@ export default function Home() {
     });
   }
 
-  function dismissPendingDriverAckAlert(driverJobLinkId: string) {
+  async function dismissPendingDriverAckAlert(driverJobLinkId: string, bookingReference: string) {
     const exactLinkId = cleanReferenceText(driverJobLinkId);
 
     if (!exactLinkId) {
       return;
     }
 
-    setDismissedPendingDriverAckLinkIds((currentIds) => {
-      if (currentIds.includes(exactLinkId)) {
-        return currentIds;
-      }
-
-      const nextIds = [...currentIds, exactLinkId].slice(-500);
-
-      try {
-        window.localStorage.setItem(
-          adminDismissedPendingDriverAckLinksStorageKey,
-          JSON.stringify(nextIds),
-        );
-      } catch {
-        // Alert dismissal is a local admin convenience; the driver link remains active.
-      }
-
-      return nextIds;
-    });
+    try {
+      const response = await fetch("/api/admin-driver-job-links", {
+        method:"PATCH", headers:{"content-type":"application/json", "x-prestige-admin-purpose":"admin-booking-persistence"},
+        body:JSON.stringify({action: "close_ack_alert", driver_job_link_id:exactLinkId, booking_reference:bookingReference}),
+      });
+      const result = await response.json();
+      if (!response.ok || result.ok !== true) throw new Error(result.error || "Alert could not be closed. Try again.");
+    } catch (error) {
+      setMessage({tone:"error", text:error instanceof Error ? error.message : "Alert could not be closed. Try again."});
+      return;
+    }
+    await refreshDashboardDriverJobLinksRead([bookingReference]);
   }
 
   async function loadExactAdminBookingPersistenceRecord(
@@ -31722,7 +31696,7 @@ export default function Home() {
 
             return link?.link_status === "active" &&
               !link.safe_summary.acknowledged &&
-              !dismissedPendingDriverAckLinkIds.includes(link.id)
+              !link.safe_summary.ack_alert_closed
               ? {
                   bookingReference,
                   issuedAt: link.issued_at,
@@ -49949,7 +49923,7 @@ export default function Home() {
                           data-pending-driver-ack-remind={item.linkId}
                           disabled={
                             item.waitingMinutes === null ||
-                            item.reminderCount === 0 ||
+                            item.waitingMinutes < 15 ||
                             pendingDriverAckReminderStates[item.linkId]?.status === "loading" ||
                             (item.reminderLastSentAt
                               ? Date.parse(item.reminderLastSentAt) + 15 * 60 * 1000 > currentTimeMs
@@ -49967,7 +49941,7 @@ export default function Home() {
                             : item.reminderCount === 0
                               ? item.waitingMinutes !== null && item.waitingMinutes < 15
                                 ? "Auto reminder scheduled"
-                                : "Auto reminder processing"
+                                : "Remind driver"
                               : (item.reminderLastSentAt &&
                                     Date.parse(item.reminderLastSentAt) + 15 * 60 * 1000 > currentTimeMs) ||
                                   (pendingDriverAckReminderStates[item.linkId]?.nextAvailableAt
@@ -49984,8 +49958,8 @@ export default function Home() {
                           aria-label={`Dismiss ${item.publicReference} pending driver acknowledgement alert`}
                           className="min-h-11 rounded-md border border-amber-400 bg-white px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100"
                           data-pending-driver-ack-dismiss={item.linkId}
-                          onClick={() => dismissPendingDriverAckAlert(item.linkId)}
-                          title="Dismiss this alert only. The driver job link remains active."
+                          onClick={() => void dismissPendingDriverAckAlert(item.linkId, item.bookingReference)}
+                          title="Close this alert and stop its reminders. The Job Link remains usable."
                           type="button"
                         >
                           Close

@@ -60,6 +60,7 @@ import {
   transitionDriverBiometricAppState,
 } from "./src/driver-biometric-lifecycle";
 import {
+  dismissNativeJobNotifications,
   forgetNativeNotificationToken,
   loadNativeDriverJob,
   nativeDriverJobHandoffUrl,
@@ -360,6 +361,10 @@ export default function App() {
         return;
       }
 
+      const remainingBadge = notificationResponse
+        ? await dismissNativeJobNotifications(request.jobKey, Notifications).catch(() => null)
+        : null;
+
       if (request.openTarget === "available_jobs") {
         // Only a real tap consumes the persisted badge. Silent Pool refreshes
         // still open the portal directly and must not consume visible alerts.
@@ -371,6 +376,7 @@ export default function App() {
           "x-prestige-driver-installation-id": installationId,
           "x-prestige-driver-purpose": "driver-native-job-open",
           "x-prestige-driver-open-target": "available_jobs",
+          ...(remainingBadge !== null ? { "x-prestige-driver-badge-count": String(remainingBadge) } : {}),
         } : {};
         setCanGoBack(false);
         setScreen((current) => ({
@@ -384,7 +390,7 @@ export default function App() {
       }
 
       const job = await loadNativeDriverJob(request.jobKey);
-      if (mounted && job) {
+      if (mounted && job && !notificationResponse) {
         await receiveDriverJobUrl(job.jobUrl, request.openTarget);
         return;
       }
@@ -395,6 +401,7 @@ export default function App() {
         webViewRequestHeadersRef.current = {
           "x-prestige-driver-installation-id": installationId,
           "x-prestige-driver-purpose": "driver-native-job-open",
+          ...(remainingBadge !== null ? { "x-prestige-driver-badge-count": String(remainingBadge) } : {}),
         };
         setCanGoBack(false);
         setScreen((current) => ({
@@ -409,7 +416,6 @@ export default function App() {
 
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        void Notifications.setBadgeCountAsync(0).catch(() => false);
         void openNotificationData(response.notification.request.content.data, true);
       },
     );
@@ -422,7 +428,15 @@ export default function App() {
           !Array.isArray(data) &&
           data.driver_pool_refresh === true
         ) {
-          void openNotificationData(data);
+          // Read current server state before clearing: a delayed cancellation
+          // must not erase a newer amendment using the same Job Link key.
+          // Never navigate away from an active private job or tracking screen.
+          try {
+            const current = new URL(currentWebViewUrlRef.current);
+            if (current.origin === productionOrigin && current.pathname === "/driver-portal") {
+              void openNotificationData(data);
+            }
+          } catch { /* Reconcile when the driver next opens My Jobs. */ }
         }
       },
     );
@@ -430,7 +444,6 @@ export default function App() {
     try {
       const initialResponse = Notifications.getLastNotificationResponse();
       if (initialResponse) {
-        void Notifications.setBadgeCountAsync(0).catch(() => false);
         void openNotificationData(initialResponse.notification.request.content.data, true)
           .finally(() => Notifications.clearLastNotificationResponse());
       }
@@ -500,6 +513,28 @@ export default function App() {
         return;
       }
 
+      if (request.type === "native_alerts_dismiss") {
+        try {
+          const origin = new URL(currentWebViewUrl);
+          if (origin.origin !== productionOrigin || origin.pathname !== "/driver-portal") return;
+          for (const key of request.jobKeys) await dismissNativeJobNotifications(key, Notifications);
+          const remaining = Math.min(99, (await Notifications.getPresentedNotificationsAsync()).length);
+          await Notifications.setBadgeCountAsync(remaining);
+          const body = JSON.stringify({badge_count: remaining, expected_badge_count: request.expectedBadgeCount});
+          const headers = JSON.stringify({"content-type": "application/json", "x-prestige-driver-purpose": "driver-portal-alerts-clear",
+            "x-prestige-driver-installation-id": installationId});
+          // Finish the existing session-bound badge write before a read alert navigates away.
+          const sync = request.expectedBadgeCount !== null && remaining !== request.expectedBadgeCount
+            ? `await fetch('/api/driver-portal/jobs',{method:'PATCH',credentials:'same-origin',headers:${headers},body:${JSON.stringify(body)}})`
+            : "null";
+          const detail = JSON.stringify({request_id: request.requestId});
+          webViewRef.current?.injectJavaScript(`void (async()=>{try{${sync};}finally{window.dispatchEvent(new CustomEvent('prestige-driver-alerts-dismissed',{detail:${detail}}));}})().catch(()=>{});true;`);
+        } catch {
+          // Notification-service failure must not block opening the saved job.
+          webViewRef.current?.injectJavaScript(`window.dispatchEvent(new CustomEvent('prestige-driver-alerts-dismissed',{detail:${JSON.stringify({request_id:request.requestId})}}));true;`);
+        }
+        return;
+      }
       if (request.type === "native_account_setup_save" || request.type === "native_account_setup_cancel" || request.type === "native_account_setup_activated") {
         if (accountSetupBusyRef.current) return;
         accountSetupBusyRef.current=true;
@@ -657,13 +692,12 @@ export default function App() {
             projectId,
           });
           const nextToken = tokenResult.data;
-          if (existingToken && existingToken !== nextToken) {
-            await unregisterNativeDriverNotifications(job, existingToken);
-          }
-
+          // The verified registration transaction retires older tokens only
+          // after the current token is saved; a failed request keeps them intact.
           const registration = await registerNativeDriverNotifications(
             job,
             nextToken,
+            installationId,
           );
           try {
             await rememberNativeDriverJob(registration.jobKey, job);
@@ -735,6 +769,7 @@ export default function App() {
       }
     },
     [
+      installationId,
       receiveDriverJobUrl,
       screen.active,
       sendNativeJobOpenResult,

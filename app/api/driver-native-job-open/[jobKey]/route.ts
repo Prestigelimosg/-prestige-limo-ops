@@ -157,6 +157,9 @@ export async function GET(
     return blocked(401);
   }
 
+  const remainingHeader = request.headers.get("x-prestige-driver-badge-count");
+  const remainingBadge = remainingHeader && /^(?:[0-9]|[1-9][0-9])$/.test(remainingHeader) ? Number(remainingHeader) : 0;
+
   if (poolNotificationOpen) {
     // A Pool alert has an offer-derived key, not a private Job Link. Read only
     // this verified driver's recent invitations, including terminal offers.
@@ -164,20 +167,24 @@ export async function GET(
     try {
       const { data, error } = await clientResult.client
         .from("driver_job_bids")
-        .select("driver_reference,driver_job_bid_offers!inner(offer_key)")
+        .select("driver_reference,driver_job_bid_offers!inner(offer_key,updated_at,offer_status)")
         .eq("driver_reference", String(session.claims.driverId))
         .order("submitted_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(1000);
-      const ownsNotification = !error && rows(data).some((bid) => {
+      const openedBid = !error && rows(data).find((bid) => {
         if (bid.driver_reference !== String(session.claims.driverId)) return false;
         const offerKey = text(record(bid.driver_job_bid_offers).offer_key, 64);
-        return jobKeyPattern.test(offerKey) && createHash("sha256")
-          .update(`prestige-driver-pool-offer:${offerKey}`)
-          .digest("hex") === jobKey;
+        return jobKeyPattern.test(offerKey) && ["prestige-driver-pool-offer:", "prestige-driver-pool-cancel:"]
+          .some(prefix => createHash("sha256").update(prefix+offerKey).digest("hex") === jobKey);
       });
-      if (ownsNotification) {
-        await resetDriverNativePushBadgeCount(clientResult.client, session.claims.driverId);
+      if (openedBid) {
+        const offer = record(openedBid.driver_job_bid_offers);
+        if (offer.offer_status === "open" && clientResult.client.rpc) {
+          await clientResult.client.rpc("mark_driver_pool_alerts_read", {p_driver_id:session.claims.driverId,
+            p_reads:[{offer_key:offer.offer_key,updated_at:offer.updated_at}]});
+        }
+        await resetDriverNativePushBadgeCount(clientResult.client, session.claims.driverId, remainingBadge);
       }
     } catch {
       // Badge synchronization is best-effort; the notification still opens.
@@ -267,8 +274,13 @@ export async function GET(
   await resetDriverNativePushBadgeCount(
     clientResult.client,
     session.claims.driverId,
+    remainingBadge,
   ).catch(() => false);
 
+  // Opening the exact job consumes its displayed updates; history is retained.
+  await clientResult.client.from("customer_driver_app_notification_outbox")
+    .update({notification_status:"dismissed",updated_at:new Date().toISOString()})
+    .eq("driver_job_link_id",linkId).eq("delivery_surface","driver_app").eq("notification_status","queued");
   const destination = new URL(`/driver-job/${encodeURIComponent(token)}`, request.url);
   return new Response(null, {
     headers: {

@@ -547,7 +547,9 @@ try {
   assert.match(portalSource, /data-driver-notification-purpose="available-jobs"/);
   assert.match(portalSource, /data-driver-notification-purpose="job-update"/);
   assert.match(portalSource, /data-driver-notification-job=\{alert\.job_key\}/);
-  assert.match(portalSource, /availableJobs\.length > 0 \|\| availableJobsHasMore/);
+  assert.match(portalSource, /driverPoolVisibleAlertCount > 0 \|\| availableJobsHasMore/);
+  assert.match(portalSource, /availableJobs\.filter\(job=>job\.alert_unread !== false\)\.length/,
+    "Read offers stay available but no longer increase the unread count");
   assert.match(portalSource, /driverPortalCountsAvailable && !driverPoolHasCurrentAlerts && driverPortalCurrentAlertCount === 0/);
   assert.match(portalSource, /setAvailableJobsReadAvailable\(true\)/);
   assert.match(portalSource, /setAvailableJobsReadAvailable\(false\)/);

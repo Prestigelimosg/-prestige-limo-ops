@@ -34,8 +34,8 @@ for (const fragment of [
   "`Waiting ${item.waitingMinutes} min`",
   'data-pending-driver-ack-queue-link-id={item.linkId}',
   'data-pending-driver-ack-dismiss={item.linkId}',
-  'onClick={() => dismissPendingDriverAckAlert(item.linkId)}',
-  "Dismiss this alert only. The driver job link remains active.",
+  'onClick={() => void dismissPendingDriverAckAlert(item.linkId, item.bookingReference)}',
+  "Close this alert and stop its reminders. The Job Link remains usable.",
   ">\n                          Close\n                        </button>",
   'pendingDriverAckQueueItems.length > 0 ? (',
   'pendingDriverAckQueueItems.length > 0 ? "text-lg" : "text-sm"',
@@ -48,13 +48,9 @@ for (const fragment of [
   "[cleanReferenceText(link.booking_reference)]: link",
   "linksByReference[linkReference]",
   "!link.safe_summary.acknowledged",
-  "!dismissedPendingDriverAckLinkIds.includes(link.id)",
+  "!link.safe_summary.ack_alert_closed",
   "linkId: link.id",
-  'const adminDismissedPendingDriverAckLinksStorageKey =',
-  '"prestige-admin-dismissed-pending-driver-ack-links"',
-  "function dismissPendingDriverAckAlert(driverJobLinkId: string)",
-  "window.localStorage.setItem(",
-  "adminDismissedPendingDriverAckLinksStorageKey,",
+  "function dismissPendingDriverAckAlert(driverJobLinkId: string, bookingReference: string)",
 ]) {
   assertIncludes(app, fragment, "pending queue wiring");
 }
@@ -77,34 +73,10 @@ const dismissEnd = app.indexOf("async function loadExactAdminBookingPersistenceR
 const dismissBlock = app.slice(dismissStart, dismissEnd);
 
 assert.ok(dismissStart > -1 && dismissEnd > dismissStart, "Exact-link dismiss helper is missing.");
-assert.ok(!dismissBlock.includes("fetch("), "Dismissing an alert must not call an API.");
+assert.ok(dismissBlock.includes('action: "close_ack_alert"'), "Close must persist the exact link dismissal.");
 assert.ok(!dismissBlock.includes("revokeDriverJobLink"), "Dismissing an alert must not revoke a link.");
-assert.ok(!dismissBlock.includes("bookingReference"), "Dismissal must not key by booking reference.");
+assert.ok(dismissBlock.includes("driver_job_link_id:exactLinkId"), "Close must carry the exact link identity.");
 assert.ok(!dismissBlock.includes("driver_id"), "Dismissal must not key by driver identity.");
-
-const dismissedStorageReadStart = app.indexOf(
-  "const [dismissedPendingDriverAckLinkIds, setDismissedPendingDriverAckLinkIds]",
-);
-const dismissedStorageReadEnd = app.indexOf(
-  "const [\n    loadBookingsTypedOperationalCardsById",
-  dismissedStorageReadStart,
-);
-const dismissedStorageReadBlock = app.slice(dismissedStorageReadStart, dismissedStorageReadEnd);
-
-assert.ok(
-  dismissedStorageReadStart > -1 && dismissedStorageReadEnd > dismissedStorageReadStart,
-  "Exact-link local-storage hydration block is missing.",
-);
-assertIncludes(
-  dismissedStorageReadBlock,
-  "window.localStorage.getItem(adminDismissedPendingDriverAckLinksStorageKey)",
-  "exact-link local-storage read",
-);
-assertIncludes(
-  dismissedStorageReadBlock,
-  "parsed.map(cleanReferenceText).filter(Boolean).slice(-500)",
-  "bounded exact-link local-storage hydration",
-);
 
 for (const fragment of [
   'const configuredAppUrl = process.env.APP_URL?.trim() || "";',
@@ -120,7 +92,7 @@ for (const fragment of [
   "one exact alert dismissed while the second remains",
   "hard refresh retained exact-link dismissal",
   "dismissed exact link remains hidden after hard refresh",
-  "Close must not create POST, PATCH, DELETE, or other mutations.",
+  "Close must call only the existing exact-link alert action.",
   "new link ID for the same booking appears after older dismissal",
   "Close must leave the exact private link active.",
   "assert.deepEqual(amendedQueue.ids, [amendedLinkId, secondLinkId])",

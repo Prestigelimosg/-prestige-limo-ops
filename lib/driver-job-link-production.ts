@@ -15,7 +15,7 @@ import {
   type DriverJobStatusPersistenceClient,
   type VerifiedDriverJobAccountProfile,
 } from "./driver-job-status-persistence.ts";
-import { verifyDriverAccountSession } from "./driver-account-device-lock.ts";
+import { verifyDriverAccountSession, deviceIdHashFor } from "./driver-account-device-lock.ts";
 import {
   registerDriverNativeDevicePushSubscriptionForAcknowledgedLink,
   registerDriverDevicePushSubscriptionForAcknowledgedLink,
@@ -60,6 +60,7 @@ export type ProductionDriverJobStatusUpdateInput = {
 export async function applyProductionDriverNativeDeviceAlertUpdate(input: {
   action: "register" | "unregister";
   expoPushToken: unknown;
+  driverInstallationId?: unknown;
   token: string;
 }): Promise<DriverNativeDeviceAlertUpdateResult | DriverJobLinkDisabledResult> {
   const clientResult = resolveProductionClient();
@@ -72,6 +73,7 @@ export async function applyProductionDriverNativeDeviceAlertUpdate(input: {
     ? registerDriverNativeDevicePushSubscriptionForAcknowledgedLink({
         client: clientResult.client,
         expoPushToken: input.expoPushToken,
+        deviceIdHash: input.driverInstallationId ? deviceIdHashFor(input.driverInstallationId, process.env) : undefined,
         token: input.token,
       })
     : unregisterDriverNativeDevicePushSubscriptionForAcknowledgedLink({

@@ -138,10 +138,10 @@ for (const count of [0, 1, 2]) {
         addEventListener: (name, fn) => events.set(name, fn),
         removeEventListener: (name) => events.delete(name),
       };
-      new Function("useEffect", "driverPoolAccountSession", "availableJobs", "availableJobsBusy", "loadAvailableJobs", "driverPoolAvailableJobsRefreshIntervalMs", "window", "document", refreshEffect)(
+      new Function("useEffect", "driverPoolAccountSession", "availableJobs", "availableJobsBusy", "loadAvailableJobs", "driverPoolAvailableJobsRefreshIntervalMs", "window", "document", "loadJobs", "jobsAlertRefreshAtRef", refreshEffect)(
         (effect) => { cleanup = effect(); }, signedIn, Array(count).fill({}), busy,
         (page, options) => { assert.equal(page, 1); assert.deepEqual(options, { quiet: true }); reads++; },
-        3000, window, document,
+        3000, window, document, async()=>{}, {current:Date.now()},
       );
       if (!signedIn) { assert.equal(timer, undefined); continue; }
       assert.equal(typeof timer, "function", `signed-in list with ${count} offers must refresh`);
@@ -646,6 +646,7 @@ try {
   assert.equal(legacyCancelResult.data.offer.offer_key, "b".repeat(64));
 
   const availableResult = await timeoutHarness.helper.loadAvailableDriverPoolJobs({
+    from(){return {select(){return this},eq(){return this},in(){return Promise.resolve({data:[],error:null})}}},
     rpc(name, payload) {
       exactActionRpcCalls.push({ name, payload });
       return Promise.resolve({
@@ -952,6 +953,7 @@ async function loadAdminDriverPoolCancelRouteHarness() {
     exports.getDriverPoolClientForProduction = () => ({ client, ok: true });
     exports.parseDriverPoolCancelPayload = () => ({ data: { offer_key: "a".repeat(64), expected_updated_at: "2026-09-05T01:00:00.123456+00:00" }, ok: true });
     exports.cancelDriverPoolOffer = async () => globalThis.__driverPoolCancelResult;
+    exports.refreshCancelledDriverPoolRecipients = async () => {};
     exports.loadAdminDriverPoolOffer = async () => ({ data: {}, ok: true });
     exports.parseDriverPoolAttentionQuery = () => ({ data: { limit: 20, page: 1 }, ok: true });
     exports.loadAdminDriverPoolAttentionOffers = async () => globalThis.__driverPoolAttentionResult;
@@ -1047,7 +1049,9 @@ try {
   };
   const openOfferCancelResponse = await cancelRouteHarness.route.PATCH(cancelRequest());
   assert.equal(openOfferCancelResponse.status, 200);
-  assert.equal(globalThis.__driverPoolCancelAfterCallbacks.length, 0, "ordinary open-offer cancellation must not send an assignment alert");
+  assert.equal(globalThis.__driverPoolCancelAfterCallbacks.length, 1, "ordinary cancellation schedules only silent recipient cleanup");
+  await globalThis.__driverPoolCancelAfterCallbacks[0]();
+  assert.equal(globalThis.__driverPoolCancelAlertCalls.length,0,"untaken offer must not send an assignment cancellation alert");
 
   globalThis.__driverPoolCancelAfterCallbacks = [];
   globalThis.__driverPoolCancelAlertCalls = [];

@@ -50,6 +50,7 @@ export type AdminDriverAckReminderResult =
       error: string;
       ok: false;
       reason:
+        | "alert_closed"
         | "acknowledged"
         | "cooldown"
         | "driver_mismatch"
@@ -163,6 +164,10 @@ export async function createAdminDriverAckReminder(
   ) {
     return blocked("invalid_link", "This pending Driver Job Link is not eligible for a native reminder.");
   }
+  const context = record(link.safe_link_context);
+  if (context.ack_alert_closed_at && String(context.ack_alert_closed_revision ?? "") === String(context.job_card_revision ?? "")) {
+    return blocked("alert_closed", "Admin closed this alert. Reminders have stopped; the Job Link remains usable.");
+  }
   if (linkWasAcknowledged(link)) {
     return blocked("acknowledged", "The newest Driver Job Link is already acknowledged.");
   }
@@ -229,7 +234,7 @@ export async function createAdminDriverAckReminder(
     .is("revoked_at", null)
     .limit(2);
   if (subscriptionError || rows(subscriptionData).length !== 1) {
-    return blocked("native_app_unavailable", "The assigned driver must have exactly one active native alert subscription.");
+    return blocked("native_app_unavailable", "Reminder not sent: this driver’s phone alert registration needs repair. Ask the driver to open the latest Driver app and enable Job alerts, then try again.");
   }
 
   const { data: reservationData, error: reservationError } = await client.rpc(
@@ -244,7 +249,7 @@ export async function createAdminDriverAckReminder(
   if (reservationError) return blocked("persistence_failed", "The reminder could not be reserved safely.", 500);
   if (reservation.claimed !== true) {
     const reason = text(reservation.reason, 80);
-    if (reason === "acknowledged" || reason === "driver_mismatch" || reason === "invalid_link" ||
+    if (reason === "alert_closed" || reason === "acknowledged" || reason === "driver_mismatch" || reason === "invalid_link" ||
       reason === "stale_link" || reason === "terminal_booking") {
       return blocked(reason, "This link is no longer eligible for an acknowledgement reminder.");
     }

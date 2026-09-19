@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { opaqueDriverJobLinkKey } from "./driver-device-push-notification.ts";
@@ -479,4 +480,50 @@ export async function clearDriverPortalAlerts({ client, driverId, notificationId
     .select("id");
   if (error || !Array.isArray(data)) return { ok: false, status: 503 };
   return { ok: true, clearedCount: data.length };
+}
+
+export async function loadDismissedDriverNotificationKeys(client: DriverPortalJobsClient, driverId: number): Promise<string[] | null> {
+  const keys = new Set<string>();
+  for (let offset = 0; ; offset += 100) {
+    const links = await client.from("driver_job_links")
+      .select("id,booking_reference,link_status,expires_at,revoked_at,safe_link_context")
+      .eq("driver_id", driverId).order("id", {ascending:true}).range(offset, offset+99);
+    if (links.error) return null;
+    const rows = asRows(links.data);
+    if (rows.length) {
+      const bookings = await client.from("bookings").select("booking_reference,driver_id,status,admin_internal_status,customer_facing_status")
+        .in("booking_reference", [...new Set(rows.map(row=>String(row.booking_reference)))]);
+      if (bookings.error) return null;
+      const byReference = new Map(asRows(bookings.data).map(row=>[row.booking_reference,row]));
+      for (const link of rows) {
+        const booking = byReference.get(link.booking_reference);
+        const context = asRecord(link.safe_link_context);
+        const closed = context.ack_alert_closed_at && String(context.ack_alert_closed_revision ?? "") === String(context.job_card_revision ?? "");
+        if (uuidPattern.test(String(link.id)) && (closed || link.link_status !== "active" || link.revoked_at ||
+          (typeof link.expires_at === "string" && Date.parse(link.expires_at) <= Date.now()) ||
+          !booking || positiveInteger(booking.driver_id) !== driverId || bookingIsTerminal(booking))) {
+          keys.add(opaqueDriverJobLinkKey(String(link.id)));
+        }
+      }
+    }
+    if (rows.length < 100) break;
+  }
+  for (let offset=0; ; offset+=100) {
+    const bids = await client.from("driver_job_bids")
+      .select("id,bid_status,safe_bid_context,driver_job_bid_offers!inner(offer_key,offer_status,updated_at)")
+      .eq("driver_reference",String(driverId)).order("id",{ascending:true}).range(offset,offset+99);
+    if (bids.error) return null;
+    const rows=asRows(bids.data);
+    for (const bid of rows) {
+      const offer=asRecord(bid.driver_job_bid_offers);
+      if (/^[a-f0-9]{64}$/.test(String(offer.offer_key)) &&
+        ((offer.offer_status==='open' && Date.parse(String(asRecord(bid.safe_bid_context).alert_read_offer_updated_at))===Date.parse(String(offer.updated_at))) ||
+        ['cancelled','closed','expired'].includes(String(offer.offer_status)) ||
+        (offer.offer_status==='assigned' && bid.bid_status!=='accepted'))) {
+        keys.add(createHash('sha256').update('prestige-driver-pool-offer:'+offer.offer_key).digest('hex'));
+      }
+    }
+    if(rows.length<100) break;
+  }
+  return [...keys];
 }

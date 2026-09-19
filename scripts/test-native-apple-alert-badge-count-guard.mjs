@@ -39,25 +39,14 @@ for (const [label, source] of [
 for (const [label, source] of [
   ["Admin", adminNative],
   ["Customer", customerNative],
-  ["Driver", driverNative],
 ]) {
   assert.ok(source.includes("Notifications.setBadgeCountAsync(0)"), `${label} app must clear its badge when opened`);
   assert.ok(source.includes("shouldSetBadge: true"), `${label} app must allow the assigned iOS badge`);
 }
 assert.ok(customerNative.includes("Notifications.getBadgeCountAsync()"));
-assert.ok(
-  !driverNative.includes("Notifications.getPresentedNotificationsAsync()"),
-  "Driver app must not consume and clear a visible badge merely because the app becomes active",
-);
-assert.ok(
-  !driverNative.includes("openLatestBadgeNotification"),
-  "Driver app must preserve the visible badge until the exact notification is opened",
-);
-assert.equal(
-  (driverNative.match(/Notifications\.setBadgeCountAsync\(0\)/g) || []).length,
-  2,
-  "Driver badge may clear only from an explicit live or cold-start notification response",
-);
+assert.ok(driverNative.includes("dismissNativeJobNotifications"), "Driver clears only the opened or cancelled job notices");
+assert.ok(driverNative.includes("Notifications.setBadgeCountAsync(remaining)"), "Unread other jobs remain counted");
+assert.ok(driverNative.includes("shouldSetBadge: true"));
 assert.ok(driverNativeOpenRoute.includes("resetDriverNativePushBadgeCount"));
 
 for (const table of [
@@ -131,6 +120,8 @@ for (const mode of ["warm", "cold", "silent", "ordinary-open"]) {
     setCanGoBack() {}, setScreen(update) { screen = update(screen); },
     Notifications: {
       setBadgeCountAsync: async (count) => { osBadge = count; return true; },
+      getPresentedNotificationsAsync: async () => [],
+      dismissNotificationAsync: async () => {},
       addNotificationResponseReceivedListener(handler) { responseHandler = handler; return { remove() {} }; },
       addNotificationReceivedListener(handler) { receivedHandler = handler; return { remove() {} }; },
       getLastNotificationResponse() { return mode === "cold" ? { notification } : null; },
@@ -152,8 +143,8 @@ for (const mode of ["warm", "cold", "silent", "ordinary-open"]) {
     assert.ok(bridge.shouldAllowDriverWebViewNavigation("https://app.prestigelimo.sg/driver-portal?view=available-jobs", screen.jobUrl));
     callbackRuns.push({ screen, headers: refs.webViewRequestHeadersRef.current });
   } else {
-    assert.equal(osBadge, 6, `${mode} must preserve OS badge`);
-    assert.equal(screen.jobUrl, mode === "silent" ? "https://app.prestigelimo.sg/driver-portal?view=available-jobs" : undefined);
+    assert.equal(osBadge, 6, `${mode} waits for authoritative cancellation cleanup`);
+    assert.equal(screen.jobUrl, undefined, "Silent refresh cannot interrupt a private job");
     assert.deepEqual(refs.webViewRequestHeadersRef.current, {});
   }
   assert.equal(cacheCleared, mode === "cold" ? 1 : 0);
@@ -170,7 +161,7 @@ for (const scenario of ["owned-pending", "owned-assigned", "owned-cancelled", "o
     if (url.pathname.endsWith("/driver_job_bids")) {
       assert.equal(request.method, "GET");
       assert.equal(url.searchParams.get("driver_reference"), "eq.30");
-      assert.equal(url.searchParams.get("select"), "driver_reference,driver_job_bid_offers!inner(offer_key)");
+      assert.equal(url.searchParams.get("select"), "driver_reference,driver_job_bid_offers!inner(offer_key,updated_at,offer_status)");
       assert.equal(url.searchParams.get("limit"), "1000");
       assert.deepEqual([...url.searchParams.keys()].sort(), ["driver_reference", "limit", "order", "select"]);
 
@@ -245,4 +236,4 @@ for (const scenario of ["owned-pending", "owned-assigned", "owned-cancelled", "o
     assert.equal(next.count, 1, "The next visible alert must restart at one after a valid tap");
   }
 }
-console.log("Driver Pool native badge tap guard passed: warm/cold taps reset the exact caller, silent/icon opens preserve badges, failures preserve safe navigation, next count is one.");
+console.log("Driver Pool native badge tap guard passed: warm/cold taps reset the exact caller, silent/icon opens wait for verified cleanup, failures preserve safe navigation, next count is one.");

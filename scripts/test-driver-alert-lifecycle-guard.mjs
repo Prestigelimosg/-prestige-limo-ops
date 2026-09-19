@@ -30,6 +30,40 @@ await dismiss('bad', api);
 assert.equal(dismissed.length,2);
 console.log('Driver alert lifecycle scope passed');
 
+// Android can present background FCM notifications without the custom data.
+// Expo reconstructs these using its exact foreign-notification tag/id URI.
+const foreign = (key, id = '0') => `expo-notifications://foreign_notifications?tag=${encodeURIComponent(`prestige-driver-job-${key}`)}&id=${id}`;
+presented = [
+ {request:{identifier:foreign(a),content:{data:{'android.text':'Job updated. Tap to review.'}}}},
+ {request:{identifier:foreign(b),content:{data:{}}}},
+ {request:{identifier:'expo-notifications://foreign_notifications?tag=FCM-Notification%3Alegacy&id=0',content:{data:{}}}},
+ {request:{identifier:foreign(a, 'invalid'),content:{data:{}}}},
+ {request:{identifier:foreign(a).replace('foreign_notifications','untrusted'),content:{data:{}}}},
+ {request:{identifier:foreign(a)+'&tag=another',content:{data:{}}}},
+ {request:{identifier:foreign(a,'1'),content:{data:{job_key:b}}}},
+];
+const removedForeign = [];
+const foreignApi = {getPresentedNotificationsAsync:async()=>presented,
+ dismissNotificationAsync:async id=>{removedForeign.push(id);presented=presented.filter(n=>n.request.identifier!==id);},
+ setBadgeCountAsync:async n=>{count=n;return true}};
+await dismiss(a, foreignApi);
+assert.deepEqual(removedForeign,[foreign(a)],'remove only the exact identified Android job; preserve conflicting, malformed and unknown notices');
+assert.equal(count,6,'unrelated and unidentifiable notices retain their badge');
+const pushSource = await read('lib/driver-device-push-notification.ts');
+const pushAst = ts.createSourceFile('push.ts',pushSource,ts.ScriptTarget.Latest,true);
+const sendFn = pushAst.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='sendNativePush');
+const send = new Function('driverDevicePushProviderTimeoutMs','expoPushEndpoint','asRecord','AbortController','setTimeout','clearTimeout',
+ ts.transpileModule(sendFn.getText(pushAst)+'; return sendNativePush;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText
+)(1000,'https://example.test/push',v=>v&&typeof v==='object'?v:{},AbortController,setTimeout,clearTimeout);
+let payload;
+await send('qa-token',a,'available_jobs','Job updated. Tap to review.',2,async (_url,options)=>{
+ payload=JSON.parse(options.body);return {ok:true,json:async()=>({data:{status:'ok'}})};
+});
+assert.deepEqual(payload,{badge:2,body:'Job updated. Tap to review.',data:{job_key:a,open_target:'available_jobs'},
+ priority:'high',sound:'default',tag:`prestige-driver-job-${a}`,title:'Prestige Driver',to:'qa-token'},
+ 'existing sender adds only the opaque Android tag; delivery, badge, message and handoff stay unchanged');
+console.log('Android background notification tag identity passed');
+
 // Execute the actual cancellation reader across more than one page.
 const {createHash} = await import('node:crypto');
 const portalSource=await read('lib/driver-portal-jobs.ts');

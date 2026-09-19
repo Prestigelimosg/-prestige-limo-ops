@@ -112,6 +112,47 @@ for (const sourceText of [nativeApp, nativeStorage]) {
   );
 }
 
+// Execute the native job-opening branch with no saved private link, as on a missed push.
+const openBranchStart = nativeApp.indexOf('        if (request.type === "native_job_open") {', nativeApp.indexOf('      bridgeBusyRef.current = true;'));
+const openBranchEnd = nativeApp.indexOf('        if (request.type === "native_biometrics_enable")', openBranchStart);
+assert.ok(openBranchStart > 0 && openBranchEnd > openBranchStart);
+const executeOpen = new Function("deps", `return (async()=>{const {request,loadNativeDriverJob,readTrackingState,readDriverAccountSetup,installationId,sendNativeJobOpenResult,dismissNativeJobNotifications,Notifications,nativeDriverJobHandoffUrl,currentWebViewUrlRef,webViewRequestHeadersRef,setCanGoBack,setScreen,receiveDriverJobUrl}=deps;${nativeApp.slice(openBranchStart,openBranchEnd)}})()`);
+const nativeCalls = [];
+const deps = {
+  request:{type:"native_job_open",jobKey:"a".repeat(64)},
+  loadNativeDriverJob:async()=>null, readTrackingState:async()=>({active:false}), readDriverAccountSetup:async()=>null, installationId:"test-installation",
+  sendNativeJobOpenResult:value=>nativeCalls.push(["result",value]),
+  dismissNativeJobNotifications:async key=>{nativeCalls.push(["dismiss",key]);return 2;},
+  Notifications:{}, nativeDriverJobHandoffUrl:key=>`https://app.prestigelimo.sg/api/driver-native-job-open/${key}`,
+  currentWebViewUrlRef:{current:"https://app.prestigelimo.sg/driver-portal"},webViewRequestHeadersRef:{current:null},
+  setCanGoBack:()=>{},setScreen:updater=>nativeCalls.push(["screen",updater({navigationKey:3,active:false})]),
+  receiveDriverJobUrl:async(...args)=>nativeCalls.push(["stored",...args]),
+};
+await executeOpen(deps);
+assert.equal(deps.webViewRequestHeadersRef.current["x-prestige-driver-purpose"],"driver-native-job-open");
+assert.equal(deps.webViewRequestHeadersRef.current["x-prestige-driver-installation-id"],"test-installation");
+assert.equal(deps.webViewRequestHeadersRef.current["x-prestige-driver-badge-count"],"2");
+assert.equal(nativeCalls.find(row=>row[0]==="screen")[1].jobUrl,`https://app.prestigelimo.sg/api/driver-native-job-open/${"a".repeat(64)}`);
+assert.equal(nativeCalls.some(row=>row[0]==="stored"),false);
+nativeCalls.length=0;
+await executeOpen({...deps,installationId:""});
+assert.deepEqual(nativeCalls,[["result",{jobKey:"a".repeat(64),ok:false}]],"Missing installation must not navigate.");
+nativeCalls.length=0;
+await executeOpen({...deps,loadNativeDriverJob:async()=>({jobUrl:"existing-private-job"})});
+assert.deepEqual(nativeCalls,[["stored","existing-private-job"]],"Existing acknowledged shortcuts remain unchanged.");
+nativeCalls.length=0;
+await executeOpen({...deps,readTrackingState:async()=>({active:true,job:{jobUrl:"active-trip"}})});
+assert.equal(nativeCalls[0][0],"stored");
+assert.equal(nativeCalls[0][1],"active-trip");
+assert.equal(nativeCalls.some(row=>row[0]==="dismiss"),false,"Pending open cannot consume alerts or leave an active trip.");
+nativeCalls.length=0;
+await executeOpen({...deps,readDriverAccountSetup:async()=>({jobUrl:"setup-job"})});
+assert.deepEqual(nativeCalls,[["stored","setup-job"]],"Unfinished setup keeps its original job.");
+const portalRead = read("../app/api/driver-portal/jobs/route.ts");
+assert.match(portalRead,/includePendingAcknowledgement: Boolean\(session.claims.accountId && session.claims.deviceIdHash &&[\s\S]*?x-prestige-driver-installation-id[\s\S]*?x-prestige-driver-pending-jobs/);
+const bridge = read("../driver-companion/src/driver-webview-bridge.ts");
+assert.match(bridge,/__PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__/);
+
 const nativeSenderStart = devicePush.indexOf("async function sendNativePush(");
 const nativeSenderEnd = devicePush.indexOf("function providerStatusCode", nativeSenderStart);
 assert.notEqual(nativeSenderStart, -1);

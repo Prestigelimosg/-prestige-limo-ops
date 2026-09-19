@@ -9,7 +9,7 @@ import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 type DriverPortalJob = {
   job_key: string;
   payload: SafeDriverJobPayload;
-  state: "assigned" | "driver_otw" | "ots" | "pob";
+  state: "pending_ack" | "assigned" | "driver_otw" | "ots" | "pob";
   state_label: string;
 };
 
@@ -108,6 +108,7 @@ type DriverNativeWindow = Window & {
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
   __PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__?: boolean;
+  __PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__?: boolean;
   __PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__?: boolean;
 };
 
@@ -311,6 +312,8 @@ export default function DriverPortalPage() {
         credentials: "same-origin",
         headers: {
           "x-prestige-driver-purpose": "driver-portal-jobs-read",
+          ...((window as DriverNativeWindow).__PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__ === true
+            ? { "x-prestige-driver-pending-jobs": "1" } : {}),
           ...(nativeInstallationId
             ? { "x-prestige-driver-installation-id": nativeInstallationId }
             : {}),
@@ -730,6 +733,8 @@ export default function DriverPortalPage() {
           headers: {
             "content-type": "application/json",
             "x-prestige-driver-purpose": "driver-portal-alerts-clear",
+            ...((window as DriverNativeWindow).__PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__ === true
+              ? { "x-prestige-driver-pending-jobs": "1" } : {}),
             ...(installationId ? { "x-prestige-driver-installation-id": installationId } : {}),
           },
           body: JSON.stringify({ notification_ids: notificationIds.slice(offset, offset + 100) }),
@@ -779,7 +784,7 @@ export default function DriverPortalPage() {
         if (!nativeBridge) {
           throw new Error("Native Driver bridge unavailable");
         }
-        if (openMessages) await clearCurrentAlerts(job.job_key);
+        if (openMessages || job.state === "pending_ack") await clearCurrentAlerts(job.job_key);
         nativeBridge.postMessage(JSON.stringify({
           job_key: job.job_key,
           type: "native_job_open",
@@ -1223,7 +1228,7 @@ export default function DriverPortalPage() {
 
             {readState.jobs.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-empty="true">
-                <p className="text-sm font-semibold text-slate-700">No acknowledged upcoming or active jobs.</p>
+                <p className="text-sm font-semibold text-slate-700">No upcoming or active jobs.</p>
               </div>
             ) : readState.jobs.map((job) => (
               <article
@@ -1265,7 +1270,7 @@ export default function DriverPortalPage() {
                   onClick={() => void openJob(job)}
                   type="button"
                 >
-                  {openingJobKey === job.job_key ? "Opening…" : "Open Driver Job"}
+                  {openingJobKey === job.job_key ? "Opening…" : job.state === "pending_ack" ? "Open & acknowledge" : "Open Driver Job"}
                 </button>
                 {openFeedback[job.job_key] ? (
                   <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900" data-driver-portal-open-feedback={job.job_key}>

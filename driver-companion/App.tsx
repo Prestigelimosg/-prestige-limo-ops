@@ -615,7 +615,33 @@ export default function App() {
         if (request.type === "native_job_open") {
           const storedJob = await loadNativeDriverJob(request.jobKey);
           if (!storedJob) {
-            sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
+            if (!installationId) {
+              sendNativeJobOpenResult({ jobKey: request.jobKey, ok: false });
+              return;
+            }
+            const trackingState = await readTrackingState();
+            if (trackingState.active && trackingState.job) {
+              await receiveDriverJobUrl(trackingState.job.jobUrl);
+              setScreen((current) => ({ ...current, message: "Stop the current trip before opening another job." }));
+              return;
+            }
+            const setup = await readDriverAccountSetup();
+            if (setup?.jobUrl) {
+              await receiveDriverJobUrl(setup.jobUrl);
+              return;
+            }
+            // Missed push: use the same account/device-verified resolver as a notification tap.
+            const remainingBadge = await dismissNativeJobNotifications(request.jobKey, Notifications).catch(() => null);
+            const handoffUrl = nativeDriverJobHandoffUrl(request.jobKey);
+            currentWebViewUrlRef.current = handoffUrl;
+            webViewRequestHeadersRef.current = {
+              "x-prestige-driver-installation-id": installationId,
+              "x-prestige-driver-purpose": "driver-native-job-open",
+              ...(remainingBadge !== null ? { "x-prestige-driver-badge-count": String(remainingBadge) } : {}),
+            };
+            setCanGoBack(false);
+            setScreen((current) => ({ ...current, active: false, jobUrl: handoffUrl,
+              message: "Opening your assigned job.", navigationKey: current.navigationKey + 1, openTarget: null }));
             return;
           }
           if (request.openTarget === "messages") {

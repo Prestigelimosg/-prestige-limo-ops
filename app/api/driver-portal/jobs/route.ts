@@ -119,6 +119,9 @@ export async function GET(request: Request) {
     client: clientResult.client,
     driverId: session.claims.driverId,
     includeAlerts: Boolean(session.claims.accountId && session.claims.deviceIdHash),
+    includePendingAcknowledgement: Boolean(session.claims.accountId && session.claims.deviceIdHash &&
+      request.headers.get("x-prestige-driver-installation-id") &&
+      request.headers.get("x-prestige-driver-pending-jobs") === "1"),
   });
   if (!jobsResult.ok) {
     return response({ jobs: [], ok: false, reason: "not_configured" }, 503);
@@ -279,6 +282,8 @@ export async function PATCH(request: Request) {
   const result = await clearDriverPortalAlerts({
     client: clientResult.client, driverId: session.claims.driverId,
     notificationIds: body.notification_ids,
+    includePendingAcknowledgement: Boolean(request.headers.get("x-prestige-driver-installation-id") &&
+      request.headers.get("x-prestige-driver-pending-jobs") === "1"),
   });
   if (!result.ok) return response({ ok: false }, result.status);
   return response({ ok: true, cleared_count: result.clearedCount }, 200);

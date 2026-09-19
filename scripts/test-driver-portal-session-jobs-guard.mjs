@@ -501,6 +501,45 @@ try {
     assert.equal(output.toLowerCase().includes(forbidden.toLowerCase()), false, `Driver Portal output leaked ${forbidden}.`);
   }
 
+  // Missed push: the verified updated app can discover its issued job before ACK.
+  const pendingTables = structuredClone(tables);
+  const pendingLink = pendingTables.driver_job_links.find(row => row.id === "55555555-5555-4555-8555-555555555555");
+  pendingLink.safe_link_context.native_handoff_ciphertext = "driver-native-job-handoff-v1.synthetic";
+  const readPending = () => harness.jobs.loadDriverPortalJobs({
+    client: createClient(pendingTables), driverId: 7, now, includePendingAcknowledgement: true,
+  });
+  const pendingResult = await readPending();
+  const pendingJob = pendingResult.jobs.find(job => job.payload.reference === "PORTAL-AMENDMENT-PENDING");
+  assert.ok(pendingJob, "An issued pending-ACK job must be discoverable without a push tap.");
+  assert.equal(pendingJob.state, "pending_ack");
+  assert.equal(pendingJob.stateLabel, "Pending ACK");
+  assert.equal(pendingResult.jobs.length, 2);
+  assert.equal(JSON.stringify(pendingResult).includes("native_handoff_ciphertext"), false);
+  assert.equal(JSON.stringify(pendingResult).includes("synthetic"), false);
+  const legacyPending = await harness.jobs.loadDriverPortalJobs({client:createClient(pendingTables),driverId:7,now});
+  assert.equal(legacyPending.jobs.length, 1, "Link sessions and older apps retain their acknowledged-only contract.");
+  pendingLink.safe_link_context = {};
+  assert.equal((await readPending()).jobs.length, 1, "Missing native handoff cannot expose a dead shortcut.");
+  pendingLink.safe_link_context.native_handoff_ciphertext = "driver-native-job-handoff-v1.synthetic";
+  pendingTables.driver_job_links.unshift({...pendingLink, id:"99999999-9999-4999-8999-999999999999", driver_id:8, created_at:"2026-07-22T07:59:00.000Z"});
+  assert.equal((await readPending()).jobs.length, 1, "A newer link for another driver must suppress the old pending shortcut.");
+  pendingTables.driver_job_links.shift();
+  pendingLink.revoked_at = now.toISOString();
+  assert.equal((await readPending()).jobs.length, 1, "Revoked pending links are hidden.");
+  pendingLink.revoked_at = null;
+  pendingLink.expires_at = "2026-07-22T07:59:00.000Z";
+  assert.equal((await readPending()).jobs.length, 1, "Expired pending links are hidden.");
+  pendingLink.expires_at = validExpiry;
+  const pendingBooking = pendingTables.bookings.find(row => row.booking_reference === pendingLink.booking_reference);
+  pendingBooking.driver_id = 8;
+  assert.equal((await readPending()).jobs.length, 1, "Reassigned bookings are hidden from the former driver.");
+  pendingBooking.driver_id = 7;
+  pendingBooking.status = "cancelled";
+  assert.equal((await readPending()).jobs.length, 1, "Cancelled bookings stay hidden.");
+  pendingBooking.status = "assigned";
+  pendingLink.safe_link_context.driver_acknowledged_at = now.toISOString();
+  assert.equal((await readPending()).jobs.find(job => job.jobKey === pendingJob.jobKey).state, "assigned", "ACK moves the same card into the existing assigned state.");
+
   const wrongDriverJobs = await harness.jobs.loadDriverPortalJobs({ client, driverId: 999, now });
   assert.equal(wrongDriverJobs.ok, true);
   assert.deepEqual(wrongDriverJobs.jobs, []);

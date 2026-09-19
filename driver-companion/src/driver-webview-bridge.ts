@@ -275,6 +275,12 @@ export function embeddedDriverBridgeBootstrap(
     value: true,
     writable: false
   });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__", {
+    configurable: false,
+    enumerable: false,
+    value: true,
+    writable: false
+  });
   Object.defineProperty(window, "__PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__", {
     configurable: false,
     enumerable: false,

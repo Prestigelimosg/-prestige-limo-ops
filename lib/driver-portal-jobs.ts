@@ -18,8 +18,8 @@ type UnknownRecord = Record<string, unknown>;
 export type DriverPortalJob = {
   jobKey: string;
   payload: SafeDriverJobPayload;
-  state: "assigned" | "driver_otw" | "ots" | "pob";
-  stateLabel: "Assigned · Awaiting OTW" | "On the way" | "On site" | "Passenger on board";
+  state: "pending_ack" | "assigned" | "driver_otw" | "ots" | "pob";
+  stateLabel: "Pending ACK" | "Assigned · Awaiting OTW" | "On the way" | "On site" | "Passenger on board";
 };
 
 export type DriverPortalAlert = {
@@ -284,11 +284,13 @@ export async function loadDriverPortalJobs({
   client,
   driverId,
   includeAlerts = false,
+  includePendingAcknowledgement = false,
   now = new Date(),
 }: {
   client: DriverPortalJobsClient;
   driverId: number;
   includeAlerts?: boolean;
+  includePendingAcknowledgement?: boolean;
   now?: Date | string | number;
 }): Promise<DriverPortalJobsResult> {
   const verifiedDriverId = positiveInteger(driverId);
@@ -328,11 +330,20 @@ export async function loadDriverPortalJobs({
     if (
       !uuidPattern.test(linkId) ||
       link.revoked_at ||
-      !acknowledgedAt ||
+      (!acknowledgedAt && (!includePendingAcknowledgement ||
+        !cleanText(asRecord(link.safe_link_context).native_handoff_ciphertext, 1200))) ||
       isDriverJobLinkExpired(expiresAt, nowDate) ||
       isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, nowDate)
     ) {
       continue;
+    }
+    if (!acknowledgedAt) {
+      // Match the existing native opener: only the newest active link across drivers.
+      const newest = await client.from("driver_job_links")
+        .select("id").eq("booking_reference", bookingReference).eq("link_status", "active")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (newest.error) return failedJobsResult();
+      if (asRecord(newest.data).id !== linkId) continue;
     }
     newestAcknowledgedLinks.set(bookingReference, link);
   }
@@ -399,7 +410,8 @@ export async function loadDriverPortalJobs({
     }
 
     const latestStatus = latestStatusByReference.get(reference);
-    const state = stateFromStatus(latestStatus?.status_value);
+    const acknowledged = Boolean(cleanText(asRecord(link.safe_link_context).driver_acknowledged_at, 80));
+    const state = acknowledged ? stateFromStatus(latestStatus?.status_value) : "pending_ack";
     if (state === "completed") {
       continue;
     }
@@ -427,7 +439,7 @@ export async function loadDriverPortalJobs({
       jobKey,
       payload,
       state,
-      stateLabel: stateLabel(state),
+      stateLabel: state === "pending_ack" ? "Pending ACK" : stateLabel(state),
     });
     alertScopes.push({
       bookingReference: reference,
@@ -458,17 +470,18 @@ export async function loadDriverPortalJobs({
 }
 
 // Clear only the exact visible snapshot, after re-reading this driver's current scope.
-export async function clearDriverPortalAlerts({ client, driverId, notificationIds }: {
+export async function clearDriverPortalAlerts({ client, driverId, notificationIds, includePendingAcknowledgement = false }: {
   client: DriverPortalJobsClient;
   driverId: number;
   notificationIds: unknown;
+  includePendingAcknowledgement?: boolean;
 }): Promise<{ ok: true; clearedCount: number } | { ok: false; status: number }> {
   if (!Array.isArray(notificationIds) || !notificationIds.length || notificationIds.length > 100 ||
       notificationIds.some((id) => typeof id !== "string" || !uuidPattern.test(id)) ||
       new Set(notificationIds).size !== notificationIds.length) {
     return { ok: false, status: 400 };
   }
-  const current = await loadDriverPortalJobs({ client, driverId, includeAlerts: true });
+  const current = await loadDriverPortalJobs({ client, driverId, includeAlerts: true, includePendingAcknowledgement });
   if (!current.ok || !current.alertsAvailable) return { ok: false, status: 503 };
   const authorized = new Set(current.alerts.flatMap((alert) => alert.notificationIds));
   if (notificationIds.some((id) => !authorized.has(id))) return { ok: false, status: 409 };

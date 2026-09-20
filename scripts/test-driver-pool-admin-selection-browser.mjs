@@ -24,7 +24,7 @@ try {
   await writeFile(path.join(temp,name+'.js'),ts.transpileModule(source,{compilerOptions}).outputText);
  }
  const entry=`import React from 'react';import {createRoot} from 'react-dom/client';import {AdminDriverPoolControl} from './admin';import Driver from './driver';
- const drivers=Array.from({length:location.pathname==='/large'?501:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:location.pathname==="/readiness"&&i===9?"VVV":"AVF",plate_number:'QA100'+(i+1),availability_status:'available'}));
+ const drivers=Array.from({length:location.pathname==='/large'?501:12},(_,i)=>({id:i+1,driver_name:'Synthetic Driver '+(i+1),vehicle_type:location.pathname==="/combined"?(["AVF","VVV","E","S","Combi","Unknown"][i]||"AVF"):location.pathname==="/readiness"&&i===9?"VVV":"AVF",plate_number:'QA100'+(i+1),availability_status:'available'}));
  const base={offer_key:'a'.repeat(64),offer_status:'open',audience:'selected',selection_mode:'first_accept',response_status:'pending',offer_payout_sgd:100,recipient_count:10,push_target_count:0,closes_at:'2099-09-15T12:00:00Z',pickup_at:'2099-09-15T12:00:00Z',public_booking_reference:'99001',safe_pickup_area:'After assignment',safe_dropoff_area:'After assignment',safe_trip_summary:'TRF',updated_at:'2026-09-14T00:00:00.123456Z',safe_vehicle_label:'AVF'};
  base.safe_pickup_area='Synthetic Hotel lobby';base.safe_dropoff_area='Synthetic Airport terminal';
  base.safe_job_details={route:'Synthetic Hotel > Synthetic intermediate stop > Synthetic Airport',flight_number:'QA123',passengers:3,luggage:2,child_seat:'1 booster seat',instructions:'Meet at the lobby. '+ 'Long instruction '.repeat(25),scheduled_end_at:'2099-09-15T15:00:00Z'};
@@ -62,6 +62,11 @@ try {
  const css=(await Promise.all(cssFiles.filter(f=>f.endsWith('.css')).map(f=>readFile('.next/static/css/'+f,'utf8')))).join('\n');
  server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/bundle.js'?'text/javascript':req.url==='/style.css'?'text/css':'text/html');res.end(req.url==='/bundle.js'?bundle:req.url==='/style.css'?css:'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"></head><body class="bg-slate-50 p-3"><div id="root"></div><script src="/bundle.js"></script></body></html>');});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url='http://127.0.0.1:'+server.address().port;
+ if (process.env.POOL_BROWSER_SERVE_ONLY === 'true') {
+  console.log('Synthetic Pool browser fixture: '+url);
+  await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
+  process.exitCode=0;
+} else {
  const port=Number(process.env.CHROME_DEBUG_PORT||9246);
  chrome=spawn(process.env.CHROME_BINARY||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless=new','--disable-gpu','--disable-background-networking','--disable-component-update','--disable-extensions','--no-first-run','--no-default-browser-check',`--user-data-dir=${path.join(temp,'chrome')}`,`--remote-debugging-port=${port}`,'about:blank'],{stdio:'ignore'});
  await waitForChromeDebugPort(port);client=createChromeClient((await waitForChromePageTarget(port)).webSocketDebuggerUrl);await client.ready;
@@ -178,4 +183,5 @@ try {
  }
  assert.deepEqual(errors,[]);
  console.log('PASS actual Admin/Driver JSX at 390px and 1280px: inline readiness and vehicle eligibility, direct all-driver POST without prior selected offer, one disclosure and two buttons, 500 selections with bounded readiness batches, selected-only POST, no Admin winner controls, exact winner refresh, per-row winner/cancel/link navigation, blocked reason, confirmation dismissal, failed cancellation, one-job widening and open cancellation, first Accept for both groups, winner confirmation, failed acceptance and decline, offer count 1 to 0, no overflow or browser errors. API responses are synthetic.');
+}
 } finally {await client?.close();if(chrome)await terminateChildProcess(chrome);if(server)await new Promise(resolve=>server.close(resolve));await rm(temp,{recursive:true,force:true});}

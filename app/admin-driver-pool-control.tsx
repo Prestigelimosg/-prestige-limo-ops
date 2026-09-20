@@ -76,7 +76,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
   const [serverEligible, setServerEligible] = useState(false);
   const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
   const [payout, setPayout] = useState(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
-  const [vehicleRequirement, setVehicleRequirement] = useState(["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(savedVehicle) ? savedVehicle : "");
+  const [vehicleRequirement, setVehicleRequirement] = useState(["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"].includes(savedVehicle) ? savedVehicle : "");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const loadVersion = useRef(0);
   const [alertReadiness, setAlertReadiness] = useState<Record<number, boolean | null>>({});
@@ -201,7 +201,8 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
   };
   const matchesVehicle = (driver: PoolDriver) => {
     const category = vehicleCategories[(driver.vehicle_type || "").toLowerCase().replace(/[^a-z0-9]/g, "")];
-    return Boolean(category && (vehicleRequirement === "E / AVF" ? ["E", "AVF"].includes(category) : category === vehicleRequirement));
+    return Boolean(category && (vehicleRequirement === "E / AVF" ? ["E", "AVF"].includes(category)
+      : vehicleRequirement === "AVF / VVV" ? ["AVF", "VVV"].includes(category) : category === vehicleRequirement));
   };
   const selectedReady = selectedIds.length >= 1 && selectedIds.every((id) =>
     alertReadiness[id] === true && drivers.some((driver) => driver.id === id && driver.availability_status?.trim().toLowerCase() === "available" && matchesVehicle(driver)));
@@ -382,6 +383,7 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
                       <option value="">Choose vehicle</option>
                       <option value="E / AVF">E / AVF</option>
                       <option value="AVF">AVF</option>
+                      <option value="AVF / VVV">AVF / VVV</option>
                       <option value="S">S</option>
                       <option value="VVV">VVV</option>
                       <option value="COMBI">Combi</option>

@@ -292,7 +292,7 @@ assert.equal(
   "publish must preserve the exact database concurrency token instead of truncating it to milliseconds",
 );
 // Only the Admin-posted, explicit vehicle requirement may reach the publisher.
-for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
+for (const vehicle of ["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"]) {
   const parsed = timeoutHarness.helper.parseDriverPoolPublishPayload({ ...exactPublishPayload.data, vehicle_requirement: vehicle });
   assert.equal(parsed.ok, true);
   assert.equal(parsed.data.vehicle_requirement, vehicle);
@@ -314,7 +314,7 @@ assert.doesNotMatch(vehicleMigration, /security definer|create table|alter table
 assert.match(files["app/admin-driver-pool-control.tsx"], /useState\(""\)/);
 assert.match(files["app/admin-driver-pool-control.tsx"], /vehicle_requirement: vehicleRequirement/);
 assert.match(files["app/admin-driver-pool-control.tsx"], /disabled=\{busy \|\| disabled \|\| !selectedReady \|\| !vehicleRequirement/);
-for (const vehicle of ["E / AVF", "AVF", "S", "VVV", "COMBI"]) {
+for (const vehicle of ["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"]) {
   assert.ok(files["app/admin-driver-pool-control.tsx"].includes(`<option value="${vehicle}">`));
 }
 assert.match(portalSource, /result\.reason === "vehicle_mismatch"[\s\S]*?This job requires a different vehicle type\./);

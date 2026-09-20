@@ -9,6 +9,15 @@ const ui=fs.readFileSync('app/admin-driver-pool-control.tsx','utf8');
 const uiCategories=new Function('return '+ui.match(/const vehicleCategories: Record<string, string> = (\{[\s\S]*?\});/)[1])();
 const sqlMatch=fs.readFileSync('supabase/migrations/20260909171426_driver_pool_vehicle_requirement.sql','utf8').split('as $match$')[1].split('$match$;')[0];
 assert.deepEqual(uiCategories,Object.fromEntries([...sqlMatch.matchAll(/when '([^']+)' then '([^']+)'/g)].map(m=>[m[1],m[2]])));
+// Execute the actual checkbox predicate for every existing category and combined choice.
+const predicateSource=ui.slice(ui.indexOf('  const matchesVehicle ='),ui.indexOf('  const selectedReady ='));
+const predicateJs=ts.transpileModule(predicateSource+'\nreturn matchesVehicle;', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const requirementCategories={'E / AVF':['E','AVF'],AVF:['AVF'],S:['S'],VVV:['VVV'],COMBI:['COMBI'],'AVF / VVV':['AVF','VVV']};
+for(const [requirement,categories] of Object.entries(requirementCategories)) {
+ const matches=new Function('vehicleCategories','vehicleRequirement',predicateJs)(uiCategories,requirement);
+ for(const [alias,category] of Object.entries(uiCategories)) assert.equal(matches({vehicle_type:alias}),categories.includes(category),`${requirement}: ${alias}`);
+ for(const unknown of [null,'','Unknown','AVF / VVV','E / AVF','Alphard Viano']) assert.equal(matches({vehicle_type:unknown}),false);
+}
 // Execute the actual UI refresh over multiple bounded requests; no hidden list cap.
 const callbackSource=ui.slice(ui.indexOf('  const load = useCallback('),ui.indexOf('  const loadAttention = useCallback('));
 const callbackJs=ts.transpileModule(callbackSource+'\nreturn load;', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;

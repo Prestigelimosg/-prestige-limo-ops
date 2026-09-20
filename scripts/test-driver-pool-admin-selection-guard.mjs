@@ -35,6 +35,18 @@ try {
  for(const invalid of [{...direct,selected_driver_ids:[1]},{...direct,selected_driver_ids:undefined},{...direct,audience:'everyone'},{...direct,audience:'selected'}]) assert.equal(helper.parseDriverPoolPublishPayload(invalid).ok,false);
  const award={action:'award',offer_key:offer.offer_key,expected_updated_at:offer.updated_at,idempotency_key:crypto.randomUUID(),driver_id:2};
  const widen={action:'widen',offer_key:offer.offer_key,expected_updated_at:offer.updated_at,idempotency_key:crypto.randomUUID(),booking_reference:'POOL-QA',offer_payout_sgd:100,vehicle_requirement:'AVF'};
+ for (const vehicle of ['E / AVF','AVF','S','VVV','COMBI','AVF / VVV']) {
+   for (const request of [publish,direct]) {
+     const parsed=helper.parseDriverPoolPublishPayload({...request,vehicle_requirement:vehicle});
+     assert.equal(parsed.ok,true,`Publish must accept explicit ${vehicle}`);
+     assert.equal(parsed.data.vehicle_requirement,vehicle);
+   }
+   assert.equal(helper.parseDriverPoolAdminActionPayload({...widen,vehicle_requirement:vehicle}).ok,true,`Widen must retain ${vehicle}`);
+ }
+ for (const vehicle of ['AVF/VVV','VVV / AVF','avf / vvv','AVF / VVV ',['AVF','VVV'],null]) {
+   assert.equal(helper.parseDriverPoolPublishPayload({...publish,vehicle_requirement:vehicle}).ok,false);
+   assert.equal(helper.parseDriverPoolAdminActionPayload({...widen,vehicle_requirement:vehicle}).ok,false);
+ }
  for(const request of [award,widen]) {assert.equal(helper.parseDriverPoolAdminActionPayload(request).ok,true);assert.equal(helper.parseDriverPoolAdminActionPayload({...request,actor_role:'admin'}).ok,false);}
  assert.equal(helper.parseDriverPoolDecisionPayload(award).ok,false,'Driver cannot submit Admin action/identity');
  rows={driver_job_bid_offers:offer,bookings:{driver_id:null,public_booking_reference:'99001',pickup_at:'2099-09-15T12:00:00Z'},driver_job_bids:[{driver_reference:'2',bid_status:'pending',safe_bid_context:{response:'available',customer_price:'SECRET'}}],drivers:[{id:2,driver_name:'Synthetic 2',plate_number:'QA1002',vehicle_type:'AVF',internal_notes:'SECRET'}]};
@@ -107,6 +119,17 @@ try {
  assert.deepEqual(sends.map(s=>s.driver_id),[6,7,8]);
  sends.length=0;rpcResult.idempotent=true;assert.equal((await route.POST(request(direct,'POST'))).status,200);assert.equal(sends.length,0);
  count=calls.length;assert.equal((await route.POST(request({...direct,selected_driver_ids:undefined},'POST'))).status,400);assert.equal(calls.length,count);
+ // Combined requirement traverses the same real Admin routes and exact notification recipient result.
+ for(const [method,payload] of [['POST',publish],['POST',direct],['PATCH',widen]]) {
+  sends.length=0;
+  rpcResult={offer:{...offer,safe_vehicle_label:'AVF / VVV'},recipient_driver_ids:[1,2],idempotent:false};
+  const result=await route[method](request({...payload,vehicle_requirement:'AVF / VVV'},method));
+  assert.equal(result.status,200);assert.equal((await result.json()).offer.safe_vehicle_label,'AVF / VVV');
+  assert.equal(calls.at(-1).name,'publish_driver_pool_offer');assert.equal(calls.at(-1).input.p_vehicle_requirement,'AVF / VVV');
+  assert.deepEqual(sends.map(s=>s.driver_id),[1,2]);
+  sends.length=0;rpcResult.idempotent=true;
+  await route[method](request({...payload,vehicle_requirement:'AVF / VVV'},method));assert.equal(sends.length,0);
+ }
  // Larger selected audiences use the same publisher and exact existing notification sender.
  for(const n of [11,20,50,201,500]) {
   const ids=Array.from({length:n},(_,i)=>2*i+1);sends.length=0;

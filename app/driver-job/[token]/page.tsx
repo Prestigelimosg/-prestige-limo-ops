@@ -1054,8 +1054,13 @@ export default function DriverJobPage() {
   const driverLiveLocationLastPostAtRef = useRef(0);
   const driverLiveLocationShareActiveRef = useRef(false);
   const driverOtwLiveLocationActionRef = useRef(false);
+  const completionDialogRef = useRef<HTMLDialogElement | null>(null);
+  const completionConfirmingRef = useRef(false);
   const loadedDriverJobTokenRef = useRef("");
   const nativeNotificationRegistrationTokenRef = useRef("");
+  useEffect(() => {
+    completionDialogRef.current?.close();
+  }, [token, pageState.kind]);
   const savedStatusHistory = useMemo(
     () => (pageState.kind === "ready" ? pageState.job.statusHistory : []),
     [pageState],
@@ -2503,7 +2508,7 @@ export default function DriverJobPage() {
     }
   }
 
-  async function updateStatus(nextStatus: string, label: string, displayLabel = label) {
+  async function updateStatus(nextStatus: string, label: string, displayLabel = label, completionConfirmed = false) {
     if (!token || pageState.kind !== "ready") {
       return false;
     }
@@ -2529,6 +2534,11 @@ export default function DriverJobPage() {
         tone: "error",
         text: transitionGuard.message,
       });
+      return false;
+    }
+
+    if (transitionGuard.status === "completed" && !completionConfirmed) {
+      completionDialogRef.current?.showModal();
       return false;
     }
 
@@ -2608,6 +2618,17 @@ export default function DriverJobPage() {
     }
   }
 
+  async function confirmJobCompletion() {
+    if (completionConfirmingRef.current || !completionDialogRef.current?.open) return;
+    completionConfirmingRef.current = true;
+    completionDialogRef.current.close();
+    try {
+      await updateStatus("Job Completed", "Job Completed", "Completed", true);
+    } finally {
+      completionConfirmingRef.current = false;
+    }
+  }
+
   async function handleOtwLiveLocationControl() {
     if (driverOtwLiveLocationActionRef.current || !token || pageState.kind !== "ready") {
       return;
@@ -2681,6 +2702,37 @@ export default function DriverJobPage() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950" data-driver-job-page="true">
+      <dialog
+        ref={completionDialogRef}
+        aria-labelledby="driver-completion-title"
+        aria-describedby="driver-completion-description"
+        className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-72 rounded-xl border border-slate-200 bg-white p-4 text-slate-950 shadow-xl backdrop:bg-slate-950/40"
+        data-driver-completion-dialog="true"
+      >
+        <button
+          aria-label="Close without completing"
+          className="absolute right-1 top-1 flex h-11 w-11 items-center justify-center rounded-md text-xl text-slate-600 focus-visible:outline-2 focus-visible:outline-sky-600"
+          onClick={() => completionDialogRef.current?.close()}
+          type="button"
+        >
+          ×
+        </button>
+        <h2 id="driver-completion-title" className="pr-8 text-base font-semibold">Complete this job?</h2>
+        <p id="driver-completion-description" className="mt-2 text-sm leading-5 text-slate-600">
+          Only confirm when the trip has finished.
+        </p>
+        <div className="mt-3 flex justify-end">
+          <button
+            className="h-11 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white disabled:opacity-60"
+            data-driver-completion-confirm="true"
+            disabled={Boolean(updatingStatus)}
+            onClick={confirmJobCompletion}
+            type="button"
+          >
+            Confirm
+          </button>
+        </div>
+      </dialog>
       <div className="mx-auto flex w-full max-w-md flex-col gap-3 px-3 py-4 sm:max-w-lg md:max-w-2xl md:py-6">
         <header className="space-y-1 border-b border-stone-200 pb-3">
           {embeddedDriverApp ? (

@@ -1515,6 +1515,11 @@ async function runChromeTest() {
 
       assert.equal(clicked, true, `Expected ${label} status button to be clickable.`);
 
+      if (label === "Job Completed") {
+        assert.equal(await evaluate(`document.querySelector('[data-driver-completion-dialog]')?.open`), true);
+        await evaluate(`document.querySelector('[data-driver-completion-confirm]').click()`);
+      }
+
       await waitForCondition(
         () =>
           evaluate(`(() => {

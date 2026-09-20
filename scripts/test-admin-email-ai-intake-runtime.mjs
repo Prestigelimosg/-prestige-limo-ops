@@ -1159,6 +1159,14 @@ Payment Stripe`;
     assert.equal(hidden.booking_parse_result.validatedReturnTrip,undefined);
     assert.equal(hidden.canonical_booking_text,"");
   }
+  const sharedSchema = createRequire(import.meta.url)(targetPaths.aiSchema).aiParseJsonSchema;
+  const emailResultSchema = emailAiSchema.adminEmailAiAnalysisJsonSchema.properties.bookingResult;
+  const withoutDescriptions = value => JSON.parse(JSON.stringify(value, (key, entry) => key === "description" ? undefined : entry));
+  assert.deepEqual(withoutDescriptions(emailResultSchema),withoutDescriptions(sharedSchema),"Email guidance must not add fields or change the shared structured-output contract");
+  for (const field of ["pax", "bookerContact", "passengerContact", "needsReviewReasons"]) {
+    assert.equal(sharedSchema.properties.bookings.items.properties[field].description,undefined,"Email-only descriptions must not mutate shared Ask AI fields");
+    assert.ok(emailResultSchema.properties.bookings.items.properties[field].description, `Missing Email-only field guidance: ${field}`);
+  }
   const requestsBeforeReturn = providerRequestBodies.length;
   try {
     correctionProviderOverride = request => {
@@ -1166,12 +1174,62 @@ Payment Stripe`;
       assert.match(request.instructions,/exactly two bookings in outbound then return order/);
       assert.equal(request.store,false);
       assert.deepEqual(request.tools,[]);
+      const emailFields = request.text.format.schema.properties.bookingResult.properties.bookings.items.properties;
+      assert.match(emailFields.pax.description || "", /booked passenger quantity/i, "Email AI must receive field-local booked-pax guidance");
+      assert.match(emailFields.pax.description, /empty string/);
+      assert.match(emailFields.pax.description, /capacity/i);
+      for (const field of ["bookerContact", "passengerContact"]) {
+        assert.match(emailFields[field].description || "", /Return \(new ride\)/);
+        assert.match(emailFields[field].description, /empty string/);
+        assert.match(emailFields[field].description, /role/i);
+      }
+      assert.match(emailFields.needsReviewReasons.description || "", /booked passenger count/);
+      assert.match(emailFields.needsReviewReasons.description, /contact role/);
+      assert.match(request.instructions, /Return-form field checks before output:/);
+      assert.match(request.instructions, /VEHICLE > Passengers count 6; no booked count/);
+      assert.match(request.instructions, /both phone fields empty/);
       return {output_text:JSON.stringify(returnInspectionAnalysis),model:"synthetic-return-test",usage:{input_tokens:100,output_tokens:80}};
     };
     const analysedReturn = await runtime.testAnalyseAllowedEmail({...returnInput,subject:'New booking "Prestige Transport 99999" has been received'});
     assert.equal(analysedReturn.ok,true,"Both legs must survive the complete AI sanitizer and normalizer chain");
     assert.equal(analysedReturn.analysis.bookingResult.validatedReturnTrip,true);
     assert.equal(analysedReturn.analysis.bookingResult.bookings.length,2);
+    for (const booking of analysedReturn.analysis.bookingResult.bookings) {
+      assert.equal(booking.pax, "", "Correct empty pax survives the full runtime chain");
+      assert.equal(booking.bookerContact, "");
+      assert.equal(booking.passengerContact, "");
+      assert.ok(booking.needsReviewReasons.some(reason => /passenger count/.test(reason)));
+      assert.ok(booking.needsReviewReasons.some(reason => /contact role/.test(reason)));
+    }
+    const explicitRoleInput = {...returnInput, body: returnInspectionSource
+      .replace("Phone number +6500000000", "Phone number +6500000000 Passangers 2\nBooker phone: +6500000001\nPassenger phone: +6500000002")};
+    const explicitRoleResult = {...returnInspectionAnalysis, bookingResult: {...returnInspectionAnalysis.bookingResult,
+      bookings: returnInspectionAnalysis.bookingResult.bookings.map(booking => ({...booking,
+        pax: "2", bookerContact: "+6500000001", passengerContact: "+6500000002",
+        needsReviewReasons: ["Confirm Booker identity."],
+      })),
+    }};
+    correctionProviderOverride = () => ({output_text:JSON.stringify(explicitRoleResult),model:"synthetic-return-test",usage:{input_tokens:100,output_tokens:80}});
+    const explicitRoles = await runtime.testAnalyseAllowedEmail({...explicitRoleInput,subject:'New booking "Prestige Transport 99999" has been received'});
+    assert.equal(explicitRoles.ok,true,"Explicit booked quantity and distinct role-labelled phones must remain usable");
+    for (const booking of explicitRoles.analysis.bookingResult.bookings) {
+      assert.equal(booking.pax,"2");
+      assert.equal(booking.bookerContact,"+6500000001");
+      assert.equal(booking.passengerContact,"+6500000002");
+    }
+    // Reproduce the bounded paid-result failure using synthetic identity and contacts.
+    const capacityResult = {...returnInspectionAnalysis, bookingResult: {...returnInspectionAnalysis.bookingResult,
+      bookings: returnInspectionAnalysis.bookingResult.bookings.map(booking => ({...booking,
+        pax: "3", bookerContact: "+6500000000", passengerContact: "+6500000000",
+        needsReviewReasons: ["Confirm Booker identity."],
+      })),
+    }};
+    correctionProviderOverride = () => ({output_text:JSON.stringify(capacityResult),model:"synthetic-return-test",usage:{input_tokens:100,output_tokens:80}});
+    const blockedCapacity = await runtime.testAnalyseAllowedEmail({...returnInput,subject:'New booking "Prestige Transport 99999" has been received'});
+    assert.equal(blockedCapacity.ok,false,"Repeated provider capacity error must still fail closed");
+    assert.equal(blockedCapacity.failureStage,"source_validation");
+    assert.match(blockedCapacity.error,/unverified booked pax/);
+    assert.match(blockedCapacity.error,/missing pax review/);
     correctionProviderOverride = () => ({output_text:JSON.stringify({...returnInspectionAnalysis,classification:"uncertain"}),model:"synthetic-return-test",usage:{input_tokens:100,output_tokens:80}});
     const uncertainReturn = await runtime.testAnalyseAllowedEmail({...returnInput,subject:'New booking "Prestige Transport 99999" has been received'});
     assert.equal(uncertainReturn.ok,false,"Do not bypass an uncertain model classification");

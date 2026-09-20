@@ -18,6 +18,26 @@ const adminEmailAiBookingResultJsonSchema = {
         ...aiParseJsonSchema.properties.bookings.items,
         properties: {
           ...aiParseJsonSchema.properties.bookings.items.properties,
+          pax: {
+            ...aiParseJsonSchema.properties.bookings.items.properties.pax,
+            description:
+              "Booked passenger quantity explicitly stated for this trip. VEHICLE > Passengers count is capacity, never booked pax. If only capacity is present, return an empty string, not capacity, 1, or a headcount inferred from names. Add a booked passenger count review reason on each affected leg. CLIENT DETAILS > Passangers/Passengers or an explicit booked Pax value may establish the count.",
+          },
+          bookerContact: {
+            ...aiParseJsonSchema.properties.bookings.items.properties.bookerContact,
+            description:
+              "The source-supported Booker/requester phone. For a Return (new ride) form, an unqualified CLIENT DETAILS Phone number does not establish its role when Booker and passenger identity are ambiguous. If its Booker role is not established, return an empty string and a contact role review reason. Do not duplicate an ambiguous phone into both contact fields. An explicitly identified Booker phone remains valid even if the Booker name is unknown.",
+          },
+          passengerContact: {
+            ...aiParseJsonSchema.properties.bookings.items.properties.passengerContact,
+            description:
+              "The source-supported passenger/traveller phone. For a Return (new ride) form, an unqualified CLIENT DETAILS Phone number does not establish its role when Booker and passenger identity are ambiguous. If its passenger role is not established, return an empty string and a contact role review reason. Do not assign a requester's phone to the passenger merely because the passenger name is nearby. Preserve an explicitly identified passenger phone.",
+          },
+          needsReviewReasons: {
+            ...aiParseJsonSchema.properties.bookings.items.properties.needsReviewReasons,
+            description:
+              "List unresolved facts for this exact leg. For a Return (new ride) form, missing booked pax needs 'Confirm booked passenger count; vehicle passenger count is capacity.' An ambiguous client phone needs 'Confirm client phone contact role: Booker or passenger.' Keep unknown fields empty; do not replace these reasons with only a generic Booker-name warning. Preserve other applicable review reasons.",
+          },
           companyAccount: {
             type: "string",
             description:

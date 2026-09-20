@@ -18,9 +18,14 @@ const fixture=()=>{
  const save=()=>sessionStorage.setItem('synthetic-alert-state',JSON.stringify(state));
  window.__saveAlertState=save;
  Object.assign(window,{__PRESTIGE_DRIVER_NATIVE_APP__:true,__PRESTIGE_DRIVER_INSTALLATION_ID__:'11111111-1111-4111-8111-111111111111',
-  __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__:true,__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__:true,__PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__:true,__PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__:true,__PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__:true,
+  __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__:true,__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__:true,__PRESTIGE_DRIVER_BIOMETRIC_ENABLED__:true,__PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__:true,__PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__:true,__PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__:true,
   ReactNativeWebView:{postMessage:value=>{
    const message=JSON.parse(value);window.__native.push(message);
+   if(message.type==='native_notifications_register' && message.account_session===true) {
+    if(!state.registrationFail)state.duplicateNative=false;
+    save();setTimeout(()=>window.dispatchEvent(new CustomEvent('prestige-driver-native-notification-result',
+      {detail:{ok:!state.registrationFail,state:state.registrationFail?'failed':'enabled'}})),25);
+   }
    if(message.request_id)setTimeout(()=>{window.__native.push({type:'synthetic-dismiss-completed',request_id:message.request_id});
     window.dispatchEvent(new CustomEvent('prestige-driver-alerts-dismissed',{detail:{request_id:message.request_id}}));},50);
   }}});
@@ -51,7 +56,7 @@ const fixture=()=>{
    return json({ok:true,session:'account',device_alerts:{ready:true,public_key:null,native_registration_ready:!state.duplicateNative},alerts_available:true,
     alert_count:alerts.reduce((n,r)=>n+r.update_count,0),alerts,
     dismiss_notification_keys:state.cancelled?[a]:[],native_badge_count:null,
-    jobs:[...(state.pending?[{job_key:'d'.repeat(64),payload:payload('QA-PENDING-ACK'),state:'pending_ack',state_label:'Pending ACK'}]:[]),{job_key:a,payload:payload('QA-ONE'),state:'assigned',state_label:'Assigned'},{job_key:b,payload:payload('QA-TWO'),state:'assigned',state_label:'Assigned'}]});
+    jobs:state.noJobs?[]:[...(state.pending?[{job_key:'d'.repeat(64),payload:payload('QA-PENDING-ACK'),state:'pending_ack',state_label:'Pending ACK'}]:[]),{job_key:a,payload:payload('QA-ONE'),state:'assigned',state_label:'Assigned'},{job_key:b,payload:payload('QA-TWO'),state:'assigned',state_label:'Assigned'}]});
   }
   if(url.pathname==='/api/driver-job-bids' && method==='GET')return json({ok:true,enabled:true,has_more:false,jobs:state.cancelled?[]:[{
    offer_key:offer,updated_at:'2030-01-01T00:00:00+00:00',alert_unread:!state.poolRead,closes_at:'2030-01-01T04:00Z',
@@ -74,7 +79,7 @@ try{
  for(const width of [390,1280]){
   await client.send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width===390});
   await navigateWithLoadEvent(client,appUrl+'/driver-portal');
-  await evaluate(`Object.assign(window.__alertState,{dismissed:[],poolRead:false,cancelled:false,duplicateNative:false,pending:false,requests:[],fail:false});window.__saveAlertState()`);
+  await evaluate(`Object.assign(window.__alertState,{dismissed:[],poolRead:false,cancelled:false,duplicateNative:false,pending:false,noJobs:false,registrationFail:false,requests:[],fail:false});window.__saveAlertState()`);
   await navigateWithLoadEvent(client,appUrl+'/driver-portal');await wait('Alerts 4');
   await evaluate(`document.querySelector('[data-driver-notification-centre-trigger]').click()`);
   await waitForCondition(()=>evaluate(`Boolean(document.querySelector('[data-driver-notification-job="${'a'.repeat(64)}"]'))`),5000,'alert list');
@@ -116,6 +121,20 @@ try{
   await evaluate(`document.querySelector('[data-driver-portal-job="QA-PENDING-ACK"]').scrollIntoView({block:'start'})`);
   const shot=await client.send('Page.captureScreenshot',{format:'png'});
   await writeFile(`/private/tmp/driver-alert-lifecycle-${width}.png`,Buffer.from(shot.data,'base64'));
+  await evaluate(`Object.assign(window.__alertState,{noJobs:true,pending:false,duplicateNative:true,registrationFail:true});window.__saveAlertState()`);
+  await navigateWithLoadEvent(client,appUrl+'/driver-portal');await wait('Alerts 1');
+  await waitForCondition(()=>evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Enable Job Alerts'&&!b.disabled)`),5000,'no-job enable control');
+  await evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Enable Job Alerts').click()`);
+  await waitForCondition(()=>evaluate(`document.body.textContent.includes('Check your connection and tap Enable Job Alerts again')`),5000,'actionable failure');
+  assert.ok(await evaluate(`window.__native.some(m=>m.type==='native_notifications_register'&&m.account_session===true&&!m.job_key)`));
+  assert.ok(await evaluate(`!document.body.textContent.includes('latest acknowledged private Job Link')`));
+  await evaluate(`window.__alertState.registrationFail=false;Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Enable Job Alerts').click()`);
+  await waitForCondition(()=>evaluate(`document.body.textContent.includes('This device is ready for Driver Job alerts.')`),5000,'no-job registration retry success');
+  assert.ok(await evaluate(`!document.querySelector('[data-driver-portal-job]')`));
+  assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth`));
+  const registrationShot=await client.send('Page.captureScreenshot',{format:'png'});
+  await writeFile(`/private/tmp/driver-registration-no-job-${width}.png`,Buffer.from(registrationShot.data,'base64'));
+
  }
- assert.deepEqual(errors,[]);console.log('Driver alert browser: exact read, other-job isolation, persisted count, offer retained after read, cancellation cleanup, pending-ACK discovery and existing native open, 390/1280px passed');
+ assert.deepEqual(errors,[]);console.log('Driver alert browser: exact read, other-job isolation, persisted count, offer retained after read, cancellation cleanup, pending-ACK discovery and existing native open, no-job registration failure/retry and unchanged UI at390/1280px passed');
 }catch(error){if(client){const diagnostic=await client.send('Runtime.evaluate',{expression:`({text:document.body.innerText.slice(0,2000),requests:window.__alertState?.requests?.slice(-5),native:window.__native?.slice(-3)})`,returnByValue:true});console.error(JSON.stringify(diagnostic.result.value));}throw error;}finally{if(client)await client.close().catch(()=>{});await terminateChildProcess(chrome);await rm(profile,{recursive:true,force:true});}

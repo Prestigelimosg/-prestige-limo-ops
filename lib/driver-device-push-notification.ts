@@ -479,6 +479,28 @@ async function resolveAcknowledgedDriverLinkForToken(
     : null;
 }
 
+// Called only after the existing portal route validates its account session and installation.
+export async function registerDriverNativeDevicePushSubscriptionForPortalAccount(input: {
+  client: DriverDevicePushClient;
+  driverId: number;
+  deviceIdHash: string;
+  expoPushToken: unknown;
+  env?: EnvInput;
+}): Promise<DriverNativeDeviceAlertUpdateResult> {
+  const env = input.env ?? process.env;
+  if (!resolveProviderConfig(env)) return nativeDeviceAlertUpdateResult("provider_not_configured");
+  const endpoint = parseExpoPushToken(input.expoPushToken);
+  if (!endpoint || !safePositiveInteger(input.driverId) || !/^[0-9a-f]{64}$/.test(input.deviceIdHash) || !input.client.rpc) {
+    return nativeDeviceAlertUpdateResult("invalid_subscription");
+  }
+  const result = await input.client.rpc("register_driver_native_push_installation", {
+    p_driver_id: input.driverId, p_link_id: null, p_device_id_hash: input.deviceIdHash, p_endpoint: endpoint,
+  });
+  return result.error || asRecord(result.data).registered !== true
+    ? nativeDeviceAlertUpdateResult("subscription_write_failed")
+    : nativeDeviceAlertUpdateResult("subscription_registered", { ok: true, registered: true });
+}
+
 export async function registerDriverNativeDevicePushSubscriptionForAcknowledgedLink(
   input: {
     client: DriverDevicePushClient;

@@ -17,6 +17,7 @@ import {
   adminEmailAiSenderAddressIsAllowed,
   type AdminEmailAiClassification,
 } from "../lib/admin-email-ai-intake-contract";
+import { adminEmailAiCanonicalBookingText, sanitizeAdminEmailAiAnalysis, type AdminEmailAiAnalysis } from "../lib/admin-email-ai-intake-schema";
 import { mockCustomers } from "./customers/_data/mock-customers";
 import {
   calculateProfit,
@@ -6010,13 +6011,45 @@ function compactParsedBooking(parsedBooking: ParsedBooking | null | undefined) {
   ) as ParsedBooking;
 }
 
-function parseBookingMessageForState(messageText: string): ParsedBooking {
+function parseBookingMessageForState(
+  messageText: string,
+  emailAiReview?: { bookingResult: AdminEmailAiAnalysis["bookingResult"]; canonicalBookingText: string },
+): ParsedBooking & Partial<BookingForm> {
+  const result = emailAiReview?.bookingResult;
+  if (result && (result.multipleBookingsDetected || result.bookings.length > 1)) {
+    if (!result.validatedReturnTrip || result.bookings.length !== 2 ||
+      messageText.trim() !== emailAiReview?.canonicalBookingText.trim()) {
+      return {success: false, multipleBookingsDetected: true,
+        parserWarning: "This email needs both validated return-trip legs. Reopen its review, then edit the existing Booking Details fields after Create Job Card."};
+    }
+    const [outbound, returnLeg] = result.bookings;
+    const outboundText = adminEmailAiCanonicalBookingText({
+      bookingResult: {...result, multipleBookingsDetected: false, bookings: [outbound]},
+      classification: "confirmed_booking", confidence: 0, reviewReasons: [], suggestedReply: "", summary: "",
+    });
+    return {
+      ...compactParsedBooking(parseJobCardBookingMessage(outboundText)),
+      // Preserve explicit AI blanks; the ordinary message parser may supply defaults.
+      pax: outbound.pax,
+      booker: outbound.bookerName,
+      bookerContact: outbound.bookerContact,
+      bookerEmail: outbound.bookerEmail,
+      passengerContact: outbound.passengerContact,
+      returnTripRequested: "yes",
+      returnDate: returnLeg.pickupDate,
+      returnTime: returnLeg.pickupTime,
+      returnFlight: returnLeg.flightNumber,
+      returnPickup: returnLeg.pickup,
+      returnDropoff: returnLeg.dropoff,
+    };
+  }
   return compactParsedBooking(parseJobCardBookingMessage(messageText));
 }
 
 function mergeParsedBookingIntoForm(
   currentBooking: BookingForm,
   parsedBooking: ParsedBooking,
+  preserveExplicitEmailAiBlanks = false,
 ): BookingForm {
   const parsedStandbyUntil = clean(
     (parsedBooking as ParsedBooking & { standbyUntil?: string }).standbyUntil,
@@ -6051,6 +6084,13 @@ function mergeParsedBookingIntoForm(
         ? parsedName
         : ""),
     name: parsedName,
+    ...(preserveExplicitEmailAiBlanks ? {
+      pax: clean(parsedBooking.pax),
+      booker: clean(parsedBooking.booker),
+      bookerContact: clean(parsedBooking.bookerContact),
+      bookerEmail: clean(parsedBooking.bookerEmail),
+      passengerContact: clean(parsedBooking.passengerContact),
+    } : {}),
   });
 }
 
@@ -21144,7 +21184,20 @@ export default function Home() {
 
     setBooking(() => createInitialBooking());
 
-    const parsedBooking = parseBookingMessageForState(messageText);
+    const emailAiRecord = activeAdminEmailAiIntakeId
+      ? adminEmailAiIntakeReadState.records.find(record => record.id === activeAdminEmailAiIntakeId && record.processing_status === "queued")
+      : undefined;
+    if (activeAdminEmailAiIntakeId && !emailAiRecord) {
+      setMessage({tone: "error", text: "Email review is no longer available. Refresh Dashboard and reopen the exact email before Create Job Card."});
+      return false;
+    }
+    const emailAiBookingResult = emailAiRecord
+      ? sanitizeAdminEmailAiAnalysis({bookingResult: emailAiRecord.booking_parse_result}, true).bookingResult
+      : undefined;
+    const parsedBooking = parseBookingMessageForState(messageText, emailAiRecord && emailAiBookingResult ? {
+      bookingResult: emailAiBookingResult,
+      canonicalBookingText: clean(emailAiRecord.canonical_booking_text),
+    } : undefined);
 
     const detectedFields = Object.entries(parsedBooking).filter(([, value]) => hasParsedValue(value)).length;
 
@@ -21181,7 +21234,10 @@ export default function Home() {
 
     setMultiBookingNotice(null);
     const parsedBookingForMerge = { ...parsedBooking };
-    const finalForm = mergeParsedBookingIntoForm(createInitialBooking(), parsedBookingForMerge);
+    const finalForm = mergeParsedBookingIntoForm(
+      createInitialBooking(), parsedBookingForMerge,
+      emailAiBookingResult?.validatedReturnTrip === true,
+    );
 
     const finalDebugBooking = {
       ...finalForm,

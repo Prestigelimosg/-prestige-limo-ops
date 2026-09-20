@@ -12223,7 +12223,7 @@ async function loadAdminDriverJobStatusRead(bookingReference: string) {
   };
 }
 
-async function loadAdminDriverOtsPhotoProofRead(bookingReference: string) {
+async function loadAdminDriverOtsPhotoProofRead(bookingReference: string, deletedIds: Set<string>) {
   const params = new URLSearchParams({
     booking_reference: bookingReference,
     limit: "3",
@@ -12252,6 +12252,7 @@ async function loadAdminDriverOtsPhotoProofRead(bookingReference: string) {
   const matchingProofs = proofs.filter(
     (proof) =>
       clean(proof.booking_reference) === bookingReference &&
+      !deletedIds.has(proof.id || "") &&
       proof.customerVisible === false &&
       proof.external_send === false,
   );
@@ -15372,6 +15373,11 @@ export default function Home() {
       status: "idle",
       statuses: [],
     });
+  const deletedOtsPhotoIdsRef = useRef(new Set<string>());
+  const deletingOtsPhotoRef = useRef(false);
+  const [otsPhotoDeleteAction, setOtsPhotoDeleteAction] = useState<{
+    bookingReference: string; status: "deleting" | "success" | "error"; text: string;
+  } | null>(null);
   const [adminDriverOtsPhotoProofReadState, setAdminDriverOtsPhotoProofReadState] =
     useState<AdminDriverOtsPhotoProofReadState>({
       bookingReference: "",
@@ -17686,7 +17692,7 @@ export default function Home() {
         });
 
         try {
-          const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+          const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference, deletedOtsPhotoIdsRef.current);
 
           if (cancelled) {
             return;
@@ -25559,6 +25565,39 @@ export default function Home() {
     });
   }
 
+  async function deleteAdminOtsPhoto(proof: AdminDriverOtsPhotoProofRecord) {
+    if (deletingOtsPhotoRef.current || !proof.id || !proof.booking_reference || !proof.uploaded_at) return;
+    const bookingReference = proof.booking_reference;
+    if (!window.confirm(`Delete the OTS photo uploaded ${adminDriverJobStatusTimeLabel(proof.uploaded_at)} for booking ${adminVisibleBookingReference(bookingReference)}? This permanently deletes only this photo. Booking and saved driver status remain.`)) return;
+    deletingOtsPhotoRef.current = true;
+    setOtsPhotoDeleteAction({ bookingReference, status: "deleting", text: "Deleting photo…" });
+    try {
+      const response = await fetch(adminDriverOtsPhotoProofsApiPath, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", "x-prestige-admin-purpose": adminLegacyDataPurpose },
+        body: JSON.stringify({ id: proof.id, booking_reference: bookingReference, uploaded_at: proof.uploaded_at }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok !== true) throw new Error("Photo deletion failed");
+      deletedOtsPhotoIdsRef.current.add(proof.id);
+      const withoutDeletedPhoto = (state: AdminDriverOtsPhotoProofReadState): AdminDriverOtsPhotoProofReadState => {
+        if (state.bookingReference !== bookingReference) return state;
+        const proofs = state.proofs.filter((item) => item.id !== proof.id);
+        return { ...state, proofs, latestProof: proofs[0] || null, status: "loaded", message: {
+          tone: "success", text: "Photo deleted. Saved driver status remains.",
+        } };
+      };
+      setAdminDriverOtsPhotoProofReadState(withoutDeletedPhoto);
+      setDashboardDriverOtsPhotoProofReadStates((states) => {
+        const current = states[bookingReference];
+        return current ? { ...states, [bookingReference]: withoutDeletedPhoto(current) } : states;
+      });
+      setOtsPhotoDeleteAction({ bookingReference, status: "success", text: "Photo deleted. Saved driver status remains." });
+    } catch {
+      setOtsPhotoDeleteAction({ bookingReference, status: "error", text: "Photo could not be deleted. Try again; if it was already removed, retry finishes cleanup." });
+    } finally { deletingOtsPhotoRef.current = false; }
+  }
+
   async function refreshAdminDriverOtsPhotoProofRead(bookingReferenceValue?: string) {
     const bookingReference = clean(
       bookingReferenceValue === undefined
@@ -25594,7 +25633,7 @@ export default function Home() {
     });
 
     try {
-      const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+      const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference, deletedOtsPhotoIdsRef.current);
       const currentBookingReference =
         cleanReferenceText(appliedAdminBookingSnapshotReferenceRef.current) ||
         cleanReferenceText(loadedBookingIdRef.current);
@@ -26294,7 +26333,7 @@ export default function Home() {
     }));
 
     try {
-      const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference);
+      const loadedProofs = await loadAdminDriverOtsPhotoProofRead(bookingReference, deletedOtsPhotoIdsRef.current);
 
       setDashboardDriverOtsPhotoProofReadStates((currentStates) => ({
         ...currentStates,
@@ -46798,18 +46837,34 @@ export default function Home() {
                         </p>
                       ) : null}
                     </div>
-                    {adminDriverOtsPhotoProofLatest?.admin_view_url ? (
-                      <a
-                        className="shrink-0 rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 sm:text-[10px]"
-                        data-admin-driver-ots-photo-proof-view="true"
-                        href={adminDriverOtsPhotoProofLatest.admin_view_url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        View photo
-                      </a>
+                    {adminDriverOtsPhotoProofLatest ? (
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        {adminDriverOtsPhotoProofLatest.admin_view_url ? (
+                          <a
+                            className="shrink-0 rounded border border-lime-300 bg-white px-2 py-0.5 text-[9px] font-semibold text-lime-950 transition hover:bg-lime-50 sm:text-[10px]"
+                            data-admin-driver-ots-photo-proof-view="true"
+                            href={adminDriverOtsPhotoProofLatest.admin_view_url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            View photo
+                          </a>
+                        ) : <span className="text-xs">Photo unavailable</span>}
+                        <button
+                          type="button"
+                          className="shrink-0 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 disabled:opacity-50"
+                          data-admin-ots-photo-delete="true"
+                          disabled={otsPhotoDeleteAction?.status === "deleting"}
+                          onClick={() => void deleteAdminOtsPhoto(adminDriverOtsPhotoProofLatest)}
+                        >
+                          {otsPhotoDeleteAction?.status === "deleting" ? "Deleting…" : "Delete photo"}
+                        </button>
+                      </span>
                     ) : null}
                   </div>
+                  {otsPhotoDeleteAction?.bookingReference === dispatchReleaseWorkflowBookingReference ? (
+                    <p role="status" className="mt-1 text-xs">{otsPhotoDeleteAction.text}</p>
+                  ) : null}
                 </div>
               </div>
               </details>
@@ -49815,6 +49870,11 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+                {otsPhotoDeleteAction?.bookingReference === dispatchReleaseWorkflowBookingReference ? (
+                  <p role="status" className="mb-2 text-xs" data-admin-ots-photo-delete-result="true">
+                    {otsPhotoDeleteAction.text}
+                  </p>
+                ) : null}
                 {adminDriverOtsPhotoProofLatest ? (
                 <div
                   className="mb-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950"
@@ -49848,16 +49908,29 @@ export default function Home() {
                       >
                         {adminDriverOtsPhotoProofReadState.status === "loading" ? "Checking" : "Refresh"}
                       </button>
-                      {adminDriverOtsPhotoProofLatest.admin_view_url ? (
-                        <a
-                          className="inline-flex min-h-8 items-center rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-semibold text-sky-950 transition hover:bg-sky-50"
-                          data-admin-driver-ots-photo-proof-visible-view="true"
-                          href={adminDriverOtsPhotoProofLatest.admin_view_url}
-                          rel="noreferrer"
-                          target="_blank"
+                      {adminDriverOtsPhotoProofLatest ? (
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        {adminDriverOtsPhotoProofLatest.admin_view_url ? (
+                          <a
+                            className="inline-flex min-h-8 items-center rounded-md border border-sky-300 bg-white px-2.5 py-1 text-xs font-semibold text-sky-950 transition hover:bg-sky-50"
+                            data-admin-driver-ots-photo-proof-visible-view="true"
+                            href={adminDriverOtsPhotoProofLatest.admin_view_url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            View photo
+                          </a>
+                        ) : <span className="text-xs">Photo unavailable</span>}
+                        <button
+                          type="button"
+                          className="shrink-0 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700 disabled:opacity-50"
+                          data-admin-ots-photo-delete="true"
+                          disabled={otsPhotoDeleteAction?.status === "deleting"}
+                          onClick={() => void deleteAdminOtsPhoto(adminDriverOtsPhotoProofLatest)}
                         >
-                          View photo
-                        </a>
+                          {otsPhotoDeleteAction?.status === "deleting" ? "Deleting…" : "Delete photo"}
+                        </button>
+                      </span>
                       ) : null}
                     </div>
                   </div>

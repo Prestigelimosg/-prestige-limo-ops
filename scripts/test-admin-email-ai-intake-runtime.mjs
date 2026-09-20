@@ -1010,7 +1010,7 @@ try {
     let source = await readFile(sourcePaths[name], "utf8");
     if (name === "runtime") {
       source +=
-        "\nexport { enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation, preserveValidatedExplicitCompanyDisplay as testPreserveValidatedExplicitCompanyDisplay, validateExplicitSourceFactsCompleteness as testValidateExplicitSourceFactsCompleteness, analyseAllowedEmail as testAnalyseAllowedEmail, updateProcessedIntake as testUpdateProcessedIntake };\nexport const testLoadCorrectionLessonCodes = typeof loadCorrectionLessonCodes === \"function\" ? loadCorrectionLessonCodes : undefined;\n";
+        "\nexport { sanitizePersistenceRecord as testSanitizePersistenceRecord, enforceStructuredPickupSeparation as testEnforceStructuredPickupSeparation, preserveValidatedExplicitCompanyDisplay as testPreserveValidatedExplicitCompanyDisplay, validateExplicitSourceFactsCompleteness as testValidateExplicitSourceFactsCompleteness, analyseAllowedEmail as testAnalyseAllowedEmail, updateProcessedIntake as testUpdateProcessedIntake };\nexport const testLoadCorrectionLessonCodes = typeof loadCorrectionLessonCodes === \"function\" ? loadCorrectionLessonCodes : undefined;\n";
     }
     await mkdir(path.dirname(targetPaths[name]), { recursive: true });
     await writeFile(
@@ -1061,6 +1061,125 @@ try {
   const runtime = createRequire(import.meta.url)(targetPaths.runtime);
   const emailAiSchema = createRequire(import.meta.url)(targetPaths.schema);
   const bookingParser = createRequire(import.meta.url)(targetPaths.bookingParser);
+
+  const returnInspectionSource = `General
+Title Prestige Transport 99999 Booking form name Prestige Transport Status Pending (new)
+Service type City Transfers Transfer type Return (new ride)
+Pickup date and time 07-10-2026 18:15 Return date and time 07-10-2026 20:40
+Route locations
+ 1. 7 Example Avenue, Singapore 111111
+ 2. 50 Sample Quay, Singapore 222222
+Return Route locations
+ 1. 50 Sample Quay Rooftop Level 19, Singapore 222222
+ 2. 7 Example Avenue, Singapore 111111
+Vehicle name Mercedes Benz E-class Bag count 2 Passengers count 3
+Client details
+First name Alex Last name Sample E-mail address requester@example.test
+Phone number +6500000000
+Billing address
+Company name Example Speakers and Trainers
+Payment Stripe`;
+  const returnInspectionBooking = Object.fromEntries(Object.keys(emailAiSchema.adminEmailAiAnalysisJsonSchema.properties.bookingResult.properties.bookings.items.properties).map(key => [key, key === 'needsReviewReasons' ? [] : key === 'confidence' ? 0.9 : '']));
+  Object.assign(returnInspectionBooking, {bagCount:'2',bookingType:'TRF',companyAccount:'Example Speakers and Trainers',bookerEmail:'requester@example.test',passengerName:'Alex Sample',passengerContact:'',needsReviewReasons:['Confirm booked passenger count.','Confirm Booker identity and contact role.'],vehicle:'Mercedes Benz E-class',pickupDate:'2026-10-07',pickupTime:'18:15',pickup:'7 Example Avenue, Singapore 111111',dropoff:'50 Sample Quay, Singapore 222222'});
+  const returnInspectionAnalysis = {classification:'confirmed_booking',confidence:0.9,summary:'Two requested rides',reviewReasons:[],suggestedReply:'',bookingResult:{multipleBookingsDetected:true,rawWarnings:[],bookings:[returnInspectionBooking,{...returnInspectionBooking,pickupTime:'20:40',pickup:'50 Sample Quay Rooftop Level 19, Singapore 222222',dropoff:'7 Example Avenue, Singapore 111111'}]}};
+  const returnInput = {body: returnInspectionSource, senderAddress: "info@prestigelimo.sg"};
+  const pairResult = runtime.testValidateExplicitSourceFactsCompleteness(returnInput, returnInspectionAnalysis);
+  assert.equal(pairResult.ok, true, "Explicit return form must validate both AI-extracted legs");
+  assert.equal(pairResult.analysis.bookingResult.validatedReturnTrip, true);
+  for (const [label, bookings] of [
+    ["omitted return", [returnInspectionBooking]],
+    ["reversed legs", [...returnInspectionAnalysis.bookingResult.bookings].reverse()],
+    ["merged route", [returnInspectionBooking, {...returnInspectionAnalysis.bookingResult.bookings[1], pickup: returnInspectionBooking.pickup}]],
+    ["invented pax from capacity", returnInspectionAnalysis.bookingResult.bookings.map(b => ({...b,pax:"3"}))],
+    ["different return passenger", [returnInspectionBooking, {...returnInspectionAnalysis.bookingResult.bookings[1], passengerName:"Other Person"}]],
+    ["unsupported return stop", [returnInspectionBooking, {...returnInspectionAnalysis.bookingResult.bookings[1], extraStopCount:"1",extraStopLocation:"Other place"}]],
+  ]) {
+    const result = runtime.testValidateExplicitSourceFactsCompleteness(returnInput, {...returnInspectionAnalysis, bookingResult:{...returnInspectionAnalysis.bookingResult, multipleBookingsDetected:bookings.length > 1, bookings}});
+    assert.equal(result.ok, false, label);
+  }
+  for (const body of [
+    returnInspectionSource.replace("20:40", ""),
+    returnInspectionSource.replace("Transfer type Return (new ride)", ""),
+    "Route name Airport Departure\n" + returnInspectionSource,
+    returnInspectionSource.replace("Return Route locations", "Unlabelled locations"),
+    returnInspectionSource.replace("Return date and time 07-10-2026 20:40", "Return date and time 07-10-2026 17:00"),
+  ]) assert.equal(runtime.testValidateExplicitSourceFactsCompleteness({...returnInput,body},returnInspectionAnalysis).ok,false);
+  const explicitReturnPax = {...returnInspectionAnalysis,bookingResult:{...returnInspectionAnalysis.bookingResult,bookings:returnInspectionAnalysis.bookingResult.bookings.map(booking => ({...booking,pax:"2"}))}};
+  assert.equal(runtime.testValidateExplicitSourceFactsCompleteness({...returnInput,body:returnInspectionSource.replace("Phone number +6500000000", "Phone number +6500000000 Passangers 2")},explicitReturnPax).ok,true,"Labelled booked pax works without an airport flight field");
+  assert.equal(runtime.testValidateExplicitSourceFactsCompleteness(returnInput,{...returnInspectionAnalysis,bookingResult:{...returnInspectionAnalysis.bookingResult,bookings:returnInspectionAnalysis.bookingResult.bookings.map(b => ({...b,pickup:b.pickup + " / " + b.dropoff}))}}).ok,false,"Combined endpoints must not pass as pickup");
+  assert.equal(runtime.testValidateExplicitSourceFactsCompleteness({...returnInput,senderAddress:"transzend@groundbooker.com"},returnInspectionAnalysis).ok,false,"Do not broaden the other sender lane");
+  const inlineCompany = returnInspectionSource.replace("Company name Example Speakers and Trainers\n", "Company name Example Speakers and Trainers Company Address 1/79\nExample Street\n");
+  assert.equal(runtime.testValidateExplicitSourceFactsCompleteness({...returnInput,body:inlineCompany},returnInspectionAnalysis).ok,true,"Inline company address must not become company name");
+  assert.equal(emailAiSchema.sanitizeAdminEmailAiAnalysis(pairResult.analysis).bookingResult.validatedReturnTrip, undefined,"AI cannot supply server validation metadata");
+  assert.equal(emailAiSchema.sanitizeAdminEmailAiAnalysis(pairResult.analysis, true).bookingResult.validatedReturnTrip,true,"Stored validation marker survives admin read projection");
+
+  // Execute the actual Dispatch adapter and established return builder, without a browser or writer.
+  const pageSource = await readFile(path.join(root,"app/page.tsx"),"utf8");
+  const pageAst = ts.createSourceFile("page.tsx",pageSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  const names = ["hasParsedValue","compactParsedBooking","parseBookingMessageForState","mergeParsedBookingIntoForm","buildAdminDispatchReturnTripBooking"];
+  const functions = pageAst.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text));
+  assert.equal(functions.length,names.length);
+  const adapterCode = transpile(functions.map(node => node.getText(pageAst)).join("\n"),"adapter.ts");
+  const {parseBookingMessageForState,mergeParsedBookingIntoForm,buildAdminDispatchReturnTripBooking} = new Function("parseJobCardBookingMessage","adminEmailAiCanonicalBookingText","clean","mergeParsedBookingState","normalizeCompanyAccount","adminDispatchSelectableBookingForm",adapterCode + "\nreturn {parseBookingMessageForState,mergeParsedBookingIntoForm,buildAdminDispatchReturnTripBooking};")(bookingParser.parseJobCardBookingMessage,emailAiSchema.adminEmailAiCanonicalBookingText,value => String(value ?? "").trim(),bookingParser.mergeParsedBookingState,value => value,value => value);
+  const canonicalBookingText = emailAiSchema.adminEmailAiCanonicalBookingText(pairResult.analysis);
+  const adapterInput = {bookingResult:pairResult.analysis.bookingResult,canonicalBookingText};
+  const dispatchPair = parseBookingMessageForState(canonicalBookingText,adapterInput);
+  assert.equal(dispatchPair.returnTripRequested,"yes");
+  assert.equal(dispatchPair.date,"2026-10-07");
+  assert.equal(dispatchPair.time,"1815hrs");
+  assert.equal(dispatchPair.returnDate,"2026-10-07");
+  assert.equal(dispatchPair.returnTime,"20:40");
+  assert.equal(dispatchPair.pickup,returnInspectionBooking.pickup);
+  assert.equal(dispatchPair.dropoff,returnInspectionBooking.dropoff);
+  assert.equal(dispatchPair.returnPickup,returnInspectionAnalysis.bookingResult.bookings[1].pickup);
+  assert.equal(dispatchPair.returnDropoff,returnInspectionAnalysis.bookingResult.bookings[1].dropoff);
+  assert.equal(dispatchPair.pax || "","","Missing booked pax must not become capacity or a parser default");
+  assert.equal(dispatchPair.booker || "","","Unknown Booker must remain for explicit review");
+  const mergedPair = mergeParsedBookingIntoForm({pax:"1",booker:"",company:"",bookerEmail:""},dispatchPair,true);
+  assert.equal(mergedPair.pax,"","Existing form default must not replace the AI unknown pax");
+  assert.equal(mergedPair.booker,"");
+  assert.equal(mergedPair.returnPickup,dispatchPair.returnPickup);
+  const returnPayloadBooking = buildAdminDispatchReturnTripBooking(mergedPair);
+  assert.equal(returnPayloadBooking.date,"2026-10-07");
+  assert.equal(returnPayloadBooking.time,"20:40");
+  assert.equal(returnPayloadBooking.pickup,dispatchPair.returnPickup);
+  assert.equal(returnPayloadBooking.dropoff,dispatchPair.returnDropoff);
+  assert.equal(returnPayloadBooking.returnTripRequested,"");
+  assert.equal(parseBookingMessageForState(canonicalBookingText + "\nPickup time: 22:00",adapterInput).success,false,"Changed multi-leg canonical text must not silently save an outbound-only job");
+  assert.equal(parseBookingMessageForState(canonicalBookingText,{...adapterInput,bookingResult:{...adapterInput.bookingResult,validatedReturnTrip:undefined}}).success,false);
+  const singleText = emailAiSchema.adminEmailAiCanonicalBookingText({...returnInspectionAnalysis,bookingResult:{multipleBookingsDetected:false,rawWarnings:[],bookings:[returnInspectionBooking]}});
+  assert.deepEqual(parseBookingMessageForState(singleText),parseBookingMessageForState(singleText,{canonicalBookingText:singleText,bookingResult:{multipleBookingsDetected:false,rawWarnings:[],bookings:[returnInspectionBooking]}}),"Single-trip and ordinary manual handoffs stay identical");
+
+  const storedReturn = {id:"synthetic-return-intake",mailbox_address:"booking@prestigelimo.sg",sender_address:"info@prestigelimo.sg",classification:"confirmed_booking",processing_status:"queued",booking_parse_result:pairResult.analysis.bookingResult,canonical_booking_text:canonicalBookingText};
+  const readReturn = runtime.testSanitizePersistenceRecord(storedReturn);
+  assert.equal(readReturn.booking_parse_result.validatedReturnTrip,true,"Existing admin read must carry server validation metadata");
+  assert.equal(parseBookingMessageForState(readReturn.canonical_booking_text,{bookingResult:readReturn.booking_parse_result,canonicalBookingText:readReturn.canonical_booking_text}).returnTripRequested,"yes");
+  for (const processing_status of ["failed","processing"]) {
+    const hidden = runtime.testSanitizePersistenceRecord({...storedReturn,processing_status});
+    assert.equal(hidden.booking_parse_result.validatedReturnTrip,undefined);
+    assert.equal(hidden.canonical_booking_text,"");
+  }
+  const requestsBeforeReturn = providerRequestBodies.length;
+  try {
+    correctionProviderOverride = request => {
+      assert.match(request.instructions,/submitted reservation for Admin review/);
+      assert.match(request.instructions,/exactly two bookings in outbound then return order/);
+      assert.equal(request.store,false);
+      assert.deepEqual(request.tools,[]);
+      return {output_text:JSON.stringify(returnInspectionAnalysis),model:"synthetic-return-test",usage:{input_tokens:100,output_tokens:80}};
+    };
+    const analysedReturn = await runtime.testAnalyseAllowedEmail({...returnInput,subject:'New booking "Prestige Transport 99999" has been received'});
+    assert.equal(analysedReturn.ok,true,"Both legs must survive the complete AI sanitizer and normalizer chain");
+    assert.equal(analysedReturn.analysis.bookingResult.validatedReturnTrip,true);
+    assert.equal(analysedReturn.analysis.bookingResult.bookings.length,2);
+    correctionProviderOverride = () => ({output_text:JSON.stringify({...returnInspectionAnalysis,classification:"uncertain"}),model:"synthetic-return-test",usage:{input_tokens:100,output_tokens:80}});
+    const uncertainReturn = await runtime.testAnalyseAllowedEmail({...returnInput,subject:'New booking "Prestige Transport 99999" has been received'});
+    assert.equal(uncertainReturn.ok,false,"Do not bypass an uncertain model classification");
+    assert.equal(uncertainReturn.failureStage,"classification");
+  } finally {
+    correctionProviderOverride = null;
+    providerRequestBodies.splice(requestsBeforeReturn);
+  }
 
   const arrivalSource = `Route name Airport arrival
 Comment 1st Drop-off: First Guest (10 Example Walk), 2nd Drop-off: Second Guest (20 Example Road).

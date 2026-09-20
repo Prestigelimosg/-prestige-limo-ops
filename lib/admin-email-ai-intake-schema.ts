@@ -35,7 +35,7 @@ const adminEmailAiBookingResultJsonSchema = {
 } as const;
 
 export type AdminEmailAiAnalysis = {
-  bookingResult: AiParseResult;
+  bookingResult: AiParseResult & { validatedReturnTrip?: true };
   classification: AdminEmailAiClassification;
   confidence: number;
   reviewReasons: string[];
@@ -99,6 +99,7 @@ function cleanMultilineText(value: unknown, maximumLength: number) {
 
 export function sanitizeAdminEmailAiAnalysis(
   value: unknown,
+  preserveStoredValidation = false,
 ): AdminEmailAiAnalysis {
   const record =
     value !== null && typeof value === "object" && !Array.isArray(value)
@@ -120,8 +121,15 @@ export function sanitizeAdminEmailAiAnalysis(
         .slice(0, 12)
     : [];
 
+  const bookingResult = sanitizeAiParseResult(record.bookingResult);
+  const storedResult = record.bookingResult as Record<string, unknown> | null;
   return {
-    bookingResult: sanitizeAiParseResult(record.bookingResult),
+    bookingResult: {
+      ...bookingResult,
+      ...(preserveStoredValidation && storedResult?.validatedReturnTrip === true &&
+        bookingResult.multipleBookingsDetected && bookingResult.bookings.length === 2
+        ? {validatedReturnTrip: true as const} : {}),
+    },
     classification,
     confidence,
     reviewReasons,

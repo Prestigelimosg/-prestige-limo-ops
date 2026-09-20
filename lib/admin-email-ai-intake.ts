@@ -26,7 +26,6 @@ import {
   sanitizeAdminEmailAiAnalysis,
   type AdminEmailAiAnalysis,
 } from "./admin-email-ai-intake-schema";
-import type { AiParseResult } from "./ai-parser-schema";
 
 export const adminEmailAiIntakePurpose = "admin-email-ai-intake";
 export const adminEmailAiEnabledEnvName = "PRESTIGE_EMAIL_AI_ENABLED";
@@ -114,7 +113,7 @@ async function loadCorrectionLessonCodes(
 const emailAnalysisInstructions = `You are the private email intake reviewer for Prestige Limo Ops admin.
 
 Classify the supplied email as exactly one of:
-- confirmed_booking: the sender clearly states that a reservation or transport job is confirmed, completed as a booking, or provides a final booking confirmation.
+- confirmed_booking: the sender clearly states that a reservation or transport job is confirmed, completed as a booking, or provides a final booking confirmation. An explicit Prestige Transport booking-form notification with Transfer type Return (new ride), outbound and return schedules, and separately labelled Route locations and Return Route locations is a submitted reservation for Admin review even when its form status is Pending (new). This classification never confirms or saves an operational booking. A quote or availability request remains enquiry; unclear intent remains uncertain.
 - enquiry: the sender asks for a quote, availability, service information, or another answer but does not confirm a booking.
 - amendment: the sender changes an existing booking.
 - cancellation: the sender cancels an existing booking.
@@ -138,7 +137,7 @@ Approved Job Card Format memory:
 
 Read the complete email before producing the structured booking result. Preserve relationships across labelled sections instead of reviewing each line in isolation. Treat Comment, route and route-location sections, pickup and drop-off sections, vehicle details, extras, and client details as one complete source. Reconcile a numbered stop or waypoint with the exact address supplied elsewhere in the same email: extraStopCount is the supported number and extraStopLocation is the exact address, never a generic label such as 1 waypoint. Keep the passenger phone in passengerContact, vehicle bag quantity in bagCount, and booked passenger quantity in pax. A vehicle's passenger count is capacity and must never replace pax. Keep each person and contact attached to the role stated by the email. When an airport departure is explicit but the airport or terminal is absent, a safe generic airport destination may be used only when supported by the route context; never invent a terminal. Every genuinely missing or ambiguous operational fact must remain empty with a precise needsReviewReasons entry instead of a guessed value.
 
-Return one coherent, complete structured booking whose supported facts agree with the whole source email. Every clearly labelled operational fact must appear in its correct structured field; never omit it, contradict it, combine separate location roles, or substitute a vehicle capacity, organizer, or other nearby value.
+Return coherent, complete structured bookings whose supported facts agree with the whole source email. For an explicit Return (new ride) form, return exactly two bookings in outbound then return order with multipleBookingsDetected true. Use each leg's own labelled schedule and route, including a separately specified return pickup; never merge, omit, or automatically reverse a leg. Shared client and vehicle sections apply to both legs only where supported. If booked pax is absent, leave pax empty on both legs and require review; vehicle capacity is not booked pax. Every clearly labelled operational fact must appear in its correct structured field; never omit it, contradict it, combine separate location roles, or substitute a vehicle capacity, organizer, or other nearby value.
 
 For Airport arrival, DROP OFF LOCATION is the final ground destination. A Comment-labelled first drop-off or ROUTE LOCATIONS waypoint is an intermediate ground stop, never the airport pickup and never a duplicate of the final destination. Keep these in extraStopLocation and extraStops in source order. If no airport pickup is named, leave pickup empty and add an airport-pickup review reason; never use a street destination as pickup.
 
@@ -175,7 +174,7 @@ export type AdminEmailAiIntakeStatus =
   | "dismissed";
 
 export type AdminEmailAiIntakeRecord = {
-  booking_parse_result: AiParseResult;
+  booking_parse_result: AdminEmailAiAnalysis["bookingResult"];
   canonical_booking_text: string;
   classification: AdminEmailAiClassification;
   confidence: number;
@@ -506,7 +505,7 @@ function sanitizePersistenceRecord(
     reviewReasons: value.review_reasons,
     suggestedReply: value.suggested_reply,
     summary: value.summary,
-  });
+  }, true);
 
   return {
     booking_parse_result: value.processing_status === "failed" || value.processing_status === "processing"
@@ -1175,7 +1174,7 @@ function explicitSourceBookingFacts(body: string) {
   const companyAccount = singleExplicitEvidence(
     matchedSourceValues(
       source,
-      /(?:^|\n)[ \t]*(?:Agency|Company(?![ \t]+Address\b))(?:[ \t]+(?:name|account))?[ \t]*(?:[:=-][ \t]*)?([^\n]*?)(?=[ \t]+Company[ \t]+Address[ \t]*(?:\n|$)|\n|$)/gim,
+      /(?:^|\n)[ \t]*(?:Agency|Company(?![ \t]+Address\b))(?:[ \t]+(?:name|account))?[ \t]*(?:[:=-][ \t]*)?([^\n]*?)(?=[ \t]+Company[ \t]+Address\b|\n|$)/gim,
     ).filter((value) => !isPrestigeOwnCompanyEvidence(value)),
   );
   const dateTimeMatches = [...source.matchAll(
@@ -1298,10 +1297,44 @@ function explicitSourceBookingFacts(body: string) {
     ...(vehicleCapacity.value ? { vehicleCapacity: vehicleCapacity.value } : {}),
   };
 
+  // Compare AI output with the two labelled legs; never populate a booking from source text.
+  const returnRequested = /\bTransfer type\s+Return\b|\bReturn\s+(?:date and time|Route locations)\b/i.test(source);
+  let returnLegs: ExplicitSourceBookingFacts[] = [];
+  if (returnRequested) {
+    const returnDates = [...source.matchAll(/\bReturn\s+date and time\s+(\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}-\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2})\b/gi)];
+    const routeSections = [...source.matchAll(/(?:^|\n)[ \t]*Route locations\s+([\s\S]+?)\bReturn\s+Route locations\s+([\s\S]+?)(?=\bVehicle(?:\s+name)?\b)/gi)];
+    const routes = routeSections.length === 1 ? routeSections[0].slice(1).map(section => {
+      const withoutLinks = section.replace(/\[https?:\/\/[^\]]*\]/gi, "");
+      const points = [...withoutLinks.matchAll(/(?:^|\n)\s*(\d+)\.\s*([\s\S]*?)(?=(?:\n\s*\d+\.)|$)/g)];
+      return points.length === 2 && points[0][1] === "1" && points[1][1] === "2"
+        ? points.map(point => cleanText(point[2], 640)) : [];
+    }) : [];
+    const clientSection = source.match(/\bClient details\s+([\s\S]+?)(?=\bBilling address\b)/i)?.[1] || "";
+    const returnPax = singleExplicitEvidence(matchedSourceValues(
+      clientSection, /\b(?:Pax|Pass(?:a|e)ngers?)\s+(\d{1,2})\b/gi, normalizedEvidenceCount,
+    ));
+    const returnDate = normalizedEvidenceDate(returnDates[0]?.[1]);
+    const returnTime = normalizedEvidenceTime(returnDates[0]?.[2]);
+    const supportedReturn = /\bTransfer type\s+Return\s*\(new ride\)/i.test(source) &&
+      /\bService type\s+City Transfers\b/i.test(source) &&
+      (!facts.bookingType || facts.bookingType === "TRF") &&
+      dateTimeMatches.length === 1 && returnDates.length === 1 && !returnPax.ambiguous &&
+      facts.pickupDate && facts.pickupTime && returnDate && returnTime &&
+      `${returnDate}T${returnTime}` > `${facts.pickupDate}T${facts.pickupTime}` &&
+      routes.length === 2 && routes.every(points => points.length === 2 && points.every(Boolean));
+    if (supportedReturn) {
+      returnLegs = [
+        {...facts, pax: returnPax.value, bookingType: "TRF", pickup: routes[0][0], dropoff: routes[0][1]},
+        {...facts, pax: returnPax.value, bookingType: "TRF", pickupDate: returnDate, pickupTime: returnTime, pickup: routes[1][0], dropoff: routes[1][1]},
+      ];
+    }
+  }
   return {
     ambiguous: evidenceResults.some((result) => result.ambiguous),
     facts,
     hasEvidence: Object.keys(facts).length > 0,
+    returnRequested,
+    returnLegs,
   };
 }
 
@@ -1316,43 +1349,53 @@ function validateExplicitSourceFactsCompleteness(
   const hasOneStructuredBooking =
     !analysis.bookingResult.multipleBookingsDetected &&
     analysis.bookingResult.bookings.length === 1;
-  const booking = analysis.bookingResult.bookings[0];
-  const facts = sourceEvidence.facts;
-  const structuredCompanyAccount = cleanText(booking?.companyAccount, 320);
+  const isReturnPair = input.senderAddress === "info@prestigelimo.sg" && sourceEvidence.returnRequested && sourceEvidence.returnLegs.length === 2 &&
+    analysis.bookingResult.multipleBookingsDetected && analysis.bookingResult.bookings.length === 2;
   const verifiedSenderCompanyAccount = cleanText(
-    adminEmailAiCanonicalCompanyAccountForSender(input.senderAddress),
-    320,
+    adminEmailAiCanonicalCompanyAccountForSender(input.senderAddress), 320,
   );
   const invalidStructuredResult =
     analysis.bookingResult.bookings.some((candidate) =>
       Boolean(cleanText(candidate.customerPriceOverride, 80)),
     );
 
-  const mismatches = [
-    ["pricing", Boolean(invalidStructuredResult)],
-    ["ambiguous source", Boolean(sourceEvidence.ambiguous)],
-    ["booking count", Boolean(sourceEvidence.hasEvidence && !hasOneStructuredBooking)],
-    ["service", Boolean(facts.bookingType && booking?.bookingType !== facts.bookingType)],
-    ["company", Boolean(facts.companyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(facts.companyAccount))],
-    ["company", Boolean(!facts.companyAccount && structuredCompanyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(verifiedSenderCompanyAccount))],
-    ["pickup date", Boolean(facts.pickupDate && normalizedEvidenceDate(booking?.pickupDate) !== facts.pickupDate)],
-    ["pickup time", Boolean(facts.pickupTime && normalizedEvidenceTime(booking?.pickupTime) !== facts.pickupTime)],
-    ["pickup", Boolean(facts.pickup && !locationContainsExplicitEvidence(booking?.pickup, facts.pickup))],
-    ["dropoff", Boolean(facts.dropoff && !locationContainsExplicitEvidence(booking?.dropoff, facts.dropoff))],
-    ["extraStopCount", Boolean(facts.extraStopCount && normalizedEvidenceCount(booking?.extraStopCount) !== facts.extraStopCount)],
-    ["extraStopLocation", Boolean(facts.extraStopLocation && !locationContainsExplicitEvidence(booking?.extraStopLocation, facts.extraStopLocation))],
-    ["pickup / extraStopLocation", Boolean(facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))],
-    ["pickup / extraStopLocation", Boolean(facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.extraStopLocation, facts.pickup))],
-    ["arrival pickup", Boolean(facts.bookingType === "MNG" && ((facts.dropoff && locationContainsExplicitEvidence(booking?.pickup, facts.dropoff)) || (facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))))],
-    ["passenger name", Boolean(facts.passengerName && !samePersonIdentity(booking?.passengerName, facts.passengerName))],
-    ["passenger contact", Boolean(facts.passengerContact && normalizedExplicitPassengerPhone(booking?.passengerContact) !== facts.passengerContact)],
-    ["passenger count", Boolean(facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax)],
-    ["bags", Boolean(facts.bagCount && normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount)],
-    ["vehicle", Boolean(facts.vehicle && normalizedEvidenceText(booking?.vehicle) !== normalizedEvidenceText(facts.vehicle))],
-    ["flight", Boolean(facts.flightNumber && normalizedEvidenceFlight(booking?.flightNumber) !== facts.flightNumber)],
-    ["passenger count / capacity", Boolean(facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity && normalizedEvidenceCount(booking?.pax) === facts.vehicleCapacity)],
-  ] as const;
-  const mismatchFields = mismatches.filter(([, mismatch]) => mismatch).map(([field]) => field);
+  const mismatches = (isReturnPair ? sourceEvidence.returnLegs : [sourceEvidence.facts]).flatMap((facts, index) => {
+    const booking = analysis.bookingResult.bookings[index];
+    const structuredCompanyAccount = cleanText(booking?.companyAccount, 320);
+    const outbound = analysis.bookingResult.bookings[0];
+    const sharedFields = ["bookingType", "companyAccount", "bookerName", "bookerEmail", "bookerContact", "passengerName", "passengerContact", "pax", "bagCount", "vehicle", "notes"] as const;
+    return [
+      ["pricing", Boolean(invalidStructuredResult)],
+      ["return trip", Boolean(sourceEvidence.returnRequested && !isReturnPair)],
+      ["return shared fields", Boolean(isReturnPair && sharedFields.some(field => cleanText(booking?.[field], 4000) !== cleanText(outbound?.[field], 4000)))],
+      ["return route roles", Boolean(isReturnPair && (locationContainsExplicitEvidence(booking?.pickup, facts.dropoff) || locationContainsExplicitEvidence(booking?.dropoff, facts.pickup)))],
+      ["return extra stops", Boolean(isReturnPair && [booking?.extraStopCount, booking?.extraStopLocation, booking?.extraStops].some(value => cleanText(value, 640) && cleanText(value, 640) !== "0"))],
+      ["unverified booked pax", Boolean(isReturnPair && !facts.pax && cleanText(booking?.pax, 40))],
+      ["missing pax review", Boolean(isReturnPair && !facts.pax && !booking?.needsReviewReasons.some(reason => /pax|passenger.*count|booked.*passenger/i.test(reason)))],
+      ["ambiguous source", Boolean(sourceEvidence.ambiguous)],
+      ["booking count", Boolean(sourceEvidence.hasEvidence && !hasOneStructuredBooking && !isReturnPair)],
+      ["service", Boolean(facts.bookingType && booking?.bookingType !== facts.bookingType)],
+      ["company", Boolean(facts.companyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(facts.companyAccount))],
+      ["company", Boolean(!facts.companyAccount && structuredCompanyAccount && normalizedEvidenceText(structuredCompanyAccount) !== normalizedEvidenceText(verifiedSenderCompanyAccount))],
+      ["pickup date", Boolean(facts.pickupDate && normalizedEvidenceDate(booking?.pickupDate) !== facts.pickupDate)],
+      ["pickup time", Boolean(facts.pickupTime && normalizedEvidenceTime(booking?.pickupTime) !== facts.pickupTime)],
+      ["pickup", Boolean(facts.pickup && !locationContainsExplicitEvidence(booking?.pickup, facts.pickup))],
+      ["dropoff", Boolean(facts.dropoff && !locationContainsExplicitEvidence(booking?.dropoff, facts.dropoff))],
+      ["extraStopCount", Boolean(facts.extraStopCount && normalizedEvidenceCount(booking?.extraStopCount) !== facts.extraStopCount)],
+      ["extraStopLocation", Boolean(facts.extraStopLocation && !locationContainsExplicitEvidence(booking?.extraStopLocation, facts.extraStopLocation))],
+      ["pickup / extraStopLocation", Boolean(facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))],
+      ["pickup / extraStopLocation", Boolean(facts.pickup && facts.extraStopLocation && locationContainsExplicitEvidence(booking?.extraStopLocation, facts.pickup))],
+      ["arrival pickup", Boolean(facts.bookingType === "MNG" && ((facts.dropoff && locationContainsExplicitEvidence(booking?.pickup, facts.dropoff)) || (facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))))],
+      ["passenger name", Boolean(facts.passengerName && !samePersonIdentity(booking?.passengerName, facts.passengerName))],
+      ["passenger contact", Boolean(facts.passengerContact && normalizedExplicitPassengerPhone(booking?.passengerContact) !== facts.passengerContact)],
+      ["passenger count", Boolean(facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax)],
+      ["bags", Boolean(facts.bagCount && normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount)],
+      ["vehicle", Boolean(facts.vehicle && normalizedEvidenceText(booking?.vehicle) !== normalizedEvidenceText(facts.vehicle))],
+      ["flight", Boolean(facts.flightNumber && normalizedEvidenceFlight(booking?.flightNumber) !== facts.flightNumber)],
+      ["passenger count / capacity", Boolean(facts.pax && facts.vehicleCapacity && facts.pax !== facts.vehicleCapacity && normalizedEvidenceCount(booking?.pax) === facts.vehicleCapacity)],
+    ] as const;
+  });
+  const mismatchFields = [...new Set(mismatches.filter(([, mismatch]) => mismatch).map(([field]) => field))];
   if (mismatchFields.length > 0) {
     const correctionLessonCodes: CorrectionLessonCode[] = [];
     // These are interpretation reminders, never replacement values or identity decisions.
@@ -1369,7 +1412,9 @@ function validateExplicitSourceFactsCompleteness(
   }
 
   return {
-    analysis,
+    analysis: isReturnPair
+      ? {...analysis, bookingResult: {...analysis.bookingResult, validatedReturnTrip: true as const}}
+      : analysis,
     ok: true as const,
   };
 }

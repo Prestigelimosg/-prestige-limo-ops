@@ -223,7 +223,7 @@ assert.match(runtimeSource, /extraStopCount/);
 assert.match(runtimeSource, /A vehicle's passenger count is capacity and must never replace pax\./);
 assert.match(
   runtimeSource,
-  /Return one coherent, complete structured booking whose supported facts agree with the whole source email\./,
+  /Return coherent, complete structured bookings whose supported facts agree with the whole source email\./,
 );
 assert.match(
   runtimeSource,
@@ -327,10 +327,13 @@ const sourceFactsValidationSource = runtimeSource.match(
 )?.[0] || "";
 assert.ok(sourceFactsValidationSource);
 assert.doesNotMatch(
-  sourceFactsValidationSource,
+  sourceFactsValidationSource.replace("bookingResult: {...analysis.bookingResult, validatedReturnTrip: true as const}", ""),
   /bookingResult\s*:\s*\{|(?:bagCount|bookingType|companyAccount|extraStopCount|extraStopLocation|flightNumber|passengerContact|passengerName|pax|pickup|pickupDate|pickupTime|vehicle)\s*:/,
   "The post-AI validator must accept or reject the provider result without populating structured booking fields from source evidence.",
 );
+assert.match(sourceFactsValidationSource, /bookingResult: \{\.\.\.analysis\.bookingResult, validatedReturnTrip: true as const\}/, "Return metadata may mark a validated pair but must not replace AI fields");
+assert.match(pageSource, /emailAiBookingResult\?\.validatedReturnTrip === true/);
+assert.match(pageSource, /messageText\.trim\(\) !== emailAiReview\?\.canonicalBookingText\.trim\(\)/);
 const companyDisplayPreservationSource = runtimeSource.match(
   /function preserveValidatedExplicitCompanyDisplay\([\s\S]*?\n}\n\nfunction prestigeTransportClientIdentity/,
 )?.[0] || "";

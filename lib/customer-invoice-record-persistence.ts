@@ -27,6 +27,7 @@ import {
   type CustomerLocalInvoiceStatus,
 } from "./customer-local-invoices";
 import { assertActiveCustomerPortalAccessAccount } from "./customer-portal-access-account";
+import { assertActiveCustomerPrincipalSession } from "./customer-principal-access";
 import type { CustomerSavedBookingsBoundaryContext } from "./customer-saved-bookings-read";
 
 export const customerInvoiceRecordVersion = "customer-invoice-record-v1";
@@ -1168,6 +1169,7 @@ export async function createCustomerInvoiceRecord(
 export async function loadAdminCustomerInvoiceRecords(
   actor: AdminBookingPersistenceAdapterActor,
   client?: CustomerInvoiceClient,
+  customerIdInput?: unknown,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord[]>> {
   if (!safeActor(actor)) {
     return safeFailure(safePersistenceConfigError, 403);
@@ -1180,6 +1182,28 @@ export async function loadAdminCustomerInvoiceRecords(
   }
 
   const invoiceClient = client ?? createServerClient();
+  if (customerIdInput !== undefined) {
+    const customerId = safeText(customerIdInput, 80);
+    if (!customerId || !/^[1-9]\d*$/.test(customerId)) return safeFailure(safeValidationError, 400);
+    const rows: CustomerInvoiceStoredRecord[] = [];
+    for (let offset = 0; offset < 10_000; offset += 200) {
+      const { data: scopedData, error: scopedError } = await invoiceClient
+        .from(customerInvoiceRecordTableName).select(customerInvoiceAdminSelect)
+        .eq("customer_id", customerId).order("created_at", { ascending: false }).order("id")
+        .range(offset, offset + 199);
+      if (scopedError || !Array.isArray(scopedData)) return safeFailure(safeReadError, 503);
+      for (const row of scopedData) {
+        const raw = asRecord(row);
+        if (safeText(raw.customer_id, 80) !== customerId) return safeFailure(safeReadError, 503);
+        const record = toStoredRecord(raw);
+        // Invalid issued rows cannot silently disappear from coverage checks.
+        if (!record) return safeFailure(safeReadError, 503);
+        rows.push(record);
+      }
+      if (scopedData.length < 200) return { data: rows, ok: true, version: customerInvoiceRecordVersion };
+    }
+    return safeFailure(safeReadError, 503);
+  }
   let { data, error } = await invoiceClient
     .from(customerInvoiceRecordTableName)
     .select(customerInvoiceAdminSelect)
@@ -2228,32 +2252,64 @@ export async function loadAdminCustomerInvoicePdf(
     : safeFailure(safeMissingError, 404);
 }
 
+// Both portal readers resolve the same account. PA account scope includes every
+// traveller under its verified Company + Booker; a Boss session gains no access.
+async function resolveCustomerInvoicePortalAccount(
+  context: CustomerSavedBookingsBoundaryContext,
+  client: CustomerInvoiceClient,
+): Promise<CustomerInvoiceResult<{ customer_account_reference: string; booker_id: number | null }>> {
+  if (context.mode === "principal-device-session") {
+    const access = context.principal_session_token
+      ? await assertActiveCustomerPrincipalSession(context.principal_session_token)
+      : null;
+    if (!access?.ok || access.data.principal_role !== "pa" ||
+        access.data.principal_id !== context.principal_id || !access.data.memberships.length) {
+      return safeFailure(safeCustomerAuthError, 403);
+    }
+    const membership = access.data.memberships[0];
+    const customerId = safeText(membership.customer_account_reference, 160);
+    const bookerId = positiveIdentityId(membership.booker_id);
+    const companyId = positiveIdentityId(membership.company_id);
+    if (!customerId || !/^[1-9]\d*$/.test(customerId) || !bookerId || !companyId ||
+        access.data.memberships.some(entry => entry.membership_role !== "managing_pa" ||
+          entry.company_id !== companyId || entry.booker_id !== bookerId ||
+          entry.customer_account_reference !== customerId)) {
+      return safeFailure(safeCustomerAuthError, 403);
+    }
+    // Recheck the current profile binding, never a query-string or display name.
+    const { data, error } = await client.from("bookers").select("id, company_id, customer_id")
+      .eq("id", bookerId).eq("company_id", companyId).eq("customer_id", customerId).maybeSingle();
+    const booker = asRecord(data);
+    if (error || positiveIdentityId(booker.id) !== bookerId ||
+        positiveIdentityId(booker.company_id) !== companyId || safeText(booker.customer_id, 160) !== customerId) {
+      return safeFailure(safeCustomerAuthError, 403);
+    }
+    return { ok: true, version: customerInvoiceRecordVersion,
+      data: { customer_account_reference: customerId, booker_id: bookerId } };
+  }
+  const customerId = safeText(context.customer_account_reference, 160);
+  if (!customerId) return safeFailure(safeCustomerAuthError, 403);
+  const account = await assertActiveCustomerPortalAccessAccount(customerId, client,
+    context.portal_link_revision || context.portal_link_issued_at
+      ? { issuedAt: context.portal_link_issued_at, linkRevision: context.portal_link_revision }
+      : undefined);
+  return account.ok
+    ? { ok: true, version: customerInvoiceRecordVersion, data: account.data }
+    : safeFailure(safeCustomerAuthError, 403);
+}
+
 export async function loadCustomerInvoiceRecordsForPortal(
   context: CustomerSavedBookingsBoundaryContext,
   client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoiceResult<CustomerInvoiceStoredRecord[]>> {
   const readiness = checkCustomerBookingRequestPersistenceConfigReadiness();
-  const customerAccountReference = safeText(context.customer_account_reference, 160);
 
   if (!readiness.ok) {
     return safeFailure(safePersistenceConfigError, 503);
   }
 
-  if (!customerAccountReference) {
-    return safeFailure(safeCustomerAuthError, 403);
-  }
-
   const invoiceClient = client ?? createServerClient();
-  const activeAccount = await assertActiveCustomerPortalAccessAccount(
-    customerAccountReference,
-    invoiceClient,
-    context.portal_link_revision || context.portal_link_issued_at
-      ? {
-          issuedAt: context.portal_link_issued_at,
-          linkRevision: context.portal_link_revision,
-        }
-      : undefined,
-  );
+  const activeAccount = await resolveCustomerInvoicePortalAccount(context, invoiceClient);
 
   if (!activeAccount.ok) {
     return safeFailure(safeCustomerAuthError, 403);
@@ -2282,7 +2338,7 @@ export async function loadCustomerInvoiceRecordsForPortal(
   let { data, error } = await invoiceQuery;
 
   if (error) {
-    if (!lifecycleColumnUnavailableError(error)) {
+    if (context.mode === "principal-device-session" || !lifecycleColumnUnavailableError(error)) {
       return safeFailure(safeReadError, 500);
     }
 
@@ -2324,28 +2380,14 @@ export async function loadCustomerInvoicePdfForPortal(
   client?: CustomerInvoiceClient,
 ): Promise<CustomerInvoicePdfResult> {
   const readiness = checkCustomerBookingRequestPersistenceConfigReadiness();
-  const customerAccountReference = safeText(context.customer_account_reference, 160);
   const invoiceNumber = safeInvoiceNumber(invoiceNumberInput);
 
   if (!readiness.ok) {
     return safeFailure(safePersistenceConfigError, 503);
   }
 
-  if (!customerAccountReference) {
-    return safeFailure(safeCustomerAuthError, 403);
-  }
-
   const invoiceClient = client ?? createServerClient();
-  const activeAccount = await assertActiveCustomerPortalAccessAccount(
-    customerAccountReference,
-    invoiceClient,
-    context.portal_link_revision || context.portal_link_issued_at
-      ? {
-          issuedAt: context.portal_link_issued_at,
-          linkRevision: context.portal_link_revision,
-        }
-      : undefined,
-  );
+  const activeAccount = await resolveCustomerInvoicePortalAccount(context, invoiceClient);
 
   if (!activeAccount.ok) {
     return safeFailure(safeCustomerAuthError, 403);
@@ -2377,7 +2419,7 @@ export async function loadCustomerInvoicePdfForPortal(
   let error = pdfResult.error;
 
   if (error) {
-    if (!lifecycleColumnUnavailableError(error)) {
+    if (context.mode === "principal-device-session" || !lifecycleColumnUnavailableError(error)) {
       return safeFailure(safeReadError, 500);
     }
 

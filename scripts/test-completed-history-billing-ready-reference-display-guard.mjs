@@ -47,7 +47,7 @@ const closeoutPayloadBuilder = sectionBetween(
 const rowBillingReadyAction = sectionBetween(
   appPage,
   "async function markCompletedHistoryBookingBillingReady",
-  "function bookingRecordCanBeDeletedFromCompletedHistory",
+  "async function resolveCompletedHistoryDeleteBookingId",
 );
 const completedHistoryPanel = sectionBetween(
   appPage,
@@ -110,7 +110,7 @@ for (const fragment of [
   "Admin marked completed job billing ready from Completed / History.",
   "method: \"POST\"",
   "adminCompletedBookingCloseoutApiPath",
-  "Billing readiness saved for ${referenceLabel}. Next: open Customers page, choose this customer/month in Monthly Billing Queue, then Prepare monthly bill.",
+  "Billing readiness saved for ${referenceLabel}. Next: open this exact job in customer billing.",
 ]) {
   assertIncludes(rowBillingReadyAction, fragment, `completed history billing ready action ${fragment}`);
 }
@@ -121,8 +121,8 @@ for (const fragment of [
   "completedHistoryBillingReadyBookingId === bookingId ? \"Saving...\" : \"Billing ready\"",
   "completedHistoryBillingReadyBookingId === bookingId",
   'data-completed-billing-ready-open-customers="true"',
-  'href="/customers"',
-  "Open Customers & Payments",
+  'onClick={() => void openCompletedHistoryBilling(savedBooking, operationalCard)}',
+  "Open this job in billing",
 ]) {
   assertIncludes(completedHistoryPanel, fragment, `completed history billing ready panel ${fragment}`);
 }

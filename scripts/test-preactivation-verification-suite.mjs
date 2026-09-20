@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 
 const guardChecks = [
   {
+    label: "Completed exact-job Paid shortcut and customer portal scope",
+    script: "scripts/test-completed-billing-shortcut-guard.mjs",
+  },
+  {
     label: "Admin Driver profile possible-duplicate advisory",
     script: "scripts/test-driver-profile-duplicate-warning.mjs",
   },

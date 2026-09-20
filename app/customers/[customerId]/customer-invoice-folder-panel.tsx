@@ -304,6 +304,8 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const [localInvoiceStatusOverrides, setLocalInvoiceStatusOverrides] = useState<Record<string, "Paid" | "Unpaid">>({});
   const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
   const invoiceViewPending = useRef(false);
+  const completedBillingHandoffAppliedRef = useRef(false);
+  const [completedBillingTargetRequested, setCompletedBillingTargetRequested] = useState(false);
   const [invoiceActionMode, setInvoiceActionMode] = useState<InvoiceActionMode>(null);
   const [invoiceActionPending, setInvoiceActionPending] = useState(false);
   const [invoiceEditItems, setInvoiceEditItems] = useState<InvoiceEditLineItem[]>([]);
@@ -344,7 +346,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   );
   const displayInvoices = storedInvoices.length > 0 ? storedInvoices : mockInvoices;
   const selectedInvoice =
-    displayInvoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber) ?? displayInvoices[0];
+    displayInvoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber) ?? (completedBillingTargetRequested ? undefined : displayInvoices[0]);
   const selectedBooking = customer.bookingHistory.find(
     (booking) => booking.invoiceNumber === selectedInvoice?.invoiceNumber,
   );
@@ -396,7 +398,13 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
 
     async function loadStoredInvoices() {
       try {
-        const response = await fetch(adminCustomerInvoicesApiPath, {
+        const params = new URLSearchParams(window.location.search);
+        const fromCompleted = params.get("billing_source") === "completed";
+        const targetReference = fromCompleted ? (params.get("focus_booking_reference") || "").trim() : "";
+        if (fromCompleted && !completedBillingHandoffAppliedRef.current) setCompletedBillingTargetRequested(true);
+        const response = await fetch(fromCompleted
+          ? `${adminCustomerInvoicesApiPath}?${new URLSearchParams({ customer_id: customer.id })}`
+          : adminCustomerInvoicesApiPath, {
           cache: "no-store",
           headers: {
             "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -417,9 +425,10 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             const invoiceCustomerName = normalizeCustomerMatch(String(invoice.customerName ?? ""));
 
             return (
+              (fromCompleted ? String(invoice.customerId ?? "") === customer.id :
               invoiceCustomerId === customerIdKey ||
               invoiceCustomerName === customerNameKey ||
-              (customerNameKey && invoiceCustomerName.includes(customerNameKey))
+              (customerNameKey && invoiceCustomerName.includes(customerNameKey)))
             );
           })
           .map(displayStoredInvoice)
@@ -432,12 +441,59 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             : "No stored invoice records matched this customer yet.",
         );
 
-        if (!selectedInvoiceNumber && invoices[0]) {
+        if (fromCompleted && !completedBillingHandoffAppliedRef.current) {
+          if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(targetReference)) throw new Error("Invalid exact job reference.");
+          const bookingResponse = await fetch(`${adminCustomerSavedBookingsApiPath}?${new URLSearchParams({
+            customer_id: customer.id, customer_account: customer.companyName, booking_reference: targetReference, limit: "200",
+          })}`, { cache: "no-store", signal: controller.signal, headers: { "x-prestige-admin-purpose": "admin-booking-persistence" } });
+          const bookingResult = await bookingResponse.json().catch(() => null);
+          const exactBookings = Array.isArray(bookingResult?.saved_bookings)
+            ? bookingResult.saved_bookings.filter((booking: { booking_reference?: string; customer_id?: string | number }) =>
+                booking.booking_reference === targetReference && String(booking.customer_id ?? "") === customer.id) : [];
+          if (!bookingResponse.ok || !bookingResult?.ok || exactBookings.length !== 1) throw new Error("Exact job ownership could not be verified.");
+          const references = new Set([targetReference, String(exactBookings[0].public_booking_reference || "")].filter(Boolean));
+          const matches = (result.invoices as StoredInvoiceRecord[]).filter(invoice =>
+            String(invoice.customerId ?? "") === customer.id && invoice.documentType === "invoice" && invoice.documentState === "issued" &&
+            (references.has(String(invoice.reference || "")) || invoice.lineItems?.some(item => references.has(String(item.bookingReference || "")))));
+          if (controller.signal.aborted) return;
+          completedBillingHandoffAppliedRef.current = true;
+          if (matches.length !== 1) {
+            setSelectedInvoiceNumber("");
+            setInvoiceActionMode(null);
+            setStoredInvoiceMessage(matches.length > 1
+              ? "More than one issued invoice covers this job. Review Total invoices; no payment changed."
+              : "No issued invoice covers this job. Review the exact job in Pending jobs for payment below.");
+            return;
+          }
+          const match = displayStoredInvoice(matches[0]);
+          if (!match) throw new Error("Linked invoice could not be read.");
+          setSelectedInvoiceNumber(match.invoiceNumber);
+          const lineReferences = matches[0].lineItems?.map(item => String(item.bookingReference || "")) || [];
+          const singleJob = lineReferences.length > 0 && lineReferences.every(reference => references.has(reference));
+          if (params.get("paid_booking_reference") === targetReference && !isPaidStatus(match.status) && singleJob) {
+            prepareMarkPaid(match);
+            // This shortcut is a payment review, never an implicit email instruction.
+            setSendPaymentThankYou(false);
+          } else {
+            setInvoiceActionMode(null);
+          }
+          setInvoiceActionMessage(isPaidStatus(match.status)
+            ? `${match.invoiceNumber} is already Paid. No payment changed.`
+            : singleJob ? `Review ${match.invoiceNumber} for this exact job before confirming payment.`
+            : `${match.invoiceNumber} covers multiple jobs or has incomplete job references. Mark paid applies to its entire total; review all items first.`);
+          window.setTimeout(() => document.querySelector('[data-customer-invoice-folder-detail]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+        } else if (!fromCompleted && !selectedInvoiceNumber && invoices[0]) {
           setSelectedInvoiceNumber(invoices[0].invoiceNumber);
         }
       } catch {
         if (!controller.signal.aborted) {
-          setStoredInvoiceMessage("Stored invoice records could not be loaded; showing folder records only.");
+          if (new URLSearchParams(window.location.search).get("billing_source") === "completed") {
+            setSelectedInvoiceNumber("");
+            setInvoiceActionMode(null);
+            setStoredInvoiceMessage("Exact job invoice could not be verified. No payment changed; reload to retry.");
+          } else {
+            setStoredInvoiceMessage("Stored invoice records could not be loaded; showing folder records only.");
+          }
         }
       }
     }
@@ -445,6 +501,9 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
     void loadStoredInvoices();
 
     return () => controller.abort();
+    // Apply the URL handoff once using the existing payment review state; changing
+    // its method/contact must not reload or reopen that completed handoff.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer.companyName, customer.id, selectedInvoiceNumber]);
 
   async function openInvoice(invoiceNumber: string) {

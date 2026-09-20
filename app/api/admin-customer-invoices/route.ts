@@ -54,7 +54,10 @@ export async function GET(request: Request) {
       return safeErrorResponse(boundary);
     }
 
-    const result = await loadAdminCustomerInvoiceRecords(boundary.actor);
+    const customerId = new URL(request.url).searchParams.get("customer_id");
+    const result = customerId !== null
+      ? await loadAdminCustomerInvoiceRecords(boundary.actor, undefined, customerId)
+      : await loadAdminCustomerInvoiceRecords(boundary.actor);
 
     if (!result.ok) {
       return safeErrorResponse(result);

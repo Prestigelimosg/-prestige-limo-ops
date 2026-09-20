@@ -20036,6 +20036,28 @@ export default function Home() {
     );
   }, [filteredCompletedBookingDisplayItems, todayKey]);
 
+  const completedDspStatusReferenceKey = visibleCompletedBookings
+    .filter((record) => bookingRecordIsCompletedStatus(record) &&
+      normalizeBookingType(record.service_type || record.route_type || record.booking_type) === "DSP")
+    .map(getBookingDriverJobStatusReference)
+    .filter(Boolean)
+    .join("|");
+
+  useEffect(() => {
+    if (activeTab !== "completed" || !completedDspStatusReferenceKey) return;
+    let cancelled = false;
+    // Reuse the existing exact-booking report reader/cache. Serial reads avoid an archive request burst.
+    void (async () => {
+      for (const bookingReference of new Set(completedDspStatusReferenceKey.split("|"))) {
+        if (cancelled) return;
+        await refreshDashboardDriverJobStatusRead(bookingReference);
+      }
+    })();
+    return () => { cancelled = true; };
+    // Re-entering Completed or changing the visible references refreshes the existing read, without polling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, completedDspStatusReferenceKey]);
+
   function update(field: keyof BookingForm, value: string) {
     if (field === "bookerEmail" || field === "company") {
       adminEmailAiCustomerRecommendationRevisionRef.current += 1;
@@ -29983,6 +30005,17 @@ export default function Home() {
               const dspScheduledEndText = formatBookingTimestampSgt(
                 operationalCard.dropoff_datetime || savedBooking.dropoff_datetime,
               );
+              const completedDspStatusReference = getBookingDriverJobStatusReference(savedBooking);
+              const completedDspStatus = dashboardDriverJobStatusReadStates[completedDspStatusReference];
+              const completedDspJc = completedDspStatus?.status === "loaded"
+                ? completedDspStatus.statuses.find((status) =>
+                    status.booking_reference === completedDspStatusReference && status.status_value === "completed")
+                : null;
+              const dspActualEndText = completedDspStatus?.status === "error"
+                ? "Unavailable — reopen Completed"
+                : completedDspStatus?.status !== "loaded"
+                  ? "Loading…"
+                  : formatBookingTimestampSgt(completedDspJc?.occurred_at) || "Not reported";
               const pickupMetaText = [
                 isDspBooking
                   ? `DSP start: ${formatBookingPickupDateTimeSgt(savedBooking)} · End: ${
@@ -30029,6 +30062,11 @@ export default function Home() {
                           >
                             {pickupMetaText}
                           </span>
+                          {isDspBooking && isCompletedStatus ? (
+                            <span className="block text-xs text-slate-700" data-completed-dsp-actual-end={bookingId}>
+                              Actual end (JC): {dspActualEndText}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-slate-800">

@@ -458,6 +458,27 @@ for (const phrase of [
 
 assertIncludes(preactivationSuite, guardScript, "preactivation bookings earlier history compact guard registration");
 
-console.log("Bookings earlier history compact guard passed");
+
 
 assertIncludes(completedHistoryPanel, "data-completed-calendar-payout={bookingId}", "read-only Calendar amount beside the driver");
+
+// Actual end is independent from the optional planning end and never inferred.
+assertIncludes(appPage, 'data-completed-dsp-actual-end={bookingId}', 'Completed DSP persisted JC display');
+assertIncludes(appPage, 'Actual end (JC): {dspActualEndText}');
+const actualEnd = sectionBetween(appPage, 'const completedDspStatusReference =', 'const pickupMetaText =');
+assertIncludes(actualEnd, 'status.status_value === "completed"');
+assertIncludes(actualEnd, 'status.booking_reference === completedDspStatusReference');
+assertIncludes(actualEnd, 'completedDspJc?.occurred_at');
+for (const forbidden of ['created_at', 'dropoff_datetime', 'new Date', 'Date.now', 'invoice', 'actual_time']) {
+  assertExcludes(actualEnd, forbidden, 'Actual end must use only persisted JC occurred_at');
+}
+assertIncludes(actualEnd, '"Not reported"');
+assertIncludes(actualEnd, '"Unavailable — reopen Completed"');
+const completedRead = sectionBetween(appPage, 'const completedDspStatusReferenceKey =', 'function update(field: keyof BookingForm');
+assertIncludes(completedRead, 'activeTab !== "completed"');
+assertIncludes(completedRead, 'await refreshDashboardDriverJobStatusRead(bookingReference)');
+for (const forbidden of ['setInterval', 'refreshDashboardDriverOtsPhotoProofRead', 'refreshAdminTodayJobMessageHistory', 'PATCH', 'POST', 'DELETE']) {
+  assertExcludes(completedRead, forbidden, 'Completed DSP read must not start another workflow');
+}
+
+console.log("Bookings earlier history compact and persisted JC display guards passed");

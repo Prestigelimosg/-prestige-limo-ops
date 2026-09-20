@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import "./test-bookings-summary-layout-guard.mjs";
 import { readFile } from "node:fs/promises";
 
 const appPagePath = "app/page.tsx";

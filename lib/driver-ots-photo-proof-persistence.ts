@@ -632,13 +632,11 @@ export async function loadAdminDriverOtsPhotoProofs(
         .from(driverOtsPhotoProofBucketName)
         .createSignedUrl(proofRow.storage_path, signedUrlTtlSeconds);
 
-      if (signedUrlError || !signedUrlData?.signedUrl) {
-        continue;
-      }
-
+      // Keep exact metadata available for retry if bytes were removed but the
+      // metadata delete failed, or signing is temporarily unavailable.
       proofs.push({
         ...safeDriverProofRecord(proofRow),
-        admin_view_url: signedUrlData.signedUrl,
+        admin_view_url: !signedUrlError && signedUrlData?.signedUrl ? signedUrlData.signedUrl : "",
         admin_view_url_expires_at: new Date(
           Date.now() + signedUrlTtlSeconds * 1000,
         ).toISOString(),
@@ -664,4 +662,102 @@ export async function loadAdminDriverOtsPhotoProofs(
       version: driverOtsPhotoProofPersistenceVersion,
     };
   }
+}
+
+function photoDeleteFailure(status = 503) {
+  return { ok: false as const, status, error: "Photo could not be deleted. Refresh and try again." };
+}
+
+type ExactPhotoDeleteTarget = { id: string; booking_reference: string; uploaded_at: string };
+
+function parsePhotoDeleteTarget(value: unknown): ExactPhotoDeleteTarget | null {
+  const row = asRecord(value);
+  if (Object.keys(row).length !== 3 ||
+      !Object.keys(row).every((key) => ["id", "booking_reference", "uploaded_at"].includes(key)) ||
+      typeof row.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.id) ||
+      typeof row.booking_reference !== "string" || safeIdentifier(row.booking_reference) !== row.booking_reference ||
+      typeof row.uploaded_at !== "string" || !safeDateText(row.uploaded_at)) return null;
+  return { id: row.id, booking_reference: row.booking_reference, uploaded_at: row.uploaded_at };
+}
+
+// Photo uploads are immutable; every removal re-reads the exact identity and
+// matches that snapshot when deleting metadata. Concurrent retries are harmless.
+async function deleteExactOtsPhoto(client: SupabaseClient, target: ExactPhotoDeleteTarget) {
+  const { data, error } = await client.from("driver_ots_photo_proofs")
+    .select(proofSelect).eq("id", target.id).maybeSingle();
+  if (error) return photoDeleteFailure();
+  if (!data) return { ok: true as const, deleted: false };
+  const proof = toProofRow(asRecord(data));
+  if (!proof || proof.booking_reference !== target.booking_reference ||
+      proof.uploaded_at !== target.uploaded_at ||
+      !proof.storage_path.startsWith(`bookings/${proof.booking_reference}/ots/`) ||
+      !/^[0-9]{14}-[A-Za-z0-9-]+\.(heic|heif|jpg|png|webp)$/.test(proof.storage_path.split("/").at(-1) || "") ||
+      proof.storage_path.split("/").length !== 4) return photoDeleteFailure(409);
+
+  // Always remove bytes through Storage, never SQL. A successful empty result
+  // is an already absent object, including a retry after metadata deletion failed.
+  const removed = await client.storage.from(driverOtsPhotoProofBucketName).remove([proof.storage_path]);
+  if (removed.error || !Array.isArray(removed.data) ||
+      removed.data.some((object) => object.name !== proof.storage_path)) return photoDeleteFailure();
+  const deleted = await client.from("driver_ots_photo_proofs").delete()
+    .eq("id", proof.id).eq("booking_reference", proof.booking_reference)
+    .eq("uploaded_at", proof.uploaded_at).eq("storage_bucket", proof.storage_bucket)
+    .eq("storage_path", proof.storage_path).eq("photo_type", "ots").eq("proof_status", "uploaded")
+    .select("id");
+  if (deleted.error || !Array.isArray(deleted.data)) return photoDeleteFailure();
+  if (deleted.data.length === 0) {
+    const current = await client.from("driver_ots_photo_proofs").select("id").eq("id", proof.id).maybeSingle();
+    if (current.error || current.data) return photoDeleteFailure(409);
+  }
+  return { ok: true as const, deleted: true };
+}
+
+export async function deleteAdminDriverOtsPhotoProof(value: unknown) {
+  const target = parsePhotoDeleteTarget(value);
+  if (!target) return photoDeleteFailure(400);
+  const connection = getServerOnlyDriverOtsPhotoProofClient();
+  if (!connection.ok) return photoDeleteFailure();
+  try { return await deleteExactOtsPhoto(connection.client, target); }
+  catch { return photoDeleteFailure(); }
+}
+
+// Calendar months in Singapore, clamping month-end (31 January -> 30 April).
+export function otsPhotoRetentionDueAt(uploadedAt: string): string | null {
+  const timestamp = new Date(uploadedAt).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  const local = new Date(timestamp + 8 * 60 * 60 * 1000);
+  const day = local.getUTCDate();
+  local.setUTCDate(1);
+  local.setUTCMonth(local.getUTCMonth() + 3);
+  const lastDay = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 0)).getUTCDate();
+  local.setUTCDate(Math.min(day, lastDay));
+  return new Date(local.getTime() - 8 * 60 * 60 * 1000).toISOString();
+}
+
+export async function runOtsPhotoRetention(now = new Date()) {
+  if (process.env.PRESTIGE_OTS_PHOTO_RETENTION_ENABLED !== "true") {
+    return { ok: true, enabled: false, deleted: 0 };
+  }
+  const connection = getServerOnlyDriverOtsPhotoProofClient();
+  if (!connection.ok || !Number.isFinite(now.getTime())) return { ok: false, enabled: true, deleted: 0 };
+  let deleted = 0;
+  try {
+    // Three calendar months cannot be shorter than 89 days. This is only a
+    // bounded candidate read; each candidate's precise due date is checked below.
+    const { data, error } = await connection.client.from("driver_ots_photo_proofs")
+      .select(proofSelect).eq("proof_status", "uploaded").eq("photo_type", "ots")
+      .lte("uploaded_at", new Date(now.getTime() - 89 * 24 * 60 * 60 * 1000).toISOString())
+      .order("uploaded_at", { ascending: true }).order("id", { ascending: true }).limit(100);
+    if (error || !Array.isArray(data)) return { ok: false, enabled: true, deleted };
+    for (const row of data) {
+      const proof = toProofRow(asRecord(row));
+      const due = proof && otsPhotoRetentionDueAt(proof.uploaded_at);
+      if (!proof || !due) return { ok: false, enabled: true, deleted };
+      if (new Date(due).getTime() > now.getTime()) continue;
+      const result = await deleteExactOtsPhoto(connection.client, proof);
+      if (!result.ok) return { ok: false, enabled: true, deleted };
+      if (result.deleted) deleted++;
+    }
+    return { ok: true, enabled: true, deleted, batchFull: data.length === 100 };
+  } catch { return { ok: false, enabled: true, deleted }; }
 }

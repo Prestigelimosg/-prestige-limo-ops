@@ -123,7 +123,7 @@ for (const fragment of [
   assertIncludes(adminRoute, fragment, `admin OTS proof route fragment: ${fragment}`);
 }
 
-assertExcludes(adminRoute, /export async function (POST|PUT|PATCH|DELETE)/, "admin OTS proof route extra verbs");
+assertExcludes(adminRoute, /export async function (POST|PUT|PATCH)/, "admin OTS proof route extra verbs");
 
 for (const fragment of [
   "/api/driver-job/${encodeURIComponent(token)}/ots-photo",

@@ -29559,7 +29559,7 @@ export default function Home() {
             >
               <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                 <details className="min-w-0 rounded-md bg-transparent" data-recent-operational-details={bookingId}>
-                  <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(13rem,1.1fr)_minmax(10rem,0.8fr)_minmax(14rem,1.4fr)_minmax(9rem,0.7fr)_auto] md:items-center">
+                  <summary className="grid cursor-pointer list-none gap-2 rounded-md px-2 py-1.5 outline-none transition hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-slate-900/20 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(9rem,0.7fr)_minmax(0,1fr)] md:items-center">
                     <span className="min-w-0">
                       <span className="block truncate font-semibold text-slate-950">
                         <AdminOperationalUppercaseValue field="company">
@@ -29612,7 +29612,7 @@ export default function Home() {
                         · Pax {operationalCard.pax_display || "1"}
                       </span>
                     </span>
-                    <span className="flex items-center gap-2 text-right">
+                    <span className="min-w-0 flex flex-wrap items-center gap-2 text-right">
                       {bookingGoogleCalendarStatusLabel ? (
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${

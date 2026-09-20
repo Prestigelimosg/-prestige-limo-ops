@@ -714,7 +714,7 @@ export default function CustomerPortalPage() {
           } else if (bosses[0]) {
             setSelectedManagedBossId((current) => current || bosses[0].traveler_id);
           }
-          setActiveSection((current) => current === "Invoices" ? "Upcoming" : current);
+          if (role !== "pa") setActiveSection((current) => current === "Invoices" ? "Upcoming" : current);
           return;
         }
       } catch {
@@ -996,7 +996,7 @@ export default function CustomerPortalPage() {
 
     async function loadCustomerInvoices() {
       if (customerPrincipalAccess.status === "checking") return;
-      if (customerPrincipalAccess.status === "principal") {
+      if (customerPrincipalAccess.status === "principal" && customerPrincipalAccess.principal_role !== "pa") {
         setCustomerInvoiceRecords([]);
         setCustomerInvoicesLoadState("blocked");
         return;
@@ -1024,7 +1024,7 @@ export default function CustomerPortalPage() {
     return () => {
       controller.abort();
     };
-  }, [customerPrincipalAccess.status]);
+  }, [customerPrincipalAccess]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2214,7 +2214,7 @@ export default function CustomerPortalPage() {
           hidden={customerNativeSessionBlocked}
         >
           {portalSections
-            .filter((section) => customerPrincipalAccess.status !== "principal" || section !== "Invoices")
+            .filter((section) => customerPrincipalAccess.status !== "principal" || customerPrincipalAccess.principal_role === "pa" || section !== "Invoices")
             .map((section) => {
             const isBookRequestLink = section === "New Booking Request";
             const isActive = !isBookRequestLink && activeSection === section;

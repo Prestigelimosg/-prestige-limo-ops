@@ -898,6 +898,8 @@ function customerFolderReturnContext() {
 
   return {
     focusBookingReference: safeBookingReferenceValue(params.get(customerFolderFocusBookingReferenceParam)),
+    fromCompleted: params.get("billing_source") === "completed",
+    paidBookingReference: safeBookingReferenceValue(params.get(customerFolderPaidBookingReferenceParam)),
   };
 }
 
@@ -1208,7 +1210,9 @@ export function CustomerFolderSavedBookingsPanel({
           },
           method: "GET",
         }),
-        fetch(adminCustomerInvoicesApiPath, {
+        fetch(customerFolderReturnContext()?.fromCompleted
+          ? `${adminCustomerInvoicesApiPath}?${new URLSearchParams({ customer_id: customerId })}`
+          : adminCustomerInvoicesApiPath, {
           cache: "no-store",
           headers: {
             "x-prestige-admin-purpose": "admin-booking-persistence",
@@ -1279,7 +1283,25 @@ export function CustomerFolderSavedBookingsPanel({
       const focusVisible = focusBookingReference
         ? visibleSavedBookings.some((booking) => safeDispatchReference(booking) === focusBookingReference)
         : false;
-      const returnMessage = focusBookingReference
+      const completedContext = customerFolderReturnContext();
+      if (completedContext?.fromCompleted && focusVisible && focusBooking) {
+        if (String(focusBooking.customer_id ?? "") !== customerId) throw new Error("Exact customer mismatch.");
+        setExpandedSavedBookingReference(focusBookingReference);
+        if (completedContext.paidBookingReference === focusBookingReference) {
+          setPaidReferences(current => ({ ...current, [focusBookingReference]: true }));
+        }
+        window.setTimeout(() => {
+          const row = [...document.querySelectorAll<HTMLElement>("[data-customer-folder-saved-bookings-row]")]
+            .find(element => element.dataset.customerFolderSavedBookingsRow === focusBookingReference);
+          row?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+      }
+      const returnMessage = completedContext?.fromCompleted
+        ? focusVisible
+          ? `Job ${focusDisplayReference} is open for billing. ${completedContext.paidBookingReference === focusBookingReference ? "Paid is selected for review only; review the price, then use Invoice to save it." : "Review its price before preparing an invoice."}`
+          : focusReturned ? `Job ${focusDisplayReference} is already billed or unavailable for new invoicing. Review its linked invoice in Total invoices.`
+          : "The exact job was not returned for this customer. No payment changed."
+        : focusBookingReference
         ? focusVisible
           ? `Returned from Dispatch after Update + Calendar. Loaded ${countLabel(
               visibleSavedBookings.length,

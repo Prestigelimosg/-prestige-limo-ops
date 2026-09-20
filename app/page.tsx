@@ -28522,6 +28522,49 @@ export default function Home() {
     );
   }
 
+  async function openCompletedHistoryBilling(
+    bookingRecord: BookingRecord,
+    operationalCard?: LoadBookingsOperationalDisplayCard,
+    paid = false,
+  ) {
+    const bookingId = bookingRecordStableKey(bookingRecord, operationalCard);
+    const reference = bookingRecordPersistedReference(bookingRecord);
+    setCompletedHistoryBillingReadyBookingId(bookingId);
+    try {
+      if (!reference || !bookingRecordIsCompletedStatus(bookingRecord)) {
+        throw new Error("Only an exact completed booking can open billing here.");
+      }
+      const response = await fetch(`${adminBookingsApiPath}?${new URLSearchParams({ booking_reference: reference })}`, {
+        cache: "no-store",
+        headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+      const exact = result?.booking as BookingRecord | undefined;
+      const customerId = adminDispatchVerifiedIdentityId(exact?.customer_id);
+      if (!response.ok || !result?.ok || !exact ||
+          bookingRecordPersistedReference(exact) !== reference ||
+          !bookingRecordIsCompletedStatus(exact) || !customerId) {
+        throw new Error("The completed job and its saved customer could not be verified. No payment changed.");
+      }
+      const params = new URLSearchParams({
+        name: clean(exact.customer_display_name) || `Customer ${customerId}`,
+        load_saved_jobs: "1",
+        focus_booking_reference: reference,
+        billing_source: "completed",
+      });
+      if (paid) params.set("paid_booking_reference", reference);
+      window.location.assign(`/customers/${customerId}?${params.toString()}`);
+    } catch (error) {
+      setBookingCompletionMessage(bookingId, {
+        tone: "error",
+        text: error instanceof Error ? error.message : "Exact job billing could not be opened. No payment changed.",
+      });
+    } finally {
+      setCompletedHistoryBillingReadyBookingId(null);
+    }
+  }
+
   async function markCompletedHistoryBookingBillingReady(
     bookingRecord: BookingRecord,
     operationalCard?: LoadBookingsOperationalDisplayCard,
@@ -28602,7 +28645,7 @@ export default function Home() {
 
       setBookingCompletionMessage(bookingId, {
         tone: "success",
-        text: `Billing readiness saved for ${referenceLabel}. Next: open Customers page, choose this customer/month in Monthly Billing Queue, then Prepare monthly bill.`,
+        text: `Billing readiness saved for ${referenceLabel}. Next: open this exact job in customer billing.`,
       });
     } catch (error) {
       setBookingCompletionMessage(bookingId, {
@@ -30278,6 +30321,15 @@ export default function Home() {
                           >
                             {completedHistoryBillingReadyBookingId === bookingId ? "Saving..." : "Billing ready"}
                           </button>
+                          <button
+                            className="h-10 rounded-md border border-emerald-300 bg-white px-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            data-completed-paid-booking={bookingId}
+                            disabled={completingBookingId === bookingId || deletingCompletedBookingId === bookingId || completedHistoryBillingReadyBookingId === bookingId}
+                            onClick={() => void openCompletedHistoryBilling(savedBooking, operationalCard, true)}
+                            type="button"
+                          >
+                            Paid
+                          </button>
                         </>
                       ) : null}
                       <button
@@ -30303,13 +30355,15 @@ export default function Home() {
                           <p>{bookingCompletionMessage.text}</p>
                           {bookingCompletionMessage.tone === "success" &&
                           bookingCompletionMessage.text.startsWith("Billing readiness saved for") ? (
-                            <Link
+                            <button
                               className="mt-2 inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-700 bg-white px-2.5 text-xs font-bold text-emerald-900 transition hover:bg-emerald-50"
                               data-completed-billing-ready-open-customers="true"
-                              href="/customers"
+                              type="button"
+                              disabled={completedHistoryBillingReadyBookingId === bookingId}
+                              onClick={() => void openCompletedHistoryBilling(savedBooking, operationalCard)}
                             >
-                              Open Customers & Payments
-                            </Link>
+                              Open this job in billing
+                            </button>
                           ) : null}
                         </div>
                       ) : null}

@@ -145,6 +145,7 @@ function loadModule(source, dependencies = {}) {
 }
 const profile = loadModule(await readFile("lib/company-profile-shared.ts", "utf8"));
 const pdf = loadModule(await readFile("lib/customer-local-invoices.ts", "utf8"), { "./company-profile-shared": profile });
+const principalFixture = { access: { ok: false }, calls: [] };
 const recordModule = loadModule(persistenceSource, {
   "server-only": {}, "node:crypto": crypto, "node:path": path, "node:fs/promises": { readFile },
   "@supabase/supabase-js": { createClient() { throw new Error("Network clients are forbidden in this guard"); } },
@@ -156,6 +157,9 @@ const recordModule = loadModule(persistenceSource, {
   "./company-profile-persistence": { loadPublicCompanyProfile: async () => ({ profile: profile.defaultCompanyProfile }) },
   "./customer-local-invoices": pdf,
   "./admin-driver-job-dsp-actual-time-read": {}, "./customer-invoice-line-description": {},
+  "./customer-principal-access": {
+    assertActiveCustomerPrincipalSession: async token => { principalFixture.calls.push(token); return principalFixture.access; },
+  },
   "./customer-portal-access-account": {
     assertActiveCustomerPortalAccessAccount: async (reference) => ({ ok: true, data: { customer_account_reference: "164", booker_id: reference === "verified-pa" ? 38 : 39 } }),
   },
@@ -209,4 +213,4 @@ for (const [insertError, expectedStatus] of [
 console.log("Company + Booker invoice preparation guard passed.");
 
 // Reuse the existing isolated invoice/PDF harness for manual-sent coverage.
-export { recordModule, clientFor, issueInput, actor, loadFunctions, folderSource, job };
+export { recordModule, clientFor, issueInput, actor, loadFunctions, folderSource, job, principalFixture };

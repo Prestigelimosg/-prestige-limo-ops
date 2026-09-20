@@ -37,6 +37,7 @@ import {
   driverNativeBiometricResultScript,
   driverNativeJobOpenResultScript,
   driverNativeNotificationResultScript,
+  driverNativeAccountNotificationRegistrationScript,
   driverTrackingResultScript,
   embeddedDriverBridgeBootstrap,
   parseDriverBridgeMessage,
@@ -137,6 +138,9 @@ export default function App() {
   );
   const unlockStateRef = useRef<"checking" | "ready" | "locked">("checking");
   const bridgeBusyRef = useRef(false);
+  const notificationRegistrationSequenceRef = useRef(0);
+  const pendingNotificationRegistrationRef = useRef<{requestId: string; finish: (ok: boolean) => void} | null>(null);
+  useEffect(() => () => pendingNotificationRegistrationRef.current?.finish(false), []);
   const currentWebViewUrlRef = useRef(initialScreenState.jobUrl || "");
   const webViewRequestHeadersRef = useRef<Record<string, string> | null>(null);
   const pendingOauthTokenRef = useRef("");
@@ -513,6 +517,14 @@ export default function App() {
         return;
       }
 
+      if (request.type === "native_notifications_registration_result") {
+        if (currentWebViewUrl === `${productionOrigin}/driver-portal` &&
+          event.nativeEvent.url === currentWebViewUrl &&
+          pendingNotificationRegistrationRef.current?.requestId === request.requestId) {
+          pendingNotificationRegistrationRef.current.finish(request.registered);
+        }
+        return;
+      }
       if (request.type === "native_alerts_dismiss") {
         try {
           const origin = new URL(currentWebViewUrl);
@@ -574,7 +586,7 @@ export default function App() {
 
       if (request.type === "native_notifications_register") {
         const requestedFromPortal = currentWebViewUrl === `${productionOrigin}/driver-portal`;
-        if (requestedFromPortal !== Boolean(request.jobKey)) {
+        if (requestedFromPortal !== Boolean(request.jobKey || request.accountSession)) {
           sendNativeNotificationResult({ ok: false, state: "failed" });
           return;
         }
@@ -679,10 +691,11 @@ export default function App() {
         }
 
         if (request.type === "native_notifications_register") {
-          const job = request.jobKey
+          const accountRegistration = request.accountSession === true;
+          const job = accountRegistration ? null : request.jobKey
             ? await loadNativeDriverJob(request.jobKey)
             : parseDriverJobUrl(currentWebViewUrl);
-          if (!job) {
+          if (!accountRegistration && !job) {
             sendNativeNotificationResult({ ok: false, state: "failed" });
             return;
           }
@@ -698,7 +711,7 @@ export default function App() {
           const permission = await Notifications.requestPermissionsAsync();
 
           if (!permission.granted) {
-            if (existingToken) {
+            if (existingToken && job) {
               await unregisterNativeDriverNotifications(job, existingToken);
               await forgetNativeNotificationToken();
             }
@@ -718,6 +731,27 @@ export default function App() {
             projectId,
           });
           const nextToken = tokenResult.data;
+          if (accountRegistration) {
+            const requestId = `${Date.now()}-${++notificationRegistrationSequenceRef.current}`;
+            const script = driverNativeAccountNotificationRegistrationScript(nextToken, installationId, requestId);
+            const registered = await new Promise<boolean>((resolve) => {
+              const timer = setTimeout(() => finish(false), 15000);
+              const finish = (ok: boolean) => {
+                clearTimeout(timer);
+                if (pendingNotificationRegistrationRef.current?.requestId === requestId) pendingNotificationRegistrationRef.current = null;
+                resolve(ok);
+              };
+              pendingNotificationRegistrationRef.current = { requestId, finish };
+              try { webViewRef.current?.injectJavaScript(script); } catch { finish(false); }
+            });
+            if (!registered) throw new Error("Phone alert registration could not be confirmed.");
+            // A storage failure must not revoke the successful server registration.
+            await rememberNativeNotificationToken(nextToken);
+            setNotificationEnabled(true);
+            if (currentWebViewUrlRef.current === `${productionOrigin}/driver-portal`) sendNativeNotificationResult({ ok: true, state: "enabled" });
+            return;
+          }
+          if (!job) throw new Error("A private job is required for legacy registration.");
           // The verified registration transaction retires older tokens only
           // after the current token is saved; a failed request keeps them intact.
           const registration = await registerNativeDriverNotifications(

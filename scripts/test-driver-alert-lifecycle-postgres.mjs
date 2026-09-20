@@ -18,7 +18,7 @@ try {
  create table driver_job_bids(driver_job_bid_offer_id uuid,driver_reference text,bid_status text,safe_bid_context jsonb default '{}');`);
  const baseline=await readFile('supabase/migrations/20260913032248_driver_link_after_duplicate_retirement.sql','utf8');
  await db.exec(baseline.slice(baseline.indexOf('create or replace function public.reserve_driver_job_link_delivery')));
- for(const file of ['20260918043000_driver_alert_lifecycle.sql','20260918043100_driver_native_push_installation.sql','20260918043200_driver_pool_alert_read.sql'])
+ for(const file of ['20260918043000_driver_alert_lifecycle.sql','20260918043100_driver_native_push_installation.sql','20260918043200_driver_pool_alert_read.sql','20260920020706_driver_account_alert_registration.sql'])
    await db.exec(await readFile('supabase/migrations/'+file,'utf8'));
  const link='11111111-1111-4111-8111-111111111111';
  const other='22222222-2222-4222-8222-222222222222';
@@ -63,6 +63,32 @@ try {
  assert.equal(subscriptions.find(r=>r.endpoint==='ExpoPushToken[other]').subscription_status,'active');
  assert.equal(subscriptions.find(r=>r.endpoint==='https://example.test/web').subscription_status,'active');
  assert.equal((await db.query('select active_device_id_hash from driver_access_accounts')).rows[0].active_device_id_hash,hash);
+ // Recovery without a job still requires the same active account and installation.
+ const snapshot=(await db.query('select * from driver_access_accounts')).rows;
+ const bookingSnapshot=(await db.query('select * from bookings order by booking_reference')).rows;
+ const linkSnapshot=(await db.query('select * from driver_job_links order by id')).rows;
+ const accountRegister=async(token,proof=hash)=>(await db.query('select register_driver_native_push_installation(7,null,$1,$2) r',[proof,token])).rows[0].r;
+ assert.equal((await accountRegister('ExpoPushToken[new]')).registered,true);
+ assert.equal((await db.query("select last_driver_job_link_id from driver_device_push_subscriptions where endpoint='ExpoPushToken[new]'" )).rows[0].last_driver_job_link_id,link,'account recovery preserves historical link association');
+ await db.query("update driver_job_links set expires_at=now()-interval '1 day'");
+ assert.equal((await register('ExpoPushToken[legacy]')).registered,false,'legacy expired-link registration still fails');
+ assert.equal((await accountRegister('ExpoPushToken[account]')).registered,true,'no usable job required');
+ assert.equal((await accountRegister('ExpoPushToken[account]')).registered,true);
+ assert.equal((await accountRegister('ExpoPushToken[other]')).registered,false,'foreign endpoint remains protected');
+ assert.equal((await accountRegister('ExpoPushToken[wrong]','b'.repeat(64))).registered,false);
+ await db.query("update driver_access_accounts set account_status='suspended'");
+ assert.equal((await accountRegister('ExpoPushToken[suspended]')).registered,false);
+ await db.query("update driver_access_accounts set account_status='active'");
+ await db.exec("create function reject_qa_token() returns trigger language plpgsql as $$ begin if new.endpoint='ExpoPushToken[fail]' then raise exception 'synthetic storage failure'; end if; return new; end $$; create trigger reject_qa before insert on driver_device_push_subscriptions for each row execute function reject_qa_token();");
+ await assert.rejects(()=>accountRegister('ExpoPushToken[fail]'));
+ assert.equal((await db.query("select count(*)::int n from driver_device_push_subscriptions where driver_id=7 and source_surface='driver_native_ios' and subscription_status='active' and revoked_at is null")).rows[0].n,1);
+ assert.equal((await db.query("select subscription_status from driver_device_push_subscriptions where endpoint='ExpoPushToken[account]'" )).rows[0].subscription_status,'active','failed replacement keeps working token');
+ assert.deepEqual((await db.query('select * from driver_access_accounts')).rows,snapshot,'account/PIN/binding unchanged');
+ assert.deepEqual((await db.query('select * from bookings order by booking_reference')).rows,bookingSnapshot);
+ assert.deepEqual((await db.query('select id, safe_link_context from driver_job_links order by id')).rows,linkSnapshot.map(({id,safe_link_context})=>({id,safe_link_context})),'ACK/report context unchanged');
+ assert.equal((await db.query("select has_function_privilege('anon','register_driver_native_push_installation(bigint,uuid,text,text)','execute') allowed")).rows[0].allowed,false);
+ assert.equal((await db.query("select has_function_privilege('authenticated','register_driver_native_push_installation(bigint,uuid,text,text)','execute') allowed")).rows[0].allowed,false);
+ console.log('No-job recovery: correct phone, legacy expiry, foreign token, suspended account, rollback and unchanged account/booking evidence passed');
  const offer='b'.repeat(64), secondOffer='c'.repeat(64);
  const version='2030-01-01T00:00:00+00:00';
  await db.query("insert into driver_job_bid_offers(offer_key,offer_status,updated_at) values ($1,'open',$3),($2,'open',$3)",[offer,secondOffer,version]);

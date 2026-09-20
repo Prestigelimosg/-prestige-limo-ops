@@ -213,7 +213,7 @@ assertIncludes(
 );
 const nativeLocalRegistrationFinalization = nativeAppSource.slice(
   nativeAppSource.indexOf("const registration = await registerNativeDriverNotifications"),
-  nativeAppSource.indexOf("sendNativeNotificationResult({ ok: true, state: \"enabled\" })"),
+  nativeAppSource.indexOf("sendNativeNotificationResult({ ok: true, state: \"enabled\" })", nativeAppSource.indexOf("const registration = await registerNativeDriverNotifications")),
 );
 assertIncludes(
   nativeLocalRegistrationFinalization,

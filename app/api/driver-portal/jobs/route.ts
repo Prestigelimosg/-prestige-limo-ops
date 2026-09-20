@@ -8,6 +8,7 @@ import {
 import {
   getDriverDevicePushReadiness,
   registerDriverDevicePushSubscriptionForPortalSession,
+  registerDriverNativeDevicePushSubscriptionForPortalAccount,
 } from "../../../../lib/driver-device-push-notification";
 
 export const dynamic = "force-dynamic";
@@ -207,6 +208,16 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonBody(request);
+  if (Object.hasOwn(body, "native_push_token")) {
+    if (!session.claims.accountId || !session.claims.deviceIdHash) return inactiveDriverAccountResponse(false);
+    if (Object.keys(body).length !== 1) return response({ ok: false, reason: "invalid_subscription" }, 400);
+    const result = await registerDriverNativeDevicePushSubscriptionForPortalAccount({
+      client: clientResult.client, driverId: session.claims.driverId,
+      deviceIdHash: session.claims.deviceIdHash, expoPushToken: body.native_push_token,
+    });
+    return response({ ok: result.ok, device_alerts: { subscription_registered: result.registered },
+      ...(result.ok ? {} : { reason: result.reason }) }, result.ok ? 200 : result.reason === "invalid_subscription" ? 400 : 503);
+  }
   const registration = await registerDriverDevicePushSubscriptionForPortalSession({
     client: clientResult.client,
     driverId: session.claims.driverId,

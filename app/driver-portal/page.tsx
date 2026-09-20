@@ -107,6 +107,7 @@ type DriverNativeWindow = Window & {
   __PRESTIGE_DRIVER_INSTALLATION_ID__?: string;
   __PRESTIGE_DRIVER_NATIVE_APP__?: boolean;
   __PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__?: boolean;
+  __PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__?: boolean;
   __PRESTIGE_DRIVER_MESSAGE_OPEN_SUPPORTED__?: boolean;
   __PRESTIGE_DRIVER_PENDING_JOB_OPEN_SUPPORTED__?: boolean;
   __PRESTIGE_DRIVER_ALERT_DISMISS_SUPPORTED__?: boolean;
@@ -642,6 +643,14 @@ export default function DriverPortalPage() {
 
   async function enableJobAlerts() {
     if (nativeBridgeReady) {
+      if (readState.kind === "ready" && readState.accountSession &&
+        (window as DriverNativeWindow).__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__ === true) {
+        setAlertState("enabling");
+        (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
+          type: "native_notifications_register", account_session: true,
+        }));
+        return;
+      }
       const notificationJob = readState.kind === "ready" ? readState.jobs[0] : null;
       if (!notificationJob) {
         setAlertState("unavailable");
@@ -1138,7 +1147,9 @@ export default function DriverPortalPage() {
               ) : alertState === "unavailable" ? (
                 <p className="mt-2 text-xs font-semibold leading-5 text-amber-900">
                   {nativeBridgeReady
-                    ? "Job alerts could not be enabled. Open the latest acknowledged private Job Link in Prestige Driver once, then try again."
+                    ? (window as DriverNativeWindow).__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__ === true
+                      ? "Job alerts were not enabled. Check your connection and tap Enable Job Alerts again. If this continues, sign in again or contact Admin."
+                      : "Update Prestige Driver using the download link from Admin, then reopen it and tap Enable Job Alerts. Install over your existing app; do not uninstall."
                     : "Job alerts are unavailable. Open this installed Driver Portal from your device's Home Screen and try again."}
                 </p>
               ) : alertState === "enabled" ? (

@@ -18,7 +18,8 @@ export type DriverBridgeMessage =
   | { type: "native_biometrics_enable" }
   | { jobKey: string; openTarget?: "messages"; type: "native_job_open" }
   | { jobKey: string; type: "native_job_remember" }
-  | { jobKey?: string; type: "native_notifications_register" };
+  | { jobKey?: string; accountSession?: true; type: "native_notifications_register" }
+  | { requestId: string; registered: boolean; type: "native_notifications_registration_result" };
 
 export type DriverTrackingResult = {
   active: boolean;
@@ -51,6 +52,13 @@ export function parseDriverBridgeMessage(value: string): DriverBridgeMessage | n
     const parsed = asRecord(JSON.parse(value));
     const keys = Object.keys(parsed);
 
+    if (parsed.type === "native_notifications_register" && keys.length === 2 && parsed.account_session === true) {
+      return { type: "native_notifications_register", accountSession: true };
+    }
+    if (parsed.type === "native_notifications_registration_result" && keys.length === 3 &&
+      typeof parsed.request_id === "string" && /^\d{1,16}-\d{1,6}$/.test(parsed.request_id) && typeof parsed.registered === "boolean") {
+      return { type: "native_notifications_registration_result", requestId: parsed.request_id, registered: parsed.registered };
+    }
     if (parsed.type === "native_alerts_dismiss" && (keys.length===3 || (keys.length===4 && typeof parsed.request_id==="string" && /^[a-f0-9-]{36}$/.test(parsed.request_id))) &&
       (parsed.expected_badge_count===null || (Number.isInteger(parsed.expected_badge_count) && Number(parsed.expected_badge_count)>=0 && Number(parsed.expected_badge_count)<=99)) && Array.isArray(parsed.job_keys) &&
       parsed.job_keys.length<=100 && parsed.job_keys.every(key=>typeof key==='string' && /^[a-f0-9]{64}$/.test(key))) {
@@ -257,6 +265,9 @@ export function embeddedDriverBridgeBootstrap(
     value: ${biometricEnabled === true},
     writable: false
   });
+  Object.defineProperty(window, "__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__", {
+    configurable: false, enumerable: false, value: true, writable: false
+  });
   Object.defineProperty(window, "__PRESTIGE_DRIVER_NOTIFICATIONS_ENABLED__", {
     configurable: false,
     enumerable: false,
@@ -310,6 +321,30 @@ export function driverTrackingResultScript(result: DriverTrackingResult) {
   return `window.dispatchEvent(new CustomEvent("prestige-driver-native-tracking-result", { detail: ${JSON.stringify(
     safeResult,
   )} })); true;`;
+}
+
+// Run in the signed-in WebView so its HttpOnly account cookie remains server-bound.
+export function driverNativeAccountNotificationRegistrationScript(token: string, installationId: string, requestId: string) {
+  if (!/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/.test(token) ||
+    !installationIdPattern.test(installationId) || !/^\d{1,16}-\d{1,6}$/.test(requestId)) throw new Error("Invalid registration request.");
+  return `void (async () => {
+    if (location.origin !== ${JSON.stringify(productionOrigin)} || location.pathname !== "/driver-portal") return;
+    let registered = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch("/api/driver-portal/jobs", {
+        method: "POST", credentials: "same-origin", signal: controller.signal,
+        headers: {"Content-Type":"application/json", "x-prestige-driver-purpose":"driver-portal-device-alert-registration",
+          "x-prestige-driver-installation-id":${JSON.stringify(installationId)}},
+        body: ${JSON.stringify(JSON.stringify({ native_push_token: token }))}
+      });
+      const body = await response.json();
+      registered = response.ok && body.ok === true && body.device_alerts?.subscription_registered === true;
+    } catch {} finally { clearTimeout(timeout); }
+    window.ReactNativeWebView?.postMessage(JSON.stringify({type:"native_notifications_registration_result",
+      request_id:${JSON.stringify(requestId)}, registered}));
+  })(); true;`;
 }
 
 export function driverNativeNotificationResultScript(result: {

@@ -201,7 +201,7 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
   if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement", "selected_driver_ids", "audience"]) ||
       !reference || !expected || !payout || !key || !validAudience ||
       !(allDrivers ? Array.isArray(ids) && ids.length === 0 : validIds) ||
-      typeof vehicle !== "string" || !["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(vehicle)) {
+      typeof vehicle !== "string" || !["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"].includes(vehicle)) {
     return { error: "Malformed Driver Pool offer rejected.", ok: false, status: 400 };
   }
   return { data: { booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout, vehicle_requirement: vehicle, selected_driver_ids: (ids as number[]).slice().sort((a, b) => a - b) }, ok: true };
@@ -239,7 +239,7 @@ export function parseDriverPoolAdminActionPayload(value: unknown): AdminBookingR
   const reference = bookingReference(record.booking_reference);
   const payout = positiveMoney(record.offer_payout_sgd);
   if (record.action === "widen" && exactKeys(record, ["action", "offer_key", "expected_updated_at", "idempotency_key", "booking_reference", "offer_payout_sgd", "vehicle_requirement"]) &&
-      reference && payout && typeof record.vehicle_requirement === "string" && ["E / AVF", "AVF", "S", "VVV", "COMBI"].includes(record.vehicle_requirement)) {
+      reference && payout && typeof record.vehicle_requirement === "string" && ["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"].includes(record.vehicle_requirement)) {
     return { ok: true, data: { ...decision.data, action: "widen", booking_reference: reference, offer_payout_sgd: payout, vehicle_requirement: record.vehicle_requirement } };
   }
   return { ok: false, error: "Malformed Driver Pool Admin action rejected.", status: 400 };

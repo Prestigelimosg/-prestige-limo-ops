@@ -66,6 +66,65 @@ try {
   const assigned = async () => { const id=(await q("select driver_id from bookings where booking_reference='POOL-QA'"))[0].driver_id; return id === null ? null : Number(id); };
   const tripMigration = fs.readdirSync('supabase/migrations').find(name => name.endsWith('_driver_pool_visible_trip_details.sql'));
   if (tripMigration) await db.exec(fs.readFileSync('supabase/migrations/'+tripMigration,'utf8'));
+  {
+  // Preserve every old vehicle rule and every unrelated function byte-for-byte.
+  const requirements=['E / AVF','AVF','S','VVV','COMBI'];
+  const vehicles=['E','E class','Mercedes E-Class','AVF','Alphard','Vellfire','Toyota Alphard','Toyota Vellfire','S','S class','Mercedes S-Class','VVV','VClass','Viano','Vito','Mercedes V-Class','Mercedes Viano','Mercedes Vito','Combi','Unknown','',null,'AVF / VVV'];
+  const matrix=()=>q('select r,v,driver_pool_vehicle_matches(r,v) eligible from unnest($1::text[]) r cross join unnest($2::text[]) v',[requirements,vehicles]);
+  const oldMatrix=await matrix();
+  const functions=()=>q("select proname,pg_get_functiondef(oid) definition from pg_proc where pronamespace='public'::regnamespace and (proname like '%driver_pool%' or proname like '%driver_bid%') order by proname,oid");
+  const beforeFunctions=await functions();
+  const combinedMigration=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_driver_pool_avf_vvv_requirement.sql'));
+  assert.ok(combinedMigration,'Combined pool migration missing');
+  await db.exec(fs.readFileSync('supabase/migrations/'+combinedMigration,'utf8'));
+  assert.deepEqual(await matrix(),oldMatrix,'Every existing vehicle requirement must stay unchanged');
+  assert.equal(await val("select driver_pool_vehicle_matches('AVF / VVV','AVF') result"),true,'Combined AVF / VVV must allow AVF');
+  const allowed=['AVF','Alphard','Vellfire','Toyota Alphard','Toyota Vellfire','VVV','VClass','Viano','Vito','Mercedes V-Class','Mercedes Viano','Mercedes Vito'];
+  for(const vehicle of vehicles) assert.equal(await val("select driver_pool_vehicle_matches('AVF / VVV',$1) result",[vehicle]),allowed.includes(vehicle),String(vehicle));
+  for(const item of await functions()) {
+    const original=beforeFunctions.find(x=>x.proname===item.proname);
+    assert.ok(original,'No new Pool function');
+    if(item.proname==='driver_pool_vehicle_matches') continue;
+    assert.equal(item.proname==='publish_driver_pool_offer'?item.definition.replace("'AVF / VVV', ",""):item.definition,original.definition,'Only publisher allowed-value list can change: '+item.proname);
+  }
+  const mixedReset=async()=>{await reset();await db.exec("update drivers set vehicle_type=case id when 1 then 'AVF' when 2 then 'VVV' when 3 then 'Viano' when 4 then 'E' when 5 then 'S' when 6 then 'Combi' when 7 then 'Unknown' else null end");};
+  const combinedPublish=(ids,key=randomUUID())=>val("select publish_driver_pool_offer('POOL-QA',(select updated_at from bookings),100,$1,'admin','Synthetic Admin','AVF / VVV',$2::bigint[]) result",[key,ids]);
+  const combinedWiden=(o,key=randomUUID())=>val("select publish_driver_pool_offer('POOL-QA',$1,100,$2,'admin','Synthetic Admin','AVF / VVV',null,$3) result",[o.offer.updated_at,key,o.offer.offer_key]);
+  for(const ids of [[1,2],[]]) for(const winner of [1,2]) {
+    await mixedReset(); const key=randomUUID(), offer=await combinedPublish(ids,key);
+    assert.deepEqual(offer.recipient_driver_ids,ids.length?ids:[1,2,3]);
+    assert.equal(offer.offer.safe_vehicle_label,'AVF / VVV');
+    assert.deepEqual((await combinedPublish(ids,key)).recipient_driver_ids,[],'Replay cannot resend');
+    for(let id=1;id<=8;id++) assert.equal((await list(id)).jobs.length,(ids.length?ids:[1,2,3]).includes(id)?1:0,'Recipient visibility '+id);
+    assert.equal((await respond(offer,winner)).reason,'accepted');
+    assert.equal(await assigned(),winner); assert.equal((await respond(offer,winner===1?2:1)).ok,false);
+    const b=(await q('select driver_payout_override,driver_payout_reason,vehicle_type_or_category from bookings'))[0];
+    assert.equal(Number(b.driver_payout_override),100);assert.equal(b.driver_payout_reason,'Driver Pool accepted fixed offer.');assert.equal(b.vehicle_type_or_category,'AVF');
+  }
+  await mixedReset(); const narrow=await combinedPublish([1]), wideKey=randomUUID(), wide=await combinedWiden(narrow,wideKey);
+  assert.equal(wide.offer.offer_key,narrow.offer.offer_key);assert.deepEqual(wide.recipient_driver_ids,[2,3]);
+  assert.equal((await combinedWiden(narrow,wideKey)).idempotent,true);
+  assert.equal((await respond(narrow,1)).ok,false,'Stale pre-widen revision must fail');
+  assert.equal((await respond(wide,2)).reason,'accepted');
+  await mixedReset(); await assert.rejects(combinedPublish([1,4]));assert.equal((await q('select count(*)::int n from driver_job_bid_offers'))[0].n,0);
+  for(const change of ["vehicle_type='E'","availability_status='unavailable'"]) {
+    await mixedReset();const offer=await combinedPublish([1,2]);await db.exec('update drivers set '+change+' where id=2');
+    assert.equal((await list(2)).jobs.length,0);assert.equal((await respond(offer,2)).ok,false);assert.equal(await assigned(),null);
+  }
+  await mixedReset();const stale=await combinedPublish([1,2]);await db.exec("update driver_access_accounts set account_status='revoked' where driver_reference='2'");
+  assert.equal((await respond(stale,2)).ok,false);
+  await mixedReset();const declined=await combinedPublish([1,2]);await decline(declined,2);assert.equal((await respond(declined,2)).ok,false);
+  if(connect) for(const ids of [[1,2],[]]) {
+    await mixedReset();const offer=await combinedPublish(ids),clients=await Promise.all([connect(),connect()]);
+    try {const result=await Promise.all(clients.map((c,i)=>c.query('select accept_driver_pool_offer($1,$2,$3,$4) result',[offer.offer.offer_key,i+1,offer.offer.updated_at,randomUUID()])));
+      assert.equal(result.filter(r=>r.rows[0].result.reason==='accepted').length,1);
+      assert.equal((await q("select count(*)::int n from driver_job_bids where bid_status='accepted'"))[0].n,1);
+    } finally {await Promise.all(clients.map(c=>c.end()));}
+  }
+  assert.equal((await q('select count(*)::int n from driver_job_links'))[0].n,0);
+  assert.equal((await q('select count(*)::int n from driver_job_status_events'))[0].n,0);
+  console.log('PASS combined AVF/VVV: old category parity, exact selected/all recipients, both winner types, fixed amount, widening/replay/stale isolation, changed vehicle/account/availability, decline and independent acceptance races.');
+  }
   for (const audience of [[1,2],[]]) {
     await reset();
     const offer = await publish(audience);
@@ -295,7 +354,7 @@ try {
     } finally {await Promise.all([blocker.end(),contender.end()]);}
     console.log('PASS independent PostgreSQL sessions: six five-way and one ten-way selected first-accept races, overlapping-job acceptance race, response-versus-widen race, and three eight-way wider first-accept races.');
   }
-  const privileges=await q("select proname,prosecdef,has_function_privilege('anon',oid,'EXECUTE') a,has_function_privilege('authenticated',oid,'EXECUTE') u,has_function_privilege('service_role',oid,'EXECUTE') s from pg_proc where proname in ('accept_driver_pool_offer','publish_driver_pool_offer','list_driver_pool_available_jobs')");
-  assert.equal(privileges.length,3); assert.ok(privileges.every(p=>!p.prosecdef&&!p.a&&!p.u&&p.s));
+  const privileges=await q("select proname,prosecdef,has_function_privilege('anon',oid,'EXECUTE') a,has_function_privilege('authenticated',oid,'EXECUTE') u,has_function_privilege('service_role',oid,'EXECUTE') s from pg_proc where proname in ('accept_driver_pool_offer','publish_driver_pool_offer','list_driver_pool_available_jobs','driver_pool_vehicle_matches')");
+  assert.equal(privileges.length,4); assert.ok(privileges.every(p=>!p.prosecdef&&!p.a&&!p.u&&p.s));
   console.log('PASS selected recipients, one first-valid winner per group, fixed amount, decline rejection, same-offer widening, replay/stale checks, account/vehicle/schedule/booking guards, privacy and no link/status writes.');
 } catch (error) { console.error(error.message); process.exitCode = 1; } finally { await db.close(); }

@@ -62,8 +62,19 @@ for(const scenario of ['single','multiple-jobs','multiple-invoices','none','paid
 // isolation, pagination failure, malformed scope and no writes.
 const {recordModule,clientFor,issueInput,actor,job,principalFixture}=await import('./test-customer-company-booker-invoice-preparation-guard.mjs');
 const writes=[],issuedRows=[];
-const db=clientFor({writes,invoices:issuedRows});
-const issued=await recordModule.createCustomerInvoiceRecord(issueInput,actor,db);assert.equal(issued.ok,true);
+const bossA={...job,traveler_id:70};
+const bossB={...job,traveler_id:71,booking_reference:'ADM-20990101000002',public_booking_reference:'99002'};
+const db=clientFor({bookings:[bossA,bossB],writes,invoices:issuedRows});
+let prefixChecks=0;
+db.rpc=async(name,parameters)=>{
+ prefixChecks++;
+ assert.equal(name,'reserve_customer_invoice_number');assert.equal(parameters.p_booker_id,38);
+ assert.ok([70,71].includes(parameters.p_traveler_id));
+ return {data:null,error:{code:'P0001',message:'traveler_invoice_prefix_required'}};
+};
+const inputFor=booking=>({...issueInput,travelerId:booking.traveler_id,bookingReference:booking.booking_reference,reference:booking.booking_reference,amountCents:5500,lineItems:[{bookingReference:booking.booking_reference,description:'ARRIVAL | SYNTHETIC QA JOB',amountLabel:'SGD55.00',quantity:1}]});
+const issued=await recordModule.createCustomerInvoiceRecord(inputFor(bossA),actor,db);
+assert.equal(issued.ok,true,'Boss A normal Unpaid issue must work without its own prefix');
 const base=issuedRows[0];
 function readClient(rows,failSecond=false){return {from(table){assert.equal(table,'customer_invoice_records');let matched=rows,offset=0;const query={select(){return query;},eq(k,v){matched=matched.filter(x=>String(x[k])===String(v));return query;},order(){return query;},range(a,b){offset=a;matched=matched.slice(a,b+1);return query;},then(resolve,reject){return Promise.resolve({data:matched,error:failSecond&&offset>0?{message:'read failed'}:null}).then(resolve,reject);}};return query;}};}
 const many=Array.from({length:201},(_,i)=>({...base,id:String(i+1),invoice_number:`INV-20990101-${String(i+1).padStart(4,'0')}`}));
@@ -71,8 +82,21 @@ const scoped=await recordModule.loadAdminCustomerInvoiceRecords(actor,readClient
 assert.equal(scoped.ok,true);assert.equal(scoped.data.length,201);
 assert.equal((await recordModule.loadAdminCustomerInvoiceRecords(actor,readClient(many,true),'164')).ok,false);
 assert.equal((await recordModule.loadAdminCustomerInvoiceRecords(actor,readClient(many),'164,165')).status,400);
-issuedRows[0].traveler_id=70; // Boss A, same Company + PA account.
-const other={...base,traveler_id:71,invoice_number:'INV-20990101-0999',reference:'OTHER',line_items:[{bookingReference:'OTHER',amountLabel:'SGD85.00',description:'OTHER'}]};issuedRows.push(other);
+const issuedB=await recordModule.createCustomerInvoiceRecord(inputFor(bossB),actor,db);
+assert.equal(issuedB.ok,true,'Boss B must use the same standard numbering path in the same PA account');
+const other=issuedRows[1];
+assert.equal(writes.length,2);assert.notEqual(base.invoice_number,other.invoice_number);
+for(const row of issuedRows){
+ assert.match(row.invoice_number,/^INV-\d{8}-\d{4}$/);
+ assert.equal(row.customer_id,'164');assert.equal(row.booker_id,38);
+ assert.equal(row.status,'Unpaid');assert.equal(row.amount_cents,5500);
+ assert.equal(row.email_delivery_status,'not_sent');assert.equal(row.manually_sent_at,undefined);
+}
+for(const booking of [bossA,bossB]){
+ assert.equal((await recordModule.createCustomerInvoiceRecord(inputFor(booking),actor,db)).status,409);
+}
+assert.equal(writes.length,2,'Normal issue retries must not duplicate either booking');
+assert.equal(prefixChecks,2,'Duplicate coverage rejects before another numbering attempt');
 const paymentDb={from(table){assert.equal(table,'customer_invoice_records');let filters=[],payload=null;const q={select(){return q;},eq(k,v){filters.push([k,v]);return q;},update(v){payload=v;return q;},maybeSingle(){return q;},then(resolve,reject){const row=issuedRows.find(r=>filters.every(([k,v])=>String(r[k])===String(v)));if(row&&payload)Object.assign(row,payload);return Promise.resolve({data:row?{...row}:null,error:null}).then(resolve,reject);}};return q;}};
 const oldPdf=issuedRows[0].pdf_base64;
 const updated=await recordModule.updateAdminCustomerInvoiceStatus(issued.data.invoiceNumber,{status:'Paid',paymentMethod:'Cash'},actor,paymentDb);

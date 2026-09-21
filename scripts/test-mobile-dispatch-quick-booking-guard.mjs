@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 
 const [appPage, globalStyles, ledger] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
@@ -22,7 +23,7 @@ const dispatchUi = sectionBetween(
 );
 const parseHandler = sectionBetween(
   appPage,
-  "async function applyParsedBookingMessage",
+  "async function handleParseBookingMessage",
   "async function handleAiAssistParse",
 );
 const saveHandler = sectionBetween(
@@ -124,11 +125,42 @@ for (const fragment of [
   );
 }
 
-for (const fragment of [
-  'const parsed = await applyParsedBookingMessage(bookingMessage);',
-  'setMobileDispatchBookingStep("review");',
-]) {
-  assert.equal(parseHandler.includes(fragment), true, `Parse handoff must include ${fragment}`);
+// Execute the actual click handler with a controlled parser boundary. Parsing
+// must finish successfully before navigation; it must never save the draft.
+for (const outcome of ["success", "rejected", "error"]) {
+  const message = "Synthetic booking message";
+  const calls = [];
+  let finishParse;
+  let rejectParse;
+  const parsed = new Promise((resolve, reject) => {
+    finishParse = resolve;
+    rejectParse = reject;
+  });
+  const handleParse = runInNewContext(`(${parseHandler.trim()})`, {
+    bookingMessage: message,
+    applyParsedBookingMessage: (value) => {
+      calls.push(["parse", value]);
+      return parsed;
+    },
+    setMobileDispatchBookingStep: (step) => calls.push(["navigate", step]),
+    saveBooking: () => assert.fail("Create Job Card must not save a booking"),
+    handleJobCardPrimaryBookingAction: () => assert.fail("Create Job Card must not invoke Save + CRM"),
+  });
+  const pending = handleParse();
+  assert.deepEqual(calls, [["parse", message]], "Pending parsing must not advance the phone view");
+  if (outcome === "error") {
+    const error = new Error("Synthetic parser failure");
+    rejectParse(error);
+    await assert.rejects(pending, (caught) => caught === error);
+  } else {
+    finishParse(outcome === "success");
+    await pending;
+  }
+  assert.deepEqual(
+    calls,
+    outcome === "success" ? [["parse", message], ["navigate", "details"]] : [["parse", message]],
+    `${outcome}: only a successful Create Job Card parse must open Details`,
+  );
 }
 
 assert.equal(

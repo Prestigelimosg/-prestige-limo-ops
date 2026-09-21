@@ -21334,7 +21334,7 @@ export default function Home() {
     const parsed = await applyParsedBookingMessage(bookingMessage);
 
     if (parsed) {
-      setMobileDispatchBookingStep("review");
+      setMobileDispatchBookingStep("details");
     }
   }
 

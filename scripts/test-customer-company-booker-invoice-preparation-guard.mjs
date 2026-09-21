@@ -201,6 +201,51 @@ assert.equal(travelerIssued.ok, true);
 assert.equal(reservations, 1, "Registered Traveller invoices must retain their existing prefix reservation");
 assert.equal(travelerWrites[0].invoice_number, "LOCAL-0001");
 assert.equal(travelerWrites[0].traveler_id, 70);
+// A verified traveller without an optional prefix uses the existing standard
+// number allocator. No other reservation/ownership failure permits that path.
+for (const status of ["Unpaid", "Paid"]) {
+  for (const reservationError of [
+    { code: "P0001", message: "traveler_invoice_prefix_required" },
+    { code: "P0001", message: "traveler_invoice_sequence_not_active" },
+    { code: "P0001", message: "traveler_invoice_prefix_malformed" },
+    { code: "P0001", message: "verified_traveler_invoice_identity_mismatch" },
+    { code: "P0001", message: "verified_traveler_invoice_identity_required" },
+    { code: "42501", message: "permission denied" },
+    { code: "08006", message: "connection failure" },
+    { code: "42501", message: "traveler_invoice_prefix_required" },
+    { code: "P0001", message: "unexpected traveler_invoice_prefix_required" },
+    null,
+  ]) {
+    const attempts = [];
+    const db = clientFor({ bookings: [{ ...job, traveler_id: 70 }], writes: attempts });
+    db.rpc = async () => ({ data: null, error: reservationError });
+    const result = await recordModule.createCustomerInvoiceRecord({ ...issueInput, travelerId: 70, status }, actor, db);
+    const optionalPrefixMissing = reservationError?.code === "P0001" && reservationError.message === "traveler_invoice_prefix_required";
+    assert.equal(result.ok, optionalPrefixMissing, JSON.stringify(reservationError));
+    assert.equal(attempts.length, optionalPrefixMissing ? 1 : 0);
+    if (result.ok) {
+      assert.match(result.data.invoiceNumber, /^INV-\d{8}-\d{4}$/);
+      assert.equal(attempts[0].customer_id, "164");
+      assert.equal(attempts[0].booker_id, 38);
+      assert.equal(attempts[0].traveler_id, 70);
+      assert.equal(attempts[0].status, status);
+      assert.equal(attempts[0].email_delivery_status, "not_sent");
+      assert.equal(attempts[0].manually_sent_at, undefined);
+    }
+  }
+}
+for (const change of [
+  { customerId: "165" }, { bookerId: 39 }, { travelerId: 71 },
+  { bookerId: null }, { travelerId: null },
+  { bookingReference: "OTHER", lineItems: [{ ...lineItem, bookingReference: "OTHER" }] },
+]) {
+  const attempts = [];
+  const db = clientFor({ bookings: [{ ...job, traveler_id: 70 }], writes: attempts });
+  db.rpc = async () => { throw new Error("Ownership must reject before prefix lookup"); };
+  const result = await recordModule.createCustomerInvoiceRecord({ ...issueInput, travelerId: 70, ...change }, actor, db);
+  assert.equal(result.ok, false, JSON.stringify(change));
+  assert.equal(attempts.length, 0);
+}
 for (const [insertError, expectedStatus] of [
   [{ code: "23505", message: "Invoice already contains one or more selected jobs." }, 409],
   [{ code: "42703", message: "booker_id does not exist" }, 503],

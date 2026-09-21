@@ -868,7 +868,6 @@ async function reserveTravelerInvoiceNumber(
   client: CustomerInvoiceClient,
   input: {
     actor: AdminBookingPersistenceAdapterActor;
-    allowUnconfiguredPrefix: boolean;
     bookerId: number;
     customerAccount: string;
     travelerId: number;
@@ -885,10 +884,10 @@ async function reserveTravelerInvoiceNumber(
   const invoiceNumber = safeInvoiceNumber(firstRow.invoice_number);
 
   if (error || !invoiceNumber) {
-    // Only the Paid manual-sent action may reuse standard numbering when this
-    // verified traveller has no prefix. Other numbering errors stay closed.
+    // Ownership is verified before reservation. An unconfigured traveller uses
+    // existing standard numbering without losing Booker or traveller identity.
+    // Configured prefixes and every other reservation failure remain unchanged.
     if (
-      input.allowUnconfiguredPrefix &&
       asRecord(error).code === "P0001" &&
       asRecord(error).message === "traveler_invoice_prefix_required"
     ) {
@@ -965,7 +964,6 @@ export async function createCustomerInvoiceRecord(
     sanitized.data.documentType === "invoice"
       ? await reserveTravelerInvoiceNumber(invoiceClient, {
           actor,
-          allowUnconfiguredPrefix: markManuallySent,
           bookerId: sanitized.data.bookerId,
           customerAccount: sanitized.data.customerName,
           travelerId: sanitized.data.travelerId,

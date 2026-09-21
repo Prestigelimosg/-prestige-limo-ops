@@ -38,8 +38,11 @@ for (const prefixError of [
 }
 const ordinaryWrites=[];const ordinaryDb=clientFor({bookings:[{...job,traveler_id:70}],writes:ordinaryWrites});
 ordinaryDb.rpc=noPrefixClient.rpc;
-assert.equal((await recordModule.createCustomerInvoiceRecord({...travelerPaidInput,action:undefined},actor,ordinaryDb)).status,409);
-assert.equal(ordinaryWrites.length,0,'Normal Issue/Send numbering remains unchanged');
+const ordinaryIssued=await recordModule.createCustomerInvoiceRecord({...travelerPaidInput,action:undefined},actor,ordinaryDb);
+assert.equal(ordinaryIssued.ok,true,'Normal issue also uses standard numbering without requiring a new Boss prefix');
+assert.equal(ordinaryWrites.length,1);
+assert.equal(ordinaryIssued.data.manuallySentAt,null,'Normal issue must not claim a manual send');
+assert.equal(ordinaryWrites[0].email_delivery_status,'not_sent');
 const configuredWrites=[];const configuredDb=clientFor({bookings:[{...job,traveler_id:70}],writes:configuredWrites});
 configuredDb.rpc=async()=>({data:[{invoice_number:'LOCAL-0002'}],error:null});
 assert.equal((await recordModule.createCustomerInvoiceRecord(travelerPaidInput,actor,configuredDb)).data.invoiceNumber,'LOCAL-0002');

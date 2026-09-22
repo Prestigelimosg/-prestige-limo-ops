@@ -49,6 +49,11 @@ export function adminEmailAiIntakeAppearsInApp(input: {
   subject?: unknown;
 }) {
   if (input.processingStatus && !["queued", "failed", "processing"].includes(String(input.processingStatus))) return false;
+  // Source-only recovery for failed allowed transport-request conversations.
+  // Without failed status this must not change classification or auto-queue an enquiry.
+  if (input.processingStatus === "failed" &&
+    adminEmailAiSenderAddressIsAllowed(input.senderAddress) &&
+    /\bcrew\s+transport\s+request\b/i.test(String(input.subject ?? "").trim())) return true;
   // A known booking subject is receipt evidence independent of the AI classification.
   const recognizedBooking = adminEmailAiSenderAddressIsAllowed(input.senderAddress) && (
       /^New booking ["“]Prestige Transport \d+["”] has been received$/i.test(String(input.subject ?? "").trim()) ||

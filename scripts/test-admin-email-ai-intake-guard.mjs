@@ -561,6 +561,13 @@ assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"failed",
 assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"failed",classification:"uncertain",senderAddress:"untrusted@example.test",subject:'New booking "Prestige Transport 99990" has been received'}),false);
 assert.equal(contract.adminEmailAiIntakeAppearsInApp({processingStatus:"reviewed",classification:"confirmed_booking",senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99990" has been received'}),false);
 assert.match(pageSource,/data-email-ai-failed-source/);
+const crewFailure = {processingStatus:"failed",classification:"uncertain",senderAddress:"info@prestigelimo.sg",subject:"Re: ORDER-123 | Crew Transport Request | AIRCRAFT | AIRPORT"};
+assert.equal(contract.adminEmailAiIntakeAppearsInApp(crewFailure),true);
+assert.equal(contract.adminEmailAiIntakeAppearsInApp({...crewFailure,senderAddress:"untrusted@example.test"}),false);
+for (const processingStatus of ["reviewed","dismissed","queued","processing"]) {
+  assert.equal(contract.adminEmailAiIntakeAppearsInApp({...crewFailure,processingStatus}),false,"Only failed conversation visibility changes; history and classification behavior remain intact");
+}
+assert.equal(contract.adminEmailAiIntakeAppearsInApp({...crewFailure,processingStatus:undefined}),false,"Visibility repair must not change the model classification gate");
 assert.match(pageSource,/clean\(record.processing_status\) !== "queued"/);
 
 for (const classification of ["uncertain", "enquiry", "unrelated"]) {

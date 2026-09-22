@@ -226,6 +226,8 @@ export default function DriverPortalPage() {
     ready: false,
   });
   const [alertState, setAlertState] = useState<DriverPortalAlertState>("available");
+  const nativeAlertAutoRepairAttemptedRef = useRef(false);
+  const nativeAlertRecoveryRef = useRef<"idle" | "pending" | "failed" | "denied">("idle");
   const [openingJobKey, setOpeningJobKey] = useState("");
   const [openFeedback, setOpenFeedback] = useState<Record<string, string>>({});
   const [availableJobs, setAvailableJobs] = useState<DriverPoolAvailableJob[]>([]);
@@ -352,7 +354,41 @@ export default function DriverPortalPage() {
         publicKey,
         ready: result.device_alerts?.ready === true && Boolean(publicKey),
       });
-      setAlertState(
+      if (nativeInstallationId && result.session === "account") {
+        const nativeWindow = window as DriverNativeWindow;
+        const registrationReady = result.device_alerts?.native_registration_ready;
+        if (nativeAlertRecoveryRef.current !== "pending") {
+          if (nativeAlertRecoveryRef.current === "denied") {
+            setAlertState("blocked");
+          } else if (nativeAlertRecoveryRef.current === "failed" || registrationReady == null) {
+            setAlertState("unavailable");
+          } else if (currentNativeNotificationsEnabled() && registrationReady === true) {
+            setAlertState("enabled");
+          } else if (currentNativeNotificationsEnabled() && registrationReady === false) {
+            if (!nativeAlertAutoRepairAttemptedRef.current &&
+                nativeWindow.__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__ === true &&
+                nativeWindow.ReactNativeWebView) {
+              // Reuse the current phone's existing verified registration transaction.
+              // Never choose a stored token or retry automatically after a failure.
+              nativeAlertAutoRepairAttemptedRef.current = true;
+              nativeAlertRecoveryRef.current = "pending";
+              setAlertState("enabling");
+              try {
+                nativeWindow.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: "native_notifications_register", account_session: true,
+                }));
+              } catch {
+                nativeAlertRecoveryRef.current = "failed";
+                setAlertState("unavailable");
+              }
+            } else {
+              setAlertState("unavailable");
+            }
+          } else {
+            setAlertState("available");
+          }
+        }
+      } else setAlertState(
         nativeInstallationId
           ? currentNativeNotificationsEnabled() && result.device_alerts?.native_registration_ready !== false
             ? "enabled"
@@ -539,6 +575,21 @@ export default function DriverPortalPage() {
         ok?: boolean;
         state?: "denied" | "enabled" | "failed";
       }>;
+      if (nativeAlertAutoRepairAttemptedRef.current) {
+        if (nativeAlertRecoveryRef.current !== "pending") {
+          void loadJobs();
+          return;
+        }
+        if (result.detail?.ok === true && result.detail.state === "enabled") {
+          nativeAlertRecoveryRef.current = "idle";
+          // Confirm the server now has exactly one registration before claiming ready.
+          void loadJobs();
+        } else {
+          nativeAlertRecoveryRef.current = result.detail?.state === "denied" ? "denied" : "failed";
+          setAlertState(result.detail?.state === "denied" ? "blocked" : "unavailable");
+        }
+        return;
+      }
       setAlertState(
         result.detail?.ok === true && result.detail.state === "enabled"
           ? "enabled"
@@ -556,7 +607,7 @@ export default function DriverPortalPage() {
       "prestige-driver-native-notification-result",
       onNativeNotificationResult,
     );
-  }, []);
+  }, [loadJobs]);
 
   useEffect(() => {
     function onNativeJobOpenResult(event: Event) {
@@ -645,10 +696,18 @@ export default function DriverPortalPage() {
     if (nativeBridgeReady) {
       if (readState.kind === "ready" && readState.accountSession &&
         (window as DriverNativeWindow).__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__ === true) {
+        if (nativeAlertRecoveryRef.current === "pending") return;
+        nativeAlertAutoRepairAttemptedRef.current = true;
+        nativeAlertRecoveryRef.current = "pending";
         setAlertState("enabling");
-        (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
-          type: "native_notifications_register", account_session: true,
-        }));
+        try {
+          (window as DriverNativeWindow).ReactNativeWebView?.postMessage(JSON.stringify({
+            type: "native_notifications_register", account_session: true,
+          }));
+        } catch {
+          nativeAlertRecoveryRef.current = "failed";
+          setAlertState("unavailable");
+        }
         return;
       }
       const notificationJob = readState.kind === "ready" ? readState.jobs[0] : null;

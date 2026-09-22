@@ -109,7 +109,8 @@ try{
   assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth`),'No horizontal overflow');
   await evaluate(`window.__alertState.duplicateNative=true;window.__saveAlertState()`);
   await navigateWithLoadEvent(client,appUrl+'/driver-portal');await wait('Alerts 1');
-  await waitForCondition(()=>evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent.includes('Enable Job Alerts')&&!b.disabled)`),5000,'repairable native registration');
+  await waitForCondition(()=>evaluate(`document.body.textContent.includes('This device is ready for Driver Job alerts.')`),5000,'automatic verified phone registration recovery');
+  assert.equal(await evaluate(`window.__native.filter(m=>m.type==='native_notifications_register'&&m.account_session===true).length`),1,'Duplicate recovery uses one existing native registration');
   await evaluate(`window.__alertState.pending=true;window.__saveAlertState()`);
   await navigateWithLoadEvent(client,appUrl+'/driver-portal');await wait('Alerts 1');
   await waitForCondition(()=>evaluate(`document.querySelector('[data-driver-portal-job="QA-PENDING-ACK"]')?.textContent.includes('Open & acknowledge')`),5000,'pending job discoverable without push tap');
@@ -123,9 +124,8 @@ try{
   await writeFile(`/private/tmp/driver-alert-lifecycle-${width}.png`,Buffer.from(shot.data,'base64'));
   await evaluate(`Object.assign(window.__alertState,{noJobs:true,pending:false,duplicateNative:true,registrationFail:true});window.__saveAlertState()`);
   await navigateWithLoadEvent(client,appUrl+'/driver-portal');await wait('Alerts 1');
-  await waitForCondition(()=>evaluate(`Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Enable Job Alerts'&&!b.disabled)`),5000,'no-job enable control');
-  await evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Enable Job Alerts').click()`);
   await waitForCondition(()=>evaluate(`document.body.textContent.includes('Check your connection and tap Enable Job Alerts again')`),5000,'actionable failure');
+  assert.equal(await evaluate(`window.__native.filter(m=>m.type==='native_notifications_register').length`),1,'Failed recovery does not loop');
   assert.ok(await evaluate(`window.__native.some(m=>m.type==='native_notifications_register'&&m.account_session===true&&!m.job_key)`));
   assert.ok(await evaluate(`!document.body.textContent.includes('latest acknowledged private Job Link')`));
   await evaluate(`window.__alertState.registrationFail=false;Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Enable Job Alerts').click()`);

@@ -1136,7 +1136,7 @@ function directPassengerPhoneCandidates(body: string) {
   const candidates = new Set<string>();
   const source = cleanMultilineText(body, maximumAiInputCharacters);
   const explicitPassengerPhonePattern =
-    /\b(?:guest|passenger|traveller|traveler)\s+(?:contact|mobile|phone)(?:\s+(?:no\.?|number))?\s*[:=-]?\s*(\+?\d(?:[\d ().-]{5,22}\d))/gi;
+    /\b(?:guest|passenger|traveller|traveler)\s+(?:(?:contact|mobile|phone)(?:\s+(?:no\.?|number))?|number)\s*[:=-]?\s*(\+?\d(?:[\d ().-]{5,22}\d))/gi;
   const labelledPassengerTokens = new Set(
     personIdentityTokens(
       source.match(/\bPassenger\s*:\s*([^\n(]+)/i)?.[1],
@@ -1223,7 +1223,7 @@ function explicitSourceBookingFacts(body: string) {
   const clientMatches = [...source.matchAll(
     /\bFirst name\s+(.+?)\s+Last name\s+(.+?)\s+E-mail address\s+\S+\s+Phone\s+(?:no\.?|number)\s+(\+?\d(?:[\d ().-]{5,22}\d))\s+Pass(?:a|e)ngers?\s+(\d{1,2})\s+Flight\s+No\.?\s+([A-Z]{2}\s*\d{1,4})\b/gi,
   )];
-  const passengerName = singleExplicitEvidence(
+  const clientName = singleExplicitEvidence(
     clientMatches.map((match) =>
       [match[1], match[2]]
         .map((value) => cleanText(value, 120))
@@ -1239,7 +1239,17 @@ function explicitSourceBookingFacts(body: string) {
   const directPhone = singleExplicitEvidence([
     ...directPassengerPhoneCandidates(source),
   ]);
-  const passengerContact = directPhone.value ? directPhone : clientPhone;
+  const labelledPassengerName = singleExplicitEvidence(matchedSourceValues(
+    source,
+    /\bPassenger\s+Name\s*:\s*([\s\S]*?)(?=\s+(?:Passenger\s+(?:number|contact|mobile|phone)\b|Route\b|Vehicle\b|Client details\b)|\n[ \t]*\n|$)/gi,
+  ));
+  const passengerName = labelledPassengerName.value || labelledPassengerName.ambiguous
+    ? labelledPassengerName : clientName;
+  const separatePassengerIdentity = Boolean(labelledPassengerName.value && clientName.value &&
+    !samePersonIdentity(labelledPassengerName.value, clientName.value));
+  const passengerContactUnspecified = separatePassengerIdentity && !directPhone.value;
+  const passengerContact = directPhone.value ? directPhone : passengerContactUnspecified
+    ? { ambiguous: false, value: "" } : clientPhone;
   const pax = singleExplicitEvidence(
     clientMatches
       .map((match) => normalizedEvidenceCount(match[4]))
@@ -1341,6 +1351,7 @@ function explicitSourceBookingFacts(body: string) {
     hasEvidence: Object.keys(facts).length > 0,
     returnRequested,
     returnLegs,
+    passengerContactUnspecified,
   };
 }
 
@@ -1394,6 +1405,7 @@ function validateExplicitSourceFactsCompleteness(
       ["arrival pickup", Boolean(facts.bookingType === "MNG" && ((facts.dropoff && locationContainsExplicitEvidence(booking?.pickup, facts.dropoff)) || (facts.extraStopLocation && locationContainsExplicitEvidence(booking?.pickup, facts.extraStopLocation))))],
       ["passenger name", Boolean(facts.passengerName && !samePersonIdentity(booking?.passengerName, facts.passengerName))],
       ["passenger contact", Boolean(facts.passengerContact && normalizedExplicitPassengerPhone(booking?.passengerContact) !== facts.passengerContact)],
+      ["passenger contact role", Boolean(sourceEvidence.passengerContactUnspecified && cleanText(booking?.passengerContact, 80))],
       ["passenger count", Boolean(facts.pax && normalizedEvidenceCount(booking?.pax) !== facts.pax)],
       ["bags", Boolean(facts.bagCount && normalizedEvidenceCount(booking?.bagCount) !== facts.bagCount)],
       ["vehicle", Boolean(facts.vehicle && normalizedEvidenceText(booking?.vehicle) !== normalizedEvidenceText(facts.vehicle))],

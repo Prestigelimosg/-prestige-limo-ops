@@ -1399,6 +1399,68 @@ Extra
     "Airport terminal is not explicitly stated.",
   ]);
 
+  const separatePassengerBody = `General
+Service type Airport transfer Transfer type One Way Pickup date and time 23-09-2026 18:15
+Comment Passenger
+Name: Alex Rider Passenger Number: +65 0000 0002
+
+Route name Airport arrival
+Drop off Location
+ 1. 20 Sample Crescent, Singapore 123456
+Vehicle name Toyota Alphard 2.5 Bag count 3 Passengers count 4
+Client details
+First name Jordan Last name Booker E-mail address requester@example.test
+Phone number +6500000001 Passangers 3 Flight No. TR545
+Payment Stripe`;
+  const separatePassengerAnalysis = {
+    ...completeExplicitSourceFactsAnalysis,
+    bookingResult: {multipleBookingsDetected:false,rawWarnings:[],bookings:[{
+      ...completeExplicitSourceFactsBooking, bookingType:"MNG", pickupDate:"2026-09-23", pickupTime:"18:15",
+      pickup:"", dropoff:"20 Sample Crescent, Singapore 123456", extraStops:"", extraStopLocation:"", extraStopCount:"",
+      passengerName:"Alex Rider", passengerContact:"+6500000002", bookerName:"Jordan Booker",
+      bookerContact:"+6500000001", bookerEmail:"requester@example.test", pax:"3",flightNumber:"TR545",notes:"",
+    }]},
+  };
+  const validateSeparatePassenger = (body, changes = {}) => runtime.testValidateExplicitSourceFactsCompleteness(
+    {body}, {...separatePassengerAnalysis,bookingResult:{...separatePassengerAnalysis.bookingResult,
+      bookings:[{...separatePassengerAnalysis.bookingResult.bookings[0],...changes}]}},
+  );
+  assert.equal(validateSeparatePassenger(separatePassengerBody).ok,true,
+    "Explicit Passenger Name/Number must take precedence over a different Client-details identity");
+  for (const changes of [
+    {passengerName:"Jordan Booker"}, {passengerContact:"+6500000001"},
+    {passengerName:""}, {passengerContact:""},
+  ]) assert.equal(validateSeparatePassenger(separatePassengerBody,changes).ok,false,"Do not substitute or omit an explicit passenger field");
+  assert.equal(validateSeparatePassenger(separatePassengerBody.replace("Passenger\nName", "Passenger Name")).ok,true);
+  assert.equal(validateSeparatePassenger(separatePassengerBody.replace("Passenger Number", "Passenger phone number")).ok,true);
+  assert.equal(validateSeparatePassenger(separatePassengerBody+"\nPassenger Name: Other Rider\n").ok,false,"Conflicting explicit passengers fail closed");
+  assert.equal(validateSeparatePassenger(separatePassengerBody+"\nPassenger Number: +6500000003\n").ok,false,"Conflicting explicit phones fail closed");
+  const unspecifiedPhoneBody = separatePassengerBody.replace("Passenger Number: +65 0000 0002", "");
+  assert.equal(validateSeparatePassenger(unspecifiedPhoneBody,{passengerContact:""}).ok,true,"A different client's phone must not become mandatory passenger evidence");
+  assert.equal(validateSeparatePassenger(unspecifiedPhoneBody,{passengerContact:"+6500000001"}).ok,false,"Do not assign the client's unqualified phone to a separate passenger");
+  const beforeSeparateProvider = providerRequestBodies.length;
+  correctionProviderOverride = () => ({output_text:JSON.stringify(separatePassengerAnalysis),usage:{input_tokens:100,output_tokens:80}});
+  try {
+    const result = await runtime.testAnalyseAllowedEmail({body:separatePassengerBody,senderAddress:"info@prestigelimo.sg",subject:'New booking "Prestige Transport 99992" has been received'});
+    assert.equal(result.ok,true,"The correct roles must survive the full established normalization/validation path");
+    assert.equal(providerRequestBodies.length,beforeSeparateProvider+1,"No additional AI request for role repair");
+    const canonical = emailAiSchema.adminEmailAiCanonicalBookingText(result.analysis);
+    const stored = runtime.testSanitizePersistenceRecord({id:"00000000-0000-4000-8000-000000099991",
+      mailbox_address:"booking@prestigelimo.sg",
+      sender_address:"info@prestigelimo.sg",classification:"confirmed_booking",processing_status:"queued",
+      booking_parse_result:result.analysis.bookingResult,canonical_booking_text:canonical});
+    assert.ok(stored,"Validated draft must survive the existing intake read projection");
+    const draft = parseBookingMessageForState(stored.canonical_booking_text,
+      {bookingResult:stored.booking_parse_result,canonicalBookingText:stored.canonical_booking_text});
+    assert.equal(draft.name,"Alex Rider");
+    assert.equal(draft.passengerContact,"+6500000002");
+    assert.equal(draft.booker,"Jordan Booker");
+    assert.equal(draft.bookerContact,"+6500000001");
+  } finally {
+    correctionProviderOverride = null;
+    providerRequestBodies.splice(beforeSeparateProvider);
+  }
+
   const possessivePassengerMobileBody = [
     syntheticPrestigeTransport15787Body,
     "Comment",
@@ -2246,7 +2308,18 @@ Extra
   assert.equal(visibleFailed.normalized_text, failedBooking.normalized_text);
   assert.equal(failuresRead.data.records.some(row=>row.id==="failed-unrelated-fixture"),false);
   assert.equal((await runtime.markAdminEmailAiIntakeReviewed(failedBooking.id, fakeDatabase)).ok,false,"Failed source cannot be marked reviewed as a validated booking");
-  intakeRows.splice(-2);
+  const failedConversation = {...failedBooking,id:"00000000-0000-4000-8000-000000099992",subject:"Re: ORDER-123 | Crew Transport Request | AIRCRAFT | AIRPORT"};
+  intakeRows.push(failedConversation);
+  const conversationRead = await runtime.loadAdminEmailAiIntake(fakeDatabase);
+  const visibleConversation = conversationRead.data.records.find(row=>row.id===failedConversation.id);
+  assert.ok(visibleConversation,"Allowed failed Crew Transport Request conversation must be visible in the existing source-only queue");
+  assert.equal(visibleConversation.canonical_booking_text,"");
+  assert.equal(visibleConversation.booking_parse_result.bookings.length,0);
+  assert.equal(visibleConversation.normalized_text,failedConversation.normalized_text);
+  assert.equal((await runtime.markAdminEmailAiIntakeReviewed(failedConversation.id,fakeDatabase)).status,409);
+  assert.equal((await runtime.markAdminEmailAiIntakeReviewed(failedConversation.id,fakeDatabase,"dismissed")).ok,true,"Existing Clear dismisses the exact failed conversation only");
+  assert.equal(failedBooking.processing_status,"failed");
+  intakeRows.splice(-3);
 
   const loaded = await runtime.loadAdminEmailAiIntake(fakeDatabase);
   assert.equal(loaded.ok, true);

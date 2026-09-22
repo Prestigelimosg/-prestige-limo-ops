@@ -8409,15 +8409,27 @@ function formatPickupDateTime(dateValue: string, timeValue: string | null | unde
   return `${formatDate(dateValue)}, ${formatPickupTime(timeValue)}`;
 }
 
-function formatBookingPickupDateTimeSgt(bookingRecord: BookingRecord) {
+function formatBookingPickupDateTimeSgt(bookingRecord: BookingRecord, dateDisplay: "year" | "weekday" = "year") {
   const timestampParts = singaporePickupDateTimePartsFromTimestamp(
     clean(bookingRecord.pickup_at) || clean(bookingRecord.pickup_datetime),
   );
   const dateValue = timestampParts?.date || getBookingDateKey(bookingRecord);
   const timeValue = timestampParts?.time || formatPickupTimeFromRecord(bookingRecord).replace(/\D/g, "");
   const formattedTime = formatPickupTime(timeValue);
+  let formattedDate = formatDate(dateValue);
+  if (dateDisplay === "weekday" && dateValue) {
+    const singaporeDate = new Date(`${dateValue}T00:00:00+08:00`);
+    if (!Number.isNaN(singaporeDate.getTime())) {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        day: "2-digit", month: "short", weekday: "short", timeZone: "Asia/Singapore",
+      }).formatToParts(singaporeDate);
+      formattedDate = ["day", "month", "weekday"]
+        .map((type) => parts.find((part) => part.type === type)?.value)
+        .join(" ");
+    }
+  }
 
-  return `${formatDate(dateValue)}, ${formattedTime}${formattedTime === "Time TBC" ? "" : " SGT"}`;
+  return `${formattedDate}, ${formattedTime}${formattedTime === "Time TBC" ? "" : " SGT"}`;
 }
 
 function formatBookingTimestampSgt(value: string | null | undefined) {
@@ -29639,7 +29651,7 @@ export default function Home() {
           );
           const driverText = driverSummary.name === "—" ? "Driver TBC" : driverSummary.name;
           const pickupMetaText = [
-            formatBookingPickupDateTimeSgt(savedBooking),
+            formatBookingPickupDateTimeSgt(savedBooking, "weekday"),
             operationalCard.job_card_display,
           ].filter(Boolean).join(" · ");
           const bookingsListStatus = bookingStatusLabel(savedBooking.status);

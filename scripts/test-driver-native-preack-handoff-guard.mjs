@@ -223,4 +223,53 @@ try {
   await rm(tempDir, { force: true, recursive: true });
 }
 
-console.log("Driver native pre-ACK handoff guard passed");
+// Execute the real Admin click handler: saving a link must not turn an
+// unconfirmed phone alert into a green success notification.
+const createLinkSource = adminPage.slice(
+  adminPage.indexOf("  async function createDriverJobLink()"),
+  adminPage.indexOf("  async function copyDriverJobLink()"),
+);
+assert.ok(createLinkSource.length > 0);
+const createLinkJs = ts.transpileModule(createLinkSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText;
+for (const reason of ["provider_accepted", "provider_failed", "not_available", "recent_attempt", "missing"]) {
+  for (const disposition of ["created", "reused", "amended"]) {
+    let state = {};
+    let requests = 0;
+    const dependencies = {
+      buildAdminDriverJobLinkCreatePayload: () => ({ ok: true, data: { booking_reference: "TEST" } }),
+      setDriverJobLinkCopyMessage: () => {},
+      setAdminDriverJobLinkState: (next) => { state = typeof next === "function" ? next(state) : next; },
+      dispatchPublicBookingReference: "TEST",
+      driverJobLinkCreateAttemptRef: { current: null },
+      crypto: { randomUUID: () => "synthetic-request" },
+      adminDriverJobLinksApiPath: "/api/admin-driver-job-links",
+      adminLegacyDataPurpose: "admin-booking-persistence",
+      fetch: async (url, options) => {
+        requests++;
+        assert.equal(url, "/api/admin-driver-job-links");
+        assert.equal(options.method, "POST");
+        return { ok: true, json: async () => ({
+          ok: true, disposition,
+          link: { booking_reference: "TEST", safe_summary: { acknowledged: false } },
+          driver_job_url: "https://example.invalid/driver-job/synthetic",
+          ...(reason === "missing" ? {} : { native_app_alert: { reason, provider_accepted: reason === "provider_accepted" } }),
+        }) };
+      },
+      clean: (value) => String(value || "").trim(),
+      cleanReferenceText: (value) => String(value || "").trim(),
+      setAdminActiveJobsMapReadState: () => {},
+      setDashboardDriverJobLinksReadState: () => {},
+      adminDriverJobLinkFailureMessage: (error) => { throw error; },
+    };
+    const createLink = new Function(...Object.keys(dependencies), `${createLinkJs}; return createDriverJobLink;`)(...Object.values(dependencies));
+    await createLink();
+    assert.equal(requests, 1, "Feedback must not automatically resend or recreate the link");
+    assert.equal(state.oneTimeUrl, "https://example.invalid/driver-job/synthetic", "The created link remains available for manual sharing");
+    assert.equal(state.message.tone, reason === "provider_accepted" ? "success" : reason === "recent_attempt" ? "info" : "error",
+      `${disposition}/${reason}: link creation alone must not imply phone-alert success`);
+  }
+}
+
+console.log("Driver native pre-ACK handoff and Admin alert feedback guards passed");

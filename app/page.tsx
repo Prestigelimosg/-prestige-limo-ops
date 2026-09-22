@@ -27820,8 +27820,8 @@ export default function Home() {
         : nativeAppAlert?.reason === "recent_attempt"
           ? "An alert was recently requested. Wait 60 seconds before another resend."
           : nativeAppAlert?.reason === "provider_failed"
-            ? "The app alert could not be confirmed. Use Copy Link if needed."
-            : "No eligible Driver app alert was available. Use Copy Link if needed.";
+            ? "Phone alert could not be confirmed. The job link is available; use Copy Link if needed."
+            : "Phone alert was not sent: no eligible Driver app alert was available. The job link is available; use Copy Link if needed.";
 
       if (!link || !driverJobUrl) {
         throw new Error("Driver job link response was missing the private URL.");
@@ -27883,11 +27883,12 @@ export default function Home() {
         link,
         loadedReference: link.booking_reference,
         message: {
-          tone: "success",
-          text: `${disposition === "amended" ? `Job updated on the same link. ${link.safe_summary.acknowledged ? "Acknowledgement kept." : "Waiting for acknowledgement."}`
+          tone: nativeAppAlert?.provider_accepted === true ? "success"
+            : nativeAppAlert?.reason === "recent_attempt" ? "info" : "error",
+          text: `${nativeAppAlertMessage} ${disposition === "amended" ? `Job updated on the same link. ${link.safe_summary.acknowledged ? "Acknowledgement kept." : "Waiting for acknowledgement."}`
             : disposition === "reused" ? "Existing job link reused."
               : liveLocationAuthorized ? "Driver job link created and live movement authorized automatically."
-                : "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup."} ${nativeAppAlertMessage}`,
+                : "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup."}`,
         },
         oneTimeUrl: driverJobUrl,
       });

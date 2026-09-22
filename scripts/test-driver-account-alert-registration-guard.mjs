@@ -4,8 +4,9 @@ import ts from 'typescript';
 const read=p=>fs.readFileSync(p,'utf8');
 function extract(path,name){const ast=ts.createSourceFile(path,read(path),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let found;function visit(n){if(ts.isFunctionDeclaration(n)&&n.name?.text===name)found=n;ts.forEachChild(n,visit)}visit(ast);assert.ok(found,name);return ts.transpileModule(found.getText(ast).replace(/^export /,''),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;}
 const states=[],messages=[];
+const recovery={current:'idle'},attempted={current:false};
 const window={__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__:true,ReactNativeWebView:{postMessage:m=>messages.push(JSON.parse(m))}};
-const enable=new Function('nativeBridgeReady','readState','setAlertState','window',extract('app/driver-portal/page.tsx','enableJobAlerts')+';return enableJobAlerts;')(true,{kind:'ready',accountSession:true,jobs:[]},s=>states.push(s),window);
+const enable=new Function('nativeBridgeReady','readState','setAlertState','window','nativeAlertRecoveryRef','nativeAlertAutoRepairAttemptedRef',extract('app/driver-portal/page.tsx','enableJobAlerts')+';return enableJobAlerts;')(true,{kind:'ready',accountSession:true,jobs:[]},s=>states.push(s),window,recovery,attempted);
 await enable();
 assert.equal(messages.length,1,'activated account with no jobs must reach native registration');
 assert.deepEqual(messages[0],{type:'native_notifications_register',account_session:true});
@@ -101,3 +102,50 @@ for(const mode of ['success','denied','server-failure','storage-failure','naviga
  assert.equal(fetches,['denied','timeout'].includes(mode)?0:1);
 }
 console.log('Actual native handler: no job lookup, stale/foreign replies, timeout/navigation, denied permission and storage failure preserve registrations');
+
+// Real portal refresh and native-result handler, with only transport/state mocked.
+const portalAst=ts.createSourceFile('portal.tsx',read('app/driver-portal/page.tsx'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let refreshCallback;
+function findRefresh(n){if(ts.isVariableDeclaration(n)&&n.name.getText(portalAst)==='loadJobs')refreshCallback=n.initializer.arguments[0];ts.forEachChild(n,findRefresh)}
+findRefresh(portalAst);assert.ok(refreshCallback);
+const refreshCode=ts.transpileModule('return '+refreshCallback.getText(portalAst),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+function portalHarness({ready=false,enabled=true,supported=true,account=true,native=true,ok=true}={}){
+ const state={ready,enabled,ok,alert:'available',messages:[],reads:0};
+ const nativeAlertRecoveryRef={current:'idle'},nativeAlertAutoRepairAttemptedRef={current:false};
+ const deps={clearingAlertsRef:{current:false},jobsReadRevisionRef:{current:0},nativeAlertRecoveryRef,nativeAlertAutoRepairAttemptedRef,
+  currentNativeInstallationId:()=>native?'verified-installation':'',currentNativeNotificationsEnabled:()=>state.enabled,
+  fetch:async()=>{state.reads++;return {ok:state.ok,status:state.ok?200:401,json:async()=>({ok:state.ok,session:account?'account':'link',device_alerts:{native_registration_ready:state.ready},jobs:[]})}},
+  window:{__PRESTIGE_DRIVER_ACCOUNT_ALERT_REGISTRATION_SUPPORTED__:supported,ReactNativeWebView:{postMessage:m=>state.messages.push(JSON.parse(m))}},
+  setAlertReadiness:()=>{},setAlertState:v=>{state.alert=v},setReadState:v=>{state.read=v},readDriverPortalAlertState:async()=>'available',dismissNativeAlerts:async()=>{},
+ };
+ const loadJobs=new Function(...Object.keys(deps),refreshCode)(...Object.values(deps));
+ const onResult=new Function('setAlertState','nativeAlertRecoveryRef','nativeAlertAutoRepairAttemptedRef','loadJobs',extract('app/driver-portal/page.tsx','onNativeNotificationResult')+';return onNativeNotificationResult;')(deps.setAlertState,nativeAlertRecoveryRef,nativeAlertAutoRepairAttemptedRef,loadJobs);
+ const manual=new Function('nativeBridgeReady','readState','setAlertState','window','nativeAlertRecoveryRef','nativeAlertAutoRepairAttemptedRef',extract('app/driver-portal/page.tsx','enableJobAlerts')+';return enableJobAlerts;')(true,{kind:'ready',accountSession:true,jobs:[]},deps.setAlertState,deps.window,nativeAlertRecoveryRef,nativeAlertAutoRepairAttemptedRef);
+ return {state,loadJobs,onResult,manual};
+}
+const repaired=portalHarness();
+await repaired.loadJobs();
+assert.deepEqual(repaired.state.messages,[{type:'native_notifications_register',account_session:true}], 'Already-enabled current phone must recover through the existing account registration bridge');
+assert.equal(repaired.state.alert,'enabling');
+await repaired.loadJobs();assert.equal(repaired.state.messages.length,1,'Refresh cannot duplicate an in-flight registration');assert.equal(repaired.state.alert,'enabling');
+repaired.state.ready=true;
+repaired.onResult({detail:{ok:true,state:'enabled'}});
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(repaired.state.alert,'enabled','Enabled requires server confirmation after the native callback');
+repaired.state.ready=false;await repaired.loadJobs();
+assert.equal(repaired.state.messages.length,1,'No automatic retry loop when later reads still disagree');assert.equal(repaired.state.alert,'unavailable');
+for(const failure of ['failed','denied']){
+ const h=portalHarness();await h.loadJobs();h.onResult({detail:{ok:false,state:failure}});
+ await h.loadJobs();assert.equal(h.state.alert,failure==='denied'?'blocked':'unavailable');assert.equal(h.state.messages.length,1);
+ h.state.ready=true;h.onResult({detail:{ok:true,state:'enabled'}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.state.alert,failure==='denied'?'blocked':'unavailable','Cached or late native enabled event cannot erase failure');
+ await h.manual();assert.equal(h.state.messages.length,2,'Explicit retry stays available');h.state.ready=true;h.onResult({detail:{ok:true,state:'enabled'}});
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(h.state.alert,'enabled');
+}
+for(const options of [{ready:true},{ready:null},{enabled:false},{supported:false},{account:false},{native:false},{ok:false}]){
+ const h=portalHarness(options);await h.loadJobs();assert.equal(h.state.messages.length,0,JSON.stringify(options)+' must not auto-register');
+ if(options.ready===null||options.supported===false)assert.equal(h.state.alert,'unavailable','Unknown registration or old-wrapper repair must not claim ready');
+}
+const falseSuccess=portalHarness();await falseSuccess.loadJobs();falseSuccess.onResult({detail:{ok:true,state:'enabled'}});
+await new Promise(resolve=>setImmediate(resolve));assert.equal(falseSuccess.state.alert,'unavailable','Native enabled callback alone cannot override duplicate registrations');
+console.log('Portal recovery: one proven-phone attempt, confirmed readiness, pending/failure persistence, explicit retry, old-wrapper/browser isolation and no automatic resend passed');

@@ -1,10 +1,44 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const app = await readFile("app/page.tsx", "utf8");
 const browserGuard = await readFile("scripts/test-pending-driver-ack-queue-browser.mjs", "utf8");
 const packageJson = await readFile("package.json", "utf8");
 const persistence = await readFile("lib/admin-driver-job-link-persistence.ts", "utf8");
+
+// Execute the real queue projection through a background read, not a copy of its logic.
+const projectionStart = app.indexOf("const pendingDriverAckQueueItems =");
+const projectionEnd = app.indexOf("const adminNotificationCentreCount =", projectionStart);
+assert.ok(projectionStart > -1 && projectionEnd > projectionStart);
+const projectQueue = new Function(
+  "dashboardDriverJobLinksReadState", "pendingDriverAckQueueEligibleBookings",
+  "getActiveJobBookingReference", "bookingPublicReference", "adminDriverJobLinkWaitingMinutes", "currentTimeMs",
+  ts.transpileModule(app.slice(projectionStart, projectionEnd), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText + "\nreturn pendingDriverAckQueueItems;",
+);
+const queueBookings = [{ reference: "ACK-ONE" }, { reference: "ACK-TWO" }];
+const firstLink = { id: "link-one", link_status: "active", issued_at: "2026-09-22T00:00:00Z", safe_summary: { acknowledged: false, ack_alert_closed: false } };
+const secondLink = { ...firstLink, id: "link-two" };
+const retainedLinks = { "ACK-ONE": firstLink, "ACK-TWO": secondLink };
+const projectIds = (status, linksByReference) => projectQueue(
+  { status, linksByReference }, queueBookings, booking => booking.reference,
+  booking => booking.reference, () => 10, 0,
+).map(item => item.linkId);
+assert.deepEqual(projectIds("loaded", retainedLinks), ["link-one", "link-two"]);
+assert.deepEqual(projectIds("loading", retainedLinks), ["link-one", "link-two"],
+  "Background ACK refresh must retain the displayed rows rather than collapse the queue.");
+assert.deepEqual(projectIds("loading", {}), [], "First load must not invent pending rows.");
+assert.deepEqual(projectIds("loaded", { "ACK-TWO": secondLink }), ["link-two"],
+  "A completed refresh must remove rows no longer returned.");
+assert.deepEqual(projectIds("loaded", {
+  ...retainedLinks, "ACK-ONE": { ...firstLink, safe_summary: { acknowledged: true } },
+}), ["link-two"], "A fresh acknowledgement must still clear only its exact row.");
+assert.deepEqual(projectIds("loaded", {
+  ...retainedLinks, "ACK-ONE": { ...firstLink, safe_summary: { ack_alert_closed: true } },
+}), ["link-two"], "A fresh exact-link Close must still clear its row.");
+assert.deepEqual(projectIds("error", {}), [], "Existing failed-read behavior is preserved.");
 
 function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
@@ -15,6 +49,7 @@ const driverJobLinkStart = app.indexOf('data-dispatch-workflow-step="driver-job-
 const driverReportsStart = app.indexOf('data-admin-driver-reports-disclosure="true"');
 
 assert.notEqual(queueStart, -1, "Pending Driver ACK Queue is missing.");
+assert.ok(!app.includes("Pending for Driver ACK Queue"), "Use the owner-requested Driver ACK Queue heading.");
 assert.ok(driverJobLinkStart < driverReportsStart, "Established Driver Reports must remain inside Driver Job Link.");
 assert.ok(driverReportsStart < queueStart, "Queue must sit below the complete established Driver Job Link section.");
 assert.ok(
@@ -23,7 +58,7 @@ assert.ok(
 );
 
 for (const fragment of [
-  "Pending for Driver ACK Queue",
+  "Driver ACK Queue",
   'className={`order-[55] min-w-0 rounded-md border transition',
   'data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}',
   'data-pending-driver-ack-queue-pulsing=',

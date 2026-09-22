@@ -31887,8 +31887,10 @@ export default function Home() {
     ),
   ];
   const pendingDriverAckQueueReferenceKey = pendingDriverAckQueueReferenceList.join("|");
+  // Background reads retain their last links; keep the queue visible until fresh results arrive.
   const pendingDriverAckQueueItems =
-    dashboardDriverJobLinksReadState.status === "loaded"
+    (dashboardDriverJobLinksReadState.status === "loaded" ||
+      dashboardDriverJobLinksReadState.status === "loading")
       ? pendingDriverAckQueueEligibleBookings
           .map((bookingRecord) => {
             const bookingReference = getActiveJobBookingReference(bookingRecord);
@@ -50096,7 +50098,7 @@ export default function Home() {
                   <h2
                     className={`${pendingDriverAckQueueItems.length > 0 ? "text-lg" : "text-sm"} font-semibold text-slate-950`}
                   >
-                    Pending for Driver ACK Queue
+                    Driver ACK Queue
                   </h2>
                   {pendingDriverAckQueueItems.length > 0 ? (
                     <p className="text-xs text-slate-600">

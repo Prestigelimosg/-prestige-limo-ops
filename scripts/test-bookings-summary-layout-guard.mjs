@@ -10,10 +10,48 @@ import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 
 const source = await readFile("app/page.tsx", "utf8");
+const appTree = ts.createSourceFile("page.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const formatterNames = ["clean", "formatDate", "formatPickupTime", "singaporePickupDateTimePartsFromTimestamp", "formatBookingPickupDateTimeSgt"];
+const formatterSource = formatterNames.map((name) => {
+  const declaration = appTree.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(declaration, `Missing existing formatter ${name}`);
+  return declaration.getText(appTree);
+}).join("\n");
+const compiledFormatters = ts.transpileModule(formatterSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText;
+// Existing legacy fallback readers are fixed boundaries; timestamp conversion and
+// both display modes execute the actual application functions above.
+const formatBooking = new Function("getBookingDateKey", "formatPickupTimeFromRecord",
+  `${compiledFormatters}; return formatBookingPickupDateTimeSgt;`,
+)((record) => record.fixtureDate || "", (record) => record.fixtureTime || "Time TBC");
+const sampleBooking = { pickup_at: "2026-09-22T07:00:00Z" };
+for (const timezone of ["UTC", "Asia/Singapore", "America/Los_Angeles"]) {
+  const previousTimezone = process.env.TZ;
+  process.env.TZ = timezone;
+  try {
+    assert.equal(formatBooking(sampleBooking, "weekday"), "22 Sep Tue, 1500hrs SGT");
+    assert.match(formatBooking(sampleBooking), /^22 Sept? 2026, 1500hrs SGT$/,
+      "Existing callers must retain the full year");
+    assert.equal(formatBooking({ pickup_at: "2026-09-21T16:15:00Z" }, "weekday"), "22 Sep Tue, 0015hrs SGT");
+    assert.equal(formatBooking({ pickup_datetime: "2026-12-31T16:15:00Z" }, "weekday"), "01 Jan Fri, 0015hrs SGT");
+    assert.equal(formatBooking({ pickup_at: "2024-02-29T15:59:00Z" }, "weekday"), "29 Feb Thu, 2359hrs SGT");
+    assert.equal(formatBooking({ pickup_at: "2026-09-22T15:00:00" }, "weekday"), "22 Sep Tue, 1500hrs SGT");
+    assert.equal(formatBooking({ fixtureDate: "2026-09-22", fixtureTime: "1500hrs" }, "weekday"), "22 Sep Tue, 1500hrs SGT");
+    assert.equal(formatBooking({}, "weekday"), "Date TBC, Time TBC");
+    assert.equal(formatBooking({ fixtureDate: "invalid" }, "weekday"), "invalid, Time TBC");
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  }
+}
 const start = source.indexOf("const recentBookingsPanel =");
 const end = source.indexOf("const completedEmptyState =", start);
 assert.ok(start >= 0 && end > start);
 const panel = source.slice(start, end);
+assert.ok(panel.includes('formatBookingPickupDateTimeSgt(savedBooking, "weekday")'));
+assert.equal([...source.matchAll(/formatBookingPickupDateTimeSgt\([^\n]*, "weekday"\)/g)].length, 1,
+  "Only the Bookings card opts into weekday display");
 const tree = ts.createSourceFile("fixture.tsx", panel, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const elements = [];
 function visit(node) {
@@ -57,7 +95,7 @@ if (process.argv.includes("--serve")) {
   const fixture = {
     bookingId: "synthetic-layout", bookingAlternateColour: "sky",
     operationalCard: { company: "SYNTHETIC COMPANY WITH A LONG NAME", pax_display: "3", vehicle_display: "AVF" },
-    pickupMetaText: "20 Sept 2026, 1215hrs SGT · Flight QA123",
+    pickupMetaText: `${formatBooking(sampleBooking, "weekday")} · Flight QA123`,
     passengerText: "SYNTHETIC PASSENGER WITH A LONG NAME", bookerText: "Synthetic Booker",
     routeText: "SYNTHETIC PICKUP LOBBY > SYNTHETIC AIRPORT TERMINAL",
     hasAssignedDriver: true, driverText: "Synthetic Driver With A Long Name",

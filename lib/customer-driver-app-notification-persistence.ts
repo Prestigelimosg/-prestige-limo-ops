@@ -235,7 +235,7 @@ const customerAccountSelect = "customer_account_reference, account_status";
 const bookingCustomerScopeSelect = "booking_reference, customer_id";
 const principalBookingScopeSelect =
   "booking_reference, customer_id, company_id, booker_id, traveler_id";
-const driverJobLinkSelect = "id, booking_reference, link_status, expires_at, revoked_at";
+const driverJobLinkSelect = "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
 const driverJobStatusEventQuickReplySelect = "status_value, occurred_at";
 const notificationSelect =
   "id, notification_type, notification_status, priority, delivery_surface, event_key, booking_reference, driver_job_link_id, workflow_area, safe_title, safe_message, safe_context, source_surface, actor_role, actor_label, created_at, updated_at";

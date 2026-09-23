@@ -28,6 +28,14 @@ input {
   font: inherit;
 }
 
+/* Keep these phone fields above iOS focus-zoom size, after input inheritance. */
+@media (max-width: 767px) {
+  [data-driver-job-details-editor="true"] :is(input, textarea),
+  .admin-ops-shell input[aria-label="Search Pool drivers"] {
+    font-size: max(16px, 1rem);
+  }
+}
+
 /* BEGIN three-app thin neutral border contrast */
 :where(
   .admin-ops-shell,

@@ -55,6 +55,7 @@ try {
     reassignmentMigration.indexOf('revoke execute on function public.apply_admin_driver_reassignment')));
   const migration=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_saved_job_combo.sql'));
   assert.ok(migration); await sql(fs.readFileSync('supabase/migrations/'+migration,'utf8'));
+  await sql(fs.readFileSync('supabase/migrations/20260923050900_combo_direct_assignment_vehicle.sql','utf8'));
   const reset=async()=>{
     await sql(`truncate driver_job_combo_members,driver_job_combos,driver_job_bids,driver_job_bid_offers,
       bookings,drivers,driver_access_accounts,driver_device_push_subscriptions,driver_job_links,driver_job_status_events,driver_live_location_latest_positions,customer_driver_app_notification_outbox,audit_logs restart identity cascade;
@@ -134,6 +135,23 @@ try {
   }finally{await Promise.all(clients.map(c=>c.end()));}
 
   const direct=(g,driver=1,total=145)=>value("select assign_admin_driver_job_combo($1,$2,$3,$4,'admin','Synthetic Combo QA') result",[g.id,g.revision,driver,total]);
+  for (const [bookingVehicle, driverVehicle, expectedCategory] of [
+    ['Combi', 'Combi', 'COMBI'], ['AVF', 'Toyota Alphard', 'AVF'], ['VVV', 'VClass', 'VVV'],
+  ]) {
+    await reset();
+    await db.query('update bookings set vehicle_type_or_category=$1', [bookingVehicle]);
+    await db.query('update drivers set vehicle_type=$1 where id=1', [driverVehicle]);
+    const vehicleGroup = await define(await members());
+    await direct(vehicleGroup,1,null);
+    assert.equal((await rows('select vehicle_requirement from driver_job_combos'))[0].vehicle_requirement, expectedCategory);
+    assert.equal((await rows('select count(*)::int n from bookings where driver_id=1'))[0].n,3);
+  }
+  await reset();
+  await sql("update bookings set vehicle_type_or_category='Combi'");
+  const mismatchGroup = await define(await members());
+  await assert.rejects(direct(mismatchGroup,1,null), /eligible/);
+  assert.equal((await rows('select count(*)::int n from bookings where driver_id is not null'))[0].n,0);
+  console.log('PASS direct combo vehicle matching: saved Combi casing, driver aliases and atomic mismatch rejection.');
   const prepareLinks=async()=> (await rows("select *,updated_at::text as updated_at from bookings where booking_reference in ('COMBO-1','COMBO-2','COMBO-3') order by booking_reference")).map((b,i)=>({
     booking_reference:b.booking_reference,expected_updated_at:b.updated_at,revision:String(i+1).repeat(64),
     payload:{booking_type:'TRF',pickup_datetime:b.pickup_at.toISOString()},token_hash:String(i+4).repeat(64),ciphertext:'sealed-fixture-'.repeat(4),

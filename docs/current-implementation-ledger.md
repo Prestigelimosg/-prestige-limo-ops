@@ -1,3 +1,9 @@
+## Combo Direct Assignment Vehicle Category Repair (2026-09-23; reproduced in Production)
+
+- After PR #605 deployed as main `3acab9fa`, the exact QA retry reached the existing assignment RPC and rejected both still-unassigned trips. A bounded rollback diagnostic exposed the exact eligibility exception. Read-only predicate checks proved saved `Combi` and registered Driver `Combi` fail the requirement side of the existing case-sensitive Pool matcher, which accepts `COMBI`.
+- Replace only `assign_admin_driver_job_combo` through migration `20260923050900_combo_direct_assignment_vehicle.sql`: uppercase/trim the saved booking category before matching and retain the primary saved category as the combo requirement instead of a Driver model label. No booking/Driver vehicle values are rewritten, no matcher or single-job lane changes, no permissions change, no new dispatch writer or schema structure.
+- Expanded the actual isolated PostgreSQL suite with saved Combi casing, Toyota Alphard/VClass Driver model labels, stored canonical requirements and atomic true-mismatch rejection. It failed on the Production spelling before repair and the complete SQL suite passes afterward, including selected/all audiences, default/override payout, link/ACK/revoke/reassignment, race and role isolation. Physical receipt/ACK remains pending the live retry; do not infer phone acceptance from SQL.
+
 ## Combo Direct Assignment Payload Repair (2026-09-23; reproduced in Production, local repair)
 
 - Physical Pixel combo QA stopped at the actual Admin `Save Driver Assignment` rejection. Both exact test trips remained unassigned. The existing recursive finance-field filter rejected `combo_assignment.total_payout_sgd` before its existing bounded validator, including null for default rates.

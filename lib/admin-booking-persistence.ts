@@ -848,7 +848,13 @@ function parseAdminBookingOperationalPayload(
   allowedTopLevelFields: Set<string>,
 ): AdminBookingResult<AdminBookingPersistenceInput> {
   const body = asRecord(value);
-  const forbiddenFields = findForbiddenFieldNames(body);
+  // Only this existing Admin assignment field is validated separately below.
+  // Keep recursive finance rejection for every other path, including nested values.
+  const forbiddenFields = findForbiddenFieldNames(body).filter((path) => !(
+    allowedTopLevelFields === updatePayloadTopLevelFields &&
+    body.update_mode === "driver_assignment" &&
+    path === "combo_assignment.total_payout_sgd"
+  ));
 
   if (forbiddenFields.length > 0) {
     return forbiddenFieldResult("admin booking");

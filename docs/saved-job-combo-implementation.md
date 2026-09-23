@@ -1,6 +1,6 @@
 # Saved-job combo implementation scope
 
-Status: implemented locally on `codex/saved-job-combo`; not deployed, migrated, enabled or device-verified.
+Status: deployed through PR #604, main 15510fb0, with the migration and Production flag enabled. Physical acceptance is incomplete; see the ledger for the reproduced direct-assignment failure and bounded repair.
 
 Owner-approved inputs: select already-saved jobs for the same customer; a small Add trip picker inside existing Dispatch Assigned Driver / Pool controls; no new sector; one whole-package Pool acceptance; one Create Link; one Save & Acknowledge; separate calendar events and reminders per trip. Owner uses the existing payout override or default rates; no additional payout setup. Do not generate new bookings or interpret Add trip as a booking-entry form.
 
@@ -83,7 +83,7 @@ Passed local focused suites:
 
 ## Release and device acceptance remaining
 
-No Production schema/config/code write, QA booking creation, physical phone test or cleanup has occurred for this feature. The implementation is gated by the new server flag `PRESTIGE_DRIVER_COMBO_ENABLED=true`; it requires the accompanying migration before enabling.
+Production migration, flag and web deployment are complete. Six QA bookings were created. iPhone combo offer receipt and three concurrent mixed-pool offers are verified; full physical combo ACK/Calendar tests and cleanup remain unfinished. Direct assignment QA exposed the payload filter rejection documented in the ledger.
 
 Release sequence: review the exact staged commit and migration; apply only this migration; deploy the reviewed web/API build with the flag off; enable the flag in the release that contains the implementation. No native APK/Apple project change or build is required. Do not publish to real drivers during QA.
 

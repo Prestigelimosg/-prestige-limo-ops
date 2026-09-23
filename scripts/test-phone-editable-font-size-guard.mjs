@@ -30,7 +30,7 @@ assert.equal(pool.length, 1);
 for (const field of [...driver, ...pool]) assert.ok(['input', 'textarea'].includes(field.tag));
 // Check the real ancestor label sizes, including the unlayered input font:inherit rule.
 assert.match(driverSource, /<label className="block space-y-1 text-sm font-semibold text-slate-700">\s*<span>Contact \/ Mobile number/);
-assert.match(poolSource, /<label className="text-xs font-semibold text-slate-700">Selected drivers/);
+assert.match(poolSource, /<label className="text-xs font-semibold text-slate-700">Search drivers/);
 const compiled = await postcss([tailwind()]).process(cssSource, { from: 'app/globals.css' });
 const escape = s => s.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 const render = ({ tag, attributes }, index) => `<${tag} id="field-${index}" ${Object.entries(attributes).map(([k, v]) => `${k === 'className' ? 'class' : k}="${escape(v)}"`).join(' ')}>${tag === 'textarea' ? '</textarea>' : ''}`;

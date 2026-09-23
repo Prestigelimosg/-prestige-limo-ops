@@ -61,6 +61,7 @@ const expectedDriverJobLinkSelectColumns = [
   "id",
   "link_status",
   "revoked_at",
+  "safe_link_context",
 ];
 const expectedSafeRecordKeys = [
   "booking_reference",
@@ -434,7 +435,7 @@ for (const fragment of [
   'import "server-only";',
   'export const customerDriverAppNotificationPersistenceVersion =\n  "stage-customer-driver-app-notification-api-v1";',
   "const notificationTable = \"customer_driver_app_notification_outbox\";",
-  "const driverJobLinkSelect = \"id, booking_reference, link_status, expires_at, revoked_at\";",
+  "const driverJobLinkSelect = \"id, booking_reference, link_status, expires_at, revoked_at, safe_link_context\";",
   "Customer app notifications require secure customer account auth before saved notifications can be read.",
   "Customer/driver app notification includes fields outside the approved safe display scope.",
   "process.env.PRESTIGE_ADMIN_BOOKING_PERSISTENCE_ENABLED !== \"true\"",
@@ -452,7 +453,7 @@ for (const fragment of [
   ".from(\"driver_job_links\")",
   ".eq(\"token_hash\", tokenHash)",
   "isDriverJobLinkExpired(String(row.expires_at || \"\"))",
-  "isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || \"\"))",
+  "isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || \"\"), new Date(), undefined, row.safe_link_context)",
   ".eq(\"delivery_surface\", \"driver_app\")",
   ".eq(\"booking_reference\", linkResult.data.booking_reference)",
   ".eq(\"notification_status\", \"queued\")",

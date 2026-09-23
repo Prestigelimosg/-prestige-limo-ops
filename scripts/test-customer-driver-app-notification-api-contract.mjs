@@ -678,6 +678,14 @@ class MockSupabaseClient {
     }
     let limitedRows = typeof resultLimit === "number" ? rows.slice(0, resultLimit) : rows;
     if (resultRange) limitedRows = limitedRows.slice(resultRange.from, resultRange.to + 1);
+    // Match the real database projection: unselected link context must not leak
+    // into the fixture and accidentally make the expiry check pass.
+    if (table === "driver_job_links" && selectedColumns && selectedColumns !== "*") {
+      const columns = selectedColumns.split(",").map((column) => column.trim());
+      limitedRows = limitedRows.map((row) => Object.fromEntries(
+        columns.map((column) => [column, row[column]]),
+      ));
+    }
 
     if (resultMode === "single") {
       return {
@@ -2593,6 +2601,53 @@ try {
     const driverToken = "safe-driver-notification-token";
     const driverLinkId = "11111111-1111-4111-8111-111111111111";
     setEnv(validEnv());
+    const comboContext = {
+      combo_id: "22222222-2222-4222-8222-222222222222",
+      combo_revision: "33333333-3333-4333-8333-333333333333",
+      combo_link_batch: "44444444-4444-4444-8444-444444444444",
+      combo_access_until: farFutureDriverLinkExpiresAt,
+      combo_trip_count: 2,
+      native_handoff_ciphertext: "PRIVATE-COMBO-CONTEXT",
+    };
+    for (const [label, changes, expectedStatus] of [
+      ["valid multi-day combo", {}, 200],
+      ["ordinary excessive expiry", { safe_link_context: null }, 410],
+      ["mismatched combo expiry", { safe_link_context: { ...comboContext, combo_access_until: validDriverLinkExpiresAt } }, 410],
+      ["revoked combo", { revoked_at: nowDate.toISOString() }, 403],
+      ["expired combo", { link_status: "expired" }, 410],
+      ["past combo expiry", { expires_at: new Date(nowDate.getTime() - 1000).toISOString() }, 410],
+    ]) {
+      const comboMock = installMockClient({
+        driver_job_links: [{
+          id: driverLinkId, booking_reference: "BOOK-COMBO-NOTIFY-001",
+          token_hash: tokenHash(driverToken), link_status: "active", revoked_at: null,
+          expires_at: farFutureDriverLinkExpiresAt, safe_link_context: comboContext, ...changes,
+        }],
+        [notificationTable]: [seededNotification({
+          booking_reference: "BOOK-COMBO-NOTIFY-001", delivery_surface: "driver_app",
+          driver_job_link_id: driverLinkId, id: "combo-driver-notice",
+        }), seededNotification({
+          booking_reference: "BOOK-OTHER-NOTIFY-001", delivery_surface: "driver_app",
+          id: "other-booking-hidden",
+        }), seededNotification({
+          booking_reference: "BOOK-COMBO-NOTIFY-001", delivery_surface: "customer_app",
+          workflow_area: "admin_customer_job_messages", id: "customer-private-hidden",
+        })],
+      });
+      const result = await responseJson(await driverRoute.GET(
+        new Request(`http://localhost/api/driver-job/${driverToken}/notifications?limit=5&page=1`),
+        routeContext(driverToken),
+      ));
+      assert.equal(result.status, expectedStatus, label);
+      assert.doesNotMatch(JSON.stringify(result.body), /PRIVATE-COMBO-CONTEXT|combo_access_until|combo_revision|combo_link_batch|other-booking-hidden|customer-private-hidden/);
+      if (expectedStatus === 200) {
+        assert.deepEqual(result.body.notifications.map((row) => row.id), ["combo-driver-notice"]);
+      } else {
+        assert.equal(comboMock.client.selectHistory.length, 1, `${label}: no notification read after denial`);
+      }
+      assert.equal(comboMock.client.insertHistory.length, 0);
+      assert.equal(comboMock.client.updateHistory.length, 0);
+    }
     const driverGetMock = installMockClient({
       [notificationTable]: [
         seededNotification({booking_reference: "BOOK-DRIVER-NOTIFY-001", delivery_surface: "driver_app",

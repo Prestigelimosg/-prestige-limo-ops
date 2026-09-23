@@ -23113,10 +23113,12 @@ export default function Home() {
     try {
       setDriverAssignmentDisplayDrivers(await fetchDriverAssignmentDisplayDriverRecords());
       setMessage({ tone: "success", text: successText });
+      return true;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown driver assignment display load error.";
       setMessage({ tone: "error", text: `Load driver assignment display failed: ${errorMessage}` });
+      return false;
     } finally {
       setLoadingDriverAssignmentDisplay(false);
     }
@@ -45747,6 +45749,7 @@ export default function Home() {
               </div>
               <AdminDriverPoolControl
                 drivers={assignableDriverAssignmentDisplayDrivers}
+                onLoadDrivers={loadDriverAssignmentDisplayDrivers}
                 savedVehicle={clean(booking.vehicle).toUpperCase()}
                 bookingReference={
                   cleanReferenceText(appliedAdminBookingSnapshotReference) ||

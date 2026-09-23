@@ -519,7 +519,7 @@ async function resolveDriverJobLink({
   if (
     link.link_status === "expired" ||
     isDriverJobLinkExpired(link.expires_at) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at)
+    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, new Date(), undefined, link.safe_link_context)
   ) {
     return blockedResult("driver_live_location_token_expired", 410);
   }

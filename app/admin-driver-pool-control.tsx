@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type {AdminDriverCombo, ComboTrip} from "../lib/driver-job-combo";
 
 type PoolDriver = { id: number; driver_name: string | null; plate_number: string | null; vehicle_type: string | null; availability_status: string | null };
 type PoolResponse = { driver_id: number; driver_name: string; plate_number: string; vehicle_type: string; status: "pending" | "available" | "declined" | "accepted" | "closed" };
@@ -52,6 +53,8 @@ type Props = {
   showPleaseAssignDriver: boolean;
   suggestedPayout: number;
   onLoadBooking: (bookingReference: string, reviewResponses?: boolean) => Promise<void>;
+  suggestedComboPayout?: number|null;
+  onComboChange?: (combo: AdminDriverCombo|null) => void;
   onAssignedOfferChange?: (offer: AssignedDriverPoolAdminOffer | null) => void;
 };
 
@@ -71,11 +74,31 @@ function pickupLabel(value: string) {
     : "Pickup time unavailable";
 }
 
-export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference, publicBookingReference, onCancelAssignment, disabled, eligible, expectedUpdatedAt, onAssignedOfferChange, onLoadBooking, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
+export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference, publicBookingReference, onCancelAssignment, disabled, eligible, expectedUpdatedAt, suggestedComboPayout, onComboChange, onAssignedOfferChange, onLoadBooking, requiresExplicitPayout, showPleaseAssignDriver, suggestedPayout }: Props) {
   const [enabled, setEnabled] = useState(false);
+  const [comboEnabled, setComboEnabled] = useState(false);
+  const [combo, setCombo] = useState<AdminDriverCombo|null>(null);
+  useEffect(() => { onComboChange?.(combo); }, [combo,onComboChange]);
+  const [tripPickerOpen, setTripPickerOpen] = useState(false);
+  const tripPickerRef = useRef<HTMLDivElement>(null);
+  const addTripButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!tripPickerOpen) return;
+    const picker = tripPickerRef.current;
+    const opener = addTripButtonRef.current;
+    picker?.querySelector<HTMLInputElement>('input[aria-label="Find a saved trip"]')?.focus();
+    return () => { opener?.focus(); };
+  }, [tripPickerOpen]);
+  const [tripCandidates, setTripCandidates] = useState<ComboTrip[]>([]);
+  const [selectedTripRefs, setSelectedTripRefs] = useState<string[]>([bookingReference]);
+  const [tripSearch, setTripSearch] = useState("");
+  const [tripPage, setTripPage] = useState(1);
+  const [tripHasMore, setTripHasMore] = useState(false);
+  const seenComboId = useRef<string|null>(null);
   const [serverEligible, setServerEligible] = useState(false);
   const [offer, setOffer] = useState<DriverPoolAdminOffer | null>(null);
-  const [payout, setPayout] = useState(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
+  const [payoutInput, setPayout] = useState<string|null>(!requiresExplicitPayout && suggestedPayout > 0 ? suggestedPayout.toFixed(2) : "");
+  const payout = payoutInput ?? (combo && suggestedComboPayout && suggestedComboPayout>0 ? suggestedComboPayout.toFixed(2) : "");
   const [vehicleRequirement, setVehicleRequirement] = useState(["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"].includes(savedVehicle) ? savedVehicle : "");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const loadVersion = useRef(0);
@@ -102,13 +125,19 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
       for (let offset = 0; offset < Math.max(ids.length, 1); offset += 200) {
         const batch = ids.slice(offset, offset + 200).join(",");
         const response = await fetch(`/api/admin-driver-job-bid-offers?booking_reference=${encodeURIComponent(bookingReference)}${batch ? `&driver_ids=${encodeURIComponent(batch)}` : ""}`, { cache: "no-store", headers });
-        const result = await response.json() as { eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null; driver_alert_readiness?: { driver_id: number; ready: boolean | null }[] };
+        const result = await response.json() as { combo_enabled?:boolean; combo?:AdminDriverCombo|null; eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null; driver_alert_readiness?: { driver_id: number; ready: boolean | null }[] };
         if (version !== loadVersion.current) return;
         if (!response.ok) throw new Error("Driver Pool refresh failed.");
         for (const row of result.driver_alert_readiness || []) readiness[row.driver_id] = row.ready;
         setEnabled(result.enabled === true);
         setServerEligible(result.eligible === true);
         setOffer(result.offer || null);
+        setComboEnabled(result.combo_enabled === true);
+        setCombo(result.combo || null);
+        if (result.combo && seenComboId.current !== result.combo.id) {
+          seenComboId.current = result.combo.id;
+          setPayout(result.combo.total_payout_sgd == null ? null : result.combo.total_payout_sgd.toFixed(2));
+        }
       }
       setAlertReadiness(readiness);
       setFeedback((current) => current === "Driver Pool could not refresh. Reload before acting." ? "" : current);
@@ -209,7 +238,45 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
 
   const offerNeedsAttention = offer?.offer_status === "open" || offer?.offer_status === "assigned";
   const showExactControl = enabled && ((eligible && serverEligible) || offerNeedsAttention);
-  if (!showExactControl && !attentionEnabled && !attentionFeedback) return null;
+  if (!showExactControl && !attentionEnabled && !attentionFeedback && !comboEnabled) return null;
+
+  async function loadTripCandidates(page = 1) {
+    if (busy) return;
+    setBusy(true); setFeedback("");
+    try {
+      const response = await fetch(`/api/admin-driver-job-bid-offers?scope=combo&booking_reference=${encodeURIComponent(bookingReference)}&page=${page}`, {cache:"no-store",headers});
+      const result = await response.json() as {ok?:boolean;error?:string;combo?:AdminDriverCombo|null;candidates?:ComboTrip[];has_more?:boolean};
+      if (!response.ok || !result.ok) throw new Error(result.error || "Saved trips could not be loaded.");
+      const existing = result.combo?.trips || [];
+      setTripCandidates(previous => {
+        const map = new Map((page===1 ? existing : previous).map(t=>[t.booking_reference,t]));
+        for (const candidate of result.candidates || []) map.set(candidate.booking_reference,candidate);
+        return [...map.values()].sort((a,b)=>a.pickup_at.localeCompare(b.pickup_at));
+      });
+      if (page===1) setSelectedTripRefs(existing.length ? existing.map(t=>t.booking_reference) : [bookingReference]);
+      setCombo(result.combo || null); setTripHasMore(result.has_more===true); setTripPage(page); setTripPickerOpen(true);
+    } catch (error) { setFeedback(error instanceof Error ? error.message : "Saved trips could not be loaded."); }
+    finally { setBusy(false); }
+  }
+
+  async function addSelectedTrips() {
+    if (busy) return;
+    setBusy(true); setFeedback("");
+    try {
+      const selected = tripCandidates.filter(t=>selectedTripRefs.includes(t.booking_reference));
+      if (selected.length!==selectedTripRefs.length || selected.length<(combo?1:2)) throw new Error("Select the first job and at least one other saved trip.");
+      const response=await fetch("/api/admin-driver-job-bid-offers",{method:"PATCH",headers,body:JSON.stringify({
+        action:"combo_members",booking_reference:combo?.primary_booking_reference || bookingReference,
+        expected_revision:combo?.revision || null,members:selected.map(t=>({booking_reference:t.booking_reference,updated_at:t.updated_at})),
+      })});
+      const result=await response.json() as {ok?:boolean;error?:string;combo?:AdminDriverCombo};
+      if(!response.ok || !result.ok)throw new Error(result.error || "Trips were not combined.");
+      setCombo(result.combo || null); seenComboId.current=result.combo?.id || null;
+      setPayout(result.combo ? null : !requiresExplicitPayout && suggestedPayout>0 ? suggestedPayout.toFixed(2) : ""); setTripPickerOpen(false);
+      setFeedback(result.combo ? "Trips combined. Review the existing payout field before posting." : "Combo removed. The saved jobs remain unchanged.");
+    } catch(error) {setFeedback(error instanceof Error ? error.message : "Trips were not combined.");}
+    finally {setBusy(false);}
+  }
 
   async function publish(audience: "selected" | "wider") {
     if (busy || disabled) return;
@@ -218,7 +285,9 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/admin-driver-job-bid-offers", {
-        body: JSON.stringify({ booking_reference: bookingReference, expected_updated_at: expectedUpdatedAt,
+        body: JSON.stringify({ booking_reference: combo?.primary_booking_reference || bookingReference,
+          expected_updated_at: combo?.trips.find(t=>t.booking_reference===combo.primary_booking_reference)?.updated_at || expectedUpdatedAt,
+          ...(combo ? {combo_revision:combo.revision} : {}),
           idempotency_key: crypto.randomUUID(), offer_payout_sgd: Number(payout), vehicle_requirement: vehicleRequirement, audience, selected_driver_ids: audience === "selected" ? selectedIds : [] }), headers, method: "POST",
       });
       const result = await response.json() as { error?: string; offer?: DriverPoolAdminOffer; ok?: boolean };
@@ -336,6 +405,35 @@ export function AdminDriverPoolControl({ drivers, savedVehicle, bookingReference
 
   return (
     <div className="mt-2 border-t border-sky-200 pt-2">
+      {comboEnabled ? <>
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+          {combo ? <strong>{combo.vehicle_requirement || savedVehicle} Combo · {combo.trips.length} trips</strong> : null}
+          {eligible && (!combo || combo.state === "draft") ? <button ref={addTripButtonRef} type="button" className="rounded border border-sky-300 bg-white px-2 py-1 font-semibold text-sky-950" disabled={busy || disabled} onClick={()=>void loadTripCandidates(1)}>Add trip</button> : null}
+        </div>
+        {combo ? <ol className="mb-2 space-y-1 text-xs text-slate-700">{combo.trips.map(t=><li key={t.booking_reference}>{t.service} · {pickupLabel(t.pickup_at)} · {t.pickup} → {t.dropoff}</li>)}</ol> : null}
+        {tripPickerOpen ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-3" onKeyDown={event=>{if(event.key==="Escape"&&!busy)setTripPickerOpen(false);}}>
+          <div ref={tripPickerRef} role="dialog" aria-modal="true" aria-labelledby="combo-trip-picker-title" onKeyDown={event=>{
+            if(event.key!=="Tab")return;
+            const controls=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled])'));
+            const first=controls[0],last=controls.at(-1);
+            if(event.shiftKey && document.activeElement===first){event.preventDefault();last?.focus();}
+            else if(!event.shiftKey && document.activeElement===last){event.preventDefault();first?.focus();}
+          }} className="flex max-h-[85dvh] w-full max-w-lg flex-col gap-3 rounded-xl bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between gap-3"><h3 id="combo-trip-picker-title" className="font-bold text-slate-950">Add saved trips · same customer</h3><button type="button" aria-label="Close saved trip picker" disabled={busy} onClick={()=>setTripPickerOpen(false)} className="rounded border px-2 py-1 text-xs">Close</button></div>
+            <input aria-label="Find a saved trip" value={tripSearch} onChange={event=>setTripSearch(event.target.value)} placeholder="Booking number, date or route" className="rounded border border-slate-300 px-3 py-2 text-sm" />
+            <div className="min-h-0 overflow-y-auto rounded border border-slate-200">
+              {tripCandidates.filter(t=>`${t.public_booking_reference} ${pickupLabel(t.pickup_at)} ${t.route} ${t.pickup} ${t.dropoff}`.toLowerCase().includes(tripSearch.trim().toLowerCase())).map(t=>{
+                const primary=t.booking_reference===(combo?.primary_booking_reference || bookingReference);
+                return <label key={t.booking_reference} className="flex items-start gap-2 border-b border-slate-100 p-2 text-xs last:border-0"><input type="checkbox" checked={selectedTripRefs.includes(t.booking_reference)} disabled={primary || busy} onChange={event=>setSelectedTripRefs(previous=>event.target.checked?[...previous,t.booking_reference]:previous.filter(ref=>ref!==t.booking_reference))}/><span><strong>{t.public_booking_reference} · {t.service} · {pickupLabel(t.pickup_at)}</strong><br/>{t.pickup} → {t.dropoff}{primary ? " · First job" : ""}</span></label>;
+              })}
+              {!tripCandidates.length ? <p className="p-3 text-sm">No eligible saved trips for this customer.</p> : null}
+            </div>
+            {tripHasMore ? <button type="button" disabled={busy} onClick={()=>void loadTripCandidates(tripPage+1)} className="text-xs font-semibold text-sky-800">Load more saved trips</button> : null}
+            {feedback ? <p role="status" className="text-xs text-slate-700">{feedback}</p> : null}
+            <div className="flex items-center justify-between gap-2"><span className="text-xs text-slate-600">{selectedTripRefs.length} selected · existing jobs only{selectedTripRefs.length>100 ? " · Select no more than 100 trips" : ""}</span><button type="button" disabled={busy || selectedTripRefs.length<(combo?1:2) || selectedTripRefs.length>100} onClick={()=>void addSelectedTrips()} className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white disabled:bg-slate-400">{busy ? "Loading…" : combo && selectedTripRefs.length===1 ? "Remove combo" : "Add selected"}</button></div>
+          </div>
+        </div> : null}
+      </> : null}
       {!showExactControl && attentionEnabled ? <p className="mb-2 text-xs text-slate-700" role="status">{feedback || "Driver Pool needs a saved, future job with no assigned driver. Load that job from Bookings first."}</p> : null}
       {showExactControl ? (
         <div className="flex flex-wrap items-end gap-2" data-driver-pool-control={offer?.offer_status || "ready"}>

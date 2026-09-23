@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import {DriverComboTrips} from "../driver-combo-trips";
+import type {DriverComboView} from "../../../lib/driver-job-combo";
 import {DriverAccountActivation} from "../driver-account-activation";
 import { useParams } from "next/navigation";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -52,11 +54,13 @@ type DriverJobApiResponse =
       ok: true;
       mode: "mock" | "production";
       payload: SafeDriverJobPayload;
+      combo?: DriverComboView|null;
       status?: string;
     }
   | {
       ok: false;
       reason?: DriverJobApiBlockedReason;
+      next_job_url?: string;
       payload: null;
     };
 
@@ -103,6 +107,8 @@ type DriverCalendarApiResponse =
     }
   | {
       ok: false;
+      saved_count?:number;
+      total_count?:number;
       reason?:
         | "expired"
         | "invalid_oauth"
@@ -992,6 +998,7 @@ async function rememberAcknowledgedDriverPortalLink(jobKey: string) {
 }
 
 export default function DriverJobPage() {
+  const [comboView,setComboView] = useState<DriverComboView|null>(null);
   const params = useParams<{ token?: string | string[] }>();
   const token = useMemo(() => {
     const rawToken = params?.token;
@@ -1468,6 +1475,10 @@ export default function DriverJobPage() {
           return;
         }
 
+        if (!result.ok && result.next_job_url?.startsWith("/driver-job/")) {
+          window.location.replace(result.next_job_url); return;
+        }
+        if (result.ok) setComboView(result.combo || null);
         if (!result.ok) {
           setPageState({ kind: "blocked", reason: normalizeBlockedReason(result.reason) });
           return;
@@ -2020,7 +2031,9 @@ export default function DriverJobPage() {
           action: "idle",
           feedback: {
             tone: "error",
-            text: driverCalendarBlockedMessage(result.ok ? undefined : result.reason),
+            text: !result.ok && result.total_count
+              ? `${result.saved_count || 0} of ${result.total_count} trip calendars saved. Tap Add / Update Calendar to retry; saved events will be updated, not duplicated.`
+              : driverCalendarBlockedMessage(result.ok ? undefined : result.reason),
           },
           status: "unavailable",
         }));
@@ -2830,6 +2843,7 @@ export default function DriverJobPage() {
                 </span>
               </div>
 
+              {comboView ? <DriverComboTrips vehicle={comboView.vehicle} trips={comboView.trips} activeReference={pageState.job.reference}/> : null}
               <dl className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
                 {embeddedDriverDetailRows(pageState.job).map((detail) => (
                   <div className="grid grid-cols-[7.5rem_1fr] gap-3 px-3 py-2 text-sm" key={detail.label}>

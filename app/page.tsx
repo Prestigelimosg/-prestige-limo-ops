@@ -1,5 +1,6 @@
 "use client";
 
+import type {AdminDriverCombo} from "../lib/driver-job-combo";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -965,6 +966,7 @@ type AdminDriverJobLinkRecord = {
   link_status: "active" | "expired" | "revoked";
   revoked_at: string | null;
   safe_summary: {
+    combo?: {primary_reference:string;trip_count:number;vehicle:string};
     ack_alert_closed?: boolean;
     ack_reminder?: {
       count: number;
@@ -15186,6 +15188,16 @@ export default function Home() {
   const [booking, setBooking] = useState<BookingForm>(() => createInitialBooking());
   const bookingFormRef = useRef(booking);
   const [appliedDraftDriverAssignmentSignature, setAppliedDraftDriverAssignmentSignature] = useState("");
+  const [dispatchCombo, setDispatchCombo] = useState<AdminDriverCombo|null>(null);
+  const dispatchComboIdentityRef = useRef<string|null>(null);
+  const receiveDispatchCombo = useCallback((next:AdminDriverCombo|null) => {
+    if(next && next.id!==dispatchComboIdentityRef.current && next.state==='draft') {
+      // An existing first-trip override is not an agreed whole-package amount.
+      setBooking(current=>({...current,driverPayoutOverride:''}));
+    }
+    dispatchComboIdentityRef.current=next?.id || null;
+    setDispatchCombo(next);
+  },[]);
   const [assignedDriverPoolAdminOffer, setAssignedDriverPoolAdminOffer] =
     useState<AssignedDriverPoolAdminOffer | null>(null);
   const [driverPoolAssignmentCancelled, setDriverPoolAssignmentCancelled] =
@@ -18844,6 +18856,25 @@ export default function Home() {
       ),
     };
   }, [booking, drivers, rateBookers, rateCompanies, rateSettings, rateTravelers]);
+
+  const comboDefaultPayout = useMemo(() => {
+    if (!dispatchCombo || !dispatchCombo.trips.some(trip=>trip.booking_reference===appliedAdminBookingSnapshotReference)) return null;
+    const company=rateCompanies.find(row=>row.id===positiveId(booking.companyId));
+    let total=0;
+    for(const trip of dispatchCombo.trips) {
+      if(trip.payout_override!==null){total+=trip.payout_override;continue;}
+      const time=new Date(trip.pickup_at);
+      if(!Number.isFinite(time.getTime()))return null;
+      const pricing=resolvePricing({bookingType:trip.service,vehicle:trip.vehicle,
+        time:new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Singapore",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(time),
+        extraStopCount:trip.extra_stop_count,childSeatRequired:trip.child_seat_required,childSeatCount:trip.child_seat_count,
+      },company || blankCompanyRecord(""),null,rateSettings);
+      // Preserve the existing Pool rule: an hourly rate is not a fixed trip total.
+      if(pricing.driverPayoutUnit!=="job")return null;
+      total+=calculateProfit(pricing).driverPayout;
+    }
+    return Number.isFinite(total)&&total>0?Number(total.toFixed(2)):null;
+  },[dispatchCombo,appliedAdminBookingSnapshotReference,booking.companyId,rateCompanies,rateSettings]);
 
   const saveCrmBillingIdentitySourceRecords = useMemo(
     () => [
@@ -26874,7 +26905,7 @@ export default function Home() {
         setAdminDriverJobLinkState((current) => ({ ...current, message: notice }));
         return;
       }
-      if (!window.confirm(`Remove ${appliedAdminBookingSnapshot?.driver_name || "the assigned driver"} from job ${appliedAdminBookingSnapshot?.public_booking_reference || targetBookingReference}? Their access will stop and a cancellation alert will be queued. Booking stays active.`)) return;
+      if (!window.confirm(`Remove ${appliedAdminBookingSnapshot?.driver_name || "the assigned driver"} from ${dispatchCombo?.primary_booking_reference===targetBookingReference ? `all ${dispatchCombo.trips.length} combo trips` : `job ${appliedAdminBookingSnapshot?.public_booking_reference || targetBookingReference}`}? Their access will stop and a cancellation alert will be queued. Booking stays active.`)) return;
     }
 
     if (assignmentOnly && !cancelDriverAssignment) {
@@ -27177,6 +27208,8 @@ export default function Home() {
           expected_updated_at: expectedUpdatedAt,
           target_booking_reference: targetBookingReference,
           update_mode: cancelDriverAssignment ? "driver_assignment_cancel" : assignmentOnly ? "driver_assignment" : undefined,
+          ...(assignmentOnly && !cancelDriverAssignment && dispatchCombo?.primary_booking_reference === targetBookingReference
+            ? {combo_assignment:{revision:dispatchCombo.revision,total_payout_sgd:clean(booking.driverPayoutOverride)?Number(booking.driverPayoutOverride):null}} : {}),
           ...payload,
         }),
         headers: {
@@ -28814,6 +28847,8 @@ export default function Home() {
     }
   }
 
+  const selectedDispatchCombo = dispatchCombo?.trips.some(trip=>trip.booking_reference===appliedAdminBookingSnapshotReference) ? dispatchCombo : null;
+  const pricingCombo = selectedDispatchCombo?.total_payout_sgd != null ? selectedDispatchCombo : null;
   const pricingPanel = (
     <div className="rounded-md border border-stone-200 bg-white p-2.5" data-admin-dispatch-form-density="slim-pricing">
       <h2 className="text-sm font-semibold">Pricing</h2>
@@ -28823,22 +28858,22 @@ export default function Home() {
           <p className="text-base font-semibold">${formatMoney(draftPricing.customerPrice)}</p>
         </div>
         <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-2">
-          <p className="text-xs text-slate-500">Driver</p>
-          <p className="text-base font-semibold">${formatMoney(draftPricing.driverPayout)}</p>
+          <p className="text-xs text-slate-500">{pricingCombo ? "Combo payout" : "Driver"}</p>
+          <p className="text-base font-semibold">{pricingCombo ? pricingCombo.total_payout_sgd==null ? "Enter total" : `$${formatMoney(pricingCombo.total_payout_sgd)}` : `$${formatMoney(draftPricing.driverPayout)}`}</p>
         </div>
         <div className="rounded-md border border-stone-200 bg-stone-50 px-2 py-2">
           <p className="text-xs text-slate-500">Profit</p>
-          <p className="text-base font-semibold">${formatMoney(draftPricing.profit)}</p>
+          <p className="text-base font-semibold">{pricingCombo ? "—" : `$${formatMoney(draftPricing.profit)}`}</p>
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-600">
+      {pricingCombo ? <p className="mt-2 text-xs text-slate-600">Customer price is for this trip. Driver payout is one total for all {pricingCombo.trips.length} trips; no per-trip profit is calculated.</p> : <p className="mt-2 text-xs text-slate-600">
         Source: {draftPricing.customerPriceSource}; customer rate ${formatMoney(draftPricing.customerRate)}/
         {draftPricing.customerRateUnit}; driver payout ${formatMoney(draftPricing.driverPayoutMin)}
         {draftPricing.driverPayoutMax !== draftPricing.driverPayoutMin
           ? `-${formatMoney(draftPricing.driverPayoutMax)}`
           : ""}
         /{draftPricing.driverPayoutUnit} ({draftPricing.driverPayoutSource})
-      </p>
+      </p>}
       {draftPricing.midnightSurcharge ||
       draftPricing.midnightPayout ||
       draftPricing.extraStopCount ||
@@ -31897,6 +31932,7 @@ export default function Home() {
             const link = dashboardDriverJobLinksReadState.linksByReference[bookingReference] || null;
 
             return link?.link_status === "active" &&
+              (!link.safe_summary.combo || link.safe_summary.combo.primary_reference===bookingReference) &&
               !link.safe_summary.acknowledged &&
               !link.safe_summary.ack_alert_closed
               ? {
@@ -31908,7 +31944,7 @@ export default function Home() {
                   reminderLastProviderAccepted:
                     link.safe_summary.ack_reminder?.last_provider_accepted ?? null,
                   reminderLastSentAt: link.safe_summary.ack_reminder?.last_sent_at ?? null,
-                  publicReference: bookingPublicReference(bookingRecord),
+                  publicReference: link.safe_summary.combo ? `${link.safe_summary.combo.vehicle} Combo · ${link.safe_summary.combo.trip_count} trips` : bookingPublicReference(bookingRecord),
                   waitingMinutes: adminDriverJobLinkWaitingMinutes(link.issued_at, currentTimeMs),
                 }
               : null;
@@ -45642,12 +45678,12 @@ export default function Home() {
                   />
                 </label>
                 <label>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Override Payout</span>
+                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">{selectedDispatchCombo ? "Combo payout override" : "Override Payout"}</span>
                   <input
                     className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
                     min={0}
                     onChange={(event) => update("driverPayoutOverride", event.target.value)}
-                    placeholder={formatMoney(draftPricing.driverPayout)}
+                    placeholder={selectedDispatchCombo ? "Default rates" : formatMoney(draftPricing.driverPayout)}
                     type="number"
                     value={booking.driverPayoutOverride}
                   />
@@ -45727,6 +45763,8 @@ export default function Home() {
                   clean(loadedAdminBookingBaselineRef.current?.updatedAt)
                 )}
                 expectedUpdatedAt={clean(loadedAdminBookingBaselineRef.current?.updatedAt)}
+                suggestedComboPayout={comboDefaultPayout}
+                onComboChange={receiveDispatchCombo}
                 onAssignedOfferChange={setAssignedDriverPoolAdminOffer}
                 onCancelAssignment={cancelAssignedDriverPoolAssignment}
                 publicBookingReference={dispatchPublicBookingReference}

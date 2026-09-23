@@ -270,7 +270,7 @@ function linkState(row: UnknownRecord, now: Date): AdminAiBookingBriefLink["stat
     cleanText(row.link_status, 40).toLowerCase() === "expired" ||
     !expiresAt ||
     isDriverJobLinkExpired(expiresAt, now) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, now)
+    isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, now, undefined, row.safe_link_context)
   ) {
     return "expired";
   }

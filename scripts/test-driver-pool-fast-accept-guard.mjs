@@ -50,6 +50,7 @@ for (const outcome of ["success", "publish-failed", "list-failed", "no-vehicle",
     load: async () => {},
     vehicleRequirement: outcome === "no-vehicle" ? "" : "VVV",
     bookingReference: "QA-POOL-EMPTY-LIST", expectedUpdatedAt: "2026-09-10T00:00:00Z", payout: "45",
+    combo: null,
     headers: { "x-prestige-admin-purpose": "admin-booking-persistence" },
     crypto: { randomUUID: () => "12345678-1234-1234-1234-123456789abc" },
     fetch: async (url, options) => {
@@ -1193,7 +1194,7 @@ assert.ok(files["app/admin-driver-pool-control.tsx"].includes("onCancelAssignmen
 
 includes("app/driver-portal/page.tsx", [
   "Available Jobs", "Fixed driver payout · earliest pickup first",
-  "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : "Accept"', 'job.response_status === "awaiting_admin" ? "Cancel" : "Decline"', "Load more",
+  "SGD {job.offer_payout_sgd.toFixed(2)}", 'job.selection_mode === "admin" ? "Available" : job.combo ? "Accept all trips" : "Accept"', 'job.response_status === "awaiting_admin" ? "Cancel" : "Decline"', "Load more",
   "Pickup", "Drop-off", "Offer closes", "job.safe_pickup_area",
   "job.safe_dropoff_area", "job.closes_at", "if (!driverPoolAccountSession)",
   "setAvailableJobs([])",

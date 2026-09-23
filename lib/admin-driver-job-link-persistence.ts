@@ -60,6 +60,7 @@ export type AdminDriverJobLinkRecord = {
   link_status: AdminDriverJobLinkStatus;
   revoked_at: string | null;
   safe_summary: {
+    combo?: {primary_reference:string;trip_count:number;vehicle:string};
     ack_alert_closed: boolean;
     ack_reminder: {
       count: number;
@@ -89,6 +90,7 @@ export type AdminDriverJobLinkCreateInput = {
 
 export type AdminDriverJobLinkCreateResult = {
   disposition: "created" | "reused" | "amended";
+  combo_booking_references?: string[];
   driver_job_token: string;
   link: AdminDriverJobLinkRecord;
   native_app_alert: {
@@ -935,6 +937,9 @@ function safeSummaryFromContext(context: UnknownRecord): AdminDriverJobLinkRecor
   const jobCardKind = textOrNull(context.job_card_kind);
 
   return {
+    ...(validUuid(context.combo_id) && validUuid(context.combo_link_batch) && validReadBookingReference(context.combo_primary_reference) &&
+      Number.isInteger(context.combo_trip_count) && Number(context.combo_trip_count)>=2 && Number(context.combo_trip_count)<=100
+      ? {combo:{primary_reference:String(context.combo_primary_reference),trip_count:Number(context.combo_trip_count),vehicle:safeText(context.combo_vehicle)||""}} : {}),
     ack_alert_closed: Boolean(validDateText(context.ack_alert_closed_at)) &&
       String(context.ack_alert_closed_revision ?? "") === String(context.job_card_revision ?? ""),
     ack_reminder: {
@@ -1090,6 +1095,46 @@ export async function loadAdminDriverJobLinks(
   };
 }
 
+async function prepareComboLinkInputs(client: SupabaseClient, refs: string[]) {
+  const read = await client.from("bookings").select(
+    "booking_reference,driver_id,updated_at,service_type,pickup_at,pickup_location,dropoff_location,route_summary,passenger_name,flight_no,driver_name,driver_contact,driver_plate_number,vehicle_type_or_category,booking_route_points(point_type,sequence,location)",
+  ).in("booking_reference",refs);
+  if (read.error || asArray(read.data).length !== refs.length) throw new Error("Combo trips could not be loaded.");
+  const inputs = [];
+  for (const row of asArray(read.data).map(asRecord)) {
+    const reference = String(row.booking_reference);
+    const pickup = singaporeDateTimeKey(row.pickup_at);
+    if (!pickup) throw new Error("A saved combo pickup time is unavailable.");
+    const routePoints = asArray(row.booking_route_points).map(asRecord).sort((a,b)=>Number(a.sequence)-Number(b.sequence));
+    const payload = safeDriverJobPayload({
+      assigned_driver_name: row.driver_name || "", assigned_driver_contact: row.driver_contact || "",
+      assigned_driver_plate: row.driver_plate_number || "", assigned_driver_vehicle_model: row.vehicle_type_or_category || "",
+      booking_type: row.service_type || "", pickup_date: pickup.slice(0,10),pickup_time:pickup.slice(11),
+      pickup_datetime: String(row.pickup_at),pickup_location:row.pickup_location || "",dropoff_location:row.dropoff_location || "",
+      route:row.route_summary || "",passenger_name:row.passenger_name || "",flight_no:row.flight_no || "",status:"assigned",
+      waypoints:routePoints.filter(p=>!["pickup","dropoff"].includes(String(p.point_type))).map(p=>p.location),
+    });
+    if (!payload || !savedBookingMatchesDriverJobPayload(row,payload)) throw new Error("A saved combo trip needs review.");
+    const previousRead=await client.from("driver_job_links").select("token_hash,safe_link_context,link_status,revoked_at,expires_at")
+      .eq("booking_reference",reference).eq("link_status","active").order("created_at",{ascending:false}).limit(1).maybeSingle();
+    if(previousRead.error)throw new Error("Existing combo access could not be verified.");
+    const previous=asRecord(previousRead.data);
+    if(previous.link_status==="active"&&!previous.revoked_at&&Date.parse(String(previous.expires_at))>Date.now()) {
+      const recovered=openDriverNativeJobHandoff({bookingReference:reference,tokenHash:previous.token_hash,
+        ciphertext:asRecord(previous.safe_link_context).native_handoff_ciphertext});
+      if(!recovered||hashDriverJobLinkToken(recovered)!==previous.token_hash)throw new Error("Existing combo access requires review.");
+    }
+    const token=generateDriverJobLinkToken(), tokenHash=hashDriverJobLinkToken(token);
+    const ciphertext=sealDriverNativeJobHandoffToken({bookingReference:reference,token,tokenHash});
+    if(!ciphertext)throw new Error("Combo access could not be prepared securely.");
+    inputs.push({booking_reference:reference,expected_updated_at:row.updated_at,payload,
+      revision:safeDriverJobPayloadRevision(payload),token_hash:tokenHash,ciphertext,
+      expected_driver_state:{driver_name:row.driver_name??null,driver_contact:row.driver_contact??null,
+        driver_plate_number:row.driver_plate_number??null,vehicle_type_or_category:row.vehicle_type_or_category??null}});
+  }
+  return inputs;
+}
+
 export async function createAdminDriverJobLink(
   input: AdminDriverJobLinkCreateInput,
   actor: AdminBookingPersistenceAdapterActor,
@@ -1149,6 +1194,9 @@ export async function createAdminDriverJobLink(
     };
   }
 
+  const combo = process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true"
+    ? await (await import("./driver-job-combo.ts")).loadDriverCombo(clientResult.data,input.booking_reference) : null;
+  const comboInputs = combo ? await prepareComboLinkInputs(clientResult.data,combo.trips.map(t=>t.booking_reference)) : null;
   const candidateToken = generateDriverJobLinkToken();
   const tokenHash = hashDriverJobLinkToken(candidateToken);
   const ciphertext = sealDriverNativeJobHandoffToken({
@@ -1171,7 +1219,10 @@ export async function createAdminDriverJobLink(
     }
   }
   const revision = safeDriverJobPayloadRevision(input.driver_job_payload);
-  const applied = await clientResult.data.rpc("apply_admin_driver_job_link", {
+  const applied = combo && comboInputs
+    ? await clientResult.data.rpc("apply_admin_driver_job_combo_links", {
+      p_id:combo.id,p_revision:combo.revision,p_links:comboInputs,p_actor_role:actor.actor_role,p_actor_label:actor.actor_label,
+    }) : await clientResult.data.rpc("apply_admin_driver_job_link", {
     p_booking_reference: input.booking_reference, p_expected_updated_at: operationalBookingRecord.updated_at,
     p_driver_id: Number.isSafeInteger(verifiedDriverId) && verifiedDriverId > 0 ? verifiedDriverId : null,
     p_payload: input.driver_job_payload, p_revision: revision, p_token_hash: tokenHash, p_ciphertext: ciphertext,
@@ -1189,11 +1240,12 @@ export async function createAdminDriverJobLink(
       ? "The booking or its active link needs review. Reload the booking; resolve existing links through Revoke Link before a replacement."
       : safeDriverJobLinkCreateError, conflict ? 409 : 500, applied.error);
   }
-  const appliedRecord = asRecord(applied.data);
+  const appliedRecord = combo ? asArray(asRecord(applied.data).links).map(asRecord)
+    .find(item=>asRecord(item.link).booking_reference===combo.primary_booking_reference) || {} : asRecord(applied.data);
   const storedLink = asRecord(appliedRecord.link);
   const link = normalizeDriverJobLinkRecord(storedLink);
   const disposition = appliedRecord.disposition;
-  const token = openDriverNativeJobHandoff({ bookingReference: input.booking_reference,
+  const token = openDriverNativeJobHandoff({ bookingReference: String(storedLink.booking_reference),
     tokenHash: storedLink.token_hash, ciphertext: asRecord(storedLink.safe_link_context).native_handoff_ciphertext });
   if (!link || !token || hashDriverJobLinkToken(token) !== storedLink.token_hash ||
     (disposition !== "created" && disposition !== "reused" && disposition !== "amended")) {
@@ -1231,7 +1283,8 @@ export async function createAdminDriverJobLink(
       nativeAppAlert = { provider_accepted: false, reason: "recent_attempt" };
     } else if (reserved.error) nativeAppAlert = { provider_accepted: false, reason: "provider_failed" };
   }
-  return { data: { driver_job_token: token, link, disposition, native_app_alert: nativeAppAlert }, ok: true };
+  return { data: { driver_job_token: token, link, disposition, native_app_alert: nativeAppAlert,
+    ...(combo ? {combo_booking_references:combo.trips.map(t=>t.booking_reference)} : {}) }, ok: true };
 }
 
 export async function revokeAdminDriverJobLink(
@@ -1242,6 +1295,19 @@ export async function revokeAdminDriverJobLink(
 
   if (!clientResult.ok) {
     return clientResult;
+  }
+
+  if (process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+    const current=await clientResult.data.from("driver_job_links").select("safe_link_context").eq("id",input.driver_job_link_id).maybeSingle();
+    if(current.error)return safeAdapterFailure(safeDriverJobLinkRevokeError,500,current.error);
+    if(asRecord(asRecord(current.data).safe_link_context).combo_id) {
+      const revoked=await clientResult.data.rpc("revoke_admin_driver_job_combo_link",{
+        p_link_id:input.driver_job_link_id,p_actor_role:actor.actor_role,p_actor_label:actor.actor_label,
+      });
+      const link=normalizeDriverJobLinkRecord(asRecord(revoked.data));
+      if(revoked.error||!link||link.link_status!=="revoked")return safeAdapterFailure(safeDriverJobLinkRevokeError,409,revoked.error);
+      return {ok:true,data:link};
+    }
   }
 
   const now = new Date().toISOString();

@@ -468,6 +468,19 @@ async function readCalendarDefaultPayout(reference: string, options: CalendarSyn
       .eq("booking_reference", reference).maybeSingle();
     const booking = bookingResult.data;
     if (bookingResult.error || !booking || booking.booking_reference !== reference) return null;
+    const comboAmountMarker = String(booking.driver_payout_reason || "").startsWith("Included in combo ") ||
+      booking.driver_payout_reason === "Admin assigned combo total.";
+    if (process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true" || comboAmountMarker) {
+      const {loadDriverCombo} = await import("./driver-job-combo.ts");
+      const combo = await loadDriverCombo(client,reference);
+      if (combo && combo.total_payout_sgd !== null) {
+        if (combo.state !== "assigned" || combo.driver_id !== Number(booking.driver_id) ||
+          !Number.isFinite(combo.total_payout_sgd) || Number(combo.total_payout_sgd)<=0) return null;
+        return reference===combo.primary_booking_reference ? `Combo total $${combo.total_payout_sgd}` :
+          `Included in combo ${combo.trips.find(trip=>trip.booking_reference===combo.primary_booking_reference)?.public_booking_reference || ""}`;
+      }
+      if (comboAmountMarker) return null;
+    }
     if (booking.driver_payout_reason === "Driver Pool accepted fixed offer.") {
       const driverId = Number(booking.driver_id);
       if (!Number.isSafeInteger(driverId) || driverId <= 0) return null;

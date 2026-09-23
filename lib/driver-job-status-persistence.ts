@@ -37,6 +37,7 @@ export type DriverJobDetailsBlockedReason =
 export type DriverJobProductionPayloadResult =
   | {
       jobKey: string;
+      isCombo?: true;
       ok: true;
       payload: SafeDriverJobPayload;
       reason: "ok";
@@ -72,6 +73,7 @@ export type DriverJobProductionStatusUpdateResult =
 
 export type DriverJobProductionDetailsUpdateResult =
   | {
+      isCombo?: true;
       booking_reference: string;
       ok: true;
       payload: SafeDriverJobPayload;
@@ -1285,7 +1287,7 @@ async function resolveLinkForToken({
   if (
     link.link_status === "expired" ||
     isDriverJobLinkExpired(link.expires_at, now) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, now)
+    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, now, undefined, link.safe_link_context)
   ) {
     return {
       ok: false,
@@ -1371,6 +1373,7 @@ export async function loadDriverJobPayloadThroughStatusPersistence(
   }
 
   return {
+    ...(asRecord(resolvedLink.link.safe_link_context).combo_id ? {isCombo:true as const} : {}),
     jobKey: opaqueDriverJobLinkKey(String(resolvedLink.link.id || "")),
     ok: true,
     payload: payloadForLink(
@@ -1479,6 +1482,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
     );
 
     return {
+      ...(asRecord(resolvedLink.link.safe_link_context).combo_id ? {isCombo:true as const} : {}),
       booking_reference: resolvedLink.link.booking_reference,
       ok: true,
       payload: payloadForLink(
@@ -1520,7 +1524,8 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
   const acknowledgedAt = new Date().toISOString();
   // Merge ACK into the latest locked link, never a stale pre-amendment JSON snapshot.
   const { data: acknowledgedData, error: acknowledgeError } = await input.client.rpc(
-    "acknowledge_current_driver_job_link",
+    asRecord(resolvedLink.link.safe_link_context).combo_id
+      ? "acknowledge_current_driver_job_combo" : "acknowledge_current_driver_job_link",
     {
       p_booking_reference: resolvedLink.link.booking_reference, p_link_id: resolvedLink.link.id,
       p_token_hash: safeHashToken(input.token), p_driver_id: verifiedDriverId,
@@ -1543,6 +1548,7 @@ export async function saveDriverJobDetailsThroughStatusPersistence(
   const currentSafeSchedule = await loadCurrentSafeBookingSchedule(input.client, updatedLink);
 
   return {
+    ...(asRecord(resolvedLink.link.safe_link_context).combo_id ? {isCombo:true as const} : {}),
     booking_reference: resolvedLink.link.booking_reference,
     ok: true,
     payload: payloadForLink(

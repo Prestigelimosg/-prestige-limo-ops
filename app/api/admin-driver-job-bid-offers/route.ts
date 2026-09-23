@@ -42,6 +42,12 @@ export async function GET(request: Request) {
     const database = getDriverPoolClientForProduction();
     if (!database.ok) return response({ error: "Driver Pool is not configured.", ok: false }, 503);
 
+    if (params.get("scope") === "combo" && process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+      if ([...params.keys()].some(key => !["scope","booking_reference","page"].includes(key) || params.getAll(key).length!==1)) return response({ok:false,error:"Invalid combo request."},400);
+      const {loadDriverComboCandidates} = await import("../../../lib/driver-job-combo");
+      const result = await loadDriverComboCandidates(database.client, params.get("booking_reference") || "", Number(params.get("page") || 1));
+      return response({...result,ok:true},200);
+    }
     if (params.has("scope")) {
       const parsed = parseDriverPoolAttentionQuery(params);
       if (!parsed.ok) return response({ error: parsed.error, ok: false }, parsed.status);
@@ -66,9 +72,11 @@ export async function GET(request: Request) {
       return response({ error: "Malformed Driver Pool request.", ok: false }, 400);
     }
     const reference = params.get("booking_reference") || "";
-    const result = await loadAdminDriverPoolOffer(database.client, reference);
+    const comboEnabled = process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true";
+    const combo = comboEnabled ? await (await import("../../../lib/driver-job-combo")).loadDriverCombo(database.client,reference) : null;
+    const result = await loadAdminDriverPoolOffer(database.client, combo?.primary_booking_reference || reference);
     return result.ok
-      ? response({ ...result.data, ...(rawIds !== null ? { driver_alert_readiness: await loadDriverPoolAlertReadiness(database.client, driverIds) } : {}), ok: true }, 200)
+      ? response({ ...result.data, ...(comboEnabled ? {combo_enabled:true,combo} : {}), ...(rawIds !== null ? { driver_alert_readiness: await loadDriverPoolAlertReadiness(database.client, driverIds) } : {}), ok: true }, 200)
       : response({ error: result.error, ok: false }, result.status);
   } catch {
     return response({ error: "Driver Pool request failed safely.", ok: false }, 500);
@@ -98,6 +106,15 @@ export async function PATCH(request: Request) {
     const access = boundary(request);
     if (!access.ok) return response({ error: access.error, ok: false }, 403);
     const payload = await body(request);
+    if (payload?.action === "combo_members" && process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+      const database = getDriverPoolClientForProduction();
+      if (!database.ok) return response({ok:false,error:"Combo is not configured."},503);
+      try {
+        const {defineDriverCombo} = await import("../../../lib/driver-job-combo");
+        const combo = await defineDriverCombo(database.client,payload,adminDispatcherBoundaryToPersistenceAdapterActor(access.context));
+        return response({ok:true,combo},200);
+      } catch (error) { return response({ok:false,error:error instanceof Error ? error.message : "Combo selection failed."},409); }
+    }
     if (payload && typeof payload === "object" && "action" in payload) {
       const parsedAction = parseDriverPoolAdminActionPayload(payload);
       if (!parsedAction.ok) return response({ error: parsedAction.error, ok: false }, parsedAction.status);

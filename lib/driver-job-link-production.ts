@@ -109,6 +109,13 @@ async function resolveVerifiedAccountDriverId({
   return activeAccount ? session.claims.driverId : null;
 }
 
+export async function getProductionDriverComboAccess(token:string,allowCompletedEntry=false) {
+  const clientResult=resolveProductionClient();
+  if(!clientResult.ok)return null;
+  const {loadDriverComboAccess}=await import("./driver-job-combo.ts");
+  return loadDriverComboAccess(clientResult.client,token,allowCompletedEntry);
+}
+
 export async function getProductionVerifiedDriverJobProfile({
   cookieHeader,
   driverInstallationId,
@@ -251,6 +258,7 @@ export async function applyProductionDriverJobDetailsUpdate({
     const { syncAcknowledgedDriverDetailsToOperationsCalendar } = await import(
       "./driver-job-operations-calendar-sync.ts"
     );
+    const combo = detailsResult.isCombo ? await getProductionDriverComboAccess(token).catch(()=>null) : null;
     const operationsCalendarSynced =
       await syncAcknowledgedDriverDetailsToOperationsCalendar({
         bookingReference: detailsResult.booking_reference,
@@ -258,6 +266,16 @@ export async function applyProductionDriverJobDetailsUpdate({
         pickupAt: detailsResult.payload.pickupDateTime,
       });
 
+    if (combo) {
+      for (const reference of combo.bookingReferences) {
+        if (reference !== detailsResult.booking_reference) {
+          const synced=await syncAcknowledgedDriverDetailsToOperationsCalendar({
+            bookingReference:reference,client:clientResult.client,
+          }).catch(()=>false);
+          if(!synced)console.warn("Driver acknowledgement Operations Calendar sync failed safely.");
+        }
+      }
+    }
     if (!operationsCalendarSynced) {
       console.warn("Driver acknowledgement Operations Calendar sync failed safely.");
     }

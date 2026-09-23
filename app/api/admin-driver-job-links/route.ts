@@ -185,6 +185,12 @@ export async function POST(request: Request) {
       context: boundary.context,
     }) : null;
 
+    if (result.data.disposition === "created" && result.data.combo_booking_references) {
+      for (const reference of result.data.combo_booking_references) {
+        if (reference !== result.data.link.booking_reference) await authorizeLiveLocationForDriverJobLink({bookingReference:reference,context:boundary.context});
+      }
+    }
+
     return Response.json({
       disposition: result.data.disposition,
       driver_job_url: driverJobUrlFromToken(result.data.driver_job_token),

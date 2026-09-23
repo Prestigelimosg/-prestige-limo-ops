@@ -313,7 +313,7 @@ function linkIsActive(row: UnknownRecord): boolean {
   return row.link_status === "active" &&
     !row.revoked_at &&
     !isDriverJobLinkExpired(String(row.expires_at || "")) &&
-    !isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || ""));
+    !isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || ""), new Date(), undefined, row.safe_link_context);
 }
 
 function linkWasAcknowledged(row: UnknownRecord): boolean {

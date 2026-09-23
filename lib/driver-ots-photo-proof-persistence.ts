@@ -73,6 +73,7 @@ export type AdminDriverOtsPhotoProofSafeRecord = DriverOtsPhotoProofSafeRecord &
 };
 
 type DriverJobLinkProofRow = {
+  safe_link_context: UnknownRecord;
   booking_reference: string;
   expires_at: string;
   id: string;
@@ -98,7 +99,7 @@ const maxBookingReferenceLength = 120;
 const maxUploadBytes = 4 * 1024 * 1024;
 const signedUrlTtlSeconds = 5 * 60;
 const driverJobLinkSelect =
-  "id, booking_reference, link_status, expires_at, revoked_at";
+  "id, booking_reference, link_status, expires_at, revoked_at, safe_link_context";
 const proofSelect =
   "id, booking_reference, storage_bucket, storage_path, content_type, file_size_bytes, photo_type, proof_status, uploaded_at";
 const allowedUploadContentTypes = new Map([
@@ -232,6 +233,7 @@ function toLinkProofRow(row: UnknownRecord): DriverJobLinkProofRow | null {
 
   return {
     booking_reference: bookingReference,
+    safe_link_context: asRecord(row.safe_link_context),
     expires_at: expiresAt,
     id,
     link_status: linkStatus as DriverJobLinkProofRow["link_status"],
@@ -344,7 +346,7 @@ async function resolveDriverLinkForProof(
   if (
     link.link_status === "expired" ||
     isDriverJobLinkExpired(link.expires_at) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at)
+    isDriverJobLinkExpiryOutsideAllowedWindow(link.expires_at, new Date(), undefined, link.safe_link_context)
   ) {
     return {
       ok: false,

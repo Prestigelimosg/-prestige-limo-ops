@@ -102,7 +102,7 @@ function activeLink(link: UnknownRecord, now: Date): boolean {
     !link.revoked_at &&
     Boolean(expiresAt) &&
     !isDriverJobLinkExpired(expiresAt as string, now) &&
-    !isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt as string, now)
+    !isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt as string, now, undefined, link.safe_link_context)
   );
 }
 

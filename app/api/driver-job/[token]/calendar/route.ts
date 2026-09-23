@@ -15,11 +15,12 @@ type DriverJobCalendarRouteContext = {
   params: Promise<{ token: string }>;
 };
 
-function safeError(result: { reason: string; status: number }) {
+function safeError(result: { reason: string; status: number; saved_count?:number; total_count?:number }) {
   return Response.json({
     error: "Google Calendar is unavailable for this Driver Job.",
     ok: false,
     reason: result.reason,
+    ...(result.total_count ? {saved_count:result.saved_count,total_count:result.total_count} : {}),
     version: driverGoogleCalendarVersion,
   }, {
     headers: { "cache-control": "private, no-store, max-age=0" },

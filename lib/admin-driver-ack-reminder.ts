@@ -106,7 +106,7 @@ function linkIsActive(link: UnknownRecord): boolean {
     !link.revoked_at &&
     Boolean(expiresAt) &&
     !isDriverJobLinkExpired(expiresAt) &&
-    !isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt);
+    !isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, new Date(), undefined, link.safe_link_context);
 }
 
 function linkWasAcknowledged(link: UnknownRecord): boolean {

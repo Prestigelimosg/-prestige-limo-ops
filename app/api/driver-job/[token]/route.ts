@@ -5,6 +5,7 @@ import {
 import {
   applyProductionDriverNativeDeviceAlertUpdate,
   applyProductionDriverJobDetailsUpdate,
+  getProductionDriverComboAccess,
   getProductionDriverJobPayloadForToken,
   getProductionVerifiedDriverJobProfile,
 } from "../../../../lib/driver-job-link-production.ts";
@@ -129,6 +130,15 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
     const result = await getProductionDriverJobPayloadForToken(token);
 
     if (result.ok) {
+      let combo;
+      if (result.isCombo) {
+        try {
+          combo = (await getProductionDriverComboAccess(token))?.view;
+          if (!combo) throw new Error("Combo unavailable");
+        } catch {
+          return Response.json({ok:false,reason:"unavailable",message:"This combo could not be verified. Please reload the job."},{status:409});
+        }
+      }
       const driverAccountProfile = await getProductionVerifiedDriverJobProfile({
         cookieHeader: request.headers.get("cookie"),
         driverInstallationId: request.headers.get("x-prestige-driver-installation-id"),
@@ -144,6 +154,7 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
         ok: true,
         mode: "production",
         payload: result.payload,
+        ...(combo ? {combo} : {}),
         account_setup: process.env.PRESTIGE_DRIVER_JOB_ACCOUNT_ACTIVATION_ENABLED === "true" ? "app" : "acknowledged_link",
         driver_account_profile: driverAccountProfile
           ? {
@@ -156,6 +167,10 @@ export async function GET(request: Request, context: DriverJobRouteContext) {
       });
     }
 
+    if (result.reason === "expired") {
+      const continuation = await getProductionDriverComboAccess(token,true).catch(()=>null);
+      if (continuation?.redirect) return Response.json({ok:false,reason:"expired",payload:null,next_job_url:continuation.redirect});
+    }
     return Response.json(result, { status: blockedStatusByReason[result.reason] });
   }
 

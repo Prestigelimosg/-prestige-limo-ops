@@ -1,5 +1,7 @@
 "use client";
 
+import {DriverComboTrips, type DriverComboTripSummary} from "../driver-job/driver-combo-trips";
+
 import {DriverAccountSetup,nativeAccountSetupState} from "./driver-account-setup";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -7,6 +9,7 @@ import { PublicAppBuildMarker } from "@/app/public-app-build-marker";
 import type { SafeDriverJobPayload } from "../../lib/driver-job-link";
 
 type DriverPortalJob = {
+  combo?:{vehicle:string;trips:DriverComboTripSummary[]};
   job_key: string;
   payload: SafeDriverJobPayload;
   state: "pending_ack" | "assigned" | "driver_otw" | "ots" | "pob";
@@ -33,6 +36,7 @@ type DriverPoolAvailableJob = {
     instructions: string | null;
     scheduled_end_at: string | null;
   };
+  combo?: {vehicle:string;trips:DriverComboTripSummary[]};
   safe_trip_summary: string | null;
   safe_vehicle_label: string | null;
   updated_at: string;
@@ -1256,22 +1260,22 @@ export default function DriverPortalPage() {
                   ].filter(([, value]) => value);
                   return (
                   <article className="rounded-md border border-emerald-200 bg-white p-3" data-driver-pool-offer={job.offer_key} key={job.offer_key}>
-                    <h3 className="mb-2 text-lg font-extrabold uppercase leading-snug text-slate-950" data-driver-pool-service-vehicle="true">
+                    {job.combo ? <DriverComboTrips vehicle={job.combo.vehicle} trips={job.combo.trips}/> : <h3 className="mb-2 text-lg font-extrabold uppercase leading-snug text-slate-950" data-driver-pool-service-vehicle="true">
                       {job.safe_trip_summary || "Transfer"} · {job.safe_vehicle_label?.trim().toUpperCase() === "ALPHARD" ? "AVF" : job.safe_vehicle_label || "Vehicle TBC"}
-                    </h3>
-                    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase text-slate-500">Job {job.public_booking_reference}</p><p className="font-bold text-slate-950">{pickupLabel}</p></div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-900">SGD {job.offer_payout_sgd.toFixed(2)}</span></div>
+                    </h3>}
+                    <div className="flex flex-wrap items-start justify-between gap-2">{job.combo ? <span className="text-xs font-semibold text-slate-600">All {job.combo.trips.length} trips</span> : <div><p className="text-xs font-bold uppercase text-slate-500">Job {job.public_booking_reference}</p><p className="font-bold text-slate-950">{pickupLabel}</p></div>}<span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-bold text-emerald-900">SGD {job.offer_payout_sgd.toFixed(2)}</span></div>
                     <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-3">
-                      <div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Pickup</dt><dd className="mt-0.5 break-words font-semibold text-slate-800">{job.safe_pickup_area}</dd></div>
-                      <div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Drop-off</dt><dd className="mt-0.5 break-words font-semibold text-slate-800">{job.safe_dropoff_area}</dd></div>
+                      {!job.combo ? <><div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Pickup</dt><dd className="mt-0.5 break-words font-semibold text-slate-800">{job.safe_pickup_area}</dd></div>
+                      <div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Drop-off</dt><dd className="mt-0.5 break-words font-semibold text-slate-800">{job.safe_dropoff_area}</dd></div></> : null}
                       <div className="rounded-md bg-slate-50 px-2.5 py-2"><dt className="font-bold uppercase text-slate-500">Offer closes</dt><dd className="mt-0.5 font-semibold text-slate-800"><time dateTime={job.closes_at}>{closesLabel}</time></dd></div>
-                      {tripDetails.map(([label, value]) => (
+                      {(job.combo ? [] : tripDetails).map(([label, value]) => (
                         <div className="min-w-0 rounded-md bg-slate-50 px-2.5 py-2 sm:col-span-3" key={label}>
                           <dt className="font-bold uppercase text-slate-500">{label}</dt>
                           <dd className="mt-0.5 whitespace-pre-wrap break-words font-semibold text-slate-800">{value}</dd>
                         </div>
                       ))}
                     </dl>
-                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy || job.response_status === "awaiting_admin"} onClick={() => void decideAvailableJob(job, "accept")} type="button">{job.response_status === "awaiting_admin" ? "Pending" : job.selection_mode === "admin" ? "Available" : "Accept"}</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "decline")} type="button">{job.response_status === "awaiting_admin" ? "Cancel" : "Decline"}</button></div>
+                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy || job.response_status === "awaiting_admin"} onClick={() => void decideAvailableJob(job, "accept")} type="button">{job.response_status === "awaiting_admin" ? "Pending" : job.selection_mode === "admin" ? "Available" : job.combo ? "Accept all trips" : "Accept"}</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "decline")} type="button">{job.response_status === "awaiting_admin" ? "Cancel" : "Decline"}</button></div>
                     {availableJobsFeedback[job.offer_key] && availableJobsFeedback[job.offer_key] !== "Pending" ? <p className="mt-2 text-xs font-semibold text-slate-600" role="status">{availableJobsFeedback[job.offer_key]}</p> : null}
                   </article>
                   );
@@ -1307,15 +1311,16 @@ export default function DriverPortalPage() {
                 key={job.job_key}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+                  <div className="min-w-0 flex-1">
+                    {job.combo ? <DriverComboTrips vehicle={job.combo.vehicle} trips={job.combo.trips}/> : <>
                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Job {job.payload.reference}</p>
-                    <h3 className="mt-1 text-lg font-bold text-slate-950">{pickupDisplay(job.payload)}</h3>
+                    <h3 className="mt-1 text-lg font-bold text-slate-950">{pickupDisplay(job.payload)}</h3></>}
                   </div>
                   <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-900 ring-1 ring-sky-200" data-driver-portal-job-state={job.state}>
                     {job.state_label}
                   </span>
                 </div>
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                {!job.combo ? <dl className="grid gap-2 text-sm sm:grid-cols-2">
                   <div className="rounded-md bg-slate-50 px-3 py-2">
                     <dt className="text-xs font-bold uppercase text-slate-500">Pickup</dt>
                     <dd className="mt-1 font-semibold text-slate-900">{displayValue(job.payload.pickupLocation)}</dd>
@@ -1332,7 +1337,7 @@ export default function DriverPortalPage() {
                     <dt className="text-xs font-bold uppercase text-slate-500">Flight</dt>
                     <dd className="mt-1 font-semibold text-slate-900">{displayValue(job.payload.flightNumber)}</dd>
                   </div>
-                </dl>
+                </dl> : null}
                 <button
                   className="h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
                   data-driver-portal-open-job={job.job_key}

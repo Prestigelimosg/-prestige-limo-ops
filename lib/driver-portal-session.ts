@@ -338,7 +338,7 @@ export async function issueDriverPortalSessionForAcknowledgedToken({
     link.revoked_at ||
     !expiresAt ||
     isDriverJobLinkExpired(expiresAt, nowDate) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, nowDate) ||
+    isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, nowDate, undefined, link.safe_link_context) ||
     typeof acknowledgedAt !== "string" ||
     !acknowledgedAt.trim()
   ) {

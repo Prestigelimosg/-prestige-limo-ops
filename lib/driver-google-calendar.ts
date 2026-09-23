@@ -42,6 +42,7 @@ type DriverGoogleCalendarConfig = {
 };
 
 type DriverCalendarContext = {
+  isCombo:boolean;
   driverId: number;
   event: ReturnType<typeof buildDriverJobGoogleCalendarEvent> & { ok: true };
   linkId: string;
@@ -62,6 +63,7 @@ type DriverGoogleCalendarFailureReason =
 type DriverGoogleCalendarHttpStatus = 400 | 401 | 403 | 409 | 410 | 502 | 503;
 
 type DriverGoogleCalendarFailure = {
+  saved_count?: number; total_count?: number;
   ok: false;
   reason: DriverGoogleCalendarFailureReason;
   status: DriverGoogleCalendarHttpStatus;
@@ -77,6 +79,7 @@ export type DriverGoogleCalendarResult =
     }
   | {
       action: "saved";
+      saved_count?: number; total_count?: number;
       ok: true;
       status: "cal_saved";
     }
@@ -321,7 +324,7 @@ async function loadContext(
   if (
     text(link.link_status) === "expired" ||
     isDriverJobLinkExpired(expiresAt) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt)
+    isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, new Date(), undefined, link.safe_link_context)
   ) {
     return failure("expired", 410);
   }
@@ -364,10 +367,38 @@ async function loadContext(
   return {
     driverId,
     event,
+    isCombo:Boolean(safeContext.combo_id),
     linkId,
     savedEventId: text(link.google_calendar_event_id),
     savedRevision: text(link.google_calendar_revision),
   };
+}
+
+async function loadCalendarContexts(token:string,config:DriverGoogleCalendarConfig,client:PersistenceClient) {
+  const first=await loadContext(token,config,client);
+  if ("ok" in first) return first;
+  if (!first.isCombo) return [first];
+  try {
+    const {loadDriverComboAccess}=await import("./driver-job-combo.ts");
+    const combo=await loadDriverComboAccess(client,token);
+    if(!combo)return [first];
+    const contexts:DriverCalendarContext[]=[];
+    for(const memberToken of combo.tokens) {
+      const context=memberToken===token?first:await loadContext(memberToken,config,client);
+      if("ok" in context)return context;
+      if(context.driverId!==first.driverId)return failure("unverified_driver",409);
+      contexts.push(context);
+    }
+    return contexts.length?contexts:failure("expired",410);
+  } catch { return failure("not_configured",503); }
+}
+
+async function writeCalendarContexts(config:DriverGoogleCalendarConfig,accessToken:string,contexts:DriverCalendarContext[],client:PersistenceClient,fetcher:Fetcher) {
+  let saved=0;
+  for(const context of contexts) {
+    if(await writeGoogleEvent(config,accessToken,context,client,fetcher).catch(()=>false))saved++;
+  }
+  return {saved_count:saved,total_count:contexts.length};
 }
 
 async function readConnection(client: PersistenceClient, driverId: number) {
@@ -521,16 +552,16 @@ export async function readDriverGoogleCalendarStatus(
 
   if (!config || !client) return failure("not_configured", 503);
 
-  const context = await loadContext(token, config, client);
-  if ("ok" in context) return context;
+  const contexts = await loadCalendarContexts(token, config, client);
+  if (!Array.isArray(contexts)) return contexts;
+  const context = contexts[0];
 
   const connection = await readConnection(client, context.driverId);
   if (connection.error) return failure("not_configured", 503);
 
   const connected = Boolean(text(connection.row?.encrypted_refresh_token));
   const saved = connected &&
-    context.savedEventId === context.event.event.id &&
-    context.savedRevision === context.event.revision;
+    contexts.every(item=>item.savedEventId===item.event.event.id && item.savedRevision===item.event.revision);
 
   return {
     action: "status",
@@ -549,8 +580,9 @@ export async function saveOrAuthorizeDriverGoogleCalendar(
 
   if (!config || !client) return failure("not_configured", 503);
 
-  const context = await loadContext(token, config, client);
-  if ("ok" in context) return context;
+  const contexts = await loadCalendarContexts(token, config, client);
+  if (!Array.isArray(contexts)) return contexts;
+  const context = contexts[0];
 
   const connection = await readConnection(client, context.driverId);
   if (connection.error) return failure("not_configured", 503);
@@ -577,10 +609,10 @@ export async function saveOrAuthorizeDriverGoogleCalendar(
       return buildAuthorizationResult(config, token);
     }
     if (refreshResult === "provider_failed") return failure("provider_failed", 502);
-    const saved = await writeGoogleEvent(config, accessToken, context, client, fetcher);
-    return saved
-      ? { action: "saved", ok: true, status: "cal_saved" }
-      : failure("provider_failed", 502);
+    const progress = await writeCalendarContexts(config,accessToken,contexts,client,fetcher);
+    return progress.saved_count===progress.total_count
+      ? { action: "saved", ok: true, status: "cal_saved", ...progress }
+      : { ...failure("provider_failed", 502), ...progress };
   } catch {
     return failure("provider_failed", 502);
   }
@@ -651,9 +683,10 @@ export async function completeDriverGoogleCalendarOauth(input: {
     };
   }
 
-  const context = await loadContext(oauthState.token, config, client);
+  const contexts = await loadCalendarContexts(oauthState.token, config, client);
 
-  if ("ok" in context) {
+  if (!Array.isArray(contexts)) {
+    const context=contexts;
     return {
       driver_job_url: returnUrl,
       ok: false,
@@ -662,6 +695,7 @@ export async function completeDriverGoogleCalendarOauth(input: {
     };
   }
 
+  const context=contexts[0];
   try {
     const response = await fetcher(config.tokenUri, {
       body: new URLSearchParams({
@@ -703,9 +737,9 @@ export async function completeDriverGoogleCalendarOauth(input: {
       return { driver_job_url: returnUrl, ok: false, reason: "not_configured", status: 503 };
     }
 
-    const saved = await writeGoogleEvent(config, accessToken, context, client, fetcher);
+    const progress=await writeCalendarContexts(config,accessToken,contexts,client,fetcher);
 
-    return saved
+    return progress.saved_count===progress.total_count
       ? { driver_job_url: returnUrl, ok: true }
       : { driver_job_url: returnUrl, ok: false, reason: "provider_failed", status: 502 };
   } catch {

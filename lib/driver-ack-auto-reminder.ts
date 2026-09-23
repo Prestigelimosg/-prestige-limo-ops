@@ -111,6 +111,7 @@ function eligibleCandidate(link: UnknownRecord, nowMs: number): boolean {
       issuedAtMs <= nowMs - automaticReminderAgeMs &&
       expiresAtMs !== null &&
       expiresAtMs > nowMs &&
+      (!context.combo_id || context.combo_primary_reference === link.booking_reference) &&
       !text(context.driver_acknowledged_at, 80) &&
       text(context.native_handoff_ciphertext, 1200),
   );

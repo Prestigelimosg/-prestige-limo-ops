@@ -185,7 +185,7 @@ export async function createDriverAccountForAcknowledgedLink(input: {
     driverId !== authorizedDriverId ||
     link.link_status !== "active" || link.revoked_at ||
     !text(context.driver_acknowledged_at) || !expiresAt ||
-    isDriverJobLinkExpired(expiresAt) || isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt)
+    isDriverJobLinkExpired(expiresAt) || isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, new Date(), undefined, link.safe_link_context)
   ) {
     return failure("invalid_link");
   }

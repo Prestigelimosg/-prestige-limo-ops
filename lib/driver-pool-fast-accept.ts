@@ -77,6 +77,7 @@ export type DriverPoolCancelResult = {
 };
 
 export type DriverPoolAvailableJob = {
+  combo?: {vehicle:string;trips:Array<{reference:string;service:string;pickup_at:string;scheduled_end_at:string|null;pickup:string;dropoff:string;route:string}>};
   alert_unread?: boolean;
   selection_mode: "admin" | "first_accept";
   response_status: "pending" | "awaiting_admin";
@@ -181,6 +182,7 @@ export function driverPoolIsEnabled(env: Record<string, string | undefined> = pr
 
 export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResult<{
   booking_reference: string;
+  combo_revision?: string;
   expected_updated_at: string;
   idempotency_key: string;
   offer_payout_sgd: number;
@@ -198,13 +200,14 @@ export function parseDriverPoolPublishPayload(value: unknown): AdminBookingResul
   const validAudience = record.audience === undefined || record.audience === "selected" || allDrivers;
   const validIds = Array.isArray(ids) && ids.length >= 1 &&
     ids.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0) && new Set(ids).size === ids.length;
-  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement", "selected_driver_ids", "audience"]) ||
+  if (!exactKeys(record, ["booking_reference", "expected_updated_at", "offer_payout_sgd", "idempotency_key", "vehicle_requirement", "selected_driver_ids", "audience", "combo_revision"]) ||
+      (record.combo_revision !== undefined && (typeof record.combo_revision !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(record.combo_revision))) ||
       !reference || !expected || !payout || !key || !validAudience ||
       !(allDrivers ? Array.isArray(ids) && ids.length === 0 : validIds) ||
       typeof vehicle !== "string" || !["E / AVF", "AVF", "AVF / VVV", "S", "VVV", "COMBI"].includes(vehicle)) {
     return { error: "Malformed Driver Pool offer rejected.", ok: false, status: 400 };
   }
-  return { data: { booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout, vehicle_requirement: vehicle, selected_driver_ids: (ids as number[]).slice().sort((a, b) => a - b) }, ok: true };
+  return { data: { ...(record.combo_revision ? {combo_revision:record.combo_revision as string} : {}), booking_reference: reference, expected_updated_at: expected, idempotency_key: key, offer_payout_sgd: payout, vehicle_requirement: vehicle, selected_driver_ids: (ids as number[]).slice().sort((a, b) => a - b) }, ok: true };
 }
 
 export function parseDriverPoolCancelPayload(value: unknown): AdminBookingResult<{
@@ -360,7 +363,7 @@ function actorIsValid(actor: AdminBookingPersistenceAdapterActor) {
 export async function publishDriverPoolOffer(
   client: DriverPoolClient,
   input: { booking_reference: string; expected_updated_at: string; idempotency_key: string; offer_payout_sgd: number;
-    vehicle_requirement: string; selected_driver_ids?: number[]; offer_key?: string },
+    vehicle_requirement: string; selected_driver_ids?: number[]; offer_key?: string; combo_revision?: string },
   actor: AdminBookingPersistenceAdapterActor,
 ): Promise<AdminBookingResult<DriverPoolOfferState>> {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 };
@@ -373,10 +376,16 @@ export async function publishDriverPoolOffer(
   let error: unknown = null;
   let status: unknown = 0;
   try {
-    ({ data, error, status } = await client.rpc("publish_driver_pool_offer", {
+    const combo = process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true"
+      ? await (await import("./driver-job-combo.ts")).loadDriverCombo(client,input.booking_reference) : null;
+    if (combo && (combo.primary_booking_reference !== input.booking_reference ||
+      (!input.offer_key && combo.revision !== input.combo_revision))) {
+      return {ok:false,error:"Reload and review the complete combo before posting.",status:409};
+    }
+    ({ data, error, status } = await client.rpc(combo ? "publish_driver_job_combo" : "publish_driver_pool_offer", {
+      ...(combo ? {p_id:combo.id,p_revision:combo.revision} : {p_booking_reference:input.booking_reference}),
       p_actor_label: actor.actor_label,
       p_actor_role: actor.actor_role,
-      p_booking_reference: input.booking_reference,
       p_expected_updated_at: input.expected_updated_at,
       p_idempotency_key: input.idempotency_key,
       p_offer_payout_sgd: input.offer_payout_sgd,
@@ -635,7 +644,13 @@ export async function refreshCancelledDriverPoolRecipients(client: DriverPoolCli
 export async function cancelDriverPoolOffer(client: DriverPoolClient, input: { offer_key: string; expected_updated_at: string }, actor: AdminBookingPersistenceAdapterActor) {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 } as const;
   if (!actorIsValid(actor)) return { error: "Verified Admin or Dispatcher required.", ok: false, status: 403 } as const;
-  const { data, error } = await client.rpc("cancel_driver_pool_offer", {
+  let comboOffer = false;
+  if (process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+    const found = await client.from("driver_job_combos").select("id").eq("offer_key",input.offer_key).maybeSingle();
+    if (found.error) return {ok:false,status:503,error:"Combo assignment could not be verified."} as const;
+    comboOffer = Boolean(found.data);
+  }
+  const { data, error } = await client.rpc(comboOffer ? "cancel_driver_job_combo_offer" : "cancel_driver_pool_offer", {
     p_actor_label: actor.actor_label, p_actor_role: actor.actor_role,
     p_expected_updated_at: input.expected_updated_at, p_offer_key: input.offer_key,
   });
@@ -703,6 +718,19 @@ export async function loadAvailableDriverPoolJobs(client: DriverPoolClient, driv
     ]));
     for(const job of mapped) job.alert_unread = Date.parse(String(seen.get(job.offer_key))) !== Date.parse(job.updated_at);
   }
+  if (mapped.length && process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+    const combos = await client.from("driver_job_combos").select("primary_booking_reference,offer_key")
+      .in("offer_key",mapped.map(job=>job.offer_key)).eq("state","offered");
+    if (combos.error) return {ok:false,error:"Combo trip details could not be verified. Refresh to try again.",status:503} as const;
+    const {loadDriverCombo,driverComboTripSummary} = await import("./driver-job-combo.ts");
+    for (const row of asRows(combos.data)) {
+      const job=mapped.find(item=>item.offer_key===row.offer_key);
+      if (!job) continue;
+      const combo=await loadDriverCombo(client,String(row.primary_booking_reference));
+      if (!combo) return {ok:false,error:"Combo trip details are unavailable.",status:503} as const;
+      job.combo={vehicle:combo.vehicle_requirement || job.safe_vehicle_label || "Vehicle",trips:combo.trips.map(driverComboTripSummary)};
+    }
+  }
   return { data: { enabled: true, has_more: result.has_more === true, jobs: mapped }, ok: true } as const;
 }
 
@@ -723,7 +751,13 @@ export async function loadDriverPoolWinnerPlate(
 export async function decideDriverPoolOffer(client: DriverPoolClient, driverId: number, input: { offer_key: string; expected_updated_at: string; idempotency_key: string }, action: "accept" | "decline", actor?: AdminBookingPersistenceAdapterActor) {
   if (!driverPoolIsEnabled()) return { error: "Driver Pool is not enabled.", ok: false, status: 503 } as const;
   if (actor && !actorIsValid(actor)) return { error: "Verified Admin or Dispatcher required.", ok: false, status: 403 } as const;
-  const { data, error } = await client.rpc(action === "accept" ? "accept_driver_pool_offer" : "decline_driver_pool_offer", {
+  let comboAcceptance = false;
+  if (action === "accept" && !actor && process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+    const comboRead = await client.from("driver_job_combos").select("id").eq("offer_key",input.offer_key).maybeSingle();
+    if (comboRead.error) return {ok:false,error:"Combo acceptance could not be verified. Reload to try again.",status:503} as const;
+    comboAcceptance = Boolean(comboRead.data);
+  }
+  const { data, error } = await client.rpc(action === "accept" ? comboAcceptance ? "accept_driver_job_combo" : "accept_driver_pool_offer" : "decline_driver_pool_offer", {
     p_driver_id: driverId, p_expected_updated_at: input.expected_updated_at,
     p_idempotency_key: input.idempotency_key, p_offer_key: input.offer_key,
     ...(actor ? { p_actor_role: actor.actor_role, p_actor_label: actor.actor_label } : {}),

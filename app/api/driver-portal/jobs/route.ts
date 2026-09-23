@@ -156,6 +156,7 @@ export async function GET(request: Request) {
       alerts_available: jobsResult.alertsAvailable,
       jobs: jobsResult.jobs.map((job) => ({
         job_key: job.jobKey,
+        ...(job.combo ? {combo:job.combo} : {}),
         payload: job.payload,
         state: job.state,
         state_label: job.stateLabel,

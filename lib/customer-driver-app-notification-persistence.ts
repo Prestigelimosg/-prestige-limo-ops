@@ -4406,7 +4406,7 @@ async function resolveDriverLinkScope(
   if (
     linkStatus === "expired" ||
     isDriverJobLinkExpired(String(row.expires_at || "")) ||
-    isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || ""))
+    isDriverJobLinkExpiryOutsideAllowedWindow(String(row.expires_at || ""), new Date(), undefined, row.safe_link_context)
   ) {
     return {
       error: "Driver app notification link has expired.",

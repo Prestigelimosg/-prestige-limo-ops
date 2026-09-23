@@ -101,6 +101,7 @@ export type AdminBookingPersistenceInput = {
 };
 
 export type AdminBookingPersistenceUpdateInput = AdminBookingPersistenceInput & {
+  combo_assignment?: {revision: string; total_payout_sgd: number|null};
   expected_updated_at?: string | null;
   target_booking_reference: string;
   update_mode?: "driver_assignment" | "driver_assignment_cancel";
@@ -207,6 +208,7 @@ const updatePayloadTopLevelFields = new Set([
   "expected_updated_at",
   "target_booking_reference",
   "update_mode",
+  "combo_assignment",
   "booking",
   "route_points",
   "service_items",
@@ -1150,6 +1152,16 @@ export function parseAdminBookingUpdatePayload(
   const targetBookingReference = validTargetBookingReference(body.target_booking_reference as string | null);
   const expectedUpdatedAt = textOrNull(body.expected_updated_at);
   const updateMode = textOrNull(body.update_mode);
+  const comboAssignment = body.combo_assignment === undefined ? null : asRecord(body.combo_assignment);
+  if (comboAssignment && (updateMode !== "driver_assignment" ||
+    Object.keys(comboAssignment).length !== 2 ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(comboAssignment.revision || "")) ||
+    (comboAssignment.total_payout_sgd !== null && (typeof comboAssignment.total_payout_sgd !== "number" || !Number.isFinite(comboAssignment.total_payout_sgd) ||
+    comboAssignment.total_payout_sgd <= 0 || comboAssignment.total_payout_sgd > 99999.99 ||
+    Math.abs(comboAssignment.total_payout_sgd * 100 - Math.round(comboAssignment.total_payout_sgd * 100)) > 0.000001)))) {
+    return {ok:false,status:400,error:"Enter the reviewed total combo payout before assigning its Driver."};
+  }
+
 
   if (
     Object.prototype.hasOwnProperty.call(body, "update_mode") &&
@@ -1194,6 +1206,7 @@ export function parseAdminBookingUpdatePayload(
     data: {
       ...parsed.data,
       ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}),
+      ...(comboAssignment ? {combo_assignment: {revision: String(comboAssignment.revision), total_payout_sgd: comboAssignment.total_payout_sgd===null?null:Number(comboAssignment.total_payout_sgd)}} : {}),
       target_booking_reference: targetBookingReference,
       ...((updateMode === "driver_assignment" || updateMode === "driver_assignment_cancel") ? { update_mode: updateMode } : {}),
     },

@@ -98,7 +98,7 @@ function linkIsActive(link: UnknownRecord) {
     !link.revoked_at &&
     Boolean(expiresAt) &&
     !isDriverJobLinkExpired(expiresAt) &&
-    !isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt);
+    !isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, new Date(), undefined, link.safe_link_context);
 }
 
 function bookingIsTerminal(booking: UnknownRecord) {
@@ -223,12 +223,31 @@ export async function GET(
   const linkId = text(link?.id, 80);
   const bookingReference = text(link?.booking_reference, 120);
   if (!link || !uuidPattern.test(linkId) || !bookingReference) {
+    // A completed first trip must not strand the remaining package. This is
+    // navigation only; status/ACK mutations never redirect onto another trip.
+    const expiredRead=await clientResult.client.from("driver_job_links")
+      .select("id,booking_reference,driver_id,token_hash,safe_link_context")
+      .eq("driver_id",session.claims.driverId).eq("link_status","expired")
+      .order("created_at",{ascending:false}).limit(100);
+    const previous=rows(expiredRead.data).find(row=>opaqueDriverJobLinkKey(String(row.id))===jobKey);
+    if(!expiredRead.error && record(previous?.safe_link_context).combo_id) {
+      const priorToken=openDriverNativeJobHandoff({bookingReference:String(previous?.booking_reference),tokenHash:previous?.token_hash,
+        ciphertext:record(previous?.safe_link_context).native_handoff_ciphertext});
+      if(priorToken) {
+        const {loadDriverComboAccess}=await import("../../../../lib/driver-job-combo");
+        const continuation=await loadDriverComboAccess(clientResult.client,priorToken,true).catch(()=>null);
+        if(continuation?.redirect) return new Response(null,{status:302,headers:{
+          "Cache-Control":"no-store","Referrer-Policy":"no-referrer",Vary:"Cookie, x-prestige-driver-installation-id",
+          Location:new URL(continuation.redirect,request.url).toString(),
+        }});
+      }
+    }
     return blocked(404);
   }
 
   const { data: newestLinkData, error: newestLinkError } = await clientResult.client
     .from("driver_job_links")
-    .select("id, expires_at, link_status, revoked_at")
+    .select("id, expires_at, link_status, revoked_at, safe_link_context")
     .eq("booking_reference", bookingReference)
     .eq("link_status", "active")
     .order("created_at", { ascending: false })

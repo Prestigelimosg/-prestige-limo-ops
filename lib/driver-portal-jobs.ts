@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type {DriverComboView} from "./driver-job-combo";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { opaqueDriverJobLinkKey } from "./driver-device-push-notification.ts";
@@ -16,6 +17,7 @@ type DriverPortalJobsClient = Pick<SupabaseClient, "from">;
 type UnknownRecord = Record<string, unknown>;
 
 export type DriverPortalJob = {
+  combo?: DriverComboView;
   jobKey: string;
   payload: SafeDriverJobPayload;
   state: "pending_ack" | "assigned" | "driver_otw" | "ots" | "pob";
@@ -301,7 +303,7 @@ export async function loadDriverPortalJobs({
 
   const { data: linkData, error: linkError } = await client
     .from("driver_job_links")
-    .select("id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at")
+    .select("id, booking_reference, driver_id, link_status, expires_at, revoked_at, safe_link_context, created_at, token_hash")
     .eq("driver_id", verifiedDriverId)
     .eq("link_status", "active")
     .order("created_at", { ascending: false })
@@ -333,7 +335,7 @@ export async function loadDriverPortalJobs({
       (!acknowledgedAt && (!includePendingAcknowledgement ||
         !cleanText(asRecord(link.safe_link_context).native_handoff_ciphertext, 1200))) ||
       isDriverJobLinkExpired(expiresAt, nowDate) ||
-      isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, nowDate)
+      isDriverJobLinkExpiryOutsideAllowedWindow(expiresAt, nowDate, undefined, link.safe_link_context)
     ) {
       continue;
     }
@@ -447,6 +449,24 @@ export async function loadDriverPortalJobs({
       jobReference: payload.reference,
       linkId,
     });
+  }
+
+  const visibleCombos = new Set<string>();
+  for (let index=0;index<jobs.length;index++) {
+    const job=jobs[index];
+    const link=[...newestAcknowledgedLinks.values()].find(row=>opaqueDriverJobLinkKey(String(row.id))===job.jobKey);
+    const context=asRecord(link?.safe_link_context),comboId=cleanText(context.combo_id,80);
+    if(!comboId)continue;
+    if(visibleCombos.has(comboId)){jobs.splice(index--,1);continue;}
+    try {
+      const {openDriverNativeJobHandoff}=await import("./driver-native-job-handoff.ts");
+      const {loadDriverComboAccess}=await import("./driver-job-combo.ts");
+      const token=openDriverNativeJobHandoff({bookingReference:String(link?.booking_reference),tokenHash:link?.token_hash,ciphertext:context.native_handoff_ciphertext});
+      if(!token)return failedJobsResult();
+      const access=await loadDriverComboAccess(client,token);
+      if(!access)return failedJobsResult();
+      job.combo=access.view;visibleCombos.add(comboId);
+    } catch { return failedJobsResult(); }
   }
 
   jobs.sort((left, right) => {

@@ -140,6 +140,7 @@ export function isDriverJobLinkExpiryOutsideAllowedWindow(
   expiresAt: Date | string | number,
   now: Date | string | number = new Date(),
   maxFutureHours = defaultDriverJobLinkMaxFutureHours,
+  storedContext?: unknown,
 ) {
   const expiresTime = new Date(expiresAt).getTime();
   const nowTime = new Date(now).getTime();
@@ -153,7 +154,16 @@ export function isDriverJobLinkExpiryOutsideAllowedWindow(
     return true;
   }
 
-  return expiresTime - nowTime > maxFutureHours * 60 * 60 * 1000;
+  // Only server-stored combo link metadata may extend a single-trip window.
+  // Callers must pass the database context, never a request payload.
+  const context = storedContext && typeof storedContext === "object" && !Array.isArray(storedContext)
+    ? storedContext as Record<string,unknown> : {};
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const comboWindow = uuid.test(String(context.combo_id || "")) && uuid.test(String(context.combo_revision || "")) &&
+    uuid.test(String(context.combo_link_batch || "")) &&
+    typeof context.combo_access_until === "string" && Date.parse(context.combo_access_until) === expiresTime;
+  const allowedHours = comboWindow ? 370 * 24 : maxFutureHours;
+  return expiresTime - nowTime > allowedHours * 60 * 60 * 1000;
 }
 
 export function mapBookingToSafeDriverJobPayload(booking: DriverJobBookingLike): SafeDriverJobPayload {

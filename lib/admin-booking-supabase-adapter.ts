@@ -2807,6 +2807,7 @@ async function applyAdminDriverReassignmentTransaction(
   input: AdminBookingPersistenceUpdateInput,
   actor: AdminBookingPersistenceAdapterActor,
   existing: AdminBookingPersistenceRecord & { id: DbIdentifier },
+  combo?: {id:string;revision:string;total_payout_sgd:number|null},
 ): Promise<AdminBookingResult<AdminBookingPersistenceRecord>> {
   const expectedUpdatedAt = textOrNull(input.expected_updated_at);
   const previousDriverId = positiveSafeInteger(existing.driver_id);
@@ -2831,13 +2832,16 @@ async function applyAdminDriverReassignmentTransaction(
     };
   }
 
-  const { data, error } = await client.rpc("apply_admin_driver_reassignment", {
+  const reassignmentArgs = {
     p_actor_label: actor.actor_label,
     p_actor_role: actor.actor_role,
     p_booking_reference: input.target_booking_reference,
     p_expected_updated_at: expectedUpdatedAt,
     p_new_driver_id: newDriverId,
-  });
+  };
+  const { data, error } = combo
+    ? await client.rpc("reassign_admin_driver_job_combo", {...reassignmentArgs,p_id:combo.id,p_revision:combo.revision,p_total_payout:combo.total_payout_sgd})
+    : await client.rpc("apply_admin_driver_reassignment", reassignmentArgs);
 
   if (error) {
     const errorCode = textOrNull(asRecord(error).code)?.toUpperCase() || "";
@@ -3117,6 +3121,32 @@ export async function updateAdminBookingThroughSupabaseAdapter(
       error: safeUpdateConflictError,
     };
   }
+
+  if (process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true") {
+    const {loadDriverCombo} = await import("./driver-job-combo.ts");
+    const combo = await loadDriverCombo(client, input.target_booking_reference);
+    if (combo) {
+      if (input.update_mode === "driver_assignment_cancel" && combo.primary_booking_reference === input.target_booking_reference) {
+        return applyAdminDriverReassignmentTransaction(client,input,actor,existing,combo);
+      }
+      if (input.update_mode !== "driver_assignment" || !input.combo_assignment ||
+          input.combo_assignment.revision !== combo.revision || combo.primary_booking_reference !== input.target_booking_reference) {
+        return {ok:false,status:409,error:"Review the complete combo and its total payout before changing the assignment or saved trips."};
+      }
+      if (positiveSafeInteger(existing.driver_id)) {
+        return applyAdminDriverReassignmentTransaction(client,input,actor,existing,{...combo,total_payout_sgd:input.combo_assignment.total_payout_sgd});
+      }
+      const assignment = await client.rpc("assign_admin_driver_job_combo", {
+        p_id:combo.id,p_revision:combo.revision,p_driver_id:positiveSafeInteger(input.booking.driver_id),
+        p_total_payout:input.combo_assignment.total_payout_sgd,p_actor_role:actor.actor_role,p_actor_label:actor.actor_label,
+      });
+      if (assignment.error || asRecord(assignment.data).ok !== true) {
+        return {ok:false,status:409,error:"Combo was not assigned. Reload and review every trip, the Driver and total payout."};
+      }
+      return fetchAdminBookingById(client,existing.id);
+    }
+  }
+  if (input.combo_assignment) return {ok:false,status:409,error:"Combo is unavailable. Reload the saved booking."};
 
   if (input.update_mode === "driver_assignment_cancel") {
     // Explicit action only: a missing replacement in the normal save mode is never cancellation.

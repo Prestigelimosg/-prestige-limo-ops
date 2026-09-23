@@ -1,10 +1,12 @@
 -- Local, unreleased combo foundation. No historical booking is grouped or rewritten.
 -- The existing single-booking Pool, link, ACK and Calendar writers remain authoritative.
+-- Production references use a partial unique index; foreign keys use the existing booking ID.
 begin;
 
 create table public.driver_job_combos (
   id uuid primary key default gen_random_uuid(),
-  primary_booking_reference text not null unique references public.bookings(booking_reference),
+  primary_booking_reference text not null unique,
+  primary_booking_id bigint not null unique references public.bookings(id),
   revision uuid not null default gen_random_uuid(),
   state text not null default 'draft' check (state in ('draft','offered','assigned','cancelled')),
   vehicle_requirement text,
@@ -17,7 +19,8 @@ create table public.driver_job_combos (
   updated_at timestamptz not null default now()
 );
 create table public.driver_job_combo_members (
-  booking_reference text primary key references public.bookings(booking_reference),
+  booking_reference text primary key,
+  booking_id bigint not null unique references public.bookings(id),
   combo_id uuid not null references public.driver_job_combos(id) on delete cascade,
   booking_updated_at timestamptz not null,
   booking_snapshot jsonb not null,
@@ -131,15 +134,15 @@ begin
   end loop;
   -- The published single-vehicle requirement is reviewed separately in the existing Pool control.
   if g.id is null then
-    insert into public.driver_job_combos(primary_booking_reference,actor_role,actor_label)
-      values(p_primary,p_actor_role,btrim(p_actor_label)) returning * into g;
+    insert into public.driver_job_combos(primary_booking_reference,primary_booking_id,actor_role,actor_label)
+      values(p_primary,first_booking.id,p_actor_role,btrim(p_actor_label)) returning * into g;
   else
     update public.driver_job_combos set revision=gen_random_uuid(),updated_at=clock_timestamp()
       where id=g.id returning * into g;
     delete from public.driver_job_combo_members where combo_id=g.id;
   end if;
-  insert into public.driver_job_combo_members(booking_reference,combo_id,booking_updated_at,booking_snapshot,ordinal)
-    select selected_booking.booking_reference,g.id,selected_booking.updated_at,public.driver_job_combo_booking_snapshot(selected_booking),
+  insert into public.driver_job_combo_members(booking_reference,booking_id,combo_id,booking_updated_at,booking_snapshot,ordinal)
+    select selected_booking.booking_reference,selected_booking.id,g.id,selected_booking.updated_at,public.driver_job_combo_booking_snapshot(selected_booking),
       row_number() over(order by selected_booking.pickup_at,selected_booking.booking_reference)::integer
     from public.bookings selected_booking where selected_booking.booking_reference=any(refs);
   return jsonb_build_object('id',g.id,'revision',g.revision,'primary_booking_reference',p_primary,'trip_count',n);

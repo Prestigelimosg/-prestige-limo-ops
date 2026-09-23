@@ -19,6 +19,10 @@ try {
   const value=async(s,args=[]) => (await rows(s,args))[0].result;
   const fixture=fs.readFileSync('scripts/test-driver-pool-vehicle-postgres.py','utf8').match(/sql\("""\n(create role[\s\S]*?)"""\)/)[1];
   await sql(fixture);
+  // Match Production: references are unique through a partial index, not a FK target.
+  await sql(`alter table bookings drop constraint bookings_booking_reference_key;
+    create unique index bookings_booking_reference_key on bookings(booking_reference)
+    where booking_reference is not null;`);
   await sql(`alter table bookings add column company_id bigint,add column booker_id bigint,
     add column traveler_id bigint,add column status text,
     add column pickup_location text,add column pickup_address text,add column dropoff_location text,
@@ -74,7 +78,11 @@ try {
   await reset();
   const before=await rows('select * from bookings order by id');
   const g=await define(await members());
-  assert.equal(g.trip_count,3); assert.deepEqual(await rows('select * from bookings order by id'),before,'Selection must not rewrite bookings');
+  assert.equal(g.trip_count,3);
+  assert.equal((await rows(`select count(*)::int n from driver_job_combo_members m
+    join bookings b on b.id=m.booking_id and b.booking_reference=m.booking_reference`))[0].n,3);
+  assert.equal((await rows(`select count(*)::int n from driver_job_combos g
+    join bookings b on b.id=g.primary_booking_id and b.booking_reference=g.primary_booking_reference`))[0].n,1); assert.deepEqual(await rows('select * from bookings order by id'),before,'Selection must not rewrite bookings');
   assert.equal((await rows('select count(*)::int n from driver_job_bid_offers'))[0].n,0,'Selection must not publish');
   await assert.rejects(define(await members()),/changed|posted/,'A lost-response retry must not duplicate a group');
   await assert.rejects(define(await members(['COMBO-2','COMBO-4']),null,'COMBO-2'),/another combo/);

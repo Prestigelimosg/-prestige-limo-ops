@@ -92,3 +92,7 @@ Use existing QA driver45 (Pixel), driver46 (mirrored iPhone) and customer192 onl
 After acceptance passes, remove only those QA records and their exact generated dependencies, preserving QA accounts and all real records. Cleanup must account for group membership write guards and existing Calendar events; do not claim calendar cleanup from deleting database rows. The historical 11020–11024 QA records were already cleaned and must not be cleaned again.
 
 Rollback before QA records exist: leave the flag off or revert the web release; additive private tables may remain. After groups exist, disabling/reverting alone does not safely dissolve them: old writers are intentionally blocked from splitting a group. Resolve only the exact QA package records first and retain the verified build for any real package. Never blanket-delete or reset bookings, memberships, links, accounts or Calendar events.
+
+## Release preflight correction
+
+The first migration attempt rolled back on PostgreSQL 42830 because Production booking-reference uniqueness is a partial index. New combo foreign keys now use the existing booking primary IDs, populated from the exact locked saved rows; operational references and the existing booking schema stay unchanged. The disposable PostgreSQL guard reproduces that exact index shape and verifies ID/reference pairs.

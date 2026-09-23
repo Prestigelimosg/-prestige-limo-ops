@@ -1,3 +1,9 @@
+## Combo Release Migration Compatibility (2026-09-23; bounded release correction)
+
+- The first Production migration attempt failed atomically with PostgreSQL 42830: the existing booking reference uniqueness is a partial index and cannot be a foreign-key target. Verified both combo tables remained absent; no booking or existing workflow was changed.
+- Reproduced the exact failure in the disposable PostgreSQL suite using the Production partial-index shape. Corrected only the new combo tables to reference the existing booking primary IDs while retaining exact booking references as operational identity. The existing combo selection transaction populates those IDs from the locked saved rows. No existing booking index, reference, table or writer is changed.
+- The focused combo SQL guard now uses the Production index shape and verifies each stored ID/reference pair. Physical QA and release outcome remain separately recorded; do not infer device acceptance from this correction.
+
 ## Same-Customer Saved-Job Combos (2026-09-23; local verified candidate, not released)
 
 - Owner approved selecting already-saved jobs for the same customer, one combined offer/link/ACK, individual Calendar events and pickup alerts, a small Add trip inside the existing assignment controls, no new sector, and existing payout override/default rates. Implemented in isolated `codex/saved-job-combo`; protected root checkout, native app projects, customer billing/invoice writers and provider configuration remain untouched.

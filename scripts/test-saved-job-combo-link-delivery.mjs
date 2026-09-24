@@ -26,7 +26,7 @@ const client={from(table){const filters=[];let single=false,limit=Infinity,updat
  then(resolve,reject){let rows=(data[table]||[]).filter(r=>filters.every(f=>f(r))).slice(0,limit);if(updates)rows.forEach(r=>Object.assign(r,updates));return Promise.resolve({data:single?rows[0]||null:rows,error:null}).then(resolve,reject)}};return q;},
  async rpc(name,args){calls.push({name,args});
    if(name==='apply_admin_driver_job_combo_links'){
-     if(rpcFailure)return {data:null,error:{code:'40001'}};
+     if(rpcFailure)return {data:null,error:{code:rpcFailure}};
      assert.deepEqual(args.p_links.map(p=>p.booking_reference),refs);
      assert.doesNotMatch(JSON.stringify(args.p_links),/customer_price|NEVER EXPOSE|internal_admin/);
      const reused=data.driver_job_links.length>0;
@@ -56,7 +56,10 @@ new Function('require','module','exports',code)(name=>{
 const input={booking_reference:refs[0],ttl_hours:96,request_id:crypto.randomUUID(),driver_job_payload:{booking_type:'TRF',pickup_date:'2026-10-01',pickup_time:'1300',pickup_datetime:data.bookings[0].pickup_at,
  pickup_location:'QA Hotel 0',dropoff_location:'QA Terminal 0',route:'QA Hotel 0 > QA Terminal 0',passenger_name:'QA Passenger',flight_no:'',assigned_driver_name:'QA Driver',assigned_driver_contact:'00000001',assigned_driver_plate:'QA1234A',assigned_driver_vehicle_model:'AVF',status:'assigned',waypoints:[]}};
 const actor={actor_role:'admin',actor_label:'Synthetic QA',source_surface:'admin_api',boundary_mode:'server-session-role-surface'};
-rpcFailure=true;assert.equal((await harnessModule.exports.createAdminDriverJobLink(input,actor)).ok,false);assert.equal(sends.length,0);
+for(const code of ['40001','PT409']){
+ rpcFailure=code;const rejected=await harnessModule.exports.createAdminDriverJobLink(input,actor);
+ assert.equal(rejected.ok,false);assert.equal(rejected.status,409);assert.equal(sends.length,0);
+}
 rpcFailure=false;
 const created=await harnessModule.exports.createAdminDriverJobLink(input,actor);assert.equal(created.ok,true,JSON.stringify(created));
 assert.deepEqual(created.data.combo_booking_references,refs);assert.equal(sends.length,1);assert.equal(data.driver_job_links.length,3);

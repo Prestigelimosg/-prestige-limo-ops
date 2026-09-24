@@ -1632,7 +1632,7 @@ try {
   );
   assertNoUnsafeResponse(cleanupFailureResult, "cleanup failure response");
   assert.deepEqual(cleanupFailureMock.client.rows, seed, "A late cleanup failure must roll back every earlier deletion");
-  for (const [code, expectedStatus] of [["55000",409],["40001",409],["PGRST202",500]]) {
+  for (const [code, expectedStatus] of [["55000",409],["40001",409],["PT409",409],["PGRST202",500]]) {
     const rpcFailure = installMockClient(seed, { rpc: { code, message: "private database diagnostic" } });
     const result = await routeJson(await route.DELETE(deleteRequest("http://localhost/api/admin-saved-bookings", {booking_id:"delete-completed-1"})));
     assert.equal(result.status, expectedStatus);

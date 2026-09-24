@@ -56,6 +56,25 @@ try {
   const migration=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_saved_job_combo.sql'));
   assert.ok(migration); await sql(fs.readFileSync('supabase/migrations/'+migration,'utf8'));
   await sql(fs.readFileSync('supabase/migrations/20260923050900_combo_direct_assignment_vehicle.sql','utf8'));
+  const conflictMigration=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_combo_nonretrying_conflicts.sql'));
+  const comboDefinitions=()=>rows(`select p.oid::regprocedure::text signature,p.prosrc,p.proacl::text,p.prosecdef,p.proconfig
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.proname like '%combo%' order by 1`);
+  const beforeConflicts=await comboDefinitions();
+  if(conflictMigration) await sql(fs.readFileSync('supabase/migrations/'+conflictMigration,'utf8'));
+  await assert.rejects(value("select assign_admin_driver_job_combo($1,$2,1,null,'admin','Synthetic Combo QA') result",
+    [randomUUID(),randomUUID()]),e=>e.code==='PT409' && e.message==='Combo is unavailable.',
+    'An unavailable combo must be a non-retrying HTTP conflict, never serialization_failure');
+  const afterConflicts=await comboDefinitions();
+  assert.deepEqual(afterConflicts,beforeConflicts.map(f=>({...f,prosrc:f.prosrc.replaceAll("errcode='40001'","errcode='PT409'")})),
+    'Change only combo business-conflict codes; preserve every function body, privilege, security mode and search path');
+  assert.equal(beforeConflicts.filter(f=>f.prosrc.includes("errcode='40001'")).length,8);
+  // A changed definition must abort the complete migration instead of overwriting later work.
+  await sql('begin');
+  await assert.rejects(sql(fs.readFileSync('supabase/migrations/'+conflictMigration,'utf8')),/definition changed/);
+  await sql('rollback');
+  assert.deepEqual(await comboDefinitions(),afterConflicts);
+  console.log('PASS unavailable combo returns PT409; eight exact function definitions retain all behavior and permissions; migration fails closed on drift.');
   const reset=async()=>{
     await sql(`truncate driver_job_combo_members,driver_job_combos,driver_job_bids,driver_job_bid_offers,
       bookings,drivers,driver_access_accounts,driver_device_push_subscriptions,driver_job_links,driver_job_status_events,driver_live_location_latest_positions,customer_driver_app_notification_outbox,audit_logs restart identity cascade;

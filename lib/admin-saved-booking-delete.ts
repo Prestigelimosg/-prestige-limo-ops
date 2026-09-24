@@ -607,9 +607,9 @@ export async function deleteAdminCompletedSavedBooking(
   });
 
   if (error) {
-    if (error.code === "55000" || error.code === "40001") {
+    if (error.code === "55000" || error.code === "40001" || error.code === "PT409") {
       return {
-        error: error.code === "40001"
+        error: (error.code === "40001" || error.code === "PT409")
           ? "Booking changed. Reload before deleting. No records were deleted."
           : "Driver account setup needs review before deleting this booking. No records were deleted.",
         ok: false,

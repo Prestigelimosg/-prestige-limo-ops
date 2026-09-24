@@ -2852,10 +2852,10 @@ async function applyAdminDriverReassignmentTransaction(
       "Trip reporting or location sharing has started. Review the trip before changing its Driver.": "Driver was not removed. Trip reporting has started; review this job before changing its driver.",
       "Another Driver has an active link. Review the current assignment first.": "Another driver has an active Job Link. Reload the job and review its assignment first.",
     };
-    if (["22023", "40001", "P0002"].includes(errorCode)) {
+    if (["22023", "40001", "PT409", "P0002"].includes(errorCode)) {
       return {
         error:
-          errorCode === "40001"
+          (errorCode === "40001" || errorCode === "PT409")
             ? safeUpdateConflictError
             : cancellation
               ? cancellationReasons[textOrNull(asRecord(error).message) || ""] || "Driver was not removed. Reload this booking before trying again."

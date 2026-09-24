@@ -1235,7 +1235,7 @@ export async function createAdminDriverJobLink(
     },
   });
   if (applied.error) {
-    const conflict = ["22023", "40001"].includes(String(asRecord(applied.error).code));
+    const conflict = ["22023", "40001", "PT409"].includes(String(asRecord(applied.error).code));
     return safeAdapterFailure(conflict
       ? "The booking or its active link needs review. Reload the booking; resolve existing links through Revoke Link before a replacement."
       : safeDriverJobLinkCreateError, conflict ? 409 : 500, applied.error);

@@ -319,7 +319,7 @@ function classify(error: unknown) {
   const record = asRecord(error);
   const message = String(record.message || "").toLowerCase();
   const code = String(record.code || "");
-  if (code === "40001" || message.includes("changed")) return { status: 409, error: "Driver Pool state changed. Reload and try again." };
+  if (code === "40001" || code === "PT409" || message.includes("changed")) return { status: 409, error: "Driver Pool state changed. Reload and try again." };
   if (code === "23505" || message.includes("already has")) return { status: 409, error: "This booking already has an open Driver Pool offer." };
   if (code === "P0002") return { status: 404, error: "Driver Pool record was not found." };
   if (code === "22023") return { status: 409, error: text(record.message, 300) || "Driver Pool action is not allowed." };

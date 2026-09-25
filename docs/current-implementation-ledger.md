@@ -1,3 +1,8 @@
+## Admin Build 10 External TestFlight Availability (2026-09-25; physical acceptance pending)
+
+- EAS Submit `d6af1cea-8546-4567-8cdc-a327c929b2e7` successfully uploaded the verified Build 10 IPA. Apple processed version 1.0.0 (10), build ID `0fcefb94-0bae-4aa9-9626-da6cb144e60a`, uploaded 25 September 2026 18:09 SGT. Added only this build to the existing External Testing group with explicit crash/Face ID/loading/reopen/stale-build test notes and automatic notification enabled. Fresh App Store Connect read confirms Build 10 `Testing` and `External Testing`, not merely Approved or Processing.
+- Existing beta link remains https://testflight.apple.com/join/4uqtKHd4. No tester identity, group settings, internal testing or other app changed. Build 9 is still recorded as a failed release and must not be used for acceptance. Owner has been asked to install 1.0.0 (10) on the affected iPhone 16 Pro Max and confirm opening through Face ID to Dispatch. Actual device result is pending; the PR remains draft/unmerged. No claim the original slow/stale web-build symptoms are fully resolved before those checks.
+
 ## Admin Build 10 Artifact Verification (2026-09-25; upload underway)
 
 - Cloud build `80a1c111-95ef-4c2e-9832-8865f4cdbe92` finished from exact source `72d8989a96aea39f72b62d07716fb3f4f946f76e`. Logs confirm Xcode 26.6 (17F113) on the pinned image. Finished IPA SHA256 `9a50fa03ec0b610f23b77f61a9e5bdb2b75a1d181645c422e632e18341456c3a`, 11,248,286 bytes.

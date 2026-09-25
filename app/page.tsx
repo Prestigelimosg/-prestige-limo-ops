@@ -15344,6 +15344,8 @@ export default function Home() {
   const [bookingsSelectedDate, setBookingsSelectedDate] = useState(() => toDateKey(new Date()));
   const [bookingsShowUpcoming, setBookingsShowUpcoming] = useState(true);
   const [bookingsUpcomingPage, setBookingsUpcomingPage] = useState(1);
+  const [savedBookingListFocus, setSavedBookingListFocus] = useState("");
+  const savedBookingListFocusAppliedRef = useRef("");
   const [completedSearchTerm, setCompletedSearchTerm] = useState("");
   const [completedMonthFilter, setCompletedMonthFilter] = useState("");
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -19738,7 +19740,9 @@ export default function Home() {
         .filter((bookingRecord) => !bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(bookingRecord))
         .filter(
           (bookingRecord) =>
-            bookingsShowUpcoming || getBookingDateKey(bookingRecord) === bookingsSelectedDate,
+            bookingsShowUpcoming ||
+            (singaporePickupDateTimePartsFromTimestamp(bookingRecord.pickup_at || bookingRecord.pickup_datetime)?.date ||
+              getBookingDateKey(bookingRecord)) === bookingsSelectedDate,
         )
         .filter((bookingRecord) => bookingMatchesLocalSearch(bookingRecord, bookingsSearchTerm)),
     [
@@ -20073,6 +20077,24 @@ export default function Home() {
     bookingsUpcomingPageStartIndex,
     bookingsUpcomingPageStartIndex + adminUpcomingBookingsPageSize,
   );
+  useEffect(() => {
+    if (!savedBookingListFocus || savedBookingListFocusAppliedRef.current === savedBookingListFocus) return;
+    if (activeTab === "bookings") {
+      const index = filteredRecentBookingDisplayItems.findIndex(({ bookingRecord }) =>
+        clean(bookingRecord.booking_reference) === savedBookingListFocus);
+      if (index < 0) return;
+      const targetPage = Math.floor(index / adminUpcomingBookingsPageSize) + 1;
+      if (bookingsUpcomingCurrentPage !== targetPage) {
+        setBookingsUpcomingPage(targetPage);
+        return;
+      }
+    } else if (activeTab !== "completed") return;
+    const card = document.querySelector<HTMLElement>('[data-saved-booking-focus="true"]');
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    savedBookingListFocusAppliedRef.current = savedBookingListFocus;
+  }, [activeTab, bookingsUpcomingCurrentPage, filteredRecentBookingDisplayItems, savedBookingListFocus]);
+
   const bookingsUpcomingVisibleStart =
     filteredRecentBookingDisplayItems.length > 0 ? bookingsUpcomingPageStartIndex + 1 : 0;
   const bookingsUpcomingVisibleEnd = Math.min(
@@ -20571,6 +20593,26 @@ export default function Home() {
       activeAdminEmailAiIntakeIdRef.current = "";
       setActiveAdminEmailAiIntakeId("");
       setAdminEmailAiCustomerProfileSuggestion(null);
+    }
+  }
+
+  function openSavedBookingInBookings(savedRecord: AdminBookingPersistenceRecord) {
+    const savedDate = singaporePickupDateTimePartsFromTimestamp(savedRecord.pickup_at)?.date;
+    const reference = clean(savedRecord.booking_reference);
+    if (!savedDate || !reference) return;
+    const savedRow = adminBookingPersistenceRecordToCalendarBookingRecord(savedRecord);
+    savedBookingListFocusAppliedRef.current = "";
+    setSavedBookingListFocus(reference);
+    if (bookingRecordBelongsInCompletedHistoryAfterAdminConfirmation(savedRow)) {
+      setCompletedMonthFilter("all");
+      setCompletedSearchTerm("");
+      setActiveTab("completed");
+    } else {
+      setBookingsSelectedDate(savedDate);
+      setBookingsShowUpcoming(false);
+      setBookingsSearchTerm("");
+      setBookingsUpcomingPage(1);
+      setActiveTab("bookings");
     }
   }
 
@@ -23580,6 +23622,9 @@ export default function Home() {
       cleanReferenceText(loadedBookingIdRef.current) ||
       cleanReferenceText(loadedBookingId);
     const customerReturnUrl = dispatchHandoffCustomerReturnUrlRef.current;
+    const saveContextRevision = driverJobLinkFormContextRevisionRef.current;
+    const saveBookingMessage = bookingMessageRef.current?.value ?? "";
+    const saveOriginTab = activeTabRef.current;
 
     const returnToCustomerFolderAfterSave = () => {
       if (typeof window === "undefined" || !customerReturnUrl) {
@@ -24030,15 +24075,29 @@ export default function Home() {
             )}. Google Calendar auto-synced; reminders included; no guest email sent.`,
       } satisfies Message;
 
-      if (postSuccessFormAction === "retain") {
-        retainSavedBookingForDriverJobLinkHandoff(primarySavedBooking);
-      } else if (postSuccessFormAction === "reset") {
-        resetAdminBookingFormAfterSuccessfulPersistence();
+      for (const { record } of savedBookings) upsertLoadedBookingFromAdminRecord(record);
+      const saveContextIsCurrent = saveContextRevision === driverJobLinkFormContextRevisionRef.current &&
+        adminBookingFormSyncSignature(bookingFormRef.current) === adminBookingFormSyncSignature(bookingForSave) &&
+        saveBookingMessage === (bookingMessageRef.current?.value ?? "") &&
+        saveOriginTab === activeTabRef.current;
+      if (saveContextIsCurrent) {
+        // Unknown dates remain editable; never navigate to today or infer a saved date.
+        const savedDateKnown = Boolean(singaporePickupDateTimePartsFromTimestamp(primarySavedBooking.pickup_at));
+        if (savedDateKnown || customerReturnUrl) {
+          if (postSuccessFormAction === "retain") {
+            retainSavedBookingForDriverJobLinkHandoff(primarySavedBooking);
+          } else if (postSuccessFormAction === "reset") {
+            resetAdminBookingFormAfterSuccessfulPersistence();
+          }
+        }
+        setMessage(saveMessage);
+        setBookingSaveMessage(saveMessage);
+        setAdminBookingPersistenceMessage(saveMessage);
+        if (!calendarSyncFailed) {
+          if (customerReturnUrl) returnToCustomerFolderAfterSave();
+          else openSavedBookingInBookings(primarySavedBooking);
+        }
       }
-      setMessage(saveMessage);
-      setBookingSaveMessage(saveMessage);
-      setAdminBookingPersistenceMessage(saveMessage);
-      returnToCustomerFolderAfterSave();
       return primarySavedBooking;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown save error.";
@@ -24876,6 +24935,7 @@ export default function Home() {
   }
 
   function selectAppTab(nextTab: AppTab) {
+    setSavedBookingListFocus("");
     setActiveTab(nextTab);
 
     if (nextTab === "drivers" && !loadingDrivers) {
@@ -29821,7 +29881,8 @@ export default function Home() {
                 bookingAlternateColour === "sky"
                   ? "border-sky-200 bg-sky-50/80"
                   : "border-violet-200 bg-violet-50/80"
-              }`}
+              } ${savedBookingListFocus && savedBookingListFocus === clean(savedBooking.booking_reference) ? "ring-2 ring-inset ring-emerald-600" : ""}`}
+              data-saved-booking-focus={savedBookingListFocus && savedBookingListFocus === clean(savedBooking.booking_reference) ? "true" : undefined}
               data-bookings-alternate-colour={bookingAlternateColour}
               data-recent-operational-card={bookingId}
               key={`recent-${bookingId}`}
@@ -30303,7 +30364,8 @@ export default function Home() {
               const isEarlierHistoryJob = bookingRecordIsEarlierJob(savedBooking, todayKey);
               return (
                 <article
-                  className="rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm"
+                  className={`rounded-md border border-stone-200 bg-white p-2 text-sm shadow-sm ${savedBookingListFocus && savedBookingListFocus === clean(savedBooking.booking_reference) ? "ring-2 ring-inset ring-emerald-600" : ""}`}
+                  data-saved-booking-focus={savedBookingListFocus && savedBookingListFocus === clean(savedBooking.booking_reference) ? "true" : undefined}
                   data-completed-operational-card={bookingId}
                   data-completed-history-bucket={
                     isCompletedStatus

@@ -15311,6 +15311,7 @@ export default function Home() {
   const loadedBookingIdRef = useRef("");
   const dispatchHandoffAttemptedReferenceRef = useRef("");
   const dispatchHandoffCustomerReturnUrlRef = useRef("");
+  const updateCalReturnBookingReferenceRef = useRef("");
   const completedHandoffAttemptedReferenceRef = useRef("");
   const [driverProfileDraft, setDriverProfileDraft] =
     useState<DriverProfileDraft>(initialDriverProfileDraft);
@@ -20568,6 +20569,7 @@ export default function Home() {
     } = {},
   ) {
     driverJobLinkFormContextRevisionRef.current += 1;
+    updateCalReturnBookingReferenceRef.current = "";
     pendingSaveCrmBillingIdentityIntentRef.current = null;
     setSaveCrmBillingIdentityConfirmation(null);
     loadedBookingIdRef.current = "";
@@ -24652,6 +24654,7 @@ export default function Home() {
       focusCustomerCopy?: boolean;
       focusDriverJobLink?: boolean;
       focusJobCard?: boolean;
+      returnToBookings?: boolean;
       suppressCustomerRequestHandledMemory?: boolean;
     } = {},
   ) {
@@ -24733,6 +24736,7 @@ export default function Home() {
       proofs: [],
       status: "loading",
     });
+    updateCalReturnBookingReferenceRef.current = options.returnToBookings ? persistedBookingReference : "";
     bookingFormRef.current = loadedBookingForm;
     setBooking(() => loadedBookingForm);
     setAppliedDraftDriverAssignmentSignature("");
@@ -25644,6 +25648,7 @@ export default function Home() {
       return;
     }
 
+    updateCalReturnBookingReferenceRef.current = "";
     const bookingReference = clean(record.booking_reference) || "selected snapshot";
     const displayBookingReference = clean(record.public_booking_reference) || "Reference unavailable";
     const reviewSuffix =
@@ -26963,7 +26968,12 @@ export default function Home() {
       cleanReferenceText(appliedAdminBookingSnapshotReference) ||
       cleanReferenceText(loadedBookingIdRef.current) ||
       cleanReferenceText(loadedBookingId);
-    const customerReturnUrl = dispatchHandoffCustomerReturnUrlRef.current;
+    const returnToBookings = updateCalReturnBookingReferenceRef.current === targetBookingReference;
+    const customerReturnUrl = returnToBookings ? "" : dispatchHandoffCustomerReturnUrlRef.current;
+    const updateContextRevision = driverJobLinkFormContextRevisionRef.current;
+    const updateOriginTab = activeTabRef.current;
+    const updateFormSignature = adminBookingFormSyncSignature(booking);
+    const updateBookingMessage = bookingMessageRef.current?.value ?? "";
 
     if (!targetBookingReference) {
       setAdminBookingPersistenceMessage({
@@ -27393,14 +27403,25 @@ export default function Home() {
           : `Operational booking updated: ${updatedBookingReference}.${updateReviewNotice} ${calendarSyncResult.message}`,
       } satisfies Message;
 
-      if (calendarSyncResult.ok) {
+      const updateContextIsCurrent = updateContextRevision === driverJobLinkFormContextRevisionRef.current &&
+        updateFormSignature === adminBookingFormSyncSignature(bookingFormRef.current) &&
+        updateBookingMessage === (bookingMessageRef.current?.value ?? "") &&
+        updateOriginTab === activeTabRef.current;
+      if (calendarSyncResult.ok && (acceptingCustomerRequest || updateContextIsCurrent)) {
         lastSuccessfulBookingSaveRef.current = {
           bookingId: updatedBookingReference,
           key: getBookingSaveGuardKey(updatedBookingReference),
           record: updatedBooking,
         };
         if (!customerReturnUrl) {
-          retainSavedBookingForDriverJobLinkHandoff(updatedBooking);
+          if (returnToBookings && !acceptingCustomerRequest) {
+            if (singaporePickupDateTimePartsFromTimestamp(updatedBooking.pickup_at)) {
+              resetAdminBookingFormAfterSuccessfulPersistence();
+              openSavedBookingInBookings(updatedBooking);
+            }
+          } else {
+            retainSavedBookingForDriverJobLinkHandoff(updatedBooking);
+          }
         } else {
           resetAdminBookingFormAfterSuccessfulPersistence();
         }
@@ -30037,7 +30058,7 @@ export default function Home() {
                 <div className="grid gap-2 sm:grid-cols-3 xl:w-52 xl:grid-cols-1" data-recent-operational-actions={bookingId}>
                   <button
                     className="h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    onClick={() => loadSelectedBooking(savedBooking)}
+                    onClick={() => loadSelectedBooking(savedBooking, { returnToBookings: activeTab === "bookings" })}
                     type="button"
                   >
                     Open / Edit

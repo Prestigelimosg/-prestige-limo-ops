@@ -85,9 +85,9 @@ for (const fragment of [
 }
 
 for (const fragment of [
-  "const flightLocationParts = dispatchCopyLocationFlightParts(booking);",
+  "const flightLocationParts = dispatchCopyLocationFlightParts(copyBooking);",
   "const driverJobLinkRoute = [",
-  "formatBookingTimestampSgt(activeAdminDriverJobLink.expires_at)",
+  "formatBookingTimestampSgt(copyLink.expires_at)",
   "Pickup:",
   "Drop-off:",
   "flightLocationParts.pickup || \"Pickup\"",
@@ -99,7 +99,7 @@ for (const fragment of [
 
 assertExcludes(
   driverJobLinkBlock,
-  "`Expires: ${activeAdminDriverJobLink.expires_at}`",
+  "`Expires: ${copyLink.expires_at}`",
   "Driver Job Link expiry must not expose the raw stored timestamp",
 );
 

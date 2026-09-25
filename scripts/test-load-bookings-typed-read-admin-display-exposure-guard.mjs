@@ -358,7 +358,7 @@ const driverJobLinkMessageBlock = sliceBetween(
 );
 assertNoTypedReadExposure(driverJobLinkMessageBlock, "Driver Job Link copy");
 for (const fragment of [
-  "const driverJobLinkPublicBookingReference = dispatchPublicBookingReference;",
+  "const driverJobLinkPublicBookingReference = adminDriverJobLinkState.copySnapshot?.publicBookingReference ?? dispatchPublicBookingReference;",
   "driverJobLinkPublicBookingReference",
   "`Reference: ${driverJobLinkPublicBookingReference}`",
 ]) {

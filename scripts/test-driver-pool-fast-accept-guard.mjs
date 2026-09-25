@@ -181,7 +181,7 @@ for (const quiet of [false, true]) {
         requests.push({url, options});
         return new Promise((resolve) => { resolveRead = resolve; });
       },
-      setAvailableJobsReadAvailable: noop, setAvailableJobsEnabled: noop,
+      setAvailableJobsReadAvailable: noop, setAvailableJobsEnabled: noop, setAvailableJobsError: noop,
       setAvailableJobs: noop, setAvailableJobsHasMore: noop, setAvailableJobsPage: noop,
     };
     const load = new Function(...Object.keys(bindings), offerLoaderCode)(...Object.values(bindings));
@@ -1336,6 +1336,7 @@ assert.ok(poolCardCallback, 'Use the existing Available Jobs card');
 const poolCardModule = {exports:{}};
 new Function('require','module','exports',ts.transpileModule(`
   export function renderCard(job:any, availableJobsBusy=false) {
+    const availableJobsReadAvailable = true;
     const availableJobsFeedback = {};
     const decideAvailableJob = () => {};
     return [job].map(${poolCardCallback})[0];

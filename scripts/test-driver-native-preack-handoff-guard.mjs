@@ -230,7 +230,11 @@ const createLinkSource = adminPage.slice(
   adminPage.indexOf("  async function copyDriverJobLink()"),
 );
 assert.ok(createLinkSource.length > 0);
-const createLinkJs = ts.transpileModule(createLinkSource, {
+const vehicleDisplaySource = adminPage.slice(
+  adminPage.indexOf("function safeDriverVehicleModelDisplay("),
+  adminPage.indexOf("function safeDriverVehicleModelFromBookingRecord("),
+);
+const createLinkJs = ts.transpileModule(vehicleDisplaySource + createLinkSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022 },
 }).outputText;
 for (const reason of ["provider_accepted", "provider_failed", "not_available", "recent_attempt", "missing"]) {

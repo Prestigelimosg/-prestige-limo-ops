@@ -266,6 +266,7 @@ export default function DriverPortalPage() {
   const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
   const [accountFirstSignIn, setAccountFirstSignIn] = useState(false);
   const [accountSetupOpen,setAccountSetupOpen]=useState(false);
+  const [accountSetupSignIn,setAccountSetupSignIn]=useState(false);
   const [accountSetupPending,setAccountSetupPending]=useState(false);
   const [accountSetupSupported,setAccountSetupSupported]=useState(false);
   useEffect(()=>{
@@ -1012,12 +1013,12 @@ export default function DriverPortalPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-loading="true">
             <p className="text-sm font-semibold text-slate-700">Loading assigned jobs…</p>
           </section>
-        ) : installedAccountSignInRequired && accountSetupSupported && (accountSetupOpen || accountSetupPending) ? (
-          <DriverAccountSetup pending={accountSetupPending} onCancel={()=>setAccountSetupOpen(false)}/>
+        ) : installedAccountSignInRequired && accountSetupSupported && !accountSetupSignIn && (accountSetupOpen || accountSetupPending) ? (
+          <DriverAccountSetup pending={accountSetupPending} onCancel={()=>{setAccountSetupOpen(false);setAccountSetupSignIn(true);}}/>
         ) : installedAccountSignInRequired ? (
           <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
             <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
-            {accountSetupSupported?<button className="min-h-11 rounded border px-3 font-semibold" type="button" onClick={()=>setAccountSetupOpen(true)}>New driver? Create account</button>:null}
+            {accountSetupSupported?<button className="min-h-11 rounded border px-3 font-semibold" type="button" onClick={()=>{setAccountSetupSignIn(false);setAccountSetupOpen(true);}}>{accountSetupPending ? "Resume setup" : "New driver? Create account"}</button>:null}
             <p className={nativePinSignIn ? "text-xs font-medium leading-5 text-slate-700" : "text-sm font-medium leading-6 text-slate-700"}>
               {nativePinSignIn
                 ? <>First sign-in: Email + 6-digit PIN.<br />Next time: 6-digit PIN only.</>

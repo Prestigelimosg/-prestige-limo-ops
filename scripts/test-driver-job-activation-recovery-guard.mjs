@@ -130,6 +130,20 @@ assert.deepEqual(page.ready, []); assert.equal(f.messages.length, 0);
 finishes[1]({ ok: true, json: async () => ({ ok: true, account_ready: false }) }); await tick();
 assert.deepEqual(page.ready, [false]); assert.equal(f.messages.length, 1);
 
+// Existing-account conflict keeps the native draft; verified retry completes that exact draft.
+let existingAccountSignedIn = false;
+f = fixture({ respond: async () => existingAccountSignedIn
+  ? ({ ok: true, json: async () => ({ ok: true, account_ready: true }) })
+  : ({ ok: false, json: async () => ({ ok: false, reason: "account_exists", error: "Use existing sign-in" }) }) });
+page = f.mount(); await tick();
+assert.deepEqual(page.ready, []); assert.equal(f.messages.length, 0, "A conflict must not clear the native setup");
+existingAccountSignedIn = true; f.retry(page); await tick();
+assert.deepEqual(page.ready, [true]);
+assert.equal(f.messages.length, 1);
+assert.equal(f.messages[0].type, "native_account_setup_activated");
+assert.equal(f.messages[0].setup_id, draft().setupId);
+assert.equal(f.messages[0].complete, true);
+
 // A rejected/revoked link and an interrupted request remain locked with visible recovery.
 f = fixture({ respond: async () => ({ ok: false, json: async () => ({ ok: false, error: "Link revoked" }) }) });
 page = f.mount(); await tick(); f.retry(page); await tick(); assert.deepEqual(page.ready, []);

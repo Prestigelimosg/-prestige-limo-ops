@@ -20,7 +20,7 @@ assert.equal(
   "The native lock must not unmount the in-progress Admin sign-in WebView",
 );
 assert.ok(
-  normalizedApp.includes("{nativeBootstrapReady ? ( <WebView"),
+  normalizedApp.includes("{nativeBootstrapReady && webViewStarted ? ( <WebView"),
   "The first WebView may wait for native bootstrap inputs but must stay mounted across privacy locks",
 );
 assert.equal(

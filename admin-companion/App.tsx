@@ -93,6 +93,7 @@ export default function App() {
   const [currentUrl, setCurrentUrl] = useState(adminSignInUrl());
   const [installationId, setInstallationId] = useState("");
   const [nativeBootstrapReady, setNativeBootstrapReady] = useState(false);
+  const [webViewStarted, setWebViewStarted] = useState(false);
   const [navigationKey, setNavigationKey] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<
@@ -123,6 +124,8 @@ export default function App() {
   const webViewRef = useRef<WebView>(null);
 
   const setAdminScreenMode = useCallback((nextScreenMode: ScreenMode) => {
+    // Start once after first unlock; later privacy locks retain the page and drafts.
+    if (nextScreenMode === "web") setWebViewStarted(true);
     screenModeRef.current = nextScreenMode;
     setScreenMode(nextScreenMode);
   }, []);
@@ -754,7 +757,7 @@ export default function App() {
               </View>
             ) : null}
             <View style={styles.webViewContainer}>
-              {nativeBootstrapReady ? (
+              {nativeBootstrapReady && webViewStarted ? (
                 <WebView
                   injectedJavaScriptBeforeContentLoaded={adminBridgeBootstrap}
                   allowsBackForwardNavigationGestures={false}

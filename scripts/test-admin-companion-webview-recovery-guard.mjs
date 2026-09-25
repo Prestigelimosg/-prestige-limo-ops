@@ -115,7 +115,7 @@ for (const phrase of [
   'AppState.currentState !== "active"',
   'const [nativeBootstrapReady, setNativeBootstrapReady] = useState(false)',
   "setNativeBootstrapReady(true)",
-  "nativeBootstrapReady ? (",
+  "nativeBootstrapReady && webViewStarted ? (",
   'message.type === "admin_native_web_ready"',
   "markAdminWebViewReady",
 ]) {
@@ -175,7 +175,7 @@ assert.equal(
   "Preparation must not remount the first Production WebView",
 );
 const webViewStart = app.search(/^\s*<WebView\s*$/m);
-const bootstrapGateStart = app.lastIndexOf("{nativeBootstrapReady ? (", webViewStart);
+const bootstrapGateStart = app.lastIndexOf("{nativeBootstrapReady && webViewStarted ? (", webViewStart);
 assert.ok(
   bootstrapGateStart >= 0 && bootstrapGateStart < webViewStart,
   "Production WebView must not mount before the final native bridge inputs are ready",
@@ -449,3 +449,132 @@ for (const mode of ["ready", "failed", "locked", "pending-biometric", "already-t
 }
 
 console.log("Admin companion WebView recovery guard passed.");
+
+// Execute cold startup and navigation with Face ID deliberately unresolved.
+// The real JSX mount gate must prevent a signed-in redirect from reaching the
+// still-locked navigation callback; later locks must retain the same WebView.
+const navigationSource = stripTypeScriptTypes(await readFile(
+  'admin-companion/src/admin-navigation.ts', 'utf8',
+), { mode: 'transform' }).replace(/\bexport\s+/g, '');
+const navigation = new Function(`${navigationSource}; return {
+  adminSignInUrl, isAdminSignInUrl, isProtectedAdminUrl, shouldAllowAdminWebViewNavigation,
+};`)();
+const modeCallback = stripTypeScriptTypes(app.slice(
+  app.indexOf('const setAdminScreenMode ='),
+  app.indexOf('const clearAdminWebViewLoadTimeout ='),
+), { mode: 'transform' });
+const unlockCallback = stripTypeScriptTypes(app.slice(
+  app.indexOf('const unlockAdminApp ='),
+  app.indexOf('const completeMandatoryEnrollment ='),
+), { mode: 'transform' });
+const navigationCallback = stripTypeScriptTypes(app.slice(
+  app.indexOf('const allowNavigation ='),
+  app.indexOf('const updateNavigation ='),
+), { mode: 'transform' });
+const mountGate = app.match(/\{([^{}\n]+)\s*\?\s*\(\s*<WebView\s/);
+assert.ok(mountGate, 'The established WebView must have one explicit startup gate');
+assert.ok(app.includes('const [webViewStarted, setWebViewStarted] = useState(false)'),
+  'Each cold process must wait for its first successful unlock or ordinary unenrolled sign-in');
+assert.equal((app.match(/setWebViewStarted\(/g) || []).length, 1,
+  'Only the existing verified screen-mode callback may open the first-load gate');
+
+async function coldStartupFixture(enabled, nativePreparationFails = false) {
+  const state = { mode: 'checking', nativeReady: false, started: false, enabled: false, enrollments: 0 };
+  let resolveBiometric;
+  const context = {
+    ...navigation,
+    mounted: true,
+    useCallback: (fn) => fn,
+    setScreenMode: (value) => { state.mode = value; },
+    setWebViewStarted: (value) => { state.started = value; },
+    screenModeRef: { current: 'checking' },
+    readOrCreateAdminInstallationId: async () => {
+      if (nativePreparationFails) throw new Error('synthetic secure storage unavailable');
+      return 'synthetic-installation';
+    },
+    isAdminBiometricUnlockEnabled: async () => enabled,
+    readAdminNativeNotificationToken: async () => null,
+    Notifications: {
+      getPermissionsAsync: async () => ({ granted: false, status: 'undetermined' }),
+      setBadgeCountAsync: async () => true,
+    },
+    setInstallationId() {},
+    biometricEnabledRef: { current: false },
+    setBiometricEnabled: (value) => { state.enabled = value; },
+    setNotificationEnabled() {},
+    setNotificationPermission() {},
+    setNativeBootstrapReady: (value) => { state.nativeReady = value; },
+    beginAdminBiometricAttempt: () => 1,
+    finishAdminBiometricAttempt: () => true,
+    biometricLifecycleRef: { current: {} },
+    authenticateAdminAppUnlock: () => new Promise((resolve) => { resolveBiometric = resolve; }),
+    setNotice() {},
+    completeMandatoryEnrollment: () => { state.enrollments += 1; },
+  };
+  context.setAdminScreenMode = new Function('context', `with (context) {
+    ${modeCallback}; return setAdminScreenMode;
+  }`)(context);
+  const prepare = new Function('context', `with (context) {
+    ${stripTypeScriptTypes(preparationSource, { mode: 'transform' })}; return preparePrivacyLock;
+  }`)(context);
+  const pendingPreparation = prepare();
+  await new Promise((resolve) => setImmediate(resolve));
+  const retry = new Function('context', `with (context) {
+    ${unlockCallback}; return unlockAdminApp;
+  }`)(context);
+  return {
+    state,
+    pendingPreparation,
+    finishBiometric: (success) => resolveBiometric(success),
+    setMode: context.setAdminScreenMode,
+    retry,
+    mounted: () => new Function('nativeBootstrapReady', 'webViewStarted',
+      `return Boolean(${mountGate[1]});`)(state.nativeReady, state.started),
+    allow: (url) => new Function('context', `with (context) {
+      ${navigationCallback}; return allowNavigation({url: requestedUrl});
+    }`)({ ...context, biometricEnabled: state.enabled, screenMode: state.mode, requestedUrl: url }),
+  };
+}
+
+const cold = await coldStartupFixture(true);
+assert.equal(cold.state.nativeReady, true, 'Native bridge preparation still finishes before first mount');
+assert.equal(cold.state.mode, 'checking');
+assert.equal(cold.allow(navigation.adminSignInUrl()), true);
+assert.equal(cold.allow('https://app.prestigelimo.sg/'), false, 'Face ID navigation protection must not be weakened');
+assert.equal(cold.mounted(), false,
+  'Cold startup must not load sign-in while Face ID is pending and cancel its protected redirect');
+cold.finishBiometric(true);
+await cold.pendingPreparation;
+assert.equal(cold.mounted(), true);
+assert.equal(cold.allow('https://app.prestigelimo.sg/'), true);
+for (const mode of ['locked', 'checking', 'enrollment-required', 'web']) {
+  cold.setMode(mode);
+  assert.equal(cold.mounted(), true, `Later ${mode} state must preserve the already-mounted page and draft`);
+}
+assert.equal(cold.allow('https://example.com/'), false);
+
+const cancelledCold = await coldStartupFixture(true);
+cancelledCold.finishBiometric(false);
+await cancelledCold.pendingPreparation;
+assert.equal(cancelledCold.mounted(), false, 'Cancelled first Face ID must not start protected navigation');
+assert.equal(cancelledCold.state.mode, 'locked');
+const pendingRetry = cancelledCold.retry();
+assert.equal(cancelledCold.mounted(), false, 'First manual unlock still waits for actual success');
+cancelledCold.finishBiometric(true);
+await pendingRetry;
+assert.equal(cancelledCold.mounted(), true, 'Successful existing Unlock control must start the first page');
+
+const firstInstall = await coldStartupFixture(false);
+await firstInstall.pendingPreparation;
+assert.equal(firstInstall.mounted(), true, 'An unenrolled first install must still reach its ordinary sign-in page');
+assert.equal(firstInstall.allow(navigation.adminSignInUrl()), true);
+assert.equal(firstInstall.allow('https://app.prestigelimo.sg/'), false);
+assert.equal(firstInstall.state.enrollments, 1, 'Protected first access must still require mandatory enrollment');
+
+const unavailable = await coldStartupFixture(true, true);
+await unavailable.pendingPreparation;
+assert.equal(unavailable.mounted(), false, 'Failed secure native preparation must not mount a page');
+assert.equal(unavailable.state.mode, 'locked');
+assert.equal((app.match(/setWebViewStarted\(false\)/g) || []).length, 0,
+  'Background, Face ID and OTP handoffs must never reset the first-load latch');
+console.log('Admin first-unlock WebView startup execution passed.');

@@ -1,3 +1,9 @@
+## Admin Build 10 Artifact Verification (2026-09-25; upload underway)
+
+- Cloud build `80a1c111-95ef-4c2e-9832-8865f4cdbe92` finished from exact source `72d8989a96aea39f72b62d07716fb3f4f946f76e`. Logs confirm Xcode 26.6 (17F113) on the pinned image. Finished IPA SHA256 `9a50fa03ec0b610f23b77f61a9e5bdb2b75a1d181645c422e632e18341456c3a`, 11,248,286 bytes.
+- Actual main Info.plist and Mach-O agree on iOS SDK 26.5; DTXcode is 2660. The release guard `--ipa` passes for Build 10 and rejects the actual Build 9 SDK 27 binary. Strict signature/system-trust verification, exact existing Admin bundle/team/profile, production APNs, non-debug entitlement, iPhone-only family, Face ID-only usage permission, existing Expo runtime/channel and nonempty ExpoModulesJSI framework pass. No temporary dependency workaround was needed on the compatible cloud builder.
+- EAS Submit is uploading only this verified artifact to the existing Admin Apple app. Do not equate artifact compatibility with physical launch acceptance. External TestFlight activation and testing on the owner's iOS 27 iPhone remain pending here; the original stale web-build symptom also remains unproven.
+
 ## Admin Build 10 Pinned Xcode Compatibility Repair (2026-09-25; release preparation)
 
 - Owner approved the replacement after two actual Build 9 crashes proved iOS 27 scene-adoption enforcement. Pin only the existing Admin production iOS EAS image to `macos-tahoe-26.5-xcode-26.6`, Expo's currently documented SDK 57 image, and advance Admin iOS build number 9 to 10. Keep the existing Face ID load-recovery source unchanged. No dependency, scene-lifecycle migration, permissions, authentication, cache, Driver/Customer binary or business workflow change.

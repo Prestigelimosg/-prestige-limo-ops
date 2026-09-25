@@ -1013,6 +1013,7 @@ type AdminDriverJobLinkState = {
     isDspItinerary: boolean;
     itineraryDisplayStops: ItineraryDisplayStop[];
     formSignature: string;
+    hydratedVehicleFormSignature?: string;
     bookingMessage: string;
     contextRevision: number;
     clearAfterCopy: boolean;
@@ -27912,6 +27913,22 @@ export default function Home() {
           cleanReferenceText(link.booking_reference) !== cleanReferenceText(payloadResult.data.booking_reference)) {
         throw new Error("Driver job link response was missing the expected booking link.");
       }
+      // The existing link refresh may fill the hidden driver vehicle model on an
+      // unassigned job. Accept only that exact returned/requested vehicle change;
+      // all editable booking/driver fields and the original copy remain protected.
+      const hydratedVehicle = safeDriverVehicleModelDisplay(link.safe_summary.vehicle);
+      if (copySnapshot.clearAfterCopy && hydratedVehicle &&
+          hydratedVehicle === clean(payloadResult.data.driver_job_payload.assigned_driver_vehicle_model) &&
+          !clean(copySnapshot.booking.driverVehicleModel) &&
+          !clean(copySnapshot.booking.driverId) && !clean(copySnapshot.booking.driverName) &&
+          !clean(copySnapshot.booking.driverContact) && !clean(copySnapshot.booking.driverPlate) &&
+          !clean(link.safe_summary.assigned_driver) &&
+          !clean(link.safe_summary.assigned_driver_contact) && !clean(link.safe_summary.assigned_driver_plate)) {
+        copySnapshot.hydratedVehicleFormSignature = adminBookingFormSyncSignature({
+          ...copySnapshot.booking,
+          driverVehicleModel: hydratedVehicle,
+        });
+      }
       if (requestRevision !== driverJobLinkRequestRevisionRef.current) return;
       driverJobLinkCreateAttemptRef.current = null;
       setDashboardDriverJobLinksReadState((current) => ({
@@ -28030,7 +28047,8 @@ export default function Home() {
       if (contextRevision !== driverJobLinkFormContextRevisionRef.current ||
           requestRevision !== driverJobLinkRequestRevisionRef.current) return;
       if (copySnapshot?.clearAfterCopy && copySnapshot.contextRevision === contextRevision &&
-          copySnapshot.formSignature === adminBookingFormSyncSignature(bookingFormRef.current) &&
+          (copySnapshot.formSignature === adminBookingFormSyncSignature(bookingFormRef.current) ||
+            copySnapshot.hydratedVehicleFormSignature === adminBookingFormSyncSignature(bookingFormRef.current)) &&
           copySnapshot.bookingMessage === (bookingMessageRef.current?.value ?? "")) {
         resetAdminBookingDraft("message");
       }

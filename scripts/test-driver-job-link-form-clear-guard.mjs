@@ -10,22 +10,26 @@ function findNode(predicate) {
   visit(tree); assert.ok(result, 'Missing production callback'); return result;
 }
 function fn(name) { return findNode(n => ts.isFunctionDeclaration(n) && n.name?.text === name).getText(tree); }
+function callback(name) { return findNode(n => ts.isVariableDeclaration(n) && n.name.getText(tree) === name).initializer.arguments[0].getText(tree); }
 const memo = findNode(n => ts.isVariableDeclaration(n) && n.name.getText(tree) === 'driverJobLinkMessage');
 const resetEffect = findNode(n => ts.isCallExpression(n) && n.expression.getText(tree) === 'useEffect' &&
   n.arguments[0]?.getText(tree).includes('const bookingReference = clean(dispatchReleaseWorkflowBookingReference);') &&
   n.arguments[0]?.getText(tree).includes('setAdminDriverJobLinkState'));
 export const runtime = ts.transpileModule([
-  fn('adminBookingFormSyncSignature'), fn('createDriverJobLink'), fn('copyDriverJobLink'),
+  fn('adminBookingFormSyncSignature'), fn('safeDriverVehicleModelDisplay'),
+  `const mergeCurrentBookingDriverDetailsFromActiveLink = ${callback('mergeCurrentBookingDriverDetailsFromActiveLink')};`,
+  `const refreshAdminDriverJobLinkForReference = ${callback('refreshAdminDriverJobLinkForReference')};`,
+  fn('createDriverJobLink'), fn('copyDriverJobLink'),
   `const copyMessage = ${memo.initializer.arguments[0].getText(tree)};`,
   `const syncSelection = ${resetEffect.arguments[0].getText(tree)};`,
-  'return {createDriverJobLink, copyDriverJobLink, copyMessage, syncSelection};',
+  'return {createDriverJobLink, copyDriverJobLink, copyMessage, syncSelection, refreshAdminDriverJobLinkForReference};',
 ].join('\n'), {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
 
 // Real production callbacks; only UI setters, clipboard and network are replaced.
 export function makeHarness(runtime, assigned = true, resultOverrides = {}) {
   const env = {
     clean:v=>String(v??'').trim(), cleanReferenceText:v=>String(v??'').trim(),
-    booking:{name:'QA FIRST PASSENGER',date:'2030-10-01',time:'1300',pickup:'QA START',dropoff:'QA END',extraStopLocation:'',driverId:assigned?'8':''},
+    booking:{name:'QA FIRST PASSENGER',date:'2030-10-01',time:'1300',pickup:'QA START',dropoff:'QA END',extraStopLocation:'',vehicle:'Combi',driverId:assigned?'8':'',driverName:'',driverContact:'',driverPlate:'',driverVehicleModel:''},
     dispatchPublicBookingReference:'99001', dispatchReleaseWorkflowBookingReference:'QA-ONE',
     appliedAdminBookingSnapshot:{driver_id:assigned?8:null}, activeTab:'dispatch',
     isDspItinerary:false, itineraryDisplayStops:[],
@@ -40,18 +44,21 @@ export function makeHarness(runtime, assigned = true, resultOverrides = {}) {
     dispatchCopyLocationFlightParts:b=>({pickup:b.pickup,dropoff:b.dropoff,standaloneFlightLine:''}),
   };
   env.bookingFormRef={current:env.booking};
-  env.buildAdminDriverJobLinkCreatePayload=()=>({ok:true,data:{booking_reference:'QA-ONE',driver_job_payload:{passenger_name:env.booking.name},ttl_hours:96}});
+  env.buildAdminDriverJobLinkCreatePayload=()=>({ok:true,data:{booking_reference:'QA-ONE',driver_job_payload:{passenger_name:env.booking.name,assigned_driver_vehicle_model:env.booking.driverVehicleModel||env.booking.vehicle},ttl_hours:96}});
   const set=(key)=>(value)=>{env[key]=typeof value==='function'?value(env[key]):value;};
   env.setAdminDriverJobLinkState=set('adminDriverJobLinkState');
   env.setDriverJobLinkCopyMessage=set('copyFeedback');
   env.setDashboardDriverJobLinksReadState=set('dashboard');
   env.setAdminActiveJobsMapReadState=()=>{};
   env.resetAdminBookingDraft=()=>{env.resets++;env.driverJobLinkFormContextRevisionRef.current++;env.booking={name:'',date:'',time:'',pickup:'',dropoff:'',extraStopLocation:'',driverId:''};env.bookingFormRef.current=env.booking;env.dispatchReleaseWorkflowBookingReference='';env.appliedAdminBookingSnapshotReferenceRef.current='';env.loadedBookingIdRef.current='';env.bookingMessageRef.current.value='';};
-  env.refreshAdminDriverJobLinkForReference=async()=>{};
+  env.loadedAdminBookingBaselineRef={current:{form:{...env.booking}}};
+  env.driverAssignmentDisplayDriversRef={current:[]};
+  env.adminDispatchHasUnsavedVerifiedDriverProfileSelection=()=>Boolean(env.booking.driverId);
+  env.setBooking=value=>{env.booking=typeof value==='function'?value(env.booking):value;env.bookingFormRef.current=env.booking;};
   env.navigator={clipboard:{writeText:async text=>{if(env.beforeCopy)await env.beforeCopy();if(env.copyFails)throw Error('denied');env.copies.push(text);}}};
-  const link={id:'qa-link-1',booking_reference:'QA-ONE',link_status:'active',expires_at:'2030-10-05',safe_summary:{acknowledged:false}};
+  const link={id:'qa-link-1',booking_reference:'QA-ONE',link_status:'active',expires_at:'2030-10-05',safe_summary:{acknowledged:false,assigned_driver:null,assigned_driver_contact:null,assigned_driver_plate:null,vehicle:'Combi'}};
   env.result={ok:true,disposition:'created',link,driver_job_url:'https://example.invalid/driver-job/QA-ONE',native_app_alert:{reason:'provider_failed'},...resultOverrides};
-  env.fetch=async()=>{env.requestCount++;if(env.beforeResponse)await env.beforeResponse();if(env.networkFails)throw Error('network failure');return{ok:env.result.ok,json:async()=>env.result};};
+  env.fetch=async(_url,options)=>{if(options?.method==='GET'){env.readCount=(env.readCount||0)+1;return{ok:true,json:async()=>({ok:true,links:[env.refreshLink||env.result.link]})};}env.requestCount++;if(env.beforeResponse)await env.beforeResponse();if(env.networkFails)throw Error('network failure');return{ok:env.result.ok,json:async()=>env.result};};
   const callbacks=new Function('env',`with(env){${runtime}}`)(env);
   Object.defineProperty(env,'activeAdminDriverJobLink',{get:()=>env.adminDriverJobLinkState.link?.booking_reference===env.dispatchReleaseWorkflowBookingReference?env.adminDriverJobLinkState.link:null});
   Object.defineProperty(env,'driverJobLinkMessage',{get:callbacks.copyMessage});
@@ -87,6 +94,29 @@ export async function runChecks() {
   assert.equal(unassigned.env.resets,0);unassigned.env.copyFails=true;await unassigned.copyDriverJobLink();assert.equal(unassigned.env.resets,0);
   unassigned.env.copyFails=false;await unassigned.copyDriverJobLink();assert.equal(unassigned.env.resets,1);unassigned.syncSelection();
   assert.match(unassigned.copyMessage(),/QA FIRST PASSENGER/);
+  // Actual GET refresh + actual form hydration, previously replaced with a no-op.
+  for(const vehicle of ['Combi','S','VVV','AVF']) {
+    const h=makeHarness(runtime,false);h.env.edit({vehicle});h.env.result.link.safe_summary.vehicle=vehicle;
+    await h.createDriverJobLink();
+    await h.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});
+    assert.equal(h.env.booking.driverVehicleModel,vehicle==='AVF'?'':vehicle);
+    await h.copyDriverJobLink();
+    assert.equal(h.env.resets,1,`Unassigned ${vehicle}: successful Copy must clear after real automatic vehicle hydration`);
+    assert.equal(h.env.readCount,1);assert.equal(h.env.copies.length,1);h.syncSelection();assert.match(h.copyMessage(),/QA FIRST PASSENGER/);
+  }
+  for(const patch of [{name:'EDITED'},{pickup:'EDITED'},{time:'1400'},{vehicle:'VVV'},{driverId:'9'},{driverName:'MANUAL DRIVER'},{driverContact:'99990000'},{driverPlate:'MANUAL1'},{driverVehicleModel:'MANUAL MODEL'}]) {
+    const h=makeHarness(runtime,false);await h.createDriverJobLink();
+    await h.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});h.env.edit(patch);
+    await h.copyDriverJobLink();assert.equal(h.env.resets,0,'Hydration allowance must preserve every real amendment');
+  }
+  const duringCopy=makeHarness(runtime,false);await duringCopy.createDriverJobLink();duringCopy.env.beforeCopy=()=>duringCopy.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});
+  await duringCopy.copyDriverJobLink();assert.equal(duringCopy.env.resets,1,'Exact automatic hydration during clipboard completion may clear');
+  const claimed=makeHarness(runtime,false);await claimed.createDriverJobLink();claimed.env.refreshLink={...claimed.env.result.link,safe_summary:{...claimed.env.result.link.safe_summary,assigned_driver:'NEWLY ACKNOWLEDGED DRIVER'}};
+  await claimed.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});await claimed.copyDriverJobLink();assert.equal(claimed.env.resets,0,'Do not clear newly received driver identity');
+  const wrongVehicle=makeHarness(runtime,false);wrongVehicle.env.result.link.safe_summary.vehicle='UNEXPECTED';await wrongVehicle.createDriverJobLink();
+  await wrongVehicle.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});await wrongVehicle.copyDriverJobLink();assert.equal(wrongVehicle.env.resets,0,'Unexpected server vehicle must not allow reset');
+  const noCopy=makeHarness(runtime,false);await noCopy.createDriverJobLink();await noCopy.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});noCopy.env.copyFails=true;await noCopy.copyDriverJobLink();assert.equal(noCopy.env.resets,0);
+  const rawEdit=makeHarness(runtime,false);await rawEdit.createDriverJobLink();await rawEdit.refreshAdminDriverJobLinkForReference('QA-ONE',{silent:true});rawEdit.env.bookingMessageRef.current.value='NEW RAW MESSAGE';await rawEdit.copyDriverJobLink();assert.equal(rawEdit.env.resets,0);
   for(const change of ['form','message','context']) {
     const h=makeHarness(runtime,true);h.env.beforeResponse=async()=>{if(change==='form')h.env.edit({name:'NEW EDIT'});else if(change==='message')h.env.bookingMessageRef.current.value='NEW MESSAGE';else h.env.nextBooking();};
     await h.createDriverJobLink();assert.equal(h.env.resets,0,`Do not clear newer ${change}`);

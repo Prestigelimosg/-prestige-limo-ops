@@ -1,3 +1,10 @@
+## Admin Build 11 Signed Artifact And Apple Upload (2026-09-25)
+
+- Exactly one approved EAS cloud build completed: `8b950fca-80a1-4ea7-b0e9-3a94d1364a08`, source `c6bacc45b2ea71970fe89f96878407005df3b571` (repair `2d3cba6`). Native Admin identity `sg.prestigelimo.admin`, version `1.0.0 (11)`.
+- Finished IPA strict code-signature/provisioning/identity checks and the existing `--ipa` release guard passed. Actual SDK `iphoneos26.5`, Xcode `2660`, Apple team `U9Y2574Y7S`, production APNs, runtime `1.0.0`, production channel; only Face ID privacy usage description. SHA256 `26869001a44314daae0d6a24216cb89c8462e31b231f64552fc4894fe6f8e8a3`, 11,248,282 bytes.
+- EAS submission `e320990a-f37e-4d3a-97cc-a80e68b104cc` confirmed successful upload to Apple Admin app `6803312296`. Apple processing, external availability and physical acceptance remain pending at this checkpoint. Durable IPA, source archive, verifier and safe verification JSON are in the protected root's ignored `tmp/releases/admin-build11-20260925/`.
+- No Driver/Customer release, Vercel deployment, OTA update, business record mutation, account reset, credential replacement or cache clear.
+
 ## Admin Build 11 First-Unlock Release Preparation (2026-09-25; owner approved)
 
 - Owner explicitly approved one Admin Build11 using Expo, release to the existing external TestFlight group, then QA iPhone testing. Source candidate2d3cba6 contains only the first-unlock mount gate and regression coverage described below. Live Apple preflight still shows10 as latest; no11 exists in the observed build list.

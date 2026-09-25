@@ -43,7 +43,7 @@ export async function POST(request: Request, context: Context) {
     }
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object" || Array.isArray(body)) return response({ok:false,error:"Reopen Admin's Job Link in Prestige Driver."},400);
-    const activated = await activateDriverJobAccount(token,body);
+    const activated = await activateDriverJobAccount(token,body,{cookieHeader:request.headers.get("cookie")});
     if (!activated.ok) return response(activated,activated.reason === "not_configured" ? 503 : 409);
     return Response.json({ok:true,activated:true,account_ready:activated.accountReady}, {
       status:200, headers:{"cache-control":"private, no-store",...(activated.cookie ? {"set-cookie":activated.cookie} : {})},

@@ -174,7 +174,7 @@ export async function createAdminDriverAckReminder(
 
   const { data: newestLinkData, error: newestLinkError } = await client
     .from("driver_job_links")
-    .select("id, link_status, expires_at, revoked_at")
+    .select("id, link_status, expires_at, revoked_at, safe_link_context")
     .eq("booking_reference", bookingReference)
     .eq("link_status", "active")
     .order("created_at", { ascending: false })

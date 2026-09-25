@@ -762,6 +762,13 @@
 
 # Prestige Limo Ops — Current Implementation Ledger
 
+## Combo ACK Reminder Newest-Link Expiry Context (2026-09-25; local repair, not deployed)
+
+- Owner's Admin screenshot reproduced `Only the newest active Driver Job Link can be reminded` for an active three-trip combo. Read-only Production evidence confirmed the exact primary link was newest, unrevoked and unacknowledged, with a valid stored combo expiry beyond the ordinary 96-hour window. The full reminder handler reproduced the same `stale_link` rejection in isolation before any reservation or provider call.
+- The first link read included `safe_link_context`, but the newest-link read omitted it before calling the same expiry validator. Add only that column to the existing newest-link projection. Both manual and automatic reminders reuse this handler; exact newest-ID, active/revoked/expiry, ACK/Close, assignment, account, single-native-registration and cooldown checks remain unchanged. No new writer, route, UI, provider, schema or migration is introduced.
+- Replace the existing reminder runtime test's always-false expiry stubs with the real link/expiry modules and a fixed clock. The mock now honors selected columns. The new valid extended-combo test failed on the original code, then passed after the one-line repair for manual and automatic triggers. Single-job excessive expiry, expired/revoked/acknowledged combos, malformed or mismatched combo metadata and an older combo link remain blocked before reservation/send. Existing single-job, cooldown and duplicate-registration coverage remains passing.
+- Passing checks: reminder runtime, pending reminder guard, automatic reminder runtime/guard, ACK queue, Admin Job Link API, explicit Admin completion and personal Driver Calendar guard. No full application build or physical-device delivery acceptance is claimed. No Production booking/link/ACK/registration was changed and no real notification was sent. Spencer's reported ACK persistence problem and Simon's registration problem remain separate; the six-item deferred plan remains parked. Deployment and live reminder acceptance remain pending.
+
 ### Customer Saved Vehicle Label (2026-09-10; local repair, release pending)
 
 - Physical Customer app inspection reproduced a main Vehicle type label of To confirm while the same booking's Driver Details correctly showed Alphard. Read-only tracing found the existing saved-booking API already provides the saved vehicle through its safe customer_driver_details.car_type field. The Customer adapter validated and formatted that value for Driver Details but hardcoded its main vehicleType to To confirm.

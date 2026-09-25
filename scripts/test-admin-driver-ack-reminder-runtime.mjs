@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mock } from "node:test";
 import { createRequire } from "node:module";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -25,10 +26,14 @@ await writeFile(
   path.join(tempDir, "driver-device-push-notification.js"),
   "exports.sendDriverNativePendingAckReminder = async () => ({ ok: false });\n",
 );
-await writeFile(
-  path.join(tempDir, "driver-job-link.js"),
-  "exports.isDriverJobLinkExpired = () => false; exports.isDriverJobLinkExpiryOutsideAllowedWindow = () => false;\n",
-);
+// Execute real expiry validation, including the server-stored combo window.
+for (const name of ["driver-job-link", "driver-job-status-workflow"]) {
+  const dependency = (await readFile(`lib/${name}.ts`, "utf8"))
+    .replaceAll('./driver-job-status-workflow.ts', './driver-job-status-workflow.js');
+  await writeFile(path.join(tempDir, `${name}.js`), ts.transpileModule(dependency, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText);
+}
 await writeFile(path.join(tempDir, "admin-booking-supabase-adapter.js"), "module.exports = {};\n");
 
 class QueryBuilder {
@@ -39,7 +44,7 @@ class QueryBuilder {
     this.operation = "select";
     this.value = null;
   }
-  select() { return this; }
+  select(columns) { this.columns = columns; return this; }
   eq(field, value) { this.filters.push([field, value]); return this; }
   is(field, value) { this.filters.push([field, value]); return this; }
   order() { return this; }
@@ -59,6 +64,7 @@ function createMockClient({
   audits = [],
   issuedAt = "2026-08-30T10:00:00.000Z",
   newestLinkId = linkId,
+  linkOverrides = {},
   subscriptions = [{ endpoint: "ExpoPushToken[abcdefghijklmnopqrstuvwxyz1234567890]" }],
 } = {}) {
   const calls = [];
@@ -81,28 +87,27 @@ function createMockClient({
       });
       if (query.table === "driver_job_links") {
         const exactIdRead = query.filters.some(([field]) => field === "id");
-        return {
-          data: exactIdRead
-            ? {
-                booking_reference: bookingReference,
-                created_at: issuedAt,
-                driver_id: 8,
-                expires_at: "2026-09-01T10:00:00.000Z",
-                id: linkId,
-                issued_at: issuedAt,
-                link_status: "active",
-                revoked_at: null,
-                safe_link_context: { native_handoff_ciphertext: "v1.opaque.server.only" },
-              }
-            : {
-                expires_at: "2026-09-01T10:00:00.000Z",
-                id: newestLinkId,
-                link_status: "active",
-                revoked_at: null,
-              },
-          error: null,
+        const saved = {
+          booking_reference: bookingReference,
+          created_at: issuedAt,
+          driver_id: 8,
+          expires_at: "2026-09-01T10:00:00.000Z",
+          id: linkId,
+          issued_at: issuedAt,
+          link_status: "active",
+          revoked_at: null,
+          safe_link_context: { native_handoff_ciphertext: "v1.opaque.server.only" },
+          ...linkOverrides,
         };
+        if (!exactIdRead) saved.id = newestLinkId;
+        // Match the Data API projection: omitted columns must really be absent.
+        const data = Object.fromEntries(query.columns.split(",").map((column) => {
+          const key = column.trim();
+          return [key, saved[key]];
+        }));
+        return { data, error: null };
       }
+
       if (query.table === "bookings") {
         return {
           data: {
@@ -150,6 +155,8 @@ const actor = {
   actor_role: "admin",
   source_surface: "admin_api",
 };
+
+mock.timers.enable({ apis: ["Date"], now });
 
 try {
   const helper = createRequire(import.meta.url)(helperPath);
@@ -258,7 +265,56 @@ try {
   assert.equal(stale.ok, false);
   assert.equal(stale.reason, "stale_link");
 
+  const comboExpiry = "2026-09-05T10:00:00.000Z";
+  const comboContext = {
+    native_handoff_ciphertext: "v1.opaque.server.only",
+    combo_id: "55555555-5555-4555-8555-555555555555",
+    combo_revision: "66666666-6666-4666-8666-666666666666",
+    combo_link_batch: "77777777-7777-4777-8777-777777777777",
+    combo_access_until: comboExpiry,
+  };
+  for (const trigger of ["manual", "automatic_repeat_reminder"]) {
+    let comboSends = 0;
+    const comboClient = createMockClient({ linkOverrides: {
+      expires_at: comboExpiry, safe_link_context: comboContext,
+    } });
+    const comboResult = await helper.createAdminDriverAckReminder(comboClient,
+      { booking_reference: bookingReference, driver_job_link_id: linkId }, actor,
+      { now, trigger, sendNativeReminder: async () => {
+        comboSends += 1;
+        return { native_provider_accepted: true, native_provider_request_count: 1 };
+      } });
+    assert.equal(comboResult.ok, true, `${trigger}: valid extended combo must pass newest-link read`);
+    assert.equal(comboSends, 1);
+    assert.equal(comboClient.calls.filter(call => call.operation === "rpc").length, 1);
+  }
+  const blockedCases = [
+    ["single-job excessive expiry", { expires_at: comboExpiry }, "invalid_link"],
+    ["expired combo", { expires_at: "2026-08-29T10:00:00Z", safe_link_context: comboContext }, "invalid_link"],
+    ["revoked combo", { expires_at: comboExpiry, revoked_at: now.toISOString(), safe_link_context: comboContext }, "invalid_link"],
+    ["invalid combo context", { expires_at: comboExpiry, safe_link_context: { ...comboContext, combo_revision: "invalid" } }, "invalid_link"],
+    ["mismatched combo expiry", { expires_at: comboExpiry, safe_link_context: { ...comboContext, combo_access_until: "2026-09-06T10:00:00Z" } }, "invalid_link"],
+    ["acknowledged combo", { expires_at: comboExpiry, safe_link_context: { ...comboContext, driver_acknowledged_at: now.toISOString() } }, "acknowledged"],
+  ];
+  for (const [label, linkOverrides, reason] of blockedCases) {
+    const client = createMockClient({ linkOverrides });
+    const result = await helper.createAdminDriverAckReminder(client,
+      { booking_reference: bookingReference, driver_job_link_id: linkId }, actor,
+      { now, sendNativeReminder: async () => { throw new Error(`${label}: must not send`); } });
+    assert.equal(result.ok, false, label);
+    assert.equal(result.reason, reason, label);
+    assert.equal(client.calls.some(call => call.operation === "rpc" || call.operation === "update"), false, label);
+  }
+  const staleComboClient = createMockClient({ newestLinkId: "44444444-4444-4444-8444-444444444444",
+    linkOverrides: { expires_at: comboExpiry, safe_link_context: comboContext } });
+  const staleCombo = await helper.createAdminDriverAckReminder(staleComboClient,
+    { booking_reference: bookingReference, driver_job_link_id: linkId }, actor,
+    { now, sendNativeReminder: async () => { throw new Error("stale combo must not send"); } });
+  assert.equal(staleCombo.reason, "stale_link");
+  assert.equal(staleComboClient.calls.some(call => call.operation === "rpc"), false);
+
   console.log("Admin Driver ACK reminder runtime guard passed.");
 } finally {
+  mock.timers.reset();
   await rm(tempDir, { force: true, recursive: true });
 }

@@ -238,6 +238,14 @@ for (const reason of ["provider_accepted", "provider_failed", "not_available", "
     let state = {};
     let requests = 0;
     const dependencies = {
+      driverJobLinkRequestRevisionRef: { current: 0 },
+      driverJobLinkFormContextRevisionRef: { current: 0 },
+      booking: {},
+      bookingMessageRef: { current: null },
+      appliedAdminBookingSnapshot: { driver_id: null },
+      isDspItinerary: false,
+      itineraryDisplayStops: [],
+      adminBookingFormSyncSignature: (booking) => JSON.stringify(booking),
       buildAdminDriverJobLinkCreatePayload: () => ({ ok: true, data: { booking_reference: "TEST" } }),
       setDriverJobLinkCopyMessage: () => {},
       setAdminDriverJobLinkState: (next) => { state = typeof next === "function" ? next(state) : next; },

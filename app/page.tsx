@@ -1007,6 +1007,16 @@ type AdminDriverJobLinkState = {
   loadedReference: string;
   message: Message | null;
   oneTimeUrl: string;
+  copySnapshot?: {
+    booking: BookingForm;
+    publicBookingReference: string;
+    isDspItinerary: boolean;
+    itineraryDisplayStops: ItineraryDisplayStop[];
+    formSignature: string;
+    bookingMessage: string;
+    contextRevision: number;
+    clearAfterCopy: boolean;
+  };
 };
 
 type AdminDashboardDriverJobLinksReadState = {
@@ -15800,6 +15810,8 @@ export default function Home() {
       message: null,
       oneTimeUrl: "",
     });
+  const driverJobLinkFormContextRevisionRef = useRef(0);
+  const driverJobLinkRequestRevisionRef = useRef(0);
   const [customerDriverDetailsPortalLinkCopyState, setCustomerDriverDetailsPortalLinkCopyState] =
     useState<CustomerDriverDetailsPortalLinkCopyState | null>(null);
 
@@ -17501,17 +17513,20 @@ export default function Home() {
     let cancelled = false;
 
     if (!bookingReference) {
-      setAdminDriverJobLinkState({
+      setAdminDriverJobLinkState((current) => current.copySnapshot && current.oneTimeUrl ? current : ({
         action: null,
         link: null,
         loadedReference: "",
         message: null,
         oneTimeUrl: "",
-      });
+      }));
       return () => {
         cancelled = true;
       };
     }
+
+    setAdminDriverJobLinkState((current) => current.loadedReference !== bookingReference
+      ? { ...current, copySnapshot: undefined, oneTimeUrl: "" } : current);
 
     if (activeTab !== "dispatch") {
       return () => {
@@ -19425,29 +19440,33 @@ export default function Home() {
       return "";
     }
 
-    const driverJobLinkPublicBookingReference = dispatchPublicBookingReference;
-    const passengerLine = clean(booking.name) ? `Passenger: ${clean(booking.name)}` : "";
-    const flightLocationParts = dispatchCopyLocationFlightParts(booking);
+    const copyBooking = adminDriverJobLinkState.copySnapshot?.booking ?? booking;
+    const copyItinerary = adminDriverJobLinkState.copySnapshot?.itineraryDisplayStops ?? itineraryDisplayStops;
+    const copyIsDsp = adminDriverJobLinkState.copySnapshot?.isDspItinerary ?? isDspItinerary;
+    const copyLink = adminDriverJobLinkState.copySnapshot ? adminDriverJobLinkState.link : activeAdminDriverJobLink;
+    const driverJobLinkPublicBookingReference = adminDriverJobLinkState.copySnapshot?.publicBookingReference ?? dispatchPublicBookingReference;
+    const passengerLine = clean(copyBooking.name) ? `Passenger: ${clean(copyBooking.name)}` : "";
+    const flightLocationParts = dispatchCopyLocationFlightParts(copyBooking);
     const driverJobLinkRoute = [
       flightLocationParts.pickup || "Pickup",
-      clean(booking.extraStopLocation),
+      clean(copyBooking.extraStopLocation),
       flightLocationParts.dropoff || "Drop-off",
     ].filter(Boolean).join(" > ");
-    const routeText = isDspItinerary
+    const routeText = copyIsDsp
       ? [
           flightLocationParts.pickup ? `Pickup: ${flightLocationParts.pickup}` : "",
           flightLocationParts.dropoff ? `Drop-off: ${flightLocationParts.dropoff}` : "",
           "Itinerary:",
-          ...itineraryDisplayStops.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
+          ...copyItinerary.map((stop) => `${stop.time || "Time TBC"} - ${stop.location}`),
         ]
           .filter(Boolean)
           .join("\n")
       : driverJobLinkRoute;
-    const linkSummary = activeAdminDriverJobLink
+    const linkSummary = copyLink
       ? [
-          `Saved link status: ${activeAdminDriverJobLink.link_status}`,
-          activeAdminDriverJobLink.expires_at
-            ? `Expires: ${formatBookingTimestampSgt(activeAdminDriverJobLink.expires_at)}`
+          `Saved link status: ${copyLink.link_status}`,
+          copyLink.expires_at
+            ? `Expires: ${formatBookingTimestampSgt(copyLink.expires_at)}`
             : "",
         ]
       : ["Saved link status: No active driver job link loaded."];
@@ -19465,7 +19484,7 @@ export default function Home() {
           ? `Reference: ${driverJobLinkPublicBookingReference}`
           : "",
         passengerLine,
-        formatPickupDateTime(booking.date, booking.time),
+        formatPickupDateTime(copyBooking.date, copyBooking.time),
         flightLocationParts.standaloneFlightLine,
       ],
       [
@@ -19492,6 +19511,8 @@ export default function Home() {
       .join("\n\n");
   }, [
     activeAdminDriverJobLink,
+    adminDriverJobLinkState.copySnapshot,
+    adminDriverJobLinkState.link,
     adminDriverJobLinkState.oneTimeUrl,
     booking,
     dispatchPublicBookingReference,
@@ -20523,6 +20544,7 @@ export default function Home() {
       preserveAdminEmailAiReview?: boolean;
     } = {},
   ) {
+    driverJobLinkFormContextRevisionRef.current += 1;
     pendingSaveCrmBillingIdentityIntentRef.current = null;
     setSaveCrmBillingIdentityConfirmation(null);
     loadedBookingIdRef.current = "";
@@ -24573,6 +24595,8 @@ export default function Home() {
       suppressCustomerRequestHandledMemory?: boolean;
     } = {},
   ) {
+    driverJobLinkFormContextRevisionRef.current += 1;
+    setAdminDriverJobLinkState((current) => ({ ...current, action: null, copySnapshot: undefined, oneTimeUrl: "" }));
     const requestRevision = loadSelectedBookingRequestRevisionRef.current + 1;
     loadSelectedBookingRequestRevisionRef.current = requestRevision;
     setDriverPoolAssignmentCancelled(false);
@@ -27817,9 +27841,22 @@ export default function Home() {
           text: payloadResult.error,
         },
         oneTimeUrl: "",
+        copySnapshot: undefined,
       }));
       return;
     }
+
+    const requestRevision = ++driverJobLinkRequestRevisionRef.current;
+    const copySnapshot: NonNullable<AdminDriverJobLinkState["copySnapshot"]> = {
+      booking: { ...booking },
+      publicBookingReference: dispatchPublicBookingReference,
+      isDspItinerary,
+      itineraryDisplayStops: itineraryDisplayStops.map((stop) => ({ ...stop })),
+      formSignature: adminBookingFormSyncSignature(booking),
+      bookingMessage: bookingMessageRef.current?.value ?? "",
+      contextRevision: driverJobLinkFormContextRevisionRef.current,
+      clearAfterCopy: !appliedAdminBookingSnapshot?.driver_id,
+    };
 
     setAdminDriverJobLinkState((current) => ({
       ...current,
@@ -27829,6 +27866,7 @@ export default function Home() {
         text: `Creating driver job link for ${dispatchPublicBookingReference || "Booking"}...`,
       },
       oneTimeUrl: "",
+      copySnapshot: undefined,
     }));
 
     try {
@@ -27870,10 +27908,21 @@ export default function Home() {
             ? "Phone alert could not be confirmed. The job link is available; use Copy Link if needed."
             : "Phone alert was not sent: no eligible Driver app alert was available. The job link is available; use Copy Link if needed.";
 
-      if (!link || !driverJobUrl) {
-        throw new Error("Driver job link response was missing the private URL.");
+      if (!link || !driverJobUrl ||
+          cleanReferenceText(link.booking_reference) !== cleanReferenceText(payloadResult.data.booking_reference)) {
+        throw new Error("Driver job link response was missing the expected booking link.");
       }
+      if (requestRevision !== driverJobLinkRequestRevisionRef.current) return;
       driverJobLinkCreateAttemptRef.current = null;
+      setDashboardDriverJobLinksReadState((current) => ({
+        linksByReference: {
+          ...current.linksByReference,
+          [cleanReferenceText(link.booking_reference)]: link,
+        },
+        status: "loaded",
+      }));
+      if (requestRevision !== driverJobLinkRequestRevisionRef.current ||
+          copySnapshot.contextRevision !== driverJobLinkFormContextRevisionRef.current) return;
 
       const liveLocation =
         result.live_location &&
@@ -27938,15 +27987,16 @@ export default function Home() {
                 : "Driver job link created. Live movement authorization did not open automatically; check the Live Dispatch Map before pickup."}`,
         },
         oneTimeUrl: driverJobUrl,
+        copySnapshot,
       });
-      setDashboardDriverJobLinksReadState((current) => ({
-        linksByReference: {
-          ...current.linksByReference,
-          [cleanReferenceText(link.booking_reference)]: link,
-        },
-        status: "loaded",
-      }));
+      if (!copySnapshot.clearAfterCopy &&
+          copySnapshot.formSignature === adminBookingFormSyncSignature(bookingFormRef.current) &&
+          copySnapshot.bookingMessage === (bookingMessageRef.current?.value ?? "")) {
+        resetAdminBookingDraft("message");
+      }
     } catch (error) {
+      if (requestRevision !== driverJobLinkRequestRevisionRef.current ||
+          copySnapshot.contextRevision !== driverJobLinkFormContextRevisionRef.current) return;
       setAdminDriverJobLinkState((current) => ({
         ...current,
         action: null,
@@ -27971,10 +28021,23 @@ export default function Home() {
       return;
     }
 
+    const copySnapshot = adminDriverJobLinkState.copySnapshot;
+    const contextRevision = driverJobLinkFormContextRevisionRef.current;
+    const requestRevision = driverJobLinkRequestRevisionRef.current;
+
     try {
       await navigator.clipboard.writeText(driverJobLinkMessage);
+      if (contextRevision !== driverJobLinkFormContextRevisionRef.current ||
+          requestRevision !== driverJobLinkRequestRevisionRef.current) return;
+      if (copySnapshot?.clearAfterCopy && copySnapshot.contextRevision === contextRevision &&
+          copySnapshot.formSignature === adminBookingFormSyncSignature(bookingFormRef.current) &&
+          copySnapshot.bookingMessage === (bookingMessageRef.current?.value ?? "")) {
+        resetAdminBookingDraft("message");
+      }
       setDriverJobLinkCopyMessage({ tone: "success", text: "Driver job link copied." });
     } catch {
+      if (contextRevision !== driverJobLinkFormContextRevisionRef.current ||
+          requestRevision !== driverJobLinkRequestRevisionRef.current) return;
       setDriverJobLinkCopyMessage({
         tone: "error",
         text: "Copy failed. Select the driver job link text manually.",
@@ -49860,15 +49923,22 @@ export default function Home() {
               </div>
             </details>
 
-            {showDriverJobLinkCopy ? (
+            {showDriverJobLinkCopy || (adminDriverJobLinkState.copySnapshot && adminDriverJobLinkState.oneTimeUrl) ? (
               <div
                 className="order-[55] min-w-0 rounded-md border border-stone-200 bg-white p-3"
                 data-dispatch-workflow-step="driver-job-link"
+                data-driver-job-link-retained-copy={!showDriverJobLinkCopy && adminDriverJobLinkState.copySnapshot && adminDriverJobLinkState.oneTimeUrl ? "true" : undefined}
               >
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Driver Job Link</h2>
                     <p className="text-xs text-slate-500">Guarded driver status link.</p>
+                    {adminDriverJobLinkState.copySnapshot && adminDriverJobLinkState.oneTimeUrl ? (
+                      <p className="text-xs font-semibold text-indigo-950" data-driver-job-link-copy-reference="true">
+                        Link ready for {adminDriverJobLinkState.copySnapshot.publicBookingReference
+                          ? `booking ${adminDriverJobLinkState.copySnapshot.publicBookingReference}` : "saved booking"}. Copy Link remains available.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-col items-start gap-2 sm:items-end">
                     <div className="flex flex-wrap gap-2">
@@ -49880,7 +49950,7 @@ export default function Home() {
                           )
                         }`}
                         data-create-driver-job-link-button="true"
-                        disabled={adminDriverJobLinkState.action !== null}
+                        disabled={adminDriverJobLinkState.action !== null || !showDriverJobLinkCopy}
                         onClick={createDriverJobLink}
                         type="button"
                       >

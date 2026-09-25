@@ -306,6 +306,9 @@ input {
   [data-mobile-dispatch-step="message"]
     > .contents
     > [data-dispatch-workflow-step="booking-input-parser"],
+  [data-mobile-dispatch-step="message"]
+    > .contents
+    > [data-driver-job-link-retained-copy="true"],
   [data-mobile-dispatch-step="details"]
     > .contents
     > [data-dispatch-workflow-step="booking-details"],

@@ -1,3 +1,9 @@
+## Admin Build 11 QA iPhone Partial Runtime Acceptance (2026-09-25)
+
+- Owner explicitly confirmed installing Build 11 and opening Admin on the QA iPhone. Mirroring subsequently showed the loaded Operations Dashboard at web build `5c9bb63f`; native Build 11 identity is owner-confirmed, not inferred from that web hash.
+- Executed two brief Home Screen -> Admin returns through Mirroring. The privacy cover appeared transiently and the existing Dashboard returned. The second run retained the exact temporary search input `11`; it was then cleared and the empty search verified. No booking, account, Calendar, billing, push registration or other business record was created/changed. This verifies short-return screen/input retention, not full booking-draft or long-background acceptance.
+- Cold-start latency, physical Face ID cancel/retry and personal iPhone 16 Pro Max acceptance remain unverified. Owner asked to force-close/reopen the QA Admin app, complete physical Face ID and report elapsed time; Mirroring cannot supply Face ID. No claim that every historic loading or stale-web-build issue is resolved.
+
 ## Admin Build 11 External TestFlight Availability (2026-09-25)
 
 - Apple processed `1.0.0 (11)` as build `49e118bc-3c09-4247-b62c-722a35fc291b`. Saved the first-unlock/retry/background/reopen test notes and added only existing `External Testing` group `219f0002-e8e8-4cee-b737-42bc286a0522`, with its existing tester notification setting. The build list now visibly shows `Testing`; the build detail confirms exactly that existing external group. Existing public beta link remains `https://testflight.apple.com/join/4uqtKHd4`.

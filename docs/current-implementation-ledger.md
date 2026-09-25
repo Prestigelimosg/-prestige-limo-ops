@@ -1,3 +1,8 @@
+## Admin Build 11 Owner-Assisted Reopen Check (2026-09-25)
+
+- In response to the explicit force-close/reopen/physical Face ID check, owner replied `done locked`. Mirroring reconnected to QA iPhone 14 Pro Max and visibly showed the loaded Operations Dashboard at web `5c9bb63f`, with the temporary search cleared. Together with the owner's explicit Build 11 installation confirmation, this records successful owner-assisted reopening plus the two observed brief background returns.
+- No elapsed time was supplied or measured; do not claim a startup-seconds result. Physical Face ID cancellation/retry, long-background behavior, future web-deployment refresh and the personal iPhone 16 Pro Max remain unverified. Build 11 is externally available and this bounded release/QA pass is complete with those stated limits.
+
 ## Admin Build 11 QA iPhone Partial Runtime Acceptance (2026-09-25)
 
 - Owner explicitly confirmed installing Build 11 and opening Admin on the QA iPhone. Mirroring subsequently showed the loaded Operations Dashboard at web build `5c9bb63f`; native Build 11 identity is owner-confirmed, not inferred from that web hash.

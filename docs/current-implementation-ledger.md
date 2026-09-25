@@ -1,3 +1,8 @@
+## Admin Build 11 External TestFlight Availability (2026-09-25)
+
+- Apple processed `1.0.0 (11)` as build `49e118bc-3c09-4247-b62c-722a35fc291b`. Saved the first-unlock/retry/background/reopen test notes and added only existing `External Testing` group `219f0002-e8e8-4cee-b737-42bc286a0522`, with its existing tester notification setting. The build list now visibly shows `Testing`; the build detail confirms exactly that existing external group. Existing public beta link remains `https://testflight.apple.com/join/4uqtKHd4`.
+- QA physical acceptance is NOT complete: Mirroring currently reports `iPhone in Use — Lock your iPhone to connect`. Owner asked to lock the QA iPhone 14 Pro Max so installation/testing can continue. No USB requirement for the personal iPhone 16 Pro Max. Native Build 11 has not yet been verified installed on either phone. Source guards and a verified signed IPA do not prove phone startup latency or resolve every stale-web-build report.
+
 ## Admin Build 11 Signed Artifact And Apple Upload (2026-09-25)
 
 - Exactly one approved EAS cloud build completed: `8b950fca-80a1-4ea7-b0e9-3a94d1364a08`, source `c6bacc45b2ea71970fe89f96878407005df3b571` (repair `2d3cba6`). Native Admin identity `sg.prestigelimo.admin`, version `1.0.0 (11)`.

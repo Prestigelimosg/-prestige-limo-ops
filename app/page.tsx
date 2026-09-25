@@ -1622,6 +1622,11 @@ type AdminBookingChangeRequestContext = {
 };
 
 type AdminCustomerInvoiceReviewRecord = {
+  customerId?: string | number | null;
+  lineItems?: Array<{ bookingReference?: string | null }>;
+  manuallySentAt?: string | null;
+  emailDeliveryStatus?: string | null;
+  emailSentAt?: string | null;
   documentState?: string | null;
   documentType?: string | null;
   invoiceNumber?: string | null;
@@ -12061,6 +12066,31 @@ function adminBookingChangeRequestMergeIntoBookingForm(
   };
 }
 
+function adminBookingInvoiceSentEvidence(
+  booking: Pick<BookingRecord, "customer_id" | "booking_reference" | "public_booking_reference">,
+  invoices: AdminCustomerInvoiceReviewRecord[],
+): string {
+  const customerId = String(booking.customer_id ?? "");
+  if (!/^[1-9]\d*$/.test(customerId)) return "";
+  const references = new Set([booking.booking_reference, booking.public_booking_reference]
+    .filter((reference): reference is string => Boolean(reference)));
+  const evidence: string[] = [];
+  for (const invoice of invoices) {
+    if (String(invoice.customerId ?? "") !== customerId ||
+        invoice.documentType !== "invoice" || invoice.documentState !== "issued" ||
+        !invoice.invoiceNumber ||
+        !(references.has(invoice.reference || "") ||
+          invoice.lineItems?.some(item => references.has(item.bookingReference || "")))) continue;
+    if (invoice.manuallySentAt && Number.isFinite(Date.parse(invoice.manuallySentAt))) {
+      evidence.push(`${invoice.invoiceNumber}: marked sent manually.`);
+    } else if (invoice.emailDeliveryStatus === "sent" && invoice.emailSentAt &&
+        Number.isFinite(Date.parse(invoice.emailSentAt))) {
+      evidence.push(`${invoice.invoiceNumber}: email sent.`);
+    }
+  }
+  return evidence.join(" ");
+}
+
 function adminCustomerInvoiceBlocksBookingAmendment(
   invoice: AdminCustomerInvoiceReviewRecord,
   bookingReference: string,
@@ -15250,6 +15280,9 @@ export default function Home() {
   const [aiAssistResponseNote, setAiAssistResponseNote] = useState("");
   const bookingMessageRef = useRef<HTMLTextAreaElement | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [bookingInvoiceSentRead, setBookingInvoiceSentRead] = useState<{
+    key: string; invoices: AdminCustomerInvoiceReviewRecord[]; failed: boolean;
+  }>({ key: "", invoices: [], failed: false });
   const [bookingGoogleCalendarStatuses, setBookingGoogleCalendarStatuses] =
     useState<Record<string, AdminBookingGoogleCalendarStatusValue>>({});
   const [bookingGoogleCalendarPayouts, setBookingGoogleCalendarPayouts] =
@@ -20115,6 +20148,65 @@ export default function Home() {
   bookingGoogleCalendarStatusSourceRef.current = activeTab === "completed" ? visibleCompletedBookings : operationalBookings;
   const filteredCompletedBookingDisplayItems =
     buildLoadBookingsOperationalDisplayItems(visibleCompletedBookings, { useTypedOperationalOrder: true });
+  const bookingInvoiceSentReadKey = JSON.stringify(
+    (activeTab === "bookings" ? visibleRecentBookingDisplayItems.map(item => item.bookingRecord)
+      : activeTab === "completed" ? visibleCompletedBookings : []).map(record => ({
+        customer_id: record.customer_id, booking_reference: record.booking_reference,
+        public_booking_reference: record.public_booking_reference,
+      })),
+  );
+  const currentBookingSentInvoices = bookingInvoiceSentRead.key === bookingInvoiceSentReadKey
+    ? bookingInvoiceSentRead.invoices : [];
+  useEffect(() => {
+    if (activeTab !== "bookings" && activeTab !== "completed") return;
+    let controller: AbortController | null = null;
+    let disposed = false;
+    async function refreshSentEvidence() {
+      controller?.abort();
+      const request = new AbortController();
+      controller = request;
+      setBookingInvoiceSentRead({ key: bookingInvoiceSentReadKey, invoices: [], failed: false });
+      const records = JSON.parse(bookingInvoiceSentReadKey) as Array<{ customer_id?: string | number | null }>;
+      const customerIds = [...new Set(records.map(record => String(record.customer_id ?? ""))
+        .filter(id => /^[1-9]\d*$/.test(id)))];
+      const invoices: AdminCustomerInvoiceReviewRecord[] = [];
+      let failed = false;
+      // One complete existing scoped read per visible customer; no invoice polling timer.
+      for (const customerId of customerIds) {
+        try {
+          const response = await fetch(`/api/admin-customer-invoices?${new URLSearchParams({ customer_id: customerId })}`, {
+            cache: "no-store", signal: request.signal,
+            headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+          });
+          const result = await response.json().catch(() => null);
+          if (!response.ok || !result?.ok || !Array.isArray(result.invoices) ||
+              result.invoices.some((invoice: AdminCustomerInvoiceReviewRecord) => String(invoice.customerId ?? "") !== customerId)) {
+            throw new Error("Invoice status unavailable");
+          }
+          invoices.push(...result.invoices);
+        } catch {
+          if (request.signal.aborted) return;
+          failed = true;
+        }
+      }
+      if (!disposed && !request.signal.aborted) {
+        setBookingInvoiceSentRead({ key: bookingInvoiceSentReadKey, invoices, failed });
+      }
+    }
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") void refreshSentEvidence(); };
+    void refreshSentEvidence();
+    window.addEventListener("prestige:customer-invoice-updated", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      disposed = true;
+      controller?.abort();
+      window.removeEventListener("prestige:customer-invoice-updated", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [activeTab, bookingInvoiceSentReadKey]);
+
   const completedHistoryMonthGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -29808,6 +29900,9 @@ export default function Home() {
           {bookingDriverDetailsDeliveryStatusMessage.text}
         </p>
       ) : null}
+      {bookingInvoiceSentRead.key === bookingInvoiceSentReadKey && bookingInvoiceSentRead.failed ? (
+        <p className="text-xs text-amber-800">Some invoice statuses are unavailable.</p>
+      ) : null}
       {hasBookingsSearch && filteredRecentBookings.length === 0 ? (
         <p
           className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
@@ -29833,6 +29928,7 @@ export default function Home() {
             clean(routeText).toLocaleLowerCase() ===
             clean(`${pickup} > ${dropoff}`).toLocaleLowerCase();
           const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
+          const invoiceSentEvidence = adminBookingInvoiceSentEvidence(savedBooking, currentBookingSentInvoices);
           const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
           const isCompleted = clean(savedBooking.status).toLowerCase() === "completed";
           const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
@@ -29994,6 +30090,10 @@ export default function Home() {
                           {bookingDriverDetailsDeliveryStatusLabel}
                         </span>
                       ) : null}
+                      {invoiceSentEvidence ? (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200"
+                          data-booking-invoice-sent={bookingId} title={invoiceSentEvidence}>Sent</span>
+                      ) : null}
                       {showBookingsListStatus ? (
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${bookingStatusClass(
@@ -30007,6 +30107,7 @@ export default function Home() {
                     </span>
                   </summary>
                   <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-recent-operational-body={bookingId}>
+                    {invoiceSentEvidence ? <p className="text-xs text-slate-600" data-booking-invoice-sent-detail={bookingId}>{invoiceSentEvidence}</p> : null}
                     <div className="grid gap-2 md:grid-cols-2">
                       <OperationalCardSection section="booking" title="Booking">
                         <p>
@@ -30221,6 +30322,9 @@ export default function Home() {
           ))}
         </div>
       ) : null}
+      {bookingInvoiceSentRead.key === bookingInvoiceSentReadKey && bookingInvoiceSentRead.failed ? (
+        <p className="text-xs text-amber-800">Some invoice statuses are unavailable.</p>
+      ) : null}
       {completedBookings.length > 0 ? (
         <div
           className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3"
@@ -30327,6 +30431,7 @@ export default function Home() {
                 operationalCard.route_points_summary ||
                 (routePoints.length >= 2 ? routePoints.join(" > ") : `${pickup} > ${dropoff}`);
               const createdAt = formatCreatedAt(operationalCard.created_at || savedBooking.created_at);
+              const invoiceSentEvidence = adminBookingInvoiceSentEvidence(savedBooking, currentBookingSentInvoices);
               const bookingId = bookingRecordStableKey(savedBooking, operationalCard);
               const rawBookingCompletionMessage = bookingCompletionMessages[bookingId] ?? null;
               const bookingCompletionMessage =
@@ -30451,6 +30556,10 @@ export default function Home() {
                           >
                             {bookingStatusLabel(completedHistoryDisplayStatus)}
                           </span>
+                          {invoiceSentEvidence ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200"
+                              data-booking-invoice-sent={bookingId} title={invoiceSentEvidence}>Sent</span>
+                          ) : null}
                           {!isCompletedStatus && !isCancelledStatus && isEarlierHistoryJob ? (
                             <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium leading-5 text-slate-600 ring-1 ring-slate-200">
                               Earlier
@@ -30460,6 +30569,7 @@ export default function Home() {
                         </span>
                       </summary>
                       <div className="mt-1.5 grid gap-2 border-t border-stone-100 px-2 pt-2" data-completed-operational-body={bookingId}>
+                    {invoiceSentEvidence ? <p className="text-xs text-slate-600" data-booking-invoice-sent-detail={bookingId}>{invoiceSentEvidence}</p> : null}
                         <div
                           className="grid gap-2 md:grid-cols-2 xl:grid-cols-4"
                           data-completed-operational-detail-grid={bookingId}

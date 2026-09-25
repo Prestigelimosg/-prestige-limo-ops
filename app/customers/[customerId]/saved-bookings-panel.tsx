@@ -907,7 +907,7 @@ function savedBookingReadFailureMessage(rawError: unknown) {
   const message = rawError instanceof Error ? rawError.message.toLowerCase() : String(rawError ?? "").toLowerCase();
 
   if (/invoice coverage/.test(message)) {
-    return "Customer invoice coverage could not be verified. Jobs not billed yet is blocked so an existing issued invoice cannot be duplicated. Reload this customer folder and try again.";
+    return "Customer invoice coverage could not be verified. Unbilled jobs is blocked so an existing issued invoice cannot be duplicated. Reload this customer folder and try again.";
   }
 
   if (/not enabled|configuration|config|client_init/.test(message)) {
@@ -1308,7 +1308,7 @@ export function CustomerFolderSavedBookingsPanel({
               "unbilled saved job",
             )} for ${customerName}; job ${focusDisplayReference} is visible below.`
           : focusReturned
-          ? `Returned from Dispatch after Update + Calendar. Job ${focusDisplayReference} was returned but is now billed, paid, cancelled, or closed, so it is hidden from Jobs not billed yet.`
+          ? `Returned from Dispatch after Update + Calendar. Job ${focusDisplayReference} was returned but is now billed, paid, cancelled, or closed, so it is hidden from Unbilled jobs.`
           : `Returned from Dispatch after Update + Calendar. Loaded ${countLabel(
               returnedCount,
               "saved job",
@@ -1322,7 +1322,7 @@ export function CustomerFolderSavedBookingsPanel({
           (visibleSavedBookings.length > 0
             ? `Loaded ${countLabel(visibleSavedBookings.length, "unbilled saved job")} for ${customerName}.`
             : returnedCount > 0
-              ? "No saved job remains in Jobs not billed yet after billed or closed checks."
+              ? "No saved job remains in Unbilled jobs after billed or closed checks."
             : `No saved jobs returned for ${customerName}.`),
         savedBookings,
         status: "loaded",
@@ -2358,7 +2358,7 @@ export function CustomerFolderSavedBookingsPanel({
             className="mt-1 text-lg font-bold text-slate-950"
             data-customer-folder-saved-bookings-heading="true"
           >
-            Jobs not billed yet
+            Unbilled jobs
           </h2>
           <p
             className="mt-0.5 max-w-4xl text-xs font-semibold leading-5 text-slate-600"
@@ -2824,7 +2824,7 @@ export function CustomerFolderSavedBookingsPanel({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
-                  4 · Selected jobs invoice review
+                  4 · Review invoice
                 </p>
                 <h3 className="mt-1 text-lg font-bold text-slate-950">Customer invoice layout</h3>
                 <p className="mt-0.5 text-xs font-semibold text-slate-600">

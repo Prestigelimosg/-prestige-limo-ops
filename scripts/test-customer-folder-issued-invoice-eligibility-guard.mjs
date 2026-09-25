@@ -46,7 +46,7 @@ for (const fragment of [
   'cache: "no-store"',
   "Customer invoice coverage could not be verified.",
   "!bookingHasIssuedInvoice(booking, issuedInvoiceReferenceSet)",
-  "No saved job remains in Jobs not billed yet after billed or closed checks.",
+  "No saved job remains in Unbilled jobs after billed or closed checks.",
 ]) {
   mustInclude(
     savedBookings,

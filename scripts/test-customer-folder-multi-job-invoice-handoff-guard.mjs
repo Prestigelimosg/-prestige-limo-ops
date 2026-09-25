@@ -51,7 +51,7 @@ for (const fragment of [
   'data-customer-folder-unbilled-scroll="true"',
   "max-h-[32rem] overflow-x-auto overflow-y-auto",
   "3 · Pending jobs for payment",
-  "4 · Selected jobs invoice review",
+  "4 · Review invoice",
 ]) {
   includes(folderPage, fragment, `customer folder four-sector fragment ${fragment}`);
 }
@@ -134,7 +134,7 @@ for (const fragment of [
   'data-selected-job-invoice-bank="true"',
   'data-selected-job-invoice-terms="true"',
   '<summary aria-hidden="true" className="hidden">',
-  "Selected jobs invoice review",
+  "Review invoice",
   "toggleSelectedJobInvoiceEditing",
   "sendSelectedJobInvoice",
   "downloadSelectedJobInvoicePdf",

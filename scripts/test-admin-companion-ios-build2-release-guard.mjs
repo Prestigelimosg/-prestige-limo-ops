@@ -24,8 +24,8 @@ assert.equal(config.version, "1.0.0");
 assert.equal(config.ios.version, "1.0.0");
 assert.equal(
   config.ios.buildNumber,
-  "8",
-  "The approved eighth Admin TestFlight build number must remain explicit",
+  "9",
+  "The Admin Face ID load-recovery release uses Build 9",
 );
 assert.equal(config.ios.bundleIdentifier, "sg.prestigelimo.admin");
 assert.equal(config.ios.infoPlist.CFBundleDisplayName, "Prestige Limo Ops");
@@ -70,4 +70,4 @@ assert.equal(
   "The Admin Build 2 release guard must run in preactivation verification",
 );
 
-console.log("Admin Companion Build 8 release identity guard passed.");
+console.log("Admin Companion Build 9 release identity guard passed.");

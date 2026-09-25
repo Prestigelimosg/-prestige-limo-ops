@@ -21,8 +21,8 @@ const driverPackage = JSON.parse(driverPackageSource);
 
 assert.deepEqual(
   [admin.ios.buildNumber, customer.ios.buildNumber],
-  ["8", "12"],
-  "Preserve the separately approved Admin Build 8 and unchanged Customer Build 12",
+  ["9", "12"],
+  "Preserve the separately approved Admin Build 9 and unchanged Customer Build 12",
 );
 assert.deepEqual(
   [

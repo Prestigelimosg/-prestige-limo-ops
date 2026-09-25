@@ -348,10 +348,16 @@ export default function App() {
         });
       }
       if (biometricAction === "reveal") setAdminScreenMode("web");
+      // Face ID can finish before the active event, whose biometric action is "ignore".
+      // Resume only a missing load deadline after unlock; keep the same page mounted.
       if (
-        biometricAction === "reveal" &&
+        returningToForeground &&
+        (biometricAction === "reveal" || biometricAction === "ignore") &&
+        screenModeRef.current === "web" &&
+        biometricLifecycleRef.current.activeAttemptId === null &&
         !webViewHasCompletedLoadRef.current &&
-        !webViewLoadFailurePendingRef.current
+        !webViewLoadFailurePendingRef.current &&
+        !webViewLoadTimeoutRef.current
       ) {
         handleAdminWebViewLoadStart();
       }

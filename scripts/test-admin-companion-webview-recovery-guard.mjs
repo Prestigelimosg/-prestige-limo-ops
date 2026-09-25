@@ -271,6 +271,18 @@ const lifecycleEffect = app.slice(
   app.lastIndexOf("useEffect(() => {", appStateStart),
   app.indexOf("\n  useEffect(() => {", appStateEnd),
 );
+const loadingEffectStart = app.indexOf("\n  useEffect(() => {", appStateEnd);
+const loadingEffect = app.slice(
+  loadingEffectStart,
+  app.indexOf("\n  useEffect(() => {", loadingEffectStart + 5),
+);
+const biometricSource = stripTypeScriptTypes(await readFile(
+  "admin-companion/src/admin-biometric-lifecycle.ts", "utf8",
+), { mode: "transform" }).replace(/\bexport\s+/g, "");
+const biometric = new Function(`${biometricSource}\nreturn {
+  createAdminBiometricLifecycle, beginAdminBiometricAttempt,
+  finishAdminBiometricAttempt, transitionAdminBiometricAppState,
+};`)();
 function createResumeFixture() {
   const timers = new Map();
   let nextTimer = 0;
@@ -291,7 +303,7 @@ function createResumeFixture() {
     adminWebViewAutomaticRecoveryLimit: 1,
     setWebViewLoadState: (value) => { state.load = value; },
     setNavigationKey: (fn) => { state.navigationKey = fn(state.navigationKey); },
-    biometricLifecycleRef: { current: { appState: "active" } },
+    biometricLifecycleRef: { current: { appState: "active", activeAttemptId: null } },
     biometricEnabledRef: { current: true },
     screenModeRef: { current: "web" },
     readAdminBiometricMonotonicTimeMs: () => 1000,
@@ -319,6 +331,15 @@ function createResumeFixture() {
   const callbacks = new Function("context", `with (context) { ${loadCallbacks}\n${lifecycleEffect}\nreturn { start: handleAdminWebViewLoadStart }; }`)(context);
   return {
     context, state, timers, start: callbacks.start,
+    renderLoadingEffect() {
+      new Function("context", `with (context) { ${loadingEffect} }`)({
+        ...context,
+        useEffect: (effect) => effect(),
+        screenMode: context.screenModeRef.current,
+        webViewLoadState: state.load,
+        handleAdminWebViewLoadStart: callbacks.start,
+      });
+    },
     emit(next) { context.AppState.currentState = next; listener(next); },
     expire() { const [id, fn] = timers.entries().next().value; timers.delete(id); fn(); },
     cleanup() { cleanup(); assert.equal(listener, null); },
@@ -359,5 +380,72 @@ locked.emit("active");
 assert.equal(locked.timers.size, 0, "A Face ID-required return must not start recovery before unlock");
 assert.equal(locked.state.unlocks, 1);
 locked.cleanup();
+
+// Run the real Face ID lifecycle together with the real WebView callbacks.
+// Face ID may resolve before or after iOS announces that the app is active.
+for (const resolutionOrder of ["before-active", "after-active"]) {
+  const prompt = createResumeFixture();
+  prompt.context.biometricLifecycleRef.current = biometric.createAdminBiometricLifecycle("active");
+  prompt.context.transitionAdminBiometricAppState = biometric.transitionAdminBiometricAppState;
+  const lifecycle = prompt.context.biometricLifecycleRef.current;
+  const attempt = biometric.beginAdminBiometricAttempt(lifecycle);
+  prompt.context.setAdminScreenMode("checking");
+  prompt.start();
+  prompt.emit("inactive");
+  assert.equal(prompt.timers.size, 0, "Face ID inactivity pauses the existing timer");
+  const finishUnlock = () => {
+    assert.equal(biometric.finishAdminBiometricAttempt(lifecycle, attempt), true);
+    prompt.context.setAdminScreenMode("web");
+    prompt.renderLoadingEffect();
+  };
+  if (resolutionOrder === "before-active") {
+    finishUnlock();
+    assert.equal(prompt.timers.size, 0, "Never recover while iOS is inactive");
+    prompt.emit("active");
+  } else {
+    prompt.emit("active");
+    assert.equal(prompt.timers.size, 0, "Never recover while Face ID is unresolved");
+    finishUnlock();
+  }
+  assert.equal(prompt.context.screenModeRef.current, "web");
+  assert.equal(prompt.timers.size, 1, `${resolutionOrder}: unlocked incomplete page must retain one recovery timer`);
+  const existingTimer = prompt.context.webViewLoadTimeoutRef.current;
+  prompt.emit("active");
+  assert.equal(prompt.context.webViewLoadTimeoutRef.current, existingTimer, "Repeated active event must not restart the deadline");
+  assert.equal(prompt.state.navigationKey, 0, "Successful Face ID must not immediately remount the page");
+  prompt.expire();
+  assert.equal(prompt.state.navigationKey, 1, "Existing timeout permits only one automatic retry");
+  prompt.start(); // The replacement WebView starts its actual next load.
+  prompt.expire();
+  assert.equal(prompt.state.load, "failed", "Second failed load exposes existing Reload Admin screen");
+  assert.equal(prompt.state.navigationKey, 1);
+  prompt.cleanup();
+}
+
+for (const mode of ["ready", "failed", "locked", "pending-biometric", "already-timed"]) {
+  const preserved = createResumeFixture();
+  preserved.context.biometricLifecycleRef.current = biometric.createAdminBiometricLifecycle("active");
+  preserved.context.transitionAdminBiometricAppState = biometric.transitionAdminBiometricAppState;
+  const lifecycle = preserved.context.biometricLifecycleRef.current;
+  const attempt = biometric.beginAdminBiometricAttempt(lifecycle);
+  preserved.context.setAdminScreenMode("checking");
+  preserved.emit("inactive");
+  if (mode !== "pending-biometric") biometric.finishAdminBiometricAttempt(lifecycle, attempt);
+  preserved.context.setAdminScreenMode(mode === "locked" ? "locked" : "web");
+  if (mode === "ready") {
+    preserved.context.webViewHasCompletedLoadRef.current = true;
+    preserved.state.load = "ready";
+  }
+  if (mode === "failed") {
+    preserved.context.webViewLoadFailurePendingRef.current = true;
+    preserved.state.load = "failed";
+  }
+  if (mode === "already-timed") preserved.start();
+  const timer = preserved.context.webViewLoadTimeoutRef.current;
+  preserved.emit("active");
+  assert.equal(preserved.context.webViewLoadTimeoutRef.current, timer, `${mode}: retain existing timer or lack of timer`);
+  assert.equal(preserved.state.navigationKey, 0, `${mode}: never remount`);
+  preserved.cleanup();
+}
 
 console.log("Admin companion WebView recovery guard passed.");

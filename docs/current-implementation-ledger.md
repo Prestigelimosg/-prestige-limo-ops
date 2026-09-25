@@ -1,3 +1,7 @@
+## Admin Build 9 crash reported during physical acceptance (2026-09-25)
+
+Owner supplied the iOS Prestige Limo Ops Crashed dialog and explicitly confirmed Shared - after Build 9. Treat Build 9 physical acceptance as FAILED, not merely pending. App Store Connect Crash Feedback currently shows No Crash Feedback; the shared report is not yet available through the inspected surface. Elevated devicectl list devices returned simulators only, no connected physical iPhone. No crash cause is established; do not attribute it to the Face ID timer, ExpoModulesJSI build workaround, provider, cache, or network without stack/termination evidence. No application edits, new build, rollback, expiration or account reset performed. Keep PR615 draft. Next read the exact Build9 crash report and diagnose narrowly before repair/rebuild.
+
 ## Admin Build 9 External TestFlight Release (2026-09-25; Apple Approved, physical acceptance pending)
 
 - Owner requested the next release step after the committed Admin Face ID load-recovery repair. Live App Store Connect read confirms latest Admin 1.0.0 Build 8, validated, bundle sg.prestigelimo.admin, existing team U9Y2574Y7S, production APNs and non-debug entitlement. Live Expo production channel has no update groups; its cloud list ends at Build 7 and does not represent the later locally built Build 8. The recorded Build 8 IPA/source commit could not be recovered for a reliable native-dependency comparison. Do not publish an OTA based only on matching version 1.0.0.

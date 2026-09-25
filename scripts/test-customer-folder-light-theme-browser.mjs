@@ -282,7 +282,7 @@ async function main() {
         "1 · Customer profile & invoice prefix",
         "2 · Total invoices",
         "3 · Pending jobs for payment",
-        "4 · Selected jobs invoice review",
+        "4 · Review invoice",
       ]);
       assert.equal(state.invoiceHeaderBackground, state.pendingHeaderBackground);
       assert.equal(state.invoiceHeaderBorder, state.tokens.slate300);

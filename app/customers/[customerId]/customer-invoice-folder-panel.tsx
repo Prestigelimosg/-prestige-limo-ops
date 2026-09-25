@@ -305,6 +305,8 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
   const invoiceViewPending = useRef(false);
   const completedBillingHandoffAppliedRef = useRef(false);
+  const sentInvoiceHandoffAppliedRef = useRef(false);
+  const [sentInvoiceTargetRequested, setSentInvoiceTargetRequested] = useState(false);
   const [completedBillingTargetRequested, setCompletedBillingTargetRequested] = useState(false);
   const [invoiceActionMode, setInvoiceActionMode] = useState<InvoiceActionMode>(null);
   const [invoiceActionPending, setInvoiceActionPending] = useState(false);
@@ -346,7 +348,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   );
   const displayInvoices = storedInvoices.length > 0 ? storedInvoices : mockInvoices;
   const selectedInvoice =
-    displayInvoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber) ?? (completedBillingTargetRequested ? undefined : displayInvoices[0]);
+    displayInvoices.find((invoice) => invoice.invoiceNumber === selectedInvoiceNumber) ?? (completedBillingTargetRequested || sentInvoiceTargetRequested ? undefined : displayInvoices[0]);
   const selectedBooking = customer.bookingHistory.find(
     (booking) => booking.invoiceNumber === selectedInvoice?.invoiceNumber,
   );
@@ -400,9 +402,12 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
       try {
         const params = new URLSearchParams(window.location.search);
         const fromCompleted = params.get("billing_source") === "completed";
+        const targetInvoice = (params.get("focus_invoice") || "").trim();
+        const fromSent = params.has("focus_invoice");
+        if (fromSent) setSentInvoiceTargetRequested(true);
         const targetReference = fromCompleted ? (params.get("focus_booking_reference") || "").trim() : "";
         if (fromCompleted && !completedBillingHandoffAppliedRef.current) setCompletedBillingTargetRequested(true);
-        const response = await fetch(fromCompleted
+        const response = await fetch(fromCompleted || fromSent
           ? `${adminCustomerInvoicesApiPath}?${new URLSearchParams({ customer_id: customer.id })}`
           : adminCustomerInvoicesApiPath, {
           cache: "no-store",
@@ -425,7 +430,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             const invoiceCustomerName = normalizeCustomerMatch(String(invoice.customerName ?? ""));
 
             return (
-              (fromCompleted ? String(invoice.customerId ?? "") === customer.id :
+              (fromCompleted || fromSent ? String(invoice.customerId ?? "") === customer.id :
               invoiceCustomerId === customerIdKey ||
               invoiceCustomerName === customerNameKey ||
               (customerNameKey && invoiceCustomerName.includes(customerNameKey)))
@@ -441,7 +446,21 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             : "No stored invoice records matched this customer yet.",
         );
 
-        if (fromCompleted && !completedBillingHandoffAppliedRef.current) {
+        if (fromSent && !sentInvoiceHandoffAppliedRef.current) {
+          const matches = (result.invoices as StoredInvoiceRecord[]).filter(invoice =>
+            String(invoice.customerId ?? "") === customer.id && invoice.invoiceNumber === targetInvoice &&
+            invoice.documentType === "invoice" && invoice.documentState === "issued");
+          if (!targetInvoice || matches.length !== 1 || !displayStoredInvoice(matches[0])) {
+            throw new Error("Exact sent invoice could not be verified.");
+          }
+          if (controller.signal.aborted) return;
+          sentInvoiceHandoffAppliedRef.current = true;
+          setSelectedInvoiceNumber(targetInvoice);
+          setInvoiceActionMode(null);
+          setInvoiceActionMessage(matches[0].manuallySentAt
+            ? `${targetInvoice} marked sent. No email sent.` : `Review ${targetInvoice}.`);
+          window.setTimeout(() => document.getElementById("total-invoices")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+        } else if (fromCompleted && !completedBillingHandoffAppliedRef.current) {
           if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(targetReference)) throw new Error("Invalid exact job reference.");
           const bookingResponse = await fetch(`${adminCustomerSavedBookingsApiPath}?${new URLSearchParams({
             customer_id: customer.id, customer_account: customer.companyName, booking_reference: targetReference, limit: "200",
@@ -482,12 +501,17 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
             : singleJob ? `Review ${match.invoiceNumber} for this exact job before confirming payment.`
             : `${match.invoiceNumber} covers multiple jobs or has incomplete job references. Mark paid applies to its entire total; review all items first.`);
           window.setTimeout(() => document.querySelector('[data-customer-invoice-folder-detail]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
-        } else if (!fromCompleted && !selectedInvoiceNumber && invoices[0]) {
+        } else if (!fromCompleted && !fromSent && !selectedInvoiceNumber && invoices[0]) {
           setSelectedInvoiceNumber(invoices[0].invoiceNumber);
         }
       } catch {
         if (!controller.signal.aborted) {
-          if (new URLSearchParams(window.location.search).get("billing_source") === "completed") {
+          if (new URLSearchParams(window.location.search).has("focus_invoice")) {
+            setStoredInvoices([]);
+            setSelectedInvoiceNumber("");
+            setInvoiceActionMode(null);
+            setStoredInvoiceMessage("Invoice unavailable. Reload to retry.");
+          } else if (new URLSearchParams(window.location.search).get("billing_source") === "completed") {
             setSelectedInvoiceNumber("");
             setInvoiceActionMode(null);
             setStoredInvoiceMessage("Exact job invoice could not be verified. No payment changed; reload to retry.");
@@ -1129,7 +1153,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
   }
 
   return (
-    <section
+    <section id="total-invoices"
       className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-md"
       data-customer-invoice-rules="true"
       data-customer-invoice-folder-panel={customer.id}
@@ -1258,7 +1282,7 @@ export function CustomerInvoiceFolderPanel({ customer }: CustomerInvoiceFolderPa
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-base font-bold text-slate-950">{selectedInvoice.invoiceNumber} items</h3>
-              {selectedInvoice.manuallySentAt ? <p className="text-xs font-semibold text-emerald-800">Marked as sent</p> : null}
+              {selectedInvoice.manuallySentAt ? <p className="text-xs font-semibold text-emerald-800">Sent</p> : null}
               <p className="mt-0.5 text-sm font-semibold text-slate-600">Only this selected invoice is shown below.</p>
             </div>
             <span

@@ -208,7 +208,7 @@ for (const fragment of [
   "Number.isSafeInteger(amountCents)",
   "amountCents <= 100_000_000",
   "missingReviewedPriceReference",
-  "Selected job ${missingReviewedPriceReference} remains listed below but is blocked until its customer price is reviewed in Jobs not billed yet.",
+  "Selected job ${missingReviewedPriceReference} remains listed below but is blocked until its customer price is reviewed in Unbilled jobs.",
   "amount: firstInvoiceRow.amountCents",
   "amount: row.amountCents",
   "their reviewed customer prices",

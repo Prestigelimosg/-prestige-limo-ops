@@ -5188,7 +5188,7 @@ export default function MockCustomerDashboardPage() {
               ),
             );
             setPlainInvoiceFeedback(
-              `Selected job ${missingReviewedPriceReference} remains listed below but is blocked until its customer price is reviewed in Jobs not billed yet.`,
+              `Selected job ${missingReviewedPriceReference} remains listed below but is blocked until its customer price is reviewed in Unbilled jobs.`,
             );
             setPlainInvoiceFeedbackTone("error");
             return;
@@ -6758,11 +6758,12 @@ export default function MockCustomerDashboardPage() {
           customerId: plainInvoiceIssuedRecord.customerId, expectedPdfVersion: plainInvoiceIssuedRecord.manualSendVersion }
       : { ...plainInvoiceRequestBodyFromPreview("issued"), action: "mark_manually_sent" };
     if (!confirmInvoiceSafetyAction({
-      action: "Mark as sent", amountLabel: formatInvoiceAmount(plainInvoiceSelectedJobReviewAmountCents),
+      action: "Mark sent", amountLabel: formatInvoiceAmount(plainInvoiceSelectedJobReviewAmountCents),
       customerName: plainInvoiceIssuedRecord?.customerName || plainInvoicePreview?.customerName || "",
       documentLabel: "Paid invoice", reference: plainInvoiceIssuedRecord?.reference || plainInvoicePreview?.reference || "",
-      consequence: "Record this paid invoice as manually sent. Its jobs leave Jobs not billed yet. No email will be sent.",
+      consequence: "Record this paid invoice as manually sent. Its jobs leave Unbilled jobs. No email will be sent.",
     })) return;
+    const sourceHref = window.location.href;
     manualInvoiceSentPendingRef.current = true;
     setManualInvoiceSentPending(true);
     try {
@@ -6775,14 +6776,27 @@ export default function MockCustomerDashboardPage() {
         throw new Error(result?.error || "Invoice was not confirmed as manually sent. Reload before retrying.");
       }
       const invoice = { ...(result.invoice as CustomerDisplayedInvoiceRecord), storageSource: "server" as const };
+      if (!/^[1-9]\d*$/.test(String(invoice.customerId)) ||
+          String(invoice.customerId) !== String(requestBody.customerId) ||
+          invoice.documentType !== "invoice" || invoice.documentState !== "issued" ||
+          !invoice.invoiceNumber ||
+          (plainInvoiceIssuedRecord && invoice.invoiceNumber !== plainInvoiceIssuedRecord.invoiceNumber)) {
+        throw new Error("Sent status saved but the exact invoice could not be verified. Reload before continuing.");
+      }
       saveCustomerLocalInvoice(invoice);
       updateIssuedInvoiceState(invoice);
       setPlainInvoiceIssuedRecord(invoice);
       window.dispatchEvent(new Event("prestige:customer-invoice-updated"));
-      setPlainInvoiceFeedback(`${invoice.invoiceNumber} marked as sent. No email sent.`);
+      setPlainInvoiceFeedback(`${invoice.invoiceNumber} marked sent. No email sent.`);
       setPlainInvoiceFeedbackTone("success");
+      if (window.location.href === sourceHref) {
+        const destination = customerFolderHrefFor(invoice.customerId, invoice.customerName);
+        window.location.assign(`${destination}${destination.includes("?") ? "&" : "?"}${new URLSearchParams({
+          focus_invoice: invoice.invoiceNumber,
+        })}#total-invoices`);
+      }
     } catch (error) {
-      setPlainInvoiceFeedback(customerInvoiceActionFailureMessage("Mark as sent", error));
+      setPlainInvoiceFeedback(customerInvoiceActionFailureMessage("Mark sent", error));
       setPlainInvoiceFeedbackTone("error");
     } finally {
       manualInvoiceSentPendingRef.current = false;
@@ -9221,7 +9235,7 @@ export default function MockCustomerDashboardPage() {
           >
           {plainInvoiceSelectedJobReviewActive ? (
             <summary aria-hidden="true" className="hidden">
-              Selected jobs invoice review
+              Review invoice
             </summary>
           ) : (
             <summary
@@ -9701,7 +9715,7 @@ export default function MockCustomerDashboardPage() {
                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                          Selected jobs invoice review
+                          Review invoice
                         </p>
                         <p className="text-xs font-semibold text-slate-700">
                           {plainInvoiceSelectedJobReviewLines.length} job
@@ -9717,7 +9731,7 @@ export default function MockCustomerDashboardPage() {
                             onClick={markSelectedJobInvoiceSent}
                             type="button"
                           >
-                            {plainInvoiceIssuedRecord?.manuallySentAt ? "Marked as sent" : manualInvoiceSentPending ? "Saving" : "Mark as sent"}
+                            {plainInvoiceIssuedRecord?.manuallySentAt ? "Sent" : manualInvoiceSentPending ? "Saving" : "Mark sent"}
                           </button>
                         ) : null}
                         <button

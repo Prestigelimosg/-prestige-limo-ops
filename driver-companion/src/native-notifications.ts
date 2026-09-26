@@ -17,10 +17,10 @@ function validJobKey(value: unknown): value is string {
 
 // Remove only notifications for this exact opaque job identity. Other jobs stay unread.
 export async function dismissNativeJobNotifications(jobKey: string, notifications: {
-  getPresentedNotificationsAsync: () => Promise<Array<{ request: { identifier: string; content: { data?: unknown } } }>>;
+  getPresentedNotificationsAsync: () => Promise<Array<{ date?: number; request: { identifier: string; content: { data?: unknown } } }>>;
   dismissNotificationAsync: (identifier: string) => Promise<void>;
   setBadgeCountAsync: (count: number) => Promise<boolean>;
-}) {
+}, before?: number) {
   if (!validJobKey(jobKey)) return null;
   const presented = await notifications.getPresentedNotificationsAsync();
   for (const notification of presented) {
@@ -42,13 +42,85 @@ export async function dismissNativeJobNotifications(jobKey: string, notification
           identifier.searchParams.get("tag") === `prestige-driver-job-${jobKey}`;
       } catch { /* Unidentifiable older notices must remain untouched. */ }
     }
-    if (matches) {
+    // Automatic cleanup is revision bounded. Unknown legacy dates remain untouched.
+    const sentAt = typeof dataRecord?.sent_at === "number" ? dataRecord.sent_at : notification.date;
+    if (matches && (before === undefined ||
+      (typeof sentAt === "number" && Number.isFinite(sentAt) && sentAt > 0 && sentAt < before))) {
       await notifications.dismissNotificationAsync(notification.request.identifier);
     }
   }
   const remaining = (await notifications.getPresentedNotificationsAsync()).length;
   await notifications.setBadgeCountAsync(Math.min(99, remaining));
   return Math.min(99, remaining);
+}
+
+// Each marker contains only a cutoff or terminal-offer flag, never job details or credentials.
+const nativeCleanupPrefix = "prestige-driver-notice-cleanup-v1.";
+let nativeCleanupPending: Promise<unknown> = Promise.resolve();
+type NativeNoticeApi = Parameters<typeof dismissNativeJobNotifications>[1];
+
+export function nativeNoticeTaskData(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const task = value as Record<string, unknown>;
+  // Responses still use the established tap handler; this task never navigates.
+  if ("actionIdentifier" in task) return null;
+  const data = task.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const encoded = (data as Record<string, unknown>).dataString;
+  if (typeof encoded === "string") {
+    try { return JSON.parse(encoded); } catch { return null; }
+  }
+  return data;
+}
+
+export async function applyNativeNoticeCleanup(value: unknown, notifications: NativeNoticeApi) {
+  // Serialise cleanup only. Visible notification handling never waits on this work.
+  const operation = nativeCleanupPending.catch(() => undefined).then(async () => {
+    const data = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown> : null;
+    if (data?.driver_pool_refresh === true && validJobKey(data.job_key)) {
+      const cutoff = data.dismiss_before;
+      if (typeof cutoff === "number" && Number.isSafeInteger(cutoff) && cutoff > 0 && cutoff <= Date.now()) {
+        const key = nativeCleanupPrefix + data.job_key;
+        const stored = await SecureStore.getItemAsync(key);
+        const previous = Number(stored);
+        // Only terminal/losing pool offers are immutable; private links always keep a cutoff.
+        const retired = stored === "retired_offer" || data.dismiss_retired_offer === true;
+        await SecureStore.setItemAsync(key, retired ? "retired_offer" : String(Math.max(Number.isSafeInteger(previous) ? previous : 0, cutoff)), {
+          keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+        });
+        await dismissNativeJobNotifications(data.job_key, notifications, retired ? undefined : cutoff);
+      }
+    }
+    // Retry persisted cleanup on launch/resume and on delayed notification arrival.
+    // Exact identity is read through the existing remover, including Android's foreign tag.
+    const presented = await notifications.getPresentedNotificationsAsync();
+    const keys = new Set<string>();
+    for (const notice of presented) {
+      const content = notice.request.content.data;
+      const record = content && typeof content === "object" && !Array.isArray(content)
+        ? content as Record<string, unknown> : null;
+      if (validJobKey(record?.job_key)) keys.add(record.job_key);
+      else if (!record?.job_key) {
+        try {
+          const tag = new URL(notice.request.identifier).searchParams.get("tag") ?? "";
+          const key = tag.slice("prestige-driver-job-".length);
+          if (tag.startsWith("prestige-driver-job-") && validJobKey(key)) keys.add(key);
+        } catch { /* The exact remover also rejects malformed/foreign identities. */ }
+      }
+    }
+    for (const key of keys) {
+      const stored = await SecureStore.getItemAsync(nativeCleanupPrefix + key);
+      const cutoff = Number(stored);
+      if (stored === "retired_offer") {
+        await dismissNativeJobNotifications(key, notifications);
+      } else if (Number.isSafeInteger(cutoff) && cutoff > 0 && cutoff <= Date.now()) {
+        await dismissNativeJobNotifications(key, notifications, cutoff);
+      }
+    }
+  });
+  nativeCleanupPending = operation;
+  return operation;
 }
 
 export function nativeDriverJobHandoffUrl(jobKey: string) {

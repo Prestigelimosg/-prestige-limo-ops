@@ -4,6 +4,11 @@ import vm from "node:vm";
 import ts from "typescript";
 
 const read = (path) => readFileSync(path, "utf8");
+const releaseConfig = JSON.parse(read("customer-companion/app.json")).expo;
+const releaseEas = JSON.parse(read("customer-companion/eas.json"));
+assert.equal(releaseConfig.ios.buildNumber, "13");
+assert.equal(releaseEas.build.production.ios.image, "macos-tahoe-26.5-xcode-26.6");
+assert.equal(releaseEas.submit.production.ios.ascAppId, "6802691447");
 const adapterSource = read("lib/customer-portal-invoices-adapter.ts");
 assert.match(adapterSource, /export async function deliverCustomerPortalInvoicePdf/, "The PDF button needs an awaited native handoff, not a blob anchor success claim");
 

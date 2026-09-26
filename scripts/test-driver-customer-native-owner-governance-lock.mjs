@@ -86,10 +86,10 @@ assert.deepEqual(
   [
     "Prestige SG",
     "sg.prestigelimo.customer",
-    "12",
+    "13",
     "ce71ff91-7f71-4297-bcef-edf420f94316",
   ],
-  "Customer Build 12 native release identity must remain exact",
+  "Customer Build 13 native release identity must remain exact",
 );
 assert.deepEqual(
   [

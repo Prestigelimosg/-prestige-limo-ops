@@ -191,6 +191,8 @@ export type DriverNativeSilentPushSender = (
   expoPushToken: string,
   jobKey: string,
   openTarget: DriverNativePushOpenTarget,
+  dismissBefore?: number,
+  retiredOffer?: boolean,
 ) => Promise<void>;
 
 type DriverDevicePushAlertOptions = {
@@ -967,6 +969,7 @@ async function sendNativePush(
         body: visibleBody,
         data: {
           job_key: jobKey,
+          sent_at: Date.now(),
           ...(openTarget ? { open_target: openTarget } : {}),
         },
         priority: "high",
@@ -1006,6 +1009,8 @@ async function sendNativeSilentPush(
   jobKey: string,
   openTarget: DriverNativePushOpenTarget,
   fetcher: typeof fetch = fetch,
+  dismissBefore?: number,
+  retiredOffer = false,
 ): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), driverDevicePushProviderTimeoutMs);
@@ -1014,8 +1019,11 @@ async function sendNativeSilentPush(
     const response = await fetcher(expoPushEndpoint, {
       body: JSON.stringify({
         contentAvailable: true,
+        _contentAvailable: true,
         data: {
           driver_pool_refresh: true,
+          ...(dismissBefore ? { dismiss_before: dismissBefore } : {}),
+          ...(retiredOffer ? { dismiss_retired_offer: true } : {}),
           job_key: jobKey,
           open_target: openTarget,
         },
@@ -1172,6 +1180,8 @@ async function sendPayloadToDriverSubscriptions(
   requireSingleNativeSubscription = false,
   nativeOnly = false,
   silentNative = false,
+  dismissBefore?: number,
+  retiredOffer = false,
 ): Promise<DriverDevicePushAlertResult> {
   const loaded = await loadActiveDriverSubscriptions(client, driverId);
   if (!loaded.ok) {
@@ -1224,12 +1234,16 @@ async function sendPayloadToDriverSubscriptions(
                 subscription.endpoint,
                 nativeJobKey!,
                 nativeOpenTarget!,
+                dismissBefore,
+                retiredOffer,
               )
             : await sendNativeSilentPush(
                 subscription.endpoint,
                 nativeJobKey!,
                 nativeOpenTarget!,
                 options.nativeFetch,
+                dismissBefore,
+                retiredOffer,
               );
         }
         return options.nativePushSender
@@ -1553,15 +1567,24 @@ export async function sendDriverDeviceSilentRefreshForJobLink(
   if (!safePositiveInteger(driverId) || !safeUuid(linkId)) return alertResult("invalid_driver_link");
   const config = resolveProviderConfig(options.env ?? process.env);
   if (!config) return alertResult("push_gate_closed");
-  const link = await client.from("driver_job_links").select("id").eq("id", linkId).eq("driver_id", driverId).maybeSingle();
+  const link = await client.from("driver_job_links").select("id,expires_at,revoked_at,safe_link_context").eq("id", linkId).eq("driver_id", driverId).maybeSingle();
   if (link.error || asRecord(link.data).id !== linkId || !(await driverHasActiveOnePhoneAccount(client, driverId))) {
     return alertResult("invalid_driver_link");
   }
+  const row = asRecord(link.data);
+  const context = asRecord(row.safe_link_context);
+  const closed = typeof context.job_card_revision === "string" && Boolean(context.job_card_revision) &&
+    context.ack_alert_closed_revision === context.job_card_revision && context.ack_alert_closed_at;
+  const cutoffs = [row.revoked_at, row.expires_at, closed]
+    .filter((value): value is string => typeof value === "string")
+    .map(value => Date.parse(value)).filter(value => Number.isFinite(value) && value > 0 && value <= Date.now());
+  // Lifecycle timestamps predate any later reissue; a delayed quiet push must not clear it.
+  const dismissBefore = cutoffs.length ? Math.max(...cutoffs) : undefined;
   const key = opaqueDriverJobLinkKey(linkId);
   return sendPayloadToDriverSubscriptions(client, driverId, {
     body:"New Driver Job app update. Tap to review.", job_key:key, tag:"prestige-driver-"+key.slice(0,24),
     target_path:"/driver-portal", title:"Prestige Limo Ops", version:driverDevicePushNotificationVersion,
-  }, config, options, "available_jobs", "Job update available", key, true, true, true);
+  }, config, options, "available_jobs", "Job update available", key, true, true, true, dismissBefore);
 }
 
 export async function sendDriverDeviceSilentRefreshForDriverPoolOffer(
@@ -1583,6 +1606,20 @@ export async function sendDriverDeviceSilentRefreshForDriverPoolOffer(
   if (!(await driverHasActiveOnePhoneAccount(client, driverId))) {
     return alertResult("invalid_driver_link", { enabled: true });
   }
+  const inspectedAt = Date.now();
+  let obsolete = false;
+  try {
+    const bid = await client.from("driver_job_bids")
+      .select("bid_status,driver_job_bid_offers!inner(offer_key,offer_status)")
+      .eq("driver_reference", String(driverId))
+      .eq("driver_job_bid_offers.offer_key", offerKey).maybeSingle();
+    const bidRow = asRecord(bid.data);
+    const offer = asRecord(bidRow.driver_job_bid_offers);
+    // Terminal offers cannot reopen. Never dismiss the winner or an unverified/open offer.
+    obsolete = !bid.error && offer.offer_key === offerKey &&
+      (["cancelled", "closed", "expired"].includes(String(offer.offer_status)) ||
+        (offer.offer_status === "assigned" && ["pending", "declined", "withdrawn", "expired"].includes(String(bidRow.bid_status))));
+  } catch { /* Keep the established refresh when cleanup eligibility cannot be verified. */ }
   const payload = driverPoolOfferPayload(
     offerKey,
     "A driver-pool job is available. Open the app to review.",
@@ -1599,6 +1636,8 @@ export async function sendDriverDeviceSilentRefreshForDriverPoolOffer(
     false,
     true,
     true,
+    obsolete ? inspectedAt : undefined,
+    obsolete,
   );
 }
 

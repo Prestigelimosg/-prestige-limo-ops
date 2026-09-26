@@ -1316,6 +1316,41 @@ export default function DriverJobPage() {
       }
 
       if (!updateResponse.ok || !updateResult.ok) {
+        if ([401, 403, 410].includes(updateResponse.status)) {
+          // The existing token reader has definitively denied access. Never
+          // preserve a previously rendered private job after cancellation or
+          // reassignment; transient network/server failures stay below.
+          loadedDriverJobTokenRef.current = "";
+          setDriverAppUpdates({ feedback: null, kind: "empty", updates: [] });
+          setComboView(null);
+          setPageState({
+            kind: "blocked",
+            reason: updateResponse.status === 410 ? "expired"
+              : updateResponse.status === 403 ? "revoked" : "unauthorized",
+          });
+          // A completed combo trip may still have the established server-verified
+          // next-trip handoff. Clear the old details first, then preserve it.
+          if (updateResponse.status === 410) {
+            try {
+              const nativeInstallationId = currentEmbeddedDriverInstallationId();
+              const continuationResponse = await fetch(`/api/driver-job/${encodeURIComponent(token)}`, {
+                cache: "no-store", signal: abortController.signal,
+                headers: nativeInstallationId ? { "x-prestige-driver-installation-id": nativeInstallationId } : undefined,
+              });
+              const continuation = await continuationResponse.json() as DriverJobApiResponse;
+              if (abortController.signal.aborted || requestSequence !== driverAppUpdatesRequestSequenceRef.current) return;
+              if (!continuation.ok && continuation.next_job_url?.startsWith("/driver-job/")) {
+                window.location.replace(continuation.next_job_url);
+                return;
+              }
+            } catch { /* Access stays blocked if continuation cannot be verified. */ }
+          }
+          if (abortController.signal.aborted || requestSequence !== driverAppUpdatesRequestSequenceRef.current) return;
+          // The established authenticated portal refresh removes this exact
+          // obsolete phone notice and reconciles its badge without a new lane.
+          if (isVerifiedEmbeddedDriverApp()) window.location.replace("/driver-portal");
+          return;
+        }
         const feedback: ControlFeedback = {
           tone: updateResponse.status === 503 ? "success" : "error",
           text:

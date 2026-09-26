@@ -91,7 +91,7 @@ const admin = JSON.parse(adminConfigSource).expo;
 const customer = JSON.parse(customerConfigSource).expo;
 const driver = JSON.parse(driverConfigSource).expo;
 assert.equal(admin.ios.buildNumber, "11", "Admin first-unlock release requires Build 11");
-assert.equal(customer.ios.buildNumber, "12", "Customer Build 12 must retain the accepted Customer identity");
+assert.equal(customer.ios.buildNumber, "13", "Customer Build 13 must retain the accepted Customer identity");
 assert.equal(driver.ios.buildNumber, "20", "Driver Build 20 must retain the approved Driver release identity");
 
 for (const phrase of [

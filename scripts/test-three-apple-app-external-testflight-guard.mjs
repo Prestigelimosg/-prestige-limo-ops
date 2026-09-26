@@ -14,7 +14,7 @@ const driver = JSON.parse(driverConfigSource).expo;
 
 assert.deepEqual(
   [admin.ios.buildNumber, customer.ios.buildNumber, driver.ios.buildNumber],
-  ["11", "12", "20"],
+  ["11", "13", "20"],
   "Source must retain the approved local release numbers; historical external testing evidence remains separate",
 );
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const pagePath = "app/driver-job/[token]/page.tsx";
 const pageSource = await readFile(pagePath, "utf8");
@@ -79,3 +80,83 @@ assert.match(
 );
 
 console.log("Driver Job foreground messages, acknowledged button state, and iPhone onboarding guard passed.");
+
+// Execute the existing refresh callback: definitive access loss must remove an
+// already-rendered private job, whereas transient failures preserve its drafts.
+const ast = ts.createSourceFile(pagePath, pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let refreshNode;
+function visit(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "refreshDriverAppUpdates") {
+    refreshNode = node.initializer.arguments[0];
+  }
+  ts.forEachChild(node, visit);
+}
+visit(ast);
+assert.ok(refreshNode);
+async function refreshScenario({ status, native = false, networkError = false, stale = false, nextJobUrl }) {
+  let page = { kind: "ready", job: { reference: "QA-PRIVATE", passengerName: "Synthetic passenger" } };
+  let updates = { kind: "loaded", updates: [{ id: "old", safe_message: "Synthetic private message" }], feedback: null };
+  let combo = { trips: [{ reference: "QA-PRIVATE" }] };
+  const navigations = [];
+  const sequence = { current: 0 };
+  const loadedToken = { current: "qa-token" };
+  const bindings = {
+    token: "qa-token", isVerifiedEmbeddedDriverApp: () => native,
+    currentEmbeddedDriverInstallationId: () => native ? "qa-installation" : "",
+    driverAppUpdatesRequestSequenceRef: sequence,
+    driverAppUpdatesAbortControllerRef: { current: null },
+    loadedDriverJobTokenRef: loadedToken,
+    setDriverAppUpdates(value) { updates = typeof value === "function" ? value(updates) : value; },
+    setPageState(value) { page = typeof value === "function" ? value(page) : value; },
+    setComboView(value) { combo = value; },
+    window: { location: { replace(value) { navigations.push(value); } } },
+    async fetch(url) {
+      if (networkError) throw new Error("Synthetic offline");
+      return { ok: status === 200, status, async json() {
+        if (stale) sequence.current++;
+        return status === 200 ? { ok: true, notifications: [] } : {
+          ok: false, error: "Access unavailable",
+          ...(!url.includes("/notifications?") && nextJobUrl ? { next_job_url: nextJobUrl } : {}),
+        };
+      } };
+    },
+  };
+  const refresh = new Function(...Object.keys(bindings), ts.transpileModule(
+    `return (${refreshNode.getText(ast)});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
+  ).outputText)(...Object.values(bindings));
+  await refresh({ preserveContent: true });
+  return { page, updates, combo, navigations, loadedToken };
+}
+for (const [status, reason] of [[401, "unauthorized"], [403, "revoked"], [410, "expired"]]) {
+  for (const native of [false, true]) {
+    const result = await refreshScenario({ status, native });
+    assert.deepEqual(result.page, { kind: "blocked", reason }, `${status}: no previously visible customer details`);
+    assert.deepEqual(result.updates.updates, [], `${status}: no retained private message content`);
+    assert.equal(result.combo, null, `${status}: no retained combo details`);
+    assert.equal(result.loadedToken.current, "", "invalidate the loaded job for late refreshes");
+    assert.deepEqual(result.navigations, native ? ["/driver-portal"] : [], "native returns to existing authenticated notice reconciliation");
+  }
+}
+for (const status of [500, 503]) {
+  const result = await refreshScenario({ status, native: true });
+  assert.equal(result.page.kind, "ready", "transient provider failure does not revoke valid access");
+  assert.equal(result.updates.updates.length, 1);
+  assert.deepEqual(result.navigations, []);
+}
+const offline = await refreshScenario({ networkError: true, native: true });
+assert.equal(offline.page.kind, "ready");
+assert.deepEqual(offline.navigations, []);
+const stale = await refreshScenario({ status: 410, native: true, stale: true });
+assert.equal(stale.page.kind, "ready", "late denial from a superseded request cannot close the current job");
+assert.deepEqual(stale.navigations, []);
+const valid = await refreshScenario({ status: 200, native: true });
+assert.equal(valid.page.kind, "ready");
+assert.deepEqual(valid.navigations, []);
+for (const native of [false, true]) {
+  const continued = await refreshScenario({ status: 410, native, nextJobUrl: "/driver-job/verified-next-combo-token" });
+  assert.equal(continued.page.kind, "blocked", "old trip details are cleared before continuation");
+  assert.deepEqual(continued.navigations, ["/driver-job/verified-next-combo-token"], "preserve established verified combo continuation");
+}
+const foreign = await refreshScenario({ status: 410, native: true, nextJobUrl: "https://foreign.example/private" });
+assert.deepEqual(foreign.navigations, ["/driver-portal"]);
+console.log("Driver open-page access loss: private details/messages cleared, exact native reconciliation, transient and stale-response preservation passed.");

@@ -80,7 +80,7 @@ const inlineEditor = sectionBetween(
   files.customerFolder,
   'data-customer-folder-inline-job-editor={booking.booking_reference || ""}',
   'data-customer-folder-price-review-save={booking.booking_reference || ""}',
-  "existing Jobs not billed yet editor",
+  "existing Unbilled jobs editor",
 );
 
 for (const fragment of [

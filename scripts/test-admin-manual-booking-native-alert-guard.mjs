@@ -13,7 +13,7 @@ const [dashboard, route, helper, nativeNotifications, adminConfigSource, ledger,
   ]);
 
 const adminConfig = JSON.parse(adminConfigSource).expo;
-assert.equal(adminConfig.ios.buildNumber, "10", "The approved Admin loading-recovery binary must retain native alert behavior in Build 10");
+assert.equal(adminConfig.ios.buildNumber, "11", "The released Admin first-unlock binary must retain native alert behavior in Build 11");
 
 const saveStart = dashboard.indexOf("async function saveBooking(");
 const saveEnd = dashboard.indexOf("function bookingRecordReferenceCandidates", saveStart);

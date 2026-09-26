@@ -4,6 +4,14 @@ import ts from 'typescript';
 import { recordModule, clientFor, issueInput, actor, loadFunctions, folderSource, job } from './test-customer-company-booker-invoice-preparation-guard.mjs';
 const page = readFileSync('app/customers/page.tsx','utf8');
 assert.ok(page.includes('data-selected-job-invoice-mark-sent="true"'), 'Paid review must offer Mark as sent');
+// Owner-approved compact labels must retain the existing manual-send and paid gates.
+assert.ok(page.includes('plainInvoiceIssuedRecord?.manuallySentAt ? "Sent" : manualInvoiceSentPending ? "Saving" : "Mark sent"'));
+assert.ok(page.includes('action: "Mark sent"'));
+assert.ok(page.includes('${invoice.invoiceNumber} marked sent. No email sent.'));
+const invoiceFolderCopy = readFileSync('app/customers/[customerId]/customer-invoice-folder-panel.tsx', 'utf8');
+assert.match(invoiceFolderCopy, /selectedInvoice\.manuallySentAt \? <p[^>]*>Sent<\/p> : null/);
+assert.ok(folderSource.includes('4 · Review invoice'));
+assert.ok(folderSource.includes('Unbilled jobs'));
 const writes = [], invoices = [];
 const client = clientFor({writes,invoices});
 const paidInput = {...issueInput,status:'Paid',action:'mark_manually_sent'};
@@ -119,7 +127,7 @@ const ast=ts.createSourceFile('page.tsx',page,ts.ScriptTarget.Latest,true,ts.Scr
 let handler;function visit(node){if(ts.isFunctionDeclaration(node)&&node.name?.text==='markSelectedJobInvoiceSent')handler=node.getText(ast);ts.forEachChild(node,visit)}visit(ast);
 assert.ok(handler);
 async function runUi({result=issued,confirm=true,pending=false,existing=null}={}) {
- const requests=[],events=[],stored=[],messages=[];let locked={current:pending};
+ const requests=[],events=[],stored=[],messages=[],navigations=[];let locked={current:pending};
  const bindings={manualInvoiceSentPendingRef:locked,issuingCustomerInvoiceKey:'',emailingCustomerInvoiceNumber:'',downloadingCustomerInvoiceNumber:'',
  plainInvoiceIssuedRecord:existing,plainInvoiceSelectedJobReviewStatus:'Paid',isPlainInvoicePreviewCurrent:true,
  plainInvoiceRequestBodyFromPreview:()=>paidInput,confirmInvoiceSafetyAction:()=>confirm,formatInvoiceAmount:()=>'$260.00',
@@ -127,16 +135,22 @@ async function runUi({result=issued,confirm=true,pending=false,existing=null}={}
  adminCustomerInvoicesApiPath:'/api/admin-customer-invoices',setManualInvoiceSentPending:()=>{},
  fetch:async(url,request)=>{requests.push({url,...request});return{ok:result.ok,json:async()=>result.ok?{ok:true,invoice:result.data}:{ok:false,error:'Save failed'}}},
  saveCustomerLocalInvoice:i=>stored.push(i),updateIssuedInvoiceState:()=>{},setPlainInvoiceIssuedRecord:()=>{},
- window:{dispatchEvent:e=>events.push(e.type)},Event:class {constructor(type){this.type=type}},
+ window:{location:{href:'https://app.prestigelimo.sg/customers',assign:href=>navigations.push(href)},dispatchEvent:e=>events.push(e.type)}, URLSearchParams, customerFolderHrefFor:(id,name)=>'/customers/'+encodeURIComponent(id)+'?name='+encodeURIComponent(name),Event:class {constructor(type){this.type=type}},
  setPlainInvoiceFeedback:m=>messages.push(m),setPlainInvoiceFeedbackTone:()=>{},customerInvoiceActionFailureMessage:(s,e)=>String(e)};
  const compiled=ts.transpileModule(handler+'\nreturn markSelectedJobInvoiceSent;',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
  const fn=new Function(...Object.keys(bindings),compiled)(...Object.values(bindings));
  await Promise.all([fn(),fn()]);
- return{requests,events,stored,messages};
+ return{requests,events,stored,messages,navigations};
 }
 const ui=await runUi();assert.equal(ui.requests.length,1);assert.equal(ui.requests[0].url,'/api/admin-customer-invoices');assert.equal(ui.requests[0].method,'POST');
+assert.equal(ui.navigations.length,1,'Confirmed send must open exact customer invoice');
+assert.equal(new URL(ui.navigations[0],'https://example.test').pathname,'/customers/'+issued.data.customerId);
+assert.equal(new URL(ui.navigations[0],'https://example.test').searchParams.get('focus_invoice'),issued.data.invoiceNumber);
 assert.deepEqual(ui.events,['prestige:customer-invoice-updated']);assert.equal(ui.stored[0].status,'Paid');
-const failUi=await runUi({result:{ok:false}});assert.equal(failUi.events.length,0);assert.equal(failUi.stored.length,0);
+for (const data of [{...issued.data,customerId:'999'}, {...issued.data,documentType:'quotation'}, {...issued.data,documentState:'draft'}]) {
+ const rejected=await runUi({result:{ok:true,data}});assert.equal(rejected.navigations.length,0);assert.equal(rejected.stored.length,0);
+}
+const failUi=await runUi({result:{ok:false}});assert.equal(failUi.navigations.length,0);assert.equal(failUi.events.length,0);assert.equal(failUi.stored.length,0);
 assert.equal((await runUi({confirm:false})).requests.length,0);
 assert.equal((await runUi({pending:true})).requests.length,0);
 assert.equal((await runUi({existing:issued.data})).requests.length,0);

@@ -237,6 +237,7 @@ export default function DriverPortalPage() {
   const [availableJobs, setAvailableJobs] = useState<DriverPoolAvailableJob[]>([]);
   const [availableJobsEnabled, setAvailableJobsEnabled] = useState(false);
   const [availableJobsReadAvailable, setAvailableJobsReadAvailable] = useState(false);
+  const [availableJobsError, setAvailableJobsError] = useState("");
   const [availableJobsHasMore, setAvailableJobsHasMore] = useState(false);
   const [availableJobsPage, setAvailableJobsPage] = useState(1);
   const [availableJobsBusy, setAvailableJobsBusy] = useState(false);
@@ -266,6 +267,7 @@ export default function DriverPortalPage() {
   const [accountEmailConfirmed, setAccountEmailConfirmed] = useState(false);
   const [accountFirstSignIn, setAccountFirstSignIn] = useState(false);
   const [accountSetupOpen,setAccountSetupOpen]=useState(false);
+  const [accountSetupSignIn,setAccountSetupSignIn]=useState(false);
   const [accountSetupPending,setAccountSetupPending]=useState(false);
   const [accountSetupSupported,setAccountSetupSupported]=useState(false);
   useEffect(()=>{
@@ -440,6 +442,7 @@ export default function DriverPortalPage() {
       const result = await response.json() as { enabled?: boolean; has_more?: boolean; jobs?: DriverPoolAvailableJob[]; ok?: boolean };
       if (!response.ok || result.ok !== true) throw new Error("Available Jobs could not be loaded.");
       if (availableJobsReadRevisionRef.current !== revision) return;
+      setAvailableJobsError("");
       setAvailableJobsReadAvailable(true);
       setAvailableJobsEnabled(result.enabled === true);
       const jobs = Array.isArray(result.jobs) ? result.jobs : [];
@@ -447,9 +450,9 @@ export default function DriverPortalPage() {
       setAvailableJobsHasMore(result.has_more === true);
       setAvailableJobsPage(page);
     } catch {
-      if (availableJobsReadRevisionRef.current === revision && !options.quiet) {
+      if (availableJobsReadRevisionRef.current === revision) {
         setAvailableJobsReadAvailable(false);
-        setAvailableJobsEnabled(false);
+        setAvailableJobsError("Could not refresh jobs. Tap Refresh to check current offers.");
       }
     } finally {
       if (availableJobsReadRevisionRef.current === revision && !options.quiet) {
@@ -471,6 +474,7 @@ export default function DriverPortalPage() {
       setAvailableJobs([]);
       setAvailableJobsEnabled(false);
       setAvailableJobsReadAvailable(false);
+      setAvailableJobsError("");
       setAvailableJobsHasMore(false);
       setAvailableJobsPage(1);
       setAvailableJobsAcceptedConfirmation("");
@@ -523,6 +527,7 @@ export default function DriverPortalPage() {
   }, [availableJobsBusy, driverPoolAccountSession, loadAvailableJobs, loadJobs]);
 
   async function decideAvailableJob(job: DriverPoolAvailableJob, action: "accept" | "decline") {
+    if (!availableJobsReadAvailable) return;
     availableJobsReadRevisionRef.current += 1;
     setAvailableJobsBusy(true);
     setAvailableJobsFeedback((current) => ({ ...current, [job.offer_key]: "Working…" }));
@@ -1012,12 +1017,12 @@ export default function DriverPortalPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-loading="true">
             <p className="text-sm font-semibold text-slate-700">Loading assigned jobs…</p>
           </section>
-        ) : installedAccountSignInRequired && accountSetupSupported && (accountSetupOpen || accountSetupPending) ? (
-          <DriverAccountSetup pending={accountSetupPending} onCancel={()=>setAccountSetupOpen(false)}/>
+        ) : installedAccountSignInRequired && accountSetupSupported && !accountSetupSignIn && (accountSetupOpen || accountSetupPending) ? (
+          <DriverAccountSetup pending={accountSetupPending} onCancel={()=>{setAccountSetupOpen(false);setAccountSetupSignIn(true);}}/>
         ) : installedAccountSignInRequired ? (
           <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-driver-portal-sign-in="true">
             <h2 className="text-lg font-bold text-slate-950">Driver sign in</h2>
-            {accountSetupSupported?<button className="min-h-11 rounded border px-3 font-semibold" type="button" onClick={()=>setAccountSetupOpen(true)}>New driver? Create account</button>:null}
+            {accountSetupSupported?<button className="min-h-11 rounded border px-3 font-semibold" type="button" onClick={()=>{setAccountSetupSignIn(false);setAccountSetupOpen(true);}}>{accountSetupPending ? "Resume setup" : "New driver? Create account"}</button>:null}
             <p className={nativePinSignIn ? "text-xs font-medium leading-5 text-slate-700" : "text-sm font-medium leading-6 text-slate-700"}>
               {nativePinSignIn
                 ? <>First sign-in: Email + 6-digit PIN.<br />Next time: 6-digit PIN only.</>
@@ -1222,18 +1227,23 @@ export default function DriverPortalPage() {
               ) : null}
             </div>
 
-            {availableJobsEnabled ? (
+            {driverPoolAccountSession && (availableJobsEnabled || Boolean(availableJobsError)) ? (
               <section className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm" data-driver-pool-available-jobs="true" id="available-jobs">
                 <div className="flex items-center justify-between gap-2">
                   <div><h2 className="text-lg font-bold text-emerald-950">Available Jobs</h2><p className="text-xs font-semibold text-emerald-800">Fixed driver payout · earliest pickup first</p></div>
                   <button className="h-9 rounded-md border border-emerald-300 bg-white px-3 text-xs font-semibold" disabled={availableJobsBusy} onClick={() => void loadAvailableJobs(1)} type="button">Refresh</button>
                 </div>
+                {availableJobsError ? (
+                  <p className="text-sm font-semibold text-amber-900" role="alert">
+                    {availableJobsError}{availableJobs.length > 0 ? " Shown offers may be out of date." : ""}
+                  </p>
+                ) : null}
                 {availableJobsAcceptedConfirmation ? (
                   <p className="text-xs font-semibold text-emerald-900" data-driver-pool-accepted-confirmation="true" role="status">
                     {availableJobsAcceptedConfirmation}
                   </p>
                 ) : null}
-                {availableJobs.length === 0 ? <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700">No open job offers.</p> : availableJobs.map((job) => {
+                {availableJobs.length === 0 ? (availableJobsReadAvailable ? <p className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-700">No open job offers.</p> : null) : availableJobs.map((job) => {
                   const [pickupLabel, closesLabel] = [job.pickup_at, job.closes_at].map((value) => {
                     const date = new Date(value);
                     if (Number.isNaN(date.getTime())) return "Time unavailable";
@@ -1275,12 +1285,12 @@ export default function DriverPortalPage() {
                         </div>
                       ))}
                     </dl>
-                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy || job.response_status === "awaiting_admin"} onClick={() => void decideAvailableJob(job, "accept")} type="button">{job.response_status === "awaiting_admin" ? "Pending" : job.selection_mode === "admin" ? "Available" : job.combo ? "Accept all trips" : "Accept"}</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void decideAvailableJob(job, "decline")} type="button">{job.response_status === "awaiting_admin" ? "Cancel" : "Decline"}</button></div>
+                    <div className="mt-2 flex gap-2"><button className="h-10 flex-1 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:bg-slate-400" disabled={availableJobsBusy || !availableJobsReadAvailable || job.response_status === "awaiting_admin"} onClick={() => void decideAvailableJob(job, "accept")} type="button">{job.response_status === "awaiting_admin" ? "Pending" : job.selection_mode === "admin" ? "Available" : job.combo ? "Accept all trips" : "Accept"}</button><button className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold" disabled={availableJobsBusy || !availableJobsReadAvailable} onClick={() => void decideAvailableJob(job, "decline")} type="button">{job.response_status === "awaiting_admin" ? "Cancel" : "Decline"}</button></div>
                     {availableJobsFeedback[job.offer_key] && availableJobsFeedback[job.offer_key] !== "Pending" ? <p className="mt-2 text-xs font-semibold text-slate-600" role="status">{availableJobsFeedback[job.offer_key]}</p> : null}
                   </article>
                   );
                 })}
-                {availableJobsHasMore ? <button className="h-10 w-full rounded-md border border-emerald-300 bg-white text-sm font-semibold" disabled={availableJobsBusy} onClick={() => void loadAvailableJobs(availableJobsPage + 1)} type="button">{availableJobsBusy ? "Loading…" : "Load more"}</button> : null}
+                {availableJobsHasMore ? <button className="h-10 w-full rounded-md border border-emerald-300 bg-white text-sm font-semibold" disabled={availableJobsBusy || !availableJobsReadAvailable} onClick={() => void loadAvailableJobs(availableJobsPage + 1)} type="button">{availableJobsBusy ? "Loading…" : "Load more"}</button> : null}
               </section>
             ) : null}
 

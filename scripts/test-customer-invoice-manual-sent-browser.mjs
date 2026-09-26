@@ -72,7 +72,8 @@ try{
  await c.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  const rect=await evaluate(`(()=>{const r=document.querySelector('[data-selected-job-invoice-mark-sent]').getBoundingClientRect();return {left:r.left,right:r.right,width:innerWidth}})()`);assert.ok(rect.left>=0&&rect.right<=rect.width,'Compact button stays in mobile viewport');
  await click('[data-selected-job-invoice-mark-sent]');
- await waitForCondition(()=>evaluate(`document.querySelector('[data-selected-job-invoice-mark-sent]')?.textContent.includes('Marked as sent')`),15000,'stored manually-sent badge');
+ await waitForCondition(()=>evaluate(`location.pathname === '/customers/164' && new URLSearchParams(location.search).get('focus_invoice') === ${JSON.stringify(rows[0]?.invoice_number)}`),15000,'automatic exact customer invoice return');
+ await waitForCondition(()=>evaluate(`document.querySelector('[data-customer-invoice-folder-detail]')?.textContent.includes('Sent')`),15000,'stored manually-sent badge');
  assert.equal(writes.length,1);assert.equal(writes[0].status,'Paid');assert.equal(writes[0].email_delivery_status,'not_sent');
  assert.equal(prefixChecks,missingTravelerPrefix?1:0);
  assert.equal(writes[0].traveler_id,missingTravelerPrefix?70:null);
@@ -82,11 +83,10 @@ try{
  assert.ok(pdfText.includes('Reference: '+job.public_booking_reference));
  assert.ok(!pdfText.includes('REF '+job.public_booking_reference));
  const screen=await c.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-manual-sent-review.png',Buffer.from(screen.data,'base64'));
- await c.send('Page.navigate',{url:folderUrl});
  await wait(`[data-customer-folder-saved-bookings-select="${other.booking_reference}"]`);
  await waitForCondition(()=>evaluate(`!document.querySelector('[data-customer-folder-saved-bookings-select="${job.booking_reference}"]')`),10000,'billed job excluded');
  assert.equal(await evaluate(`!!document.querySelector('[data-customer-folder-saved-bookings-select="${other.booking_reference}"]')`),true);
- await waitForCondition(()=>evaluate(`document.body.textContent.includes('Marked as sent')`),10000,'persistent folder status');
+ await waitForCondition(()=>evaluate(`document.body.textContent.includes('Sent')`),10000,'persistent folder status');
  await wait('[data-customer-invoice-folder-selected-item-table]');
  const storedItemText=await evaluate(`document.querySelector('[data-customer-invoice-folder-selected-item-table]').textContent`);
  assert.ok(!/\|\s*REF\b/i.test(storedItemText),'Total invoices item display must also omit the repeated reference');
@@ -118,7 +118,7 @@ try{
     await writeFile('/private/tmp/prestige-invoice-view-local.png',Buffer.from(image.data,'base64'));
    }
   }finally{pdfViewer.close()}
-  assert.equal(await evaluate(`document.querySelector('[data-customer-invoice-folder-detail]').textContent.includes('Marked as sent')`),true);
+  assert.equal(await evaluate(`document.querySelector('[data-customer-invoice-folder-detail]').textContent.includes('Sent')`),true);
   await c.send('Target.closeTarget',{targetId:opened.targetId});
  }
  assert.equal(requests.filter(r=>r.path.startsWith('/api/admin-customer-invoice-pdf/')).length,2);

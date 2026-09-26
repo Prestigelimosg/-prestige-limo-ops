@@ -61,6 +61,7 @@ import {
   transitionDriverBiometricAppState,
 } from "./src/driver-biometric-lifecycle";
 import {
+  applyNativeNoticeCleanup,
   dismissNativeJobNotifications,
   forgetNativeNotificationToken,
   loadNativeDriverJob,
@@ -216,7 +217,9 @@ export default function App() {
   }, [setDriverUnlockState]);
 
   useEffect(() => {
+    void applyNativeNoticeCleanup(null, Notifications).catch(() => undefined);
     const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") void applyNativeNoticeCleanup(null, Notifications).catch(() => undefined);
       const action = transitionDriverBiometricAppState(
         biometricLifecycleRef.current,
         nextState,
@@ -426,6 +429,7 @@ export default function App() {
     const receivedSubscription = Notifications.addNotificationReceivedListener(
       (notification) => {
         const data = notification.request.content.data;
+        void applyNativeNoticeCleanup(data, Notifications).catch(() => undefined);
         if (
           data &&
           typeof data === "object" &&

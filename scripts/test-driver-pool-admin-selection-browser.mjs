@@ -81,7 +81,7 @@ try {
   assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[10].disabled"),true);
   assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[11].disabled"),true);
   assert.equal(await evaluate("document.querySelectorAll('input[type=checkbox]')[9].disabled"),true,'Mismatched vehicle cannot be selected');
-  assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"1\"]').innerText"),'Online · alerts ready');
+  assert.equal(await evaluate("document.querySelector('[data-driver-alert-status=\"1\"]').innerText"),'Alerts registered');
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,`Selection overflow at ${width}`);
   const selectedShot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/pool-direct-selected-'+width+'.png',Buffer.from(selectedShot.data,'base64'));
   await evaluate("document.querySelector('input[type=checkbox]').click();window.poolTest.failReadiness=true");
@@ -89,7 +89,7 @@ try {
   assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Send to selected drivers').disabled"),true,'Failed refresh cannot retain a ready selection');
   assert.equal(await evaluate("document.querySelector('input[type=checkbox]').disabled"),false,'Previously selected driver can still be unticked');
   await evaluate("document.querySelector('input[type=checkbox]').click();window.poolTest.failReadiness=false");
-  await click('Refresh alert status');await wait("document.querySelector('[data-driver-alert-status=\"1\"]').innerText==='Online · alerts ready'");
+  await click('Refresh alert status');await wait("document.querySelector('[data-driver-alert-status=\"1\"]').innerText==='Alerts registered'");
   assert.equal(await evaluate("document.querySelectorAll('summary').length"),1,'One Driver Pool disclosure');
   assert.equal(await evaluate("document.querySelector('summary').textContent"),'Driver Pool');
   assert.equal(await evaluate("[...document.querySelectorAll('button')].filter(b=>b.textContent.startsWith('Send to')).length"),2);
@@ -101,7 +101,7 @@ try {
   assert.equal(await evaluate("window.poolTest.requests.some(r=>r.body?.action==='widen')"),false,'Direct all sends once without a selected offer or widening');
   await evaluate("window.poolTest.allowConfirm=true");await click('Cancel Offer');
   await wait("document.body.innerText.includes('Offer cancelled')");
-  await client.send('Page.navigate',{url:url+'/large'});await wait("document.querySelector('[data-driver-alert-status=\"501\"]')?.innerText==='Online · alerts ready'");
+  await client.send('Page.navigate',{url:url+'/large'});await wait("document.querySelector('[data-driver-alert-status=\"501\"]')?.innerText==='Alerts registered'");
   assert.deepEqual(await evaluate("window.poolTest.requests.filter(r=>r.url.includes('driver_ids=')).map(r=>new URL(r.url,location.origin).searchParams.get('driver_ids').split(',').length)"),[200,200,101]);
   for(let i=0;i<500;i++)await evaluate(`document.querySelectorAll('input[type=checkbox]')[${i}].click()`);
   await wait("document.querySelectorAll('input[type=checkbox]:checked').length===500");

@@ -518,7 +518,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
                   </label>
                   <div className="mt-2 w-full space-y-1" data-driver-pool-selected-drivers="true">
                     <p className="text-sm font-semibold text-sky-950">Choose drivers · {selectedIds.length} selected</p>
-                    <p className="text-xs text-slate-600">Online means job alerts are enabled, including when the app is closed. Delivery still depends on the phone connection.</p>
+                    <p className="text-xs text-slate-600">Registration does not confirm the phone is online or the job was delivered.</p>
                     <div className="flex flex-wrap items-center gap-2">
                     <button className="min-h-8 text-xs font-semibold text-sky-900 underline" disabled={busy || driverListState === "loading"} onClick={() => void (driverListState === "failed" || !drivers.length ? requestDrivers() : load())} type="button">{driverListState === "loading" ? "Loading drivers…" : driverListState === "failed" ? "Retry loading drivers" : "Refresh alert status"}</button>
                     <label className="text-xs font-semibold text-slate-700">Search drivers
@@ -532,7 +532,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
                           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 break-words">
                             <span>{driver.driver_name || "Unnamed driver"} · {driver.vehicle_type || "Vehicle unavailable"} · {driver.plate_number || "Plate unavailable"}</span>
                             <span className={alertReadiness[driver.id] === true ? "font-semibold text-emerald-700" : "text-slate-600"} data-driver-alert-status={driver.id}>
-                              {alertReadiness[driver.id] === true ? "Online · alerts ready" : alertReadiness[driver.id] === false ? "Alerts not ready" : "Alert status unavailable"}
+                              {alertReadiness[driver.id] === true ? "Alerts registered" : alertReadiness[driver.id] === false ? "Alerts not ready" : "Alert status unavailable"}
                             </span>
                             {!matchesVehicle(driver) ? <span className="text-amber-800">{vehicleRequirement ? "Vehicle does not match" : "Choose pool vehicle"}</span> : null}
                           </span>

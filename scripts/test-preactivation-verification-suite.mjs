@@ -616,6 +616,10 @@ const guardChecks = [
     script: "scripts/test-customer-companion-foundation-guard.mjs",
   },
   {
+    label: "Customer native invoice PDF handoff guard",
+    script: "scripts/test-customer-native-invoice-pdf-guard.mjs",
+  },
+  {
     label: "Customer biometric single-flight guard",
     script: "scripts/test-customer-biometric-single-flight-guard.mjs",
   },

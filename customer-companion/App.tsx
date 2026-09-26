@@ -5,6 +5,7 @@ import {
   AppState,
   Image,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -23,6 +24,7 @@ import {
 import type { WebView as WebViewType } from "react-native-webview";
 
 import prestigeIcon from "./assets/icon.png";
+import { createCustomerInvoicePdfHandler, customerInvoicePdfResultScript } from "./src/customer-invoice-pdf";
 
 import {
   beginCustomerBiometricAttempt,
@@ -168,6 +170,7 @@ export default function App() {
   const nativeAlertsRegistrationAttemptRef = useRef("");
   const unlockStateRef = useRef<UnlockState>("checking");
   const webViewRef = useRef<WebViewType>(null);
+  const customerInvoicePdfHandlerRef = useRef(createCustomerInvoicePdfHandler());
 
   const injectCustomerNativeRegistration = useCallback((registration: CustomerNativeRegistration) => {
     webViewRef.current?.injectJavaScript(
@@ -372,6 +375,14 @@ export default function App() {
   }, [currentUrl, injectCustomerNativeRegistration, loadedCustomerWebView, nativeAlertsEnabled, nativeRegistration]);
 
   const handleCustomerNativeBridgeMessage = useCallback(async (event: WebViewMessageEvent) => {
+    if (Platform.OS === "ios" && await customerInvoicePdfHandlerRef.current(event.nativeEvent.data, {
+      eventUrl: event.nativeEvent.url,
+      currentUrl,
+      loadedUrl: loadedCustomerWebView.url,
+      unlocked: unlockStateRef.current === "ready",
+    }, (requestId, status) => {
+      webViewRef.current?.injectJavaScript(customerInvoicePdfResultScript(requestId, status));
+    })) return;
     const request = parseCustomerNativeBridgeMessage(event.nativeEvent.data);
     if (
       !request ||
@@ -591,7 +602,7 @@ export default function App() {
                 javaScriptEnabled
                 key="prestige-customer-webview"
                 ref={webViewRef}
-                injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; true;` : undefined}
+                injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; ${Platform.OS === "ios" ? "window.__prestigeCustomerNativePdf = 1;" : ""} true;` : undefined}
                 mixedContentMode="never"
                 onMessage={handleCustomerNativeBridgeMessage}
                 onNavigationStateChange={updateNavigation}

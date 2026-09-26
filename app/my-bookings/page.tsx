@@ -22,6 +22,7 @@ import {
 } from "../../lib/customer-portal-trip-updates-adapter";
 import { submitCustomerPortalBookingChangeRequest } from "../../lib/customer-portal-booking-change-request-adapter";
 import {
+  deliverCustomerPortalInvoicePdf,
   fetchCustomerPortalInvoicePdf,
   loadCustomerPortalInvoiceRecords,
   type CustomerPortalInvoiceRecord,
@@ -36,7 +37,7 @@ import { updateCustomerDevicePushSubscription } from "../../lib/customer-device-
 
 type BookingFilter = "Cancelled" | "Completed" | "Upcoming";
 type InvoiceFolder = "Credit Notes" | "Paid Invoices" | "Quotations" | "Unpaid Invoices";
-type InvoiceDownloadState = "downloaded" | "downloading" | "failed";
+type InvoiceDownloadState = "downloaded" | "downloading" | "failed" | "shared" | "cancelled";
 type PortalSection = "New Booking Request" | "Invoices" | BookingFilter;
 type PortalBookingsLoadState = "blocked" | "loading" | "ready" | "retrying";
 type PortalInvoicesLoadState = "blocked" | "loading" | "stored";
@@ -335,18 +336,6 @@ function invoiceFolderDateHeading(folder: InvoiceFolder) {
 
 function invoiceFolderRowDate(folder: InvoiceFolder, invoice: CustomerPortalInvoiceRecord) {
   return folder === "Unpaid Invoices" ? invoice.dueDateLabel : invoice.issueDateLabel;
-}
-
-function downloadBrowserBlob(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
 function customerDevicePushIsSupported() {
@@ -1728,11 +1717,11 @@ export default function CustomerPortalPage() {
         throw new Error("Invoice PDF could not be downloaded right now.");
       }
 
-      downloadBrowserBlob(pdf.blob, pdf.filename || invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
+      const result = await deliverCustomerPortalInvoicePdf(pdf.blob, pdf.filename || invoice.pdfFilename || `${invoice.invoiceNumber}.pdf`);
 
       setInvoiceDownloadStates((current) => ({
         ...current,
-        [invoice.invoiceNumber]: "downloaded",
+        [invoice.invoiceNumber]: result,
       }));
     } catch {
       setInvoiceDownloadStates((current) => ({
@@ -2347,7 +2336,7 @@ export default function CustomerPortalPage() {
                                     aria-label={`Download PDF ${invoice.invoiceNumber}`}
                                     className={[
                                       "min-h-8 rounded-md border px-2 text-xs font-bold transition disabled:cursor-wait",
-                                      downloadState === "downloaded"
+                                      downloadState === "downloaded" || downloadState === "shared"
                                         ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                                         : downloadState === "failed"
                                           ? "border-red-200 bg-red-50 text-red-900 hover:border-red-300"
@@ -2363,9 +2352,11 @@ export default function CustomerPortalPage() {
                                       ? "Downloading"
                                       : downloadState === "downloaded"
                                         ? "Downloaded"
-                                        : downloadState === "failed"
-                                          ? "Try again"
-                                          : "PDF"}
+                                        : downloadState === "shared"
+                                          ? "Shared / saved"
+                                          : downloadState === "failed"
+                                            ? "Try again"
+                                            : "PDF"}
                                   </button>
                                 </td>
                               </tr>

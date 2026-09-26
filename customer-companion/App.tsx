@@ -375,15 +375,17 @@ export default function App() {
   }, [currentUrl, injectCustomerNativeRegistration, loadedCustomerWebView, nativeAlertsEnabled, nativeRegistration]);
 
   const handleCustomerNativeBridgeMessage = useCallback(async (event: WebViewMessageEvent) => {
-    if (Platform.OS === "ios" && await customerInvoicePdfHandlerRef.current(event.nativeEvent.data, {
-      eventUrl: event.nativeEvent.url,
+    // React Native releases its pooled event after the synchronous callback.
+    const { data, url } = event.nativeEvent;
+    if (Platform.OS === "ios" && await customerInvoicePdfHandlerRef.current(data, {
+      eventUrl: url,
       currentUrl,
       loadedUrl: loadedCustomerWebView.url,
       unlocked: unlockStateRef.current === "ready",
     }, (requestId, status) => {
       webViewRef.current?.injectJavaScript(customerInvoicePdfResultScript(requestId, status));
     })) return;
-    const request = parseCustomerNativeBridgeMessage(event.nativeEvent.data);
+    const request = parseCustomerNativeBridgeMessage(data);
     if (
       !request ||
       !isCustomerBookingsUrl(currentUrl) ||

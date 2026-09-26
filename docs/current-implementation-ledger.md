@@ -1,3 +1,8 @@
+## Customer PDF Release Callback Preservation Check (2026-09-26)
+
+- Final integration review found that the new awaited PDF receiver could read a recycled React Native WebView event before continuing the existing notification handler. The pinned React Native renderer releases pooled events after synchronous dispatch; the pinned WebView passes that event through. An executable test of the actual App callback reproduced the failure by recycling the event after invocation. The callback now captures only its data and URL synchronously before awaiting, preserving the existing notification parser and paths.
+- Initial EAS build90048fa8-39f5-4654-b7c5-a7b2aa0b292d was successfully cancelled before any Apple upload or web merge. Do not submit that artifact. Replacement13 must contain this correction. The new actual-callback regression, existing PDF/notification/biometric/foundation guards, Customer TypeScript and scoped lint pass. This supersedes the initial single-build expectation; report the cancelled attempt separately from the completed replacement and do not claim zero Expo usage.
+
 ## Customer PDF Build 13 Release Preparation (2026-09-26)
 
 - Owner approved the bounded Customer PDF release and matching web deployment after local repair160bf12. Fresh Expo and App Store Connect both show Customer12 as the latest build; prepare13 for the existing sg.prestigelimo.customer / ce71ff91-7f71-4297-bcef-edf420f94316 / Apple6802691447 identity. Production main remains8c216ce at preflight. No duplicate build/upload has been started at this checkpoint.

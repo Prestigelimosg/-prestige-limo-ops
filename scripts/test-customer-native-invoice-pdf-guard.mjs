@@ -146,9 +146,33 @@ assert.equal(anchors, 1, "Ordinary browser download remains unchanged");
 
 const app = read("customer-companion/App.tsx");
 const page = read("app/my-bookings/page.tsx");
+// React Native pools the WebView event after the synchronous callback returns.
+// Exercise the actual App callback, not only the PDF helper, to protect alerts.
+const appAst = ts.createSourceFile("App.tsx", app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let bridgeCallback;
+function findBridge(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(appAst) === "handleCustomerNativeBridgeMessage") bridgeCallback = node.initializer.arguments[0].getText(appAst);
+  ts.forEachChild(node, findBridge);
+}
+findBridge(appAst);
+assert.ok(bridgeCallback);
+let parsedNotification;
+const callbackJs = ts.transpileModule("(" + bridgeCallback + ")", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const actualAppCallback = vm.runInNewContext(callbackJs, {
+  Platform: { OS: "ios" },
+  customerInvoicePdfHandlerRef: { current: async () => false },
+  currentUrl: origin, loadedCustomerWebView: { url: origin }, unlockStateRef: { current: "ready" },
+  parseCustomerNativeBridgeMessage: (data) => { parsedNotification = data; return null; },
+});
+const pooledEvent = { nativeEvent: { data: '{"type":"customer_native_notifications_enable"}', url: origin } };
+const notificationHandling = actualAppCallback(pooledEvent);
+pooledEvent.nativeEvent = null;
+await assert.doesNotReject(notificationHandling, "The awaited PDF branch must not read a released React Native event in the notification lane");
+assert.equal(parsedNotification, '{"type":"customer_native_notifications_enable"}');
 assert.match(app, /onMessage=\{handleCustomerNativeBridgeMessage\}/);
 assert.match(app, /customerInvoicePdfHandlerRef\.current/);
-assert.match(app, /eventUrl: event\.nativeEvent\.url/);
+assert.match(app, /const \{ data, url \} = event\.nativeEvent/);
+assert.match(app, /eventUrl: url/);
 assert.match(app, /unlocked: unlockStateRef\.current === "ready"/);
 assert.match(app, /Platform\.OS === "ios"/);
 assert.match(app, /sharedCookiesEnabled/);

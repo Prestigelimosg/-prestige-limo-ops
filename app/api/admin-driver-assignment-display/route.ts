@@ -8,6 +8,7 @@ import {
   adminDriverAssignmentDisplayReadiness,
   adminDriverAssignmentDisplayVersion,
   listAdminDriverAssignmentDisplay,
+  readFrequentAssignmentDrivers,
 } from "../../../lib/admin-driver-assignment-display";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +72,16 @@ export async function GET(request: Request) {
     }
 
     const actor = adminDispatcherBoundaryToPersistenceAdapterActor(boundary.context);
-    const result = await listAdminDriverAssignmentDisplay(new URL(request.url).searchParams, actor);
+    const params = new URL(request.url).searchParams;
+    if (params.has("scope")) {
+      if (params.get("scope") !== "frequent" || [...params.entries()].length !== 1) {
+        return errorResponse({ error: "Invalid driver frequency parameters.", status: 400 });
+      }
+      const ranked = await readFrequentAssignmentDrivers(actor);
+      if (!ranked.ok) return errorResponse(ranked);
+      return Response.json({ ok: true, frequent_drivers: ranked.data, window_days: 90 }, { headers: { "Cache-Control": "no-store" } });
+    }
+    const result = await listAdminDriverAssignmentDisplay(params, actor);
 
     if (!result.ok) {
       return errorResponse(result);

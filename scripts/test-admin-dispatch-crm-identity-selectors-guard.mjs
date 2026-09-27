@@ -20,8 +20,7 @@ for (const fragment of [
   'data-admin-dispatch-customer-account-search="true"',
   'data-admin-dispatch-customer-account-option={account.key}',
   'data-admin-dispatch-customer-account-create="true"',
-  'data-admin-dispatch-new-customer-choice="true"',
-  'data-admin-dispatch-new-customer-corporate="true"',
+  'onClick={() => chooseAdminDispatchNewCustomerType("corporate")}',
   "adminDispatchFilteredCustomerAccountOptions",
   "adminDispatchCustomerAccountSearch",
   "selectAdminDispatchCustomerAccount",
@@ -64,6 +63,9 @@ for (const forbiddenTitle of [
 }
 
 for (const forbiddenFragment of [
+  'data-admin-dispatch-new-customer-choice="true"',
+  'data-admin-dispatch-new-customer-corporate="true"',
+  "setAdminDispatchNewCustomerChoiceOpen",
   'data-admin-dispatch-new-customer-account="true"',
   'data-admin-dispatch-new-customer-personal="true"',
   'data-admin-email-ai-use-repeated-customer="true"',
@@ -325,8 +327,8 @@ for (const fragment of [
   "different passenger keeps the approved account without another prompt",
   "verified Company + Booker Save + CRM account gate",
   "The focused Company + Booker probe must perform zero booking writes",
-  "single Company + Booker new-customer choice",
-  "new-customer path selection",
+  "Create New Customer directly selects Company + Booker setup",
+  "extraStep: false",
   "assert.equal(bookingPosts.length, 0)",
   'search("Kim Passenger")',
   'search("Mr Jwalent Nanavati")',

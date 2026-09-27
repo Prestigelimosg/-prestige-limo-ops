@@ -1597,6 +1597,7 @@ type AdminAutomationRuntimeResult = {
 };
 
 type AdminAlertLocatorTarget =
+  | "active-job-messages"
   | "admin-app-notification"
   | "admin-action-summary"
   | "new-booking-requests"
@@ -12507,7 +12508,53 @@ async function loadAdminAppNotificationsRead() {
     }
   }
 
-  return { notifications, pagination };
+  let incomingMessageError = "";
+  try {
+    const incoming: AdminAppNotificationRecord[] = [];
+    const seen = new Set<string>();
+    for (let page = 1; page <= adminAppNotificationReadMaxPages; page += 1) {
+      const params = new URLSearchParams({ scope: "admin_incoming_messages", limit: "100", page: String(page) });
+      const response = await fetch(`${adminCustomerDriverAppNotificationsApiPath}?${params}`, {
+        cache: "no-store",
+        headers: { "x-prestige-admin-purpose": adminLegacyDataPurpose },
+        method: "GET",
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok !== true || !Array.isArray(result.notifications)) {
+        throw new Error("Incoming messages could not be loaded. Use Refresh Dashboard to retry.");
+      }
+      for (const record of result.notifications as AdminTodayJobMessageRecord[]) {
+        const direction = record.safe_context?.direction;
+        const valid = record.delivery_surface === "driver_app" && (
+          (direction === "driver_to_admin" && record.workflow_area === "admin_driver_job_messages") ||
+          (direction === "customer_to_driver" && record.workflow_area === "customer_driver_quick_replies")
+        );
+        const id = clean(record.id);
+        if (!valid || !id || !clean(record.booking_reference) || seen.has(id)) continue;
+        seen.add(id);
+        incoming.push({
+          id: `message:${id}`, booking_reference: record.booking_reference,
+          created_at: record.created_at, notification_status: "queued", priority: "normal",
+          notification_type: "trip_update", workflow_area: "admin_incoming_job_message",
+          safe_title: direction === "driver_to_admin" ? "Driver → Admin" : "Customer → Driver",
+          safe_message: record.safe_message,
+          safe_context: { incoming_message_id: id, direction,
+            sender_label: direction === "customer_to_driver" ? clean(record.safe_title) : "" },
+        });
+      }
+      if (!result.pagination?.has_next_page) break;
+      if (page === adminAppNotificationReadMaxPages) throw new Error("Incoming messages exceeded the safe read limit. Message history remains available on each job.");
+    }
+    // Read dismissal after all pages finish, so a concurrent Done cannot reappear.
+    notifications.push(...incoming.filter((item) => {
+      try { return window.localStorage.getItem(`prestige.admin.incoming-message.done.${item.safe_context?.incoming_message_id}`) !== "1"; }
+      catch { return true; }
+    }));
+  } catch (error) {
+    incomingMessageError = error instanceof Error ? error.message : "Incoming messages could not be loaded.";
+  }
+
+  return { notifications, pagination, incomingMessageError };
 }
 
 async function loadAdminEmailAiIntakeRead() {
@@ -16218,7 +16265,7 @@ export default function Home() {
 
     void (async () => {
       try {
-        const { notifications, pagination } = await loadAdminAppNotificationsRead();
+        const { notifications, pagination, incomingMessageError } = await loadAdminAppNotificationsRead();
 
         if (cancelled) {
           return;
@@ -16236,11 +16283,11 @@ export default function Home() {
 
         setAdminAppNotificationReadState({
           message: {
-            tone: notifications.length > 0 ? "success" : "info",
+            tone: incomingMessageError ? "error" : notifications.length > 0 ? "success" : "info",
             text:
-              notifications.length > 0
+              incomingMessageError || (notifications.length > 0
                 ? loadedNotificationText
-                : "No queued saved admin app notifications.",
+                : "No queued saved admin app notifications."),
           },
           notifications,
           pagination,
@@ -16792,6 +16839,25 @@ export default function Home() {
     notificationStatus: AdminAppNotificationUpdateStatus,
   ) => {
     const cleanedNotificationId = clean(notificationId);
+
+    if (cleanedNotificationId.startsWith("message:")) {
+      const alert = adminAppNotificationReadState.notifications.find((item) => item.id === cleanedNotificationId && item.workflow_area === "admin_incoming_job_message");
+      const sourceValue = alert?.safe_context?.incoming_message_id;
+      const sourceId = typeof sourceValue === "string" ? sourceValue.trim() : "";
+      if (!sourceId || cleanedNotificationId !== `message:${sourceId}`) return;
+      try {
+        window.localStorage.setItem(`prestige.admin.incoming-message.done.${sourceId}`, "1");
+        setAdminAppNotificationReadState((current) => ({ ...current,
+          notifications: current.notifications.filter((item) => item.id !== cleanedNotificationId),
+          message: { tone: "success", text: "Message alert cleared on this browser. The job conversation is unchanged." },
+        }));
+      } catch {
+        setAdminAppNotificationReadState((current) => ({ ...current,
+          message: { tone: "error", text: "This browser could not save the cleared alert. The message remains visible." },
+        }));
+      }
+      return;
+    }
 
     if (!cleanedNotificationId) {
       setAdminAppNotificationReadState((current) => ({
@@ -20028,7 +20094,8 @@ export default function Home() {
       !adminAppNotificationIsNewBookingRequest(notification) &&
       !adminAppNotificationChangeRequestContext(notification),
   ).map((notification) => {
-    if (clean(notification.workflow_area) !== "driver_pickup_location_followup") {
+    const incomingMessage = clean(notification.workflow_area) === "admin_incoming_job_message";
+    if (clean(notification.workflow_area) !== "driver_pickup_location_followup" && !incomingMessage) {
       return notification;
     }
 
@@ -20048,11 +20115,11 @@ export default function Home() {
       matches.length > 0 && publicReferences.size === 1 && driverNames.size === 1;
     const publicReference = exact ? clean(matches[0].public_booking_reference) : "";
     const jobLabel = publicReference
-      ? `Job ${publicReference} · ${clean(matches[0].driver_name) || "Driver TBC"}`
+      ? `Job ${publicReference}${incomingMessage ? "" : ` · ${clean(matches[0].driver_name) || "Driver TBC"}`}`
       : "Job details unavailable";
     return {
       ...notification,
-      safe_title: `${clean(notification.safe_title) || "Admin update"} · ${jobLabel}`,
+      safe_title: `${clean(notification.safe_title) || "Admin update"} · ${jobLabel}${incomingMessage && typeof notification.safe_context?.sender_label === "string" && notification.safe_context.sender_label ? ` · ${notification.safe_context.sender_label}` : ""}`,
     };
   });
   const visibleOtherAdminAppNotifications = otherAdminAppNotifications;
@@ -25415,6 +25482,21 @@ export default function Home() {
         const feed = document.querySelector<HTMLElement>('[data-admin-app-notification-feed="true"]');
 
         (row ?? feed)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
+      if (target === "active-job-messages") {
+        const card = Array.from(document.querySelectorAll<HTMLElement>("[data-admin-multi-driver-active-job]"))
+          .find((candidate) => candidate.dataset.adminMultiDriverActiveJob === notificationId);
+        const messages = card?.querySelector<HTMLElement>('[data-admin-active-job-driver-message="true"]');
+        if (!messages) {
+          setAdminAppNotificationReadState((current) => ({ ...current, message: {
+            tone: "info", text: "This job is not currently in Active Assigned Jobs. Its message is retained; check the exact booking in Bookings.",
+          } }));
+          return;
+        }
+        messages.scrollIntoView({ behavior: "smooth", block: "center" });
+        messages.focus({ preventScroll: true });
         return;
       }
 
@@ -33437,6 +33519,7 @@ export default function Home() {
                 <div
                   className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs text-sky-950"
                   data-admin-active-job-driver-message="true"
+                  tabIndex={-1}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-semibold">Messages</div>
@@ -52471,6 +52554,7 @@ export default function Home() {
                   const notificationHighlighted =
                     adminAlertLocatorHighlight?.target === "admin-app-notification" &&
                     adminAlertLocatorHighlight.notificationId === notificationId;
+                  const incomingMessage = notification.workflow_area === "admin_incoming_job_message";
 
 	                  return (
 	                    <div
@@ -52532,7 +52616,20 @@ export default function Home() {
 	                          ))}
 	                        </dl>
 	                      ) : null}
+                      {incomingMessage ? <p className="mt-1 text-xs text-slate-500">{createdTime}</p> : null}
 	                      <div className="mt-2 flex flex-wrap gap-2">
+                        {incomingMessage ? <button
+                          className="h-7 rounded-md border border-sky-300 bg-white px-2 text-xs font-semibold text-sky-800"
+                          data-admin-incoming-message-open={notificationId}
+                          onClick={() => {
+                            const reference = clean(notification.booking_reference);
+                            if (!reference) return;
+                            updateAdminTodayJobMessageAudience(reference, notification.safe_context?.direction === "driver_to_admin" ? "driver" : "customer");
+                            void refreshAdminTodayJobMessageHistory(reference);
+                            scrollToAdminAlertLocatorTarget("active-job-messages", reference);
+                          }}
+                          type="button"
+                        >{notification.safe_context?.direction === "driver_to_admin" ? "Reply to Driver" : "Reply to Customer"}</button> : null}
                         {isNewBookingRequestNotification ? (
                           <button
                             className="h-7 rounded-md border border-emerald-300 bg-emerald-700 px-2 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:hover:bg-slate-100"

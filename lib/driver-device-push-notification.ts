@@ -150,7 +150,7 @@ type DriverNativePushVisibleBody =
   | "Job updated. Tap to review."
   | "Job acknowledgement needed. Tap to review."
   | "New job offer available. Open Driver Portal."
-  | "New job available. Tap to review."
+  | "Open and ack the job."
   | "Pickup is in 1 hour. Open Driver Portal to review.";
 
 type DriverDevicePushPayload = {
@@ -1415,7 +1415,9 @@ export async function sendDriverDevicePushAlertForNewJobLink(
     config,
     options,
     null,
-    input.amendment === true ? "Job updated. Tap to review." : "New job available. Tap to review.",
+    input.amendment === true || linkWasAcknowledged(link)
+      ? "Job updated. Tap to review."
+      : "Open and ack the job.",
     nativeAccountEligible ? payload.job_key : null,
     true,
   );

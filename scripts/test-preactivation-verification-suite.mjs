@@ -552,6 +552,10 @@ const guardChecks = [
     script: "scripts/test-customer-booking-status-device-alert-guard.mjs",
   },
   {
+    label: "Driver issued-job notification wording and stage isolation",
+    script: "scripts/test-driver-issued-job-alert-copy-guard.mjs",
+  },
+  {
     label: "Driver Job acknowledgement device push alert guard",
     script: "scripts/test-driver-job-device-push-alert-guard.mjs",
   },

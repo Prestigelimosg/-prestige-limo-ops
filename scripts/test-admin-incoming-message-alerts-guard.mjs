@@ -18,7 +18,7 @@ let calls, allowed = true, dbError = null;
 const db = {from(table) {
   calls.push(['from',table]);
   const q = {};
-  for (const name of ['select','or','order','range']) q[name] = (...args) => {calls.push([name,...args]);return q;};
+  for (const name of ['select','or','order','range','is']) q[name] = (...args) => {calls.push([name,...args]);return q;};
   q.then = resolve => Promise.resolve({data:[{id:'row'}],count:1201,error:dbError}).then(resolve);
   return q;
 }};
@@ -32,6 +32,7 @@ let result=await serverRead(new URLSearchParams({scope:'admin_incoming_messages'
 assert.equal(result.data.pagination.total_notification_count,1201);
 assert.deepEqual(calls.find(c=>c[0]==='range'),['range',700,799]);
 assert.deepEqual(calls.filter(c=>c[0]==='order'),[['order','created_at',{ascending:false}],['order','id',{ascending:false}]]);
+assert.deepEqual(calls.find(c=>c[0]==='is'),['is','admin_attention_done_at',null]);
 const filter = calls.find(c=>c[0]==='or')[1];
 assert.ok(filter.includes('safe_context->>direction.eq.driver_to_admin'));
 assert.ok(filter.includes('safe_context->>direction.eq.customer_to_driver'));
@@ -44,7 +45,8 @@ allowed=true;dbError={code:'unavailable'};calls=[];assert.equal((await serverRea
 // Execute the actual existing alert loader, with two pages, mixed directions and an already-cleared exact ID.
 const start=page.indexOf('async function loadAdminAppNotificationsRead()');
 const end=page.indexOf('async function loadAdminEmailAiIntakeRead()',start);
-const readRequests=[];const storage=new Map();let failedMessages=false;let failPage=0;
+const readRequests=[];const storage=new Map();const serverDone=new Set();let dismissError=false;
+const sharedDismiss=async ids=>{if(dismissError)throw Error('offline');ids.forEach(id=>serverDone.add(id));return ids;};let failedMessages=false;let failPage=0;
 const driver={id:'driver-a',booking_reference:'EXACT-A',safe_message:'Driver needs help',workflow_area:'admin_driver_job_messages',delivery_surface:'driver_app',safe_context:{direction:'driver_to_admin'}};
 const customer={id:'customer-b',booking_reference:'EXACT-B',safe_message:'Customer asks about pickup',workflow_area:'customer_driver_quick_replies',delivery_surface:'driver_app',safe_context:{direction:'customer_to_driver'}};
 const ack={id:'ack-b',booking_reference:'EXACT-B',safe_message:'Driver details acknowledged.',workflow_area:'customer_driver_details_acknowledgements',delivery_surface:'customer_app',safe_context:{direction:'customer_to_admin'}};
@@ -58,17 +60,18 @@ const request=async (url,init)=>{
   assert.equal(parsed.searchParams.has('notification_status'),false,'Driver sent echoes are read, not queued');
   const n=Number(parsed.searchParams.get('page'));
   if(failedMessages || failPage===n) return Response.json({ok:false},{status:503});
-  return Response.json({ok:true,notifications:n===1?[driver,customer,
+  return Response.json({ok:true,notifications:(n===1?[driver,customer,
     {...driver,id:'outgoing',safe_context:{direction:'admin_to_driver'}},
     {...customer,id:'wrong-surface',delivery_surface:'customer_app'},
     {...driver,id:'missing-reference',booking_reference:null},
     {...driver,id:'cleared'},
-  ]:[driver,ack],pagination:{has_next_page:n===1}});
+  ]:[driver,ack]).filter(r=>!serverDone.has(r.id)),pagination:{has_next_page:n===1}});
 };
 storage.set('prestige.admin.incoming-message.done.cleared','1');
-const load=new Function('fetch','clean','adminAppNotificationReadPageSize','adminAppNotificationReadMaxPages','adminAppNotificationsApiPath','adminCustomerDriverAppNotificationsApiPath','adminLegacyDataPurpose','adminMonthlyBillingGroupingCount','window',compile(page.slice(start,end))+'\nreturn loadAdminAppNotificationsRead;')(
-  request,clean,100,1000,'/alerts','/messages','admin-booking-persistence',v=>Number(v)||0,{localStorage:{getItem:key=>storage.get(key)}},
+const load=new Function('fetch','clean','adminAppNotificationReadPageSize','adminAppNotificationReadMaxPages','adminAppNotificationsApiPath','adminCustomerDriverAppNotificationsApiPath','adminLegacyDataPurpose','adminMonthlyBillingGroupingCount','window','dismissAdminIncomingMessageAlerts',compile(page.slice(start,end))+'\nreturn loadAdminAppNotificationsRead;')(
+  request,clean,100,1000,'/alerts','/messages','admin-booking-persistence',v=>Number(v)||0,{localStorage:{getItem:key=>storage.get(key),removeItem:key=>storage.delete(key)}},sharedDismiss,
 );
+dismissError=true;result=await load();assert.ok(result.notifications.some(n=>n.id==='message:driver-a'));assert.ok(result.notifications.some(n=>n.id==='message:customer-b'));assert.ok(result.incomingMessageError,'Old marker migration failure must never hide new incoming alerts');dismissError=false;
 result=await load();
 assert.deepEqual(result.notifications.map(n=>n.id),['ordinary-alert','message:driver-a','message:customer-b']);
 assert.deepEqual(result.notifications.slice(1).map(n=>n.safe_title),['Driver → Admin','Customer → Driver']);
@@ -77,20 +80,20 @@ assert.equal(result.incomingMessageError,'');
 failPage=2;result=await load();assert.deepEqual(result.notifications,[ordinary],'Partial message pages must fail visibly without hiding the existing alerts');assert.ok(result.incomingMessageError);
 failPage=0;failedMessages=true;result=await load();assert.deepEqual(result.notifications,[ordinary]);assert.ok(result.incomingMessageError);
 
-// Execute Done. No API write; source history and any other message are retained.
+// Execute Done using shared server attention, then read from another device with no local markers.
 const actionStart=page.indexOf('  const handleAdminAppNotificationStatusUpdate = async (');
 const actionEnd=page.indexOf('\n  async function ',actionStart);
 let state={notifications:[{id:'message:driver-a',workflow_area:'admin_incoming_job_message',safe_context:{incoming_message_id:'driver-a'}},{id:'message:customer-b',workflow_area:'admin_incoming_job_message',safe_context:{incoming_message_id:'customer-b'}}]};
-let blockedStorage=false;let writeAttempts=0;
-const done=new Function('clean','adminAppNotificationReadState','setAdminAppNotificationReadState','window','updateAdminAppNotificationStatus',compile(page.slice(actionStart,actionEnd))+'\nreturn handleAdminAppNotificationStatusUpdate;')(
-  clean,state,fn=>state=fn(state),{localStorage:{setItem:(key,v)=>{if(blockedStorage)throw Error('Storage unavailable');storage.set(key,v);}}},()=>{writeAttempts++;throw Error('Must not write source status');},
+let writeAttempts=0;let revision=0;
+const done=new Function('clean','adminAppNotificationReadState','setAdminAppNotificationReadState','dismissAdminIncomingMessageAlerts','updateAdminAppNotificationStatus','setAdminAppNotificationAction','setAdminAppNotificationReadRevision',compile(page.slice(actionStart,actionEnd))+'\nreturn handleAdminAppNotificationStatusUpdate;')(
+ clean,state,fn=>state=fn(state),sharedDismiss,()=>{writeAttempts++;throw Error('Must not write source status');},()=>{},fn=>revision=fn(revision),
 );
 await done('message:unknown','read');assert.equal(state.notifications.length,2);
-await done('message:driver-a','read');assert.equal(state.notifications.length,1);assert.equal(storage.get('prestige.admin.incoming-message.done.driver-a'),'1');assert.equal(writeAttempts,0);
-blockedStorage=true;await done('message:customer-b','read');assert.equal(state.notifications.length,1);assert.equal(state.message.tone,'error');
-failedMessages=false;result=await load();assert.ok(!result.notifications.some(n=>n.id==='message:driver-a'),'Exact dismissal survives refresh');assert.ok(result.notifications.some(n=>n.id==='message:customer-b'));
+await done('message:driver-a','read');assert.equal(state.notifications.length,1);assert.ok(serverDone.has('driver-a'));assert.equal(writeAttempts,0);assert.equal(revision,1);
+dismissError=true;await done('message:customer-b','read');assert.equal(state.notifications.length,1);assert.equal(state.message.tone,'error');dismissError=false;
+failedMessages=false;storage.clear();result=await load();assert.ok(!result.notifications.some(n=>n.id==='message:driver-a'),'Another device with no local marker sees server Done');assert.ok(result.notifications.some(n=>n.id==='message:customer-b'));
 assert.equal(JSON.stringify([driver,customer,ack]),original);
 assert.ok(page.includes('data-admin-incoming-message-open={notificationId}'));
 assert.ok(page.includes('candidate.dataset.adminMultiDriverActiveJob === notificationId'));
 assert.ok(page.includes('updateAdminTodayJobMessageAudience(reference, notification.safe_context?.direction === "driver_to_admin" ? "driver" : "customer")'));
-console.log('Incoming alerts passed: paginated read-only projection, exact directions, no duplicates, isolated read failure, browser-only Done, reload preservation and exact-job reply wiring.');
+console.log('Incoming alerts passed: paginated read-only projection, exact directions, no duplicates, isolated read failure, shared Done, independent-device refresh, legacy marker migration, failed-write preservation and exact-job reply wiring.');

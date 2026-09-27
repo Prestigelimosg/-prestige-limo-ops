@@ -204,6 +204,10 @@ const guardChecks = [
     script: "scripts/test-admin-incoming-message-alerts-guard.mjs",
   },
   {
+    label: "Admin shared message attention API and retention boundary guard",
+    script: "scripts/test-admin-message-attention-api-guard.mjs",
+  },
+  {
     label: "pending Driver ACK native reminder guard",
     script: "scripts/test-pending-driver-ack-reminder-guard.mjs",
   },

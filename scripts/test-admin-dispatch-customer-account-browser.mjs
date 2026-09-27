@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { formatCustomerInvoiceLineDescription } from "../lib/customer-invoice-line-description.ts";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -104,9 +105,11 @@ async function main() {
   let client = null;
   const bookingPosts = [];
   const newBookerProbe = process.env.PRESTIGE_NEW_BOOKER_ONLY === "1";
+  const returnDestination = process.env.PRESTIGE_RETURN_DROPOFF ?? "QA Airport";
   const probeBookers = [];
   const probeWrites = [];
   const probeDialogs = [];
+  const probeBrowserErrors = [];
   let approveProbe = true;
 
   try {
@@ -163,6 +166,7 @@ async function main() {
       });
     };
 
+    client.on("Runtime.exceptionThrown", event => probeBrowserErrors.push(event.exceptionDetails.text));
     client.on("Page.javascriptDialogOpening", ({ message }) => {
       if (!newBookerProbe) return;
       probeDialogs.push(message);
@@ -240,6 +244,10 @@ async function main() {
         } : { error: "Focused browser test blocks booking writes.", ok: false };
       }
 
+      if (newBookerProbe && requestUrl.pathname === "/api/admin-booking-calendar-google-sync" && method === "POST") {
+        responseBody = {ok:true, sync:{event_count:1, events_synced:1, live_calendar_provider:"google_calendar", live_calendar_write_performed:true, provider_connection:"connected", send_updates:"none"}};
+      }
+
       if (newBookerProbe && !responseBody && !["GET", "HEAD"].includes(method)) responseBody = { ok: false, error: "Isolated test: provider and unrelated API requests blocked.", bookings: [], links: [] };
 
       if (!responseBody) {
@@ -291,12 +299,19 @@ async function main() {
       };
       for (const [label, value] of [["Company / Account", "KKR "], ["Booker", "Connie"], ["Booker email (optional)", "connie@example.invalid"], ["Passenger name", "John Pattar"], ["Pickup date", "2030-10-01"], ["Pickup time", "12:25"], ["Flight number", "SQ001"], ["Pickup", "QA Airport"], ["Drop-off", "QA Hotel"]]) await fill(label, value);
       await evaluate(`document.querySelector('[data-admin-dispatch-return-trip-checkbox="true"]').click()`);
-      for (const [label, value] of [["Return pickup date", "2030-10-03"], ["Return pickup time", "10:30"], ["Return flight", "SQ002"], ["Return pickup", "QA Hotel"], ["Return drop-off", "QA Airport"]]) await fill(label, value);
+      for (const [label, value] of [["Return pickup date", "2030-10-03"], ["Return pickup time", "10:30"], ["Return flight", "SQ002"], ["Return pickup", "QA Hotel"], ["Return drop-off", returnDestination]]) await fill(label, value);
       const save = async () => evaluate(`(() => {
         const button = [...document.querySelectorAll("button")].find(item => item.textContent.trim() === "Save + CRM");
         if (!button || button.disabled) return false;
         button.click(); return true;
       })()`);
+      for (const [label, value] of [["Return pickup date", "2030-10-03"], ["Return pickup time", "10:30"], ["Return pickup", "QA Hotel"]]) {
+        await fill(label, "");
+        assert.equal(await save(), true);
+        await waitForCondition(() => evaluate(`document.body.textContent.includes(${JSON.stringify("Return trip needs " + label)})`), 10000, label + " remains required");
+        assert.equal(probeWrites.length, 0, "Missing return timing/pickup must not write");
+        await fill(label, value);
+      }
       approveProbe = false;
       assert.equal(await save(), true);
       await waitForCondition(() => evaluate(`document.body.textContent.includes("Save cancelled before creating the Company + Booker Customer Account")`), 10000, "cancel safely before creation");
@@ -310,10 +325,33 @@ async function main() {
       probeBookers.length = 0;
       assert.equal(await save(), true);
       await waitForCondition(() => bookingPosts.length === 2, 15000, "outbound and return booking handoff");
+      await waitForCondition(() => probeWrites.filter(value => value.path === "/api/admin-booking-calendar-google-sync").length === 2, 15000, "one existing Calendar handoff per saved leg");
+      await waitForCondition(() => evaluate(`!document.body.textContent.includes("Saving...") && !document.body.textContent.includes("Syncing Google Calendar...")`), 10000, "paired save finishes");
       const payloads = bookingPosts.map(value => JSON.parse(value));
       assert.deepEqual(payloads.map(value => [value.booking.company_id, value.booking.booker_id, value.booking.traveler_id]), [[42, 4201, null], [42, 4201, null]]);
       assert.deepEqual(payloads[0].customer_account_collision_resolution, { action: "create_new", reviewed_customer_ids: [] });
       assert.equal(payloads[1].customer_account_collision_resolution, undefined, "Return must reuse the first exact Booker account");
+      assert.equal(payloads[0].booking.dropoff_location, "QA Hotel");
+      assert.equal(payloads[1].booking.dropoff_location, returnDestination.trim() || "Drop-off To Confirm");
+      assert.equal(payloads[1].route_points.find(point => point.point_type === "dropoff").location_text, payloads[1].booking.dropoff_location);
+      assert.notEqual(payloads[0].booking.booking_reference, payloads[1].booking.booking_reference);
+      assert.equal(payloads[0].booking.booking_reference.replace(/-OUT$/, ""), payloads[1].booking.booking_reference.replace(/-RET$/, ""));
+      assert.equal(payloads[1].booking.pickup_location, "QA Hotel");
+      assert.equal(payloads[1].booking.flight_no, "SQ002");
+      // Pass actual captured save values through the unchanged invoice formatter.
+      // Invoice pricing/issue remains an explicit later lane; no invoice API is called.
+      for (const serviceType of ["MNG", "DEP", "TRF", "DSP"]) {
+        const saved = payloads[1].booking;
+        const input = {serviceType, dropoffLocation:saved.dropoff_location, pickupLocation:saved.pickup_location, flightNumber:saved.flight_no, pickupAt:saved.pickup_datetime, dspStartedAt:saved.pickup_datetime, dspEndedAt:"2030-10-03T12:30:00+08:00", vehicleType:saved.vehicle_type_or_category, passengerName:saved.passenger_name, publicReference:"99002"};
+        const description = formatCustomerInvoiceLineDescription(input);
+        const knownDescription = formatCustomerInvoiceLineDescription({...input,dropoffLocation:"QA Airport"});
+        if (["MNG","TRF"].includes(serviceType)) assert.ok(description.includes(saved.dropoff_location.toUpperCase()), "Invoice must honestly retain the saved destination or placeholder");
+        else assert.equal(description, knownDescription, "Departure/hourly descriptions do not depend on drop-off");
+      }
+      const calendarCalls = probeWrites.filter(value => value.path === "/api/admin-booking-calendar-google-sync");
+      assert.equal(calendarCalls.length, 2);
+      assert.ok(JSON.stringify(calendarCalls[1].body).includes(payloads[1].booking.dropoff_location));
+      assert.deepEqual(probeBrowserErrors, [], "No browser exceptions");
       assert.equal(probeBookers.length, 1);
       assert.equal(probeBookers[0].booker_name, "Connie");
       assert.equal(probeBookers[0].company_id, 42);
@@ -323,7 +361,7 @@ async function main() {
       await evaluate(`document.querySelector('[data-app-tab="dispatch"]')?.click()`);
       const shot = await client.send("Page.captureScreenshot", { format: "png" });
       await writeFile("/private/tmp/new-booker-browser.png", Buffer.from(shot.data, "base64"));
-      console.log(JSON.stringify(reporter.summary({ok:true, isolated:true, bookingPosts:2, bookerCreates:1, companyWrites:0, cancelledAttemptWrites:0, invoiceWrites:0}), null, 2));
+      console.log(JSON.stringify(reporter.summary({ok:true, isolated:true, bookingPosts:2, returnDropoff:payloads[1].booking.dropoff_location, calendarHandoffs:2, browserErrors:0, bookerCreates:1, companyWrites:0, cancelledAttemptWrites:0, invoiceWrites:0}), null, 2));
       return;
     }
     if (process.env.PRESTIGE_SAVED_BOSS_FIELD_ONLY === "1") {

@@ -13,18 +13,25 @@ const projectionEnd = app.indexOf("const adminNotificationCentreCount =", projec
 assert.ok(projectionStart > -1 && projectionEnd > projectionStart);
 const projectQueue = new Function(
   "dashboardDriverJobLinksReadState", "pendingDriverAckQueueEligibleBookings",
-  "getActiveJobBookingReference", "bookingPublicReference", "adminDriverJobLinkWaitingMinutes", "currentTimeMs",
+  "getActiveJobBookingReference", "bookingPublicReference", "adminDriverJobLinkWaitingMinutes", "currentTimeMs", "clean", "getBookerName",
   ts.transpileModule(app.slice(projectionStart, projectionEnd), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText + "\nreturn pendingDriverAckQueueItems;",
 );
+const cleanDisplayText = value => String(value ?? "").trim();
+const bookerHelperStart = app.indexOf("function getBookerName(");
+const bookerHelperEnd = app.indexOf("function bookingMatchesLocalSearch(", bookerHelperStart);
+assert.ok(bookerHelperStart > -1 && bookerHelperEnd > bookerHelperStart);
+const savedBookerName = new Function("clean", ts.transpileModule(app.slice(bookerHelperStart, bookerHelperEnd), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022 },
+}).outputText + "\nreturn getBookerName;")(cleanDisplayText);
 const queueBookings = [{ reference: "ACK-ONE" }, { reference: "ACK-TWO" }];
 const firstLink = { id: "link-one", link_status: "active", issued_at: "2026-09-22T00:00:00Z", safe_summary: { acknowledged: false, ack_alert_closed: false } };
 const secondLink = { ...firstLink, id: "link-two" };
 const retainedLinks = { "ACK-ONE": firstLink, "ACK-TWO": secondLink };
 const projectIds = (status, linksByReference) => projectQueue(
   { status, linksByReference }, queueBookings, booking => booking.reference,
-  booking => booking.reference, () => 10, 0,
+  booking => booking.reference, () => 10, 0, cleanDisplayText, savedBookerName,
 ).map(item => item.linkId);
 assert.deepEqual(projectIds("loaded", retainedLinks), ["link-one", "link-two"]);
 assert.deepEqual(projectIds("loading", retainedLinks), ["link-one", "link-two"],
@@ -40,6 +47,43 @@ assert.deepEqual(projectIds("loaded", {
 }), ["link-two"], "A fresh exact-link Close must still clear its row.");
 assert.deepEqual(projectIds("error", {}), [], "Existing failed-read behavior is preserved.");
 
+// Display must use the exact saved booking and current link, never the selected draft,
+// passenger/customer identity, old driver, or a default service inferred from missing data.
+const displayBookings = [
+  { reference: "ACK-ONE", public_booking_reference: "11053", contact_display_name: "QA Booker A", service_type: "DEP", driver_plate_number: "OLD1111A" },
+  { reference: "ACK-TWO", public_booking_reference: "11054", contact_display_name: "QA Booker B", service_type: "MNG" },
+  { reference: "COMBO-PRIMARY", public_booking_reference: "11055", contact_display_name: "QA Booker C", service_type: "DSP" },
+  { reference: "COMBO-CHILD", public_booking_reference: "11056", contact_display_name: "QA Booker C", service_type: "TRF" },
+  { reference: "UNKNOWN", public_booking_reference: "11057", passenger_name: "NOT THE BOOKER", customer_display_name: "NOT THE BOOKER EITHER" },
+];
+const comboSummary = { primary_reference: "COMBO-PRIMARY", trip_count: 2, vehicle: "AVF" };
+const displayLinks = {
+  "ACK-ONE": { ...firstLink, safe_summary: { ...firstLink.safe_summary, assigned_driver_plate: "SNP9124S" } },
+  "ACK-TWO": { ...secondLink, safe_summary: { ...secondLink.safe_summary, assigned_driver_plate: "SNP9124S" } },
+  "COMBO-PRIMARY": { ...firstLink, id: "combo-primary", safe_summary: { combo: comboSummary, assigned_driver_plate: "SLA3003C" } },
+  "COMBO-CHILD": { ...firstLink, id: "combo-child", safe_summary: { combo: comboSummary, assigned_driver_plate: "SLA3003C" } },
+  "UNKNOWN": { ...firstLink, id: "unknown", safe_summary: {} },
+};
+const displayProject = (status, links = displayLinks) => projectQueue(
+  { status, linksByReference: links }, displayBookings, booking => booking.reference,
+  booking => booking.public_booking_reference || "Reference unavailable", () => 10, 0,
+  cleanDisplayText, savedBookerName,
+);
+const displayRows = displayProject("loaded");
+assert.deepEqual(displayRows.map(row => [row.assignedDriverPlate, row.bookerName, row.serviceLabel, row.bookingDisplayReference]), [
+  ["SNP9124S", "QA Booker A", "DEP", "11053"],
+  ["SNP9124S", "QA Booker B", "MNG", "11054"],
+  ["SLA3003C", "QA Booker C", "Combo", "11055"],
+  ["Not set", "Not set", "Not set", "11057"],
+]);
+assert.deepEqual(displayProject("loading"), displayRows, "Refresh must retain all display fields and row identities.");
+assert.equal(displayRows[2].publicReference, "AVF Combo · 2 trips", "Keep existing action descriptions independent of the new visible label.");
+const reassigned = displayProject("loaded", { ...displayLinks, "ACK-ONE": { ...displayLinks["ACK-ONE"], id: "new-driver-link", safe_summary: { assigned_driver_plate: "SLB2222B" } } });
+assert.equal(reassigned[0].assignedDriverPlate, "SLB2222B");
+assert.equal(reassigned[0].linkId, "new-driver-link");
+assert.equal(reassigned[1].linkId, secondLink.id, "Another job with the same plate must remain independent.");
+assert.ok(!displayRows.some(row => row.linkId === "combo-child"), "A combo must remain one primary row.");
+
 function assertIncludes(source, fragment, label) {
   assert.ok(source.includes(fragment), `Missing ${label}: ${fragment}`);
 }
@@ -49,7 +93,7 @@ const driverJobLinkStart = app.indexOf('data-dispatch-workflow-step="driver-job-
 const driverReportsStart = app.indexOf('data-admin-driver-reports-disclosure="true"');
 
 assert.notEqual(queueStart, -1, "Pending Driver ACK Queue is missing.");
-assert.ok(!app.includes("Pending for Driver ACK Queue"), "Use the owner-requested Driver ACK Queue heading.");
+assert.ok(!app.includes("Pending for Driver ACK Queue"), "Do not restore the retired queue heading.");
 assert.ok(driverJobLinkStart < driverReportsStart, "Established Driver Reports must remain inside Driver Job Link.");
 assert.ok(driverReportsStart < queueStart, "Queue must sit below the complete established Driver Job Link section.");
 assert.ok(
@@ -58,14 +102,15 @@ assert.ok(
 );
 
 for (const fragment of [
-  "Driver ACK Queue",
+  "Pending for ack",
   'className={`order-[55] min-w-0 rounded-md border transition',
   'data-pending-driver-ack-queue-count={String(pendingDriverAckQueueItems.length)}',
   'data-pending-driver-ack-queue-pulsing=',
   'pendingDriverAckQueueItems.length > 0\n                  ? "animate-pulse',
   'data-pending-driver-ack-queue-list="true"',
-  "pendingDriverAckQueueItems.map((item, index)",
-  "{index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued",
+  "pendingDriverAckQueueItems.map((item)",
+  "{item.assignedDriverPlate} - {item.bookerName} - {item.serviceLabel} - {item.bookingDisplayReference}",
+  "{adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued",
   "`Waiting ${item.waitingMinutes} min`",
   'data-pending-driver-ack-queue-link-id={item.linkId}',
   'data-pending-driver-ack-dismiss={item.linkId}',

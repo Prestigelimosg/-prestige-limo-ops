@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -36,6 +36,8 @@ const bookings = [
     id: "ack-close-booking-one",
     booking_reference: "ACK-CLOSE-BOOKING-ONE",
     public_booking_reference: "12001",
+    contact_display_name: "QA Booker A",
+    service_type: "MNG",
     pickup_at: firstPickup,
     pickup_datetime: firstPickup,
     pickup_address: "Changi Airport Terminal 3",
@@ -54,6 +56,8 @@ const bookings = [
     id: "ack-close-booking-two",
     booking_reference: "ACK-CLOSE-BOOKING-TWO",
     public_booking_reference: "12002",
+    contact_display_name: "QA Booker B with a deliberately long name for mobile wrapping",
+    service_type: "DSP",
     pickup_at: secondPickup,
     pickup_datetime: secondPickup,
     pickup_address: "Marina Bay Sands",
@@ -174,7 +178,7 @@ function pageFixtureScript() {
     const amendedLinkId = ${JSON.stringify(amendedLinkId)};
     const originalFetch = window.fetch.bind(window);
 
-    const makeLink = ({ ackReminder, bookingReference, id, issuedAt, jobCardKind }) => ({
+    const makeLink = ({ ackReminder, bookingReference, id, issuedAt, jobCardKind, plate, combo }) => ({
       booking_reference: bookingReference,
       created_at: issuedAt,
       expires_at: "2026-07-22T12:00:00.000Z",
@@ -192,6 +196,8 @@ function pageFixtureScript() {
         acknowledged: false,
         acknowledged_at: null,
         assigned_driver: null,
+        assigned_driver_plate: plate || null,
+        ...(combo ? { combo } : {}),
         job_card_kind: jobCardKind,
         pickup_datetime: null,
         route: null,
@@ -214,12 +220,15 @@ function pageFixtureScript() {
           id: amendmentMode ? amendedLinkId : firstLinkId,
           issuedAt: new Date(Date.now() - (amendmentMode ? 5 : 40) * 60 * 1000).toISOString(),
           jobCardKind: amendmentMode ? "amendment" : "reissued",
+          plate: amendmentMode ? "SLB2222B" : "SLA1001A",
         }),
         makeLink({
           bookingReference: "ACK-CLOSE-BOOKING-TWO",
           id: secondLinkId,
           issuedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
           jobCardKind: "new",
+          plate: "SLA1002B",
+          combo: { primary_reference: "ACK-CLOSE-BOOKING-TWO", trip_count: 2, vehicle: "AVF" },
         }),
       ];
     };
@@ -395,6 +404,12 @@ async function runChromeTest() {
     };
 
     const openDispatchTab = async () => {
+      // A load event may precede React hydration after a hard refresh.
+      await waitForCondition(
+        () => evaluate(`window.__prestigeAckQueueRequests.some(request => request.method === "GET" && request.url.startsWith("/api/admin-driver-job-links"))`),
+        15000,
+        "hydrated Admin active-link read before opening Dispatch",
+      );
       const clicked = await evaluate(`(() => {
         const button = [...document.querySelectorAll("button[role='tab']")].find(
           (button) => button.textContent?.trim() === "Dispatch",
@@ -408,6 +423,18 @@ async function runChromeTest() {
         () => evaluate(`Boolean(document.querySelector("[data-pending-driver-ack-queue='true']"))`),
         10000,
         "Pending Driver ACK Queue after opening Dispatch",
+      );
+      const openedOptions = await evaluate(`(() => {
+        const button = document.querySelector('[data-mobile-dispatch-quick-step="options"]');
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`);
+      assert.equal(openedOptions, true, "Use the established mobile Options step to display the queue.");
+      await waitForCondition(
+        () => evaluate(`document.querySelector('[data-pending-driver-ack-queue="true"]')?.getBoundingClientRect().height > 0`),
+        5000,
+        "visible queue inside mobile Options",
       );
     };
 
@@ -507,8 +534,34 @@ async function runChromeTest() {
     );
     assert.equal(initialQueue.pulsing, "true");
     assert.deepEqual(initialQueue.ids, [firstLinkId, secondLinkId]);
-    assert.match(initialQueue.text, /12001 · Reissued · Link issued/);
-    assert.match(initialQueue.text, /12002 · New · Link issued/);
+    assert.match(initialQueue.text, /Pending for ack/);
+    assert.match(initialQueue.text, /SLA1001A - QA Booker A - MNG - 12001/);
+    assert.match(initialQueue.text, /SLA1002B - QA Booker B with a deliberately long name for mobile wrapping - Combo - 12002/);
+    assert.match(initialQueue.text, /Reissued · Link issued/);
+    assert.match(initialQueue.text, /New · Link issued/);
+    const queueFitsViewport = await evaluate(`(() => {
+      const queue = document.querySelector("[data-pending-driver-ack-queue='true']");
+      return queue.clientWidth > 0 && queue.scrollWidth <= queue.clientWidth && [...queue.querySelectorAll("[data-pending-driver-ack-queue-item]")].every(row => row.scrollWidth <= row.clientWidth);
+    })()`);
+    assert.equal(queueFitsViewport, true, "Long Booker labels must wrap without hiding the queue controls on mobile.");
+    const artifactDir = process.env.PRESTIGE_BROWSER_ARTIFACT_DIR;
+    if (artifactDir) await mkdir(artifactDir, { recursive: true });
+    for (const width of [390, 1280]) {
+      await client.send("Emulation.setDeviceMetricsOverride", { deviceScaleFactor: 1, height: 844, mobile: width === 390, width });
+      const layout = await evaluate(`(() => {
+        const queue = document.querySelector("[data-pending-driver-ack-queue='true']");
+        queue.scrollIntoView({ block: "center" });
+        return { fits: queue.clientWidth > 0 && queue.scrollWidth <= queue.clientWidth && [...queue.querySelectorAll("[data-pending-driver-ack-queue-item]")].every(row => row.scrollWidth <= row.clientWidth), heading: queue.querySelector("h2").textContent.trim() };
+      })()`);
+      assert.equal(layout.fits, true, `Queue must fit at ${width}px.`);
+      assert.equal(layout.heading, "Pending for ack");
+      if (artifactDir) {
+        const screenshot = await client.send("Page.captureScreenshot", { format: "png" });
+        await writeFile(path.join(artifactDir, `pending-ack-${width}.png`), Buffer.from(screenshot.data, "base64"));
+      }
+    }
+    await client.send("Emulation.setDeviceMetricsOverride", { deviceScaleFactor: 1, height: 844, mobile: true, width: 390 });
+    reporter.step("regular and combo labels fit mobile and desktop");
     assert.match(initialQueue.text, /Remind again/);
     assert.match(initialQueue.text, /Auto reminder scheduled/);
 
@@ -625,8 +678,10 @@ async function runChromeTest() {
       "new link ID for the same booking appears after older dismissal",
     );
     assert.deepEqual(amendedQueue.ids, [amendedLinkId, secondLinkId]);
-    assert.match(amendedQueue.text, /12001 · Amendment · Link issued/);
-    assert.match(amendedQueue.text, /12002 · New · Link issued/);
+    assert.match(amendedQueue.text, /SLB2222B - QA Booker A - MNG - 12001/);
+    assert.doesNotMatch(amendedQueue.text, /SLA1001A/);
+    assert.match(amendedQueue.text, /Amendment · Link issued/);
+    assert.match(amendedQueue.text, /Combo - 12002/);
     assert.equal(amendedQueue.pulsing, "true");
 
     assert.deepEqual(browserErrors, [], `Expected no browser errors:\n${browserErrors.join("\n")}`);

@@ -32213,6 +32213,15 @@ export default function Home() {
               !link.safe_summary.ack_alert_closed
               ? {
                   bookingReference,
+                  assignedDriverPlate: clean(link.safe_summary.assigned_driver_plate) || "Not set",
+                  bookerName: getBookerName(bookingRecord) || "Not set",
+                  serviceLabel: link.safe_summary.combo
+                    ? "Combo"
+                    : clean(bookingRecord.service_type) ||
+                      clean(bookingRecord.route_type) ||
+                      clean(bookingRecord.booking_type) ||
+                      "Not set",
+                  bookingDisplayReference: bookingPublicReference(bookingRecord),
                   issuedAt: link.issued_at,
                   jobCardKind: link.safe_summary.job_card_kind,
                   linkId: link.id,
@@ -50420,7 +50429,7 @@ export default function Home() {
                   <h2
                     className={`${pendingDriverAckQueueItems.length > 0 ? "text-lg" : "text-sm"} font-semibold text-slate-950`}
                   >
-                    Driver ACK Queue
+                    Pending for ack
                   </h2>
                   {pendingDriverAckQueueItems.length > 0 ? (
                     <p className="text-xs text-slate-600">
@@ -50444,7 +50453,7 @@ export default function Home() {
                   className="mt-3 max-h-64 space-y-2 overflow-y-auto"
                   data-pending-driver-ack-queue-list="true"
                 >
-                  {pendingDriverAckQueueItems.map((item, index) => (
+                  {pendingDriverAckQueueItems.map((item) => (
                     <li
                       className="flex flex-col gap-2 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-950 sm:flex-row sm:items-center sm:justify-between"
                       data-pending-driver-ack-queue-booking-reference={item.bookingReference}
@@ -50453,12 +50462,15 @@ export default function Home() {
                       key={item.linkId}
                     >
                       <div className="min-w-0">
-                        <span>
-                          {index + 1}) {item.publicReference} · {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
+                        <span className="break-words" data-pending-driver-ack-queue-label="true">
+                          {item.assignedDriverPlate} - {item.bookerName} - {item.serviceLabel} - {item.bookingDisplayReference}
+                        </span>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {adminDriverJobCardKindLabel(item.jobCardKind)} · Link issued{" "}
                           {adminDriverJobLinkIssuedCompactTimeLabel(item.issuedAt)} · {item.waitingMinutes === null
                             ? "Waiting"
                             : `Waiting ${item.waitingMinutes} min`}
-                        </span>
+                        </p>
                         {pendingDriverAckReminderStates[item.linkId]?.message ? (
                           <p
                             className={`mt-1 text-xs ${

@@ -107,7 +107,7 @@ export async function startDriverTracking(
     await postDriverLocation(job, currentLocation);
   } catch (error) {
     if (error instanceof DriverJobRequestError && error.terminal) {
-      await stopTrackingAfterTerminalResponse();
+      await stopTrackingAfterTerminalResponse(job);
       throw error;
     }
 
@@ -123,13 +123,17 @@ export async function startDriverTracking(
   };
 }
 
-export async function stopTrackingAfterTerminalResponse() {
+export async function stopTrackingAfterTerminalResponse(expectedJob?: ActiveDriverJob) {
+  // A late response from a completed combo member must not stop its successor.
+  if (expectedJob && (await readActiveJob())?.token !== expectedJob.token) return false;
   if (await hasStartedTracking()) {
-    await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK_NAME).catch(
-      () => undefined,
-    );
+    if (expectedJob && (await readActiveJob())?.token !== expectedJob.token) return false;
+    await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK_NAME);
   }
+  // Keep the saved job if the OS stop failed, so the existing recovery can retry.
+  if (expectedJob && (await readActiveJob())?.token !== expectedJob.token) return false;
   await clearActiveJob();
+  return true;
 }
 
 export async function stopDriverTracking(): Promise<TrackingResult> {

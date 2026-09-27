@@ -37,7 +37,7 @@ TaskManager.defineTask(DRIVER_LOCATION_TASK_NAME, async ({ data, error }) => {
     const summary = await loadDriverJobSummary(job);
 
     if (summary.status === "completed") {
-      await stopTrackingAfterTerminalResponse();
+      await stopTrackingAfterTerminalResponse(job);
       return;
     }
 
@@ -47,7 +47,7 @@ TaskManager.defineTask(DRIVER_LOCATION_TASK_NAME, async ({ data, error }) => {
       requestFailure instanceof DriverJobRequestError &&
       requestFailure.terminal
     ) {
-      await stopTrackingAfterTerminalResponse();
+      await stopTrackingAfterTerminalResponse(job).catch(() => undefined);
     }
   }
 });

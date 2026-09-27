@@ -177,14 +177,22 @@ export function parseDriverJobUrl(value: string): ActiveDriverJob {
   };
 }
 
-export async function loadDriverJobSummary(job: ActiveDriverJob) {
+export async function loadDriverJobSummary(job: ActiveDriverJob, signal?: AbortSignal) {
   const response = await fetch(
     `${job.origin}/api/driver-job/${encodeURIComponent(job.token)}`,
-    { headers: { Accept: "application/json" } },
+    { headers: { Accept: "application/json" }, signal },
   );
   const body = await responseBody(response);
 
   if (!response.ok || body.ok !== true) {
+    // The existing combo reader uses HTTP 200 for a completed member's
+    // verified continuation. It still terminates tracking of THIS member.
+    const nextPath = typeof body.next_job_url === "string" ? body.next_job_url : "";
+    if (response.ok && body.ok === false && body.reason === "expired" &&
+        body.payload === null && /^\/driver-job\/[A-Za-z0-9_-]{20,}$/.test(nextPath) &&
+        nextPath !== `/driver-job/${encodeURIComponent(job.token)}`) {
+      throw new DriverJobRequestError("expired", response.status, true);
+    }
     throw requestError(response, body);
   }
 

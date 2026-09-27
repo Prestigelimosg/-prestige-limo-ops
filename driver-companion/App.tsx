@@ -29,6 +29,8 @@ import {readDriverAccountSetup,saveDriverAccountSetup,rememberDriverAccountSetup
 
 import {
   DriverJobRequestError,
+  loadDriverJobSummary,
+  type ActiveDriverJob,
   productionOrigin,
   registerNativeDriverNotifications,
   unregisterNativeDriverNotifications,
@@ -139,6 +141,7 @@ export default function App() {
   );
   const unlockStateRef = useRef<"checking" | "ready" | "locked">("checking");
   const bridgeBusyRef = useRef(false);
+  const pendingTrackingTerminalRef = useRef<ActiveDriverJob | null>(null);
   const notificationRegistrationSequenceRef = useRef(0);
   const pendingNotificationRegistrationRef = useRef<{requestId: string; finish: (ok: boolean) => void} | null>(null);
   useEffect(() => () => pendingNotificationRegistrationRef.current?.finish(false), []);
@@ -242,7 +245,27 @@ export default function App() {
   ) => {
     try {
       const incomingJob = parseDriverJobUrl(driverAppJobUrl(incomingUrl));
-      const trackingState = await readTrackingState();
+      const openingFromUrl = currentWebViewUrlRef.current;
+      let trackingState = await readTrackingState();
+      if (trackingState.active && trackingState.job && trackingState.job.token !== incomingJob.token) {
+        const previousJob = trackingState.job;
+        let terminal = false;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+          terminal = (await loadDriverJobSummary(previousJob, controller.signal)).status === "completed";
+        } catch (error) {
+          terminal = error instanceof DriverJobRequestError && error.terminal;
+        } finally {
+          clearTimeout(timeout);
+        }
+        if (controller.signal.aborted || currentWebViewUrlRef.current !== openingFromUrl) return;
+        if (terminal) {
+          await stopTrackingAfterTerminalResponse(previousJob);
+          if (currentWebViewUrlRef.current !== openingFromUrl) return;
+          trackingState = await readTrackingState();
+        }
+      }
 
       if (
         trackingState.active &&
@@ -606,6 +629,17 @@ export default function App() {
         return;
       }
 
+      if (request.type === "tracking_terminal") {
+        try {
+          // Capture the source member now; never infer it from a later page.
+          const completedJob = parseDriverJobUrl(event.nativeEvent.url);
+          pendingTrackingTerminalRef.current = completedJob;
+        } catch {
+          return;
+        }
+        if (bridgeBusyRef.current) return;
+      }
+
       if (bridgeBusyRef.current) {
         if (request.type === "native_biometrics_enable") {
           webViewRef.current?.injectJavaScript(
@@ -778,10 +812,7 @@ export default function App() {
         }
 
         if (request.type === "tracking_terminal") {
-          await stopTrackingAfterTerminalResponse();
-          const message = "Trip tracking stopped after Job Completed.";
-          setScreen((current) => ({ ...current, active: false, message }));
-          sendTrackingResult(request.type, { active: false, message, ok: true });
+          // Drain below while retaining the existing action lock.
           return;
         }
 
@@ -803,7 +834,11 @@ export default function App() {
         });
       } catch (error) {
         if (error instanceof DriverJobRequestError && error.terminal) {
-          await stopTrackingAfterTerminalResponse();
+          try {
+            await stopTrackingAfterTerminalResponse(parseDriverJobUrl(currentWebViewUrl));
+          } catch {
+            // Preserve the current job when an OS stop fails; existing Stop can retry.
+          }
         }
 
         const trackingState = await readTrackingState();
@@ -829,7 +864,25 @@ export default function App() {
           });
         }
       } finally {
-        bridgeBusyRef.current = false;
+        try {
+          while (pendingTrackingTerminalRef.current) {
+            const completedJob = pendingTrackingTerminalRef.current;
+            pendingTrackingTerminalRef.current = null;
+            try {
+              if (await stopTrackingAfterTerminalResponse(completedJob)) {
+                const message = "Trip tracking stopped after Job Completed.";
+                setScreen((current) => ({ ...current, active: false, message }));
+                sendTrackingResult("tracking_terminal", { active: false, message, ok: true });
+              }
+            } catch {
+              const message = "Could not stop the previous trip tracking. Tap Stop Sharing to retry.";
+              setScreen((current) => ({ ...current, message }));
+              sendTrackingResult("tracking_terminal", { active: true, message, ok: false });
+            }
+          }
+        } finally {
+          bridgeBusyRef.current = false;
+        }
       }
     },
     [
@@ -886,7 +939,7 @@ export default function App() {
   );
 
   const shouldStartNavigation = useCallback(
-    (request: { url: string }) => {
+    (request: { url: string; isTopFrame?: boolean }) => {
       const currentWebViewUrl = currentWebViewUrlRef.current;
       if (!currentWebViewUrl) {
         return false;
@@ -898,6 +951,56 @@ export default function App() {
       }
 
       const allowed = shouldAllowDriverWebViewNavigation(request.url, currentWebViewUrl);
+      if (!allowed) {
+        // Combo members have different private tokens. Keep the ordinary
+        // same-token policy: verify this exact destination through the current
+        // trip's existing server read, then use the normal guarded opener.
+        try {
+          const currentJob = parseDriverJobUrl(currentWebViewUrl);
+          const nextJob = parseDriverJobUrl(request.url);
+          const nextPath = `/driver-job/${encodeURIComponent(nextJob.token)}`;
+          if (request.isTopFrame === false || !installationId || bridgeBusyRef.current ||
+              nextJob.token === currentJob.token || request.url !== `${productionOrigin}${nextPath}`) {
+            return false;
+          }
+          bridgeBusyRef.current = true;
+          void (async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            try {
+              const response = await fetch(`${productionOrigin}/api/driver-job/${encodeURIComponent(currentJob.token)}`, {
+                cache: "no-store",
+                headers: { Accept: "application/json", "x-prestige-driver-installation-id": installationId },
+                signal: controller.signal,
+              });
+              const result = await response.json() as {
+                ok?: boolean; reason?: string; next_job_url?: string;
+                combo?: { trips?: Array<{ href?: string | null; completed?: boolean } | null> };
+              };
+              const trips = result?.combo?.trips;
+              const verifiedMember = result?.ok === true && Array.isArray(trips) &&
+                trips.length >= 2 && trips.length <= 100 &&
+                trips.some(trip => trip?.href === `/driver-job/${encodeURIComponent(currentJob.token)}` && trip.completed === false) &&
+                trips.some(trip => trip?.href === nextPath && trip.completed === false);
+              const verifiedContinuation = result?.ok === false && result.reason === "expired" && result.next_job_url === nextPath;
+              if (response.ok && !controller.signal.aborted && (verifiedMember || verifiedContinuation) &&
+                  currentWebViewUrlRef.current === currentWebViewUrl) {
+                // Reuses active-trip tracking and unfinished account-setup
+                // protection. Never save ACK/status or transfer tracking here.
+                await receiveDriverJobUrl(nextJob.jobUrl);
+              }
+            } catch {
+              // An unavailable or changed combo cannot authorize navigation.
+            } finally {
+              clearTimeout(timeout);
+              bridgeBusyRef.current = false;
+            }
+          })();
+        } catch {
+          // Foreign origins, non-job routes and malformed tokens stay blocked.
+        }
+        return false;
+      }
       if (allowed) {
         try {
           currentWebViewUrlRef.current = parseDriverJobUrl(request.url).jobUrl;
@@ -914,7 +1017,7 @@ export default function App() {
       }
       return allowed;
     },
-    [openCalendarAuthorization],
+    [installationId, openCalendarAuthorization, receiveDriverJobUrl],
   );
 
   const updateNavigationState = useCallback((navigation: WebViewNavigation) => {

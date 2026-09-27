@@ -1708,7 +1708,7 @@ export default function DriverJobPage() {
       }
 
       const stopped = result.request === "tracking_stop" && result.ok === true;
-      const active = result.request === "tracking_start" && result.active === true;
+      const active = result.request === "tracking_start" && result.ok === true && result.active === true;
 
       setDriverLiveLocation((currentState) => ({
         ...currentState,

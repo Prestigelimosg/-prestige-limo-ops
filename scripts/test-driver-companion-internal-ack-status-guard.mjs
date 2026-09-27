@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import ts from "typescript";
 
 const paths = {
   app: new URL("../driver-companion/App.tsx", import.meta.url),
@@ -102,6 +103,7 @@ const {
   parseDriverJobUrl,
   parseNativeCalendarOauthStartUrl,
   shouldAllowDriverWebViewNavigation,
+  parseNativeDriverJobHandoffUrl,
 } = await import(paths.bridge.href);
 
 const token = "a".repeat(32);
@@ -274,4 +276,82 @@ for (const forbidden of [
   );
 }
 
+// Execute the real navigation callback and existing opener together. The combo
+// page uses different private tokens for its members; the native same-token
+// policy must stay closed until the existing server read verifies that member.
+const nativeAst = ts.createSourceFile("App.tsx", source.app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const callbacks = new Map();
+function collectCallbacks(node) {
+  if (ts.isVariableDeclaration(node) && ["shouldStartNavigation", "receiveDriverJobUrl"].includes(node.name.getText(nativeAst))) {
+    callbacks.set(node.name.getText(nativeAst), node.initializer.arguments[0].getText(nativeAst));
+  }
+  ts.forEachChild(node, collectCallbacks);
+}
+collectCallbacks(nativeAst);
+function bindCallback(name, dependencies) {
+  const code = ts.transpileModule(`return (${callbacks.get(name)});`, {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+  return new Function(...Object.keys(dependencies), code)(...Object.values(dependencies));
+}
+const comboOrigin = "https://app.prestigelimo.sg";
+const comboFirst = `${comboOrigin}/driver-job/${"a".repeat(43)}`;
+const comboNext = `${comboOrigin}/driver-job/${"b".repeat(43)}`;
+const comboLater = `${comboOrigin}/driver-job/${"c".repeat(43)}`;
+const memberResponse = {ok:true,combo:{trips:[
+  {href:comboFirst.slice(comboOrigin.length),completed:false},
+  {href:comboNext.slice(comboOrigin.length),completed:false},
+]}};
+async function nativeComboCase({result=memberResponse,httpOk=true,destination=comboNext,tracking=false,setup=null,
+  stale=false,busy=false,networkFailure=false,subframe=false,installation=true,timeout=false}={}) {
+  const calls=[];let resolveRead,timeoutCallback;
+  const currentWebViewUrlRef={current:comboFirst},webViewRequestHeadersRef={current:null},bridgeBusyRef={current:busy};
+  const deps={productionOrigin:comboOrigin,currentWebViewUrlRef,webViewRequestHeadersRef,bridgeBusyRef,
+    installationId:installation ? "123e4567-e89b-42d3-a456-426614174000" : "",
+    parseDriverJobUrl,parseNativeCalendarOauthStartUrl,parseNativeDriverJobHandoffUrl,shouldAllowDriverWebViewNavigation,
+    openCalendarAuthorization:()=>calls.push(["calendar"]),
+    fetch:async(url,options)=>{calls.push(["read",url,options]);if(networkFailure)throw Error("synthetic read failure");
+      if(stale||timeout)await new Promise(resolve=>{resolveRead=resolve;});return {ok:httpOk,json:async()=>result};},
+    AbortController,setTimeout:fn=>{timeoutCallback=fn;return 1;},clearTimeout:()=>{},
+    loadDriverJobSummary:async()=>({status:"pob"}),
+    driverAppJobUrl:url=>url,readTrackingState:async()=>({active:tracking,job:tracking?parseDriverJobUrl(comboFirst):null}),
+    readDriverAccountSetup:async()=>setup,baseDriverJobUrl:url=>url,
+    rememberDriverAccountSetup:async()=>calls.push(["setup-write"]),setPendingAccountSetup:()=>{},
+    pendingOauthTokenRef:{current:""},Alert:{alert:()=>calls.push(["setup-block"])},
+    setCanGoBack:()=>{},setScreen:fn=>{const screen=fn({navigationKey:1});calls.push(["screen",screen]);},readableFailure:()=>"synthetic error"};
+  deps.receiveDriverJobUrl=bindCallback("receiveDriverJobUrl",deps);
+  const navigate=bindCallback("shouldStartNavigation",deps);
+  assert.equal(navigate({url:destination,isTopFrame:!subframe}),false,"Do not permit a raw cross-trip navigation");
+  if(stale&&resolveRead){currentWebViewUrlRef.current=comboOrigin+"/driver-portal";resolveRead();}
+  if(timeout&&resolveRead){timeoutCallback();resolveRead();}
+  await new Promise(resolve=>setImmediate(resolve));
+  return {calls,currentWebViewUrlRef,bridgeBusyRef};
+}
+const continued = await nativeComboCase();
+assert.equal(continued.calls.find(call=>call[0]==="screen")?.[1].jobUrl,comboNext,
+  "A verified next combo trip must reach the existing native opener");
+assert.equal(continued.currentWebViewUrlRef.current,comboNext);
+const completedEntry = await nativeComboCase({result:{ok:false,reason:"expired",next_job_url:comboNext.slice(comboOrigin.length)}});
+assert.equal(completedEntry.currentWebViewUrlRef.current,comboNext,"Verified completed-member continuation must open its next active trip");
+for(const test of [
+  {result:{ok:true}}, {result:{ok:false,reason:"revoked",next_job_url:comboNext.slice(comboOrigin.length)}},
+  {result:{ok:true,combo:{trips:[{href:comboNext.slice(comboOrigin.length),completed:false}]}}},
+  {result:{ok:true,combo:{trips:[{href:comboFirst.slice(comboOrigin.length),completed:false},{href:comboNext.slice(comboOrigin.length),completed:true}]}}},
+  {result:{ok:true,combo:{trips:null}}}, {result:{ok:true,combo:{trips:[null,null]}}},
+  {httpOk:false},{destination:comboLater},{destination:"https://example.com/driver-job/"+"b".repeat(43)},
+  {destination:comboNext+"?calendar=saved"},{stale:true},{busy:true},{networkFailure:true},{subframe:true},{installation:false},{timeout:true},
+]) {
+  const blocked = await nativeComboCase(test);
+  assert.equal(blocked.calls.some(call=>call[0]==="screen"),false,"Unverified, stale or unrelated continuation stays closed");
+  assert.equal(blocked.calls.some(call=>call[0]==="setup-write"),false);
+}
+const tracked=await nativeComboCase({tracking:true});
+assert.equal(tracked.calls.find(call=>call[0]==="screen")?.[1].jobUrl,comboFirst,"Active tracking retains the current trip");
+assert.match(tracked.calls.find(call=>call[0]==="screen")?.[1].message,/Stop the current trip/);
+const unfinished=await nativeComboCase({setup:{activated:true,jobUrl:comboFirst}});
+assert.ok(unfinished.calls.some(call=>call[0]==="setup-block"));
+assert.equal(unfinished.calls.some(call=>call[0]==="screen"),false);
+assert.ok(continued.calls.filter(call=>call[0]==="read").every(call=>!call[2].method||call[2].method==="GET"));
+assert.equal(continued.calls.find(call=>call[0]==="read")[1],`${comboOrigin}/api/driver-job/${"a".repeat(43)}`,
+  "Only the current capability can establish membership, never the requested destination itself");
+assert.equal(continued.bridgeBusyRef.current,false);
+console.log("PASS native combo continuation: verified members/completed entry, exact secure opener, active tracking/setup protection, denied unrelated/stale/failed reads; no status writes.");
 console.log("Driver Companion complete embedded workflow guard passed");

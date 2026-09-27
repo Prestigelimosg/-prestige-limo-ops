@@ -577,7 +577,10 @@ export default function App() {
           pointerEvents={webLayerLocked ? "none" : "auto"}
           style={[styles.webLayer, webLayerLocked ? styles.hiddenWebLayer : null]}
         >
-          <SafeAreaView edges={["top", "left", "right"]} style={styles.safeArea}>
+          <SafeAreaView
+            edges={Platform.OS === "android" ? ["top", "left", "right", "bottom"] : ["top", "left", "right"]}
+            style={styles.safeArea}
+          >
             <View style={styles.header}>
               <Image
                 alt="Prestige SG"

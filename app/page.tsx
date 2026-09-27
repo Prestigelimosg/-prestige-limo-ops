@@ -10619,7 +10619,6 @@ function adminDispatchReturnTripMissingFields(bookingValue: BookingForm) {
     !clean(bookingValue.returnDate) ? fieldLabels.returnDate : "",
     !clean(bookingValue.returnTime) ? fieldLabels.returnTime : "",
     !clean(bookingValue.returnPickup) ? fieldLabels.returnPickup : "",
-    !clean(bookingValue.returnDropoff) ? fieldLabels.returnDropoff : "",
   ].filter(Boolean);
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -103,6 +103,11 @@ async function main() {
   const chromeProcess = spawn(chromeBinary, chromeArgs, { stdio: "ignore" });
   let client = null;
   const bookingPosts = [];
+  const newBookerProbe = process.env.PRESTIGE_NEW_BOOKER_ONLY === "1";
+  const probeBookers = [];
+  const probeWrites = [];
+  const probeDialogs = [];
+  let approveProbe = true;
 
   try {
     await waitForChromeDebugPort(chromeDebugPort);
@@ -119,6 +124,7 @@ async function main() {
           { requestStage: "Request", urlPattern: "*/api/admin-bookers*" },
           { requestStage: "Request", urlPattern: "*/api/admin-companies-crm-identity*" },
           { requestStage: "Request", urlPattern: "*/api/admin-bookings*" },
+          ...(newBookerProbe ? [{ requestStage: "Request", urlPattern: "*/api/*" }] : []),
         ],
       }),
     ]);
@@ -157,13 +163,26 @@ async function main() {
       });
     };
 
+    client.on("Page.javascriptDialogOpening", ({ message }) => {
+      if (!newBookerProbe) return;
+      probeDialogs.push(message);
+      client.send("Page.handleJavaScriptDialog", { accept: approveProbe }).catch(() => {});
+    });
     client.on("Fetch.requestPaused", ({ request, requestId }) => {
       const requestUrl = new URL(request.url);
       const method = request.method || "GET";
       let responseBody = null;
 
+      if (newBookerProbe && !["GET", "HEAD"].includes(method)) {
+        probeWrites.push({ path: requestUrl.pathname, method, body: JSON.parse(request.postData || "{}") });
+      }
+
       if (requestUrl.pathname === "/api/admin-rate-setup" && method === "GET") {
-        responseBody = { bookers, companies, ok: true, settings: null, travelers };
+        responseBody = {
+          bookers: newBookerProbe ? [...bookers, ...probeBookers] : bookers,
+          companies: newBookerProbe ? [...companies, { id: 42, company_name: "KKR" }] : companies,
+          ok: true, settings: null, travelers,
+        };
       } else if (requestUrl.pathname === "/api/admin-customer-accounts" && method === "GET") {
         responseBody = {
           accounts: [
@@ -185,7 +204,10 @@ async function main() {
           ok: true,
         };
       } else if (requestUrl.pathname === "/api/admin-bookers" && method === "GET") {
-        const booker = bookers.find(
+        const booker = probeBookers.find((candidate) =>
+          String(candidate.id) === requestUrl.searchParams.get("id") ||
+          (String(candidate.company_id) === requestUrl.searchParams.get("company_id") && candidate.booker_name === requestUrl.searchParams.get("booker_name")),
+        ) || bookers.find(
           (candidate) => String(candidate.id) === requestUrl.searchParams.get("id"),
         );
         responseBody = booker
@@ -198,18 +220,27 @@ async function main() {
               ok: true,
             }
           : { booker: null, ok: true };
+      } else if (newBookerProbe && requestUrl.pathname === "/api/admin-bookers" && method === "POST") {
+        const booker = { ...JSON.parse(request.postData), id: 4201 };
+        probeBookers.push(booker);
+        responseBody = { ok: true, booker };
       } else if (
         requestUrl.pathname === "/api/admin-companies-crm-identity" &&
         method === "GET"
       ) {
-        responseBody = {
+        responseBody = newBookerProbe ? { ok: true, company: { id: 42, company_name: "KKR", primary_contact_name: "Kelly", operations_email: "kelly@example.invalid" } } : {
           error: "Verified Company + Booker account gate passed; focused probe stopped before any write.",
           ok: false,
         };
       } else if (requestUrl.pathname === "/api/admin-bookings" && method === "POST") {
         bookingPosts.push(request.postData || "");
-        responseBody = { error: "Focused browser test blocks booking writes.", ok: false };
+        responseBody = newBookerProbe ? {
+          ok: true,
+          booking: { ...JSON.parse(request.postData).booking, id: String(9000 + bookingPosts.length), customer_id: "420", public_booking_reference: String(99000 + bookingPosts.length) },
+        } : { error: "Focused browser test blocks booking writes.", ok: false };
       }
+
+      if (newBookerProbe && !responseBody && !["GET", "HEAD"].includes(method)) responseBody = { ok: false, error: "Isolated test: provider and unrelated API requests blocked.", bookings: [], links: [] };
 
       if (!responseBody) {
         client.send("Fetch.continueRequest", { requestId }).catch(() => {});
@@ -226,12 +257,75 @@ async function main() {
 
     await navigateWithLoadEvent(client, appUrl);
     await waitForSelector(evaluate, '[data-app-tab="dispatch"]', "Dispatch tab");
-    await evaluate(`document.querySelector('[data-app-tab="dispatch"]')?.click()`);
+    await waitForCondition(() => evaluate(`(() => {
+      if (document.querySelector('[data-admin-dispatch-customer-account-select="true"]')) return true;
+      document.querySelector('[data-app-tab="dispatch"]')?.click();
+      return false;
+    })()`), 10000, "hydrated Dispatch tab");
     await waitForSelector(
       evaluate,
       '[data-admin-dispatch-customer-account-select="true"]',
       "unified Customer Account chooser",
     );
+    if (newBookerProbe) {
+      reporter.step("checking direct new-customer setup and existing-company new-Booker save");
+      await waitForSelector(evaluate, '[data-admin-dispatch-customer-account-option="corporate:55:5501"]', "existing account fixture");
+      await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-option="corporate:55:5501"]').click()`);
+      await waitForCondition(() => evaluate(`document.querySelector('[data-admin-dispatch-customer-account-select="true"]').dataset.customerId === "550"`), 10000, "existing account selected before reset");
+      await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]').click()`);
+      await waitForSelector(evaluate, '[data-admin-dispatch-new-customer-type="corporate"]', "one-click new customer setup");
+      assert.deepEqual(await evaluate(`(() => {
+        const account = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+        return { ids: [account.dataset.customerId, account.dataset.companyId, account.dataset.bookerId, account.dataset.travelerId].map(value => value || ""), extra: Boolean(document.querySelector('[data-admin-dispatch-new-customer-choice="true"]')), open: account.open };
+      })()`), { ids: ["", "", "", ""], extra: false, open: false });
+      const fill = async (labelText, value) => {
+        assert.equal(await evaluate(`(() => {
+          const label = [...document.querySelectorAll("label")].find(item => (item.querySelector("span")?.textContent || "").replace(/\\s+\\*/g, " ").trim() === ${JSON.stringify(labelText)});
+          const input = label?.querySelector("input");
+          if (!input) return false;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, ${JSON.stringify(value)});
+          input.dispatchEvent(new Event("input", {bubbles:true}));
+          input.dispatchEvent(new Event("change", {bubbles:true}));
+          return true;
+        })()`), true, `Missing ${labelText}`);
+      };
+      for (const [label, value] of [["Company / Account", "KKR "], ["Booker", "Connie"], ["Booker email (optional)", "connie@example.invalid"], ["Passenger name", "John Pattar"], ["Pickup date", "2030-10-01"], ["Pickup time", "12:25"], ["Flight number", "SQ001"], ["Pickup", "QA Airport"], ["Drop-off", "QA Hotel"]]) await fill(label, value);
+      await evaluate(`document.querySelector('[data-admin-dispatch-return-trip-checkbox="true"]').click()`);
+      for (const [label, value] of [["Return pickup date", "2030-10-03"], ["Return pickup time", "10:30"], ["Return flight", "SQ002"], ["Return pickup", "QA Hotel"], ["Return drop-off", "QA Airport"]]) await fill(label, value);
+      const save = async () => evaluate(`(() => {
+        const button = [...document.querySelectorAll("button")].find(item => item.textContent.trim() === "Save + CRM");
+        if (!button || button.disabled) return false;
+        button.click(); return true;
+      })()`);
+      approveProbe = false;
+      assert.equal(await save(), true);
+      await waitForCondition(() => evaluate(`document.body.textContent.includes("Save cancelled before creating the Company + Booker Customer Account")`), 10000, "cancel safely before creation");
+      assert.equal(probeWrites.length, 0, "Cancel must not write company, Booker, booking or provider");
+      approveProbe = true;
+      probeBookers.push({ id: 4209, company_id: 42, booker_name: "Connie", email: null, phone: null });
+      assert.equal(await save(), true);
+      await waitForCondition(() => evaluate(`document.body.textContent.includes("A Booker with this name already exists")`), 10000, "duplicate Booker requires exact account selection");
+      assert.equal(probeWrites.length, 0, "Unselected duplicate Booker must not receive a contact PATCH");
+      assert.equal(probeBookers[0].email, null);
+      probeBookers.length = 0;
+      assert.equal(await save(), true);
+      await waitForCondition(() => bookingPosts.length === 2, 15000, "outbound and return booking handoff");
+      const payloads = bookingPosts.map(value => JSON.parse(value));
+      assert.deepEqual(payloads.map(value => [value.booking.company_id, value.booking.booker_id, value.booking.traveler_id]), [[42, 4201, null], [42, 4201, null]]);
+      assert.deepEqual(payloads[0].customer_account_collision_resolution, { action: "create_new", reviewed_customer_ids: [] });
+      assert.equal(payloads[1].customer_account_collision_resolution, undefined, "Return must reuse the first exact Booker account");
+      assert.equal(probeBookers.length, 1);
+      assert.equal(probeBookers[0].booker_name, "Connie");
+      assert.equal(probeBookers[0].company_id, 42);
+      assert.equal(probeDialogs.length, 2, "One existing creation approval per save, including the cancelled attempt");
+      assert.ok(probeDialogs.every(message => message.includes("Company: KKR. Booker: Connie.")));
+      assert.ok(!probeWrites.some(value => /company|invoice|access|notification/.test(value.path)), "No company, invoice, access or notification write");
+      await evaluate(`document.querySelector('[data-app-tab="dispatch"]')?.click()`);
+      const shot = await client.send("Page.captureScreenshot", { format: "png" });
+      await writeFile("/private/tmp/new-booker-browser.png", Buffer.from(shot.data, "base64"));
+      console.log(JSON.stringify(reporter.summary({ok:true, isolated:true, bookingPosts:2, bookerCreates:1, companyWrites:0, cancelledAttemptWrites:0, invoiceWrites:0}), null, 2));
+      return;
+    }
     if (process.env.PRESTIGE_SAVED_BOSS_FIELD_ONLY === "1") {
       reporter.step("checking the bounded saved Boss field in visible Chrome");
       await waitForSelector(evaluate, '[data-admin-dispatch-customer-account-option="corporate:55:5501"]', "fixture account");
@@ -614,36 +708,21 @@ async function main() {
     assert.equal(bookingPosts.length, 0);
 
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
-    const createChoices = await waitForCondition(
-      async () => evaluate(`(() => {
-        const corporate = document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]');
-        if (!(corporate instanceof HTMLButtonElement)) return false;
-        const state = {
-          account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
-          corporate: true,
-          corporateDisabled: corporate.disabled,
-          personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
-        };
-        if (!corporate.disabled) corporate.click();
-        return state;
-      })()`),
+    await waitForCondition(
+      async () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]'))`),
       10000,
-      "single Company + Booker new-customer choice",
+      "Create New Customer directly selects Company + Booker setup",
     );
-    assert.deepEqual(createChoices, {
-      account: false,
-      corporate: true,
-      corporateDisabled: false,
-      personal: false,
-    });
-    assert.equal(
-      await waitForCondition(
-        async () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]'))`),
-        10000,
-        "new-customer path selection",
-      ),
-      true,
-    );
+    assert.deepEqual(await evaluate(`(() => {
+      const chooser = document.querySelector('[data-admin-dispatch-customer-account-select="true"]');
+      return {
+        companyId: chooser.dataset.companyId || "",
+        bookerId: chooser.dataset.bookerId || "",
+        customerId: chooser.dataset.customerId || "",
+        travelerId: chooser.dataset.travelerId || "",
+        extraStep: Boolean(document.querySelector('[data-admin-dispatch-new-customer-choice="true"]')),
+      };
+    })()`), { companyId: "", bookerId: "", customerId: "", travelerId: "", extraStep: false });
     assert.equal(bookingPosts.length, 0);
 
     reporter.step("checking iPhone Customer Account layout and touch selection");
@@ -830,6 +909,12 @@ async function main() {
       errorCount: 0,
       ok: true,
     }), null, 2));
+  } catch (error) {
+    if (client && newBookerProbe) {
+      const state = await client.send("Runtime.evaluate", { expression: "document.body.innerText.slice(0, 6000)", returnByValue: true }).catch(() => null);
+      console.error("Local browser failure state", state?.result?.value);
+    }
+    throw error;
   } finally {
     await client?.close().catch(() => {});
     await terminateChildProcess(chromeProcess);

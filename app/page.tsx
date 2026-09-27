@@ -7180,6 +7180,7 @@ async function saveCrmCompanyProfileForBooking(
 async function resolveSaveCrmCompanyProfileForSave(
   bookingValue: BookingForm,
   confirmedAccountLabel: string,
+  creatingNewCorporateAccount = false,
 ): Promise<SaveCrmCompanyProfileResolution> {
   const requestedCompanyId = adminDispatchVerifiedIdentityId(bookingValue.companyId);
   const requestedCompanyName = clean(confirmedAccountLabel);
@@ -7263,6 +7264,19 @@ async function resolveSaveCrmCompanyProfileForSave(
       ok: true,
       profileWritePerformed: false,
     };
+  }
+
+  if (creatingNewCorporateAccount && existingCompany) {
+    const companyId = adminDispatchVerifiedIdentityId(existingCompany.id);
+    const companyName = clean(existingCompany.company_name);
+
+    if (!companyId || !companyName) {
+      throw new Error("The exact CRM company profile is incomplete. No booking was saved.");
+    }
+
+    // The existing Booker resolver still requires exact account selection or creation
+    // approval. A different Booker must not overwrite the shared company contacts.
+    return { companyId, companyName, ok: true, profileWritePerformed: false };
   }
 
   if (!requestedCompanyId && existingCompany) {
@@ -7543,6 +7557,7 @@ async function findOrCreateSaveCrmBooker(
   companyId: number,
   bookingValue: BookingForm,
   createApproved: boolean,
+  readOnlyLookup = false,
 ) {
   const bookerName = clean(bookingValue.booker);
   const bookerEmail = clean(bookingValue.bookerEmail).toLowerCase();
@@ -7581,6 +7596,8 @@ async function findOrCreateSaveCrmBooker(
         "A matching Booker appeared before the new account could be created. Select the exact existing Customer Account and review it before saving; nothing was created.",
       );
     }
+
+    if (readOnlyLookup) return booker;
 
     const savedEmail = clean(booker.email).toLowerCase();
     const savedContact = clean(booker.phone);
@@ -7767,6 +7784,7 @@ async function resolveSaveCrmCorporateIdentityForSave(
   bookingValue: BookingForm,
   companyId: number,
   companyName: string,
+  creatingNewCorporateAccount = false,
 ): Promise<SaveCrmCorporateIdentityResolution> {
   const currentBookerId = adminDispatchVerifiedIdentityId(bookingValue.bookerId);
   const currentTravelerId = adminDispatchVerifiedIdentityId(bookingValue.travelerId);
@@ -7782,7 +7800,7 @@ async function resolveSaveCrmCorporateIdentityForSave(
   let accountCreationApproved = false;
   let booker = currentBookerId
     ? await loadSaveCrmBookerById(companyId, currentBookerId)
-    : await findOrCreateSaveCrmBooker(companyId, bookingValue, false);
+    : await findOrCreateSaveCrmBooker(companyId, bookingValue, false, creatingNewCorporateAccount);
 
   if (!currentBookerId && booker) {
     return {
@@ -15402,8 +15420,6 @@ export default function Home() {
   const [adminDispatchAgencyFoldersLoaded, setAdminDispatchAgencyFoldersLoaded] = useState(false);
   const [adminDispatchAgencyFoldersError, setAdminDispatchAgencyFoldersError] = useState("");
   const [adminDispatchCustomerAccountSearch, setAdminDispatchCustomerAccountSearch] = useState("");
-  const [adminDispatchNewCustomerChoiceOpen, setAdminDispatchNewCustomerChoiceOpen] =
-    useState(false);
   const [adminDispatchNewCustomerType, setAdminDispatchNewCustomerType] =
     useState<AdminDispatchNewCustomerType | null>(null);
   const adminDispatchCustomerAccountChooserRef = useRef<HTMLDetailsElement | null>(null);
@@ -20676,7 +20692,6 @@ export default function Home() {
     setDriverJobLinkCopyMessage(null);
     setDispatchLoadFocusTarget(null);
     setAdminDispatchCustomerAccountSearch("");
-    setAdminDispatchNewCustomerChoiceOpen(false);
     setAdminDispatchNewCustomerType(null);
     if (adminDispatchCustomerAccountChooserRef.current) {
       adminDispatchCustomerAccountChooserRef.current.open = false;
@@ -23790,6 +23805,7 @@ export default function Home() {
         ? await resolveSaveCrmCompanyProfileForSave(
             booking,
             saveCrmExplicitCompanyAccount(booking),
+            adminDispatchNewCustomerType === "corporate",
           )
         : null;
 
@@ -23823,6 +23839,7 @@ export default function Home() {
               booking,
               companyProfileResolution.companyId,
               companyProfileResolution.companyName,
+              adminDispatchNewCustomerType === "corporate",
             )
           : null;
 
@@ -29586,7 +29603,6 @@ export default function Home() {
     adminEmailAiCustomerRecommendationRevisionRef.current += 1;
     setAdminEmailAiCustomerProfileSuggestion(null);
     setAdminDispatchCustomerAccountSearch("");
-    setAdminDispatchNewCustomerChoiceOpen(false);
     setAdminDispatchNewCustomerType(null);
     if (adminDispatchCustomerAccountChooserRef.current) {
       adminDispatchCustomerAccountChooserRef.current.open = false;
@@ -29665,7 +29681,6 @@ export default function Home() {
     adminEmailAiCustomerRecommendationRevisionRef.current += 1;
     setAdminEmailAiCustomerProfileSuggestion(null);
     setAdminDispatchNewCustomerType(type);
-    setAdminDispatchNewCustomerChoiceOpen(false);
     setAdminDispatchCustomerAccountSearch("");
     if (adminDispatchCustomerAccountChooserRef.current) {
       adminDispatchCustomerAccountChooserRef.current.open = false;
@@ -45383,15 +45398,7 @@ export default function Home() {
                           className="block w-full rounded px-2 py-2 text-left text-sm font-bold text-sky-900 hover:bg-sky-50 focus-visible:bg-sky-50 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-white"
                           data-admin-dispatch-customer-account-create="true"
                           disabled={adminDispatchCustomerAccountSelectionLocked}
-                          onClick={() => {
-                            if (adminDispatchCustomerAccountSelectionLocked) {
-                              return;
-                            }
-                            setAdminDispatchNewCustomerChoiceOpen(true);
-                            if (adminDispatchCustomerAccountChooserRef.current) {
-                              adminDispatchCustomerAccountChooserRef.current.open = false;
-                            }
-                          }}
+                          onClick={() => chooseAdminDispatchNewCustomerType("corporate")}
                           type="button"
                         >
                           Create New Customer
@@ -45471,37 +45478,6 @@ export default function Home() {
                   >
                     New Company + Booker selected: enter the exact company, Booker and passenger details.
                   </p>
-                ) : null}
-                {adminDispatchNewCustomerChoiceOpen ? (
-                  <div
-                    className="rounded-md border border-sky-300 bg-white p-3 text-xs text-slate-900 md:col-span-3"
-                    data-admin-dispatch-new-customer-choice="true"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Choose new customer type"
-                  >
-                    <p className="font-bold">Choose the exact new-customer path</p>
-                    <p className="mt-1 font-medium text-slate-600">The app will not infer account ownership from names.</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:text-slate-400"
-                        data-admin-dispatch-new-customer-corporate="true"
-                        disabled={adminDispatchCustomerAccountSelectionLocked}
-                        onClick={() => chooseAdminDispatchNewCustomerType("corporate")}
-                        type="button"
-                      >
-                        Create Company + Booker Account
-                      </button>
-                      <button
-                        className="rounded-md border border-slate-300 bg-white px-3 py-2 font-bold text-slate-700"
-                        data-admin-dispatch-new-customer-cancel="true"
-                        onClick={() => setAdminDispatchNewCustomerChoiceOpen(false)}
-                        type="button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 ) : null}
                 {activeAdminEmailAiIntakeId && adminEmailAiCustomerProfileSuggestion ? (
                   <p

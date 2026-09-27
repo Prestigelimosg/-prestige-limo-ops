@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 
 const [appSource, calendarSyncSource, ledger] = await Promise.all([
   readFile("app/page.tsx", "utf8"),
@@ -24,9 +25,9 @@ for (const fragment of [
   "company_id: adminDispatchVerifiedIdentityId(bookingValue.companyId)",
   "customer_id: adminDispatchVerifiedIdentityId(bookingValue.customerId)",
   'data-admin-dispatch-customer-account-select="true"',
-  'data-admin-dispatch-new-customer-corporate="true"',
+  'onClick={() => chooseAdminDispatchNewCustomerType("corporate")}',
   'data-admin-dispatch-agency-folder-create="true"',
-  "Create Company + Booker Account",
+  "New Company + Booker selected",
   "adminDispatchIsCreatingAgencyFolder(booking)",
   "hotel_agency_folder_create",
   "Each booking keeps its own passenger name.",
@@ -155,7 +156,7 @@ for (const fragment of [
   'operations_email: "browserui@example.com"',
   "Expected Save + CRM to write only the approved base company name and Booker contact fields",
   "future Company + Booker-only new-customer choice",
-  "Create Company + Booker Account",
+  "New Company + Booker selected",
   "future Company + Booker light-mode UI",
   "Expected the future Company + Booker mode to keep one unified customer choice",
   'assert.equal(futureCompanyBookerUi.company, "BROWSER UI TEST COMPANY")',
@@ -170,3 +171,101 @@ for (const fragment of [
 }
 
 console.log("Save + CRM company profile contact sync guard passed.");
+
+// Execute the real company and Booker resolvers without network or database writes.
+// A new Booker under an existing company must never enter company contact sync.
+const resolverAst = ts.createSourceFile("page.tsx", appSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const resolverNames = ["resolveSaveCrmCompanyProfileForSave", "resolveSaveCrmCorporateIdentityForSave"];
+const resolverCode = resolverNames.map((name) => {
+  const declaration = resolverAst.statements.find((item) => ts.isFunctionDeclaration(item) && item.name?.text === name);
+  assert.ok(declaration, `Missing ${name}`);
+  return declaration.getText(resolverAst);
+}).join("\n");
+let company = { id: 42, company_name: "KKR", primary_contact_name: "Kelly" };
+let approve = true;
+let existingBooker = null;
+const calls = [];
+const bindings = {
+  clean: (value) => String(value ?? "").trim(),
+  adminDispatchVerifiedIdentityId: (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null,
+  adminDispatchIsCreatingAgencyFolder: () => false,
+  loadSaveCrmCompanyProfileForSave: async () => company,
+  loadSaveCrmCompanyProfileCandidateByOperationsEmail: async () => null,
+  saveCrmCompanyProfileForBooking: async (payload) => { calls.push(["company-write", payload]); return { id: 43, company_name: payload.company_name }; },
+  buildSaveCrmCompanyProfileContactPayload: () => { calls.push(["contact-payload"]); return { company_name: "New Company" }; },
+  saveCrmCompanyProfileConflictFields: () => [],
+  saveCrmCompanyProfileNeedsWrite: () => false,
+  window: { confirm: (message) => { calls.push(["confirm", message]); return approve; } },
+  loadSaveCrmBookerById: async () => { throw new Error("Unexpected stale Booker ID"); },
+  findOrCreateSaveCrmBooker: async (companyId, booking, create) => {
+    calls.push(["booker", companyId, booking.booker, create]);
+    return create ? { id: 81, company_id: companyId } : existingBooker;
+  },
+  loadSaveCrmCorporateIdentityRows: async () => [],
+};
+const compiledResolvers = ts.transpileModule(`${resolverCode}\nreturn { ${resolverNames.join(",")} };`, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+const resolvers = new Function(...Object.keys(bindings), compiledResolvers)(...Object.values(bindings));
+const draft = { company: "KKR ", companyId: "", booker: "Connie", bookerId: "", customerId: "", travelerId: "", name: "John Pattar" };
+const reusedCompany = await resolvers.resolveSaveCrmCompanyProfileForSave(draft, "KKR", true);
+assert.deepEqual(reusedCompany, { companyId: 42, companyName: "KKR", ok: true, profileWritePerformed: false });
+assert.deepEqual(calls, [], "Company reuse must perform no contact update or extra confirmation");
+assert.equal(company.primary_contact_name, "Kelly");
+const newAccount = await resolvers.resolveSaveCrmCorporateIdentityForSave(draft, reusedCompany.companyId, reusedCompany.companyName);
+assert.equal(newAccount.ok, true);
+assert.equal(newAccount.bookerId, 81);
+assert.equal(newAccount.companyId, 42);
+assert.equal(newAccount.travelerId, null);
+assert.equal(newAccount.accountCreationApproved, true);
+assert.deepEqual(calls.filter(([kind]) => kind === "booker"), [["booker", 42, "Connie", false], ["booker", 42, "Connie", true]]);
+assert.equal(calls.filter(([kind]) => kind === "confirm").length, 1);
+calls.length = 0;
+approve = false;
+assert.equal((await resolvers.resolveSaveCrmCorporateIdentityForSave(draft, 42, "KKR")).ok, false);
+assert.ok(!calls.some(([kind, , , create]) => kind === "booker" && create), "Cancel must not create a Booker");
+calls.length = 0;
+existingBooker = { id: 80, company_id: 42, customer_id: 700 };
+assert.equal((await resolvers.resolveSaveCrmCorporateIdentityForSave(draft, 42, "KKR")).ok, false);
+assert.deepEqual(calls, [["booker", 42, "Connie", false]], "Existing Booker must require exact account selection, not name-based reuse");
+calls.length = 0;
+assert.equal((await resolvers.resolveSaveCrmCompanyProfileForSave(draft, "KKR")).ok, false, "Reuse must require explicit new-customer intent");
+assert.equal((await resolvers.resolveSaveCrmCompanyProfileForSave({ ...draft, customerId: "700" }, "KKR", true)).ok, false, "Stale customer identity must remain blocked");
+assert.deepEqual(await resolvers.resolveSaveCrmCompanyProfileForSave({ ...draft, companyId: "42" }, "KKR", true), reusedCompany, "Retry must preserve shared company contacts too");
+company = { id: null, company_name: "KKR" };
+await assert.rejects(() => resolvers.resolveSaveCrmCompanyProfileForSave(draft, "KKR", true), /incomplete/);
+company = null;
+approve = true;
+calls.length = 0;
+assert.equal((await resolvers.resolveSaveCrmCompanyProfileForSave({ ...draft, company: "New Company" }, "New Company", true)).companyId, 43);
+assert.equal(calls.filter(([kind]) => kind === "company-write").length, 1, "The existing genuinely-new-company path must remain usable");
+assert.equal(calls.find(([kind]) => kind === "company-write")[1].action_type, "company_create");
+console.log("Existing-company new-Booker isolation, cancellation, duplicate and retry checks passed.");
+
+const bookerHelperNames = ["findOrCreateSaveCrmBooker", "saveCrmValidatedBookerRecord", "saveCrmComparableIdentityValue"];
+const helperCode = bookerHelperNames.map(name => resolverAst.statements.find(item => ts.isFunctionDeclaration(item) && item.name?.text === name).getText(resolverAst)).join("\n");
+const lookupMethods = [];
+const existingRecord = { id: 80, company_id: 42, booker_name: "Connie", email: null, phone: null };
+const helperBindings = {
+  clean: bindings.clean,
+  adminDispatchVerifiedIdentityId: bindings.adminDispatchVerifiedIdentityId,
+  adminBookersApiPath: "/api/admin-bookers",
+  adminLegacyDataPurpose: "admin-legacy-data",
+  fetch: async (_url, options) => {
+    lookupMethods.push(options.method);
+    return { ok: true, json: async () => ({ ok: true, booker: existingRecord }) };
+  },
+};
+const helperJs = ts.transpileModule(`${helperCode}\nreturn findOrCreateSaveCrmBooker;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const lookupBooker = new Function(...Object.keys(helperBindings), helperJs)(...Object.values(helperBindings));
+const contactDraft = { ...draft, bookerEmail: "connie@example.invalid", bookerContact: "90000000" };
+assert.equal((await lookupBooker(42, contactDraft, false, true)).id, 80);
+assert.deepEqual(lookupMethods, ["GET"], "New-customer duplicate lookup must not fill another account's blank contacts");
+lookupMethods.length = 0;
+await assert.rejects(() => lookupBooker(42, contactDraft, true), /appeared before/);
+assert.deepEqual(lookupMethods, ["GET"], "A Booker appearing after approval must still stop creation");
+lookupMethods.length = 0;
+await lookupBooker(42, contactDraft, false);
+assert.deepEqual(lookupMethods, ["GET", "PATCH"], "Keep the pre-existing contact-completion behavior outside new-customer setup");
+assert.match(saveBookingSection, /companyProfileResolution\.companyName,\s+adminDispatchNewCustomerType === "corporate",/, "Only the established new-customer save passes read-only duplicate intent");
+console.log("New-customer duplicate contact protection and unchanged legacy contact lookup passed.");

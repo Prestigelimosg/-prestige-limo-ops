@@ -9285,11 +9285,10 @@ async function runChromeTest() {
     );
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
     await waitForCondition(
-      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]'))`),
+      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]'))`),
       10000,
       "Email AI manual override corporate new-customer choice",
     );
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
     const emailAiManualOverrideState = await waitForCondition(
       () =>
         evaluate(`(() => {
@@ -9540,14 +9539,13 @@ async function runChromeTest() {
     const newCustomerChoiceState = await waitForCondition(
       () => evaluate(`(() => ({
         account: Boolean(document.querySelector('[data-admin-dispatch-new-customer-account="true"]')),
-        corporate: Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')),
+        corporate: Boolean(document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]')),
         personal: Boolean(document.querySelector('[data-admin-dispatch-new-customer-personal="true"]')),
       }))()`),
       10000,
       "explicit new Customer Account type choice",
     );
     assert.deepEqual(newCustomerChoiceState, { account: false, corporate: true, personal: false });
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-cancel="true"]')?.click()`);
 
     const startedEmailAiBookerEmailOnly = await evaluate(`(() => {
       window.__prestigeEmailAiCustomerRecommendationMode = "booker-email-agency";
@@ -23348,11 +23346,10 @@ async function runChromeTest() {
 
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
     await waitForCondition(
-      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]'))`),
+      () => evaluate(`Boolean(document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]'))`),
       10000,
       "Save + CRM corporate new-customer choice",
     );
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
 
     const clickedSaveBookingCrm = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(
@@ -24044,7 +24041,7 @@ async function runChromeTest() {
     assert.equal(openedFutureCompanyBookerMode, true, "Expected the future Customer Account chooser to open");
     const futureCustomerChoiceState = await waitForCondition(
       () => evaluate(`(() => {
-        const corporate = document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]');
+        const corporate = document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]');
 
         return corporate
           ? {
@@ -24061,10 +24058,9 @@ async function runChromeTest() {
     assert.deepEqual(futureCustomerChoiceState, {
       account: false,
       corporate: true,
-      label: "Create Company + Booker Account",
+      label: "New Company + Booker selected: enter the exact company, Booker and passenger details.",
       personal: false,
     });
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
 
     const futureCompanyBookerUi = await waitForCondition(
       () => evaluate(`(() => {
@@ -25103,7 +25099,7 @@ async function runChromeTest() {
     await evaluate(`document.querySelector('[data-admin-dispatch-customer-account-create="true"]')?.click()`);
     const mrLeeNewCustomerChoiceState = await waitForCondition(
       () => evaluate(`(() => {
-        const corporate = document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]');
+        const corporate = document.querySelector('[data-admin-dispatch-new-customer-type="corporate"]');
 
         return corporate
           ? {
@@ -25121,7 +25117,6 @@ async function runChromeTest() {
       corporate: true,
       personal: false,
     });
-    await evaluate(`document.querySelector('[data-admin-dispatch-new-customer-corporate="true"]')?.click()`);
 
     const clickedMrLeeNoCompanySave = await evaluate(`(() => {
       const saveButton = [...document.querySelectorAll("button")].find(

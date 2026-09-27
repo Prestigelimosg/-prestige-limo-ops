@@ -39,7 +39,7 @@ try {
     ['admin','/','1zofh8u_QY0-xAsqkM8eN6G7IYp9chqw2'],
     ['customer','/my-bookings','1a2uhL39Fn1JyxaPz8zPfNo9RjnQPJnPa'],
   ]) {
-    for (const [build, width, platform] of [[null,390,'Android'],['1',390,'Android'],['2',320,'Android'],[null,390,'iPhone']]) {
+    for (const [build, width, platform] of [[null,390,'Android'],['4',390,'Android'],['5',390,'Android'],['6',320,'Android'],[null,390,'iPhone']]) {
       if (injected) await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: injected });
       injected = (await client.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${fixture.toString()})(${JSON.stringify(role)},${JSON.stringify(build)})` })).identifier;
       await client.send('Emulation.setUserAgentOverride', { userAgent: `Mozilla/5.0 ${platform}` });
@@ -47,11 +47,11 @@ try {
       await navigateWithLoadEvent(client, appUrl + path);
       await waitForCondition(() => evaluate(`window.__updateRequests.length > 0 && document.querySelector('h1') !== null`), 20000, role + ' hydration');
       const selector = `[data-android-app-update-download="${role}"]`;
-      if (build === null && platform === 'Android') {
+      if ((build === null || build === '4') && platform === 'Android') {
         await waitForCondition(() => evaluate(`Boolean(document.querySelector('${selector}'))`), 10000, role + ' download');
         assert.equal(await evaluate(`document.querySelectorAll('${selector}').length`), 1);
         assert.equal(await evaluate(`document.querySelector('${selector}').href`), `https://drive.usercontent.google.com/uc?id=${fileId}&export=download`);
-        assert.equal(await evaluate(`document.querySelector('${selector}').textContent.trim()`), `Download ${role === 'admin' ? 'Admin' : 'Customer'} App`);
+        assert.equal(await evaluate(`document.querySelector('${selector}').textContent.trim()`), `${build === '4' ? 'Update' : 'Download'} ${role === 'admin' ? 'Admin' : 'Customer'} App`);
         assert.ok(await evaluate(`(() => {const r=document.querySelector('${selector}').getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth && r.height>=44;})()`));
         const before = await evaluate(`JSON.stringify(window.__updateCommands)`);
         await evaluate(`document.querySelector('${selector}').addEventListener('click',e=>{e.preventDefault();window.__clickedUpdate=e.currentTarget.href;},{once:true});document.querySelector('${selector}').click()`);

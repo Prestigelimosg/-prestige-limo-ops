@@ -66,7 +66,7 @@ try {
     { ua: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36', embedded: false, signedIn: false, width: 390, visible: false },
     { ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148', embedded: true, signedIn: true, width: 390, visible: false },
     { ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36', embedded: false, signedIn: true, width: 1280, visible: false },
-    ...['12', '13', '14', 'invalid'].map(build => ({ ua: 'Mozilla/5.0 Android 14', embedded: true, signedIn: true, width: 390, build, visible: build === '12' || build === 'invalid' })),
+    ...['13', '14', '15', 'invalid'].map(build => ({ ua: 'Mozilla/5.0 Android 14', embedded: true, signedIn: true, width: 390, build, visible: build === '13' || build === 'invalid' })),
   ]) {
     if (injected) await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: injected });
     injected = (await client.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${fixture.toString()})(${JSON.stringify(test)})` })).identifier;
@@ -78,7 +78,7 @@ try {
     if (test.visible) {
       await waitForCondition(() => evaluate(`Boolean(${readLink})`), 10000, 'Android update action');
       assert.equal(await evaluate(`${readLink}.href`), downloadUrl);
-      assert.equal(await evaluate(`${readLink}.textContent.trim()`), test.build === '12' ? 'Update Driver App' : 'Download Driver App');
+      assert.equal(await evaluate(`${readLink}.textContent.trim()`), test.build === '13' ? 'Update Driver App' : 'Download Driver App');
       assert.equal(await evaluate(`${readLink}.referrerPolicy`), 'no-referrer');
       assert.equal(await evaluate(`${readLink}.rel`), 'noopener noreferrer');
       assert.equal(await evaluate(`${readLink}.target`), '_blank');

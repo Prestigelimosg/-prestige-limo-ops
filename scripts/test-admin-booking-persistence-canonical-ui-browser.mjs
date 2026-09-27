@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -398,6 +398,7 @@ async function main() {
       bookingsTab?.click();
       return Boolean(bookingsTab);
     })()`);
+    await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-bookings-find-toolbar="true"]'))`),10000,'Bookings tab render');
     const bookingsSurfaceState = await evaluate(`(() => {
       const autoLoadTab = document.querySelector("[data-bookings-tab-autoload='true']");
       const findToolbar = document.querySelector("[data-bookings-find-toolbar='true']");
@@ -477,6 +478,7 @@ async function main() {
             .map((node) => node.textContent || "")
             .find((text) => text.includes("Booking 19001 loaded.")) || "";
           const getField = (labelText) => {
+        if (labelText === "Driver") return document.querySelector("[data-driver-assignment-trigger]")?.value || "";
             const normalizedLabel = (value) =>
               String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
             const label = [...document.querySelectorAll("label")].find(
@@ -581,24 +583,25 @@ async function main() {
     assert.equal(type2LoadedState.assignmentLabel, "Apply Driver to Draft");
 
     const loadDriversClicked = await evaluate(`(() => {
-      const button = [...document.querySelectorAll("button")]
-        .find((candidate) => candidate.textContent.trim() === "Load Drivers for Assignment");
+      const button = document.querySelector("[data-driver-assignment-trigger]");
       button?.click();
       return Boolean(button);
     })()`);
     assert.equal(loadDriversClicked, true);
 
+    await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-assignment-picker] [data-driver-id="7301"]:not(:disabled)'))`),10000,'automatic driver roster loaded');
+    await evaluate(`document.querySelector('[data-driver-assignment-picker]').scrollIntoView({block:'center'})`);
+    const pickerScreenshot=await client.send('Page.captureScreenshot',{format:'png'});
+    await writeFile('/private/tmp/driver-assignment-search-dispatch.png',Buffer.from(pickerScreenshot.data,'base64'));
     const selectedType2DriverState = await waitForCondition(
       () => evaluate(`(() => {
-        const normalizeLabel = (value) => String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
-        const driverLabel = [...document.querySelectorAll("label")].find(
-          (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Driver",
-        );
-        const driverSelect = driverLabel?.querySelector("select");
-        if (!driverSelect?.querySelector("option[value='7301']")) return false;
-        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-        setter?.call(driverSelect, "7301");
-        driverSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const option = document.querySelector("[data-driver-assignment-picker] [data-driver-id='7301']");
+        const trigger = document.querySelector("[data-driver-assignment-trigger]");
+        if (trigger?.value !== "7301") {
+          if (!option || option.disabled) return false;
+          option.click();
+          return false;
+        }
         const assignmentButton = [...document.querySelectorAll("button")]
           .find((button) => button.textContent.trim() === "Save Driver Assignment");
         const primaryButton = document.querySelector("[data-job-card-save-toolbar='primary'] button");
@@ -634,6 +637,7 @@ async function main() {
     const selectedType2DriverFieldsAfterLinkRefresh = await evaluate(`(() => {
       const normalizeLabel = (value) => String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
       const getField = (labelText) => {
+        if (labelText === "Driver") return document.querySelector("[data-driver-assignment-trigger]")?.value || "";
         const label = [...document.querySelectorAll("label")].find(
           (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === labelText,
         );
@@ -705,6 +709,26 @@ async function main() {
     assert.equal(type2AssignmentSavedState.createLinkDisabled, false);
     assert.match(type2AssignmentSavedState.linkSectionText, /Booking 19002/);
     assert.match(type2AssignmentSavedState.linkSectionText, /TYPE 2 VERIFIED DRIVER/);
+    await evaluate(`(() => {
+      const normalizeLabel = (value) => String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
+      const paxLabel = [...document.querySelectorAll("label")].find(
+        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Pax",
+      );
+      const paxInput = paxLabel?.querySelector("input");
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(paxInput, "3");
+      paxInput?.dispatchEvent(new Event("input", { bubbles: true }));
+      paxInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      const primaryButton = document.querySelector("[data-job-card-save-toolbar='primary'] button");
+      return {
+        primaryDisabled: primaryButton?.disabled,
+        primaryLabel: primaryButton?.textContent.trim() || "",
+      };
+    })()`);
+    await waitForCondition(() => evaluate(`(() => {const b=document.querySelector("[data-job-card-save-toolbar='primary'] button");return b?.textContent.trim()==='Update + Cal' && !b.disabled})()`),10000,'non-driver amendment retains Update + Cal');
+    await evaluate(`(() => {const label=[...document.querySelectorAll('label')].find(l=>l.querySelector('span')?.textContent.trim()==='Pax');const input=label.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'2');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await waitForCondition(() => evaluate(`!document.querySelector("[data-create-driver-job-link-button='true']")?.disabled`),10000,'restored saved booking before link');
+
     const type2CreateLinkFocused = await waitForCondition(
       () => evaluate(`(() => {
         const createLinkButton = document.querySelector("[data-create-driver-job-link-button='true']");
@@ -736,37 +760,10 @@ async function main() {
     assert.equal(type2LinkState.body.driver_job_payload.assigned_driver_vehicle_model, "Alphard");
     assert.equal(type2LinkState.copyEnabled, true);
 
-    const nonDriverAmendmentState = await evaluate(`(() => {
-      const normalizeLabel = (value) => String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
-      const paxLabel = [...document.querySelectorAll("label")].find(
-        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Pax",
-      );
-      const paxInput = paxLabel?.querySelector("input");
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(paxInput, "3");
-      paxInput?.dispatchEvent(new Event("input", { bubbles: true }));
-      paxInput?.dispatchEvent(new Event("change", { bubbles: true }));
-      const primaryButton = document.querySelector("[data-job-card-save-toolbar='primary'] button");
-      return {
-        primaryDisabled: primaryButton?.disabled,
-        primaryLabel: primaryButton?.textContent.trim() || "",
-      };
-    })()`);
-    assert.equal(nonDriverAmendmentState.primaryLabel, "Update + Cal");
-    assert.equal(nonDriverAmendmentState.primaryDisabled, false);
-
     const newBookingAssignmentState = await evaluate(`(() => {
       const newBookingButton = [...document.querySelectorAll("button")]
         .find((candidate) => candidate.textContent.trim() === "New booking");
       newBookingButton?.click();
-      const normalizeLabel = (value) => String(value || "").replace(/\\s*\\*\\s*$/, "").trim();
-      const driverLabel = [...document.querySelectorAll("label")].find(
-        (candidate) => normalizeLabel(candidate.querySelector("span")?.textContent) === "Driver",
-      );
-      const driverSelect = driverLabel?.querySelector("select");
-      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-      setter?.call(driverSelect, "7301");
-      driverSelect?.dispatchEvent(new Event("change", { bubbles: true }));
       const assignmentButton = [...document.querySelectorAll("button")]
         .find((button) => button.textContent.trim() === "Apply Driver to Draft");
       const primaryButton = document.querySelector("[data-job-card-save-toolbar='primary'] button");
@@ -778,6 +775,11 @@ async function main() {
     assert.equal(newBookingAssignmentState.assignmentLabel, "Apply Driver to Draft");
     assert.equal(newBookingAssignmentState.primaryLabel, "Save + CRM");
 
+    await evaluate(`document.querySelector('[data-driver-assignment-trigger]').click()`);
+    await waitForCondition(() => evaluate(`Boolean(document.querySelector('[data-driver-id="7301"]'))`), 10000, 'new draft dropdown');
+    await evaluate(`document.querySelector('[data-driver-id="7301"]').click()`);
+    await waitForCondition(() => evaluate(`document.querySelector('[data-driver-assignment-trigger]').value==='7301'`),10000,'new draft selected');
+    assert.equal(await evaluate(`window.__type2AssignmentPatchBodies.length`),1,'Selecting a new draft must not persist');
     console.log("Admin booking persistence canonical UI browser test passed.");
   } finally {
     if (client) {

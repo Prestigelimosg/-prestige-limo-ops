@@ -2,6 +2,7 @@
 
 import type {AdminDriverCombo} from "../lib/driver-job-combo";
 import Link from "next/link";
+import { AdminDriverAssignmentPicker } from "./admin-driver-assignment-picker";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -15354,6 +15355,8 @@ export default function Home() {
     DriverAssignmentDisplayRecord[]
   >([]);
   const driverAssignmentDisplayDriversRef = useRef<DriverAssignmentDisplayRecord[]>([]);
+  const driverAssignmentDisplayLoad = useRef<Promise<boolean> | null>(null);
+  const driverAssignmentDisplayLoadedAt = useRef(0);
   const [bookingCompletionMessages, setBookingCompletionMessages] =
     useState<Record<string, Message>>({});
   const [completedCancelHandoffBooking, setCompletedCancelHandoffBooking] =
@@ -23248,6 +23251,7 @@ export default function Home() {
     while (true) {
       const offset = drivers.length;
       const response = await fetch(`${adminDriverAssignmentDisplayApiPath}?limit=200${offset ? `&offset=${offset}` : ""}`, {
+        signal: AbortSignal.timeout(10000),
         headers: {
           "x-prestige-admin-purpose": adminLegacyDataPurpose,
         },
@@ -23280,22 +23284,31 @@ export default function Home() {
   async function loadDriverAssignmentDisplayDrivers(
     successText = "Driver assignment display list loaded.",
     loadingText = "Loading driver assignment display list...",
+    reuseRecent = false,
   ) {
-    setLoadingDriverAssignmentDisplay(true);
-    setMessage({ tone: "info", text: loadingText });
-
-    try {
-      setDriverAssignmentDisplayDrivers(await fetchDriverAssignmentDisplayDriverRecords());
-      setMessage({ tone: "success", text: successText });
-      return true;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown driver assignment display load error.";
-      setMessage({ tone: "error", text: `Load driver assignment display failed: ${errorMessage}` });
-      return false;
-    } finally {
-      setLoadingDriverAssignmentDisplay(false);
-    }
+    if (driverAssignmentDisplayLoad.current) return driverAssignmentDisplayLoad.current;
+    if (reuseRecent && Date.now() - driverAssignmentDisplayLoadedAt.current < 60000) return true;
+    const pending = (async () => {
+      setLoadingDriverAssignmentDisplay(true);
+      setMessage({ tone: "info", text: loadingText });
+      try {
+        const records = await fetchDriverAssignmentDisplayDriverRecords();
+        driverAssignmentDisplayDriversRef.current = records;
+        setDriverAssignmentDisplayDrivers(records);
+        driverAssignmentDisplayLoadedAt.current = Date.now();
+        setMessage({ tone: "success", text: successText });
+        return true;
+      } catch (error) {
+        driverAssignmentDisplayLoadedAt.current = 0;
+        const errorMessage = error instanceof Error ? error.message : "Unknown driver assignment display load error.";
+        setMessage({ tone: "error", text: `Load driver assignment display failed: ${errorMessage}` });
+        return false;
+      } finally {
+        setLoadingDriverAssignmentDisplay(false);
+      }
+    })();
+    driverAssignmentDisplayLoad.current = pending;
+    try { return await pending; } finally { driverAssignmentDisplayLoad.current = null; }
   }
 
   async function saveDriverProfile() {
@@ -45874,42 +45887,17 @@ export default function Home() {
                   <h3 className="text-sm font-semibold text-sky-950">Assigned Driver</h3>
                   <p className="text-xs text-slate-600">Manual assignment with payout control.</p>
                 </div>
-                <button
-                  className="h-8 rounded-md border border-sky-300 bg-white px-2.5 text-xs font-semibold text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  disabled={loadingDriverAssignmentDisplay}
-                  onClick={() =>
-                    loadDriverAssignmentDisplayDrivers(
-                      "Driver assignment display list loaded.",
-                      "Loading driver assignment display list...",
-                    )
-                  }
-                  type="button"
-                >
-                  {loadingDriverAssignmentDisplay ? "Loading Drivers..." : "Load Drivers for Assignment"}
-                </button>
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                <label>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver</span>
-                  <select
-                    className="h-8 w-full rounded-md border border-stone-300 bg-white px-2 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-                    onChange={(event) => applyDriverToBooking(event.target.value)}
-                    value={assignedDriverSelectValue}
-                  >
-                    <option value="">Select driver</option>
-                    {showSavedAssignedDriverOption ? (
-                      <option disabled value={savedAssignedDriverOptionValue}>
-                        Saved: {clean(booking.driverName) || `Driver ${assignedDriverId}`}
-                        {assignedDriverIsInactive ? " (inactive)" : ""}
-                      </option>
-                    ) : null}
-                    {assignableDriverAssignmentDisplayDrivers.map((driver) => (
-                      <option key={driver.id} value={driver.id}>
-                        {driver.driver_name} {driver.availability_status ? `(${driver.availability_status})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <AdminDriverAssignmentPicker
+                  drivers={assignableDriverAssignmentDisplayDrivers}
+                  value={assignedDriverSelectValue}
+                  savedLabel={showSavedAssignedDriverOption ? `Saved: ${clean(booking.driverName) || `Driver ${assignedDriverId}`}${assignedDriverIsInactive ? " (inactive)" : ""}` : ""}
+                  loading={loadingDriverAssignmentDisplay}
+                  onLoad={() => loadDriverAssignmentDisplayDrivers(undefined, undefined, true)}
+                  onChange={applyDriverToBooking}
+                  matchesSearch={driverDisplayMatchesSearch}
+                />
                 <label>
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">Driver Name</span>
                   <input

@@ -408,3 +408,90 @@ export async function listAdminDriverAssignmentDisplay(
     ok: true,
   };
 }
+
+// Optional dropdown ordering only. Never participates in assignment or Pool eligibility.
+export async function readFrequentAssignmentDrivers(
+  actor: AdminBookingPersistenceAdapterActor,
+): Promise<AdminBookingResult<{ driver_id: number; job_count: number }[]>> {
+  const actorResult = validateActor(actor);
+  if (!actorResult.ok) return actorResult;
+  const clientResult = getAdminDriverAssignmentDisplayClient();
+  if (!clientResult.ok) return clientResult;
+  const client = clientResult.data;
+  const now = Date.now();
+  const cutoff = now - 90 * 86400000;
+  const since = new Date(cutoff).toISOString();
+  const signal = AbortSignal.timeout(8000);
+  const failure = { ok: false as const, status: 503, error: "Frequent drivers are unavailable. Driver search is still available." };
+  try {
+    const evidence: { reference: string; driverId: number }[] = [];
+    for (const table of ["driver_job_links", "driver_job_bids"] as const) {
+      const seen = new Set<string>();
+      for (let offset = 0; ; offset += 500) {
+        // A bounded read must fail visibly rather than rank a truncated history.
+        if (offset >= 10000) return failure;
+        let query = client.from(table).select(table === "driver_job_links"
+          ? "id,booking_reference,driver_id,acknowledged_at:safe_link_context->>driver_acknowledged_at"
+          : "id,booking_reference,driver_reference,decided_at").gte(table === "driver_job_links" ? "updated_at" : "decided_at", since);
+        if (table === "driver_job_bids") query = query.eq("bid_status", "accepted");
+        const { data, error } = await query.order("id", { ascending: true }).range(offset, offset + 499).abortSignal(signal);
+        if (error || !Array.isArray(data) || data.length > 500) return failure;
+        for (const value of data) {
+          const row = asRecord(value);
+          const id = textOrNull(row.id);
+          if (!id || seen.has(id)) return failure;
+          seen.add(id);
+          const driverId = positiveInteger(table === "driver_job_links" ? row.driver_id : row.driver_reference);
+          const reference = textOrNull(row.booking_reference);
+          const time = Date.parse(String(table === "driver_job_links" ? row.acknowledged_at ?? "" : row.decided_at ?? ""));
+          if (driverId && reference && Number.isFinite(time) && time >= cutoff && time <= now) {
+            evidence.push({ reference, driverId });
+          }
+        }
+        if (data.length < 500) break;
+      }
+    }
+    const references = [...new Set(evidence.map((row) => row.reference))];
+    const bookings = new Map<string, UnknownRecord>();
+    const combos = new Map<string, string>();
+    for (let offset = 0; offset < references.length; offset += 100) {
+      const batch = references.slice(offset, offset + 100);
+      const saved = await client.from("bookings").select("booking_reference,driver_id,status,admin_internal_status,customer_facing_status")
+        .in("booking_reference", batch).range(0, batch.length).abortSignal(signal);
+      const members = await client.from("driver_job_combo_members").select("booking_reference,combo_id")
+        .in("booking_reference", batch).range(0, batch.length).abortSignal(signal);
+      if (saved.error || members.error || !Array.isArray(saved.data) || !Array.isArray(members.data) ||
+          saved.data.length > batch.length || members.data.length > batch.length) return failure;
+      for (const value of saved.data) {
+        const row = asRecord(value);
+        const reference = textOrNull(row.booking_reference);
+        if (!reference || !batch.includes(reference) || bookings.has(reference)) return failure;
+        bookings.set(reference, row);
+      }
+      for (const value of members.data) {
+        const row = asRecord(value);
+        const reference = textOrNull(row.booking_reference);
+        const comboId = textOrNull(row.combo_id);
+        if (!reference || !comboId || !batch.includes(reference) || combos.has(reference)) return failure;
+        combos.set(reference, comboId);
+      }
+    }
+    const jobs = new Map<number, Set<string>>();
+    for (const row of evidence) {
+      const booking = bookings.get(row.reference);
+      if (!booking || positiveInteger(booking.driver_id) !== row.driverId) continue;
+      // Match the established booking reader's current-status / legacy fallback.
+      const current = textOrNull(booking.admin_internal_status)?.toLowerCase();
+      const status = current && current !== "draft" ? current : textOrNull(booking.status)?.toLowerCase() || current || textOrNull(booking.customer_facing_status)?.toLowerCase();
+      if (["cancelled", "canceled", "declined_internal", "archived"].includes(status || "")) continue;
+      const key = combos.has(row.reference) ? `combo:${combos.get(row.reference)}` : `booking:${row.reference}`;
+      const taken = jobs.get(row.driverId) || new Set<string>();
+      taken.add(key);
+      jobs.set(row.driverId, taken);
+    }
+    return { ok: true, data: [...jobs].map(([driver_id, taken]) => ({ driver_id, job_count: taken.size }))
+      .sort((a, b) => b.job_count - a.job_count || a.driver_id - b.driver_id) };
+  } catch {
+    return failure;
+  }
+}

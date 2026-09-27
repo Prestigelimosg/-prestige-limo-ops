@@ -175,6 +175,10 @@ class MockSupabaseQuery {
     return this;
   }
 
+  gte(column, value) { this.filters.push({column,type:"gte",value}); return this; }
+  in(column, value) { this.filters.push({column,type:"in",value}); return this; }
+  abortSignal() { return this; }
+
   ilike(column, value) {
     this.filters.push({ column, type: "ilike", value });
 
@@ -250,6 +254,8 @@ class MockSupabaseClient {
           return String(rowValue || "").toLowerCase() === String(filter.value || "").toLowerCase();
         }
 
+        if (filter.type === "gte") return rowValue >= filter.value;
+        if (filter.type === "in") return filter.value.includes(rowValue);
         return rowValue === filter.value;
       }),
     );
@@ -301,7 +307,7 @@ class MockSupabaseClient {
 
     return {
       data: rows.map((row) =>
-        Object.fromEntries(selected.map((column) => [column, row[column]])),
+        Object.fromEntries(selected.map((column) => column === "acknowledged_at:safe_link_context->>driver_acknowledged_at" ? ["acknowledged_at", row.safe_link_context?.driver_acknowledged_at] : [column, row[column]])),
       ),
       error: null,
     };
@@ -724,7 +730,7 @@ try {
       appPageSource.indexOf("async function loadDriverAssignmentDisplayDrivers"),
     );
     const calls = [];
-    const context = { exports: {}, adminLegacyDataPurpose: "admin-booking-persistence", adminDriverAssignmentDisplayApiPath: "/api/admin-driver-assignment-display",
+    const context = { AbortSignal, exports: {}, adminLegacyDataPurpose: "admin-booking-persistence", adminDriverAssignmentDisplayApiPath: "/api/admin-driver-assignment-display",
       fetch: async (url) => {
         calls.push(url);
         return route.GET(request(`http://localhost${url}`));
@@ -753,6 +759,29 @@ try {
       await assert.rejects(context.exports.fetchDriverAssignmentDisplayDriverRecords(), mode === "failure" ? /Synthetic second page failure/ : /changed while loading/i);
       assert.equal(count, 2, "failed or repeated pages must not expose partial results or loop");
     }
+  }
+  {
+    const now = new Date().toISOString();
+    const mock = installMock({drivers:seedDrivers().drivers, driver_job_links:[{id:1,booking_reference:"QA-ONE",driver_id:1,updated_at:now,safe_link_context:{driver_acknowledged_at:now,token:"NEVER_RETURN"}}],driver_job_bids:[],bookings:[{booking_reference:"QA-ONE",driver_id:1,status:null,admin_internal_status:"assigned"}],driver_job_combo_members:[]});
+    setEnv(validEnv());
+    for (const headers of [{},validAdminHeaders({referer:"http://localhost/customers"}),validAdminHeaders({referer:"https://wrong.example/"})]) {
+      const r=await route.GET(request("http://localhost/api/admin-driver-assignment-display?scope=frequent",headers));
+      assert.equal(r.status,403);
+    }
+    assert.equal(mock.client.operations.length,0,"No frequency evidence for blocked callers");
+    for (const suffix of ["scope=other","scope=frequent&limit=20","scope=frequent&scope=frequent"]) {
+      assert.equal((await route.GET(request("http://localhost/api/admin-driver-assignment-display?"+suffix))).status,400);
+    }
+    const r=await route.GET(request("http://localhost/api/admin-driver-assignment-display?scope=frequent"));
+    assert.equal(r.status,200);
+    const body=await r.json();
+    assert.deepEqual(body,{ok:true,frequent_drivers:[{driver_id:1,job_count:1}],window_days:90});
+    assert.equal(r.headers.get("cache-control"),"no-store");
+    assert.ok(mock.client.operations.every(op=>op.action==="select"));
+    mock.client.failures["select:bookings"]={message:"Private backend failure"};
+    const failed=await route.GET(request("http://localhost/api/admin-driver-assignment-display?scope=frequent"));
+    assert.equal(failed.status,503);
+    assert.equal(JSON.stringify(await failed.json()).includes("Private backend"),false);
   }
 } finally {
   restoreEnv();

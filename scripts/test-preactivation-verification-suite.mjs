@@ -200,6 +200,10 @@ const guardChecks = [
     script: "scripts/test-admin-notification-centre-guard.mjs",
   },
   {
+    label: "admin incoming-message attention and history isolation guard",
+    script: "scripts/test-admin-incoming-message-alerts-guard.mjs",
+  },
+  {
     label: "pending Driver ACK native reminder guard",
     script: "scripts/test-pending-driver-ack-reminder-guard.mjs",
   },

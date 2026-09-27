@@ -4256,6 +4256,29 @@ export async function loadCustomerDriverAppNotifications(
     return clientResult;
   }
 
+  const search = input instanceof URLSearchParams ? input : new URLSearchParams(input as Record<string, string>);
+  if (search.get("scope") === "admin_incoming_messages") {
+    // Admin-only read projection of existing conversations. Never change their recipient/read state.
+    const { data, count, error } = await clientResult.data.from(notificationTable)
+      .select(notificationSelect, { count: "exact" })
+      .or([
+        "and(workflow_area.eq.admin_driver_job_messages,safe_context->>direction.eq.driver_to_admin,delivery_surface.eq.driver_app)",
+        "and(workflow_area.eq.customer_driver_quick_replies,safe_context->>direction.eq.customer_to_driver,delivery_surface.eq.driver_app)",
+      ].join(","))
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range((params.page - 1) * params.limit, params.page * params.limit - 1);
+    if (error) return safeAdapterFailure(safeNotificationLoadError, 500, error);
+    return {
+      data: {
+        notifications: asArray(data).map(normalizeRecord).map(toAdminSafeRecord),
+        pagination: buildCountedPagination(count || 0, params.limit, params.page),
+        version: customerDriverAppNotificationPersistenceVersion,
+      },
+      ok: true,
+    };
+  }
+
   let query = clientResult.data
     .from(notificationTable)
     .select(notificationSelect)

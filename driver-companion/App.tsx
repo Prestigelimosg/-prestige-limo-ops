@@ -1,3 +1,4 @@
+import { nativeBuildVersion } from "expo-application";
 import * as WebBrowser from "expo-web-browser";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
@@ -1065,6 +1066,7 @@ export default function App() {
                   biometricEnabled,
                   notificationEnabled,
                   screen.openTarget,
+                  Platform.OS === "android" ? nativeBuildVersion : null,
                 ) + driverAccountSetupBootstrap(pendingAccountSetup,currentWebViewUrlRef.current || screen.jobUrl)}
                 javaScriptCanOpenWindowsAutomatically={false}
                 mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"

@@ -1,5 +1,7 @@
 "use client";
 
+import { reportDriverActivity } from "../../lib/driver-activity-client";
+
 import {DriverComboTrips, type DriverComboTripSummary} from "../driver-job/driver-combo-trips";
 
 import {DriverAccountSetup,nativeAccountSetupState} from "./driver-account-setup";
@@ -355,6 +357,7 @@ export default function DriverPortalPage() {
         return;
       }
 
+      if (result.session === "account") reportDriverActivity(nativeInstallationId);
       const publicKey = typeof result.device_alerts?.public_key === "string"
         ? result.device_alerts.public_key
         : "";

@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { loadDriverPoolActivity } from "../../../lib/driver-account-activity";
 
 import { sendAdminDevicePushAlert } from "../../../lib/admin-device-push-notification";
 
@@ -75,8 +76,12 @@ export async function GET(request: Request) {
     const comboEnabled = process.env.PRESTIGE_DRIVER_COMBO_ENABLED === "true";
     const combo = comboEnabled ? await (await import("../../../lib/driver-job-combo")).loadDriverCombo(database.client,reference) : null;
     const result = await loadAdminDriverPoolOffer(database.client, combo?.primary_booking_reference || reference);
+    const activityAndReadiness = result.ok && rawIds !== null ? await Promise.all([
+      loadDriverPoolAlertReadiness(database.client, driverIds),
+      loadDriverPoolActivity(database.client, driverIds),
+    ]) : null;
     return result.ok
-      ? response({ ...result.data, ...(comboEnabled ? {combo_enabled:true,combo} : {}), ...(rawIds !== null ? { driver_alert_readiness: await loadDriverPoolAlertReadiness(database.client, driverIds) } : {}), ok: true }, 200)
+      ? response({ ...result.data, ...(comboEnabled ? {combo_enabled:true,combo} : {}), ...(activityAndReadiness ? { driver_alert_readiness: activityAndReadiness[0], driver_activity: activityAndReadiness[1] } : {}), ok: true }, 200)
       : response({ error: result.error, ok: false }, result.status);
   } catch {
     return response({ error: "Driver Pool request failed safely.", ok: false }, 500);

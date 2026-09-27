@@ -1,5 +1,7 @@
 "use client";
 
+import { reportDriverActivity } from "../../../lib/driver-activity-client";
+
 import Link from "next/link";
 import {DriverComboTrips} from "../driver-combo-trips";
 import type {DriverComboView} from "../../../lib/driver-job-combo";
@@ -1289,6 +1291,9 @@ export default function DriverJobPage() {
     }
 
     const requestSequence = driverAppUpdatesRequestSequenceRef.current + 1;
+    // The activity route independently verifies the account cookie and bound installation;
+    // the private job token never establishes account presence.
+    reportDriverActivity(currentEmbeddedDriverInstallationId());
     driverAppUpdatesRequestSequenceRef.current = requestSequence;
     driverAppUpdatesAbortControllerRef.current?.abort();
     const abortController = new AbortController();

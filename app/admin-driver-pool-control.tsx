@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {AdminDriverCombo, ComboTrip} from "../lib/driver-job-combo";
+import type { DriverPoolActivity } from "../lib/driver-account-activity";
 
 type PoolDriver = { id: number; driver_name: string | null; plate_number: string | null; vehicle_type: string | null; availability_status: string | null };
 type PoolResponse = { driver_id: number; driver_name: string; plate_number: string; vehicle_type: string; status: "pending" | "available" | "declined" | "accepted" | "closed" };
@@ -104,6 +105,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const loadVersion = useRef(0);
   const [alertReadiness, setAlertReadiness] = useState<Record<number, boolean | null>>({});
+  const [driverActivity, setDriverActivity] = useState<Record<number, DriverPoolActivity>>({});
   const driverIdsQuery = drivers.map((driver) => driver.id).sort((a, b) => a - b).join(",");
   const [driverSearch, setDriverSearch] = useState("");
   const driverListRequested = useRef(false);
@@ -138,13 +140,15 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
       // Keep the existing readiness API's 200-ID request bound without limiting the driver list.
       const ids = driverIdsQuery ? driverIdsQuery.split(",") : [];
       const readiness: Record<number, boolean | null> = {};
+      const activity: Record<number, DriverPoolActivity> = {};
       for (let offset = 0; offset < Math.max(ids.length, 1); offset += 200) {
         const batch = ids.slice(offset, offset + 200).join(",");
         const response = await fetch(`/api/admin-driver-job-bid-offers?booking_reference=${encodeURIComponent(bookingReference)}${batch ? `&driver_ids=${encodeURIComponent(batch)}` : ""}`, { cache: "no-store", headers });
-        const result = await response.json() as { combo_enabled?:boolean; combo?:AdminDriverCombo|null; eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null; driver_alert_readiness?: { driver_id: number; ready: boolean | null }[] };
+        const result = await response.json() as { combo_enabled?:boolean; combo?:AdminDriverCombo|null; eligible?: boolean; enabled?: boolean; offer?: DriverPoolAdminOffer | null; driver_alert_readiness?: { driver_id: number; ready: boolean | null }[]; driver_activity?: DriverPoolActivity[] };
         if (version !== loadVersion.current) return;
         if (!response.ok) throw new Error("Driver Pool refresh failed.");
         for (const row of result.driver_alert_readiness || []) readiness[row.driver_id] = row.ready;
+        for (const row of result.driver_activity || []) activity[row.driver_id] = row;
         setEnabled(result.enabled === true);
         setServerEligible(result.eligible === true);
         setOffer(result.offer || null);
@@ -156,9 +160,11 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
         }
       }
       setAlertReadiness(readiness);
+      setDriverActivity(activity);
       setFeedback((current) => current === "Driver Pool could not refresh. Reload before acting." ? "" : current);
     } catch {
       if (version !== loadVersion.current) return;
+      setDriverActivity({});
       setAlertReadiness({}); setFeedback("Driver Pool could not refresh. Reload before acting.");
     }
   }, [bookingReference, driverIdsQuery]);
@@ -519,6 +525,7 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
                   <div className="mt-2 w-full space-y-1" data-driver-pool-selected-drivers="true">
                     <p className="text-sm font-semibold text-sky-950">Choose drivers · {selectedIds.length} selected</p>
                     <p className="text-xs text-slate-600">Registration does not confirm the phone is online or the job was delivered.</p>
+                    <p className="text-xs text-slate-600">Online means verified app contact within 2 minutes, not that a job was seen. Last active does not prevent Pool selection.</p>
                     <div className="flex flex-wrap items-center gap-2">
                     <button className="min-h-8 text-xs font-semibold text-sky-900 underline" disabled={busy || driverListState === "loading"} onClick={() => void (driverListState === "failed" || !drivers.length ? requestDrivers() : load())} type="button">{driverListState === "loading" ? "Loading drivers…" : driverListState === "failed" ? "Retry loading drivers" : "Refresh alert status"}</button>
                     <label className="text-xs font-semibold text-slate-700">Search drivers
@@ -531,6 +538,9 @@ export function AdminDriverPoolControl({ drivers, onLoadDrivers, savedVehicle, b
                           <input className="h-4 w-4 shrink-0" type="checkbox" checked={selectedIds.includes(driver.id)} disabled={busy || disabled || (!selectedIds.includes(driver.id) && (alertReadiness[driver.id] !== true || !matchesVehicle(driver)))} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, driver.id] : current.filter((id) => id !== driver.id))} />
                           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 break-words">
                             <span>{driver.driver_name || "Unnamed driver"} · {driver.vehicle_type || "Vehicle unavailable"} · {driver.plate_number || "Plate unavailable"}</span>
+                            <span className={driverActivity[driver.id]?.state === "online" ? "font-semibold text-emerald-800" : "text-slate-600"} data-driver-activity={driver.id}>
+                              {driverActivity[driver.id]?.label || "Unknown"}
+                            </span>
                             <span className={alertReadiness[driver.id] === true ? "font-semibold text-emerald-700" : "text-slate-600"} data-driver-alert-status={driver.id}>
                               {alertReadiness[driver.id] === true ? "Alerts registered" : alertReadiness[driver.id] === false ? "Alerts not ready" : "Alert status unavailable"}
                             </span>

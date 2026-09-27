@@ -18,13 +18,13 @@ try {
   const source = process.env.POOL_PICKER_BASELINE === '1' ? execFileSync('git', ['show', 'HEAD:app/admin-driver-pool-control.tsx'], { encoding: 'utf8' }) : await readFile('app/admin-driver-pool-control.tsx', 'utf8');
   await writeFile(path.join(dir, 'pool.js'), ts.transpileModule(source, { compilerOptions: options }).outputText);
   const entry = `import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{AdminDriverPoolControl}from'./pool';
-    const roster=Array.from({length:6},(_,i)=>({id:i+1,driver_name:'QA Driver '+(i+1),plate_number:'QA'+(i+1),vehicle_type:i===5?'VVV':'AVF',availability_status:'available'}));
+    const roster=Array.from({length:location.pathname==='/large'?321:6},(_,i)=>({id:i+1,driver_name:'QA Driver '+(i+1),plate_number:'QA'+(i+1),vehicle_type:i===5?'VVV':'AVF',availability_status:'available'}));
     window.picker={loads:0,fail:location.pathname==='/failure',requests:[]};
     window.fetch=async(url,init={})=>{window.picker.requests.push({url:String(url),method:init.method||'GET',body:init.body});
       if((init.method||'GET')!=='GET')throw Error('Selection must never send');
       if(String(url).includes('scope=attention'))return Response.json({ok:true,enabled:true,items:[]});
       const ids=new URL(url,location.origin).searchParams.get('driver_ids')?.split(',').map(Number)||[];
-      return Response.json({ok:true,enabled:true,eligible:location.pathname!=='/ineligible',offer:null,driver_alert_readiness:ids.map(id=>({driver_id:id,ready:id!==5}))});};
+      return Response.json({ok:true,enabled:true,eligible:location.pathname!=='/ineligible',offer:null,driver_activity:ids.map((id,i)=>({driver_id:id,state:['online','last_active','signed_out','unknown'][i%4],label:['Online','Last active 15 min ago','Signed out','Unknown'][i%4]})),driver_alert_readiness:ids.map(id=>({driver_id:id,ready:id!==5}))});};
     function App(){const[drivers,setDrivers]=useState(location.pathname==='/preloaded'?roster:[]);
       return <main className="admin-ops-shell p-2"><AdminDriverPoolControl drivers={drivers} onLoadDrivers={async()=>{window.picker.loads++;if(window.picker.fail)return false;setDrivers(location.pathname==='/empty'?[]:roster);return true;}} savedVehicle="AVF" bookingReference="QA-PICKER" expectedUpdatedAt="2026-09-23T00:00:00.000Z" eligible={location.pathname!=='/ineligible'} disabled={false} requiresExplicitPayout={false} showPleaseAssignDriver={false} suggestedPayout={65} onLoadBooking={async()=>{throw Error('Unexpected booking navigation')}} onCancelAssignment={async()=>{throw Error('Unexpected cancellation')}}/></main>}
     createRoot(document.getElementById('root')).render(<App/>);`;
@@ -47,6 +47,7 @@ try {
     await client.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<768});
     await navigate('/');await wait('document.querySelectorAll("input[type=checkbox]").length===6');
     await wait('!document.querySelector("input[type=checkbox]").disabled');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll("[data-driver-activity]")].slice(0,4).map(e=>e.textContent)'),['Online','Last active 15 min ago','Signed out','Unknown']);
     assert.equal(await evaluate('window.picker.loads'),1,'Loads automatically once without a separate button');
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true,'No overflow');
     assert.equal(await evaluate('document.querySelector("input[type=checkbox]").closest("label").getBoundingClientRect().height>=44'),true,'Touchable driver row');
@@ -65,6 +66,11 @@ try {
     const shot=await client.send('Page.captureScreenshot',{format:'png'});await writeFile('/private/tmp/prestige-pool-picker-'+width+'.png',Buffer.from(shot.data,'base64'));
     console.log('PASS '+width+'px auto-load, four selections across search, eligible-only controls, no mutation or overflow');
   }
+  await navigate('/large');await wait('document.querySelectorAll("input[type=checkbox]").length===321');
+  await wait('document.querySelectorAll("[data-driver-activity]")[320]?.textContent==="Online"');
+  assert.equal(await evaluate('window.picker.requests.filter(r=>r.url.includes("driver_ids=")).every(r=>new URL(r.url,location.origin).searchParams.get("driver_ids").split(",").length<=200)'),true);
+  await evaluate('document.querySelectorAll("input[type=checkbox]")[320].click()');await wait('document.body.innerText.includes("1 selected")');
+  console.log('PASS 321 drivers with bounded requests, activity aggregation and final-row selection');
   await navigate('/failure');await wait('document.body.innerText.includes("Drivers could not load")');assert.equal(await evaluate('window.picker.loads'),1,'Failure does not loop');
   await evaluate('window.picker.fail=false');await click('Retry loading drivers');await wait('document.querySelectorAll("input[type=checkbox]").length===6');assert.equal(await evaluate('window.picker.loads'),2);
   await navigate('/empty');await wait('document.body.innerText.includes("No available drivers to select")');assert.equal(await evaluate('window.picker.loads'),1,'Empty response does not loop');

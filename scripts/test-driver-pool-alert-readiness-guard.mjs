@@ -23,19 +23,21 @@ const callbackSource=ui.slice(ui.indexOf('  const load = useCallback('),ui.index
 const callbackJs=ts.transpileModule(callbackSource+'\nreturn load;', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 for(const size of [0,1,200,201,501]) {
  for(const failBatch of [0,2]) {
-  const state={readiness:{},feedback:'',calls:[]};
+  const state={readiness:{},activity:{},feedback:'',calls:[]};
   const bindings={useCallback:fn=>fn,bookingReference:'POOL-QA',driverIdsQuery:Array.from({length:size},(_,i)=>i+1).join(','),loadVersion:{current:0},headers:{},
+   setComboEnabled:()=>{},setCombo:()=>{},seenComboId:{current:null},setPayout:()=>{},setDriverActivity:value=>state.activity=value,
    setEnabled:()=>{},setServerEligible:()=>{},setOffer:()=>{},setAlertReadiness:value=>state.readiness=value,
    setFeedback:value=>state.feedback=typeof value==='function'?value(state.feedback):value,
    fetch:async(url,options)=>{
     assert.equal(options.cache,'no-store');
     const ids=new URL(url,'https://synthetic.invalid').searchParams.get('driver_ids')?.split(',').map(Number)||[];
     state.calls.push(ids);assert.ok(ids.length<=200);
-    return {ok:state.calls.length!==failBatch,json:async()=>({enabled:true,eligible:true,offer:null,driver_alert_readiness:ids.map(driver_id=>({driver_id,ready:true}))})};
+    return {ok:state.calls.length!==failBatch,json:async()=>({enabled:true,eligible:true,offer:null,driver_activity:ids.map(driver_id=>({driver_id,state:'last_active',label:'Last active 3 min ago'})),driver_alert_readiness:ids.map(driver_id=>({driver_id,ready:true}))})};
    }};
   await new Function(...Object.keys(bindings),callbackJs)(...Object.values(bindings))();
   const failed=failBatch===2&&size>200;
   assert.equal(Object.keys(state.readiness).length,failed?0:size);
+  assert.equal(Object.keys(state.activity).length,failed?0:size);
   assert.equal(state.feedback.includes('could not refresh'),failed);
   if(!failed)assert.deepEqual(state.calls.flat(),Array.from({length:size},(_,i)=>i+1));
  }
@@ -60,7 +62,7 @@ try {
  // GET contract: purpose/role boundary runs before readiness; unknown inputs cannot broaden the read.
  let allowed=true,requested=[];
  const route=load('app/api/admin-driver-job-bid-offers/route.ts',{
-  'next/server':{},'../../../lib/admin-device-push-notification':{},'../../../lib/admin-booking-supabase-adapter':{},
+  'next/server':{},'../../../lib/driver-account-activity':{loadDriverPoolActivity:async()=>[]},'../../../lib/admin-device-push-notification':{},'../../../lib/admin-booking-supabase-adapter':{},
   '../../../lib/admin-dispatcher-auth-boundary':{resolveAdminDispatcherBoundary:()=>({ok:allowed,error:'Denied'}),adminBookingPersistencePurpose:'admin-booking-persistence'},
   '../../../lib/driver-device-push-notification':{loadDriverPoolAlertReadiness:async(_c,ids)=>{requested.push(ids);return ids.map(driver_id=>({driver_id,ready:true}));}},
   '../../../lib/driver-pool-fast-accept':{getDriverPoolClientForProduction:()=>({ok:true,client}),loadAdminDriverPoolOffer:async()=>({ok:true,data:{enabled:true,eligible:true,offer:null}})},

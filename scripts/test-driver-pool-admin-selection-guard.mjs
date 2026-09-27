@@ -98,6 +98,7 @@ try {
  for(const reason of ['not_eligible','schedule_conflict','vehicle_mismatch','response_required','no_longer_available']) {rpcResult={ok:false,reason};assert.equal((await helper.decideDriverPoolOffer(client,2,award,'accept')).ok,false);}
  const route=load('app/api/admin-driver-job-bid-offers/route.ts',{
   'next/server':{after:(cb)=>after.push(cb)},
+  '../../../lib/driver-account-activity':{loadDriverPoolActivity:async()=>[]},
   '../../../lib/admin-device-push-notification':{sendAdminDevicePushAlert:async(kind,input)=>sends.push({kind,...input})},
   '../../../lib/admin-booking-supabase-adapter':{adminDispatcherBoundaryToPersistenceAdapterActor:()=>actor},
   '../../../lib/admin-dispatcher-auth-boundary':{adminBookingPersistencePurpose:'admin-booking-persistence',resolveAdminDispatcherBoundary:()=>authorized?{ok:true,context:{}}:{ok:false,error:'Unauthorized'}},

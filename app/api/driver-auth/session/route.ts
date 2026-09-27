@@ -1,7 +1,10 @@
-import { completeDriverPinReset, signInDriverAccountForInstallation } from "../../../../lib/driver-account-device-lock.ts";
+import { completeDriverPinReset, signInDriverAccountForInstallation, verifyDriverAccountSession } from "../../../../lib/driver-account-device-lock.ts";
+import { recordDriverAccountActivity } from "../../../../lib/driver-account-activity";
+import { getDriverJobStatusPersistenceClientForProduction } from "../../../../lib/driver-job-status-persistence";
 import {
   clearDriverPortalSessionCookie,
   issueDriverPortalAccountSession,
+  resolveDriverPortalSession,
 } from "../../../../lib/driver-portal-session.ts";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +83,11 @@ export async function DELETE(request: Request) {
     return response({ ok: false, reason: "unauthorized" }, 401);
   }
 
+  try {
+    const session = resolveDriverPortalSession(request.headers.get("cookie"));
+    const database = getDriverJobStatusPersistenceClientForProduction();
+    if (session.ok && database.ok) await recordDriverAccountActivity(database.client, session.claims, "signed_out");
+  } catch { /* Logout still clears the cookie if optional activity storage fails. */ }
   return response({ ok: true, session: "ended" }, 200, clearDriverPortalSessionCookie());
 }
 
@@ -88,4 +96,26 @@ export async function GET() {
 }
 
 export async function PUT() { return GET(); }
-export async function PATCH() { return GET(); }
+export async function PATCH(request: Request) {
+  // Activity is separate from authorization and accepts no identity or timestamp body.
+  try {
+    const url = new URL(request.url);
+    const referer = new URL(request.headers.get("referer") || "invalid:");
+    if (request.headers.get("x-prestige-driver-purpose") !== "driver-account-activity"
+      || (request.headers.get("origin") && request.headers.get("origin") !== url.origin)
+      || referer.origin !== url.origin
+      || !(referer.pathname === "/driver-portal" || /^\/driver-job\/[^/]+$/.test(referer.pathname))
+      || url.search || (await request.text()).length !== 0) return response({ ok: false }, 403);
+    const session = resolveDriverPortalSession(request.headers.get("cookie"));
+    if (!session.ok || !session.claims.accountId || !session.claims.deviceIdHash) return response({ ok: false }, 401);
+    const database = getDriverJobStatusPersistenceClientForProduction();
+    if (!database.ok) return response({ ok: false }, 503);
+    if (!await verifyDriverAccountSession({
+      accountId: session.claims.accountId, deviceIdHash: session.claims.deviceIdHash,
+      driverId: session.claims.driverId, sessionIssuedAt: session.claims.issuedAt,
+      installationId: request.headers.get("x-prestige-driver-installation-id"), client: database.client,
+    })) return response({ ok: false }, 401);
+    const recorded = await recordDriverAccountActivity(database.client, session.claims, "active");
+    return response({ ok: recorded }, recorded ? 200 : 503);
+  } catch { return response({ ok: false }, 503); }
+}

@@ -1564,7 +1564,7 @@ try {
       ? helper.opaqueDriverJobLinkKey("11111111-1111-4111-8111-111111111111")
       : "",
     openTarget: null,
-    visibleBody: "New job available. Tap to review.",
+    visibleBody: "Open and ack the job.",
   });
   assertExcludes(
     JSON.stringify(nativePreAcknowledgementRequest),

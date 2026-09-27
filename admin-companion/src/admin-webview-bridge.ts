@@ -60,6 +60,7 @@ export function embeddedAdminBridgeBootstrap(
   installationId: string,
   notificationsEnabled: boolean,
   notificationPermission: "denied" | "granted" | "undetermined",
+  androidBuildVersion: string | null = null,
 ) {
   if (!installationIdPattern.test(installationId)) {
     throw new Error("A valid native Admin installation is required.");
@@ -67,6 +68,7 @@ export function embeddedAdminBridgeBootstrap(
 
   return `
 (function () {
+  ${androidBuildVersion === null ? "" : `try { if (!Object.prototype.hasOwnProperty.call(window, "__PRESTIGE_ANDROID_APP__")) Object.defineProperty(window, "__PRESTIGE_ANDROID_APP__", { configurable: false, enumerable: false, writable: false, value: Object.freeze({ role: "admin", build: ${JSON.stringify(androidBuildVersion)} }) }); } catch {} `}
   const nativeNotificationState = {
     enabled: ${notificationsEnabled === true},
     permission: ${JSON.stringify(notificationPermission)}

@@ -1,3 +1,4 @@
+import { nativeBuildVersion } from "expo-application";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -562,6 +563,10 @@ export default function App() {
   const customerWebViewCanMount =
     customerWebViewMounted && nativeAlertsPreferenceReady;
 
+  const androidAppVersionBootstrap = Platform.OS === "android"
+    ? `try { if (!Object.prototype.hasOwnProperty.call(window, "__PRESTIGE_ANDROID_APP__")) Object.defineProperty(window, "__PRESTIGE_ANDROID_APP__", { configurable: false, enumerable: false, writable: false, value: Object.freeze({ role: "customer", build: ${JSON.stringify(nativeBuildVersion)} }) }); } catch {} `
+    : "";
+
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <View style={styles.root}>
@@ -604,7 +609,7 @@ export default function App() {
                 javaScriptEnabled
                 key="prestige-customer-webview"
                 ref={webViewRef}
-                injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; ${Platform.OS === "ios" ? "window.__prestigeCustomerNativePdf = 1;" : ""} true;` : undefined}
+                injectedJavaScriptBeforeContentLoaded={installationId ? `window.__prestigeCustomerInstallationId = ${JSON.stringify(installationId)}; window.__prestigeCustomerNativeAlerts = { available: true, enabled: ${JSON.stringify(nativeAlertsEnabled)} }; ${Platform.OS === "ios" ? "window.__prestigeCustomerNativePdf = 1;" : ""} ${androidAppVersionBootstrap} true;` : undefined}
                 mixedContentMode="never"
                 onMessage={handleCustomerNativeBridgeMessage}
                 onNavigationStateChange={updateNavigation}

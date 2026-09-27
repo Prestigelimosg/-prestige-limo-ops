@@ -1,5 +1,7 @@
 "use client";
 
+import { AndroidAppUpdate } from "./android-app-update";
+
 import type {AdminDriverCombo} from "../lib/driver-job-combo";
 import Link from "next/link";
 import { AdminDriverAssignmentPicker } from "./admin-driver-assignment-picker";
@@ -37419,6 +37421,7 @@ export default function Home() {
             >
               Build {deployedBuildCommitShort}
             </p>
+            <AndroidAppUpdate role="admin" />
           </div>
           <div
             className="flex flex-col gap-1.5 sm:min-w-80"

@@ -240,6 +240,7 @@ export function embeddedDriverBridgeBootstrap(
   biometricEnabled: boolean,
   notificationsEnabled = false,
   openTarget: "available_jobs" | "messages" | null = null,
+  androidBuildVersion: string | null = null,
 ) {
   if (!installationIdPattern.test(installationId)) {
     throw new Error("A valid native Driver installation is required.");
@@ -247,6 +248,7 @@ export function embeddedDriverBridgeBootstrap(
 
   return `
 (function () {
+  ${androidBuildVersion === null ? "" : `try { if (!Object.prototype.hasOwnProperty.call(window, "__PRESTIGE_ANDROID_APP__")) Object.defineProperty(window, "__PRESTIGE_ANDROID_APP__", { configurable: false, enumerable: false, writable: false, value: Object.freeze({ role: "driver", build: ${JSON.stringify(androidBuildVersion)} }) }); } catch {} `}
   Object.defineProperty(window, "__PRESTIGE_DRIVER_NATIVE_APP__", {
     configurable: false,
     enumerable: false,

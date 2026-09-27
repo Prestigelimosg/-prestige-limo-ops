@@ -1,5 +1,7 @@
 "use client";
 
+import { AndroidAppUpdate } from "../android-app-update";
+
 import Link from "next/link";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2050,6 +2052,7 @@ export default function CustomerPortalPage() {
               </button>
             ) : null}
           </div>
+          <AndroidAppUpdate role="customer" />
           {portalBookingsLoadState === "ready" &&
           customerPrincipalAccess.status !== "checking" &&
           customerNotificationCentreOpen ? (

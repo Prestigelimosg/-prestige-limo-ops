@@ -1,3 +1,4 @@
+import { nativeBuildVersion } from "expo-application";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
@@ -5,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -723,6 +725,7 @@ export default function App() {
         installationId,
         notificationEnabled,
         notificationPermission,
+        Platform.OS === "android" ? nativeBuildVersion : null,
       )
     : "true;";
 

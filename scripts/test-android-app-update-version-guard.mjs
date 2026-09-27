@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import ts from 'typescript';
 
 const path = 'app/android-app-update.tsx';
@@ -110,3 +111,28 @@ for (const role of ['driver','admin','customer']) {
   }
 }
 console.log('PASS: actual three native bootstrap outputs, exact role/build, immutable capability, iOS omission, and pinned existing dependency.');
+
+// Execute the installed WebView external-origin handoff, rather than assuming
+// the app's stricter same-origin navigation callback handles download URLs.
+const webViewRequire = createRequire(new URL('../customer-companion/package.json', import.meta.url));
+const webViewModule = { exports: {} };
+const opened = [];
+const linking = { canOpenURL: async () => true, openURL: async url => { opened.push(url); } };
+vm.runInNewContext(readFileSync(webViewRequire.resolve('react-native-webview/lib/WebViewShared.js'), 'utf8'), {
+  module: webViewModule, exports: webViewModule.exports, console,
+  require: name => name === 'react-native' ? { Linking: linking }
+    : name === 'react' || name === './WebView.styles' || name === 'react/jsx-runtime' ? {} : webViewRequire(name),
+});
+for (const role of ['driver','admin','customer']) {
+  const app = readFileSync(`${role}-companion/App.tsx`, 'utf8');
+  assert.ok(app.includes('setSupportMultipleWindows={false}'));
+  const whitelist = role === 'customer' ? ['https://app.prestigelimo.sg','https://www.google.com'] : ['https://app.prestigelimo.sg'];
+  assert.ok(app.includes(role === 'driver' ? 'originWhitelist={[productionOrigin]}' : `originWhitelist={${JSON.stringify(whitelist).replaceAll(',', ', ')}}`));
+  const decisions = [];
+  const handler = webViewModule.exports.createOnShouldStartLoadWithRequest((...args) => decisions.push(args), whitelist, () => { throw Error('Download must use existing external-origin handoff'); });
+  handler({ nativeEvent: { url: androidAppReleases[role].url, lockIdentifier: 1 } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(opened.at(-1), androidAppReleases[role].url);
+  assert.equal(decisions[0][0], false, 'Download never navigates protected WebView away');
+}
+console.log('PASS: installed WebView delegates each exact APK URL to Linking and preserves protected native page.');
